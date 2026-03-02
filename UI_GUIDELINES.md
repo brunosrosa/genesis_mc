@@ -1,36 +1,36 @@
 # 🎨 UI GUIDELINES: Acessibilidade Cognitiva e Fluxo Espacial
 
-A interface do Genesis não é um website; é um **Sistema Operacional Visual**. O design deve respeitar mentes de alto desempenho, eliminando a fadiga de logs e traduzindo estados de máquina em abstrações espaciais fluidas.
+A interface do Genesis NÃO é um website; é um **Sistema Operacional Visual**. O design deve respeitar mentes de alto desempenho, eliminando a fadiga cognitiva de logs textuais e traduzindo estados complexos de máquina em abstrações espaciais fluidas, organizadas e táteis.
 
 ## 1. CORE DESIGN SYSTEM (A FUNDAÇÃO)
 
-- **Framework Base:** Tailwind CSS v3/v4.
-- **Blocos de Construção:** Shadcn UI (copiado diretamente para `src/components`, mantendo total propriedade do código).
-- **Esquema de Cores:** Estritamente baseado nas variáveis semânticas do Shadcn (ex: `bg-background`, `text-primary`, `border-border`). **NUNCA** utilizar cores fixas (ex: `bg-red-500`), assegurando suporte perfeito ao Modo Escuro.
+- **Framework Base:** Tailwind CSS v4.
+- **Blocos de Construção:** Shadcn UI. Os componentes devem ser integrados diretamente na pasta `src/components`, garantindo total propriedade do código (sem dependência de wrappers NPM ocultos).
+- **Esquema de Cores:** Estritamente baseado nas variáveis semânticas do Shadcn (ex: `bg-background`, `text-primary`, `border-border`). **NUNCA** utilize cores fixas de paleta (ex: `bg-red-500`), assegurando um suporte perfeito e automático ao Modo Escuro.
 
 ## 2. A LEI DO MOVIMENTO (FRAMER MOTION OBRIGATÓRIO)
 
-O ecrã nunca deve sofrer transições bruscas (layout shifts). As mudanças de estado abruptas quebram o fluxo de concentração.
+A tela nunca deve sofrer transições bruscas (*layout shifts*). Mudanças de estado abruptas quebram o fluxo de concentração do usuário.
 
-- TODO E QUALQUER modal, painel lateral (slide-out), dropdown ou alteração de estado no Kanban DEVE ser animado com **Framer Motion**.
-- Utilizar a transição do tipo `spring` (com `stiffness` elevado e `damping` suave) para garantir um sentimento físico e tátil.
+- Todo e qualquer modal, painel lateral (*slide-out*), dropdown, ou alteração de estado em listas DEVE ser animado com **Framer Motion**.
+- Utilize transições do tipo `spring` (com `stiffness` elevado e `damping` suave) para garantir um feedback tátil, responsivo e físico.
 
-## 3. MICRO-INTERAÇÕES (ORIGIN UI)
+## 3. MICRO-INTERAÇÕES (ESTADO VIVO)
 
-A interface deve parecer responsiva e "viva" sob o rato do utilizador.
+A interface deve parecer responsiva sob o ponteiro do mouse ou teclado.
 
-- **Botões e Cards:** Devem possuir a classe `active:scale-95` e transições suaves de opacidade (`transition-all duration-200`).
-- **Foco:** Utilizar os anéis de foco do Tailwind (`ring-2 ring-offset-2 ring-ring`) para indicar claramente onde a ação do teclado se encontra.
+- **Feedback de Ação:** Botões e Cards interativos devem possuir micro-animações (ex: `active:scale-95` via Tailwind ou Framer Motion) e transições de opacidade (`transition-all duration-200`).
+- **Acessibilidade de Foco:** Utilize os anéis de foco do Tailwind (`ring-2 ring-offset-2 ring-ring`) para indicar claramente onde a ação do teclado se encontra a qualquer momento.
 
 ## 4. DIVULGAÇÃO PROGRESSIVA (LAZY RENDERING)
 
-Para evitar exaustão visual e derretimento da RAM:
+Para evitar exaustão visual e estrangulamento de memória RAM (V8 Engine):
 
-- Os blocos de código gerados pelo agente num chat devem aparecer inicialmente como texto simples colorido (syntax highlighting leve).
-- Apenas mediante ação do utilizador (clique em "Editar/Diff"), a interface deve expandir-se espacialmente e instanciar o **Monaco Editor** / CodeMirror para validação profunda.
-- Destruir a instância pesada do editor da memória assim que o utilizador fechar a visualização.
+- Os blocos de código gerados pelo agente num chat devem aparecer inicialmente como **texto simples colorido** (syntax highlighting super leve).
+- Apenas mediante ação explícita do usuário (ex: clique em "Inspecionar/Editar"), a interface deve se expandir espacialmente e instanciar o **Monaco Editor** para validação profunda.
+- A instância pesada do Monaco Editor DEVE ser destruída da memória (unmount) assim que o usuário fechar a visualização.
 
-## 5. REGRAS DOS COMPONENTES COMPLEXOS
+## 5. REGRAS DE COMPONENTES COMPLEXOS
 
-- **Workflow / Canvas:** Utilizar exclusivamente o `React Flow`. Os nós devem possuir cantos arredondados, sombras difusas (soft shadows) e ligação visual clara. As operações lógicas dos agentes devem manifestar-se espacialmente aqui, ocultando os logs crus.
-- **Kanban Pessoal:** Utilizar exclusivamente o `Pragmatic Drag and Drop`. Assegurar que os cartões não encravam a renderização da interface, permitindo arrasto assíncrono.
+- **Workflow / Canvas Pessoal:** Utilize EXCLUSIVAMENTE o **React Flow**. Os nós lógicos dos agentes devem manifestar-se espacialmente aqui (ocultando logs crus). Nós devem ter cantos arredondados, *soft shadows* e ligações visuais claras.
+- **Kanban Pessoal / Gestão de Tarefas:** Utilize EXCLUSIVAMENTE o **Pragmatic Drag and Drop** (Atlassian). O arrasto de cartões deve ser assíncrono para garantir que a renderização da UI a 60fps não seja engasgada por chamadas IPC ao Rust.

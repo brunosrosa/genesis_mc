@@ -1,14 +1,14 @@
 # 📜 WORKSPACE RULES: Genesis - Mission Control
 
-ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DESTE AGENTE PARA O CONTEXTO DESTE PROJETO.
+ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA IDE PARA O CONTEXTO DESTE PROJETO ESPECÍFICO.
 
 ## 1. STACK TECNOLÓGICO IMUTÁVEL
 
 - **Backend / Core:** Rust.
 - **Desktop Framework:** Tauri v2.
 - **Frontend / UI:** React 18+ (via Vite), TypeScript.
-- **Estilização:** Tailwind CSS v3/v4.
-- **UI Base:** Shadcn UI (componentes copiados para `src/components`, não instalados via npm).
+- **Estilização:** Tailwind CSS v4.
+- **UI Base:** Shadcn UI (componentes copiados para `src/components`, não instalados via npm wrapper).
 - **Animações:** Framer Motion.
 - **Visualização de Grafos/Canvas:** React Flow.
 - **Kanban / DnD:** Pragmatic Drag and Drop (Atlassian).
@@ -22,21 +22,26 @@ ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DEST
 
 ## 2. ARQUITETURA DE COMUNICAÇÃO (REACT <-> RUST)
 
-- O frontend React é ESTRITAMENTE PASSIVO.
+- O frontend React é ESTRITAMENTE PASSIVO ("burro").
 - Para passar dados volumosos (ex: varredura de arquivos), o Rust deve emitir Eventos Tauri assíncronos (`emit`) e o React deve escutá-los (`listen`), preferencialmente usando estruturas binárias para evitar asfixia do V8 Engine com JSONs gigantes.
-- NUNCA bloqueie a thread principal com comandos síncronos demorados.
+- **NUNCA** bloqueie a thread principal com comandos síncronos demorados.
 
-## 3. DESIGN SYSTEM E ESTÉTICA
+## 3. BANCO DE DADOS E CONCORRÊNCIA (A LEI DO DOLT)
+
+- O motor Rust conectará ao banco de dados **Dolt** (Protocolo MySQL na porta 3306) operando o ecossistema Beads.
+- É **OBRIGATÓRIO** implementar um *Graceful Sleep* (espera ativa/retries) na inicialização da *Connection Pool* no Rust para permitir a subida do listener TCP do Windows antes da primeira query.
+
+## 4. DESIGN SYSTEM E ESTÉTICA
 
 - Todo novo componente React deve ser precedido pela leitura do `UI_GUIDELINES.md`.
 - Micro-interações são obrigatórias. Elementos interativos devem ter feedback visual utilizando Framer Motion ou utilitários Tailwind aprovados (ex: propriedades `active:`, `focus-within:`).
 
-## 4. ORQUESTRAÇÃO DE CONTEXTO (PREVENÇÃO DE CONTEXT ROT)
+## 5. ORQUESTRAÇÃO DE CONTEXTO (PREVENÇÃO DE CONTEXT ROT)
 
 - Antes de iniciar o desenvolvimento de uma funcionalidade nova, o agente DEVE ler e preencher um modelo `INITIAL.md` (Product Requirements Prompt - PRP).
 - **Semantic Chunking:** Ao solicitar refatoração de backend (Rust), o agente NÃO DEVE incluir no seu contexto arquivos do frontend (React/CSS), e vice-versa, para evitar contaminação semântica.
 - **Execução Stateless:** Trate cada tarefa como isolada. Busque a verdade no sistema de arquivos local e nos testes (Ralph Loop), não no histórico da conversa atual.
 
-## 5. CONTROLES DE SEGURANÇA (GATES)
+## 6. CONTROLES DE SEGURANÇA (GATES)
 
 - Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro (chamadas de API pagas) deve ser implementada com um mecanismo de suspensão de corrotina em Rust, aguardando um sinal de aprovação via UI (React).
