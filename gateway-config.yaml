@@ -15,5 +15,13 @@ binds:
                   targets:
                     - name: jcodemunch
                       stdio:
-                        cmd: "uvx"
-                        args: ["jcodemunch-mcp"]
+                        cmd: "uvx.exe"
+                        args: ["--quiet", "jcodemunch-mcp"]
+                    - name: time_server
+                      stdio:
+                        cmd: "mcp-server-time.exe"
+                        args: []
+                    - name: sqlite_soda
+                      stdio:
+                        cmd: "uvx.exe"
+                        args: ["--quiet", "mcp-server-sqlite", "--db-path", "genesis.db"]
