@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+config: {}
+binds:
+  - port: 3000
+    listeners:
+      - protocol: HTTP
+        routes:
+          - policies:
+              cors:
+                allowOrigins: ["*"]
+                allowHeaders: ["*"]
+                exposeHeaders: ["Mcp-Session-Id"]
+            backends:
+              - mcp:
+                  targets:
+                    - name: jcodemunch
+                      stdio:
+                        cmd: "uvx"
+                        args: ["jcodemunch-mcp"]
