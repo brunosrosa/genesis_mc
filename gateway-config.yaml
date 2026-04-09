@@ -10,35 +10,48 @@ binds:
                 allowOrigins: ['*']
                 allowHeaders: ['*']
                 exposeHeaders: ['Mcp-Session-Id']
+              mcpAuthorization:
+                rules:
+                  # VÁLVULA INTELIGENTE CEL CORRIGIDA:
+                  # A diretiva correta para expressões CEL no AgentGateway exige o bloco 'match'
+                  - action: deny
+                    match:
+                      cel: 'mcp.tool.name.startsWith("jcodemunch_") && !mcp.tool.name.matches("^jcodemunch_(ast_parse|get_file_outline|search_symbols|get_context_bundle)")'
             backends:
               - mcp:
                   failureMode: failOpen
                   targets:
+                    # 1. AST Parser (Agora 100% funcional com o tree-sitter)
                     - name: jcodemunch
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', 'jcodemunch-mcp']
+                    # 2. Servidor de Tempo (Rust Nativo)
                     - name: time_server
                       stdio:
                         cmd: 'mcp-server-time.exe'
                         args: []
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+                    # 3. Memória L2 Transacional
                     - name: sqlite_soda
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']
+                    # 4. Raciocínio Passo-a-Passo (Vital para os modelos locais menores)
                     - name: sequential_thinking
                       stdio:
                         cmd: 'npx.cmd'
                         args: ['-y', '@modelcontextprotocol/server-sequential-thinking']
+                    # 5. Pesquisa Web Gratuita (Grounding de Fatos)
+                    - name: duckduckgo_search
+                      stdio:
+                        cmd: 'uvx.exe'
+                        args: ['--quiet', 'mcp-server-duckduckgo']
+                    # 6. Integração Git/PRs
                     - name: github_mcp
                       stdio:
                         cmd: 'npx.cmd'
                         args: ['-y', '@modelcontextprotocol/server-github']
                         env:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
-                    - name: duckduckgo_search
-                      stdio:
-                        cmd: 'uvx.exe'
-                        args: ['--quiet', 'mcp-server-duckduckgo']
