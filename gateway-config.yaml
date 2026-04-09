@@ -7,21 +7,38 @@ binds:
         routes:
           - policies:
               cors:
-                allowOrigins: ["*"]
-                allowHeaders: ["*"]
-                exposeHeaders: ["Mcp-Session-Id"]
+                allowOrigins: ['*']
+                allowHeaders: ['*']
+                exposeHeaders: ['Mcp-Session-Id']
             backends:
               - mcp:
+                  failureMode: failOpen
                   targets:
                     - name: jcodemunch
                       stdio:
-                        cmd: "uvx.exe"
-                        args: ["--quiet", "jcodemunch-mcp"]
+                        cmd: 'uvx.exe'
+                        args: ['--quiet', 'jcodemunch-mcp']
                     - name: time_server
                       stdio:
-                        cmd: "mcp-server-time.exe"
+                        cmd: 'mcp-server-time.exe'
                         args: []
+                        env:
+                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: sqlite_soda
                       stdio:
-                        cmd: "uvx.exe"
-                        args: ["--quiet", "mcp-server-sqlite", "--db-path", "genesis.db"]
+                        cmd: 'uvx.exe'
+                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']
+                    - name: sequential_thinking
+                      stdio:
+                        cmd: 'npx.cmd'
+                        args: ['-y', '@modelcontextprotocol/server-sequential-thinking']
+                    - name: github_mcp
+                      stdio:
+                        cmd: 'npx.cmd'
+                        args: ['-y', '@modelcontextprotocol/server-github']
+                        env:
+                          GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
+                    - name: duckduckgo_search
+                      stdio:
+                        cmd: 'uvx.exe'
+                        args: ['--quiet', 'mcp-server-duckduckgo']
