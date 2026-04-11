@@ -12,16 +12,15 @@ binds:
                 exposeHeaders: ['Mcp-Session-Id']
               mcpAuthorization:
                 rules:
-                  # VÁLVULA INTELIGENTE CEL (FIREWALL ANTI-BLOAT V4 - STRICT ALLOWLIST)
-                  # AVALIAÇÃO RAW: Libera EXATAMENTE as ferramentas descritas abaixo, bloqueando todo o resto.
+                  # VÁLVULA INTELIGENTE CEL (FIREWALL V5 - O PONTO DE EQUILÍBRIO)
+                  # 1. Permite indexação de código, arquivos e git (JCodeMunch e Github)
+                  # 2. Permite leitura de documentos e cadernos (NotebookLM)
+                  # 3. Permite acesso SQLite e utilitários (Tempo/Raciocínio)
+                  # 4. Bloqueia explicitamente a Busca Web (Conforme PRD Milestone 1)
                   - >
-                    mcp.tool.name.matches("^(index_repo|index_folder|ast_parse|get_file_outline|search_symbols|sequential_thinking|get_current_time|duckduckgo_search)$")
+                    mcp.tool.name.matches(".*(index|ast|symbol|file|issue|pull|repo|commit|push|diff).*")
                     ||
-                    mcp.tool.name.matches("^(get_file_contents|search_repositories|search_code|get_issue|get_pull_request|create_issue|create_pull_request|push_files)$")
-                    ||
-                    mcp.tool.name.matches("^(ask_question|list_notebooks|list_documents|read_document)$")
-                    ||
-                    mcp.tool.name.matches("^(query|list_tables|describe_table)$")
+                    mcp.tool.name.matches(".*(notebook|document|ask|source|query|table|time|sequential).*")
             backends:
               - mcp:
                   failureMode: failOpen
