@@ -12,20 +12,26 @@ binds:
                 exposeHeaders: ['Mcp-Session-Id']
               mcpAuthorization:
                 rules:
-                  # VÁLVULA INTELIGENTE CEL CORRIGIDA:
-                  # A diretiva correta para expressões CEL no AgentGateway exige o bloco 'match'
-                  - action: deny
-                    match:
-                      cel: 'mcp.tool.name.startsWith("jcodemunch_") && !mcp.tool.name.matches("^jcodemunch_(ast_parse|get_file_outline|search_symbols|get_context_bundle)")'
+                  # VÁLVULA INTELIGENTE CEL (FIREWALL ANTI-BLOAT V2)
+                  # 1. Permite os novos indexadores do JCodeMunch mapeados na auditoria
+                  # 2. Corta ferramentas inúteis do GitHub (focando só em file, issue, pull, repo, search)
+                  # 3. Corta ferramentas de edição do NotebookLM (focando apenas em consulta/leitura)
+                  - >
+                    ( !mcp.tool.name.startsWith("jcodemunch_") || mcp.tool.name.matches("^jcodemunch_(index_repo|index_folder|ast_parse|get_file_outline|search_symbols)$") )
+                    &&
+                    ( !mcp.tool.name.startsWith("github") || mcp.tool.name.matches("^github.*(file|issue|pull|repo|search).*$") )
+                    &&
+                    ( !mcp.tool.name.startsWith("notebooklm") || mcp.tool.name.matches("^notebooklm.*(ask|source|doc|notebook|read).*$") )
             backends:
               - mcp:
                   failureMode: failOpen
                   targets:
-                    # 1. AST Parser (Agora 100% funcional com o tree-sitter)
+                    # 1. AST Parser (Agora blindado via CEL na porta de entrada)
                     - name: jcodemunch
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', 'jcodemunch-mcp']
+                    
                     # 2. Servidor de Tempo (Rust Nativo)
                     - name: time_server
                       stdio:
@@ -33,21 +39,25 @@ binds:
                         args: []
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+                    
                     # 3. Memória L2 Transacional
                     - name: sqlite_soda
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']
-                    # 4. Raciocínio Passo-a-Passo (Vital para os modelos locais menores)
+                    
+                    # 4. Raciocínio Passo-a-Passo
                     - name: sequential_thinking
                       stdio:
                         cmd: 'npx.cmd'
                         args: ['-y', '@modelcontextprotocol/server-sequential-thinking']
-                    # 5. Pesquisa Web Gratuita (Grounding de Fatos)
+                    
+                    # 5. Pesquisa Web Gratuita (Pacote PyPI Correto)
                     - name: duckduckgo_search
                       stdio:
                         cmd: 'uvx.exe'
-                        args: ['--quiet', 'mcp-server-duckduckgo']
+                        args: ['--quiet', 'duckduckgo-mcp-server']
+                    
                     # 6. Integração Git/PRs
                     - name: github_mcp
                       stdio:
@@ -55,3 +65,10 @@ binds:
                         args: ['-y', '@modelcontextprotocol/server-github']
                         env:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
+                    
+                    # 7. O ORÁCULO DE CONTEXTO (NotebookLM)
+                    # Exige a flag --from pois o nome do pacote difere do executável
+                    - name: notebooklm
+                      stdio:
+                        cmd: 'uvx.exe'
+                        args: ['--quiet', '--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
