@@ -12,14 +12,16 @@ binds:
                 exposeHeaders: ['Mcp-Session-Id']
               mcpAuthorization:
                 rules:
-                  # VÁLVULA INTELIGENTE CEL (FIREWALL ANTI-BLOAT V3)
-                  # AVALIAÇÃO RAW: O Gateway lê os nomes AQUI antes de adicionar prefixos.
-                  # A regra permite ferramentas exatas (ex: ast_parse, sequential_thinking) 
-                  # OU ferramentas que contenham palavras essenciais (ex: file, issue, query, search).
+                  # VÁLVULA INTELIGENTE CEL (FIREWALL ANTI-BLOAT V4 - STRICT ALLOWLIST)
+                  # AVALIAÇÃO RAW: Libera EXATAMENTE as ferramentas descritas abaixo, bloqueando todo o resto.
                   - >
-                    mcp.tool.name.matches("^(index_repo|index_folder|ast_parse|get_file_outline|search_symbols|sequential_thinking|get_current_time)$")
+                    mcp.tool.name.matches("^(index_repo|index_folder|ast_parse|get_file_outline|search_symbols|sequential_thinking|get_current_time|duckduckgo_search)$")
                     ||
-                    mcp.tool.name.matches(".*(file|issue|pull|repo|search|ask|source|doc|notebook|read|query|table).*")
+                    mcp.tool.name.matches("^(get_file_contents|search_repositories|search_code|get_issue|get_pull_request|create_issue|create_pull_request|push_files)$")
+                    ||
+                    mcp.tool.name.matches("^(ask_question|list_notebooks|list_documents|read_document)$")
+                    ||
+                    mcp.tool.name.matches("^(query|list_tables|describe_table)$")
             backends:
               - mcp:
                   failureMode: failOpen
