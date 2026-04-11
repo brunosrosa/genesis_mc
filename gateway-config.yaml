@@ -12,15 +12,17 @@ binds:
                 exposeHeaders: ['Mcp-Session-Id']
               mcpAuthorization:
                 rules:
-                  # VÁLVULA INTELIGENTE CEL (FIREWALL V5 - O PONTO DE EQUILÍBRIO)
-                  # 1. Permite indexação de código, arquivos e git (JCodeMunch e Github)
-                  # 2. Permite leitura de documentos e cadernos (NotebookLM)
-                  # 3. Permite acesso SQLite e utilitários (Tempo/Raciocínio)
-                  # 4. Bloqueia explicitamente a Busca Web (Conforme PRD Milestone 1)
+                  # VÁLVULA INTELIGENTE CEL (FIREWALL V6 - O CANIVETE SUÍÇO SODA)
+                  # Libera exatas 21 ferramentas de leitura, raciocínio e recuperação.
+                  # Bloqueia 100% das ferramentas de deleção, edição remota e I/O destrutivo.
                   - >
-                    mcp.tool.name.matches(".*(index|ast|symbol|file|issue|pull|repo|commit|push|diff).*")
+                    mcp.tool.name.matches("^(index_folder|get_file_tree|get_file_outline|get_symbol_source|search_symbols|get_file_content)$")
                     ||
-                    mcp.tool.name.matches(".*(notebook|document|ask|source|query|table|time|sequential).*")
+                    mcp.tool.name.matches("^(get_current_time|read_query|list_tables|describe_table|sequentialthinking)$")
+                    ||
+                    mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests)$")
+                    ||
+                    mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|source_get_content)$")
             backends:
               - mcp:
                   failureMode: failOpen
