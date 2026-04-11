@@ -2,50 +2,53 @@
 trigger: always_on
 ---
 
-# 📜 WORKSPACE RULES: Genesis - Mission Control
+# 📜 WORKSPACE RULES: Genesis - Mission Control (SODA)
 
 ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA IDE PARA O CONTEXTO DESTE PROJETO ESPECÍFICO.
 
-## 1. STACK TECNOLÓGICO IMUTÁVEL
+## 1. STACK TECNOLÓGICO IMUTÁVEL (BARE-METAL CORE)
 
-- **Backend / Core:** Rust.
+- **Backend / Core:** Rust (assíncrono via `tokio`).
 - **Desktop Framework:** Tauri v2.
 - **Frontend / UI:** React 18+ (via Vite), TypeScript.
 - **Estilização:** Tailwind CSS v4.
 - **UI Base:** Shadcn UI (componentes copiados para `src/components`, não instalados via npm wrapper).
-- **Animações:** Framer Motion.
-- **Visualização de Grafos/Canvas:** React Flow.
-- **Kanban / DnD:** Pragmatic Drag and Drop (Atlassian).
+- **Animações:** Framer Motion (apenas para micro-interações, priorizando performance).
+- **Visualização de Grafos/Canvas:** React Flow / Tldraw.
+- **Sandboxing de Execução:** Wasmtime (para execução isolada de lógicas ou scripts gerados).
 
 ### 🚫 TECNOLOGIAS E PADRÕES EXPRESSAMENTE PROIBIDOS
 
 - **NÃO** utilize Next.js, Remix ou frameworks SSR (Server-Side Rendering). Este é um app Desktop Tauri.
 - **NÃO** utilize Electron.
 - **NÃO** instale bibliotecas de UI baseadas em CSS-in-JS (como Material UI ou Emotion).
-- **NÃO** crie APIs REST em Node.js. Toda lógica pesada, acesso a banco e leitura de arquivos deve ser feita em Rust e exposta ao React via comandos/eventos Tauri IPC.
+- **NÃO** crie APIs REST em Node.js. Toda lógica pesada, acesso a banco e leitura de arquivos DEVE ser feita em Rust.
 
-## 2. ARQUITETURA DE COMUNICAÇÃO (REACT <-> RUST)
+## 2. ARQUITETURA DE COMUNICAÇÃO (IPC ZERO-COPY)
 
-- O frontend React é ESTRITAMENTE PASSIVO ("burro").
-- Para passar dados volumosos (ex: varredura de arquivos), o Rust deve emitir Eventos Tauri assíncronos (`emit`) e o React deve escutá-los (`listen`), preferencialmente usando estruturas binárias para evitar asfixia do V8 Engine com JSONs gigantes.
-- **NUNCA** bloqueie a thread principal com comandos síncronos demorados.
+- O frontend React é ESTRITAMENTE PASSIVO ("burro"). Ele não possui regras de negócios.
+- A comunicação entre Rust e React deve priorizar o envio de **buffers binários nativos** (ou JSON estritamente tipado) via Eventos Tauri assíncronos (`emit` / `listen`) para evitar asfixia do motor V8 com serializações gigantes.
+- **NUNCA** bloqueie a thread principal com comandos síncronos demorados. O I/O pesado deve rodar em `tokio::task::spawn_blocking`.
 
-## 3. BANCO DE DADOS E CONCORRÊNCIA (A LEI DO DOLT)
+## 3. BANCO DE DADOS E MEMÓRIA (O FIM DO DOLT/MYSQL)
 
-- O motor Rust conectará ao banco de dados **Dolt** (Protocolo MySQL na porta 3306) operando o ecossistema Beads.
-- É **OBRIGATÓRIO** implementar um *Graceful Sleep* (espera ativa/retries) na inicialização da *Connection Pool* no Rust para permitir a subida do listener TCP do Windows antes da primeira query.
+- A memória L2 transacional do agente utilizará EXCLUSIVAMENTE o **SQLite (via `rusqlite` ou `sqlx`)** operando em modo WAL (*Write-Ahead Logging*).
+- O uso de instâncias externas pesadas (MySQL, Dolt, Postgres) está proibido para garantir a soberania "Local-First".
+- Consultas lexicais utilizarão a extensão nativa **FTS5** do SQLite.
 
-## 4. DESIGN SYSTEM E ESTÉTICA
+## 4. A EXCEÇÃO DO DOCKER (SIDECARS EFÊMEROS)
 
-- Todo novo componente React deve ser precedido pela leitura do `UI_GUIDELINES.md`.
-- Micro-interações são obrigatórias. Elementos interativos devem ter feedback visual utilizando Framer Motion ou utilitários Tailwind aprovados (ex: propriedades `active:`, `focus-within:`).
+- **Atenção à Regra Bare-Metal:** O produto final do SODA jamais usará contêineres.
+- **Exceção de Desenvolvimento:** Exclusivamente durante o desenvolvimento neste workspace, **É PERMITIDO** o uso de Docker apenas para orquestrar "Sidecars Efêmeros" via MCP (ex: `docling-mcp`, `browser-use`).
+- Estes contêineres devem obrigatoriamente rodar com a flag `--rm` para serem sumariamente destruídos após a extração do JSON-RPC, devolvendo a memória à máquina hospedeira.
 
-## 5. ORQUESTRAÇÃO DE CONTEXTO (PREVENÇÃO DE CONTEXT ROT)
+## 5. ORQUESTRAÇÃO DE CONTEXTO E GITOPS (SHADOW WORKSPACES)
 
-- Antes de iniciar o desenvolvimento de uma funcionalidade nova, o agente DEVE ler e preencher um modelo `INITIAL.md` (Product Requirements Prompt - PRP).
-- **Semantic Chunking:** Ao solicitar refatoração de backend (Rust), o agente NÃO DEVE incluir no seu contexto arquivos do frontend (React/CSS), e vice-versa, para evitar contaminação semântica.
-- **Execução Stateless:** Trate cada tarefa como isolada. Busque a verdade no sistema de arquivos local e nos testes (Ralph Loop), não no histórico da conversa atual.
+- **Spec-Driven Development (SDD):** Nunca codifique às cegas. Antes de gerar código, você DEVE estruturar o problema usando a metodologia BMAD (criar `proposal.md`, `design.md` e `tasks.md`).
+- **Shadow Workspaces:** Para refatorações críticas ou execuções autônomas, **NÃO aplique commits diretos na branch main**. Trabalhe em ramificações ou pastas temporárias isoladas, gerando um patch (Diff) para a aprovação estrita do Arquiteto (Human-in-the-loop).
+- **Execução Stateless:** Trate cada tarefa como isolada. O sucesso não é definido pelo chat, mas por *Exit Code 0* nos testes locais (`cargo check` / `cargo test`).
 
-## 6. CONTROLES DE SEGURANÇA (GATES)
+## 6. CONTROLES DE SEGURANÇA (GATES & HITL)
 
-- Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro (chamadas de API pagas) deve ser implementada com um mecanismo de suspensão de corrotina em Rust, aguardando um sinal de aprovação via UI (React).
+- Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro deve ser implementada com um mecanismo de suspensão de corrotina em Rust.
+- O *daemon* em Rust "congela" a thread e exibe um Card de Aprovação no Canvas (React), aguardando a confirmação explícita humana antes de aplicar a mutação no disco.

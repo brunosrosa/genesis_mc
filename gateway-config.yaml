@@ -72,3 +72,9 @@ binds:
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', '--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
+                    
+                    # # 8. Documentação Estática Otimizada (LLMs.txt) [Tá com erro pra subir - precisa verificar]
+                    # - name: docfork
+                    #   stdio:
+                    #     cmd: 'uvx.exe'
+                    #     args: ['--quiet', 'docfork-mcp']
