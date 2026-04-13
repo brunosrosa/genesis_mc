@@ -23,6 +23,8 @@ binds:
                     mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests)$")
                     ||
                     mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|source_get_content)$")
+                    ||
+                    mcp.tool.name.matches("^(web_search|duckduckgo_search|fetch_content)$")
             backends:
               - mcp:
                   failureMode: failOpen
