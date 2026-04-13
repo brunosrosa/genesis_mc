@@ -2,53 +2,46 @@
 trigger: always_on
 ---
 
-# 📜 WORKSPACE RULES: Genesis - Mission Control (SODA)
-
+### 📜 WORKSPACE RULES: Genesis - Mission Control (SODA)
+**Versão:** 1.0 (Definitiva)
 ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA IDE PARA O CONTEXTO DESTE PROJETO ESPECÍFICO.
 
-## 1. STACK TECNOLÓGICO IMUTÁVEL (BARE-METAL CORE)
+#### 1. STACK TECNOLÓGICO IMUTÁVEL (BARE-METAL CORE)
+* **Backend / Core:** Rust (assíncrono via tokio).
+* **Desktop Framework:** Tauri v2.
+* **Frontend / UI:** React 18+ (via Vite), TypeScript.
+* **Estilização:** Tailwind CSS v4.
+* **UI Base:** Shadcn UI (componentes copiados para src/components, não instalados via npm wrapper).
+* **Animações:** Framer Motion (apenas para micro-interações, priorizando performance).
+* **Visualização de Grafos/Canvas:** React Flow / Tldraw.
+* **Sandboxing de Execução:** Wasmtime (para execução isolada de lógicas ou scripts gerados).
 
-- **Backend / Core:** Rust (assíncrono via `tokio`).
-- **Desktop Framework:** Tauri v2.
-- **Frontend / UI:** React 18+ (via Vite), TypeScript.
-- **Estilização:** Tailwind CSS v4.
-- **UI Base:** Shadcn UI (componentes copiados para `src/components`, não instalados via npm wrapper).
-- **Animações:** Framer Motion (apenas para micro-interações, priorizando performance).
-- **Visualização de Grafos/Canvas:** React Flow / Tldraw.
-- **Sandboxing de Execução:** Wasmtime (para execução isolada de lógicas ou scripts gerados).
+##### 🚫 TECNOLOGIAS E PADRÕES EXPRESSAMENTE PROIBIDOS
+* **NÃO** utilize Next.js, Remix ou frameworks SSR (Server-Side Rendering). Este é um app Desktop Tauri.
+* **NÃO** utilize Electron.
+* **NÃO** instale bibliotecas de UI baseadas em CSS-in-JS (como Material UI ou Emotion).
+* **NÃO** crie APIs REST em Node.js. Toda lógica pesada, acesso a banco e leitura de arquivos DEVE ser feita em Rust.
 
-### 🚫 TECNOLOGIAS E PADRÕES EXPRESSAMENTE PROIBIDOS
+#### 2. ARQUITETURA DE COMUNICAÇÃO (IPC ZERO-COPY)
+* O frontend React é ESTRITAMENTE PASSIVO ("burro"). Ele não possui regras de negócios.
+* A comunicação entre Rust e React deve priorizar o envio de **buffers binários nativos** (ou JSON estritamente tipado) via Eventos Tauri assíncronos (emit / listen) para evitar asfixia do motor V8 com serializações gigantes.
+* **NUNCA** bloqueie a thread principal com comandos síncronos demorados. O I/O pesado deve rodar em `tokio::task::spawn_blocking`.
 
-- **NÃO** utilize Next.js, Remix ou frameworks SSR (Server-Side Rendering). Este é um app Desktop Tauri.
-- **NÃO** utilize Electron.
-- **NÃO** instale bibliotecas de UI baseadas em CSS-in-JS (como Material UI ou Emotion).
-- **NÃO** crie APIs REST em Node.js. Toda lógica pesada, acesso a banco e leitura de arquivos DEVE ser feita em Rust.
+#### 3. BANCO DE DADOS E MEMÓRIA (O FIM DO DOLT/MYSQL)
+* A memória L2 transacional do agente utilizará EXCLUSIVAMENTE o **SQLite (via `rusqlite` ou `sqlx`)** operando em modo WAL (*Write-Ahead Logging*).
+* O uso de instâncias externas pesadas (MySQL, Dolt, Postgres) está proibido para garantir a soberania "Local-First".
+* Consultas lexicais utilizarão a extensão nativa **FTS5** do SQLite.
 
-## 2. ARQUITETURA DE COMUNICAÇÃO (IPC ZERO-COPY)
+#### 4. A EXCEÇÃO DO DOCKER (SIDECARS EFÊMEROS)
+* **Atenção à Regra Bare-Metal:** O produto final do SODA jamais usará contêineres.
+* **Exceção de Desenvolvimento:** Exclusivamente durante o desenvolvimento neste workspace, **É PERMITIDO** o uso de Docker apenas para orquestrar "Sidecars Efêmeros" via MCP (ex: docling-mcp, browser-use).
+* Estes contêineres devem obrigatoriamente rodar com a flag `--rm` para serem sumariamente destruídos após a extração do JSON-RPC, devolvendo a memória à máquina hospedeira.
 
-- O frontend React é ESTRITAMENTE PASSIVO ("burro"). Ele não possui regras de negócios.
-- A comunicação entre Rust e React deve priorizar o envio de **buffers binários nativos** (ou JSON estritamente tipado) via Eventos Tauri assíncronos (`emit` / `listen`) para evitar asfixia do motor V8 com serializações gigantes.
-- **NUNCA** bloqueie a thread principal com comandos síncronos demorados. O I/O pesado deve rodar em `tokio::task::spawn_blocking`.
+#### 5. ORQUESTRAÇÃO DE CONTEXTO E GITOPS (SHADOW WORKSPACES)
+* **Spec-Driven Development (SDD):** Nunca codifique às cegas. Antes de gerar código, você DEVE estruturar o problema usando a metodologia BMAD (criar proposal.md, design.md e tasks.md).
+* **Shadow Workspaces:** Para refatorações críticas ou execuções autônomas, **NÃO aplique commits diretos na branch main**. Trabalhe em ramificações ou pastas temporárias isoladas, gerando um patch (Diff) para a aprovação estrita do Arquiteto (Human-in-the-loop).
+* **Execução Stateless:** Trate cada tarefa como isolada. O sucesso não é definido pelo chat, mas por *Exit Code 0* nos testes locais (cargo check / cargo test).
 
-## 3. BANCO DE DADOS E MEMÓRIA (O FIM DO DOLT/MYSQL)
-
-- A memória L2 transacional do agente utilizará EXCLUSIVAMENTE o **SQLite (via `rusqlite` ou `sqlx`)** operando em modo WAL (*Write-Ahead Logging*).
-- O uso de instâncias externas pesadas (MySQL, Dolt, Postgres) está proibido para garantir a soberania "Local-First".
-- Consultas lexicais utilizarão a extensão nativa **FTS5** do SQLite.
-
-## 4. A EXCEÇÃO DO DOCKER (SIDECARS EFÊMEROS)
-
-- **Atenção à Regra Bare-Metal:** O produto final do SODA jamais usará contêineres.
-- **Exceção de Desenvolvimento:** Exclusivamente durante o desenvolvimento neste workspace, **É PERMITIDO** o uso de Docker apenas para orquestrar "Sidecars Efêmeros" via MCP (ex: `docling-mcp`, `browser-use`).
-- Estes contêineres devem obrigatoriamente rodar com a flag `--rm` para serem sumariamente destruídos após a extração do JSON-RPC, devolvendo a memória à máquina hospedeira.
-
-## 5. ORQUESTRAÇÃO DE CONTEXTO E GITOPS (SHADOW WORKSPACES)
-
-- **Spec-Driven Development (SDD):** Nunca codifique às cegas. Antes de gerar código, você DEVE estruturar o problema usando a metodologia BMAD (criar `proposal.md`, `design.md` e `tasks.md`).
-- **Shadow Workspaces:** Para refatorações críticas ou execuções autônomas, **NÃO aplique commits diretos na branch main**. Trabalhe em ramificações ou pastas temporárias isoladas, gerando um patch (Diff) para a aprovação estrita do Arquiteto (Human-in-the-loop).
-- **Execução Stateless:** Trate cada tarefa como isolada. O sucesso não é definido pelo chat, mas por *Exit Code 0* nos testes locais (`cargo check` / `cargo test`).
-
-## 6. CONTROLES DE SEGURANÇA (GATES & HITL)
-
-- Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro deve ser implementada com um mecanismo de suspensão de corrotina em Rust.
-- O *daemon* em Rust "congela" a thread e exibe um Card de Aprovação no Canvas (React), aguardando a confirmação explícita humana antes de aplicar a mutação no disco.
+#### 6. CONTROLES DE SEGURANÇA (GATES & HITL)
+* Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro deve ser implementada com um mecanismo de suspensão de corrotina em Rust.
+* O *daemon* em Rust "congela" a thread e exibe um Card de Aprovação no Canvas (React), aguardando a confirmação explícita humana antes de aplicar a mutação no disco.
