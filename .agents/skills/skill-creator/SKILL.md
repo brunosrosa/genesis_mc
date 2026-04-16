@@ -28,7 +28,7 @@ mkdir -p .agents/skills/<nome-da-nova-skill>/references/
 
 ### Passo 3: Formatação e Escrita do SKILL.md
 
-Você deve compor e escrever o arquivo SKILL.md utilizando a interface de terminal padrão (bash cat). O arquivo DEVE ter um YAML Frontmatter contendo name, description e triggers, seguido pelas seções Markdown ## Goal, ## Instructions, ## Constraints e ## Examples.
+Você deve compor e escrever o arquivo `SKILL.md` utilizando a interface de terminal padrão (`bash cat`). O arquivo DEVE ter um YAML Frontmatter contendo `name`, `description` e `triggers`, seguido pelas seções Markdown `## Goal`, `## Instructions`, `## Constraints` e `## Examples`.
 
 ```bash
 cat > .agents/skills/<nome-da-nova-skill>/SKILL.md << 'EOF'
@@ -57,7 +57,7 @@ chmod +x .agents/skills/<nome-da-nova-skill>/scripts/validator.sh
 
 ### Passo 5: Ingestão de Referências (Evitando Context Rot)
 
-Se a documentação tiver regras extensas (ex: padrões de arquitetura), NÃO as coloque no SKILL.md. Salve-as em references/rules.md:
+Se a documentação tiver regras extensas (ex: padrões de arquitetura), NÃO as coloque no `SKILL.md`. Salve-as em `references/rules.md`:
 
 ```bash
 cat > .agents/skills/<nome-da-nova-skill>/references/rules.md << 'EOF'
@@ -67,7 +67,10 @@ EOF
 
 ### Constraints (Restrições Inegociáveis)
 
-Economia de Tokens: A descrição no YAML deve ter no máximo ~100 tokens, pois residirá na memória constante. O nome da pasta da habilidade deve ser idêntico à propriedade name contida no YAML.
-Zero Python/Node: Não crie arquivos .js ou .py para o agente rodar na nova skill. Restrinja-se a bash, Rust ou Wasm.
-Examples
-Entrada do Usuário: "Crie uma skill chamada soda-linter que roda cargo clippy." Ação do Agente: Executa mkdir -p .agents/skills/soda-linter/scripts, cria o SKILL.md com os triggers: ["validar rust", "rodar linter"] e cria um validator.sh contendo o comando cargo clippy -- -D warnings.
+**Economia de Tokens**: A descrição no YAML deve ter no máximo ~100 tokens, pois residirá na memória constante. 
+O nome da pasta da habilidade deve ser **idêntico** à propriedade `name` contida no YAML.
+**Zero Python/Node**: Não crie arquivos .js ou .py para o agente rodar na nova skill. Restrinja-se a bash, Rust ou Wasm.
+
+### Examples
+
+*Entrada do Usuário*: "Crie uma skill chamada soda-linter que roda cargo clippy." Ação do Agente: Executa `mkdir -p .agents/skills/soda-linter/scripts`, cria o `SKILL.md` com os `triggers: ["validar rust", "rodar linter"]` e cria um `validator.sh` contendo o comando `cargo clippy -- -D warnings`.
