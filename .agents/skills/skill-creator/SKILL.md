@@ -65,12 +65,12 @@ cat > .agents/skills/<nome-da-nova-skill>/references/rules.md << 'EOF'
 EOF
 ```
 
-### Constraints (Restrições Inegociáveis)
+## Constraints (Restrições Inegociáveis)
 
 **Economia de Tokens**: A descrição no YAML deve ter no máximo ~100 tokens, pois residirá na memória constante. 
 O nome da pasta da habilidade deve ser **idêntico** à propriedade `name` contida no YAML.
 **Zero Python/Node**: Não crie arquivos .js ou .py para o agente rodar na nova skill. Restrinja-se a bash, Rust ou Wasm.
 
-### Examples
+## Examples
 
 *Entrada do Usuário*: "Crie uma skill chamada soda-linter que roda cargo clippy." Ação do Agente: Executa `mkdir -p .agents/skills/soda-linter/scripts`, cria o `SKILL.md` com os `triggers: ["validar rust", "rodar linter"]` e cria um `validator.sh` contendo o comando `cargo clippy -- -D warnings`.
