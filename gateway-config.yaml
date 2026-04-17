@@ -20,7 +20,7 @@ binds:
                     ||
                     mcp.tool.name.matches("^(get_current_time|read_query|list_tables|describe_table|sequentialthinking)$")
                     ||
-                    mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests)$")
+                    mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$")
                     ||
                     mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|source_get_content)$")
                     ||
