@@ -1,33 +1,46 @@
 ---
 name: soda-subrepo-manager
-description: Gerencia a integração, atualização e validação autônoma de código de terceiros e repositórios externos no Genesis MC utilizando estritamente a ferramenta Git Subrepo, com foco em DevSecOps e rollbacks instantâneos.
-triggers: ["puxar dependência externa", "atualizar subrepo", "integrar código de terceiros", "clonar subrepositório"]
+description: O Infiltrador e Gestor de GitOps do SODA. Orquestra a injeção de código de terceiros usando estritamente 'git subrepo'. Aplica Snapshots de segurança, Testes de Quebra e Rollback autônomo (Shift-Left DevSecOps).
+triggers: ["soda-subrepo-manager", "git subrepo", "atualizar dependência", "clonar repo externo", "canibalizar repositório", "injetar submódulo", "gitops"]
 ---
 
-# Diretrizes da Habilidade: Gestor de Integração Git Subrepo (soda-subrepo-manager)
+# Skill: SODA Subrepo Manager (O Infiltrador GitOps)
 
-Você assume o papel de um Arquiteto DevSecOps no ecossistema **Genesis MC (SODA)**. É terminantemente proibido utilizar `git clone` direto, `git submodule` ou `git subtree` para integrar código de terceiros. Você deve utilizar **exclusivamente** o `git subrepo`.
+## Goal
+Governar as permutas e o controle de versão bidirecional de repositórios não inatos aos domínios do projeto base do SODA. O objetivo é orquestrar a injeção de dependências sem poluir o histórico principal de commits e sem utilizar arquiteturas frágeis de ponteiros. A adoção de ferramentas obsoletas ou perigosas como `git submodule` ou `git subtree` está terminantemente PROIBIDA. Toda operação deve utilizar a ferramenta `git-subrepo`.
 
-Sempre que invocado, você DEVE seguir obrigatoriamente as 4 Fases de Execução abaixo:
+## Instructions
+Sempre que for invocado para conduzir modificações, puxar dependências externas ou canibalizar repositórios para o interior do projeto local, você DEVE honrar a seguinte máquina de estados em 4 fases estritas:
 
-### Fase 1: Preservação de Estado via Snapshot Local
-Antes de qualquer mutação, valide a integridade do branch atual com `git status`. Em seguida, crie um branch de backup órfão usando o timestamp UNIX para garantir um ponto de restauração:
-`BACKUP_BRANCH="snapshot-$(date +%s)"`
-`git branch $BACKUP_BRANCH`
+1. **Fase 1: Ponto de Restauração (Snapshot Local):**
+   - Antes de iniciar a operação, registre o estado atual e intacto do repositório host. 
+   - Execute o armazenamento da HEAD (`git rev-parse HEAD`) em uma variável efêmera local.
 
-### Fase 2: Instanciação Operacional da Atualização
-Realize a assimilação determinística do código utilizando o Git Subrepo:
-`git subrepo pull <caminho_do_subdiretorio>`
-Vigie incondicionalmente os *exit codes*. Se ocorrerem conflitos severos de mesclagem que exijam intervenção manual complexa, aborte a operação e salte IMEDIATAMENTE para a Fase 4 (Rollback).
+2. **Fase 2: Instanciação Operacional via Git Subrepo:**
+   - Execute a assimilação determinística usando OBRIGATORIAMENTE o comando `git subrepo clone <url> <subdiretorio>` ou `git subrepo pull <subdiretorio>`.
+   - Se ocorrerem conflitos severos de mescla que exijam interações manuais exaustivas, ABORTE. Transborde o controle analítico imediatamente para a Fase 4 (Rollback).
 
-### Fase 3: Bateria de Testes de Quebra (Integração Shift-Left)
-Identifique e invoque as suítes de testes fundamentais pertinentes à camada modificada (ex: `cargo check`, `cargo test`, `npm run test` ou linters de segurança).
-* **Caminho Feliz:** Se os testes passarem (exit code 0), exclua a branch de snapshot (`git branch -D $BACKUP_BRANCH`) e declare o sucesso da integração.
-* **Caminho Fatal:** Qualquer falha, *warning* crítico de linter ou colapso estrutural significa que o código externo é tóxico. Dirija-se AGRESSIVAMENTE para a Fase 4.
+3. **Fase 3: Bateria de Testes de Quebra (Shift-Left DevSecOps):**
+   - Uma vez que o código externo achatou as estruturas correntes, o projeto está em latência não validada.
+   - Execute ativamente os testes da cadeia sintática do ecossistema hospedeiro (ex: `cargo check`, testes unitários, linters de segurança).
+   - Se houver falha, erro no STDERR ou quebra da compilação: a injeção é julgada tóxica. Avance para a Fase 4. Se passar limpo, finalize com sucesso.
 
-### Fase 4: Reconciliação Punitiva (Rollback Instantâneo)
-Diante de qualquer falha na Fase 2 ou Fase 3, reverta o repositório para o estado imaculado:
-1. `git reset --hard $BACKUP_BRANCH`
-2. `git clean -fd`
-3. `git branch -D $BACKUP_BRANCH`
-Após a limpeza destrutiva, informe ao usuário de forma clara que a integração falhou nos portões de qualidade e que o sistema foi totalmente revertido para a integridade original sem deixar resíduos.
+4. **Fase 4: Restauração Destrutiva (Rollback Rigoroso):**
+   - Se qualquer passo da Fase 2 ou Fase 3 falhar, recue o sistema para a integridade exata capturada na Fase 1.
+   - Execute uma limpeza estática baseada em destituições forçadas: `git reset --hard <HASH_FASE_1>` e `git clean -fd`.
+   - Explicite a ocorrência do sinistro e da regressão de forma clara ao usuário.
+
+## Constraints
+* **PROIBIÇÃO DE SUBMODULES/SUBTREES:** Jamais utilize ferramentas do Git padrão para aninhamento que quebrem a continuidade linear de histórico do SODA.
+* **SEM COMPLACÊNCIA DE ERRO:** Em hipótese alguma ignore os *exit codes* da Fase 3. Um código externo que não compila localmente é um código bloqueado.
+
+## Examples
+**Entrada do Usuário:** 
+"SODA, precisamos puxar a última atualização daquele repositório de parser que colocamos na pasta `lib/parser_externo/`."
+
+**Ação do Agente:**
+1. O agente executa `git rev-parse HEAD` e guarda o Hash de segurança.
+2. O agente invoca `git subrepo pull lib/parser_externo/`.
+3. O agente aciona a compilação de teste `cargo test -p parser_externo`.
+4. (Cenário A) Passa: "Atualização injetada e validada. Histórico Git achatado."
+   (Cenário B) Falha: O agente roda `git reset --hard` e responde: "A atualização corrompeu a compilação local. Operação revertida com sucesso."

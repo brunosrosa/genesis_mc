@@ -1,76 +1,41 @@
 ---
 name: skill-creator
-description: Meta-habilidade estrutural ativada para destilar repositórios complexos e gerar novas habilidades agênticas. Ela orquestra a engenharia de Divulgação Progressiva, criando o SKILL.md e isolando lógicas em scripts atômicos.
+description: A Forja do SODA. Meta-habilidade estrutural ativada para extrair lógicas de repositórios e gerar novas habilidades agênticas. Orquestra a Divulgação Progressiva, criando o SKILL.md e isolando lógicas em scripts atômicos.
 triggers: ["criar skill", "destilar repositório", "gerar habilidade", "nova skill", "criar agente", "skill-creator"]
 ---
-# Meta-Skill: Skill Creator (A Forja de Habilidades SODA)
+
+# Skill: Skill Creator (A Forja de Habilidades SODA)
 
 ## Goal
-
-Atuar como a "Skill que cria Skills" (A Forja) dentro da infraestrutura do Genesis Mission Control (SODA). Sua missão é ler documentações densas ou ferramentas obscuras, extrair a "alma matemática" do processo e encapsulá-la no padrão arquitetural `agentskills.io` (Divulgação Progressiva em 3 Níveis). Você deve proteger implacavelmente a VRAM (6GB) do sistema, impedindo o _Context Rot_ ao isolar lógicas em scripts efêmeros e conhecimentos densos em arquivos de referência, mantendo o arquivo `SKILL.md` final enxuto e imperativo.
+Atuar como a "Skill que cria Skills" (A Forja) dentro da infraestrutura do Antigravity IDE. Sua missão é extrair a "alma matemática" de repositórios open-source e encapsulá-la no padrão arquitetural `agentskills.io` (Divulgação Progressiva em 3 Níveis). O objetivo é garantir que o Agente Antigravity crie ferramentas que não causem *Context Rot* ou *Tool Bloat*, preparando o terreno para a execução *bare-metal* restrita (6GB VRAM) do Genesis MC.
 
 ## Instructions
+Sempre que o usuário solicitar a criação de uma nova habilidade ou a destilação de um repositório, você DEVE executar os seguintes passos em ordem estrita:
 
-### Passo 1: Levantamento de Dados (Ingestão do Conhecimento)
+1. **Ingestão Cirúrgica (Proibição de Força Bruta):**
+   - Você NUNCA deve ler o repositório inteiro. 
+   - Utilize OBRIGATORIAMENTE a skill `@mcp-jcodemunch-master` para extrair a Árvore de Sintaxe Abstrata (AST) do alvo, resgatando apenas as lógicas e heurísticas essenciais.
 
-- Utilize ferramentas como `jcodemunch-mcp` ou `notebooklm-mcp` para ler a documentação, o repositório ou os arquivos fornecidos pelo usuário.
-- Descarte sumariamente quaisquer lógicas que dependam de servidores web monolíticos pesados ou runtimes contínuos baseados em Node.js/Python em background, priorizando comandos de terminal nativos ou binários compilados (Rust/Wasm).
+2. **Destilação da "Alma Matemática":**
+   - Elimine qualquer dependência visual, interpretadores em *background* (Python/Node.js) ou arquiteturas pesadas de nuvem (Docker) do código original.
+   - Transmute os conceitos extraídos em regras lógicas puras e algoritmos compatíveis com a arquitetura SODA (Rust/Tauri/Wasmtime/SQLite).
 
-### Passo 2: Estruturação da Taxonomia de Diretórios
+3. **Geração da Taxonomia de 3 Níveis (Late-Binding):**
+   A nova habilidade DEVE ser estruturada na pasta `.agents/skills/<nome-da-skill>/` utilizando os três níveis de divulgação progressiva:
+   - **Nível 1 (Frontmatter YAML):** Crie o cabeçalho no arquivo `SKILL.md` contendo APENAS `name`, `description` (curta e semântica) e `triggers`. Isso garante um carregamento inicial na memória com menos de 100 tokens.
+   - **Nível 2 (Instruções Core):** No corpo do `SKILL.md`, estabeleça a Máquina de Estados finita da tarefa (Goal, Instructions, Constraints e Examples). Proíba alucinações.
+   - **Nível 3 (Isolamento de Carga Pesada):** Crie as subpastas:
+     - `assets/`: Para templates, esquemas JSON ou marcações vazias.
+     - `scripts/`: Para executáveis coercitivos (Bash/Python) que o agente tratará como caixas-pretas, não precisando ler o código-fonte na memória ativa.
+     - `references/`: Para manuais ou docs de arquitetura pesados.
 
-Prepare o terreno no sistema de arquivos usando estritamente o terminal local. Execute:
-
-```bash
-mkdir -p .agents/skills/<nome-da-nova-skill>/scripts/
-mkdir -p .agents/skills/<nome-da-nova-skill>/assets/
-mkdir -p .agents/skills/<nome-da-nova-skill>/references/
-```
-
-### Passo 3: Formatação e Escrita do SKILL.md
-
-Você deve compor e escrever o arquivo `SKILL.md` utilizando a interface de terminal padrão (`bash cat`). O arquivo DEVE ter um YAML Frontmatter contendo `name`, `description` e `triggers`, seguido pelas seções Markdown `## Goal`, `## Instructions`, `## Constraints` e `## Examples`.
-
-```bash
-cat > .agents/skills/<nome-da-nova-skill>/SKILL.md << 'EOF'
-[COLE O FRONTMATTER YAML E O CORPO MARKDOWN AQUI]
-EOF
-```
-
-### Passo 4: A Forja do "Nível 3" (Caixa-Preta de Validação)
-
-Para impedir que o LLM alucine validações, isole a verificação de erros da nova skill criando um script executável:
-
-```bash
-cat > .agents/skills/<nome-da-nova-skill>/scripts/validator.sh << 'EOF'
-#!/usr/bin/env bash
-# [SCRIPT DE VALIDAÇÃO GERADO AUTOMATICAMENTE]
-# O LLM tratará o 'exit code' deste script como uma lei inegociável.
-# Exemplo de falha: if [ erro ]; then exit 1; fi
-echo "Validação concluída com sucesso."
-exit 0
-EOF
-```
-
-```bash
-chmod +x .agents/skills/<nome-da-nova-skill>/scripts/validator.sh
-```
-
-### Passo 5: Ingestão de Referências (Evitando Context Rot)
-
-Se a documentação tiver regras extensas (ex: padrões de arquitetura), NÃO as coloque no `SKILL.md`. Salve-as em `references/rules.md`:
-
-```bash
-cat > .agents/skills/<nome-da-nova-skill>/references/rules.md << 'EOF'
-[TEXTO DOUTRINÁRIO DENSO]
-EOF
-```
-
-## Constraints (Restrições Inegociáveis)
-
-**Economia de Tokens**: A descrição no YAML deve ter no máximo ~100 tokens, pois residirá na memória constante. 
-O nome da pasta da habilidade deve ser **idêntico** à propriedade `name` contida no YAML.
-**Zero Python/Node**: Não crie arquivos .js ou .py para o agente rodar na nova skill. Restrinja-se a bash, Rust ou Wasm.
+## Constraints
+* **Foco no Metal Nu:** A habilidade gerada deve ser desenhada com o princípio de que o SODA rodará em uma dGPU de 6GB de VRAM e não tolerará daemons em *background*.
+* **Economia Extrema de Tokens:** O `SKILL.md` deve ser espartano. Detalhes excessivos devem ser empurrados para a pasta `references/` e consultados pelo agente gerado apenas sob demanda.
 
 ## Examples
-
-*Entrada do Usuário*: "Crie uma skill chamada soda-linter que roda cargo clippy." Ação do Agente: Executa `mkdir -p .agents/skills/soda-linter/scripts`, cria o `SKILL.md` com os `triggers: ["validar rust", "rodar linter"]` e cria um `validator.sh` contendo o comando `cargo clippy -- -D warnings`.
+**Usuário:** "Quero uma skill para gerar diagramas de arquitetura baseada no repo X."
+**Ação do Agente:** 
+1. Invoca `jcodemunch` para ler a AST do repo X e abstrai a lógica vetorial.
+2. Cria `.agents/skills/soda-diagrams/SKILL.md` com YAML de triggers restritos e instruções curtas.
+3. Extrai as regras de cores SVG pesadas e salva em `.agents/skills/soda-diagrams/assets/colors.json`, orientando o SKILL.md a consultá-las apenas quando for renderizar.
