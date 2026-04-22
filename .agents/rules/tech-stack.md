@@ -3,11 +3,14 @@ trigger: always_on
 ---
 
 ### 📜 WORKSPACE RULES: Genesis - Mission Control (SODA)
-**Versão:** 1.0 (Definitiva)
+**Versão:** 1.1 (Definitiva)
 ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA IDE PARA O CONTEXTO DESTE PROJETO ESPECÍFICO.
 
 #### 1. STACK TECNOLÓGICO IMUTÁVEL (BARE-METAL CORE)
 * **Backend / Core:** Rust (assíncrono via tokio).
+* **UI e Sincronização:** React via Tauri v2. PROIBIDO o uso de CRDTs (Yjs/Automerge) pesados. A sincronização de concorrência multi-agente no Canvas utilizará ESTRITAMENTE o **Rebase Semântico Atômico** (arquitetura IPC Zero-Copy).
+* **Gestão de VRAM e Inferência:** Modelos de texto densos rodam exclusivamente na dGPU (RTX 2060m 6GB) via `Candle Framework` (HuggingFace) gerenciando a VMM dinamicamente. PROIBIDO o uso de vLLM ou llama.cpp no núcleo de produção para evitar fragmentação de memória.
+* **Processamento Analógico (Áudio):** A iGPU da Intel (UHD 630) é de uso EXCLUSIVO para processamento analógico auditivo via OpenVINO (Cobra VAD, Parakeet TDT para STT e Kokoro-82M para TTS). PROIBIDO rotear modelos de linguagem (LLMs) para a iGPU.
 * **Desktop Framework:** Tauri v2.
 * **Frontend / UI:** React 18+ (via Vite), TypeScript.
 * **Estilização:** Tailwind CSS v4.
@@ -45,3 +48,10 @@ ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA I
 #### 6. CONTROLES DE SEGURANÇA (GATES & HITL)
 * Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro deve ser implementada com um mecanismo de suspensão de corrotina em Rust.
 * O *daemon* em Rust "congela" a thread e exibe um Card de Aprovação no Canvas (React), aguardando a confirmação explícita humana antes de aplicar a mutação no disco.
+
+#### 7. ARQUITETURA DE MEMÓRIA (NEURO-SINTÉTICA - MNS)
+* **Proibição de RAG Simplista:** É proibido tratar a memória como um banco vetorial único. O sistema utiliza a Memória Tri-Partite Especializada embutida no Daemon Rust:
+  1. **Transacional (Curto Prazo/Event Sourcing):** SQLite em modo WAL com FTS5.
+  2. **Semântica (Longo Prazo/Zero-Copy):** LanceDB (vetores colunares Apache Arrow no SSD).
+  3. **Relacional/Episódica:** FalkorDB (Grafos estruturais estáticos em RAM).
+* O "Esquecimento" é gerenciado matematicamente por Geometria Diferencial (Métrica Fisher-Rao) processada na CPU, nunca gastando tokens de LLM para "decidir" o que lembrar.

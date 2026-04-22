@@ -12,71 +12,70 @@ binds:
                 exposeHeaders: ['Mcp-Session-Id']
               mcpAuthorization:
                 rules:
-                  # VÁLVULA INTELIGENTE CEL (FIREWALL V6 - O CANIVETE SUÍÇO SODA)
-                  # Libera exatas 21 ferramentas de leitura, raciocínio e recuperação.
-                  # Bloqueia 100% das ferramentas de deleção, edição remota e I/O destrutivo.
+                  # VÁLVULA INTELIGENTE CEL (FIREWALL L7)
+                  # Usando short-circuit com !has() para proteger o handshake de inicialização
                   - >
-                    mcp.tool.name.matches("^(index_folder|get_file_tree|get_file_outline|get_symbol_source|search_symbols|get_file_content)$")
-                    ||
-                    mcp.tool.name.matches("^(get_current_time|read_query|list_tables|describe_table|sequentialthinking)$")
-                    ||
-                    mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$")
-                    ||
-                    mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|source_get_content)$")
-                    ||
-                    mcp.tool.name.matches("^(web_search|duckduckgo_search|fetch_content)$")
+                    !has(mcp.tool) 
+                    || mcp.tool.name.matches("^(index_folder|index_repo|get_file_tree|get_file_outline|get_symbol_source|search_symbols|get_file_content)$") 
+                    || mcp.tool.name.matches("^(get_current_time|read_query|list_tables|describe_table|sequentialthinking)$") 
+                    || mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$") 
+                    || mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|source_get_content)$") 
+                    || mcp.tool.name.matches("^(web_search|duckduckgo_search|fetch_content)$") 
+                    || mcp.tool.name.matches("^(memory_.*|sqlite_.*|lean_.*|sqz_.*|toon_compress)$")
             backends:
+              # =====================================================================
+              # BLOCO A: NÚCLEO COGNITIVO E DE SEGURANÇA (FAIL CLOSED)
+              # Se o Hipocampo ou o Filtro caírem, trava tudo para evitar amnésia.
+              # =====================================================================
+              - mcp:
+                  failureMode: failClosed
+                  targets:
+                    - name: lean-ctx
+                      stdio:
+                        cmd: 'lean-ctx.exe'
+                        args: []
+                    - name: sequential_thinking
+                      stdio:
+                        cmd: 'sequential-thinking-server.exe'
+                        args: []
+                    - name: memory-mcp-rs
+                      stdio:
+                        cmd: 'memory-mcp-rs.exe'
+                        args: []
+
+              # =====================================================================
+              # BLOCO B: UTILITÁRIOS E PERIFÉRICOS (FAIL OPEN)
+              # Se a web ou o github caírem, o agente sobrevive e continua a tarefa.
+              # =====================================================================
               - mcp:
                   failureMode: failOpen
                   targets:
-                    # 1. AST Parser
                     - name: jcodemunch
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', 'jcodemunch-mcp']
-                    
-                    # 2. Servidor de Tempo
                     - name: time_server
                       stdio:
                         cmd: 'mcp-server-time.exe'
                         args: []
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
-                    
-                    # 3. Memória L2 Transacional
-                    - name: sqlite_soda
-                      stdio:
-                        cmd: 'uvx.exe'
-                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']
-                    
-                    # 4. Raciocínio Passo-a-Passo
-                    - name: sequential_thinking
-                      stdio:
-                        cmd: 'npx.cmd'
-                        args: ['-y', '@modelcontextprotocol/server-sequential-thinking']
-                    
-                    # 5. Pesquisa Web Gratuita
                     - name: duckduckgo_search
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', 'duckduckgo-mcp-server']
-                    
-                    # 6. Integração Git/PRs
                     - name: github_mcp
                       stdio:
                         cmd: 'npx.cmd'
                         args: ['-y', '@modelcontextprotocol/server-github']
                         env:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
-                    
-                    # 7. O ORÁCULO DE CONTEXTO (NotebookLM)
                     - name: notebooklm
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', '--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
-                    
-                    # # 8. Documentação Estática Otimizada (LLMs.txt) [Tá com erro pra subir - precisa verificar]
-                    # - name: docfork
-                    #   stdio:
-                    #     cmd: 'uvx.exe'
-                    #     args: ['--quiet', 'docfork-mcp']
+                    # Movido para Fail Open para não engasgar o gateway se o arquivo DB faltar
+                    - name: sqlite_soda
+                      stdio:
+                        cmd: 'uvx.exe'
+                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']

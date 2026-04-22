@@ -1,0 +1,16 @@
+FROM ghcr.io/astral-sh/uv:bookworm-slim
+
+# Otimizações de compilação rápida para o SODA
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+# Dependências de sistema exigidas pelo motor de visão/OCR do Docling
+RUN apt-get update && apt-get install -y libgl1 libglib2.0-0
+
+# Instalação do servidor MCP
+RUN uv tool install docling-mcp
+
+# Exporta o binário para o PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+ENTRYPOINT ["docling-mcp-server"]
