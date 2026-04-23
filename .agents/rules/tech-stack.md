@@ -3,20 +3,20 @@ trigger: always_on
 ---
 
 ### 📜 WORKSPACE RULES: Genesis - Mission Control (SODA)
-**Versão:** 1.1 (Definitiva)
+**Versão:** 1.2 (2026-04-23)
 ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA IDE PARA O CONTEXTO DESTE PROJETO ESPECÍFICO.
 
 #### 1. STACK TECNOLÓGICO IMUTÁVEL (BARE-METAL CORE)
 * **Backend / Core:** Rust (assíncrono via tokio).
-* **UI e Sincronização:** React via Tauri v2. PROIBIDO o uso de CRDTs (Yjs/Automerge) pesados. A sincronização de concorrência multi-agente no Canvas utilizará ESTRITAMENTE o **Rebase Semântico Atômico** (arquitetura IPC Zero-Copy).
-* **Gestão de VRAM e Inferência:** Modelos de texto densos rodam exclusivamente na dGPU (RTX 2060m 6GB) via `Candle Framework` (HuggingFace) gerenciando a VMM dinamicamente. PROIBIDO o uso de vLLM ou llama.cpp no núcleo de produção para evitar fragmentação de memória.
-* **Processamento Analógico (Áudio):** A iGPU da Intel (UHD 630) é de uso EXCLUSIVO para processamento analógico auditivo via OpenVINO (Cobra VAD, Parakeet TDT para STT e Kokoro-82M para TTS). PROIBIDO rotear modelos de linguagem (LLMs) para a iGPU.
+* **UI e Sincronização:** Svelte 5 via Tauri v2. PROIBIDO o uso de CRDTs (Yjs/Automerge) pesados. A sincronização de concorrência multi-agente no Canvas utilizará ESTRITAMENTE o **Rebase Semântico Atômico** (arquitetura IPC Zero-Copy).
+**Gestão de VRAM e Inferência:** Modelos de texto densos rodam estritamente na dGPU (RTX 2060m 6GB) utilizando exclusivamente o motor **`llama.cpp`** (envelopado via bindings nativos `llama_cpp_rs`). É OBRIGATÓRIO o uso do mapeamento de memória `mmap` e da diretiva `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` para descarregamento dinâmico estático dos tensores de volta para a RAM de 32GB do sistema. O uso de vLLM ou do Candle Framework é ESTRITAMENTE PROIBIDO, pois exigem offloading dinâmico pesado que causa estrangulamento e gargalos catastróficos no barramento PCIe.
+**Processamento Analógico (Áudio):** A CPU Intel i9 é de uso EXCLUSIVO para processamento analógico auditivo. Utilizamos Cobra VAD (Escuta), Parakeet TDT 0.6B V3 (STT) e Kokoro-82M (TTS). Todo o pipeline de áudio roda em FP32 explorando as instruções AVX2 nativas da CPU. O uso da iGPU (Intel UHD 630) está SUMARIAMENTE PROIBIDO e desativado para evitar gargalos letais no barramento de memória compartilhada do sistema.
 * **Desktop Framework:** Tauri v2.
-* **Frontend / UI:** React 18+ (via Vite), TypeScript.
+* **Frontend / UI:** Svelte 5, TypeScript.
 * **Estilização:** Tailwind CSS v4.
-* **UI Base:** Shadcn UI (componentes copiados para src/components, não instalados via npm wrapper).
-* **Animações:** Framer Motion (apenas para micro-interações, priorizando performance).
-* **Visualização de Grafos/Canvas:** React Flow / Tldraw.
+* **UI Base:** shadcn-svelte (componentes copiados para src/lib/components).
+* **Animações:** svelte-motion.
+* **Visualização de Grafos/Canvas:** Svelte Flow.
 * **Sandboxing de Execução:** Wasmtime (para execução isolada de lógicas ou scripts gerados).
 
 ##### 🚫 TECNOLOGIAS E PADRÕES EXPRESSAMENTE PROIBIDOS
@@ -26,8 +26,8 @@ ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA I
 * **NÃO** crie APIs REST em Node.js. Toda lógica pesada, acesso a banco e leitura de arquivos DEVE ser feita em Rust.
 
 #### 2. ARQUITETURA DE COMUNICAÇÃO (IPC ZERO-COPY)
-* O frontend React é ESTRITAMENTE PASSIVO ("burro"). Ele não possui regras de negócios.
-* A comunicação entre Rust e React deve priorizar o envio de **buffers binários nativos** (ou JSON estritamente tipado) via Eventos Tauri assíncronos (emit / listen) para evitar asfixia do motor V8 com serializações gigantes.
+* O frontend Svelte 5 é ESTRITAMENTE PASSIVO ("burro"). Ele não possui regras de negócios.
+* A comunicação entre Rust e Svelte 5 deve priorizar o envio de **buffers binários nativos** (ou JSON estritamente tipado) via Eventos Tauri assíncronos (emit / listen) para evitar asfixia do motor V8 com serializações gigantes.
 * **NUNCA** bloqueie a thread principal com comandos síncronos demorados. O I/O pesado deve rodar em `tokio::task::spawn_blocking`.
 
 #### 3. BANCO DE DADOS E MEMÓRIA (O FIM DO DOLT/MYSQL)
@@ -47,7 +47,7 @@ ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA I
 
 #### 6. CONTROLES DE SEGURANÇA (GATES & HITL)
 * Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro deve ser implementada com um mecanismo de suspensão de corrotina em Rust.
-* O *daemon* em Rust "congela" a thread e exibe um Card de Aprovação no Canvas (React), aguardando a confirmação explícita humana antes de aplicar a mutação no disco.
+* O *daemon* em Rust "congela" a thread e exibe um Card de Aprovação no Canvas (Svelte 5), aguardando a confirmação explícita humana antes de aplicar a mutação no disco.
 
 #### 7. ARQUITETURA DE MEMÓRIA (NEURO-SINTÉTICA - MNS)
 * **Proibição de RAG Simplista:** É proibido tratar a memória como um banco vetorial único. O sistema utiliza a Memória Tri-Partite Especializada embutida no Daemon Rust:

@@ -12,7 +12,7 @@ binds:
                 exposeHeaders: ['Mcp-Session-Id']
               mcpAuthorization:
                 rules:
-                  # VÁLVULA INTELIGENTE CEL (FIREWALL L7)
+                  # VÁLVULA INTELIGENTE CEL (FIREWALL L7) (v1.1 22/04/2026)
                   # Usando short-circuit com !has() para proteger o handshake de inicialização
                   - >
                     !has(mcp.tool) 
@@ -20,7 +20,8 @@ binds:
                     || mcp.tool.name.matches("^(get_current_time|read_query|list_tables|describe_table|sequentialthinking)$") 
                     || mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$") 
                     || mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|source_get_content)$") 
-                    || mcp.tool.name.matches("^(web_search|duckduckgo_search|fetch_content)$") 
+                    || mcp.tool.name.matches("^(web_search|duckduckgo_search|fetch_content)$")
+                    || mcp.tool.name.matches("^(search_docs|get_docs_tree)$")
                     || mcp.tool.name.matches("^(memory_.*|sqlite_.*|lean_.*|sqz_.*|toon_compress)$")
             backends:
               # =====================================================================
@@ -79,3 +80,7 @@ binds:
                       stdio:
                         cmd: 'uvx.exe'
                         args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']
+                    - name: docs_scraper
+                      stdio:
+                        cmd: 'npx.cmd'
+                        args: ['-y', 'mcp-docs-scraper']
