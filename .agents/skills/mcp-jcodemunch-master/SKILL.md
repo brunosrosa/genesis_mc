@@ -1,38 +1,45 @@
 ---
 name: mcp-jcodemunch-master
-description: O manual de instrução inegociável para leitura cirúrgica de código. Proíbe a leitura de arquivos inteiros por força bruta. Força o uso de parsing via Árvore de Sintaxe Abstrata (AST) em O(1) para poupar VRAM.
-triggers: ["mcp-jcodemunch-master", "ler código", "buscar função", "analisar classe", "ler repositório", "jcodemunch", "explorar código", "AST"]
+description: O manual de instrução inegociável para leitura cirúrgica de código no Antigravity IDE. Proíbe a leitura de arquivos por força bruta. Força a extração da Árvore de Sintaxe Abstrata (AST) em O(1) usando jcodemunch restrito.
+triggers: ["mcp-jcodemunch-master", "ler código", "buscar função", "analisar classe", "jcodemunch", "explorar código", "AST", "extrair lógica"]
 ---
 
-# Skill: MCP JCodeMunch Master (Leitura Cirúrgica via AST)
+### skill: MCP JCodeMunch Master (Leitura Cirúrgica em O(1))
 
-## Goal
-Proteger a janela de contexto do LLM e a VRAM da máquina (limite absoluto de 6GB) contra o *Context Rot* e o *Tool Bloat* induzidos pela leitura massiva de arquivos de código fonte [1, 2]. O objetivo é doutrinar o agente a abandonar ferramentas arcaicas (como `cat`, `read_file` geral ou `grep`) e utilizar exclusivamente a biblioteca `tree-sitter` através do servidor MCP `jcodemunch` [3]. A finalidade é extrair lógicas matemáticas e nós de código específicos em tempo $\mathcal{O}(1)$ e com economia de até 99% no custo de tokens [4].
+#### Goal
+Proteger a janela de contexto do Antigravity IDE e a VRAM da máquina host (limite absoluto de 6GB) contra o *Context Rot* induzido pela leitura massiva de arquivos de código fonte. O objetivo inegociável é doutrinar o agente a operar sob a filosofia *Zero-Bloat*: utilizar ferramentas de Sistema Operacional (`lean-ctx`) para descobrir onde o arquivo está, e o servidor MCP `jcodemunch` EXCLUSIVAMENTE como um "bisturi" semântico para extrair a Árvore de Sintaxe Abstrata (AST) em tempo constante $\mathcal{O}(1)$.
 
-## Instructions
-Sempre que você precisar ler, entender ou auditar um arquivo de código-fonte ou repositório inteiro na "Fábrica" (Antigravity IDE), você DEVE operar sob a mecânica de Extração Cirúrgica via AST. 
+#### Instructions
+Sempre que precisar ler, refatorar ou auditar arquivos locais de código-fonte no seu Ambiente de Desenvolvimento, você DEVE operar sob o protocolo de "Extração Cirúrgica" em 4 Fases:
 
-Você deve executar as seguintes fases operacionais em ordem estrita:
+1. **Reconhecimento de Terreno (O Binóculo `lean-ctx`):**
+   * Você está PROIBIDO de usar as ferramentas de listagem de arquivos do jcodemunch (ex: `jcodemunch_get_file_tree`) para varredura básica.
+   * Invoque OBRIGATORIAMENTE as ferramentas `ctx_tree` ou `ctx_search` (do pacote `lean-ctx`) para encontrar o caminho do arquivo alvo de forma instantânea e leve.
 
-1. **Interdição de Força Bruta:** Você está expressamente PROIBIDO de solicitar a leitura integral de grandes arquivos de código. Nunca injete documentos de código inteiros no seu contexto [1, 5].
-2. **Mapeamento Estrutural (AST):** Utilize as ferramentas fornecidas pelo servidor MCP do `jcodemunch` para solicitar primeiramente apenas o **índice** ou a Árvore de Sintaxe Abstrata do arquivo ou diretório alvo [1]. Seu objetivo inicial é obter puramente os metadados estruturais (nomes de classes, assinaturas de funções, declarações de variáveis) [3].
-3. **Extração O(1) por Byte-Offset:** Após analisar o mapa estrutural recebido, identifique o nó exato que contém a lógica que você precisa modificar ou entender. Faça uma segunda requisição ao MCP solicitando *exclusivamente* o conteúdo daquela função ou bloco lógico específico, utilizando o *byte-level offset* ou o identificador restrito do nó (AST node) [1, 6]. 
+2. **Indexação Escopada (A Preparação):**
+   * PROIBIDO usar `jcodemunch_index_repo` na raiz do projeto (causa colapso de memória local).
+   * Acione OBRIGATORIAMENTE a ferramenta `jcodemunch_index_folder` restrita APENAS à subpasta onde o arquivo alvo reside.
 
-## Constraints
-* **ECONOMIA DE TOKENS INEGOCIÁVEL:** A extração cirúrgica deve reduzir o consumo de leitura da sua memória em mais de 95%, caindo da faixa dos milhares de tokens para meras poucas centenas por tarefa [1, 3].
-* **PURIFICAÇÃO DE RETORNO:** Ao receber o trecho de código extraído, aja ativamente como um filtro analítico: descarte mentalmente importações e comentários irrelevantes e foque estritamente na "alma matemática" da função antes de prosseguir com o *Spec-Driven Development* (SDD).
-* **AMARRAÇÃO TARDIA (LATE-BINDING):** Lembre-se que você só carrega as assinaturas reais da ferramenta MCP no momento em que invoca a exploração. Libere o cache assim que a função exata for consertada.
+3. **Mapeamento Estrutural AST (O Escaneamento):**
+   * Não invoque `cat`, `ctx_read` ou `jcodemunch_get_file_content` se o arquivo for maior que 100 linhas.
+   * Chame a ferramenta `jcodemunch_get_file_outline` passando o caminho do arquivo. Isso retornará os metadados brutos (nomes de classes, assinaturas de funções e argumentos), custando uma fração irrisória da VRAM.
 
-## Examples
+4. **Extração O(1) por Byte-Offset (O Bisturi):**
+   * Leia o Outline retornado e copie o identificador exato (`symbol_id`) da função que você precisa.
+   * Acione a ferramenta `jcodemunch_get_symbol_source` fornecendo este `symbol_ids[]`. O MCP retornará EXCLUSIVAMENTE o bloco de código exato daquela função.
 
-**Entrada do Usuário:** 
-"Verifique como a função de serialização de payload na camada de IPC está lidando com o banco de dados no arquivo `ipc_handler.rs`."
+#### Constraints
+* **INTERDIÇÃO DE FORÇA BRUTA:** O uso de comandos como `cat`, `type` ou a invocação de `jcodemunch_get_file_content` para ler arquivos gigantes sem cortes é uma violação severa da arquitetura da IDE.
+* **SEM ALUCINAÇÃO DE IDs:** Você é proibido de tentar adivinhar o `symbol_id`. O uso da ferramenta `get_file_outline` antes da extração final é obrigatório.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia (Late-Binding) do gateway.
 
-**Ação Incorreta (NÃO FAÇA):**
-O agente invoca ferramentas padrão de sistema para ler o `ipc_handler.rs` inteiro, inundando sua escassa VRAM com 15.000 tokens de código irrelevante, o que estrangula o raciocínio subsequente.
+#### Examples
+**Entrada do Usuário:** "SODA, preciso que você conserte o buffer da função de despacho no `ipc_router.rs`."
 
-**Ação Correta (Obrigatória):**
-1. O agente invoca a ferramenta MCP do `jcodemunch` (ex: `get_symbols` ou `index_file`) para listar apenas as assinaturas do arquivo `ipc_handler.rs`.
-2. O servidor MCP responde com um esqueleto em JSON listando os *offsets* das funções, incluindo o método exato de `serialize_ipc_payload`.
-3. O agente invoca o `jcodemunch` novamente pedindo a extração isolada do nó correspondente a `serialize_ipc_payload`.
-4. O agente recebe apenas as 25 linhas estritas do método, processando a resposta com uso de VRAM insignificante e mantendo sua atenção perfeitamente clara para arquitetar a solução.
+**Ação do Agente:**
+1. O Agente NÃO lê o arquivo inteiro.
+2. Invoca `ctx_search` para confirmar o caminho do arquivo.
+3. Invoca `jcodemunch_index_folder(folder_path: "src/ipc/")` para indexar a pasta específica, evitando OOM.
+4. Invoca `jcodemunch_get_file_outline(file_path: "src/ipc/ipc_router.rs")`. A ferramenta devolve as assinaturas, revelando o `symbol_id` da função `fn dispatch_binary_buffer`.
+5. Invoca `jcodemunch_get_symbol_source(symbol_ids: ["dispatch_binary_buffer"])`. O Agente recebe apenas as linhas exatas daquela função.
+6. O Agente elabora a correção baseada unicamente no contexto extraído.

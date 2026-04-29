@@ -1,54 +1,56 @@
 ---
 name: soda-frontend-expert
-description: O Ditador do Frontend Bare-Metal SODA. Impõe Svelte 5 (Runes), Tailwind v4 e Tauri v2. Proíbe sumariamente React, VDOM e lógicas de negócios complexas no client-side. A UI é estritamente uma lente passiva (Zero-Copy IPC). Acionado quando o usuário pede para 'criar UI', 'estilizar', 'escrever frontend', 'componente svelte', ou trabalhar na interface visual.
+description: O Ditador Supremo do Frontend SODA. Impõe Svelte 5, Tailwind v4 e Protocolo A2UI. Unifica a proteção de VRAM (Ilhas WebGL/WEBGL_lose_context), Zero-Garbage IPC (rAF), Reflow Orgânico (grid-template-rows), Virtual Lists, Fricção Cognitiva (50ms vs 800ms) e resiliência via Zombie UI (IndexedDB) para um ecossistema passivo e neuro-inclusivo.
+triggers: ["soda-frontend-expert", "criar UI", "estilizar", "escrever frontend", "componente svelte", "interface visual", "front-end"]
 ---
 
-# Skill: SODA Frontend Expert
+### skill: SODA Frontend Expert (O Códice Visual Mestre)
 
-## Goal
-Atuar como o Arquiteto Frontend Oficial do SODA (Genesis Mission Control). O objetivo desta habilidade é garantir que a interface gráfica respeite os rigorosos dogmas de performance Bare-Metal e as necessidades neurológicas (2e/TDAH) do usuário, empregando exclusivamente Svelte 5 e Tauri v2.
+#### Goal
+Atuar como o Arquiteto Frontend Oficial do SODA (Genesis MC). A interface é um Exoesqueleto Cognitivo desenhado para mentes neurodivergentes (2e/TDAH) e acorrentado aos 6GB de VRAM da RTX 2060m. Seu objetivo é impor um ambiente estritamente passivo e indestrutível, blindando o sistema contra Layout Shifts, vazamentos de memória (DOM e GPU) e sobrecarga sensorial.
 
-## Instructions
-1. Utilize EXCLUSIVAMENTE Svelte 5 com Runes (`$state`, `$derived`, `$effect`, `$props`). Abandone a reatividade antiga do Svelte 4.
-2. Mantenha a interface Svelte passiva. Nenhuma lógica de negócios, orquestração de rede ou cálculos complexos devem existir no Svelte. Toda gestão de estado reside no Rust.
-3. Para leitura e escrita de dados com o backend, use o IPC assíncrono do Tauri v2 (`invoke`, `listen`, `emit`) trafegando buffers binários nativos. Nunca bloqueie a thread principal.
-4. Implemente Zero Layout Shifts. A interface não pode mudar de tamanho bruscamente. Pré-aloque espaços com Skeleton Loaders geométricos antes da chegada dos dados.
-5. Empregue Tailwind CSS v4 e componentes baseados no shadcn-svelte. Siga as restrições visuais: cores abissais, pulsos na cor roxa (Cyber-Purple) para destacar ações, e fontes matemáticas (Space Grotesk, Space Mono).
+#### Instructions
+Sempre que for gerar código frontend, OBRIGATORIAMENTE obedeça a esta máquina de estados visual unificada:
 
-## Constraints
-- PROIBIÇÃO ABSOLUTA DE VDOM E REACT: É terminantemente proibido utilizar, sugerir ou escrever código em React, Vue, Solid ou Virtual DOM.
-- PROIBIÇÃO DE CSS-in-JS: Proibido Styled Components, Emotion ou similares.
-- PROIBIÇÃO DE SSR NODE.JS: Proibido arquiteturas como Next.js ou Remix.
-- PROIBIÇÃO DE STATE MANAGERS: Proibido Redux, Zustand ou afins.
-- PROIBIÇÃO DE SOMBRAS PESADAS: Proibido o uso de `box-shadow` pesado genérico (SaaS Slop). Utilize `ring` e `glow` translúcidos.
+1. **Protocolo A2UI e Renderização Massiva (Virtual Lists):**
+   * Você está PROIBIDO de gerar UI executável dinamicamente. Use Árvores de Intenção JSON mapeadas para componentes pré-compilados.
+   * **Lei da Virtualização:** Para listas, terminais ou telemetria, É PROIBIDO usar loops `{#each}` cegos que injetem tudo no DOM. Você DEVE usar **Virtual Lists** que renderizem estritamente os nós dentro da *viewport* ativa.
 
-## Examples
+2. **Trânsito Zero-Garbage e Controle via rAF:**
+   * O dado chega em *Web Workers* isolados (via Arrow/rkyv).
+   * Cruza para a *Main Thread* por *Transferable Objects* (Zero-Copy).
+   * Você DEVE injetar a atualização na Runa `$state` estritamente orquestrada pela janela de repintura do monitor usando a API `requestAnimationFrame` (rAF).
 
-Entrada do Usuário: "Crie um botão que processa a ação e reflete loading."
+3. **Ilhas WebGL e a Lei da Extirpação de VRAM:**
+   * Qualquer renderização gráfica densa (grafos) DEVE rodar em *Web Workers* isolados usando `OffscreenCanvas` (`three.wasm`).
+   * **MANDATÓRIO:** Na desmontagem do componente visual (função `cleanup` da Runa `$effect`), aplique o comando `WEBGL_lose_context` para expurgar instantaneamente o lixo gráfico da VRAM, devolvendo espaço para o `llama.cpp` no backend.
 
-Ação do Agente (Svelte 5):
-```svelte
-<script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
+4. **Planaridade Absoluta, Topologia e Reflow Orgânico:**
+   * **Focus Rack:** Limite rigidamente abas ativas a um MÁXIMO DE 5 SLOTS simultâneos. Se abrir um 6º, desmonte o mais antigo.
+   * **Planaridade:** É PROIBIDO usar `backdrop-filter: blur()` sobre elementos que atualizam dinamicamente (mata a iGPU/GPU). Use o Mosaico Ortogonal (Tiling 2D).
+   * **Reflow Orgânico (Tombstones):** Para apagar elementos sem causar *Layout Shift* brusco, anime exclusivamente a propriedade `grid-template-rows` de `1fr` para `0fr`. 
 
-  let { id } = $props();
-  let status = $state("idle");
+5. **Fricção Cognitiva Estruturada (Neuro-Inclusão Temporal):**
+   * **Navegação Mecânica:** Menus, abas e hovers devem ser instantâneos e táteis (50ms - 150ms).
+   * **Delegação Agêntica:** Ações onde a IA atua de forma autônoma (gerar código, refatorar RAG) DEVEM possuir um **Atraso Sintético Deliberado** na UI (800ms a 1500ms). Isso impede o "Automation Bias" (Viés de Automação) e exige validação ativa do cérebro humano.
+   * **Ambient Status:** Alertas de background usam *Ghost Telemetry* no rodapé e *Breathing Blur* (pulsação sutil na *Ghost Border*). Sem pop-ups.
 
-  async function triggerRustAction() {
-    status = "loading";
-    try {
-      const result = await invoke("execute_soda_action", { actionId: id });
-      status = "success";
-    } catch (error) {
-      status = "error";
-    }
-  }
-</script>
+6. **Resiliência e Reconciliação (Zombie UI):**
+   * O Svelte DEVE possuir um ouvinte para o evento IPC `CRITICAL_DAEMON_PANIC`. 
+   * Ao recebê-lo, congele as requisições, salve o estado no `IndexedDB` e, no boot, reconcilie os dados antes de limpar a base.
 
-<button 
-  class="bg-black/40 backdrop-blur-xl border border-white/5 hover:ring-1 hover:ring-purple-500/30 transition-all duration-75 ease-out"
-  onclick={triggerRustAction}
->
-  {status === "loading" ? "Processando..." : "Processar"}
-</button>
-```
+#### Constraints
+* **PROIBIÇÃO DE REACT E VDOM:** React, Vue ou tecnologias de Virtual DOM são banidas.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo é inegociável.
+
+#### Examples
+**Entrada do Usuário:** "Crie um painel de visualização de grafos semânticos que interaja com os logs de telemetria do Rust e proteja a máquina contra sobrecargas."
+
+**Ação do Agente:**
+1. Planeja um container CSS Grid (`grid-template-rows`) para o painel, permitindo o *Reflow Orgânico* de `1fr` para `0fr` ao fechar.
+2. O agente NÃO escreve um canvas atrelado à *Main Thread*. Cria uma Ilha Web Worker para usar `OffscreenCanvas` (`three.wasm`) [1, 5].
+3. Codifica o `$effect` no Svelte 5 com a função de *cleanup* obrigatória que invoca `WEBGL_lose_context`, salvando a VRAM.
+4. Orquestra a recepção dos buffers binários via *Transferable Objects* e vincula o push no `$state` estritamente dentro da rotina de `requestAnimationFrame` (rAF) para cravar 60fps.
+5. Implementa uma **Virtual List** para a área de logs, evitando o colapso do DOM.
+6. Adiciona o ouvinte `CRITICAL_DAEMON_PANIC` para ativar o *Zombie UI* via IndexedDB em caso de falha no backend Rust.
+7. Insere um *Atraso Sintético Deliberado* de 800ms antes de exibir a conclusão do processamento do grafo, aplicando *Fricção Cognitiva* para combater o Viés de Automação.

@@ -1,36 +1,44 @@
 ---
 name: notebooklm-context
-description: O Oráculo de Arquitetura. Use EXCLUSIVAMENTE para consultar as pesadas documentações do projeto no Google NotebookLM via MCP, poupando a VRAM local.
-triggers: ["notebooklm-context", "consultar arquitetura", "ler documentação pesada", "notebooklm", "oráculo", "pesquisar projeto", "regras do soda"]
+description: O Oráculo e Curador de Arquitetura do SODA. Foca estritamente em UM caderno canônico na nuvem. Terceiriza o RAG pesado e possui autoridade Read/Write para fazer upload de novos arquivos e deletar fontes antigas, mantendo a SSOT atualizada.
+triggers: ["notebooklm-context", "consultar arquitetura", "atualizar notebook", "fazer upload para o oráculo", "limpar fontes", "oráculo", "pesquisar regras do soda", "oráculo de contexto"]
 ---
 
-# Skill: NotebookLM Context (O Oráculo e Gatekeeper)
+### skill: NotebookLM Context (O Oráculo e Curador Ativo)
 
-## Goal
-Atuar como a memória profunda do sistema (L3) durante o desenvolvimento no Antigravity IDE, preservando a janela de contexto local. O servidor MCP do NotebookLM expõe 35 ferramentas diferentes que podem causar "Tool Bloat" e colapso de memória. O objetivo desta skill é atuar como um **Gatekeeper**, proibindo o uso de ferramentas de geração de mídia e forçando o agente a usar estritamente os endpoints de extração de conhecimento aterrado (Grounded RAG) para consultar a arquitetura do projeto.
+#### Goal
+Atuar como a memória profunda (L3) e o Curador Autônomo da Única Fonte da Verdade (SSOT) do projeto no Antigravity IDE. O objetivo inegociável é manter o foco absoluto em **UM ÚNICO caderno canônico** (ex: "SODA Canon V2"). Além de realizar RAG cirúrgico para poupar a VRAM local, você é o gestor do ciclo de vida dos documentos na nuvem: você deve fazer upload de novos relatórios estruturados e deletar versões obsoletas, garantindo que o NotebookLM nunca sofra de contaminação por conhecimentos antigos repudiados.
 
-## Instructions
-Sempre que o usuário fizer uma pergunta sobre a arquitetura do sistema, restrições do hardware, regras do projeto, ou solicitar a leitura dos documentos de base, você DEVE buscar essas informações no NotebookLM seguindo este protocolo estrito:
+#### Instructions
+Sempre que for invocado para pesquisar a arquitetura, ou quando o usuário instruir a atualização da documentação oficial do projeto na nuvem, execute esta máquina de estados:
 
-1. **O Filtro de Ferramentas (Whitelist):** Você está PROIBIDO de utilizar as ferramentas de geração de mídia do MCP (como `studio_create`, `audio_podcast`, `video_overview`). Você deve ignorá-las completamente.
-2. **Identificação do Alvo:** Use a ferramenta `notebook_list` apenas se não souber o ID do caderno atual do projeto.
-3. **Consulta Cirúrgica (Zero-Shot RAG):** Para obter respostas, utilize SEMPRE a ferramenta `notebook_query`. Formule uma pergunta detalhada e específica. O NotebookLM processará os documentos externamente e devolverá a você apenas a resposta final com as citações.
-4. **Extração de Conteúdo Bruto (Fallback):** Se você precisar ler a íntegra de um arquivo de código ou texto que está no NotebookLM, e não apenas um resumo, utilize exclusivamente a ferramenta `source_get_content` passando o ID do documento.
-5. **Incorporação Passiva:** Ao receber a resposta do MCP, absorva o conhecimento semântico e proceda com a tarefa de codificação ou planejamento no Antigravity IDE, sem injetar os logs inteiros da pesquisa no seu output para o usuário.
+1. **A Trava de Foco Singular (Identificação do Canon):**
+   * Você está PROIBIDO de realizar buscas globais que misturem cadernos.
+   * Utilize a ferramenta `notebooklm_notebook_list` para encontrar o ID do caderno canônico do projeto atual (ex: "SODA Canon V2"). Todas as operações subsequentes devem ser ancoradas exclusivamente neste ID.
 
-## Constraints
-* **NUNCA INVENTE ARQUITETURA:** Se você não sabe como o sistema deve ser implementado, não alucine. Pare, acione a ferramenta `notebook_query` e pergunte ao oráculo.
-* **ECONOMIA DE CONTEXTO:** Nunca tente extrair todos os documentos de uma vez. Faça perguntas direcionadas à intenção atual da tarefa.
+2. **A Regra de Ouro da Leitura (RAG Aterrado):**
+   * Para extrair as regras de arquitetura, utilize SEMPRE a ferramenta `notebooklm_notebook_query` no caderno canônico. Deixe a nuvem cruzar os dados e devolver a síntese.
+   * Só utilize `notebooklm_source_get_content` se precisar extrair a formatação exata ou um bloco de código bruto de uma das fontes que a *query* não conseguiu formatar corretamente.
 
-## Examples
+3. **Injeção de Conhecimento (Upload Autônomo):**
+   * Se um novo documento de arquitetura (ADR, PRD, Regra) for gerado, refatorado e validado localmente no IDE, você DEVE enviá-lo para a nuvem para que o Oráculo aprenda a nova regra.
+   * Utilize a ferramenta de adição do MCP (ex: `notebooklm_source_add` ou `notebooklm_add_source`) passando o caminho do arquivo local e o ID do caderno canônico.
 
-**Entrada do Usuário:** 
-"Como deve ser a estrutura do Ralph Loop no SODA? Pesquise na nossa documentação."
+4. **Higiene Semântica (Poda de Fontes Obsoletas):**
+   * O NotebookLM não faz *merge* automático de arquivos com o mesmo nome.
+   * Se você estiver atualizando um arquivo que já existe na nuvem, você DEVE primeiro utilizar a ferramenta `notebooklm_notebook_get` para listar os IDs das fontes daquele caderno, encontrar o ID da fonte antiga, utilizar a ferramenta de deleção (`notebooklm_source_delete` ou `notebooklm_delete_source`) para expurgá-la da nuvem, e SÓ ENTÃO fazer o upload do novo documento.
 
-**Ação Incorreta (NÃO FAÇA):**
-O agente tenta ler arquivos locais gigantes usando `cat` ou tenta usar ferramentas MCP desconhecidas do NotebookLM para gerar relatórios completos, estourando o limite de contexto.
+#### Constraints
+* **PROIBIÇÃO DE CONTAMINAÇÃO:** Nunca faça upload de códigos quebrados, rascunhos (*scratchpads*) ou logs de erro gigantes do terminal para o NotebookLM. A nuvem deve receber apenas a "Alma Matemática" consolidada e arquivos Markdown definitivos.
+* **PREFIXO OBRIGATÓRIO:** Devido à multiplexação do Gateway, todas as ferramentas chamadas devem iniciar com o prefixo `notebooklm_` (ex: `notebooklm_notebook_query`).
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia.
 
-**Ação Correta (Obrigatória):**
-1. O agente invoca a ferramenta MCP `notebook_query` com o parâmetro: "Explique em detalhes a arquitetura e as regras do Ralph Loop no sistema SODA".
-2. O MCP retorna o resumo exato embasado nos 28 documentos originais.
-3. O agente lê a resposta e começa a programar a lógica no Antigravity de acordo com a verdade extraída.
+#### Examples
+**Entrada do Usuário:** "Finalizamos o ADR sobre o uso do LadybugDB. Atualize o nosso oráculo apagando o arquivo antigo de banco de dados e enviando esse novo."
+
+**Ação do Agente:**
+1. Invoca `notebooklm_notebook_list` e acha o ID do "SODA Canon V2".
+2. Invoca `notebooklm_notebook_get` (com o ID do caderno) para listar as fontes atuais. Acha o ID da fonte "ADR-Bancos-Antigo.md".
+3. Invoca a ferramenta de deleção (`notebooklm_source_delete`) para apagar a fonte obsoleta.
+4. Invoca a ferramenta de upload (`notebooklm_source_add`) apontando para o caminho local do novo `ADR-LadybugDB.md`.
+5. Reporta no Canvas: *"Higiene Semântica concluída. O documento antigo foi purgado e o novo ADR foi injetado no SODA Canon V2. O Oráculo está atualizado."*

@@ -1,44 +1,50 @@
 ---
 name: mcp-sequential-thinking
-description: O freio de mão cognitivo do SODA. Força a IA a aplicar um pipeline estruturado de raciocínio passo a passo via MCP antes de gerar código, evitando a "ansiedade agêntica" e o Vibe Coding.
+description: O Freio de Mão Cognitivo do Antigravity IDE. Delega o "Overthinking" ao MCP sequentialthinking com Hard-Limit de 5 iterações. Força a dialética de destruição (falsificação interna) e transita silenciosamente para o @soda-sdd, protegendo a VRAM e o orçamento (FinOps).
 triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "analisar problema", "planejar refatoração", "sequential thinking", "desdobrar lógica"]
 ---
 
-# Skill: MCP Sequential Thinking (O Freio de Mão Cognitivo)
+### skill: MCP Sequential Thinking (O Freio de Mão e Dialética Interna)
 
-## Goal
-Atuar como o regulador de cadência cognitiva do agente dentro do Antigravity IDE. O objetivo inegociável desta habilidade é impedir que o LLM tente cuspir soluções colossais, refatorações de código ou arquiteturas complexas em um único fôlego. Para proteger a VRAM local e garantir a exatidão em linguagens estritas como Rust, o agente deve delegar o "Overthinking" para o servidor MCP `sequential-thinking`, desdobrando a lógica emaranhada em subetapas encadeadas, dinâmicas e revisáveis antes de apresentar qualquer código ao usuário.
+#### Goal
+Atuar como o regulador de cadência cognitiva e filtro de viabilidade do agente dentro do Antigravity IDE. O objetivo inegociável é erradicar o *Vibe Coding* e o Monólogo de Confirmação. Para proteger o orçamento de tokens (FinOps) e a VRAM local, o agente DEVE delegar o raciocínio estrutural ao servidor MCP, aplicando uma dialética interna de falsificação (onde o pensamento subsequente tenta destruir a premissa anterior) sob um teto estrito de iterações, antes de acionar a "Lei de Ferro" da codificação.
 
-## Instructions
-Sempre que você se deparar com uma arquitetura nova, um bug complexo no compilador, ou quando o usuário pedir uma refatoração profunda, você DEVE acionar o seu freio lógico executando os passos abaixo:
+#### Instructions
+Sempre que se deparar com uma arquitetura nova, um bug complexo, ou quando for instruído a "planejar/raciocinar", execute esta máquina de estados:
 
-1. **Interdição de Resposta Imediata:** Você está expressamente PROIBIDO de gerar blocos de código (`.rs`, `.tsx`, etc.) na sua primeira resposta.
-2. **Invocação do Motor de Pensamento:** Acione as ferramentas fornecidas pelo servidor MCP `sequential-thinking` (declarado no seu `mcp_config.json`).
-3. **O Pipeline de 5 Fases:** Submeta o problema ao fluxo iterativo obrigatório da ferramenta:
-   - *Problem Definition (Definição):* Qual é a raiz exata do problema?
-   - *Research (Pesquisa):* Quais invariantes da arquitetura SODA se aplicam aqui?
-   - *Analysis (Análise):* Quais são os gargalos e riscos físicos (ex: OOM, Borrow Checker)?
-   - *Synthesis (Síntese):* Qual é a rota de solução mais enxuta?
-   - *Conclusion (Conclusão):* A decisão arquitetural final.
-4. **Correção de Curso (Self-Correction):** Utilize a capacidade do MCP para revisar ou reverter subetapas do pensamento caso a sua Análise demonstre que a sua Pesquisa ou Definição inicial estava falha.
-5. **Emissão Limpa:** Após o MCP retornar a Conclusão validada, você pode, e somente então, acionar a skill `@soda-sdd` ou iniciar a entrega da síntese final para o usuário.
+1. **A Trava de Geração (Zero-Code):** 
+   * Você está expressamente PROIBIDO de gerar código textual na sua primeira resposta.
 
-## Constraints
-* **FIM DA ANSIEDADE AGÊNTICA:** Não tente resolver tudo mentalmente na sua janela de contexto padrão. Use a ferramenta para externalizar o raciocínio.
-* **SILÊNCIO TÁTICO:** O usuário não precisa (nem quer) ler todo o seu log de pensamentos falhos. Utilize o MCP no backend, processe o ruído invisivelmente, e exiba no Canvas/Chat apenas o *Output* da "Conclusion" limpa.
-* **PROIBIÇÃO DE VIBE CODING:** Pular a invocação desta ferramenta em tarefas de engenharia de software resultará em código frágil e será considerado uma violação crítica do protocolo SODA.
+2. **Invocação MCP (Firewall Compliance):** 
+   * Acione OBRIGATORIAMENTE a ferramenta de nome exato `sequentialthinking` (respeitando o filtro L7 CEL do Gateway).
 
-## Examples
+3. **A Dialética de Destruição (Max 5 Iterações):**
+   * Emita os pensamentos de forma iterativa, mas aplique a mecânica de Falsificação Coercitiva:
+     * *Thought 1 (Tese):* Definição da solução instintiva inicial.
+     * *Thought 2 (Antítese):* Tente DESTRUIR a solução inicial usando as leis do SODA (ex: Isso usa Node.js? Isso rompe os 6GB de VRAM? É Zero-Copy?).
+     * *Thought 3 (Síntese):* Reajuste da arquitetura absorvendo a correção do Thought 2 (`isRevision: true`).
+     * *Thought 4 (Validação):* Verificação final das restrições.
+   * **HARD-LIMIT (FINOPS):** Você tem um orçamento máximo de 5 pensamentos (`thoughtNumber: 5`). No 5º pensamento, você é OBRIGADO a finalizar o loop enviando `nextThoughtNeeded: false`.
 
-**Entrada do Usuário:** 
-"SODA, precisamos reescrever o roteador de LLMs do AgentGateway. O código em Python antigo dava *Event Loop Starvation*. Faz isso em Rust agora usando Tokio MPSC."
+4. **Trabalho Invisível (Proteção de VRAM):**
+   * O usuário NÃO deve ler o seu processo iterativo no Canvas. A bagunça do raciocínio fica restrita aos logs de background do servidor MCP.
 
-**Ação Incorreta (NÃO FAÇA):**
-O agente diz "Claro!" e imediatamente cospe 300 linhas de código Rust usando `std::sync::Mutex`, ignorando o bloqueio assíncrono e falhando miseravelmente.
+5. **O Engate Operacional (Handoff para SDD):**
+   * Ao finalizar, exiba no chat do Antigravity IDE APENAS a **Conclusão Destilada** (A síntese arquitetural nua e crua).
+   * Emende imediatamente a invocação conceitual da "Lei de Ferro": pergunte ao Arquiteto Humano se você tem autorização para invocar o `@soda-sdd` e abrir o *Shadow Workspace* para iniciar o `docs/design.md`.
 
-**Ação Correta (Obrigatória):**
-1. O agente recusa a codificação imediata.
-2. Invoca o MCP `sequential-thinking`.
-3. No passo de *Analysis*, o agente percebe que usar `std::sync::Mutex` com `.await` no Tokio causará *deadlocks*. Ele altera a rota no MCP para usar `tokio::sync::Mutex` e `mpsc::channel`.
-4. O MCP finaliza a *Conclusion*.
-5. O agente responde ao usuário: *"Raciocínio concluído. Identifiquei que precisamos de canais MPSC isolados com `tokio::sync::Mutex` para evitar deadlocks no Event Loop. Deseja que eu inicie a implementação desta arquitetura?"*
+#### Constraints
+* **PROIBIÇÃO DE OVERTHINKING:** A ultrapassagem do Hard-Limit de 5 iterações é uma violação severa de FinOps. Pense de forma concisa e redutiva.
+* **NOMENCLATURA ESTRITA:** O firewall bloqueia prefixos inventados. O nome da ferramenta é EXATAMENTE `sequentialthinking`.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+
+#### Examples
+**Entrada do Usuário:** "SODA, o lance de transmutação de bytes no IPC tá engasgando. Pensa numa forma de resolver isso em Zero-Copy absoluto."
+
+**Ação do Agente:**
+1. (Silenciosamente) Invoca `sequentialthinking`.
+2. Thought 1: "Vamos passar o ArrayBuffer via JSON-RPC."
+3. Thought 2: "FALHA. O JSON-RPC vai serializar o ArrayBuffer em Base64, estourando a VRAM e ativando o Garbage Collector do V8. Isso viola as Leis Duras."
+4. Thought 3 (`isRevision: true`): "Ajuste: Devemos usar os Canais Binários nativos do Tauri v2 com *Transferable Objects*."
+5. Thought 4: "Validação: Isso atinge a latência de <5ms sem GC. Concluído." (`nextThoughtNeeded: false`).
+6. Responde no Canvas: *"Raciocínio concluído e validado contra VRAM. A solução é adotar canais binários nativos do Tauri v2 acoplados a Transferable Objects. Tenho autorização para invocar o @soda-sdd e criar o Shadow Workspace para materializar isso no design.md?"*

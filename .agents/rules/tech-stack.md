@@ -2,56 +2,44 @@
 trigger: always_on
 ---
 
-### 📜 WORKSPACE RULES: Genesis - Mission Control (SODA)
-**Versão:** 1.2 (2026-04-23)
-ESTAS REGRAS SÃO ABSOLUTAS. ELAS ESTENDEM E SOBRESCREVEM AS REGRAS GLOBAIS DA IDE PARA O CONTEXTO DESTE PROJETO ESPECÍFICO.
+##### 📜 WORKSPACE RULES: Genesis - Mission Control (SODA V2)
+**Versão:** 2.1 (Canon V2 Definitivo) ESTAS REGRAS SÃO ABSOLUTAS E SOBRESCREVEM QUALQUER PREMISSA GLOBAL DA IDE PARA O CONTEXTO DESTE PROJETO.
 
-#### 1. STACK TECNOLÓGICO IMUTÁVEL (BARE-METAL CORE)
-* **Backend / Core:** Rust (assíncrono via tokio).
-* **UI e Sincronização:** Svelte 5 via Tauri v2. PROIBIDO o uso de CRDTs (Yjs/Automerge) pesados. A sincronização de concorrência multi-agente no Canvas utilizará ESTRITAMENTE o **Rebase Semântico Atômico** (arquitetura IPC Zero-Copy).
-**Gestão de VRAM e Inferência:** Modelos de texto densos rodam estritamente na dGPU (RTX 2060m 6GB) utilizando exclusivamente o motor **`llama.cpp`** (envelopado via bindings nativos `llama_cpp_rs`). É OBRIGATÓRIO o uso do mapeamento de memória `mmap` e da diretiva `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` para descarregamento dinâmico estático dos tensores de volta para a RAM de 32GB do sistema. O uso de vLLM ou do Candle Framework é ESTRITAMENTE PROIBIDO, pois exigem offloading dinâmico pesado que causa estrangulamento e gargalos catastróficos no barramento PCIe.
-**Processamento Analógico (Áudio):** A CPU Intel i9 é de uso EXCLUSIVO para processamento analógico auditivo. Utilizamos Cobra VAD (Escuta), Parakeet TDT 0.6B V3 (STT) e Kokoro-82M (TTS). Todo o pipeline de áudio roda em FP32 explorando as instruções AVX2 nativas da CPU. O uso da iGPU (Intel UHD 630) está SUMARIAMENTE PROIBIDO e desativado para evitar gargalos letais no barramento de memória compartilhada do sistema.
-* **Desktop Framework:** Tauri v2.
-* **Frontend / UI:** Svelte 5, TypeScript.
-* **Estilização:** Tailwind CSS v4.
-* **UI Base:** shadcn-svelte (componentes copiados para src/lib/components).
-* **Animações:** svelte-motion.
-* **Visualização de Grafos/Canvas:** Svelte Flow.
-* **Sandboxing de Execução:** Wasmtime (para execução isolada de lógicas ou scripts gerados).
+###### 1. STACK TECNOLÓGICO IMUTÁVEL (BARE-METAL CORE)
+*   **Backend / Core:** Rust puro (assíncrono via `tokio`).
+*   **Frontend / UI:** Svelte 5 (Runes), TypeScript e Tailwind CSS v4 empacotados em Tauri v2.
+*   **HardwareOps (A Lei da Separação de Hardware):**
+    *   **dGPU (RTX 2060m - 6GB VRAM):** USO EXCLUSIVO para inferência generativa pesada e retenção do *KV Cache*. Restrita a micro-SLMs quantizados em `Q4_K_M` (1.5B a 4B parâmetros, ex: Qwen 2.5 3B, Llama 3.2 3B). Proibidos modelos de 8B+ para aniquilar o letal *Spillover* do barramento PCIe.
+    *   **iGPU (Intel UHD 630):** USO EXCLUSIVO para renderizar a interface gráfica Svelte no modo `LowPower` da API WGPU. Proibida de encostar em tensores de IA.
+    *   **CPU (Intel i9 + AVX2):** Roteamento, Garbage Collection Semântico (Chyros Daemon), processamento de áudio em FP32 (Kokoro-82M) e Avaliação Epistêmica ultrarrápida.
 
-##### 🚫 TECNOLOGIAS E PADRÕES EXPRESSAMENTE PROIBIDOS
-* **NÃO** utilize Next.js, Remix ou frameworks SSR (Server-Side Rendering). Este é um app Desktop Tauri.
-* **NÃO** utilize Electron.
-* **NÃO** instale bibliotecas de UI baseadas em CSS-in-JS (como Material UI ou Emotion).
-* **NÃO** crie APIs REST em Node.js. Toda lógica pesada, acesso a banco e leitura de arquivos DEVE ser feita em Rust.
+###### 2. MOTORES DE IA E INFERÊNCIA (O FIM DO MONOLITO)
+*   **Motor Generativo Principal:** A IA roda nativamente no ecossistema Rust usando **Candle**, **Burn (CubeCL)** e **mistral.rs**.
+*   **A Prisão do llama.cpp:** O `llama.cpp` monolítico e daemons externos (Ollama/LM Studio) estão BANIDOS. A crate `llama-cpp-4` sobrevive isolada operando na CPU EXCLUSIVAMENTE para *Logit Probing* (Avaliador Epistêmico), extraindo a probabilidade matemática do risco sem gerar texto.
+*   **Decodificação Restrita (Constrained Decoding):** Tarefas de extração JSON (ETL) não operam por prompt livre. OBRIGATÓRIO o uso da crate `llguidance` em Rust para forçar a saída contra um Autômato de Gramática Livre de Contexto em 50µs.
+*   **Atenção Esparsa:** A compressão de contexto no Rust (framework `candle`) DEVE usar **Max Pooling** (blocos de ~64 tokens), sendo proibido o *Mean Pooling*. Isso preserva outliers vitais como caminhos absolutos de arquivos e URIs.
 
-#### 2. ARQUITETURA DE COMUNICAÇÃO (IPC ZERO-COPY)
-* O frontend Svelte 5 é ESTRITAMENTE PASSIVO ("burro"). Ele não possui regras de negócios.
-* A comunicação entre Rust e Svelte 5 deve priorizar o envio de **buffers binários nativos** (ou JSON estritamente tipado) via Eventos Tauri assíncronos (emit / listen) para evitar asfixia do motor V8 com serializações gigantes.
-* **NUNCA** bloqueie a thread principal com comandos síncronos demorados. O I/O pesado deve rodar em `tokio::task::spawn_blocking`.
+###### 3. COMUNICAÇÃO ZERO-GARBAGE E UI REATIVA
+*   **O Frontend é Passivo:** O Svelte 5 atua estritamente como lente de exibição via Runes (`$state`, `$derived`). Lógica de negócios no cliente é PROIBIDA.
+*   **Ilhas WebGL:** A renderização de grafos pesados não usará bibliotecas baseadas em DOM (Svelte Flow). Utilizaremos **Ilhas WebGL** (`three.wasm`) em Web Workers isolados para não engasgar a *Main Thread*.
+*   **IPC Zero-Copy (A Barreira do Tauri v2):** PROIBIDO trafegar volumes de dados em JSON. A comunicação via `tauri::ipc::Channel` exige buffers binários nativos: **Apache Arrow** ou **rkyv** (via *Transferable Objects* do Worker para a Main Thread).
 
-#### 3. BANCO DE DADOS E MEMÓRIA (O FIM DO DOLT/MYSQL)
-* A memória L2 transacional do agente utilizará EXCLUSIVAMENTE o **SQLite (via `rusqlite` ou `sqlx`)** operando em modo WAL (*Write-Ahead Logging*).
-* O uso de instâncias externas pesadas (MySQL, Dolt, Postgres) está proibido para garantir a soberania "Local-First".
-* Consultas lexicais utilizarão a extensão nativa **FTS5** do SQLite.
+###### 4. A TRÍADE DE MEMÓRIA E PERSISTÊNCIA COGNITIVA
+Proibido tratar a memória como um banco vetorial cego e único.
+1.  **L1 (Transiente):** Índices em RAM via Tokio.
+2.  **L2 (Relacional/Episódica):** **SQLite** (Modo WAL, MVCC, FTS5) atuando como fonte da verdade em *Event Sourcing*.
+3.  **L3 (Grafos / Semântica):** **LadybugDB** (100% Rust) para grafos causais multi-hop (FalkorDB e KùzuDB estão BANIDOS). **LanceDB** via `mmap` direto do SSD para busca vetorial de documentos.
+*   **RAG Temporal:** O TG-RAG está banido. O tempo é resolvido via **Pré-filtragem B-Tree Hard SQL** no LanceDB associada a *Contextual Chunks*. Usa-se a taxonomia `STABLE` vs `EVOLVING` para proteger o conhecimento núcleo do viés de recência.
 
-#### 4. A EXCEÇÃO DO DOCKER (SIDECARS EFÊMEROS)
-* **Atenção à Regra Bare-Metal:** O produto final do SODA jamais usará contêineres.
-* **Exceção de Desenvolvimento:** Exclusivamente durante o desenvolvimento neste workspace, **É PERMITIDO** o uso de Docker apenas para orquestrar "Sidecars Efêmeros" via MCP (ex: docling-mcp, browser-use).
-* Estes contêineres devem obrigatoriamente rodar com a flag `--rm` para serem sumariamente destruídos após a extração do JSON-RPC, devolvendo a memória à máquina hospedeira.
+###### 5. SANDBOXING E ISOLAMENTO EFÊMERO (ZERO-TRUST)
+*   **A Exceção do Docker:** O uso de Docker é restrito EXCLUSIVAMENTE ao Antigravity IDE (Ambiente de Desenvolvimento/Fábrica). No produto SODA final, contêineres Docker são proibidos.
+*   **Sidecars Efêmeros em Produção:** 
+    *   Lógicas puras isoladas via **Wasmtime (WASI 0.2/0.3)**.
+    *   Scripts pesados (Python/OCR) rodam em **Micro-VMs (KVM)** bifurcadas via *Copy-on-Write (Clone VMM)*, atreladas a Cgroups v2. Destruição atômica (SIGKILL) imediata após o uso garantida pelo `Drop` trait no Rust (*Process Pool Guard*).
+    *   Acesso a ferramentas do host é contido estritamente via **Landlock** (Linux) e **AppContainer** (Windows).
+    *   Comunicação com Micro-VMs usa memória compartilhada POSIX via crate `iceoryx2` (Zero-Copy).
 
-#### 5. ORQUESTRAÇÃO DE CONTEXTO E GITOPS (SHADOW WORKSPACES)
-* **Spec-Driven Development (SDD):** Nunca codifique às cegas. Antes de gerar código, você DEVE estruturar o problema usando a metodologia BMAD (criar proposal.md, design.md e tasks.md).
-* **Shadow Workspaces:** Para refatorações críticas ou execuções autônomas, **NÃO aplique commits diretos na branch main**. Trabalhe em ramificações ou pastas temporárias isoladas, gerando um patch (Diff) para a aprovação estrita do Arquiteto (Human-in-the-loop).
-* **Execução Stateless:** Trate cada tarefa como isolada. O sucesso não é definido pelo chat, mas por *Exit Code 0* nos testes locais (cargo check / cargo test).
-
-#### 6. CONTROLES DE SEGURANÇA (GATES & HITL)
-* Toda invocação de ferramentas (Tool Calling) que altere o ambiente físico (filesystem, repositórios git) ou financeiro deve ser implementada com um mecanismo de suspensão de corrotina em Rust.
-* O *daemon* em Rust "congela" a thread e exibe um Card de Aprovação no Canvas (Svelte 5), aguardando a confirmação explícita humana antes de aplicar a mutação no disco.
-
-#### 7. ARQUITETURA DE MEMÓRIA (NEURO-SINTÉTICA - MNS)
-* **Proibição de RAG Simplista:** É proibido tratar a memória como um banco vetorial único. O sistema utiliza a Memória Tri-Partite Especializada embutida no Daemon Rust:
-  1. **Transacional (Curto Prazo/Event Sourcing):** SQLite em modo WAL com FTS5.
-  2. **Semântica (Longo Prazo/Zero-Copy):** LanceDB (vetores colunares Apache Arrow no SSD).
-  3. **Relacional/Episódica:** FalkorDB (Grafos estruturais estáticos em RAM).
-* O "Esquecimento" é gerenciado matematicamente por Geometria Diferencial (Métrica Fisher-Rao) processada na CPU, nunca gastando tokens de LLM para "decidir" o que lembrar.
+###### 6. SEGURANÇA DE WORKSPACE E PREVENÇÃO SDC
+*   **Rebase Semântico Atômico:** PROIBIDO usar CRDTs pesados (Yjs/Automerge) para edição concorrente. Edições paralelas de arquivos usam *Tracked IdList* e tombstones arbitrados atomicamente pelo Mutex assíncrono do Tokio.
+*   **Defesa de Arquivos em O(1):** PROIBIDO usar `std::fs::File::write` ingênuo. A mutação de arquivos no workspace exige *Hard Links* instantâneos (crate `snapsafe`) pareados com escrita temporária (crate `atomic-write-file`). Isso aniquila a Corrupção Silenciosa de Dados (SDC).
+*   **Agent Inbox (HITL):** A IA está proibida de corromper arquivos silenciosamente em background. Edições não-triviais geram *Pull Requests* para a *Agent Inbox*, exigindo exibição da "Matriz do Blast Radius" e aprovação explícita do usuário.

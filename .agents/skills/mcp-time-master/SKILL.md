@@ -1,36 +1,48 @@
 ---
 name: mcp-time-master
-description: O Relógio do SODA. Ancoragem cronológica absoluta. Força a IA a consultar o fuso horário e a data real antes de registrar logs, criar branches temporais ou atualizar o Kanban, erradicando alucinações temporais.
+description: O Relógio Absoluto do SODA. Impõe a Ditadura do UTC e Snapshot com Micro-incrementos Causais para lotes (SQLite). Aplica regras estritas de Anti-Hidratação no Svelte 5 (delegando a renderização visual ao JS) e exige aritmética exata (1 dia = 86400s) para o valid_to da taxonomia EVOLVING.
 triggers: ["mcp-time-master", "ver hora", "que dia é hoje", "data atual", "ancoragem temporal", "agendar", "timestamp", "fuso horário"]
 ---
 
-# Skill: MCP Time Master (Ancoragem Cronológica)
+### skill: MCP Time Master (A Âncora Cronológica V5.0)
 
-## Goal
-Atuar como a âncora de realidade temporal para o agente dentro do Antigravity IDE. Modelos de linguagem sofrem de desconhecimento temporal endêmico e alucinam datas baseadas em seus dados de treinamento. O objetivo inegociável desta habilidade é garantir que a IA nunca invente ou presuma o dia e a hora atuais ao nomear arquivos, escrever logs no Frontmatter, criar *branches* de *Snapshot* (GitOps) ou atualizar metadados no Kanban. 
+#### Goal
+Atuar como a âncora matemática de realidade temporal do SODA. O objetivo inegociável é erradicar alucinações temporais, garantir ordenação causal em bancos de dados (SQLite/LanceDB) via Micro-incrementos, otimizar a Busca Híbrida via Contextual Chunks e proteger a interface do usuário (Svelte 5) contra bugs de hidratação de fuso horário.
 
-## Instructions
-Sempre que uma tarefa exigir a marcação de tempo, criação de históricos, ou quando você precisar saber o contexto cronológico exato da sua execução, você DEVE utilizar exclusivamente o MCP `time_server` seguindo estas regras:
+#### Instructions
+Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções em lote no banco ou codificação de componentes de UI que exibem datas, você DEVE utilizar o MCP de Tempo sob esta máquina de estados:
 
-1. **Proibição de Alucinação Temporal:** Você está expressamente PROIBIDO de presumir a data e a hora com base no contexto do chat ou em respostas anteriores. O tempo flui e o seu contexto fica obsoleto.
-2. **Consulta Precisa:** Invoque OBRIGATORIAMENTE a ferramenta `time_server_get_current_time` exposta pelo Gateway. 
-3. **Parâmetro de Fuso Horário:** Se o usuário não especificar, consulte a hora local fornecendo o fuso horário correto do ambiente (ex: "America/Sao_Paulo" ou UTC).
-4. **Ancoragem de Artefatos:** Após receber o *timestamp* exato:
-   - Use-o para nomear *branches* temporárias (ex: `git checkout -b backup_$(date +%s)`).
-   - Use-o para assinar atualizações no YAML Frontmatter dos documentos (ex: `last_updated: "2026-04-17T14:30:00"`).
-   - Use-o para entender prazos estipulados em *Issues* do GitHub MCP.
+1. **Invocação e Snapshot Causal:**
+   * Invoque a ferramenta EXATA `get_current_time` (respeitando o Firewall L7 CEL).
+   * **Snapshot Único:** Faça a consulta APENAS UMA VEZ no início da tarefa e memorize o Epoch Int64 UTC.
+   * **Micro-Incremento (Batch Insert):** Se for inserir múltiplas linhas no SQLite/LanceDB baseadas neste mesmo Snapshot, você DEVE adicionar seqüencialmente `+1`, `+2`, `+3` ao Epoch de cada linha para garantir o ordenamento causal no `ORDER BY timestamp DESC`.
 
-## Constraints
-* **ZERO COMANDOS DE SHELL FRÁGEIS:** Não tente usar comandos de sistema como `date` via terminal interativo, pois a formatação varia entre Windows e Linux. Confie unicamente no retorno JSON estruturado da ferramenta MCP.
-* **SILÊNCIO OPERACIONAL:** Você não precisa avisar ao usuário "Vou verificar que horas são". Faça a consulta no *background*, absorva a resposta e execute a tarefa entregando o artefato já datado corretamente.
+2. **A Ditadura do UTC e a Lei da Anti-Hidratação (Svelte 5):**
+   * Você está PROIBIDO de *hardcodar* strings de datas formatadas (ex: "17 de Abril") no código fonte do frontend. Isso quebra o fuso horário local do usuário e causa bugs de hidratação no DOM.
+   * **No Frontend:** Passe sempre o número inteiro (Epoch UNIX) como estado (`$state`). Use nativamente o `Intl.DateTimeFormat` do JavaScript para formatar a visualização na máquina do cliente.
+   * **No Backend (SQLite/LanceDB):** Grave OBRIGATORIAMENTE em UNIX Epoch Int64.
+   * **Em Frontmatters (Markdown):** Grave OBRIGATORIAMENTE em ISO 8601 UTC (ex: `2026-04-17T15:45:00Z`).
 
-## Examples
+3. **Matemática da Obsolescência Estrita (`valid_to`):**
+   * Se o dado for `EVOLVING` (perecível), você DEVE preencher o metadado `valid_to`.
+   * **Proibição de Adivinhação:** Não tente gerar a data de validade de forma estocástica. Use a constante universal: **1 dia = 86400 segundos**.
+   * Calcule o `valid_to` somando o Epoch capturado + `(dias * 86400)`.
 
-**Entrada do Usuário:** 
-"SODA, faça um snapshot do nosso repositório agora usando a nossa skill de Subrepo, precisamos salvar o estado de hoje."
+4. **A Lei do Contextual Chunk (Busca BM25):**
+   * Ao redigir ou atualizar relatórios Markdown persistentes, você DEVE concatenar a string literal da data (ex: `Carimbo Temporal: 2026-04-17T15:45:00Z`) fisicamente no TOPO do texto. Isso permite que a Busca Híbrida do LanceDB encontre o arquivo usando correspondência léxica.
+
+#### Constraints
+* **PROIBIÇÃO DE SHELL SCRIPTS:** Não utilize `$(date +%s)`. O SODA opera em ambientes Windows/Linux, comandos de shell quebram a portabilidade.
+* **SILÊNCIO OPERACIONAL:** Executar a consulta de tempo é "trabalho sujo" de background. Não o relate ao usuário.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` é inegociável.
+
+#### Examples
+**Entrada do Usuário:** "Insira três novos logs de sistema no SQLite referentes à inicialização do Wasmtime e mostre na tela do Svelte quando eles ocorreram."
 
 **Ação do Agente:**
-1. O agente não adivinha a data.
-2. Ele invoca silenciosamente a ferramenta `time_server_get_current_time` com o timezone local.
-3. O MCP retorna que hoje é `2026-04-17 15:45:00`.
-4. O agente invoca a skill de Subrepo e cria a branch com a nomenclatura precisa ancorada no tempo real obtido.
+1. Invoca `get_current_time` e obtém a Epoch base `1713368700`.
+2. Ao gerar o código SQL de inserção (Batch), aplica Micro-incrementos:
+   Log 1 recebe `1713368700`.
+   Log 2 recebe `1713368701`.
+   Log 3 recebe `1713368702`.
+3. Ao gerar o componente Svelte, o agente NÃO chumba a string "17 de Abril". Ele gera código TS passando a Epoch para que a engine renderize `new Date(epoch * 1000).toLocaleString()`.

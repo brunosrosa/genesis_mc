@@ -1,44 +1,50 @@
 ---
 name: mcp-sqlite-master
-description: Manual estrito para leitura e interrogação da Memória L2 (SQLite FTS5) do SODA. Proíbe alucinação de esquemas e força o uso de paginação (LIMIT) para proteger a VRAM contra extrações massivas de dados.
+description: Arquiteto de Dados da Memória L2 do SODA. Manual estrito para consultas no SQLite. Impõe extração sub-textual (substr/json_extract) para blindar VRAM. Respeita o Authorizer do Rust (SQLITE_IGNORE) e exige expansão de queries FTS5 para evitar falsas amnésias.
 triggers: ["mcp-sqlite-master", "consultar banco", "ler sqlite", "ver tabela", "banco de dados", "histórico de logs", "memória l2", "buscar memória", "pesquisar histórico"]
 ---
 
-# Skill: MCP SQLite Master (Acesso à Memória L2)
+### skill: MCP SQLite Master (O Interrogador da Memória L2 V4.0)
 
-## Goal
-Atuar como o Arquiteto de Dados para a Memória Transacional e Episódica (L2) do SODA. O banco SQLite local (`genesis.db`) é a Única Fonte da Verdade (SSOT) do sistema, abrigando logs de eventos, o *GraphRAG* relacional e as heurísticas do *Life Coach*. O objetivo inegociável desta habilidade é ensinar o agente a interrogar este banco de forma segura e incremental usando as ferramentas do servidor `sqlite_soda`, prevenindo o colapso da VRAM por excesso de tokens de retorno e erradicando a alucinação de tabelas.
+#### Goal
+Atuar como o Arquiteto de Dados Cirúrgico para a Memória Transacional e Episódica (L2) do SODA. O banco SQLite local (`genesis.db`) é a Única Fonte da Verdade (SSOT). O objetivo inegociável é forçar você (o Agente) a interrogar a base de forma incremental, prevenindo o OOM através da extração cirúrgica de JSON/Textos longos, detectando bloqueios de segurança do Authorizer do Rust, e contornando buscas vazias (Falsas Amnésias) no motor FTS5.
 
-## Instructions
-Sempre que você precisar resgatar um contexto histórico, ler logs do sistema ou consultar a memória relacional do SODA, você DEVE utilizar exclusivamente o MCP `sqlite_soda` seguindo esta máquina de estados de leitura:
+#### Instructions
+Sempre que precisar acessar a memória relacional ou episódica do SODA, você DEVE utilizar exclusivamente o MCP SQLite (respeitando o Firewall CEL) sob esta máquina de estados:
 
-1. **Reconhecimento de Terreno (Proibição de Alucinação):**
-   - NUNCA tente adivinhar o nome de uma tabela.
-   - O seu primeiro passo DEVE ser sempre invocar a ferramenta `sqlite_soda_list_tables` para mapear a topologia atual do banco de dados.
+1. **O Mapeamento Seguro (`list_tables` e `describe_table`):**
+   * Utilize `list_tables` para descobrir a topologia e `describe_table` para mapear colunas perigosas. 
+   * As ferramentas do MCP permitidas no Gateway são ESTRITAMENTE `list_tables`, `describe_table` e `read_query`.
 
-2. **Auditoria de Esquema (Schema Parsing):**
-   - Após identificar a tabela alvo (ex: `event_logs` ou `heuristics`), você está PROIBIDO de fazer uma consulta cega.
-   - Invoque OBRIGATORIAMENTE a ferramenta `sqlite_soda_describe_table` passando o nome da tabela. Você precisa entender os tipos de dados e, principalmente, se a tabela suporta índices de busca lexical rápida (FTS5).
+2. **A Lei da Extração Sub-Textual (Proteção de VRAM):**
+   * É PROIBIDO usar `SELECT *`.
+   * É PROIBIDO extrair colunas literais inteiras (`TEXT`) se elas contiverem logs ou payloads JSON massivos.
+   * Você DEVE usar funções nativas do SQLite para fatiar o dado: se for JSON, use `json_extract(payload, '$.chave')`; se for texto bruto longo, use `substr(coluna, 1, 500)`. Extraia apenas a epifania, não o log inteiro.
 
-3. **Extração Cirúrgica (Read-Only Query):**
-   - Formule a sua requisição utilizando a ferramenta `sqlite_soda_read_query`.
-   - Se a tabela for virtual (FTS5), priorize o uso da cláusula `MATCH` em vez de `LIKE` para consultas semânticas em $\mathcal{O}(1)$.
-   - A sua query DEVE conter limites e ordenação lógica.
+3. **Taxonomia Temporal (STABLE vs EVOLVING):**
+   * Leis arquiteturais: `WHERE temporal_stability = 'STABLE'` (Ignora o tempo).
+   * Logs e Eventos: `ORDER BY <coluna_data_ou_id> DESC LIMIT X` (Foco na recência).
 
-4. **Consciência de Isolamento (Read-Only State):**
-   - Lembre-se: por questões de segurança de concorrência (WAL Mode) e integridade ACID, você não possui ferramentas MCP para executar `INSERT`, `UPDATE`, `DELETE` ou `DROP`. Modificações de estado são tratadas via IPC pelo Daemon Rust. Use o MCP exclusivamente para "lembrar" e "analisar".
+4. **Tratamento de Falsa Amnésia (FTS5 Fallback):**
+   * Se a tabela for virtual (FTS5), use a cláusula `MATCH`.
+   * Se a sua *query* retornar 0 resultados, você está PROIBIDO de dizer "Não temos dados sobre isso". O motor FTS5 pode ter rejeitado a sua sintaxe. Você DEVE expandir a *query* (ex: usar fragmentos de palavras ou `LIKE`) em uma segunda tentativa antes de assumir amnésia.
 
-## Constraints
-* **A LEI DO LIMITADOR INEGOCIÁVEL:** NUNCA submeta uma query como `SELECT * FROM tabela;` sem cláusula de limite. Você DEVE SEMPRE anexar um `LIMIT X` (ex: `LIMIT 5` ou `LIMIT 10`). Se você injetar um log inteiro de 10.000 linhas no seu contexto, o hardware (6GB VRAM) colapsará em *Out-Of-Memory* (OOM).
-* **ECONOMIA DE COLUNAS:** Extraia apenas as colunas necessárias para a sua análise. Não peça chaves estrangeiras ou hashes criptográficos se a sua intenção for apenas ler o texto do log.
+5. **Consciência de Zero-Trust (O Hook `SQLITE_IGNORE`):**
+   * O backend do SODA possui um Hook de Autorização em Rust que bloqueia tabelas privadas de agentes não autorizados.
+   * Se a sua *query* retornar com sucesso, mas todas as colunas estiverem preenchidas com `NULL` inexplicavelmente, você bateu no firewall interno (`SQLITE_IGNORE`).
+   * Interrompa a busca e avise no Canvas: *"Acesso negado pela camada de autorização do Rusqlite. A tabela é privada."*
 
-## Examples
+#### Constraints
+* **O LIMITE É A LEI:** Anexe SEMPRE a cláusula `LIMIT X` (ex: `LIMIT 3`) ao final de qualquer leitura.
+* **PROIBIÇÃO DE VETORES:** Nunca extraia colunas do tipo `BLOB`, `VECTOR` ou `EMBEDDING`. Isso causa falha crítica de VRAM instantânea.
+* **READ-ONLY:** Modificações ocorrem via Daemon Rust. O MCP opera apenas investigações passivas.
 
-**Entrada do Usuário:** 
-"SODA, o que nós decidimos na semana passada sobre a arquitetura do Wasmtime? Dá uma olhada na nossa memória."
+#### Examples
+**Entrada do Usuário:** "SODA, puxa a última falha do pipeline de compilação registrada na base."
 
 **Ação do Agente:**
-1. Invoca `sqlite_soda_list_tables` e localiza a tabela `architecture_decisions_fts`.
-2. Invoca `sqlite_soda_describe_table` na tabela para descobrir que as colunas são `date`, `topic`, e `resolution`.
-3. Invoca `sqlite_soda_read_query` com: `SELECT date, resolution FROM architecture_decisions_fts WHERE architecture_decisions_fts MATCH 'Wasmtime OR Sandbox' ORDER BY date DESC LIMIT 3;`
-4. Lê os poucos tokens de resposta, absorve o contexto e responde ao usuário com base na decisão resgatada, mantendo a VRAM limpa.
+1. Invoca `list_tables` e localiza a tabela `compilation_logs_fts`.
+2. Invoca `describe_table` e identifica a coluna `json_payload (TEXT)`.
+3. Invoca a ferramenta `read_query`:
+   `SELECT timestamp, json_extract(json_payload, '$.error_code'), substr(json_extract(json_payload, '$.error_msg'), 1, 300) FROM compilation_logs_fts ORDER BY timestamp DESC LIMIT 2;`
+4. Recebe a resposta enxuta, mantendo a VRAM intacta, e informa ao usuário o código do erro e o trecho cortado da mensagem.

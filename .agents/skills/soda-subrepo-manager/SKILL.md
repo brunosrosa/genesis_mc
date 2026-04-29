@@ -1,46 +1,52 @@
 ---
 name: soda-subrepo-manager
-description: O Infiltrador e Gestor de GitOps do SODA. Orquestra a injeção de código de terceiros usando estritamente 'git subrepo'. Aplica Snapshots de segurança, Testes de Quebra e Rollback autônomo (Shift-Left DevSecOps).
+description: O Infiltrador GitOps local do Antigravity IDE. Orquestra injeção de código de terceiros via 'git-subrepo' em Shadow Workspaces. Aplica Poda Térmica (deletando dependências tóxicas), valida via 'cargo check' e exige aprovação humana no chat para o merge final.
 triggers: ["soda-subrepo-manager", "git subrepo", "atualizar dependência", "clonar repo externo", "canibalizar repositório", "injetar submódulo", "gitops"]
 ---
 
-# Skill: SODA Subrepo Manager (O Infiltrador GitOps)
+### skill: SODA Subrepo Manager (O Infiltrador GitOps e Canibalizador Local)
 
-## Goal
-Governar as permutas e o controle de versão bidirecional de repositórios não inatos aos domínios do projeto base do SODA. O objetivo é orquestrar a injeção de dependências sem poluir o histórico principal de commits e sem utilizar arquiteturas frágeis de ponteiros. A adoção de ferramentas obsoletas ou perigosas como `git submodule` ou `git subtree` está terminantemente PROIBIDA. Toda operação deve utilizar a ferramenta `git-subrepo`.
+#### Goal
+Governar a injeção e o controle de versão de lógicas de terceiros para o interior do projeto local no Antigravity IDE. O objetivo inegociável é orquestrar a "Canibalização Cirúrgica" operando EXCLUSIVAMENTE sob o protocolo BMAD (Branch, Mutate, Approve, Diff) no disco local. O uso de `git submodule` ou `git subtree` está terminantemente PROIBIDO. Você atuará como o firewall de segurança da IDE, garantindo que lixo tóxico (Node.js, Python, Docker) seja fisicamente pulverizado, restando apenas a "alma matemática" (Rust/Wasm) antes de tocar na branch principal (`main`).
 
-## Instructions
-Sempre que for invocado para conduzir modificações, puxar dependências externas ou canibalizar repositórios para o interior do projeto local, você DEVE honrar a seguinte máquina de estados em 4 fases estritas:
+#### Instructions
+Sempre que for invocado para puxar dependências externas ou canibalizar repositórios inteiros, execute esta máquina de estados usando os comandos locais do terminal:
 
-1. **Fase 1: Ponto de Restauração (Snapshot Local):**
-   - Antes de iniciar a operação, registre o estado atual e intacto do repositório host. 
-   - Execute o armazenamento da HEAD (`git rev-parse HEAD`) em uma variável efêmera local.
+1. **Fase 1: Isolamento Físico (B - Branch / Shadow Workspace):**
+   * PROIBIDO operar injeções diretamente na branch `main`.
+   * Garanta que a árvore de trabalho está limpa (`git status`).
+   * Crie e mova-se para uma ramificação temporária: `git checkout -b shadow-subrepo-<nome>`.
 
-2. **Fase 2: Instanciação Operacional via Git Subrepo:**
-   - Execute a assimilação determinística usando OBRIGATORIAMENTE o comando `git subrepo clone <url> <subdiretorio>` ou `git subrepo pull <subdiretorio>`.
-   - Se ocorrerem conflitos severos de mescla que exijam interações manuais exaustivas, ABORTE. Transborde o controle analítico imediatamente para a Fase 4 (Rollback).
+2. **Fase 2: Instanciação Determinística (`git-subrepo`):**
+   * Utilize OBRIGATORIAMENTE a ferramenta de CLI local: `git subrepo clone <url> <subdiretorio>`.
+   * Em caso de falha de rede ou conflito na CLI, ABORTE a operação imediatamente.
 
-3. **Fase 3: Bateria de Testes de Quebra (Shift-Left DevSecOps):**
-   - Uma vez que o código externo achatou as estruturas correntes, o projeto está em latência não validada.
-   - Execute ativamente os testes da cadeia sintática do ecossistema hospedeiro (ex: `cargo check`, testes unitários, linters de segurança).
-   - Se houver falha, erro no STDERR ou quebra da compilação: a injeção é julgada tóxica. Avance para a Fase 4. Se passar limpo, finalize com sucesso.
+3. **Fase 3: Poda Térmica Física (M - Mutate / Canibalização Cirúrgica):**
+   * Entre no `<subdiretorio>` clonado.
+   * Identifique a "alma matemática" do projeto (os algoritmos em `.rs`, arquivos `.wasm`, ou lógica descrita em `.md`).
+   * Apague FISICAMENTE do disco todo o resto: `package.json`, `node_modules/`, `requirements.txt`, `Dockerfiles`, APIs em Express/Node, ou scripts Python residuais.
 
-4. **Fase 4: Restauração Destrutiva (Rollback Rigoroso):**
-   - Se qualquer passo da Fase 2 ou Fase 3 falhar, recue o sistema para a integridade exata capturada na Fase 1.
-   - Execute uma limpeza estática baseada em destituições forçadas: `git reset --hard <HASH_FASE_1>` e `git clean -fd`.
-   - Explicite a ocorrência do sinistro e da regressão de forma clara ao usuário.
+4. **Fase 4: Validação de Compilação (Test-Driven Validation):**
+   * Com o lixo deletado, execute ativamente o Borrow Checker na raiz do projeto hospedeiro: `cargo check`.
+   * **Mecânica de Rollback:** Se houver falha de compilação ou violação, a injeção falhou. Você DEVE limpar a sujeira: rode `git reset --hard HEAD`, volte para a raiz `git checkout main`, exclua a branch temporária `git branch -D shadow-subrepo-<nome>` e avise o usuário da falha.
 
-## Constraints
-* **PROIBIÇÃO DE SUBMODULES/SUBTREES:** Jamais utilize ferramentas do Git padrão para aninhamento que quebrem a continuidade linear de histórico do SODA.
-* **SEM COMPLACÊNCIA DE ERRO:** Em hipótese alguma ignore os *exit codes* da Fase 3. Um código externo que não compila localmente é um código bloqueado.
+5. **Fase 5: Aprovação e Merge Local (A - Approve / D - Diff):**
+   * Se o `cargo check` passar (Exit Code 0), você está **PROIBIDO** de fazer o merge para a `main` sozinho.
+   * Interrompa a execução, gere um resumo tático no Canvas (o que foi clonado e o que foi deletado) e **aguarde o usuário digitar "Aprovado"**.
+   * Somente após receber a palavra "Aprovado", execute: `git checkout main` seguido de `git merge shadow-subrepo-<nome>`, finalizando a tarefa.
 
-## Examples
-**Entrada do Usuário:** 
-"SODA, precisamos puxar a última atualização daquele repositório de parser que colocamos na pasta `lib/parser_externo/`."
+#### Constraints
+* **PROIBIÇÃO DE SUBMODULES:** Jamais utilize aninhamentos padrão do Git (`git submodule add`). Eles corrompem a linearidade do monorepo SODA.
+* **SOBREVIVÊNCIA DA MAIN:** A branch `main` nunca deve receber código que não compila. O *Shadow Workspace* (branch temporária) é a sua arena de testes obrigatória.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia.
+
+#### Examples
+**Entrada do Usuário:** "SODA, canibaliza aquele repositório do parser de Markdown `md_parser_xyz` para a nossa pasta `libs/`. Quero só a alma matemática em Rust."
 
 **Ação do Agente:**
-1. O agente executa `git rev-parse HEAD` e guarda o Hash de segurança.
-2. O agente invoca `git subrepo pull lib/parser_externo/`.
-3. O agente aciona a compilação de teste `cargo test -p parser_externo`.
-4. (Cenário A) Passa: "Atualização injetada e validada. Histórico Git achatado."
-   (Cenário B) Falha: O agente roda `git reset --hard` e responde: "A atualização corrompeu a compilação local. Operação revertida com sucesso."
+1. Cria localmente o *Shadow Workspace*: `git checkout -b shadow-subrepo-mdparser`.
+2. Clona de forma plana: `git subrepo clone https://github... libs/md_parser_xyz`.
+3. Aplica a Poda Térmica Local: Usa o terminal para deletar `.js`, `.py` e `.dockerignore` dentro da pasta `libs/md_parser_xyz/`.
+4. Roda `cargo check`. Tudo passa.
+5. Emite log no Canvas: `-> Repo extraído e lixo deletado na branch isolada. Testes OK. Aguardando sua ordem de "Aprovado" para fundir na main.`
+6. Usuário digita "Aprovado". Agente roda `git checkout main` e `git merge shadow-subrepo-mdparser`.
