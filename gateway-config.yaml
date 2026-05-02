@@ -70,7 +70,7 @@ binds:
                     - name: github_mcp
                       stdio:
                         cmd: 'npx.cmd'
-                        args: ['-y', '@modelcontextprotocol/server-github']
+                        args: ['-y', '--quiet', '@modelcontextprotocol/server-github']
                         env:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
                     - name: notebooklm
@@ -85,7 +85,7 @@ binds:
                     - name: docs_scraper
                       stdio:
                         cmd: 'npx.cmd'
-                        args: ['-y', 'mcp-docs-scraper']
+                        args: ['-y', '--quiet', 'mcp-docs-scraper']
                     - name: webcrawl-mcp
                       stdio:
                         cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'

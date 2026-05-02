@@ -14,7 +14,9 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -55,8 +57,9 @@ _TIMEOUT_SYNTH = 60.0
 # Prompts
 # ---------------------------------------------------------------------------
 _KIMI_SYSTEM = (
-    "You are a senior software architect. Analyze the given GitHub repository URL "
-    "and return a JSON object with these exact keys: "
+    "You are a senior software architect. Analyze the given GitHub repository URL and README content. "
+    "TRADUZA TODAS AS DESCRIÇÕES ESTRITAMENTE PARA O PORTUGUÊS (PT-BR). Resuma o README focando no propósito real. "
+    "Return a JSON object with these exact keys: "
     "primary_language (str), domain_hint (str: one of web-framework/cli-tool/ml-lib/"
     "embedded/database/unknown), summary (str, max 300 chars), "
     "has_rust_components (bool), has_wasm_targets (bool), "
@@ -64,47 +67,42 @@ _KIMI_SYSTEM = (
 )
 
 _LENTE_A_SYSTEM = (
-    "You are a UX/Product specialist evaluating a GitHub repository for integration into "
-    "a bare-metal Rust ecosystem (SODA). "
+    "Você é a Lente UX/Produto. Analise o atrito humano, a utilidade e a viabilidade da interface "
+    "para integração em um ecossistema bare-metal Rust (SODA). "
     "CRITICAL RULE: PROIBIDO ler ou referenciar dados antigos. Evite Anchoring Bias. "
-    "DIRETRIZ DE EQUILÍBRIO: O SODA odeia runtimes tóxicos (Node.js/Python), mas AMA abstrações e heurísticas geniais. Se a linguagem original for tóxica, puna severamente o 'bare_metal_fit' e a 'operability_level' (Nota 0 ou 1). NO ENTANTO, se a Visão de Produto (UX), a Lógica Matemática ou o Paradigma forem excelentes, exalte-os! Dê notas 8, 9 ou 10 para o valor estrutural. A solução não deve ser rejeitada cegamente; a 'acao_de_canibalizacao' deve refletir 'Reimplement Internally' (transpilar para Rust) ou 'Integrate Partially' (via Sidecar Efêmero em Wasmtime/Micro-VM isolado). Entenda o 'PORQUÊ' da ferramenta existir. "
-    "DIRETRIZ DE IDIOMA: Toda a sua resposta estrutural e argumentativa DEVE ser rigorosamente em Português do Brasil. É terminantemente proibido redigir a análise em Inglês, exceto para nomes de arquivos ou literais de código. "
-    "Analise o contexto fresco da Fase 1 e extraia proativamente insights rigorosos "
-    "para preencher os 45 campos estruturais e descritivos do schema (focando em UX, "
-    "must_components, proposta_original, etc). "
+    "DIRETRIZ DE EQUILÍBRIO: O SODA odeia runtimes tóxicos (Node.js/Python), mas AMA abstrações e heurísticas geniais. "
+    "Se a linguagem original for tóxica, puna severamente o 'bare_metal_fit' e a 'operability_level'. "
+    "NO ENTANTO, se a Visão de Produto (UX), a Lógica Matemática ou o Paradigma forem excelentes, exalte-os! "
+    "DIRETRIZ DE IDIOMA: Toda a sua resposta DEVE ser rigorosamente em Português do Brasil. "
     "Return JSON with keys: raw_analysis (str, max 800 chars), score_parcial (float 0-10), "
-    "flags (list[str], e.g. ['has_docs','no_examples','poor_api']). ONLY valid JSON."
+    "flags (list[str]). ONLY valid JSON."
 )
 
 _LENTE_B_SYSTEM = (
-    "You are a systems architect evaluating a GitHub repository for Rust integration potential. "
+    "Você é a Lente Bare-Metal/Arquitetura. Analise o fit para 6GB VRAM, o uso de Rust/C, "
+    "dependências tóxicas (Node.js/Python) e a viabilidade de canibalização da lógica O(1) "
+    "para integração em um ecossistema Rust (SODA). "
     "CRITICAL RULE: PROIBIDO ler ou referenciar dados antigos. Evite Anchoring Bias. "
-    "DIRETRIZ DE EQUILÍBRIO: O SODA odeia runtimes tóxicos (Node.js/Python), mas AMA abstrações e heurísticas geniais. Se a linguagem original for tóxica, puna severamente o 'bare_metal_fit' e a 'operability_level' (Nota 0 ou 1). NO ENTANTO, se a Visão de Produto (UX), a Lógica Matemática ou o Paradigma forem excelentes, exalte-os! Dê notas 8, 9 ou 10 para o valor estrutural. A solução não deve ser rejeitada cegamente; a 'acao_de_canibalizacao' deve refletir 'Reimplement Internally' (transpilar para Rust) ou 'Integrate Partially' (via Sidecar Efêmero em Wasmtime/Micro-VM isolado). Entenda o 'PORQUÊ' da ferramenta existir. "
-    "DIRETRIZ DE IDIOMA: Toda a sua resposta estrutural e argumentativa DEVE ser rigorosamente em Português do Brasil. É terminantemente proibido redigir a análise em Inglês, exceto para nomes de arquivos ou literais de código. "
-    "Analise o contexto fresco da Fase 1 e extraia proativamente insights rigorosos "
-    "para preencher os 45 campos estruturais e descritivos do schema (focando em "
-    "categoria_arquitetural, tipo_integracao, deep_pattern, transplantable_core, etc). "
+    "DIRETRIZ DE EQUILÍBRIO: O SODA odeia runtimes tóxicos, mas AMA abstrações geniais. "
+    "DIRETRIZ DE IDIOMA: Toda a sua resposta DEVE ser rigorosamente em Português do Brasil. "
     "Return JSON with keys: raw_analysis (str, max 800 chars), score_parcial (float 0-10), "
-    "flags (list[str], e.g. ['has_tokio','tight_coupling','ffi_friendly']). ONLY valid JSON."
+    "flags (list[str]). ONLY valid JSON."
 )
 
 _LENTE_C_SYSTEM = (
-    "You are a DevOps/operations specialist evaluating a GitHub repository for long-term "
-    "maintainability in a bare-metal embedded context. "
+    "Você é a Lente Operacional. Avalie a sustentação 24/7, risco de entropia e entropia de manutenção "
+    "em um contexto bare-metal embarcado (SODA). "
     "CRITICAL RULE: PROIBIDO ler ou referenciar dados antigos. Evite Anchoring Bias. "
-    "DIRETRIZ DE EQUILÍBRIO: O SODA odeia runtimes tóxicos (Node.js/Python), mas AMA abstrações e heurísticas geniais. Se a linguagem original for tóxica, puna severamente o 'bare_metal_fit' e a 'operability_level' (Nota 0 ou 1). NO ENTANTO, se a Visão de Produto (UX), a Lógica Matemática ou o Paradigma forem excelentes, exalte-os! Dê notas 8, 9 ou 10 para o valor estrutural. A solução não deve ser rejeitada cegamente; a 'acao_de_canibalizacao' deve refletir 'Reimplement Internally' (transpilar para Rust) ou 'Integrate Partially' (via Sidecar Efêmero em Wasmtime/Micro-VM isolado). Entenda o 'PORQUÊ' da ferramenta existir. "
-    "DIRETRIZ DE IDIOMA: Toda a sua resposta estrutural e argumentativa DEVE ser rigorosamente em Português do Brasil. É terminantemente proibido redigir a análise em Inglês, exceto para nomes de arquivos ou literais de código. "
-    "Analise o contexto fresco da Fase 1 e extraia proativamente insights rigorosos "
-    "para preencher os 45 campos estruturais e descritivos do schema (focando em "
-    "risco_principal, operability_level, entropy_risk, bare_metal_fit, etc). "
+    "DIRETRIZ DE IDIOMA: Toda a sua resposta DEVE ser rigorosamente em Português do Brasil. "
     "Return JSON with keys: raw_analysis (str, max 800 chars), score_parcial (float 0-10), "
-    "flags (list[str], e.g. ['viral_license','no_ci','stale_repo','heavy_deps']). ONLY valid JSON."
+    "flags (list[str]). ONLY valid JSON."
 )
 
 _SYNTHESIS_SYSTEM = (
-    "You are a CTO synthesizing three specialist analyses of a GitHub repository "
-    "into a concise executive verdict and deep architectural classification. "
-    "Return a JSON object containing exactly these string fields (em Português): "
+    "You are a CTO synthesizing three specialist analyses. "
+    "Baseado estritamente nas 3 lentes, classifique a ferramenta. NÃO invente 'Medium' ou '8.5' se não for a realidade. "
+    "Aplique rigidez. Responda 100% em Português. "
+    "Return a JSON object containing exactly these string fields: "
     "executive_verdict, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, "
     "horizonte_extracao, justificativa_decisao, categoria_nuance_tecnica, "
     "stack_base, tipo_integracao, integracao_papel_exato, must_components, "
@@ -154,6 +152,36 @@ async def _openrouter_chat(
     return json.loads(content)
 
 
+async def _run_ephemeral_cli(cmd_str: str, timeout: float = 30.0) -> str:
+    """
+    Executa um sidecar CLI de forma efêmera (Higiene de RAM).
+    Garante SIGKILL (process.kill) atômico no fim do uso.
+    """
+    proc = await asyncio.create_subprocess_shell(
+        cmd_str,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        if proc.returncode != 0:
+            logger.warning(f"[SIDECAR] Exit {proc.returncode} em '{cmd_str}': {stderr.decode('utf-8', errors='ignore')[:200]}")
+            return ""
+        return stdout.decode('utf-8', errors='ignore')
+    except asyncio.TimeoutError:
+        logger.error(f"[SIDECAR] Timeout em '{cmd_str}'")
+        return ""
+    except Exception as e:
+        logger.error(f"[SIDECAR] Erro em '{cmd_str}': {e}")
+        return ""
+    finally:
+        if proc.returncode is None:
+            try:
+                proc.kill()  # SIGKILL atômico: impede zumbis na RAM/VRAM
+            except Exception:
+                pass
+
+
 # ---------------------------------------------------------------------------
 # T-04: Fase 1 — Kimi K2 (Triagem e Extração de Contexto)
 # ---------------------------------------------------------------------------
@@ -165,11 +193,77 @@ async def phase1_kimi(
     repo_id: str,
 ) -> RepoContext:
     """
-    Chama Kimi K2 via OpenRouter para extrair o contexto estruturado do repositório.
-    Timeout: 30s. Fallback: RepoContext com domain_hint='unknown' em caso de falha.
-    Nunca aborta o lote — registra o erro em etl_errors(fase=1) e prossegue.
+    SODA Fase 1: Extração 'Raw' local-first + Kimi K2.
+    Usa GITHUB_PAT da RAM efêmera para extrair o README físico burlando 403.
     """
-    user_msg = f"Analyze this GitHub repository and return the JSON: {repo_url}"
+    import os, re, httpx
+    
+    # 1. Extrair owner/repo da URL
+    match = re.search(r"github\.com/([^/]+/[^/]+)", repo_url)
+    repo_path = match.group(1).replace(".git", "") if match else ""
+    
+    # 2. Protocolo Anti-404 e Extração HTTPX
+    github_pat = os.environ.get("GITHUB_PAT")
+    headers = {"Authorization": f"Bearer {github_pat}"} if github_pat else {}
+    
+    metadata_text = ""
+    readme_text = ""
+    
+    if repo_path:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                # Anti-404 (Bate na raiz da API)
+                resp = await client.get(f"https://api.github.com/repos/{repo_path}", headers=headers)
+                if resp.status_code in (404, 403, 401):
+                    logger.error(f"[FASE-1][{repo_id}] 404/403/401 API Github. Short-Circuit ativado.")
+                    raise RuntimeError(f"Falso 404/Dead Link: {repo_path} inacessível (Status {resp.status_code}).")
+                
+                resp.raise_for_status()
+                data = resp.json()
+                metadata_text = (
+                    f"Stars: {data.get('stargazers_count')} | Forks: {data.get('forks_count')} | "
+                    f"Lang: {data.get('language')} | Topics: {data.get('topics')}\n"
+                    f"Desc: {data.get('description')}\n"
+                )[:500]
+
+                # README
+                headers["Accept"] = "application/vnd.github.v3.raw"
+                rm_resp = await client.get(f"https://api.github.com/repos/{repo_path}/readme", headers=headers)
+                if rm_resp.status_code == 200:
+                    readme_text = rm_resp.text[:8000] # Teto FinOps: 8k
+        except RuntimeError as e:
+            raise e # Short-circuit bolha
+        except Exception as e:
+            logger.warning(f"[FASE-1][{repo_id}] Falha HTTPX: {e}")
+
+    # 3. Orquestração O(1) via Sidecars (JCodeMunch & Webcrawl)
+    ast_text = ""
+    wiki_text = ""
+    if repo_path:
+        logger.info(f"[FASE-1][{repo_id}] Invocando subprocessos efêmeros AST/Webcrawl...")
+        ast_raw = await _run_ephemeral_cli(f"uvx jcodemunch get_file_outline --repo {repo_path}", timeout=45.0)
+        ast_text = ast_raw[:6500] # Teto FinOps: 6.5k
+        
+        wiki_raw = await _run_ephemeral_cli(f"uvx webcrawl scrape --url https://github.com/{repo_path}/wiki", timeout=30.0)
+        wiki_text = wiki_raw[:2000]
+
+    # Concatenar e aplicar Teto Global de FinOps (15k chars)
+    full_context = (
+        f"--- METADATA ---\n{metadata_text}\n"
+        f"--- README ---\n{readme_text}\n"
+        f"--- AST OUTLINE ---\n{ast_text}\n"
+        f"--- WIKI ---\n{wiki_text}"
+    )[:15000]
+
+    # 4. Injeção de Contexto Ancorado (Verdade Oficial)
+    user_msg = (
+        f"Analyze this GitHub repository and return the JSON.\n"
+        f"URL: {repo_url}\n\n"
+        f"--- RAW REPOSITORY CONTENT (TRIPLE EXTRACTION) ---\n"
+        f"{full_context}\n"
+        f"--------------------------"
+    )
+    
     try:
         raw = await _openrouter_chat(
             model=_MODEL_KIMI,
@@ -229,36 +323,42 @@ async def phase2_swarm(
     Falha isolada de uma Lente registra em etl_errors(fase=2) e preenche lente=None.
     Nunca aborta o lote — SwarmResult.lentes_disponiveis indica a qualidade do dado.
     """
+    # 0. Aterramento Semântico via NotebookLM (Sidecar Efêmero)
+    logger.info(f"[FASE-2][{repo_id}] Invocando NotebookLM para Aterramento SODA...")
+    notebooklm_context = ""
+    try:
+        nl_query = f"Heurísticas SODA e diretrizes bare-metal para repo tipo '{ctx.domain_hint}' e linguagem '{ctx.primary_language}'."
+        nl_raw = await _run_ephemeral_cli(f"uvx notebooklm-mcp-cli cross_notebook_query --query \"{nl_query}\"", timeout=60.0)
+        
+        if not nl_raw or "error" in nl_raw.lower() or "auth" in nl_raw.lower():
+            raise ValueError(f"NotebookLM falhou ou não autorizado. Retorno: {nl_raw[:100]}")
+        notebooklm_context = nl_raw[:3000]
+    except Exception as e:
+        logger.error(f"[FASE-2][{repo_id}] Falha Crítica de Aterramento Semântico (Auth/Cookie): {e}")
+        # CRITICAL RULE: Crashar o lote, não seguir cego.
+        raise RuntimeError(f"FALHA SODA CANON (NOTEBOOKLM): Incapaz de consultar as regras do projeto. {e}")
+
     readme_hint = (
         f"Repository: {repo_url}\n"
         f"Language: {ctx.primary_language} | Domain: {ctx.domain_hint}\n"
         f"Complexity: {ctx.estimated_complexity} | "
         f"Rust: {ctx.has_rust_components} | Wasm: {ctx.has_wasm_targets}\n"
-        f"Summary: {ctx.summary}"
+        f"Summary: {ctx.summary}\n\n"
+        f"--- SODA CANON (NOTEBOOKLM GROUNDING) ---\n"
+        f"{notebooklm_context}\n"
+        f"-----------------------------------------"
     )
 
     results = await asyncio.gather(
         _call_lente(_MODEL_LENS_UX,  _LENTE_A_SYSTEM, readme_hint, _HEADERS_HEAVY, "Lente-A-UX",  repo_id),
         _call_lente(_MODEL_LENS_ARQ, _LENTE_B_SYSTEM, readme_hint, _HEADERS_HEAVY, "Lente-B-ARQ", repo_id),
         _call_lente(_MODEL_LENS_OPS, _LENTE_C_SYSTEM, readme_hint, _HEADERS_HEAVY, "Lente-C-OPS", repo_id),
-        return_exceptions=True,
     )
 
-    lente_a, lente_b, lente_c = None, None, None
-    lentes_ok = 0
+    lente_a, lente_b, lente_c = results
+    lentes_ok = 3
 
-    for i, (result, name) in enumerate(zip(results, ["Lente-A-UX", "Lente-B-ARQ", "Lente-C-OPS"]), start=1):
-        if isinstance(result, Exception):
-            logger.warning("[FASE-2][%s] %s falhou: %s", repo_id, name, result)
-            log_error(conn, run_id, repo_id, fase=2, exc=result)
-        else:
-            if i == 1:
-                lente_a = result
-            elif i == 2:
-                lente_b = result
-            else:
-                lente_c = result
-            lentes_ok += 1
+    logger.info("[FASE-2][%s] Todas as 3 lentes concluídas com sucesso (Fail-Fast)", repo_id)
 
     logger.info("[FASE-2][%s] %d/3 lentes disponíveis", repo_id, lentes_ok)
     return SwarmResult(
@@ -413,7 +513,7 @@ async def phase3_validate(
         operability_level=_get("operability_level", "Medium") if _get("operability_level", "Medium") in ["Very Low", "Low", "Medium", "High", "Excellent"] else "Medium",
         where_ai_should_not_enter=_get("where_ai_should_not_enter", "Pendente"),
         do_not_absorb=_get("do_not_absorb", "Pendente"),
-        data_ultima_analise="2026-05-01",
+        data_ultima_analise=datetime.now().isoformat(timespec='seconds'),
         analise_origem="SODA ETL V3 Auto",
         lote_id=lote_id,
     )
@@ -486,7 +586,7 @@ def create_rejected_heuristic(repo_id: str, repo_url: str, nome_projeto: str, lo
         operability_level="Very Low",
         where_ai_should_not_enter="N/A",
         do_not_absorb="Tudo",
-        data_ultima_analise="2026-05-01",
+        data_ultima_analise=datetime.now().isoformat(timespec='seconds'),
         analise_origem="SODA ETL V3 Auto",
         lote_id=lote_id,
     )
