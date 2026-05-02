@@ -55,7 +55,7 @@ binds:
                   targets:
                     - name: jcodemunch
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'jcodemunch-mcp']
                     - name: time_server
                       stdio:
@@ -65,7 +65,7 @@ binds:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: duckduckgo_search
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'duckduckgo-mcp-server']
                     - name: github_mcp
                       stdio:
@@ -75,24 +75,24 @@ binds:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
                     - name: notebooklm
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', '--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
                     # Movido para Fail Open para não engasgar o gateway se o arquivo DB faltar
-                    - name: sqlite_soda
+                    - name: sqlite
                       stdio:
-                        cmd: 'uvx.exe'
-                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
+                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'C:/Users/rosas/Dev_Projects/genesis_mc/genesis.db']
                     - name: docs_scraper
                       stdio:
                         cmd: 'npx.cmd'
                         args: ['-y', 'mcp-docs-scraper']
                     - name: webcrawl-mcp
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'webcrawl-mcp']
                     - name: mcp-google-sheets
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'mcp-google-sheets']
                         env:
                           GOOGLE_APPLICATION_CREDENTIALS: '${GOOGLE_APPLICATION_CREDENTIALS}'

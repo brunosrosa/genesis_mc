@@ -101,7 +101,7 @@ binds:
                   targets:
                     - name: jcodemunch
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'jcodemunch-mcp']
                     - name: time_server
                       stdio:
@@ -111,7 +111,7 @@ binds:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: duckduckgo_search
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'duckduckgo-mcp-server']
                     - name: github_mcp
                       stdio:
@@ -121,24 +121,24 @@ binds:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
                     - name: notebooklm
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', '--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
                     # Movido para Fail Open para não engasgar o gateway se o arquivo DB faltar
-                    - name: sqlite_soda
+                    - name: sqlite
                       stdio:
-                        cmd: 'uvx.exe'
-                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'genesis.db']
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
+                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'C:/Users/rosas/Dev_Projects/genesis_mc/genesis.db']
                     - name: docs_scraper
                       stdio:
                         cmd: 'npx.cmd'
                         args: ['-y', 'mcp-docs-scraper']
                     - name: webcrawl-mcp
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'webcrawl-mcp']
                     - name: mcp-google-sheets
                       stdio:
-                        cmd: 'uvx.exe'
+                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
                         args: ['--quiet', 'mcp-google-sheets']
                         env:
                           GOOGLE_APPLICATION_CREDENTIALS: '${GOOGLE_APPLICATION_CREDENTIALS}'
@@ -197,11 +197,11 @@ Add a source to a notebook. Unified tool for all source types. Supports: url, te
 Delete source(s) permanently. IRREVERSIBLE. Requires confirm=True.
 23. notebooklm_source_get_content
 Get raw text content of a source (no AI processing). Returns the original indexed text from PDFs, web pages, pasted text, or YouTube transcripts. Much faster than notebook_query for content export.
-24. sqlite_soda_read_query
+24. sqlite_read_query
 Execute a SELECT query on the SQLite database
-25. sqlite_soda_list_tables
+25. sqlite_list_tables
 List all tables in the SQLite database
-26. sqlite_soda_describe_table
+26. sqlite_describe_table
 Get the schema information for a specific table
 27. docs_scraper_get_docs_tree
 Get file/folder structure of cached docs. Use to discover file paths before get_docs_content. Optionally filter by path or limit depth.
