@@ -1,0 +1,37 @@
+--- LENTE A ---
+{
+  "raw_analysis": "Goose é um agente de IA extensível em Rust puro, com CLI, app desktop nativo e API. A Visão de Produto é excepcional: abstrai 15+ provedores LLM e 70+ extensões via MCP (Model Context Protocol), eliminando atrito de configuração. A heurística de unificar instalação/execução/edição/testes em um único agente é genial. Zero runtime tóxico — bare-metal fit é alto. Operabilidade CLI-first casa perfeitamente com ecossistemas headless. MCP como camada de extensão é um paradigma elegante e padronizado. Possível atrito: complexidade HIGH pode exigir curva de aprendizado, e dependência de LLMs externos introduz latência/custo não-determinístico.",
+  "score_parcial": 8.7,
+  "flags": [
+    "rust_nativo",
+    "mcp_protocol",
+    "multi_provider_abstraction",
+    "cli_first",
+    "extensible_paradigm",
+    "llm_dependency"
+  ]
+}
+
+--- LENTE B ---
+{
+  "raw_analysis": "Goose é um agente IA em Rust, leve e portátil. Fit para 6GB VRAM: runtime mínimo, mas LLMs locais podem exceder; depende do modelo. Uso de Rust: excelente, alinhado ao SODA. Dependências tóxicas: não detectadas diretamente; extensões MCP podem exigir servidores Node/Python, porém opcionais. Canibalização O(1): viável, lógica central em Rust pura e de baixo overhead, integrável em ecossistemas Rust.",
+  "score_parcial": 9.0,
+  "flags": [
+    "Possível dependência indireta de Node/Python via extensões MCP",
+    "Uso de VRAM depende do LLM selecionado, não do agente em si",
+    "Lógica O(1) referenciada pode ser simplificação; revisar complexidade real"
+  ]
+}
+
+--- LENTE C ---
+{
+  "raw_analysis": "O sistema analisado (agente de IA CLI com múltiplas extensões e provedores LLM) apresenta atrito severo com o contexto bare-metal embarcado (SODA). A sustentação 24/7 é comprometida pela dependência de redes externas e APIs de LLMs, introduzindo não determinismo e falhas de latência inaceitáveis em ambientes restritos. O risco de entropia é crítico: a integração de 70+ extensões via MCP e 15+ provedores gera uma superfície de falha expansiva e mutável. A entropia de manutenção é elevada devido à alta complexidade inerente ao Rust para orquestração de sistemas dinâmicos, exigindo esforço contínuo para manter contratos de API estáveis. A portabilidade do Rust não mitiga o acoplamento externo massivo. O sistema é inadequado para operação embarcada isolada 24/7.",
+  "score_parcial": 2.5,
+  "flags": [
+    "ALTO_RISCO_ENTROPIA_EXTERNA",
+    "DEPENDENCIA_REDE_LLM",
+    "INCOMPATIVEL_BARE_METAL_24_7",
+    "SUPERFICIE_EXTENSAO_MCP_CRITICA"
+  ]
+}
+

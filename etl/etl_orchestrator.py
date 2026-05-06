@@ -86,6 +86,7 @@ async def fetch_batch_from_sheets(
     lote_id: str,
     batch_size: int,
     sheet_tab: str = "MASTER_SOLUTIONS_v3",
+    limit: int | None = None,
 ) -> list[RepoCatalogEntry]:
     """
     Lê a planilha MASTER_SOLUTIONS_v3 e retorna todos os repos
@@ -142,9 +143,10 @@ async def fetch_batch_from_sheets(
             lote_id=lote_id,
         ))
 
-    entries = entries[:5]  # Trava estrita de lote piloto (5 linhas não processadas)
+    if limit is not None:
+        entries = entries[:limit]
 
-    logger.info("[SHEETS] %d repos TRIAGEM/PENDENTE encontrados (após deduplicação V3) para lote=%s", len(entries), lote_id)
+    logger.info("[SHEETS] %d repos encontrados para lote=%s", len(entries), lote_id)
     return entries
 
 
@@ -269,6 +271,7 @@ async def main(
     batch_size: int,
     vault_db: Path,
     dry_run: bool,
+    limit: int | None = None,
 ) -> int:
     """
     Orquestra o pipeline ETL completo.
@@ -286,7 +289,7 @@ async def main(
         logger.info("[DB] Vault: %s", vault_db)
 
         # Fetch do micro-lote da planilha
-        entries = await fetch_batch_from_sheets(lote_id, batch_size)
+        entries = await fetch_batch_from_sheets(lote_id, batch_size, limit=limit)
 
         if not entries:
             logger.warning("[ETL] Nenhum repo TRIAGEM encontrado para lote=%s", lote_id)
@@ -316,17 +319,14 @@ async def main(
                     repos_erro += 1
                     ultimo_erro = f"Falha em {entry.repo_id}"
                 
-                # Resfriamento da fila TCP
-                await asyncio.sleep(2)
+                # Resfriamento da fila TCP (Sleep de 5s como solicitado)
+                await asyncio.sleep(5)
 
             # Atualiza planilha para este micro-lote
             await update_sheets_status(chunk, chunk_results, dry_run)
             
             # Atualiza o log da run no sqlite
             finalize_run_log(conn, run_id, repos_ok, repos_erro, ultimo_erro)
-            
-            logger.info("[ETL] HARD BREAK ATIVADO: Encerrando execução do Lote Piloto.")
-            break
 
         logger.info("[ETL] Varredura de Lote Piloto finalizada. run_id=%s", run_id)
 
@@ -366,6 +366,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Número de repos por micro-lote (default: 5)",
     )
     p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limite rígido total de repositórios a processar (default: None)",
+    )
+    p.add_argument(
         "--vault-db",
         type=Path,
         default=_DEFAULT_VAULT,
@@ -391,6 +398,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             vault_db=args.vault_db,
             dry_run=args.dry_run,
+            limit=args.limit,
         )
     )
     sys.exit(exit_code)

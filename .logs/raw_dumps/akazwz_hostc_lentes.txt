@@ -1,0 +1,38 @@
+--- LENTE A ---
+{
+  "raw_analysis": "Visão de produto excelente: alternativa ao ngrok com zero-config, WebSocket nativo e self-hosting é uma dor real resolvida com elegância. UX de CLI tende a ser fluida. Porém, a stack é duplamente tóxica para SODA: TypeScript no cliente (Node runtime) E dependência arquitetural de Cloudflare Workers/Durable Objects — vendor lock-in extremo e impossível de rodar bare-metal. A heurística de usar edge network para túneis é inteligente, mas inseparável do ecossistema CF. Operabilidade em ambiente Rust puro é nula sem reescrita completa do cliente e substituição do backend por algo como QUIC/WireGuard self-hosted. Valor conceitual alto, fit técnico baixo.",
+  "score_parcial": 4.2,
+  "flags": [
+    "toxic_runtime_nodejs",
+    "vendor_lockin_cloudflare",
+    "excellent_product_vision",
+    "poor_bare_metal_fit",
+    "clever_edge_heuristic",
+    "rewrite_required"
+  ]
+}
+
+--- LENTE B ---
+{
+  "raw_analysis": "hostc é CLI TypeScript, usa Node.js (runtime tóxico). Não utiliza Rust/C. Ajuste para 6GB VRAM: provavelmente leve, mas Node pode consumir RAM. Lógica O(1) provavelmente no protocolo de túnel, pode ser canibalizada para Rust, mas requer reescrita significativa devido a dependência do Cloudflare Workers/Durable Objects. Abstração de self-hosting é valiosa, porém acoplada ao ecossistema Cloudflare. Score reflete penalidade por runtime tóxico e ausência de Rust.",
+  "score_parcial": 3.5,
+  "flags": [
+    "toxic_runtime:nodejs",
+    "no_rust",
+    "cloudflare_coupled",
+    "self_hostable"
+  ]
+}
+
+--- LENTE C ---
+{
+  "raw_analysis": "A ferramenta é uma CLI em TypeScript focada em túneis edge via Cloudflare Workers, representando desalinhamento crítico com o contexto bare-metal embarcado (SODA). Para sustentação 24/7 em bare-metal, TypeScript é inadequado devido ao não-determinismo do runtime (pausas de GC) e falta de controle de baixo nível. O risco de entropia é elevado pela dependência do ecossistema npm e das APIs da Cloudflare, que sofrem rotatividade rápida. A entropia de manutenção é alta, pois a arquitetura exige infraestrutura externa proprietária e não atende a restrições de hardware embarcado ou execução contínua autônoma. O baixo score reflete a inaptidão estrutural ao domínio SODA.",
+  "score_parcial": 1.5,
+  "flags": [
+    "context_mismatch_soda",
+    "high_dependency_entropy",
+    "external_infra_dependency",
+    "non_deterministic_runtime"
+  ]
+}
+
