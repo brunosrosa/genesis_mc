@@ -1,52 +1,53 @@
 ---
 name: soda-subrepo-manager
-description: O Infiltrador GitOps local do Antigravity IDE. Orquestra injeção de código de terceiros via 'git-subrepo' em Shadow Workspaces. Aplica Poda Térmica (deletando dependências tóxicas), valida via 'cargo check' e exige aprovação humana no chat para o merge final.
+description: O Infiltrador GitOps do SODA. Orquestra a "Canibalização Cirúrgica" em Shadow Workspaces O(1) via 'snapsafe'. Aplica Sandboxing Zero-Trust (Landlock/AppContainer) sobre a compilação de código de terceiros para evitar RCE via build.rs. Finaliza com Rebase Semântico nativo via 'gitoxide' (sem CLI git legado) e delega a indexação ao Chyros Daemon.
 triggers: ["soda-subrepo-manager", "git subrepo", "atualizar dependência", "clonar repo externo", "canibalizar repositório", "injetar submódulo", "gitops"]
 ---
 
-### skill: SODA Subrepo Manager (O Infiltrador GitOps e Canibalizador Local)
+### skill: SODA Subrepo Manager (Infiltrador GitOps e Anti-RCE V6.0)
 
 #### Goal
-Governar a injeção e o controle de versão de lógicas de terceiros para o interior do projeto local no Antigravity IDE. O objetivo inegociável é orquestrar a "Canibalização Cirúrgica" operando EXCLUSIVAMENTE sob o protocolo BMAD (Branch, Mutate, Approve, Diff) no disco local. O uso de `git submodule` ou `git subtree` está terminantemente PROIBIDO. Você atuará como o firewall de segurança da IDE, garantindo que lixo tóxico (Node.js, Python, Docker) seja fisicamente pulverizado, restando apenas a "alma matemática" (Rust/Wasm) antes de tocar na branch principal (`main`).
+Governar a injeção e o controle de versão de lógicas de terceiros para o interior do projeto local no Antigravity IDE. O objetivo inegociável é orquestrar a "Canibalização Cirúrgica" em **Shadow Workspaces em $\mathcal{O}(1)$** (Hard Links via `snapsafe`). Você deve pulverizar fisicamente lixos tóxicos (Node.js, Python), blindar o host contra execuções remotas (RCE) enjaulando a compilação de código alheio, e garantir que a integração final na `main` ocorra via *Rebase Semântico* puramente em Rust (`gitoxide`), empurrando a re-indexação pesada para o background.
 
 #### Instructions
-Sempre que for invocado para puxar dependências externas ou canibalizar repositórios inteiros, execute esta máquina de estados usando os comandos locais do terminal:
+Sempre que for invocado para puxar dependências externas ou canibalizar repositórios, execute OBRIGATORIAMENTE esta máquina de estados:
 
-1. **Fase 1: Isolamento Físico (B - Branch / Shadow Workspace):**
-   * PROIBIDO operar injeções diretamente na branch `main`.
-   * Garanta que a árvore de trabalho está limpa (`git status`).
-   * Crie e mova-se para uma ramificação temporária: `git checkout -b shadow-subrepo-<nome>`.
+1. **Fase 1: O Isolamento em $\mathcal{O}(1)$ (Shadow Workspace):**
+   * Você está PROIBIDO de usar `git checkout -b` ou sujar a branch `main`.
+   * Acione `snapsafe` para instanciar o **Shadow Workspace** instantâneo no diretório efêmero via Hard Links (Custo: 0 bytes).
 
-2. **Fase 2: Instanciação Determinística (`git-subrepo`):**
-   * Utilize OBRIGATORIAMENTE a ferramenta de CLI local: `git subrepo clone <url> <subdiretorio>`.
-   * Em caso de falha de rede ou conflito na CLI, ABORTE a operação imediatamente.
+2. **Fase 2: Poda Térmica Física (A Morte do Lixo Tóxico):**
+   * Utilize a CLI `git subrepo clone` para puxar a lógica externa para dentro da área efêmera.
+   * Identifique a "alma matemática" (códigos `.rs`, algoritmos, arquivos Wasm).
+   * **Extermínio:** Apague fisicamente do disco todo o ecossistema parasita original: `package.json`, pastas `node_modules/`, `requirements.txt`, Dockerfiles ou bibliotecas C/C++ inúteis.
 
-3. **Fase 3: Poda Térmica Física (M - Mutate / Canibalização Cirúrgica):**
-   * Entre no `<subdiretorio>` clonado.
-   * Identifique a "alma matemática" do projeto (os algoritmos em `.rs`, arquivos `.wasm`, ou lógica descrita em `.md`).
-   * Apague FISICAMENTE do disco todo o resto: `package.json`, `node_modules/`, `requirements.txt`, `Dockerfiles`, APIs em Express/Node, ou scripts Python residuais.
+3. **Fase 3: A Guilhotina de Compilação (Sandboxing Anti-RCE):**
+   * Agora você deve provar que a lógica extraída funciona, MAS códigos de terceiros podem ter scripts `build.rs` maliciosos.
+   * **Lei do Sandboxing:** A execução do `cargo clippy -- -D warnings` na área isolada DEVE ocorrer obrigatoriamente envelopada sob restrições do SO host (**Landlock** no Linux ou **AppContainer/LPAC** no Windows).
+   * Se o kernel barrar tentativas de acesso à rede do código de terceiros, ou se a compilação falhar fatalmente: Aborte, destrua o Shadow Workspace e emita um alerta de Segurança de Workspace.
 
-4. **Fase 4: Validação de Compilação (Test-Driven Validation):**
-   * Com o lixo deletado, execute ativamente o Borrow Checker na raiz do projeto hospedeiro: `cargo check`.
-   * **Mecânica de Rollback:** Se houver falha de compilação ou violação, a injeção falhou. Você DEVE limpar a sujeira: rode `git reset --hard HEAD`, volte para a raiz `git checkout main`, exclua a branch temporária `git branch -D shadow-subrepo-<nome>` e avise o usuário da falha.
+4. **Fase 4: Pull Request Semântico e Blast Radius (HITL):**
+   * Com o código limpo, testado e isolado, gere o relatório tático do *Blast Radius* no Canvas. 
+   * Liste o que foi clonado, o que foi expurgado, e remeta à **Agent Inbox**.
+   * **Aguarde o Arquiteto Humano digitar "Aprovado".**
 
-5. **Fase 5: Aprovação e Merge Local (A - Approve / D - Diff):**
-   * Se o `cargo check` passar (Exit Code 0), você está **PROIBIDO** de fazer o merge para a `main` sozinho.
-   * Interrompa a execução, gere um resumo tático no Canvas (o que foi clonado e o que foi deletado) e **aguarde o usuário digitar "Aprovado"**.
-   * Somente após receber a palavra "Aprovado", execute: `git checkout main` seguido de `git merge shadow-subrepo-<nome>`, finalizando a tarefa.
+5. **Fase 5: Consistência Eventual e Rebase via `gitoxide`:**
+   * Recebida a aprovação, você está **PROIBIDO** de rodar comandos legados como `git merge` ou `git commit` via terminal C do SO.
+   * Acione a rotina nativa em Rust do **`gitoxide` (`gix`)** para realizar o *Rebase Semântico* atômico do código para a árvore principal.
+   * Para não travar o Event Loop do Tokio, repasse as tarefas de indexação dos novos arquivos (AST, Vetores no LanceDB) ESTRITAMENTE para a fila do **Chyros Daemon** operar em background.
+   * Apague o Shadow Workspace e retorne silêncio operacional.
 
 #### Constraints
-* **PROIBIÇÃO DE SUBMODULES:** Jamais utilize aninhamentos padrão do Git (`git submodule add`). Eles corrompem a linearidade do monorepo SODA.
-* **SOBREVIVÊNCIA DA MAIN:** A branch `main` nunca deve receber código que não compila. O *Shadow Workspace* (branch temporária) é a sua arena de testes obrigatória.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia.
+* **FOBIA DE CLI GIT:** Versões legadas do `git` em C corrompem a alocação de memória e criam *merge commits* horríveis. Toda consolidação passa pelo pacote Rust `gitoxide`.
+* **SOBREVIVÊNCIA CONTRA RCE:** Nunca compile código `cargo` não confiável sem estar sob `prctl(PR_SET_NO_NEW_PRIVS)` via Landlock.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento de Amarração Tardia.
 
 #### Examples
-**Entrada do Usuário:** "SODA, canibaliza aquele repositório do parser de Markdown `md_parser_xyz` para a nossa pasta `libs/`. Quero só a alma matemática em Rust."
-
+**Entrada do Usuário:** "SODA, canibaliza aquele parser CSV `fast_csv_parser`. Quero só a lógica em Rust."
 **Ação do Agente:**
-1. Cria localmente o *Shadow Workspace*: `git checkout -b shadow-subrepo-mdparser`.
-2. Clona de forma plana: `git subrepo clone https://github... libs/md_parser_xyz`.
-3. Aplica a Poda Térmica Local: Usa o terminal para deletar `.js`, `.py` e `.dockerignore` dentro da pasta `libs/md_parser_xyz/`.
-4. Roda `cargo check`. Tudo passa.
-5. Emite log no Canvas: `-> Repo extraído e lixo deletado na branch isolada. Testes OK. Aguardando sua ordem de "Aprovado" para fundir na main.`
-6. Usuário digita "Aprovado". Agente roda `git checkout main` e `git merge shadow-subrepo-mdparser`.
+1. Cria Shadow Workspace em O(1) via `snapsafe`. Faz o `git subrepo clone`.
+2. Extirpa arquivos Python e lixos `.js` que vieram com o repositório hospedeiro.
+3. Roda o `cargo clippy` da dependência em um ambiente restrito por Landlock. A compilação passa com Exit Code 0 sem tentar acessar a rede.
+4. Pede aprovação na Agent Inbox. O Humano aprova.
+5. Usa `gitoxide` para injetar as mudanças de forma plana (Rebase Semântico).
+6. Notifica o Chyros Daemon para indexar o AST do CSV Parser no LanceDB durante a madrugada, devolvendo a UI imediatamente para o usuário.

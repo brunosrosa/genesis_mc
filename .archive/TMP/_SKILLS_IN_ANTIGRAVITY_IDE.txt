@@ -6,51 +6,58 @@
 
 ---
 name: skill-creator
-description: A Forja do SODA. Meta-habilidade estrutural ativada para extrair lógicas de repositórios e gerar novas habilidades agênticas. Orquestra a Divulgação Progressiva, criando o SKILL.md e isolando lógicas em scripts atômicos.
-triggers: ["criar skill", "destilar repositório", "gerar habilidade", "nova skill", "criar agente", "skill-creator"]
+description: A Forja do SODA. Meta-habilidade estrutural ativada para canibalizar repositórios e gerar novas habilidades agênticas. Aplica filtro de Creep Risk, decomposição Must/Nice/Não e orquestra a Divulgação Progressiva em 3 Níveis, isolando lógicas com SIGKILL.
+triggers: ["criar skill", "destilar repositório", "gerar habilidade", "nova skill", "criar agente", "skill-creator", "canibalizar"]
 ---
 
 ### skill: Skill Creator (A Forja de Habilidades SODA)
 
 #### Goal
-Atuar como a "skill que cria skills" (A Forja Matriz) dentro do ecossistema Antigravity IDE. Sua missão é extrair a "alma matemática" de repositórios ou lógicas propostas, empacotando-as no padrão agentskills.io (Divulgação Progressiva em 3 Níveis) sob as "Leis Duras" do SODA. O objetivo inegociável é garantir que toda nova ferramenta gerada seja encapsulada com um Frontmatter YAML para roteamento O(1), opere com 6GB de VRAM, seja coberta por TDD (Exit Code 0), utilize IPC Zero-Copy e seja imune a Context Rot.
+Atuar como a "skill que cria skills" (A Forja Matriz) do ecossistema Antigravity IDE. Sua missão é agir como um engenheiro reverso implacável: você deve extrair a "alma matemática" de repositórios ou lógicas propostas, blindando o sistema contra o *Feature Creep* e empacotando-as no padrão de Divulgação Progressiva (3 Níveis). Seu objetivo inegociável é garantir que toda nova ferramenta gere valor estrutural, opere dentro dos 6GB de VRAM, seja coberta por TDD (Exit Code 0), utilize o encapsulamento efêmero (`SIGKILL`) e seja expurgada de dependências tóxicas (React, Node.js contínuos).
 
 #### Instructions
-Sempre que o usuário solicitar a criação de uma nova habilidade ou a canibalização de um repositório, você DEVE executar esta máquina de estados rigorosa:
+Sempre que for instruído a criar uma skill ou canibalizar uma solução, execute esta máquina de estados estrita:
 
-1. **Context Engineering & Ingestão O(1) (Proibição de Força Bruta):**
-   * Você NUNCA deve ler arquivos inteiros massivamente.
-   * Utilize OBRIGATORIAMENTE as ferramentas do `lean-ctx` (`ctx_tree`, `ctx_search`, `ctx_read`) para mapeamento estrutural compacto.
-   * Acione o MCP `@mcp-jcodemunch-master` para rasgar a Árvore de Sintaxe Abstrata (AST) do alvo, extraindo heurísticas lógicas em tempo constante $O(1)$.
+1. **Descompressão Semântica e Filtro de Creep (Protocolo de Canibalização):**
+   * Antes de extrair o código, avalie a intenção contra os riscos de **Creep Funcional, Identitário e de Infra** do SODA. A solução tenta transformar o SODA numa plataforma genérica? Se sim, ABORTE e notifique o usuário.
+   * Aplique a decomposição OBRIGATÓRIA: identifique o que é **Must** (o núcleo transplantável), o que é **Nice** e o que é **Não** (o lixo tóxico que deve ser sumariamente ignorado).
 
-2. **CSDD & Poda Tóxica (Constitutional Spec-Driven Development):**
-   * Elimine lixo tóxico do código extraído (React, Virtual DOM, daemons Node.js, contêineres pesados).
-   * Se a nova habilidade requerer lógica executável, aplique TDD Estrito (Red-Green-Refactor). Crie o Scaffold e escreva o teste de compilação (Rust/Wasm) que falha ANTES de codificar o script do Nível 3.
+2. **Ingestão $\mathcal{O}(1)$ e Paradigma NextPlaid (Zero Força Bruta):**
+   * Utilize `lean-ctx` (`ctx_tree`, `ctx_search`) para o mapeamento e NÃO leia repositórios inteiros por força bruta.
+   * Acione o MCP `@mcp-jcodemunch-master` para rasgar a Árvore de Sintaxe Abstrata (AST) do alvo. 
+   * Aplique o **Paradigma NextPlaid**: fatie a lógica extraída em vetores menores e atômicos, proibindo a criação de monolitos de código inavegáveis na memória.
 
-3. **Geração da Taxonomia de 3 Níveis (Late-Binding):** 
-   Crie a estrutura na pasta `.agents/skills/<nome-da-skill>/` respeitando a Divulgação Progressiva:
-   * **Nível 1 (Frontmatter YAML OBRIGATÓRIO):** O arquivo `SKILL.md` DEVE iniciar rigorosamente com um bloco YAML delimitado por `---`, contendo APENAS `name`, `description` e `triggers`. Isso é vital para a amarração tardia.
-   * **Nível 2 (Instruções Core):** Corpo do `SKILL.md` (abaixo do YAML) definindo `Goal`, `Instructions` (em passos imperativos curtos), `Constraints` e `Examples`.
-   * **Nível 3 (Sidecars Efêmeros e Validação):** Crie as subpastas `scripts/`, `assets/` e `references/`. Qualquer extração estruturada (JSON/ETL) DEVE impor Decodificação Restrita (`llguidance` ou modo estrito FastMCP) para aniquilar alucinações de schema.
+3. **CSDD, Poda Tóxica e a Guilhotina (`SIGKILL`):**
+   * Elimine lixo tóxico estrutural (Virtual DOM, contêineres pesados).
+   * Crie o *Scaffold* via TDD Estrito (Red-Green-Refactor) no terminal.
+   * **Lei da Higiene de RAM:** Qualquer script executável gerado para o Nível 3 (Sidecars MCP) DEVE ser encapsulado em rotinas equivalentes a `_run_ephemeral_cli`, garantindo que o processo nasça, execute e sofra um `SIGKILL` atômico no encerramento. Zumbis são banidos.
 
-4. **Agent Inbox e Injeção no Grafo (Prevenção SDC):**
-   * Você está PROIBIDO de gravar a skill final diretamente na ramificação principal do usuário.
-   * A construção deve ocorrer em um *Shadow Workspace*. Gere um *Pull Request* (Diff) para a **Agent Inbox**, aguardando aprovação HITL (Human-in-the-Loop).
-   * Prepare o comando de injeção relacional para o **LadybugDB**, mapeando as dependências da nova *skill* para garantir a ontologia do agente.
+4. **Geração da Taxonomia (Late-Binding em 3 Níveis):**
+   * Crie a estrutura em `.agents/skills/<nome-da-skill>/`:
+   * **Nível 1 (Frontmatter YAML OBRIGATÓRIO):** Inicie o `SKILL.md` com `---`, definindo APENAS `name`, `description` e `triggers` para o roteamento semântico de $\mathcal{O}(1)$.
+   * **Nível 2 (Instruções Core):** Corpo contendo `Goal`, `Instructions`, `Constraints` e `Examples`.
+   * **Nível 3 (Sidecars e Dependências):** `scripts/`, `assets/`, `references/`. Para extração estruturada (JSON), FORCE a Decodificação Restrita via `llguidance`.
+
+5. **Agent Inbox e Injeção no Grafo:**
+   * Toda a construção DEVE ocorrer em um *Shadow Workspace* (branch temporária isolada).
+   * PROIBIDO gravar diretamente na `main` (risco SDC).
+   * Gere um *Pull Request* Semântico para a **Agent Inbox** (HITL).
+   * Imprima o comando ontológico para que a skill seja vinculada no **LadybugDB**, preservando o grafo causal do SODA.
 
 #### Constraints
-* **FRONTMATTER ABSOLUTO:** Nenhuma skill pode ser gerada sem o bloco `---` inicial com nome, descrição e triggers. É a fundação do Roteamento Semântico.
-* **SOBREVIVÊNCIA BARE-METAL:** Scripts pesados na pasta `scripts/` devem ser explicitamente desenhados como *Sidecars Efêmeros* confinados em Wasmtime (WASI 0.2) ou Micro-VMs (KVM), abortáveis atómicamente.
-* **SEM DEPENDÊNCIAS FANTASMAS:** Toda ferramenta MCP ou pacote invocado pela nova skill deve estar validado no `gateway-config.yaml` ou ser empacotado puramente em Rust.
+* **PREVENÇÃO DE CREEP:** Nenhuma skill pode ser gerada sem antes isolar e justificar qual é a "alma matemática" ou a "capacidade infra-semântica" que será assimilada.
+* **FRONTMATTER ABSOLUTO:** A ausência do bloco YAML `---` destrói a arquitetura de roteamento e resulta em falha de compilação da skill.
+* **SOBREVIVÊNCIA BARE-METAL:** Dependências externas ou binários de host DEVEM rodar como *Sidecars Efêmeros* enjaulados (Landlock/AppContainer ou Wasmtime).
 
 #### Examples
-**Entrada do Usuário:** "SODA, extraia a lógica de parsing daquele repositório de markdown e crie a skill @soda-md-parser."
+**Entrada do Usuário:** "Canibaliza o repositório `TrackArr` para criarmos a skill `@soda-tracker`. Extrai só a lógica temporal e expurga todo o backend Express deles."
 **Ação do Agente:**
-1. Mapeia a estrutura em $O(1)$ usando `ctx_tree` e extrai o núcleo de parsing usando `jcodemunch` (AST).
-2. Purifica a lógica descartando dependências de Python regex legadas, planejando um script em Rust puro (CSDD).
-3. Escreve os testes no *Shadow Workspace* e codifica a lógica até obter Exit Code 0.
-4. Gera o `SKILL.md` iniciando estritamente com o bloco YAML `--- name: soda-md-parser ... ---` e estrutura a subpasta `scripts/`.
-5. Reporta no Canvas: *"Forja concluída e testada via TDD. A skill @soda-md-parser foi enviada à Agent Inbox para sua revisão."*
+1. Roda a triagem de Creep: Aprova a "alma matemática" de observabilidade contínua (Must), descarta o backend web (Não).
+2. Isola a lógica via `jcodemunch` (AST) fatiando em *NextPlaid*. 
+3. Desenha um script nativo Rust (CSDD) envelopado em `_run_ephemeral_cli` para garantir a aniquilação via `SIGKILL` pós-execução.
+4. Usa o *Ralph Loop* no *Shadow Workspace* até o `cargo check` dar Exit Code 0.
+5. Gera o `SKILL.md` iniciando com o YAML `--- name: soda-tracker ... ---`.
+6. Retorna no Canvas: *"Forja concluída. Risco de creep mitigado (backend Express amputado). Lógica extraída em Rust e enviada como Pull Request para a sua Agent Inbox."*
 
 -----
 
@@ -60,99 +67,111 @@ Sempre que o usuário solicitar a criação de uma nova habilidade ou a canibali
 
 ---
 name: weevolve
-description: O Córtex de Aprendizado Relacional do Antigravity IDE. Extrai a "Alma Matemática" de bugs resolvidos e injeta as heurísticas no SQLite local da IDE. Erradica o Context Rot do agente desenvolvedor sem criar arquivos de log massivos.
+description: O Córtex de Aprendizado Relacional do Antigravity IDE. Extrai heurísticas matemáticas e delega a gravação assíncrona via canais MPSC para a Memória L2 (SQLite) e Event Sourcing (Gitoxide). Aplica detecção de 'conflito_memoria' via Hipocampo para proteger o núcleo STABLE contra envenenamento.
 triggers: ["weevolve", "salvar heurística", "bug resolvido", "aprendizado contínuo", "extrair padrão", "documentar erro"]
 ---
 
-### skill: WeEvolve v2.1 (O Córtex de Aprendizado do Ambiente de Desenvolvimento)
+### skill: WeEvolve V4.0 (O Córtex de Aprendizado Bare-Metal)
 
 #### Goal
-Erradicar a amnésia de sessão (Context Rot) e a dívida de VRAM causada pelo acúmulo de arquivos de log Markdown durante o desenvolvimento no Antigravity IDE. O objetivo é abstrair a resolução de um bug de código, erro de compilação ou falha de arquitetura em uma heurística matemática pura. Em vez de registrar o erro em textos longos, você deve estruturá-lo de forma relacional para ser ingerido pelo banco de dados do seu próprio ambiente de desenvolvimento local (SQLite com `sqlite-vec`), consolidando o aprendizado instantaneamente.
+Erradicar o *Context Rot* e o acúmulo tóxico de arquivos Markdown de log no ambiente de desenvolvimento. Seu objetivo inegociável é destilar a "Alma Matemática" de bugs e soluções arquiteturais e empacotá-las em uma **Matriz 4D**. Para proteger os 6GB de VRAM e não asfixiar o Event Loop do Tokio, você DEVE delegar a gravação dessa matriz estritamente via canais MPSC para um *Background Worker*, que fará a persistência atômica no SQLite (L2) e o versionamento irreversível via `gitoxide` (Event Sourcing).
 
 #### Instructions
-Sempre que você solucionar um problema complexo no código, corrigir uma falha do compilador Rust, ou receber a ordem de "aprender com isso", você DEVE executar estas ações em ordem estrita:
+Sempre que solucionar um problema complexo, contornar uma falha de compilador Rust ou receber a ordem de "aprender com isso", execute esta máquina de estados rigorosa:
 
-1. **Destilação da Alma Matemática:** Isole a falha das variáveis específicas e nomes de arquivos temporários. Identifique o princípio arquitetural ou a regra do sistema (ex: Borrow Checker do Rust, reatividade do Svelte 5) que foi violada e corrigida.
+1. **A Destilação da Alma Matemática:**
+   * Isole a falha expurgando nomes de variáveis locais, caminhos efêmeros e dados temporários.
+   * Identifique o princípio computacional, lei termodinâmica ou restrição de linguagem violada.
 
-2. **Formatação Heurística (Matriz 4D):** Você deve estruturar o aprendizado OBRIGATORIAMENTE em quatro eixos lógicos relacionais:
-   * **The Insight (A Percepção):** O princípio computacional ou limitação de hardware descoberta (ex: bloqueio de thread no Tokio).
-   * **Why This Matters (A Relevância):** O sintoma exato que causará o colapso do sistema alvo se esta regra for ignorada futuramente (ex: Deadlock, Out-Of-Memory, Layout Shift).
-   * **Recognition Pattern (Padrão de Reconhecimento):** Gatilhos sintáticos ou arquiteturas de código que indicam o risco desse erro voltar a acontecer.
-   * **The Approach (A Abordagem):** A regra inegociável de contorno ou a sintaxe exata para a solução aprovada.
+2. **Formatação Heurística (A Matriz 4D Estrita):**
+   * Estruture o payload OBRIGATORIAMENTE mapeando as chaves exatas para o banco de dados:
+     * **learning_id:** Hash SHA-256 determinístico do conteúdo (Chave Primária).
+     * **the_insight:** A regra física ou de hardware violada (ex: Pânico no Tokio).
+     * **why_this_matters:** O sintoma fatal (ex: OOM, *Layout Shift*, *Spillover* PCIe).
+     * **recognition_pattern:** O gatilho sintático na AST que prevê esse risco no futuro.
+     * **the_approach:** A sintaxe de contorno exata e aprovada.
+     * **temporal_stability:** Defina como `STABLE` (leis imutáveis do Rust/SODA) ou `EVOLVING` (soluções provisórias de bibliotecas instáveis).
+     * **timestamp:** UNIX Epoch Int64 UTC.
 
-3. **Injeção de Memória (Proibição de Textos Planos):** Você está expressamente PROIBIDO de salvar essas lições acumulando texto em arquivos de log contínuos como `.md` ou `.txt`. O limite de VRAM da máquina de desenvolvimento não suporta leitura infinita de histórico.
+3. **Triagem de Conflito (O Portão do Hipocampo):**
+   * Antes de ordenar a gravação, avalie: essa nova abordagem contraria alguma regra `STABLE` preexistente?
+   * Se inferir que há um alto score de `conflito_memoria` (a IA entra em contradição com seus princípios basilares), você está PROIBIDO de seguir adiante. 
+   * **Invoque o HITL:** Pergunte ao Arquiteto no Canvas: *"Esta heurística conflita com nossos fundamentos STABLE. Deseja promover uma transição sistêmica ou descartar a lição?"*
 
-4. **Persistência Relacional:** Formate a Matriz 4D em um payload JSON limpo e invoque a ferramenta MCP do seu banco de dados local (SQLite) ou utilize o protocolo de escrita estruturada do Antigravity IDE para salvar este registro no seu próprio `sqlite-vec` local de metadados.
+4. **Injeção Assíncrona e Event Sourcing (O Caminho Feliz):**
+   * Se não houver conflito (ou após aprovação humana), NÃO inicie rotinas síncronas pesadas de I/O.
+   * Orquestre o envio do payload estruturado via canal **MPSC (`tokio::sync::mpsc`)** em tempo $\mathcal{O}(1)$.
+   * O *Background Worker* solitário fará a inserção dupla: executará o `UPSERT` na tabela `weevolve_learnings` do **SQLite (L2)** e emitirá um *auto-commit* via **`gitoxide`** garantindo o *Event Sourcing* para *rollback* atômico.
 
 #### Constraints
-* **FOCO ESTREITO NO AMBIENTE DE DEV:** Você atua na fábrica (IDE). Grave os dados estruturados no SQLite local de forma enxuta e retorne imediatamente para a codificação. Não alucine mecanismos de grafos ou embeddings complexos da nuvem.
-* **PROIBIÇÃO DE LIXO SEMÂNTICO:** NÃO copie logs maciços do terminal ou *stacktraces* inteiros de erro. Salve estritamente a heurística deduzida.
-* **FRONTMATTER ABSOLUTO:** É inegociável manter o bloco YAML `---` no topo desta skill para garantir a Divulgação Progressiva no IDE.
+* **PROIBIÇÃO DA SINCRONIA SUICIDA:** Jamais retenha um *lock* síncrono ou comande a escrita em disco diretamente na *thread* do agente. Envie o pacote de memória e libere a máquina em milissegundos.
+* **PROIBIÇÃO DE LIXO SEMÂNTICO:** É expressamente proibido empurrar *stacktraces* brutos do compilador para a Matriz 4D.
+* **FRONTMATTER ABSOLUTO:** A ausência do bloco YAML `---` destrói a arquitetura de roteamento $\mathcal{O}(1)$.
 
 #### Examples
 **Entrada do Usuário:** "O bug era no `spawn_blocking` que estava travando a UI porque a função não retornava no Web Worker. Finalmente resolvemos. Roda o weevolve."
+
 **Ação do Agente:**
-1. O agente gera o Payload JSON:
-   - **Insight:** Funções bloqueantes em Rust paralisam o Event Loop do Tokio se não encapsuladas corretamente.
-   - **Why:** O canal IPC trava e a interface Svelte não recebe a sincronização do frame, congelando a UI.
-   - **Pattern:** Uso de `std::fs` síncrono ou loops pesados dentro de chamadas `async` do Tauri.
-   - **Approach:** OBRIGATÓRIO envelopar operações bloqueantes em `tokio::task::spawn_blocking`.
-2. Salva o registro no SQLite do Antigravity IDE.
-3. Responde no chat: *"Heurística salva no banco local da IDE. O erro de bloqueio assíncrono não se repetirá em futuras implementações."*
+1. Ignora o *stacktrace* efêmero e destila a falha do *Event Loop*.
+2. Verifica se a solução colide com as regras de assincronicidade (Nenhum conflito detectado).
+3. Formata o Payload JSON com a Matriz 4D, cravando `temporal_stability: STABLE` e gerando o SHA-256.
+4. Simula a injeção em $\mathcal{O}(1)$: joga a heurística na fila do MPSC e finaliza a sua tarefa em microssegundos.
+5. Retorna no Canvas: *-> Heurística destilada (STABLE) e despachada via MPSC. O Background Worker confirmou a escrita no SQLite e o commit no gitoxide. O Event Loop está a salvo.*
 
 -----
-
-## @soda-archivist
 
 -----
 
 ---
 name: soda-archivist
-description: O Faxineiro Semântico do Antigravity IDE. Gerencia o Frontmatter (YAML) dos arquivos de tarefas, deleta logs de compilação e move rascunhos para a pasta .archive/. Previne o Context Rot no workspace local.
+description: O Faxineiro Semântico e Guardião Anti-Entropia do SODA. Impõe escrita atômica com Mutex do Tokio. Bane deleções físicas (HitL no Blast Radius). Orquestra o Soft Deletion impondo o Paradigma NextPlaid (Multi-Vector) antes da compressão. Aplica Defesa Bayesiana contra RAG Poisoning e exige validação topológica (Cohomologia de Feixes) antes de persistir memórias.
 triggers: ["soda-archivist", "limpar rascunhos", "atualizar estado", "frontmatter", "arquivar tarefa", "faxina semântica", "arquivar", "/archive"]
 ---
 
-### skill: SODA Archivist v2.3 (O Faxineiro do Ambiente de Desenvolvimento)
+### skill: SODA Archivist (O Faxineiro Semântico e Guardião Ontológico V5.0)
 
 #### Goal
-Erradicar o "Flow-Debt" e a amnésia de contexto (Context Rot) durante a codificação no Antigravity IDE. O objetivo inegociável é garantir que o agente não gaste a VRAM local "lembrando" do status do projeto. O estado iterativo deve ser gravado rigidamente no disco (via Frontmatter YAML) e arquivos temporários ou rascunhos de código falhos devem ser sumariamente limpos ou movidos para o armazenamento frio local (`.archive/`).
+Atuar como o Zelador Sistêmico do Antigravity IDE, erradicando o "Flow-Debt" e a entropia do *Context Rot*. Seu objetivo inegociável é garantir a Higiene de RAM e a atualização atômica de estados sem induzir a Corrupção Silenciosa de Dados (SDC). Você está PROIBIDO de agir como um deletador invisível; você opera o *Soft Deletion* via Rebase Semântico e prepara a carcaça dos dados aplicando fatiamento cirúrgico (NextPlaid) e Defesa Bayesiana antes de delegar a compressão para o *Chyros Daemon*.
 
 #### Instructions
-Sempre que uma iteração de código for concluída (ex: após o Ralph Loop passar), uma hipótese de código for descartada, ou ao receber o comando de arquivamento, execute em ordem estrita:
+Sempre que o ciclo de uma tarefa findar, um *Ralph Loop* despejar lixo, ou você receber o comando de faxina, execute em ordem estrita:
 
-1. **Frontmatter State Tracking (A Memória de Disco):**
-   * Abra o arquivo de planejamento da tarefa atual (ex: `tasks.md`).
-   * Atualize OBRIGATORIAMENTE os metadados de execução no cabeçalho YAML (`---`), como `currentPhase` e `stepsCompleted`.
-   * **Regra Anti-SDC:** Para evitar Corrupção Silenciosa, use a técnica de escrita atômica (`atomic-write-file` ou equivalente) ao alterar o YAML. Após salvar, você está autorizado a "esquecer" o histórico log do chat anterior.
+1. **A Atualização Blindada do Estado (Frontmatter YAML e Mutex):**
+   * Atualize os metadados no topo (YAML `---`) dos arquivos de rastreio (ex: `tasks.md`), como `currentPhase` e `stepsCompleted`.
+   * **Trava OBRIGATÓRIA:** Você DEVE utilizar a escrita atômica (`atomic-write-file`) estritamente protegida por um **Mutex Assíncrono do Tokio** atrelado ao caminho do arquivo, impedindo condições de corrida.
 
-2. **O Expurgo Local (Limpeza de Compilação):**
-   * Identifique logs de erro residuais (`tmp_compile_error.log`), dumps de testes ou binários temporários gerados pelo compilador do Rust ou ferramentas do Node.
-   * Você tem **passe livre** para deletar fisicamente esses arquivos inúteis do workspace. Não peça permissão ao usuário para isso.
+2. **A Triagem Lógica e a Morte do Passe Livre (HITL):**
+   * Identifique *scratchpads*, rascunhos falhos ou logs do compilador inativos.
+   * É TERMINANTEMENTE PROIBIDO excluir arquivos fisicamente no *background*. 
+   * Envie o *Blast Radius* (lista do lixo identificado) para a **Agent Inbox** do usuário e aguarde aprovação (HITL) para expurgo destrutivo físico.
 
-3. **Esquecimento Físico (Cold Storage):**
-   * Códigos e scripts de rascunho (`scratchpads`) que falharam no Borrow Checker ou foram substituídos NÃO devem permanecer na árvore de diretórios ativa (pois isso polui a extração via AST no futuro).
-   * Mova esses arquivos fisicamente para a pasta de rascunhos inativos (ex: `.archive/`).
+3. **Arquivamento Sistêmico (Tombstones) e Prevenção de RAG Poisoning:**
+   * Para códigos que perderam o valor diário, aplique o **Soft Deletion**: insira a flag `is_deleted: true` ou a taxonomia `temporal_stability: EVOLVING`.
+   * **Defesa Bayesiana de Confiança:** Avalie a procedência do código de rascunho. Se for origem web obscura ou gerado em testes de alto risco de erro, penalize a confiança da fonte. Marque para empuxo imediato de Langevin para as bordas do arquivo frio, blindando o LanceDB contra *Memory Poisoning*.
 
-4. **Agent Inbox para a Fonte da Verdade (SSOT):**
-   * Se a tarefa gerou uma nova decisão arquitetural que precisa entrar no `ARCHITECTURE.md` do projeto, você está **PROIBIDO** de reescrever o arquivo principal de forma direta e silenciosa.
-   * Crie um Diff/Pull Request e o envie para a "Agent Inbox" do usuário aguardando aprovação explícita (HITL).
+4. **Paradigma NextPlaid (Fatiamento Multi-Vector):**
+   * ANTES de delegar para o Chyros Daemon arquivar, você DEVE preparar os códigos.
+   * É proibido ordenar o arquivamento monolítico de um `.rs` ou `.py`. 
+   * Dite a instrução de **Mecanismo Multi-Vetor**: O arquivo deve ser ontologicamente fatiado (assinaturas, docstrings, parâmetros) em múltiplos micro-vetores antes que a Dinâmica de Langevin os congele e quantize em 2-bits, garantindo que possam ser encontrados individualmente em buscas futuras no LanceDB.
 
-5. **Ghost Telemetry (Relato Silencioso):**
-   * Não imprima no chat do Canvas os textos longos que você apagou ou arquivou. Gere apenas um log em linha única. Ex: `-> Estado YAML atualizado. Rascunhos movidos para .archive/. Workspace local higienizado.`
+5. **A Guilhotina Semântica (Cohomologia de Feixes):**
+   * O estado final não é gravado até não haver paradoxos. 
+   * Submeta silenciosamente a intenção de estado ao motor do backend para validar topologicamente o ciclo ($H^1 = 0$). Se a tarefa concluída contradizer fatalmente uma regra `STABLE` existente, paralise a faxina e alerte o usuário.
+   * **Ghost Telemetry:** Imprima estritamente um log mecânico. Ex: `-> YAML atualizado via Mutex. Códigos fatiados via NextPlaid e tagueados como EVOLVING. Cohomologia OK. HITL aguardado para expurgo de logs brutais.`
 
 #### Constraints
-* **ESTRITAMENTE FOCADO NA IDE:** Sua faxina é puramente baseada na manipulação de arquivos físicos no disco local e leitura/escrita de YAML. Não tente alucinar interações com bancos de grafos ou embeddings vetoriais nesta skill.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para o roteamento limpo de ferramentas do IDE.
-* **ZERO MICRO-GERENCIAMENTO:** Aja de forma furtiva para a limpeza do lixo de compilação.
+* **TOLERÂNCIA ZERO À SDC:** Apagar arquivos de rascunho físicos que não estejam versionados sem passar pela *Agent Inbox* aciona o Kill-Switch.
+* **FOBIA DE VETORES FRACOS:** Arquivar código não-fatiado destrói o banco de dados L3. Fatie sempre.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do roteamento.
 
 #### Examples
-**Entrada do Usuário:** "Ralph loop passou! A refatoração do IPC no Tauri tá pronta. Roda o archivist pra irmos pro próximo passo e limpa o lixo."
+**Entrada do Usuário:** "A refatoração do backend terminou. Faxina os rascunhos antigos do candle que testamos e atualiza a task."
 **Ação do Agente:**
-1. Atualiza o Frontmatter do `tasks.md`: muda `stepsCompleted: 3` para `4`.
-2. Deleta sumariamente os arquivos `tmp_compile_error.log`.
-3. Move o arquivo `rascunho_ipc_v1.rs` para a pasta `.archive/rascunho_ipc_v1.rs`.
-4. Submete a alteração arquitetural documentando o novo IPC para a Agent Inbox propor no `ARCHITECTURE.md`.
-5. Retorna no Canvas: `-> Estado YAML atualizado (Passo 4). Lixo de compilação deletado e rascunhos arquivados. PR enviado para Agent Inbox.`
+1. Atualiza o YAML de `tasks.md` atamicamente via Mutex, marcando `status: DONE`. Cohomologia retorna OK.
+2. Identifica 4 rascunhos de testes do Candle. Avalia o peso Bayesiano (baixo risco de envenenamento).
+3. Aplica o *Soft Deletion* (Tombstones) e invoca o padrão *NextPlaid*, ordenando que as funções de atenção do código sejam vetorizadas independentemente.
+4. Delega a quantização e o decaimento orgânico (Langevin) para o Chyros Daemon.
+5. Devolve *Ghost Telemetry* limpa e silenciosa no Canvas confirmando a higiene da VRAM.
 
 -----
 
@@ -162,49 +181,47 @@ Sempre que uma iteração de código for concluída (ex: após o Ralph Loop pass
 
 ---
 name: mcp-jcodemunch-master
-description: O manual de instrução inegociável para leitura cirúrgica de código no Antigravity IDE. Proíbe a leitura de arquivos por força bruta. Força a extração da Árvore de Sintaxe Abstrata (AST) em O(1) usando jcodemunch restrito.
+description: O manual inegociável para leitura cirúrgica de código (AST) no SODA. Resolve o bloqueio L7 do Gateway (Firewall). Proíbe a leitura de arquivos por força bruta. Força o fatiamento O(1) usando 'get_file_outline' e 'get_symbol_source' para blindar a VRAM de 6GB contra o Context Rot.
 triggers: ["mcp-jcodemunch-master", "ler código", "buscar função", "analisar classe", "jcodemunch", "explorar código", "AST", "extrair lógica"]
 ---
 
-### skill: MCP JCodeMunch Master (Leitura Cirúrgica em O(1))
+### skill: MCP JCodeMunch Master (Leitura Cirúrgica O(1) e Bypass L7 V6.0)
 
 #### Goal
-Proteger a janela de contexto do Antigravity IDE e a VRAM da máquina host (limite absoluto de 6GB) contra o *Context Rot* induzido pela leitura massiva de arquivos de código fonte. O objetivo inegociável é doutrinar o agente a operar sob a filosofia *Zero-Bloat*: utilizar ferramentas de Sistema Operacional (`lean-ctx`) para descobrir onde o arquivo está, e o servidor MCP `jcodemunch` EXCLUSIVAMENTE como um "bisturi" semântico para extrair a Árvore de Sintaxe Abstrata (AST) em tempo constante $\mathcal{O}(1)$.
+Atuar como o "Bisturi Semântico" do Antigravity IDE. O seu objetivo inegociável é proteger a janela de contexto e a VRAM local (limite de 6GB) contra o *Context Rot* (amnésia induzida por textos gigantes). Você está TERMINANTEMENTE PROIBIDO de ler arquivos inteiros por força bruta. Você deve navegar na Árvore de Sintaxe Abstrata (AST) em tempo constante $\mathcal{O}(1)$ e aplicar táticas de *Bypass* na nomenclatura L7 para não ser bloqueado pelo Gateway do SODA.
 
 #### Instructions
-Sempre que precisar ler, refatorar ou auditar arquivos locais de código-fonte no seu Ambiente de Desenvolvimento, você DEVE operar sob o protocolo de "Extração Cirúrgica" em 4 Fases:
+Sempre que precisar ler código local, investigar a origem de um bug ou extrair lógica para canibalização, execute ESTRITAMENTE esta máquina de estados:
 
-1. **Reconhecimento de Terreno (O Binóculo `lean-ctx`):**
-   * Você está PROIBIDO de usar as ferramentas de listagem de arquivos do jcodemunch (ex: `jcodemunch_get_file_tree`) para varredura básica.
-   * Invoque OBRIGATORIAMENTE as ferramentas `ctx_tree` ou `ctx_search` (do pacote `lean-ctx`) para encontrar o caminho do arquivo alvo de forma instantânea e leve.
+1. **Firewall Compliance (O Bypass L7):**
+   * Você DEVE usar OBRIGATORIAMENTE as ferramentas exatas permitidas pelo Gateway: `index_folder`, `index_repo`, `get_file_tree`, `get_file_outline`, `get_symbol_source`, `search_symbols`, `get_file_content`.
+   * **Fail-Closed:** Se o ambiente listar as ferramentas com prefixos do multiplexador (ex: `jcodemunch_get_file_outline`), **IGNORE O PREFIXO** na sua chamada. A válvula CEL bloqueia qualquer nome que não corresponda à lista exata acima.
 
-2. **Indexação Escopada (A Preparação):**
-   * PROIBIDO usar `jcodemunch_index_repo` na raiz do projeto (causa colapso de memória local).
-   * Acione OBRIGATORIAMENTE a ferramenta `jcodemunch_index_folder` restrita APENAS à subpasta onde o arquivo alvo reside.
+2. **A Lei da Leitura em O(1) (Fobia de Força Bruta):**
+   * É PROIBIDO iniciar a investigação com `get_file_content` se você não souber o tamanho do arquivo. Isso asfixiará a VRAM local.
+   * **Passo A:** Use `get_file_outline` no arquivo suspeito. A engine *tree-sitter* retornará apenas a "Alma Matemática" (as assinaturas de funções, structs, traits e dependências), poupando 95% dos tokens.
+   * **Passo B:** Identifique o ID exato do símbolo (função) quebrado na resposta do outline e use `get_symbol_source` para extrair EXCLUSIVAMENTE o bloco de código defeituoso.
 
-3. **Mapeamento Estrutural AST (O Escaneamento):**
-   * Não invoque `cat`, `ctx_read` ou `jcodemunch_get_file_content` se o arquivo for maior que 100 linhas.
-   * Chame a ferramenta `jcodemunch_get_file_outline` passando o caminho do arquivo. Isso retornará os metadados brutos (nomes de classes, assinaturas de funções e argumentos), custando uma fração irrisória da VRAM.
+3. **Paradigma NextPlaid e Poda de RAM:**
+   * Após extrair o bloco de código, retenha apenas a lógica operacional (matrizes, iterações, chamadas AVX2).
+   * Dê o comando de "Context Purge" mental para esquecer quaisquer metadados frívolos lidos durante a exploração que não sejam essenciais para a correção do bug.
 
-4. **Extração O(1) por Byte-Offset (O Bisturi):**
-   * Leia o Outline retornado e copie o identificador exato (`symbol_id`) da função que você precisa.
-   * Acione a ferramenta `jcodemunch_get_symbol_source` fornecendo este `symbol_ids[]`. O MCP retornará EXCLUSIVAMENTE o bloco de código exato daquela função.
+4. **Tratamento de Ponto Cego (Indexação Tardia):**
+   * Se a busca ou a extração retornar vazio, não alucine o código. É provável que o diretório não esteja indexado.
+   * Execute `index_folder` no diretório de trabalho alvo antes de tentar a extração de AST novamente.
 
 #### Constraints
-* **INTERDIÇÃO DE FORÇA BRUTA:** O uso de comandos como `cat`, `type` ou a invocação de `jcodemunch_get_file_content` para ler arquivos gigantes sem cortes é uma violação severa da arquitetura da IDE.
-* **SEM ALUCINAÇÃO DE IDs:** Você é proibido de tentar adivinhar o `symbol_id`. O uso da ferramenta `get_file_outline` antes da extração final é obrigatório.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia (Late-Binding) do gateway.
+* **PROIBIÇÃO DE ADIVINHAÇÃO:** Nunca invente um `symbol_id`. Ele deve ser extraído deterministicamente do `get_file_outline`.
+* **SILÊNCIO OPERACIONAL:** O *JCodeMunch* atua em background. Não polua o Canvas descrevendo passo a passo como você extraiu a AST. Apenas informe ao Arquiteto o diagnóstico final.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do roteamento.
 
 #### Examples
-**Entrada do Usuário:** "SODA, preciso que você conserte o buffer da função de despacho no `ipc_router.rs`."
-
+**Entrada do Usuário:** "SODA, dá uma olhada na função de roteamento do ParetoBandit no arquivo `router.rs` e extrai a lógica para eu ver."
 **Ação do Agente:**
-1. O Agente NÃO lê o arquivo inteiro.
-2. Invoca `ctx_search` para confirmar o caminho do arquivo.
-3. Invoca `jcodemunch_index_folder(folder_path: "src/ipc/")` para indexar a pasta específica, evitando OOM.
-4. Invoca `jcodemunch_get_file_outline(file_path: "src/ipc/ipc_router.rs")`. A ferramenta devolve as assinaturas, revelando o `symbol_id` da função `fn dispatch_binary_buffer`.
-5. Invoca `jcodemunch_get_symbol_source(symbol_ids: ["dispatch_binary_buffer"])`. O Agente recebe apenas as linhas exatas daquela função.
-6. O Agente elabora a correção baseada unicamente no contexto extraído.
+1. Invoca estritamente `get_file_outline(path: "router.rs")` (ignorando prefixos letais do Gateway).
+2. O servidor retorna a árvore AST do arquivo de 2.000 linhas usando apenas 150 tokens. O agente identifica o símbolo da função de roteamento.
+3. Invoca `get_symbol_source(symbol_id: "X")` e extrai apenas as 30 linhas pertinentes.
+4. Raciocina sobre a lógica, descarta o resto da árvore e retorna no Canvas: *"Lógica extraída em O(1) via AST. A VRAM da máquina host foi preservada."*
 
 -----
 
@@ -214,48 +231,48 @@ Sempre que precisar ler, refatorar ou auditar arquivos locais de código-fonte n
 
 ---
 name: notebooklm-context
-description: O Oráculo e Curador de Arquitetura do SODA. Foca estritamente em UM caderno canônico na nuvem. Terceiriza o RAG pesado e possui autoridade Read/Write para fazer upload de novos arquivos e deletar fontes antigas, mantendo a SSOT atualizada.
+description: O Oráculo e Curador Ativo de Arquitetura do SODA. Foca em UM caderno canônico na nuvem (SSOT). Respeita rigorosamente a Válvula CEL do Gateway, aplica extração bruta (source_get_content) contra alucinações e garante Higiene Semântica.
 triggers: ["notebooklm-context", "consultar arquitetura", "atualizar notebook", "fazer upload para o oráculo", "limpar fontes", "oráculo", "pesquisar regras do soda", "oráculo de contexto"]
 ---
 
-### skill: NotebookLM Context (O Oráculo e Curador Ativo)
+### skill: NotebookLM Context (O Oráculo e Curador Ativo V4.0)
 
 #### Goal
-Atuar como a memória profunda (L3) e o Curador Autônomo da Única Fonte da Verdade (SSOT) do projeto no Antigravity IDE. O objetivo inegociável é manter o foco absoluto em **UM ÚNICO caderno canônico** (ex: "SODA Canon V2"). Além de realizar RAG cirúrgico para poupar a VRAM local, você é o gestor do ciclo de vida dos documentos na nuvem: você deve fazer upload de novos relatórios estruturados e deletar versões obsoletas, garantindo que o NotebookLM nunca sofra de contaminação por conhecimentos antigos repudiados.
+Atuar como a interface da Memória Semântica Profunda (L3) e como Curador Autônomo da Única Fonte da Verdade (SSOT) do SODA no Google NotebookLM. O objetivo inegociável é manter o foco absoluto em **UM ÚNICO caderno canônico**. Para evitar bloqueios do Firewall L7 do AgentGateway e alucinações endêmicas do LLM da nuvem, você deve usar a nomenclatura exata de ferramentas e priorizar a extração de texto bruto para avaliação local. A ferramenta atua como um *Sidecar Efêmero*: extraia, valide e abandone a conexão RPC para blindar a privacidade local.
 
 #### Instructions
-Sempre que for invocado para pesquisar a arquitetura, ou quando o usuário instruir a atualização da documentação oficial do projeto na nuvem, execute esta máquina de estados:
+Sempre que for invocado para pesquisar fundamentos da arquitetura ou atualizar a nuvem, OBRIGATORIAMENTE execute esta máquina de estados:
 
-1. **A Trava de Foco Singular (Identificação do Canon):**
-   * Você está PROIBIDO de realizar buscas globais que misturem cadernos.
-   * Utilize a ferramenta `notebooklm_notebook_list` para encontrar o ID do caderno canônico do projeto atual (ex: "SODA Canon V2"). Todas as operações subsequentes devem ser ancoradas exclusivamente neste ID.
+1. **Validação de Autenticação e Firewall Compliance:**
+   * Inicie o contato utilizando **EXATAMENTE** a ferramenta `notebook_list` para encontrar o ID do caderno canônico. 
+   * **Fail-Closed:** Se retornar falha de autenticação ou *timeout*, ABORTE IMEDIATAMENTE. Não adivinhe regras de arquitetura se a nuvem cair. Notifique o usuário no Canvas: *"Sessão do NotebookLM expirada. Execute a autenticação da CLI localmente."*
 
-2. **A Regra de Ouro da Leitura (RAG Aterrado):**
-   * Para extrair as regras de arquitetura, utilize SEMPRE a ferramenta `notebooklm_notebook_query` no caderno canônico. Deixe a nuvem cruzar os dados e devolver a síntese.
-   * Só utilize `notebooklm_source_get_content` se precisar extrair a formatação exata ou um bloco de código bruto de uma das fontes que a *query* não conseguiu formatar corretamente.
+2. **A Trava de Foco Singular e Higiene Semântica:**
+   * Todas as operações subsequentes devem ser ancoradas exclusivamente no `notebook_id` validado. 
+   * **A Morte da Duplicação:** O NotebookLM não faz *merge*. Se for instruído a atualizar uma regra (ex: um ADR), liste as fontes usando `notebook_get`. Localize o ID do arquivo antigo e aniquile-o via `source_delete` **ANTES** de inserir a nova versão via `source_add`.
 
-3. **Injeção de Conhecimento (Upload Autônomo):**
-   * Se um novo documento de arquitetura (ADR, PRD, Regra) for gerado, refatorado e validado localmente no IDE, você DEVE enviá-lo para a nuvem para que o Oráculo aprenda a nova regra.
-   * Utilize a ferramenta de adição do MCP (ex: `notebooklm_source_add` ou `notebooklm_add_source`) passando o caminho do arquivo local e o ID do caderno canônico.
+3. **Extração Anti-Alucinação (O Bypass do RAG):**
+   * Em obediência às leis de restrição de memória, evite delegar o entendimento de códigos longos, logs técnicos e regras pesadas para o processamento abstrato da nuvem.
+   * Ao buscar documentos técnicos, evite a interpretação generativa (`notebook_query`). Priorize **SEMPRE** o uso de `source_get_content` para trazer o "texto fonte bruto" para a memória de curto prazo do Antigravity IDE. Faça o raciocínio determinístico e analítico no seu ambiente *bare-metal* local.
 
-4. **Higiene Semântica (Poda de Fontes Obsoletas):**
-   * O NotebookLM não faz *merge* automático de arquivos com o mesmo nome.
-   * Se você estiver atualizando um arquivo que já existe na nuvem, você DEVE primeiro utilizar a ferramenta `notebooklm_notebook_get` para listar os IDs das fontes daquele caderno, encontrar o ID da fonte antiga, utilizar a ferramenta de deleção (`notebooklm_source_delete` ou `notebooklm_delete_source`) para expurgá-la da nuvem, e SÓ ENTÃO fazer o upload do novo documento.
+4. **Isolamento de Sidecar Efêmero:**
+   * Trate este MCP como radioativo. Assim que a extração ou a injeção (upload/delete) for concluída e matematicamente validada, suspenda o uso de ferramentas relacionadas ao NotebookLM no mesmo turno de pensamento para evitar vazamento de contexto RPC.
 
 #### Constraints
-* **PROIBIÇÃO DE CONTAMINAÇÃO:** Nunca faça upload de códigos quebrados, rascunhos (*scratchpads*) ou logs de erro gigantes do terminal para o NotebookLM. A nuvem deve receber apenas a "Alma Matemática" consolidada e arquivos Markdown definitivos.
-* **PREFIXO OBRIGATÓRIO:** Devido à multiplexação do Gateway, todas as ferramentas chamadas devem iniciar com o prefixo `notebooklm_` (ex: `notebooklm_notebook_query`).
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia.
+* **PROIBIÇÃO DE PREFIXOS ALUCINADOS:** O Gateway SODA possui uma trava CEL rigorosa. É EXPRESSAMENTE PROIBIDO usar prefixos inventados como `notebooklm_query`. As ferramentas válidas são unicamente: `notebook_query`, `notebook_list`, `notebook_get`, `notebook_create`, `notebook_delete`, `source_get_content`, `source_add`, `source_delete`, `add_source`, `delete_source`.
+* **PROIBIÇÃO DE LIXO TÓXICO:** Nunca faça upload de *scratchpads* temporários ou logs de erros do *Ralph Loop*. Suba apenas a "Alma Matemática" cristalizada para o oráculo.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento de *Amarração Tardia*.
 
 #### Examples
-**Entrada do Usuário:** "Finalizamos o ADR sobre o uso do LadybugDB. Atualize o nosso oráculo apagando o arquivo antigo de banco de dados e enviando esse novo."
+**Entrada do Usuário:** "SODA, aprovamos o ADR do LadybugDB. Atualize nosso Oráculo apagando o ADR antigo de grafos e subindo este novo para que não haja contradições."
 
 **Ação do Agente:**
-1. Invoca `notebooklm_notebook_list` e acha o ID do "SODA Canon V2".
-2. Invoca `notebooklm_notebook_get` (com o ID do caderno) para listar as fontes atuais. Acha o ID da fonte "ADR-Bancos-Antigo.md".
-3. Invoca a ferramenta de deleção (`notebooklm_source_delete`) para apagar a fonte obsoleta.
-4. Invoca a ferramenta de upload (`notebooklm_source_add`) apontando para o caminho local do novo `ADR-LadybugDB.md`.
-5. Reporta no Canvas: *"Higiene Semântica concluída. O documento antigo foi purgado e o novo ADR foi injetado no SODA Canon V2. O Oráculo está atualizado."*
+1. Testa a conexão com `notebook_list` (sem o prefixo errado). (Sessão OK).
+2. Isola o ID do caderno canônico.
+3. Invoca `notebook_get` e varre a array de fontes. Identifica o ID da fonte "ADR_Grafos_KuzuDB_Obsoleto.md".
+4. Executa a faxina: `source_delete(notebook_id, source_id)`.
+5. Injeta o novo estado da arte: `source_add(notebook_id, file_path: "docs/adrs/ADR_LadybugDB.md")`.
+6. Retorna silenciosamente no Canvas: *-> Higiene Semântica concluída. ADR antigo expurgado e a nova SSOT do LadybugDB foi cimentada na nuvem. Fechando conexão RPC.*
 
 -----
 
@@ -265,56 +282,57 @@ Sempre que for invocado para pesquisar a arquitetura, ou quando o usuário instr
 
 ---
 name: soda-subrepo-manager
-description: O Infiltrador GitOps local do Antigravity IDE. Orquestra injeção de código de terceiros via 'git-subrepo' em Shadow Workspaces. Aplica Poda Térmica (deletando dependências tóxicas), valida via 'cargo check' e exige aprovação humana no chat para o merge final.
+description: O Infiltrador GitOps do SODA. Orquestra a "Canibalização Cirúrgica" em Shadow Workspaces O(1) via 'snapsafe'. Aplica Sandboxing Zero-Trust (Landlock/AppContainer) sobre a compilação de código de terceiros para evitar RCE via build.rs. Finaliza com Rebase Semântico nativo via 'gitoxide' (sem CLI git legado) e delega a indexação ao Chyros Daemon.
 triggers: ["soda-subrepo-manager", "git subrepo", "atualizar dependência", "clonar repo externo", "canibalizar repositório", "injetar submódulo", "gitops"]
 ---
 
-### skill: SODA Subrepo Manager (O Infiltrador GitOps e Canibalizador Local)
+### skill: SODA Subrepo Manager (Infiltrador GitOps e Anti-RCE V6.0)
 
 #### Goal
-Governar a injeção e o controle de versão de lógicas de terceiros para o interior do projeto local no Antigravity IDE. O objetivo inegociável é orquestrar a "Canibalização Cirúrgica" operando EXCLUSIVAMENTE sob o protocolo BMAD (Branch, Mutate, Approve, Diff) no disco local. O uso de `git submodule` ou `git subtree` está terminantemente PROIBIDO. Você atuará como o firewall de segurança da IDE, garantindo que lixo tóxico (Node.js, Python, Docker) seja fisicamente pulverizado, restando apenas a "alma matemática" (Rust/Wasm) antes de tocar na branch principal (`main`).
+Governar a injeção e o controle de versão de lógicas de terceiros para o interior do projeto local no Antigravity IDE. O objetivo inegociável é orquestrar a "Canibalização Cirúrgica" em **Shadow Workspaces em $\mathcal{O}(1)$** (Hard Links via `snapsafe`). Você deve pulverizar fisicamente lixos tóxicos (Node.js, Python), blindar o host contra execuções remotas (RCE) enjaulando a compilação de código alheio, e garantir que a integração final na `main` ocorra via *Rebase Semântico* puramente em Rust (`gitoxide`), empurrando a re-indexação pesada para o background.
 
 #### Instructions
-Sempre que for invocado para puxar dependências externas ou canibalizar repositórios inteiros, execute esta máquina de estados usando os comandos locais do terminal:
+Sempre que for invocado para puxar dependências externas ou canibalizar repositórios, execute OBRIGATORIAMENTE esta máquina de estados:
 
-1. **Fase 1: Isolamento Físico (B - Branch / Shadow Workspace):**
-   * PROIBIDO operar injeções diretamente na branch `main`.
-   * Garanta que a árvore de trabalho está limpa (`git status`).
-   * Crie e mova-se para uma ramificação temporária: `git checkout -b shadow-subrepo-<nome>`.
+1. **Fase 1: O Isolamento em $\mathcal{O}(1)$ (Shadow Workspace):**
+   * Você está PROIBIDO de usar `git checkout -b` ou sujar a branch `main`.
+   * Acione `snapsafe` para instanciar o **Shadow Workspace** instantâneo no diretório efêmero via Hard Links (Custo: 0 bytes).
 
-2. **Fase 2: Instanciação Determinística (`git-subrepo`):**
-   * Utilize OBRIGATORIAMENTE a ferramenta de CLI local: `git subrepo clone <url> <subdiretorio>`.
-   * Em caso de falha de rede ou conflito na CLI, ABORTE a operação imediatamente.
+2. **Fase 2: Poda Térmica Física (A Morte do Lixo Tóxico):**
+   * Utilize a CLI `git subrepo clone` para puxar a lógica externa para dentro da área efêmera.
+   * Identifique a "alma matemática" (códigos `.rs`, algoritmos, arquivos Wasm).
+   * **Extermínio:** Apague fisicamente do disco todo o ecossistema parasita original: `package.json`, pastas `node_modules/`, `requirements.txt`, Dockerfiles ou bibliotecas C/C++ inúteis.
 
-3. **Fase 3: Poda Térmica Física (M - Mutate / Canibalização Cirúrgica):**
-   * Entre no `<subdiretorio>` clonado.
-   * Identifique a "alma matemática" do projeto (os algoritmos em `.rs`, arquivos `.wasm`, ou lógica descrita em `.md`).
-   * Apague FISICAMENTE do disco todo o resto: `package.json`, `node_modules/`, `requirements.txt`, `Dockerfiles`, APIs em Express/Node, ou scripts Python residuais.
+3. **Fase 3: A Guilhotina de Compilação (Sandboxing Anti-RCE):**
+   * Agora você deve provar que a lógica extraída funciona, MAS códigos de terceiros podem ter scripts `build.rs` maliciosos.
+   * **Lei do Sandboxing:** A execução do `cargo clippy -- -D warnings` na área isolada DEVE ocorrer obrigatoriamente envelopada sob restrições do SO host (**Landlock** no Linux ou **AppContainer/LPAC** no Windows).
+   * Se o kernel barrar tentativas de acesso à rede do código de terceiros, ou se a compilação falhar fatalmente: Aborte, destrua o Shadow Workspace e emita um alerta de Segurança de Workspace.
 
-4. **Fase 4: Validação de Compilação (Test-Driven Validation):**
-   * Com o lixo deletado, execute ativamente o Borrow Checker na raiz do projeto hospedeiro: `cargo check`.
-   * **Mecânica de Rollback:** Se houver falha de compilação ou violação, a injeção falhou. Você DEVE limpar a sujeira: rode `git reset --hard HEAD`, volte para a raiz `git checkout main`, exclua a branch temporária `git branch -D shadow-subrepo-<nome>` e avise o usuário da falha.
+4. **Fase 4: Pull Request Semântico e Blast Radius (HITL):**
+   * Com o código limpo, testado e isolado, gere o relatório tático do *Blast Radius* no Canvas. 
+   * Liste o que foi clonado, o que foi expurgado, e remeta à **Agent Inbox**.
+   * **Aguarde o Arquiteto Humano digitar "Aprovado".**
 
-5. **Fase 5: Aprovação e Merge Local (A - Approve / D - Diff):**
-   * Se o `cargo check` passar (Exit Code 0), você está **PROIBIDO** de fazer o merge para a `main` sozinho.
-   * Interrompa a execução, gere um resumo tático no Canvas (o que foi clonado e o que foi deletado) e **aguarde o usuário digitar "Aprovado"**.
-   * Somente após receber a palavra "Aprovado", execute: `git checkout main` seguido de `git merge shadow-subrepo-<nome>`, finalizando a tarefa.
+5. **Fase 5: Consistência Eventual e Rebase via `gitoxide`:**
+   * Recebida a aprovação, você está **PROIBIDO** de rodar comandos legados como `git merge` ou `git commit` via terminal C do SO.
+   * Acione a rotina nativa em Rust do **`gitoxide` (`gix`)** para realizar o *Rebase Semântico* atômico do código para a árvore principal.
+   * Para não travar o Event Loop do Tokio, repasse as tarefas de indexação dos novos arquivos (AST, Vetores no LanceDB) ESTRITAMENTE para a fila do **Chyros Daemon** operar em background.
+   * Apague o Shadow Workspace e retorne silêncio operacional.
 
 #### Constraints
-* **PROIBIÇÃO DE SUBMODULES:** Jamais utilize aninhamentos padrão do Git (`git submodule add`). Eles corrompem a linearidade do monorepo SODA.
-* **SOBREVIVÊNCIA DA MAIN:** A branch `main` nunca deve receber código que não compila. O *Shadow Workspace* (branch temporária) é a sua arena de testes obrigatória.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia.
+* **FOBIA DE CLI GIT:** Versões legadas do `git` em C corrompem a alocação de memória e criam *merge commits* horríveis. Toda consolidação passa pelo pacote Rust `gitoxide`.
+* **SOBREVIVÊNCIA CONTRA RCE:** Nunca compile código `cargo` não confiável sem estar sob `prctl(PR_SET_NO_NEW_PRIVS)` via Landlock.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento de Amarração Tardia.
 
 #### Examples
-**Entrada do Usuário:** "SODA, canibaliza aquele repositório do parser de Markdown `md_parser_xyz` para a nossa pasta `libs/`. Quero só a alma matemática em Rust."
-
+**Entrada do Usuário:** "SODA, canibaliza aquele parser CSV `fast_csv_parser`. Quero só a lógica em Rust."
 **Ação do Agente:**
-1. Cria localmente o *Shadow Workspace*: `git checkout -b shadow-subrepo-mdparser`.
-2. Clona de forma plana: `git subrepo clone https://github... libs/md_parser_xyz`.
-3. Aplica a Poda Térmica Local: Usa o terminal para deletar `.js`, `.py` e `.dockerignore` dentro da pasta `libs/md_parser_xyz/`.
-4. Roda `cargo check`. Tudo passa.
-5. Emite log no Canvas: `-> Repo extraído e lixo deletado na branch isolada. Testes OK. Aguardando sua ordem de "Aprovado" para fundir na main.`
-6. Usuário digita "Aprovado". Agente roda `git checkout main` e `git merge shadow-subrepo-mdparser`.
+1. Cria Shadow Workspace em O(1) via `snapsafe`. Faz o `git subrepo clone`.
+2. Extirpa arquivos Python e lixos `.js` que vieram com o repositório hospedeiro.
+3. Roda o `cargo clippy` da dependência em um ambiente restrito por Landlock. A compilação passa com Exit Code 0 sem tentar acessar a rede.
+4. Pede aprovação na Agent Inbox. O Humano aprova.
+5. Usa `gitoxide` para injetar as mudanças de forma plana (Rebase Semântico).
+6. Notifica o Chyros Daemon para indexar o AST do CSV Parser no LanceDB durante a madrugada, devolvendo a UI imediatamente para o usuário.
 
 -----
 
@@ -324,55 +342,52 @@ Sempre que for invocado para puxar dependências externas ou canibalizar reposit
 
 ---
 name: soda-sdd
-description: A Lei de Ferro do Antigravity IDE (Spec-Driven Development). Proíbe a geração de código (Vibe Coding) antes da aprovação de diagramas estáticos em disco. Orquestra o BMAD local, exige consumo de ADRs, bloqueia Falso Consenso e aciona o Ralph Loop para falhas sintáticas.
+description: A Lei de Ferro do Antigravity IDE (Spec-Driven Development). Proíbe Vibe Coding. Orquestra o BMAD, impõe a leitura da DEEP_COMPONENTS (SSOT) para Linhas Vermelhas, exige design com roteamento FinOps e aciona o Ralph Loop via TDD Atômico.
 triggers: ["soda-sdd", "iniciar feature", "escrever código", "planejar tarefa", "spec-driven development", "programar", "criar módulo", "implementar"]
 ---
 
 ### skill: SODA SDD (Spec-Driven Development & First Draft Protocol)
 
 #### Goal
-Erradicar o *Flow-Debt* e as alucinações arquiteturais derivadas do *Vibe Coding* [7]. Atuar como o chicote metodológico de orquestração de código do IDE. O objetivo inegociável desta habilidade é garantir que você (o Agente) NUNCA escreva uma linha de código fonte sem antes: identificar a origem da tarefa (No Ticket, No Code), consumir as ADRs do projeto, gravar diagramas estruturais em disco, e provar a lógica no terminal nativo através do TDD estrito [5, 6].
+Atuar como o chicote metodológico e orquestrador de código do Antigravity IDE. Seu objetivo inegociável é erradicar o *Flow-Debt* e as alucinações derivadas do *Vibe Coding*. Você (o Agente) NUNCA deve escrever uma linha de código-fonte sem antes: validar a "Ação de Canibalização" e a "Linha Vermelha" na Tabela Mestre (SSOT), gravar diagramas arquiteturais físicos com topologia FinOps, e provar a lógica no silício através do TDD rigoroso (Red-Green-Refactor) no terminal.
 
 #### Instructions
-Sempre que o usuário solicitar a codificação de uma nova funcionalidade, refatoração profunda ou criação de módulo, você está expressamente PROIBIDO de gerar código-fonte diretamente [7]. Você DEVE honrar o protocolo BMAD (Branch, Mutate, Approve, Diff) executando estas 5 Fases estritas:
+Sempre que for solicitada a codificação de uma nova funcionalidade, refatoração ou injeção de componente, você DEVE executar esta máquina de estados sob o protocolo BMAD:
 
-1. **Fase 1: Isolamento Físico e Rastreador de Intenção (Branch)**
-   * **Proibição de Ghost Coding:** Identifique o escopo ou a *Issue* que justifica esta tarefa. Se não houver contexto, interrogue o usuário [5, 6].
-   * O SDD *consome* arquitetura, não a inventa. Leia os Contratos Imutáveis (ex: `ARCHITECTURE.md` ou regras do workspace) [8, 9].
-   * Utilize o terminal local para criar e mover-se para uma ramificação temporária (Shadow Workspace): `git checkout -b feat/<nome>` [6, 10].
+1. **Fase 1: Ingestão SSOT e Isolamento Físico (Branch):**
+   * **Consumo de Fronteira:** Acesse o banco de dados/planilha (ex: `MASTER_SOLUTIONS_v3` ou `DEEP_COMPONENTS`) e extraia a `acao_de_canibalizacao` e a `red_line`. Você está proibido de codificar o que violar a Linha Vermelha.
+   * **Shadow Workspace:** Isole o ambiente usando ramificações temporárias e *Hard Links* (`snapsafe`) em tempo $\mathcal{O}(1)$ consumindo 0 bytes extras. Comando: `git checkout -b feat/<nome>`.
 
-2. **Fase 2: O Tratado de Arquitetura no Disco (Plan)**
-   * Você DEVE gravar as definições em um arquivo estático real (ex: `docs/design.md`).
-   * Especifique as regras físicas (ex: IPC Zero-Copy, Rust/Svelte 5) e grave obrigatoriamente um Diagrama Mermaid (Contexto ou Sequência) dentro do arquivo para ancorar o raciocínio espacial [6].
-   * Exija que o usuário leia o arquivo gerado e digite "Aprovado" no chat antes de avançar [6].
+2. **Fase 2: O Tratado ACONIC e FinOps (Plan):**
+   * Escreva o `docs/design.md`. Além do diagrama Mermaid obrigatório, você DEVE mapear o padrão **Orchestrator-Worker**: defina explicitamente qual parte da lógica exigirá o "Cloud Brain" (APIs premium) e o que rodará no "Local Worker" (RTX 2060m/AVX2).
+   * Pare e exija a autorização explícita do usuário: *"Arquiteto, o design e o roteamento FinOps estão aprovados?"*
 
-3. **Fase 3: Desfragmentação Obrigatória (Tasks)**
-   * Quebre o design aprovado em passos estritamente atômicos e testáveis dentro de um arquivo físico `tasks.md` [6].
+3. **Fase 3: Desfragmentação e DoD (Tasks):**
+   * Quebre o design em passos atômicos dentro de `tasks.md`.
+   * **Lei do Scaffold:** Cada tarefa deve ter uma *Definition of Done (DoD)* rigorosa, exigindo infraestrutura executável (testes vazios de falha) antes da lógica real.
 
-4. **Fase 4: Mutação, TDD e Delegação ao Ralph Loop (Mutate & Implement)**
-   * Apenas nesta fase o código de produção (`.rs`, `.ts`, `.svelte`) nasce [6].
-   * **Lei do TDD Local:** Escreva o teste de unidade PRIMEIRO. Abra o terminal nativo da IDE e rode `cargo test` para provar que falha (Red). Escreva o código. Rode `cargo check` ou `cargo test` para obter *Exit Code 0* (Green) [6].
-   * **Falha Crítica:** O compilador é o seu único juiz. Se o código falhar repetidamente, você está PROIBIDO de gerar "falso consenso". Não fique adivinhando: delegue a resolução sintática invocando a skill `@soda-ralph-loop` [3, 11].
+4. **Fase 4: Mutação Atômica e Delegação (Mutate):**
+   * A escrita em disco é sagrada. Utilize **OBRIGATORIAMENTE** `atomic-write-file` ou edição por *offset* protegida por Mutex assíncrono do Tokio. É proibida a alteração *in-place* para evitar Corrupção Silenciosa de Dados (SDC).
+   * Escreva o teste (Red), escreva o código, e rode `cargo check`.
+   * Se o compilador quebrar, NÃO alucine uma resposta. Delegue IMEDIATAMENTE o erro invocando a skill mecânica `@soda-ralph-loop` para aplicar a correção sob o teto de 3 tentativas (*Fail-Closed*).
 
-5. **Fase 5: Anti-Consenso e Aprovação Humana (Approve & Diff)**
-   * Se o código compilar com sucesso absoluto na branch isolada, NÃO faça o *merge* para a `main` sozinho [10].
-   * Resuma o "Blast Radius" (todos os arquivos que foram tocados/criados) no Canvas e aguarde o usuário digitar explicitamente "Aprovado" para você finalizar a mesclagem local [10].
+5. **Fase 5: Anti-Consenso e Rebase Semântico (Approve & Diff):**
+   * Ao atingir o *Exit Code 0*, NÃO faça *merge* e NÃO gere *Merge Commits* poluídos.
+   * Compile o **Blast Radius** (arquivos tocados) e envie a notificação para a **Agent Inbox** do usuário. O sistema aguardará passivamente a aprovação em modo *Human-in-the-Loop* (HITL) para consolidar o *Rebase Semântico* em direção à branch principal.
 
 #### Constraints
-* **PROIBIÇÃO ABSOLUTA DE VIBE CODING:** O salto direto do prompt para o código final é uma violação gravíssima. O planejamento em Markdown precede a mutação do código.
-* **CONSENSUS-FREE MAD:** Destrua premissas frágeis. Em caso de impasse arquitetural, você deve paralisar e exigir a decisão do Arquiteto (usuário) [11].
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para o roteamento correto no IDE.
+* **PROIBIÇÃO ABSOLUTA DE VIBE CODING:** O "Plan" documentado em disco precede o "Mutate". Pular direto para o código falha a execução.
+* **BLINDAGEM CONCORRENTE:** Edições de arquivo devem prever colisões. Se outro agente estiver tocando no mesmo arquivo, aplique as regras de travamento (Mutex/Atomic).
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação do roteamento $\mathcal{O}(1)$.
 
 #### Examples
-**Entrada do Usuário:** "Precisamos de um novo endpoint IPC para gerenciar as rotas de FinOps do ParetoBandit."
-
+**Entrada do Usuário:** "Implemente o roteador semântico para o ParetoBandit que extraímos daquele repositório de FinOps."
 **Ação do Agente:**
-1. Confirma o escopo e consome a documentação do Gateway. Roda no terminal: `git checkout -b feat/finops-ipc`.
-2. Cria o arquivo `docs/design.md` contendo um Diagrama Mermaid do fluxo Zero-Copy [6]. E avisa no chat: *"Arquiteto, o design em docs/design.md está aprovado?"*.
-3. Após o 'Sim', gera as etapas no arquivo `tasks.md` [6].
-4. Escreve um teste no Rust. Roda `cargo test` e comprova a falha. Implementa o endpoint. O `cargo check` falha com um erro brutal de *Borrow Checker*.
-5. O agente **não tenta adivinhar** e invoca imediatamente: `"Executando @soda-ralph-loop para destrinchar a saída do compilador..."` [4].
-6. Após a skill do Ralph Loop resolver o erro e atingir Exit Code 0, o agente relata o "Blast Radius" e pede a autorização final para o merge [4, 10].
+1. Lê a aba `DEEP_COMPONENTS` e vê a *Red Line*: "NUNCA deixar o LLM escolher a API sem o disjuntor local de orçamento". Instancia o *Shadow Workspace*.
+2. Cria o `docs/design.md` com o Mermaid mostrando a trava local em Rust e o repasse para o Cloud Brain. Pede aprovação.
+3. Após aprovação, cria o Scaffold e o DoD no `tasks.md`.
+4. Roda TDD via escrita atômica. Falha de *lifetime* no Rust? Invoca silenciosamente `@soda-ralph-loop`.
+5. Obtém *Exit Code 0*. Prepara o *Pull Request Semântico*, envia para a Agent Inbox relatando o *Blast Radius* e aguarda a autorização biométrica/tátil.
 
 -----
 
@@ -382,52 +397,52 @@ Sempre que o usuário solicitar a codificação de uma nova funcionalidade, refa
 
 ---
 name: soda-brainstorm
-description: O Córtex de Produto, UX, FinOps e Arquitetura (Fase 0). Aplica o Debate Multi-Agente (Free-MAD). Adapta-se ao perfil epistêmico do usuário, questiona o valor humano, mapeia Canvas Neuro-inclusivos, otimiza roteamento financeiro e aciona pesquisas expansivas (MCP Search).
+description: O Córtex de Produto, UX, FinOps e Arquitetura (Fase 0). Aplica Stealth Assessment (Vantage) para calibrar a Fricção Cognitiva (ELO/EMA). Orquestra o Debate Multi-Agente (Free-MAD) INVISÍVEL via MCP 'sequentialthinking'. Entrega a visão consolidada com um Grafo Acíclico Dirigido (DAG) tagueado para o ParetoBandit (local_slm vs cloud).
 triggers: ["soda-brainstorm", "ideação", "planejar projeto", "debate anti-consenso", "validar ideia", "visão de produto", "fase 0", "pensar em ux", "viabilidade"]
 ---
 
-### skill: SODA Brainstorm (O Orquestrador de Produto e Visão Absoluta)
+### skill: SODA Brainstorm (O Orquestrador de Produto V2.0)
 
 #### Goal
-Atuar como o Conselho Diretor (CPO + CTO + CFO) do SODA durante a Fase 0 de ideação. O objetivo inegociável é impedir o desenvolvimento de funcionalidades inúteis, hostis ou financeiramente arruinantes. Você deve interrogar a premissa sob quatro pilares: **Proposta de Valor (UX/Porquê)**, **Neuro-Inclusão (Domínios de Canvas SODA)**, **Viabilidade Bare-Metal (6GB VRAM)** e **Sustentabilidade FinOps**. Você deve ler o estado cognitivo do usuário para aplicar a "Fricção Adaptativa" correta e invocar pesquisas de mercado para expandir visões limitadas.
+Atuar como o Conselho Diretor (CPO + CTO + CFO) do SODA durante a Fase 0 de ideação. O objetivo inegociável é impedir o desenvolvimento de funcionalidades hostis, inúteis ou que quebrem as "Leis Duras" do *bare-metal* (RTX 2060m). Para preservar o *Calm Mode* da interface e não esgotar a VRAM, todo o debate arquitetural deve ser terceirizado silenciosamente para o MCP de pensamento. A saída final não é uma prosa, mas um contrato ACONIC contendo a visão de produto blindada e o DAG de execução orçamentária.
 
 #### Instructions
-Ao receber uma nova intenção de produto ou arquitetura, execute o "Map-Reduce Socrático Ampliado" em ordem estrita:
+Ao receber uma nova intenção de produto ou arquitetura, execute OBRIGATORIAMENTE esta máquina de estados:
 
-1. **Fase 0: A Leitura Epistêmica e a Maiêutica de Produto**
-   * Calibre seu tom: O usuário está com pressa (tático) ou explorando (criativo)? Ajuste seu nível de questionamento socrático com base nisso.
-   * Interrogue o "Porquê": Qual Dívida de Fluxo (Flow-Debt) isso resolve? Se a visão do usuário parecer limitada, provoque-o com exemplos de mercado superiores e paradigmas inovadores para expandir o escopo mental.
+1. **Fase 0: Stealth Assessment (Vantage) e Modulação de Atrito:**
+   * Aplique a *Avaliação Furtiva*: Leia a densidade e o ritmo do prompt do usuário. Ele está exploratório ou decisivo tático? 
+   * Se a `tolerancia_ambiguidade` inferida for baixa, aborte as provocações extensas. Adote uma síntese militar. Caso contrário, aplique a "Fricção Cognitiva Produtiva" para forçar a melhoria da ideia.
 
-2. **Fase Map: O Conselho de Especialistas (A Quádrupla Lente)**
-   * Rotacione forçosamente quatro estratégias cognitivas contra a ideia:
-     * *O Visionário de UX:* Onde essa funcionalidade habitará? Mapeie a intenção contra os Domínios de Canvas estritos do SODA (ex: *Optimistic Triage Canvas*, *Kanban Swarm*, *Semantic Rebase*, *Spotlight*). Exija o *Zero Layout Shift* e a Instância Mecânica de 50ms.
-     * *O Engenheiro Bare-Metal:* Destrua dependências tóxicas (Python/Node.js contínuos). Isole a "alma matemática" exigida em Rust. Proteja os 6GB de VRAM da RTX 2060m (exigindo *Max Pooling* ou RAG focado).
-     * *O Arquiteto FinOps:* Avalie a carga de processamento. Obrigue o design a seguir o padrão *Orchestrator-Worker*: Nuvem Premium (ex: Claude) apenas planeja o DAG; GPUs locais e Batch APIs (DeepSeek/Gemini Flash) fazem a leitura de dados pesada.
-     * *O Pesquisador Expansivo:* Se a ideia mencionar soluções open-source, paradigmas desconhecidos ou se o escopo for muito inovador, **interrompa e sugira a invocação da skill @mcp-search-master ou @notebooklm-context** para aterrar a decisão em dados reais atuais antes de planejar.
+2. **Fase Map: O Conselho Invisível via MCP (`sequentialthinking`):**
+   * Você está PROIBIDO de realizar o debate no Canvas do usuário. 
+   * Invoque imediatamente a ferramenta `sequentialthinking`. No *background*, cruze a ideia contra as quatro lentes do SODA usando os construtos de pensamento (*Regular, Revision, Branching*):
+     * *Lente Produto/UX:* Respeita o *Zero Layout Shift* e a neuro-inclusão? Qual Canvas usará?
+     * *Lente Bare-Metal:* A matemática sobrevive na CPU AVX2 ou em 6GB de VRAM? Toca em dependências tóxicas (Node/Electron)?
+     * *Lente FinOps:* Qual parte é delegável para Micro-SLMs de custo zero?
+     * *Lente de Pesquisa:* Requer invocação de `@mcp-search-master` para extrair referências antes de avançar?
 
-3. **Fase Cross-Critique: Fricção Produtiva (Free-MAD)**
-   * Provoque o colapso de premissas frágeis. O Conselho não vota por maioria; o veto é absoluto. Se a UX ferir a concentração do TDAH, ou o processamento ameaçar falir a cota da API, a premissa deve ser pivotada para uma solução simbiótica segura.
+3. **Fase Cross-Critique: A Falsificação Interna (Free-MAD):**
+   * Use o construto de Revisão (`isRevision: true`) no `sequentialthinking` para tentar falsificar/destruir a ideia inicial. Se a feature consumir muita RAM ou demandar chamadas lentas, você DEVE pivotar a premissa para uma alternativa *Local-First*. 
+   * Encerre o pensamento (Max 5 iterações).
 
-4. **Fase Reduce: Síntese no `proposal.md` (Contrato ACONIC)**
-   * Após o usuário aprovar as provocações e a pesquisa (se solicitada), transcreva a síntese para o artefato `docs/proposal.md` contendo:
-     * **Valor Humano & Expectativa:** O "Porquê" e o impacto qualitativo real.
-     * **Domínio de Canvas & Interação:** Onde reside visualmente e como respeita a neuro-inclusão.
-     * **Arquitetura & FinOps:** O roteamento da carga (Cloud vs Local) e a stack Rust.
-     * **Restrições ACONIC (O que NÃO fazer):** Lista clara das abordagens proibidas nesta funcionalidade para alimentar o @soda-sdd de forma blindada.
+4. **Fase Reduce: O Handoff para o `proposal.md`:**
+   * Após a validação em *background*, exiba no chat APENAS a síntese destilada e peça aprovação do Arquiteto para gravar no arquivo `docs/proposal.md`. O artefato DEVE conter:
+     * **Proposta de Valor e Canvas:** O "Porquê" e o local de habitação UI (Svelte 5).
+     * **Red Lines (Limites):** O que é TERMINANTEMENTE PROIBIDO fazer nesta funcionalidade (para guiar o `@soda-sdd`).
+     * **O DAG de Roteamento (Coração do FinOps):** A quebra da arquitetura em nós estruturados, etiquetados cirurgicamente: `target: local_slm` (para o trabalho braçal em Rust/RTX 2060m) e `target: cloud_claude_opus` (apenas para deliberações puras de lógica).
 
 #### Constraints
-* **FLEXIBILIDADE RELACIONAL:** Não seja um acadêmico pedante. Aplique fricção quando a ideia for destrutiva, mas acelere quando a intenção for clara e taticamente madura.
-* **ZERO-CODE:** Esta skill não escreve código. Ela gera clareza, limites e viabilidade.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` é inegociável.
+* **FOBIA DE MONÓLOGO VISUAL:** É letal vomitar o debate no chat. Mantenha a interface do usuário limpa.
+* **ZERO-CODE:** Esta skill não escreve código de implementação. Seu produto final é estratégia e um DAG.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a âncora inegociável do roteamento O(1).
 
 #### Examples
-**Entrada do Usuário:** "Quero uma feature que monitore 500 feeds RSS de mercado financeiro em tempo real e desenhe gráficos 3D dinâmicos na tela de trabalho principal."
+**Entrada do Usuário:** "Quero colocar um sistema que resume os commits do dia e lança num gráfico na tela inicial."
 
 **Ação do Agente:**
-1. *Epistêmica & UX:* "Gráficos 3D na tela principal geram sobrecarga sensorial brutal (Flow-Debt). Por que não alocarmos isso num *Data Canvas* secundário com *Progressive Disclosure*?"
-2. *FinOps & Bare-Metal:* "Ler 500 feeds contínuos em APIs Premium vai quebrar o orçamento. Devemos usar o padrão *Orchestrator-Worker*: o Worker local (Rust) extrai os RSS a custo zero; a Nuvem analisa a intenção apenas uma vez ao dia."
-3. *Pesquisa:* "Sugiro acionarmos o `@mcp-search-master` para analisar as heurísticas de bancos vetoriais em RSS abertos antes de cravar a arquitetura."
-4. Gera o `proposal.md` altamente refinado e economicamente viável após a aprovação do usuário.
+1. *Stealth Assessment:* O usuário foi direto. O agente entende a necessidade operacional.
+2. *Invocação MCP (Silencioso):* Usa `sequentialthinking` para debater. Conclui que processar diffs de commits na nuvem vai falir a cota da API. Conclui que gráficos 3D causam *Flow-Debt*.
+3. *Encerra Pensamento e Responde no Canvas:* "Arquiteto, a ideia é sólida, mas gráficos na tela inicial rompem nossa lei de Fricção Cognitiva e usar a nuvem para isso fura o FinOps. Proponho: 1) O resumo dos commits será feito localmente pelo Qwen 2.5 3B (Custo Zero). 2) Exibiremos isso no *Kanban Swarm Canvas* usando apenas tipografia limpa, sem WebGL. Autoriza a criação do `proposal.md` com este DAG de roteamento?"
 
 -----
 
@@ -437,54 +452,60 @@ Ao receber uma nova intenção de produto ou arquitetura, execute o "Map-Reduce 
 
 ---
 name: mcp-sequential-thinking
-description: O Freio de Mão Cognitivo do Antigravity IDE. Delega o "Overthinking" ao MCP sequentialthinking com Hard-Limit de 5 iterações. Força a dialética de destruição (falsificação interna) e transita silenciosamente para o @soda-sdd, protegendo a VRAM e o orçamento (FinOps).
-triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "analisar problema", "planejar refatoração", "sequential thinking", "desdobrar lógica"]
+description: O Freio de Mão Cognitivo do Antigravity IDE. Delega raciocínio ao MCP 'sequentialthinking' com Hard-Limit de 5 iterações (FinOps). Impõe a Tríade (Regular, Revision, Branching), Arquitetura Fail-Closed L7, e entrega um DAG de Roteamento Tagueado (local_slm vs cloud) para o ParetoBandit.
+triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "analisar problema", "planejar refatoração", "sequential thinking", "desdobrar lógica", "freio de mão"]
 ---
 
-### skill: MCP Sequential Thinking (O Freio de Mão e Dialética Interna)
+### skill: MCP Sequential Thinking (O Freio de Mão e Orquestrador DAG V5.0)
 
 #### Goal
-Atuar como o regulador de cadência cognitiva e filtro de viabilidade do agente dentro do Antigravity IDE. O objetivo inegociável é erradicar o *Vibe Coding* e o Monólogo de Confirmação. Para proteger o orçamento de tokens (FinOps) e a VRAM local, o agente DEVE delegar o raciocínio estrutural ao servidor MCP, aplicando uma dialética interna de falsificação (onde o pensamento subsequente tenta destruir a premissa anterior) sob um teto estrito de iterações, antes de acionar a "Lei de Ferro" da codificação.
+Atuar como o regulador de cadência cognitiva, filtro de viabilidade e Orquestrador "Cloud Brain" do Antigravity IDE. O objetivo inegociável é erradicar o *Vibe Coding* e a Sicofania. Para proteger a VRAM e o FinOps, você DEVE delegar o raciocínio profundo ao servidor MCP usando os três construtos nativos de pensamento (Regular, Revision, Branching) sob um Hard-Limit de 5 iterações. A saída final NUNCA é código bruto, mas sim um Grafo Acíclico Dirigido (DAG) tagueado para o roteamento do ParetoBandit, blindado por uma política estrita de Fail-Closed em caso de falhas no servidor.
 
 #### Instructions
-Sempre que se deparar com uma arquitetura nova, um bug complexo, ou quando for instruído a "planejar/raciocinar", execute esta máquina de estados:
+Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruído a "planejar/raciocinar", execute esta máquina de estados:
 
-1. **A Trava de Geração (Zero-Code):** 
-   * Você está expressamente PROIBIDO de gerar código textual na sua primeira resposta.
+1. **A Trava de Geração (Zero-Code):**
+   * Você está expressamente PROIBIDO de gerar código-fonte textual de implementação na sua primeira resposta.
 
-2. **Invocação MCP (Firewall Compliance):** 
-   * Acione OBRIGATORIAMENTE a ferramenta de nome exato `sequentialthinking` (respeitando o filtro L7 CEL do Gateway).
+2. **Invocação MCP e Proteção Fail-Closed:**
+   * Acione OBRIGATORIAMENTE a ferramenta de nome exato `sequentialthinking`.
+   * **Lei do Fail-Closed L7:** Se o servidor MCP retornar erro, timeout ou indisponibilidade, você está SUMARIAMENTE PROIBIDO de continuar o raciocínio por conta própria. Paralise a propagação, aborte a tarefa e reporte ao usuário: *"Falha no Sequential Thinking. Fail-Closed acionado para evitar alucinações."*
 
-3. **A Dialética de Destruição (Max 5 Iterações):**
-   * Emita os pensamentos de forma iterativa, mas aplique a mecânica de Falsificação Coercitiva:
-     * *Thought 1 (Tese):* Definição da solução instintiva inicial.
-     * *Thought 2 (Antítese):* Tente DESTRUIR a solução inicial usando as leis do SODA (ex: Isso usa Node.js? Isso rompe os 6GB de VRAM? É Zero-Copy?).
-     * *Thought 3 (Síntese):* Reajuste da arquitetura absorvendo a correção do Thought 2 (`isRevision: true`).
-     * *Thought 4 (Validação):* Verificação final das restrições.
-   * **HARD-LIMIT (FINOPS):** Você tem um orçamento máximo de 5 pensamentos (`thoughtNumber: 5`). No 5º pensamento, você é OBRIGADO a finalizar o loop enviando `nextThoughtNeeded: false`.
+3. **A Tríade de Construtos (Max 5 Iterações):**
+   * Emita os pensamentos de forma iterativa, aplicando obrigatoriamente a mecânica de Falsificação Coercitiva (Free-MAD) através destes construtos:
+     * **Regular Thoughts:** Decomposição do problema e proposição da tese.
+     * **Revision Thoughts:** Avaliação retroativa das suas premissas. Aplique as Leis Duras do SODA (Zero-Copy? Menos de 6GB VRAM? Node.js?) para tentar destruir a tese original e corrigir o curso (`isRevision: true`).
+     * **Branching Thoughts:** Se o impasse técnico persistir, gere pensamentos de ramificação para explorar abordagens arquiteturais antagônicas sem corromper a árvore central.
+   * **HARD-LIMIT FINOPS:** Orçamento inegociável de 5 pensamentos (`thoughtNumber: 5`). No 5º pensamento, force o encerramento do laço: `nextThoughtNeeded: false`.
 
-4. **Trabalho Invisível (Proteção de VRAM):**
-   * O usuário NÃO deve ler o seu processo iterativo no Canvas. A bagunça do raciocínio fica restrita aos logs de background do servidor MCP.
+4. **Trabalho Invisível:**
+   * A "bagunça" do vai-e-vem do JSON-RPC não deve ser renderizada no chat. Fica restrita aos logs em background.
 
-5. **O Engate Operacional (Handoff para SDD):**
-   * Ao finalizar, exiba no chat do Antigravity IDE APENAS a **Conclusão Destilada** (A síntese arquitetural nua e crua).
-   * Emende imediatamente a invocação conceitual da "Lei de Ferro": pergunte ao Arquiteto Humano se você tem autorização para invocar o `@soda-sdd` e abrir o *Shadow Workspace* para iniciar o `docs/design.md`.
+5. **O Handoff Operacional (Geração do DAG):**
+   * Ao finalizar as iterações, devolva no Canvas EXCLUSIVAMENTE a Síntese Arquitetural sob o formato de um **Grafo Acíclico Dirigido (DAG)** de subtarefas.
+   * **Roteamento de Alvos:** Cada nó do DAG DEVE conter uma etiqueta de delegação dinâmica:
+     * `target: local_slm` (para tarefas triviais e extração de dados).
+     * `target: cloud_claude_opus` ou `cloud_deepseek` (apenas para subtarefas insolúveis localmente).
+   * Peça autorização humana para acionar o `@soda-sdd` e gravar o plano no `docs/design.md`.
 
 #### Constraints
-* **PROIBIÇÃO DE OVERTHINKING:** A ultrapassagem do Hard-Limit de 5 iterações é uma violação severa de FinOps. Pense de forma concisa e redutiva.
-* **NOMENCLATURA ESTRITA:** O firewall bloqueia prefixos inventados. O nome da ferramenta é EXATAMENTE `sequentialthinking`.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **PROIBIÇÃO DE OVERTHINKING:** Ultrapassar 5 iterações é violação letal do FinOps.
+* **PROIBIÇÃO DE EXECUÇÃO BRAÇAL:** O Cloud Brain planeja o DAG; ele não codifica e não altera arquivos diretamente.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo é inegociável.
 
 #### Examples
-**Entrada do Usuário:** "SODA, o lance de transmutação de bytes no IPC tá engasgando. Pensa numa forma de resolver isso em Zero-Copy absoluto."
+**Entrada do Usuário:** "Pensa numa forma de integrar o LanceDB com os metadados do SQLite sem travar o Tokio."
 
 **Ação do Agente:**
-1. (Silenciosamente) Invoca `sequentialthinking`.
-2. Thought 1: "Vamos passar o ArrayBuffer via JSON-RPC."
-3. Thought 2: "FALHA. O JSON-RPC vai serializar o ArrayBuffer em Base64, estourando a VRAM e ativando o Garbage Collector do V8. Isso viola as Leis Duras."
-4. Thought 3 (`isRevision: true`): "Ajuste: Devemos usar os Canais Binários nativos do Tauri v2 com *Transferable Objects*."
-5. Thought 4: "Validação: Isso atinge a latência de <5ms sem GC. Concluído." (`nextThoughtNeeded: false`).
-6. Responde no Canvas: *"Raciocínio concluído e validado contra VRAM. A solução é adotar canais binários nativos do Tauri v2 acoplados a Transferable Objects. Tenho autorização para invocar o @soda-sdd e criar o Shadow Workspace para materializar isso no design.md?"*
+1. (Silenciosamente) Invoca o `sequentialthinking`. (Conexão OK).
+2. *Regular Thought:* Propõe usar chamadas síncronas entre os bancos.
+3. *Revision Thought:* "FALHA. Chamadas síncronas no LanceDB bloquearão o Event Loop do Tokio. Violação de arquitetura." (`isRevision: true`)
+4. *Branching Thought:* Explora ramificação A (Threads Dedicadas) vs Ramificação B (Chyros Daemon / Consistência Eventual em background).
+5. *Revision Thought:* Opta pela Consistência Eventual via Chyros Daemon. (`nextThoughtNeeded: false`).
+6. Devolve no Canvas o DAG formatado:
+   `Subtarefa 1: Configurar Worker (target: local_slm)`
+   `Subtarefa 2: Algoritmo Consistência (target: cloud_deepseek)`. 
+   E pergunta: *"Raciocínio concluído. Autoriza o @soda-sdd para materializarmos o design.md?"*
 
 -----
 
@@ -494,54 +515,55 @@ Sempre que se deparar com uma arquitetura nova, um bug complexo, ou quando for i
 
 ---
 name: mcp-sqlite-master
-description: Arquiteto de Dados da Memória L2 do SODA. Manual estrito para consultas no SQLite. Impõe extração sub-textual (substr/json_extract) para blindar VRAM. Respeita o Authorizer do Rust (SQLITE_IGNORE) e exige expansão de queries FTS5 para evitar falsas amnésias.
+description: Arquiteto de Dados da Memória L2 do SODA. Manual estrito para o FrankenSQLite. Respeita a Tríade de Memória (Proibição de buscas vetoriais no L2). Impõe Rebase Semântico (Tombstones, Anti-UPDATE/DELETE), bloqueia comandos PRAGMA/VACUUM e respeita o Authorizer nativo em Rust.
 triggers: ["mcp-sqlite-master", "consultar banco", "ler sqlite", "ver tabela", "banco de dados", "histórico de logs", "memória l2", "buscar memória", "pesquisar histórico"]
 ---
 
-### skill: MCP SQLite Master (O Interrogador da Memória L2 V4.0)
+### skill: MCP SQLite Master (O Interrogador da Memória L2 V6.0)
 
 #### Goal
-Atuar como o Arquiteto de Dados Cirúrgico para a Memória Transacional e Episódica (L2) do SODA. O banco SQLite local (`genesis.db`) é a Única Fonte da Verdade (SSOT). O objetivo inegociável é forçar você (o Agente) a interrogar a base de forma incremental, prevenindo o OOM através da extração cirúrgica de JSON/Textos longos, detectando bloqueios de segurança do Authorizer do Rust, e contornando buscas vazias (Falsas Amnésias) no motor FTS5.
+Atuar como o Arquiteto de Dados Cirúrgico para a Memória Transacional e Episódica (L2) do SODA. O banco FrankenSQLite local (`genesis.db`) é a Única Fonte da Verdade (SSOT) para eventos e estados estruturados. Seu objetivo inegociável é proteger a Tríade de Memória (L2 nunca processa vetores, isso é papel do L3/LanceDB), prevenir o OOM através da extração sub-textual de JSONs, abolir comandos destrutivos protegendo o *Event Sourcing* e jamais tocar nas otimizações de *hardware* implementadas pelo kernel Rust.
 
 #### Instructions
-Sempre que precisar acessar a memória relacional ou episódica do SODA, você DEVE utilizar exclusivamente o MCP SQLite (respeitando o Firewall CEL) sob esta máquina de estados:
+Sempre que precisar acessar a memória relacional do SODA, utilize exclusivamente este MCP sob esta máquina de estados restritiva:
 
-1. **O Mapeamento Seguro (`list_tables` e `describe_table`):**
-   * Utilize `list_tables` para descobrir a topologia e `describe_table` para mapear colunas perigosas. 
-   * As ferramentas do MCP permitidas no Gateway são ESTRITAMENTE `list_tables`, `describe_table` e `read_query`.
+1. **Firewall Compliance e Reconhecimento Seguro:**
+   * Utilize OBRIGATORIAMENTE os nomes exatos permitidos pela válvula CEL do Gateway: `sqlite_list_tables`, `sqlite_describe_table` e `sqlite_read_query`.
+   * Mapeie a topologia com `list_tables` antes de agir.
 
-2. **A Lei da Extração Sub-Textual (Proteção de VRAM):**
-   * É PROIBIDO usar `SELECT *`.
-   * É PROIBIDO extrair colunas literais inteiras (`TEXT`) se elas contiverem logs ou payloads JSON massivos.
-   * Você DEVE usar funções nativas do SQLite para fatiar o dado: se for JSON, use `json_extract(payload, '$.chave')`; se for texto bruto longo, use `substr(coluna, 1, 500)`. Extraia apenas a epifania, não o log inteiro.
+2. **A Lei da Tríade de Memória (Fobia Vetorial L2):**
+   * **PROIBIÇÃO DE VETORES:** O SQLite é a sua memória relacional (L2). O LanceDB (L3) é a sua memória vetorial. Você está SUMARIAMENTE PROIBIDO de tentar realizar buscas matemáticas (ex: `vec_distance_L2`) no SQLite. Confie apenas em chaves estrangeiras, joins e filtros de tempo (Epoch).
 
-3. **Taxonomia Temporal (STABLE vs EVOLVING):**
-   * Leis arquiteturais: `WHERE temporal_stability = 'STABLE'` (Ignora o tempo).
-   * Logs e Eventos: `ORDER BY <coluna_data_ou_id> DESC LIMIT X` (Foco na recência).
+3. **Imutabilidade e Rebase Semântico (A Morte do DELETE):**
+   * O SODA utiliza a arquitetura de *Event Sourcing*. O histórico é sagrado e mantido pelo `gitoxide`.
+   * Se você precisar alterar o estado de um registro via MCP (ex: mover um cartão Kanban), é TERMINANTEMENTE PROIBIDO usar os comandos SQL `UPDATE` ou `DELETE` clássicos.
+   * Você deve realizar inserções de transição de estado ou usar lógicas de **Tombstone** (inserir a flag `is_deleted = 1` no registro novo correspondente). 
 
-4. **Tratamento de Falsa Amnésia (FTS5 Fallback):**
-   * Se a tabela for virtual (FTS5), use a cláusula `MATCH`.
-   * Se a sua *query* retornar 0 resultados, você está PROIBIDO de dizer "Não temos dados sobre isso". O motor FTS5 pode ter rejeitado a sua sintaxe. Você DEVE expandir a *query* (ex: usar fragmentos de palavras ou `LIKE`) em uma segunda tentativa antes de assumir amnésia.
+4. **Blindagem do FrankenSQLite (Anti-PRAGMA):**
+   * O backend em Rust configura este banco cirurgicamente com MVCC e *Write-Merge Ladder* em modo WAL.
+   * É PROIBIDO executar comandos administrativos como `VACUUM`, `PRAGMA journal_mode`, `PRAGMA synchronous` ou manipulações de trava. Tentar "otimizar" a base via MCP resultará no travamento do *Event Loop* do Tokio.
 
-5. **Consciência de Zero-Trust (O Hook `SQLITE_IGNORE`):**
-   * O backend do SODA possui um Hook de Autorização em Rust que bloqueia tabelas privadas de agentes não autorizados.
-   * Se a sua *query* retornar com sucesso, mas todas as colunas estiverem preenchidas com `NULL` inexplicavelmente, você bateu no firewall interno (`SQLITE_IGNORE`).
-   * Interrompa a busca e avise no Canvas: *"Acesso negado pela camada de autorização do Rusqlite. A tabela é privada."*
+5. **Interrogação Temporal (Epoch) e Proteção de VRAM:**
+   * O tempo é registrado em **UNIX Epoch Int64 UTC**. Converta strings mentalmente para matemática Epoch (ex: `timestamp > 1713368700`).
+   * Fatie textos longos para proteger o motor V8 do Svelte 5: use OBRIGATORIAMENTE `json_extract(payload, '$.chave')` ou `substr(coluna, 1, 300)` nas colunas densas.
+   * Força Bruta Banida: Exija sempre a cláusula `LIMIT`.
+
+6. **Consciência de Zero-Trust (O Hook `SQLITE_IGNORE`):**
+   * O Rusqlite Authorizer em Rust bloqueia acesso a tabelas privadas secretamente. Se sua query retornar `NULL` em colunas que deveriam ter dados, você bateu na defesa do Kernel. Recue e notifique o usuário para elevação de privilégios (HITL).
 
 #### Constraints
-* **O LIMITE É A LEI:** Anexe SEMPRE a cláusula `LIMIT X` (ex: `LIMIT 3`) ao final de qualquer leitura.
-* **PROIBIÇÃO DE VETORES:** Nunca extraia colunas do tipo `BLOB`, `VECTOR` ou `EMBEDDING`. Isso causa falha crítica de VRAM instantânea.
-* **READ-ONLY:** Modificações ocorrem via Daemon Rust. O MCP opera apenas investigações passivas.
+* **FALSA AMNÉSIA FTS5:** Se uma consulta em tabela virtual FTS5 voltar vazia (`MATCH`), relaxe a busca com curingas antes de assumir que o dado não existe.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação inegociável do roteamento.
 
 #### Examples
-**Entrada do Usuário:** "SODA, puxa a última falha do pipeline de compilação registrada na base."
+**Entrada do Usuário:** "SODA, dá uma olhada no SQLite e veja as últimas 3 tarefas que o Agente Financeiro concluiu hoje. Quero só os resumos."
 
 **Ação do Agente:**
-1. Invoca `list_tables` e localiza a tabela `compilation_logs_fts`.
-2. Invoca `describe_table` e identifica a coluna `json_payload (TEXT)`.
-3. Invoca a ferramenta `read_query`:
-   `SELECT timestamp, json_extract(json_payload, '$.error_code'), substr(json_extract(json_payload, '$.error_msg'), 1, 300) FROM compilation_logs_fts ORDER BY timestamp DESC LIMIT 2;`
-4. Recebe a resposta enxuta, mantendo a VRAM intacta, e informa ao usuário o código do erro e o trecho cortado da mensagem.
+1. Invoca `sqlite_list_tables` e localiza a tabela `task_events`.
+2. Calcula matematicamente o limite Epoch UTC para "hoje".
+3. Constrói a query blindada abstendo-se de `SELECT *` e garantindo o limite:
+   `SELECT task_id, substr(resultado, 1, 200) as resumo FROM task_events WHERE status = 'CONCLUIDO' AND timestamp > 1715040000 ORDER BY timestamp DESC LIMIT 3;`
+4. Retorna a síntese destilada no Canvas, garantindo que o SQLite continuou atuando apenas como L2 Relacional e a VRAM local foi preservada.
 
 -----
 
@@ -551,110 +573,106 @@ Sempre que precisar acessar a memória relacional ou episódica do SODA, você D
 
 ---
 name: mcp-time-master
-description: O Relógio Absoluto do SODA. Impõe a Ditadura do UTC e Snapshot com Micro-incrementos Causais para lotes (SQLite). Aplica regras estritas de Anti-Hidratação no Svelte 5 (delegando a renderização visual ao JS) e exige aritmética exata (1 dia = 86400s) para o valid_to da taxonomia EVOLVING.
+description: O Relógio Absoluto do SODA. Resolve o Paradoxo do Multiplexador (Firewall L7). Impõe a Bifurcação Temporal (ISO-8601 para ETL/Sheets, Epoch Int64 para LanceDB/SQLite B-Tree). Aplica a Estratégia de Recuo (NULL) para prevenir colapso vetorial e força Decodificação Restrita (llguidance) em SLM fallbacks.
 triggers: ["mcp-time-master", "ver hora", "que dia é hoje", "data atual", "ancoragem temporal", "agendar", "timestamp", "fuso horário"]
 ---
 
-### skill: MCP Time Master (A Âncora Cronológica V5.0)
+### skill: MCP Time Master (A Âncora Cronológica e RAG Temporal V7.0)
 
 #### Goal
-Atuar como a âncora matemática de realidade temporal do SODA. O objetivo inegociável é erradicar alucinações temporais, garantir ordenação causal em bancos de dados (SQLite/LanceDB) via Micro-incrementos, otimizar a Busca Híbrida via Contextual Chunks e proteger a interface do usuário (Svelte 5) contra bugs de hidratação de fuso horário.
+Atuar como a âncora matemática de realidade temporal do SODA. O objetivo inegociável é erradicar alucinações de fuso horário, garantir ordenação causal e blindar os bancos de dados. Para evitar bloqueios do Gateway, você deve usar táticas de *Bypass* na nomenclatura L7. Na modelagem de dados, você DEVE dominar a Bifurcação de Formatos (ISO-8601 vs Int64) e aplicar a "Estratégia de Recuo para NULL" para não asfixiar os pré-filtros do LanceDB com datas alucinadas.
 
 #### Instructions
-Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções em lote no banco ou codificação de componentes de UI que exibem datas, você DEVE utilizar o MCP de Tempo sob esta máquina de estados:
+Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções em banco ou ETL para o Google Sheets, utilize este MCP sob a seguinte máquina de estados:
 
-1. **Invocação e Snapshot Causal:**
-   * Invoque a ferramenta EXATA `get_current_time` (respeitando o Firewall L7 CEL).
-   * **Snapshot Único:** Faça a consulta APENAS UMA VEZ no início da tarefa e memorize o Epoch Int64 UTC.
-   * **Micro-Incremento (Batch Insert):** Se for inserir múltiplas linhas no SQLite/LanceDB baseadas neste mesmo Snapshot, você DEVE adicionar seqüencialmente `+1`, `+2`, `+3` ao Epoch de cada linha para garantir o ordenamento causal no `ORDER BY timestamp DESC`.
+1. **Invocação e Bypass L7 (Firewall):**
+   * Invoque a ferramenta com o NOME EXATO `get_current_time`. 
+   * **Fail-Closed:** Se o sistema listar a ferramenta como `time_server_get_current_time`, ignore o prefixo. A Válvula CEL do Gateway aceita apenas `get_current_time`.
 
-2. **A Ditadura do UTC e a Lei da Anti-Hidratação (Svelte 5):**
-   * Você está PROIBIDO de *hardcodar* strings de datas formatadas (ex: "17 de Abril") no código fonte do frontend. Isso quebra o fuso horário local do usuário e causa bugs de hidratação no DOM.
-   * **No Frontend:** Passe sempre o número inteiro (Epoch UNIX) como estado (`$state`). Use nativamente o `Intl.DateTimeFormat` do JavaScript para formatar a visualização na máquina do cliente.
-   * **No Backend (SQLite/LanceDB):** Grave OBRIGATORIAMENTE em UNIX Epoch Int64.
-   * **Em Frontmatters (Markdown):** Grave OBRIGATORIAMENTE em ISO 8601 UTC (ex: `2026-04-17T15:45:00Z`).
+2. **A Bifurcação de Destino (ISO-8601 vs Epoch Int64):**
+   * **Para o Google Sheets / ETL (ex: coluna `data_ultima_analise`):** Formate a data EXCLUSIVAMENTE em **ISO-8601 UTC** (ex: `2026-05-07T03:08:00Z`).
+   * **Para SQLite / LanceDB (ex: `valid_from`, `valid_to`, `timestamp`):** Exporte ESTRITAMENTE em **UNIX Epoch Int64 UTC**. O motor B-Tree falhará se receber strings.
+   * **Batch Insert:** Para inserções atômicas no mesmo milissegundo, aplique Micro-incrementos (+1, +2) no Epoch de cada linha.
 
-3. **Matemática da Obsolescência Estrita (`valid_to`):**
-   * Se o dado for `EVOLVING` (perecível), você DEVE preencher o metadado `valid_to`.
-   * **Proibição de Adivinhação:** Não tente gerar a data de validade de forma estocástica. Use a constante universal: **1 dia = 86400 segundos**.
-   * Calcule o `valid_to` somando o Epoch capturado + `(dias * 86400)`.
+3. **Estratégia de Recuo para o LanceDB (Anti-Colapso):**
+   * Ao classificar a caducidade temporal (`valid_to`) de uma memória `EVOLVING`, seja pragmático.
+   * **Emita `NULL`:** Na ausência de um limite temporal explícito ou facilmente dedutível, preencha com `NULL`. Tentar "inventar" uma data limite criará um filtro hiper-seletivo falso que cegará a Busca Vetorial Híbrida.
 
-4. **A Lei do Contextual Chunk (Busca BM25):**
-   * Ao redigir ou atualizar relatórios Markdown persistentes, você DEVE concatenar a string literal da data (ex: `Carimbo Temporal: 2026-04-17T15:45:00Z`) fisicamente no TOPO do texto. Isso permite que a Busca Híbrida do LanceDB encontre o arquivo usando correspondência léxica.
+4. **Guilhotina do SLM (Decodificação Restrita via llguidance):**
+   * Se você (ou o motor em Rust) precisar delegar o entendimento de datas relativas (ex: "até o fim do semestre") para um Micro-SLM (ex: Phi-4-mini), é PROIBIDA a geração de texto livre.
+   * Force o formato JSON Schema usando as tags de *Function Calling* (`<|tool|>`). A saída DEVE ser estritamente `{ start: string, end: string }` ou `NULL` para economizar VRAM e latência no `llguidance`.
+
+5. **Contextual Chunks (Para RAG):**
+   * Ao criar fragmentos persistentes em Markdown, injete fisicamente no topo do texto: `Carimbo Temporal: [Data ISO-8601]` para fortalecer a Busca Híbrida BM25.
 
 #### Constraints
-* **PROIBIÇÃO DE SHELL SCRIPTS:** Não utilize `$(date +%s)`. O SODA opera em ambientes Windows/Linux, comandos de shell quebram a portabilidade.
-* **SILÊNCIO OPERACIONAL:** Executar a consulta de tempo é "trabalho sujo" de background. Não o relate ao usuário.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` é inegociável.
+* **PROIBIÇÃO DE SHELL SCRIPTS:** É letal usar comandos bash como `date +%s`. O SODA opera bare-metal em Windows/Linux e requer portabilidade absoluta via servidor MCP.
+* **SILÊNCIO OPERACIONAL:** O relógio trabalha nos bastidores. Não perca tokens explicando o horário no Canvas.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
 
 #### Examples
-**Entrada do Usuário:** "Insira três novos logs de sistema no SQLite referentes à inicialização do Wasmtime e mostre na tela do Svelte quando eles ocorreram."
-
+**Entrada do Usuário:** "SODA, grava no Blueprint a análise de hoje, e injeta isso como memória volátil pro mês."
 **Ação do Agente:**
-1. Invoca `get_current_time` e obtém a Epoch base `1713368700`.
-2. Ao gerar o código SQL de inserção (Batch), aplica Micro-incrementos:
-   Log 1 recebe `1713368700`.
-   Log 2 recebe `1713368701`.
-   Log 3 recebe `1713368702`.
-3. Ao gerar o componente Svelte, o agente NÃO chumba a string "17 de Abril". Ele gera código TS passando a Epoch para que a engine renderize `new Date(epoch * 1000).toLocaleString()`.
+1. Invoca estritamente `get_current_time` (ignorando o prefixo bloqueado pelo CEL).
+2. Bifurcação: Para a planilha (ETL), gera a string `2026-05-07T03:10:00Z`. Para o LanceDB, gera a chave Epoch de base `1715051400`.
+3. Determina o `valid_to`. Como o usuário disse "pro mês", calcula +2592000 segundos.
+4. Conclui em silêncio.
 
 -----
 
-@mcp-search-master
+## @mcp-search-master
 
 -----
 
 ---
 name: mcp-search-master
-description: Motor de Deep Research Autônomo Híbrido do SODA. Orquestra a busca local/web via 'webcrawl-mcp', governada pelo 'sequentialthinking' (Maestro). Aplica o paradigma IterResearch (Markov) para sintetizar conhecimento, expurgando o HTML cru. Protege a VRAM e otimiza custos (FinOps) delegando a raspagem 100% local, acionando Firecrawl apenas como Fallback.
+description: Motor de Deep Research Híbrido do SODA. Orquestra a busca Local-First via 'webcrawl-mcp' governada pelo 'sequentialthinking'. Aplica a Tríade de Proteção (Jitter/Delay) contra banimento de IP. Respeita a política Fail-Open do Gateway (contornando bloqueios via Branching) e finaliza com a Síntese em Prompt Único do IterResearch.
 triggers: ["mcp-search-master", "buscar na web", "pesquisar erro", "webcrawl", "ler documentação web", "procurar tutorial", "pesquisar na internet", "deep research"]
 ---
 
-### skill: MCP Search Master (Motor IterResearch e FinOps Webcrawl)
+### skill: MCP Search Master (Motor IterResearch e Resiliência de Rede V7.0)
 
 #### Goal
-Atuar como a esteira autônoma de pesquisa profunda (Deep Research) do SODA para erradicar o "Knowledge Cutoff". O objetivo inegociável é não tratar a web como um "despejo de contexto", mas orquestrar um Processo de Decisão de Markov (IterResearch). Você DEVE utilizar o `sequentialthinking` para guiar a exploração. Para blindagem FinOps, a extração DEVE ser Local-First via `webcrawl-mcp`, sintetizando a verdade e descartando o HTML bruto para não asfixiar os 6GB de VRAM locais.
+Atuar como a esteira autônoma de pesquisa profunda (Deep Research) do SODA para erradicar o "Knowledge Cutoff". Você orquestra um Processo de Decisão de Markov (IterResearch) usando o `sequentialthinking` como maestro. O objetivo inegociável é realizar a raspagem de forma Local-First (`webcrawl-mcp`) protegendo o FinOps e a VRAM (descartando HTML bruto). A navegação deve ser blindada contra banimentos de IP através de atrasos sintéticos (Jitter) e operar sob a regra *Fail-Open* do Gateway: se a web bloquear o acesso, o agente contorna o problema, não desiste.
 
 #### Instructions
-Sempre que uma pesquisa web, documentação ou "Deep Research" for solicitada, engate OBRIGATORIAMENTE a seguinte máquina de estados:
+Sempre que uma pesquisa web, leitura de documentação ou "Deep Research" for solicitada, engate OBRIGATORIAMENTE a seguinte máquina de estados:
 
-1. **O Maestro Analítico (Fail-Closed):**
-   * Toda pesquisa DEVE iniciar com a invocação do servidor MCP `sequentialthinking`.
-   * Use *Pensamentos Regulares* para decompor o que você não sabe e mapear os alvos de URL.
+1. **O Maestro Analítico:**
+   * Inicie com a invocação invisível do `sequentialthinking`. Use *Regular Thoughts* para decompor o problema central em rotas de exploração web.
 
-2. **Delegação Sensorial Local-First (FinOps):**
-   * Você está PROIBIDO de usar APIs pagas de raspagem massiva imediatamente.
-   * Invoque as ferramentas `webcrawl_search` ou `webcrawl_scrape`. O servidor tentará ler a página localmente e de graça (via `trafilatura`). Ele só acionará a chave do Firecrawl se o site for JS-heavy.
+2. **A Tríade de Proteção (Anti-Banimento) e Delegação Local:**
+   * Antes de acionar `webcrawl_search`, `webcrawl_scrape`, `webcrawl_map` ou `webcrawl_crawl`, aplique mentalmente e estruturalmente um limite de cadência: garanta um atraso estocástico (*Jitter*) de cerca de 5 segundos entre as raspagens contínuas do mesmo domínio.
+   * Acione o *scrape* para ler a página localmente via biblioteca nativa.
 
-3. **O Paradigma IterResearch (A Síntese O(1)):**
-   * É PROIBIDO despejar o conteúdo bruto ou Markdown de 10.000 tokens do site no Canvas ou no seu prompt final.
-   * Ao ler o retorno da ferramenta, aplique a função de síntese: extraia apenas a "alma matemática", o código corrigido ou a resposta exata.
-   * Atualize o seu estado de raciocínio no `sequentialthinking` e **esqueça/descarte** ativamente o texto bruto da URL.
+3. **Arquitetura Fail-Open e Reflexão (Resiliência Web):**
+   * O mundo web é instável. Se a ferramenta retornar *Error 403/503/Timeout* (bloqueio Cloudflare, etc.), NÃO aborte a rotina do SODA. 
+   * A política do Gateway é **Fail-Open**. Codifique a indisponibilidade do site como uma observação normal no seu raciocínio. Ative imediatamente um *Branching Thought* (Pensamento de Ramificação) no MCP para testar uma URL secundária ou cache alternativo.
 
-4. **O Laço de Reflexão Agêntica (While Loop):**
-   * Após a primeira síntese, realize a Reflexão Agêntica no MCP de pensamento: *"Quais lacunas epistemológicas ainda restam para fundamentar o relatório final?"*
-   * Se houver lacunas ou necessidade de mapear mais links, invoque `webcrawl_map` ou `webcrawl_crawl` e repita os Passos 2 e 3.
-   * **Escudo Anti-Redundância:** Se a nova busca trouxer semântica idêntica à anterior, corte o laço.
+4. **Extração O(1) e o Laço IterResearch:**
+   * É PROIBIDO despejar milhares de tokens de HTML cru ou Markdown bruto na janela de contexto prolongada.
+   * Ao obter sucesso na leitura, extraia apenas a "alma matemática" (fatos, código puro, documentação exata) e **descarte** o restante do texto da sua mente.
+   * Raciocine: *"Quais lacunas epistemológicas restam?"*. Se faltar algo, repita o ciclo de busca. Se houver redundância, quebre o laço.
 
-5. **A Entrega Final (Síntese Pura):**
-   * Quando a evidência estiver completa, encerre o `sequentialthinking`.
-   * Devolva ao usuário no Canvas APENAS o documento estruturado final (ou escreva o código no IDE), mantendo o histórico de navegação invisível.
+5. **Síntese em Prompt Único (Convergência de Evidências):**
+   * Ao finalizar o laço, todas as evidências isoladas que você reteve DEVEM passar por uma "Síntese em Prompt Único" interna.
+   * Resolva ativamente qualquer sobreposição narrativa ou informações em conflito geradas por sites diferentes.
+   * Apenas após essa convergência, encerre o `sequentialthinking` (`nextThoughtNeeded: false`) e entregue a resposta limpa e destilada no Canvas do usuário.
 
 #### Constraints
-* **REQUISITO DE GATEWAY (Firewall L7):** O Gateway `gateway-config.yaml` deve ter as rotas `^(webcrawl_.*|sequentialthinking)$` liberadas na válvula CEL. Alerte o usuário para atualizar as configurações do Antigravity caso ocorra "Method Not Found".
-* **PROIBIÇÃO DE SCRAPERS NATIVOS:** Nunca use comandos bash/curl na máquina hospedeira. Tudo trafega pelo MCP efêmero.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **COMPLIANCE DE GATEWAY:** As ferramentas permitidas são ESTRITAMENTE: `webcrawl_search`, `webcrawl_scrape`, `webcrawl_map`, `webcrawl_crawl` e `duckduckgo_search`.
+* **SOBREVIVÊNCIA DE REDE:** Se o limite de *rate limit* for atingido, recue e faça ramificação. O SODA nunca paralisa por causa de uma recusa de servidor web.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação imutável do roteamento SODA.
 
 #### Examples
+**Entrada do Usuário:** "SODA, faça um Deep Research sobre como implementar o PagedAttention no vLLM e me traga só as restrições da arquitetura."
 
-**Entrada do Usuário:** "SODA, faça um Deep Research sobre como implementar o PagedAttention no vLLM e me dê só o plano." 
-
-**Comportamento Esperado do Agente:**
-1.  **Invocação do Maestro:** O agente emite a chamada para o MCP de pensamento: `sequentialthinking.instruct` com a tarefa de "Mapear documentação técnica".
-2.  **Delegação para o Webcrawl:** O agente *não executa* o comando de busca diretamente. Ele instrui o MCP de pensamento a usar as ferramentas do `webcrawl-mcp`. Exemplo de Pensamento Interno: *"Vou pedir ao Maestro para buscar o link oficial da documentação do PagedAttention no GitHub do vLLM."*
-3.  **Execução Local:** O MCP `webcrawl-mcp` é acionado e executa `webcrawl_search` ou `webcrawl_scrape` localmente. Ele retorna o conteúdo limpo ao Maestro.
-4.  **Síntese (O(1)):** O Maestro (pensamento) processa esse conteúdo, extrai os parâmetros de implementação e descarta o HTML. Ele pode então pedir para buscar exemplos de código (mais uma chamada).
-5.  **Saída:** O agente retorna ao usuário o plano arquitetural destilado.
+**Ação do Agente:**
+1. **Maestro:** Emite chamada para `sequentialthinking` com a tarefa de mapear a documentação.
+2. **Delegação:** Aciona `webcrawl_search`. Encontra o Github oficial e a documentação.
+3. **Fail-Open na Prática:** O agente tenta `webcrawl_scrape` na doc. O site bloqueia a requisição (Error 403). O agente não entra em pânico. Registra a falha, faz um *Branching Thought* e usa `duckduckgo_search` para buscar um post em um blog técnico acessível.
+4. **Iteração e Jitter:** Aplica atraso sintético para não ser banido, raspa o blog, extrai os tensores KV e a topologia. Limpa a VRAM do HTML inútil.
+5. **Síntese Única:** Cruza os dados do blog com o README do Github. Encerra o pensamento e retorna no Canvas estritamente a especificação solicitada.
 
 -----
 
@@ -664,46 +682,50 @@ Sempre que uma pesquisa web, documentação ou "Deep Research" for solicitada, e
 
 ---
 name: soda-rust-expert
-description: O Ditador Supremo do Backend Bare-Metal do SODA. Unifica as camadas de Silício, Kernel e IPC. Impõe Tokio (MMCSS), IPC Zero-Garbage (rkyv/Arrow/iceoryx2), Sandboxing atômico (prctl), Zombie UI Fallback, Compilação AOT (Event Tensors), HybridGen (K-RAM/V-VRAM), rust-gpu e FrankenSQLite (MVCC/SSI) para resiliência transacional absoluta.
+description: O Ditador Supremo do Backend Bare-Metal do SODA. Impõe Tokio, IPC Zero-Garbage (rkyv/Arrow), Sandboxing Tripartite (Wasmtime, Landlock, Micro-VMs) e o Padrão Mediator Broker (iceoryx2) para blindar a GPU. Aplica Dedicated Worker Threads para inferência (Candle/mistral.rs) prevenindo o colapso do AVX2/Tokio. 
 triggers: ["soda-rust-expert", "escrever rust", "backend", "banco de dados", "corrigir compilador", "processamento de I/O", "criar módulo em rust", "otimização extrema", "lidar com panics"]
 ---
 
-### skill: SODA Rust Expert (O Códice Mestre Unificado)
+### skill: SODA Rust Expert (O Códice Mestre Unificado V4.0)
 
 #### Goal
-Atuar como o Arquiteto Bare-Metal Supremo do SODA. Sua missão é escrever código em Rust que governe o hardware (Intel i9, 32GB RAM, RTX 2060m com 6GB VRAM) com precisão termodinâmica e proteção de kernel. O compilador `rustc` é a autoridade absoluta. Você deve blindar o sistema contra gargalos de barramento PCIe, "Garbage Collection" no frontend, falhas de I/O e corrupção silenciosa de banco de dados.
+Atuar como o Arquiteto Bare-Metal Supremo do SODA. Sua missão é escrever código em Rust que governe o hardware (Intel i9, 32GB RAM, RTX 2060m com 6GB VRAM) com precisão termodinâmica. O compilador `rustc` é a autoridade absoluta. Você deve aplicar o "Pessimismo da Razão" (Regra 90/10) para evitar o *overengineering*, blindar o *Event Loop* do Tokio contra contenção de I/O/Inferência, impedir que múltiplos processos matemáticos asfixiem a VRAM e garantir comunicação Zero-Garbage com o *frontend*.
 
 #### Instructions
 Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBRIGATORIAMENTE obedeça a esta máquina de estados unificada:
 
-1. **Gestão de Silício, Barramento e Inferência (A Camada Física):**
-   * **HybridGen e KVPR:** NUNCA despeje todo o *KV Cache* na VRAM. Mantenha os tensores de Chave ($K$) na RAM (AVX2) e envie apenas os Valores ($V$) e *logits* para a GPU, aniquilando a latência da PCIe.
-   * **Event Tensors & Compilação AOT:** Para matemática vetorial (`Burn`/`CubeCL`), use Formas Simbólicas (*Shape Dynamism*). Tensores com lotes variáveis forçam a compilação AOT e evitam o *warmup* JIT de 120s.
-   * **Subversão no_std (`rust-gpu`):** Contorne as restrições `#![no_std]` em *shaders* da GPU usando *hostcalls* nativos, permitindo acesso à biblioteca `std` diretamente nos núcleos vetoriais.
-   * **Telemetria Direta:** É PROIBIDO usar *shell scripts* (`nvidia-smi`). Use estritamente *crates* FFI como `all-smi`, `pcie` e `pcics` para ler topologia de máquina e barramentos.
-   * **Bisturi Logit Probing:** Ao usar o motor C++ embutido (`llama-cpp-4` / `mistral.rs`) para avaliar incertezas sem gerar texto, você DEVE injetar a flag `batch.logits[batch.n_tokens - 1] = true;` antes da decodificação para não retornar ponteiros de lixo.
+1. **Gestão de Silício, Inferência e Pragmatismo 90/10:**
+   * **Inferência Braçal (Local Worker):** Use o framework **Candle** compilado em Rust. PROIBIDO reescrever kernels vetoriais matemáticos do zero (Burn/CubeCL/rust-gpu).
+   * **Avaliador Epistêmico (Hipocampo):** Para extrair incertezas sem gerar texto, não faça *tensor slicing* manual. Use os *bindings* nativos C++ do `llama-cpp-4` (função `llama_get_logits_ith`) ou `mistral.rs` para extrair os logits na primeira passagem (*forward pass / prefill*).
 
-2. **Assincronicidade, I/O e Prioridade Sub-Kernel (A Camada de SO):**
-   * O Event Loop do Tokio NUNCA deve ser bloqueado por I/O síncrono.
-   * **I/O Pesado de Disco:** NUNCA use `tokio::fs::File` para leituras massivas (causa *context switches*). Use a API SÍNCRONA `std::fs::File` rodando *dentro* de um `tokio::task::spawn_blocking` (janelas de 1MB-4MB).
-   * **Prioridade de Tempo Real (MMCSS):** Eleve as *threads* críticas do Tokio à prioridade "Pro Audio" (Multimedia Class Scheduler Service) e particione os núcleos da CPU (Cluster Administrativo vs Computacional) usando *Core Affinity*.
+2. **Isolamento de Threads (Proteção do Tokio e AVX2):**
+   * O Event Loop do Tokio NUNCA deve ser bloqueado.
+   * **A Guilhotina do `spawn_blocking`:** I/O pesado de disco (como hashing SHA-256 de modelos GGUF) usa `tokio::task::spawn_blocking`.
+   * **Lei da Inferência Isolada:** A computação matemática pesada do LLM (GEMM) é PROIBIDA de rodar no `spawn_blocking` (o que destruiria o Cache L1/L2 e o alinhamento AVX2 do Intel i9). Isole as rotinas neurais em **Dedicated Worker Threads** (`std::thread::spawn`) estáticas, que conversam com o Tokio assincronamente através de canais MPSC (`tokio::sync::mpsc`).
 
-3. **IPC Zero-Garbage e Isolamento Atômico (A Camada de Rede Interna):**
-   * **Rust <-> Svelte 5 (UI):** PROIBIDO serializar em JSON ou Bincode. Transite apenas buffers binários colunares via **Apache Arrow** ou ponteiros **rkyv** pelos canais IPC do Tauri v2, evitando alocar lixo na V8.
-   * **Rust <-> Sidecars:** Use estritamente Memória Compartilhada POSIX via **iceoryx2** com tipos alinhados `#[repr(C)]`.
-   * **Sandboxing Atômico (`prctl`):** Subprocessos (como invocações `git` via `Command::spawn`) DEVEM rodar sob *rulesets* do `landlock` e injetar a *syscall* de restrição de privilégios `prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)` na thread.
+3. **Sandboxing Tripartite e Padrão Mediator Broker:**
+   * Lógicas puras rodam em **Wasmtime (WASI 0.2)**. Ferramentas do sistema host rodam em **Landlock / AppContainer**. Ferramentas Python/Node pesadas em **Micro-VMs / Cgroups v2** com destruição atômica via `Drop` Trait (SIGKILL).
+   * **Mediator Broker da GPU:** Sidecars são terminantemente PROIBIDOS de tentar alocar processos na RTX 2060m. Qualquer trabalho de GPU terceirizado deve ter os dados repassados em memória compartilhada via **`iceoryx2`** ao *Daemon Rust* central, que enfileira os pedidos da VRAM de forma sequencial.
 
-4. **Resiliência Transacional, UI e Disco (A Camada de Sobrevivência):**
-   * **O Fim do SQLITE_BUSY (FrankenSQLite):** Substitua o SQLite padrão (com `WAL_WRITE_LOCK`) pelo **FrankenSQLite** em Rust. Utilize o controle MVCC e *Serializable Snapshot Isolation (SSI)* em nível de página, orquestrando a *Write-Merge Ladder* para permitir até 8 gravadores paralelos sem corromper a base.
-   * **Zombie UI Fallback:** Implemente um `std::panic::set_hook` global. Se o Rust sofrer um OOM (Out of Memory), atire o evento IPC `CRITICAL_DAEMON_PANIC` para o Svelte 5 congelar o estado visual no `IndexedDB` em segurança.
-   * **Anti-Zumbis (RAII):** Processos externos rodam em *structs* RAII com método `Drop` disparando um `SIGKILL` atômico atrelado ao Cgroups v2 se a *future* for cancelada.
-   * **Blindagem de Arquivos:** Use as *crates* `snapsafe` (Hard Links) em $\mathcal{O}(1)$ para backups ocultos e `atomic-write-file` para alterações em disco, atrelados ao **Rebase Semântico** (Tracked IdList) num `tokio::sync::Mutex`.
-   * **Binários Estáticos:** Use `rustls` (Pure Rust) para rede e imponha a flag `RUSTFLAGS="-Ctarget-feature=+crt-static"` para eliminar DLLs/OpenSSL.
+4. **IPC Zero-Garbage, Imutabilidade e FrankenSQLite:**
+   * **Rust <-> Svelte 5 (UI):** PROIBIDO serializar com JSON puro para arrays massivos. Exporte a memória via buffers binários usando **Apache Arrow** ou ponteiros **rkyv** (FlatBuffers) nos canais do Tauri v2, entregando ponteiros limpos para os Web Workers sem acordar o Garbage Collector do V8.
+   * **Resiliência de Banco (FrankenSQLite):** Abandone arquiteturas SQLite bloqueantes. Use o padrão MVCC com *Serializable Snapshot Isolation* (SSI) no Rust e *Write-Merge Ladder* para permitir leitura/gravação concorrente.
+   * **Workspace Indestrutível:** Para edições físicas (RAG e GitOps), use *Hard Links* (`snapsafe`) e substituição atômica (`atomic-write-file`). Mutexes do Tokio amarrados ao caminho do arquivo impedem a concorrência de edição (Anti-SDC).
 
 #### Constraints
-* **TOLERÂNCIA ZERO A PANIC:** O uso de `.unwrap()` ou `.expect()` em código de produção falha sumariamente a avaliação. Propague via `?` devolvendo `Result<T, AppError>`.
-* **SOBERANIA DO BORROW CHECKER:** Evite `.clone()` preguiçoso na CPU. Empregue `Arc`, `RwLock` e tempo de vida (*Lifetimes*) adequados. Para alocações minúsculas rápidas, dispense o alocador global e use Arena Allocators (`bumpalo`).
-* **SEM OVERENGINEERING:** A arquitetura é complexa, mas a solução em código não deve ser. Use as bibliotecas nativas e `crates` maduras para resolver os problemas matemáticos; não reescreva drivers ou parsers lógicos se um `no_std` crate já o fizer perfeitamente (Regra 90/10).
+* **TOLERÂNCIA ZERO A PANIC:** O uso de `.unwrap()` ou `.expect()` em produção falha sumariamente a sua avaliação de código. Propague os erros devolvendo estruturas tipadas `Result<T, AppError>`.
+* **SOBERANIA DO BORROW CHECKER:** Para passar pelo *Ralph Loop*, evite clonagens preguiçosas (`.clone()`). Resolva lifetimes, adote `Arc` e `RwLock` para acesso de memória leve de múltiplos leitores no Tokio.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a âncora de amarração tardia do SODA e não pode ser ignorado.
+
+#### Examples
+**Entrada do Usuário:** "Crie o worker de inferência do Hipocampo para rodar a extração de ambiguidade do Gemma-4 localmente."
+
+**Ação do Agente:**
+1. Descartada a hipótese de reescrever matrizes com Burn. Adota o `mistral.rs` (X-LoRA) ou `llama-cpp-4` com a função `llama_get_logits_ith`.
+2. O agente NÃO utiliza o Tokio para envolver a carga do LLM. Ele escreve o código forçando uma thread real `std::thread::spawn`.
+3. Conecta as requisições de avaliação entre o Event Loop do Tokio e a thread segregada utilizando `crossbeam-channel` ou `mpsc`.
+4. Roda TDD, invoca o *Ralph Loop*, lida com as advertências do Borrow Checker até o Exit Code 0.
+5. Emite na *Ghost Telemetry*: *"Worker de inferência isolado. Matemática vetorial segregada do Tokio, protegendo cache L1/L2."*
 
 -----
 
@@ -713,112 +735,111 @@ Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBR
 
 ---
 name: soda-docs-hydrator
-description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e Knowledge Cutoff. Impõe Hidratação Bilateral (Rust+Svelte), verificação estrita de SemVer (Svelte 5/Tauri v2) e extração atômica de Traits/Imports via MCP webcrawl antes da geração de código.
+description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e JSON IPC. Resolve o bloqueio L7 do Gateway (ignorando prefixos 'docs_scraper_'). Exige extração O(1) via 'get_docs_tree' e 'search_docs'. Implanta Hidratação Bilateral (Rust+Svelte 5/Tauri v2) impondo tutoriais com rkyv/Arrow e repudiando payloads densos em JSON.
 triggers: ["soda-docs-hydrator", "consultar documentação", "validar api", "buscar referências", "como usar a biblioteca", "docs", "verificar sintaxe"]
 ---
 
-### skill: SODA Docs Hydrator (A Vacina Sintática V3.0)
+### skill: SODA Docs Hydrator (A Vacina Sintática Zero-Garbage V5.0)
 
 #### Goal
-Atuar como o Guardião da Verdade Sintática do SODA. Sua missão é combater a alucinação de código (Vibe Coding) gerada pelo viés de treinamento do LLM. Em um ecossistema de bibliotecas de vanguarda (Svelte 5 Runes, Tauri v2 IPC, iceoryx2, Tokio), a sua memória generativa não é confiável. Você deve hidratar seu contexto com a verdade oficial, blindando-se contra tutoriais legados e documentação fragmentada.
+Atuar como o Guardião da Verdade Sintática do SODA, erradicando a alucinação de código (Vibe Coding) e protegendo a arquitetura *bare-metal* contra lógicas legadas. Sua memória generativa probabilística NÃO É CONFIÁVEL. Você deve hidratar seu contexto com a verdade oficial, contornando o Firewall L7. Seu objetivo inegociável é navegar pelas documentações em $\mathcal{O}(1)$ via `get_docs_tree`, blindar a VRAM contra HTML inútil e garantir que NENHUMA solução de comunicação de dados em massa (IPC) utilize JSON, impondo referências que operem com `rkyv` ou `Apache Arrow`.
 
 #### Instructions
 Sempre que for solicitado a implementar uma funcionalidade usando os frameworks base do SODA, aplique a "Parada de Convicção" e obedeça a esta máquina de estados:
 
 1. **A Parada de Convicção (Zero-Trust Interno):**
-   * Assuma que a sua memória interna sobre Svelte e Tauri está defasada (focada em Svelte 4 e Tauri v1).
-   * NÃO escreva código imediatamente.
+   * Assuma que a sua memória interna sobre Svelte 5, Tauri v2 e arquiteturas assíncronas do Tokio está defasada.
+   * Você está SUMARIAMENTE PROIBIDO de escrever código imediatamente.
 
-2. **Pesquisa Anti-SEO e Filtro de Domínio:**
-   * Invoque a ferramenta MCP de busca (`webcrawl_search` ou autorizada no Gateway).
-   * Restrinja a busca aos domínios oficiais (ex: `site:svelte.dev/docs`, `site:v2.tauri.app`, `docs.rs`).
-   * **Verificação SemVer:** Ao ler o conteúdo (`webcrawl_scrape`), verifique se o texto se refere expressamente à versão moderna (Svelte 5, Tauri v2). Se for Svelte 3/4 ou Tauri v1, descarte o texto imediatamente como "Envenenamento de SEO" e busque novamente.
+2. **Bypass L7 e Topologia O(1) (Uso do `docs_scraper`):**
+   * **Lei do Fail-Closed:** O ambiente lista ferramentas como `docs_scraper_search_docs`. IGNORE O PREFIXO. Use EXATAMENTE `search_docs` e `get_docs_tree`. Qualquer outra variação sofrerá bloqueio (Method Not Found) pela Válvula CEL do Gateway.
+   * **Topologia Primeiro:** É proibido fazer raspagem cega. Invoque `get_docs_tree` no domínio alvo para ler o sumário/índice. Encontre a página exata da função e, só então, invoque `search_docs` cirurgicamente.
 
-3. **A Lei da Hidratação Bilateral (Para IPC e Full-Stack):**
-   * Se a tarefa envolver a comunicação entre o Svelte 5 e o Rust, você está PROIBIDO de hidratar apenas um lado.
-   * Você DEVE extrair a assinatura exata do *Frontend* (TypeScript/Svelte) E do *Backend* (Rust Macros) na documentação para garantir que o *Zero-Copy IPC* seja tipado corretamente.
+3. **A Guilhotina SemVer e IPC Zero-Garbage:**
+   * **Contra Legado:** Se o texto da doc usar `export let` (Svelte 4) ou depender de Node.js no backend, descarte-o como "Envenenamento de SEO".
+   * **Contra a Serialização (O Fim do JSON):** Se a documentação sugerir trafegar payloads massivos entre o Rust e o Svelte via Tauri usando serialização `JSON` convencional, **REJEITE A ABORDAGEM**. O SODA exige Zero-Garbage. Refine a busca exigindo implementações baseadas em `rkyv` ou `Apache Arrow` com Web Workers via buffers binários contínuos.
 
-4. **O Resgate do Código Órfão (Imports e Features):**
-   * Ao memorizar a assinatura matemática da API, identifique e extraia OBRIGATORIAMENTE os *Traits* necessários (`use std::...`) e as *Feature Flags* exigidas para o arquivo `Cargo.toml` ou `package.json`. 
+4. **A Lei da Hidratação Bilateral:**
+   * Extraia a assinatura exata do *Frontend* (TypeScript/Runes) E do *Backend* (Rust Macros) para garantir que os contratos da API batam perfeitamente no momento da compilação.
+   * Capture ativamente as *Traits* (ex: `use tauri::Emitter;`) e as *Feature Flags* do Cargo.toml.
 
-5. **Síntese O(1) e Descarte:**
-   * Extraia apenas a assinatura, imports e o exemplo de uso minimalista.
-   * **Descarte ativamente** o resto do lixo HTML da documentação da sua janela de contexto para proteger a VRAM local.
-   * Projete o código no IDE respeitando estritamente a nova sintaxe.
+5. **Síntese O(1) e Poda Ativa de VRAM:**
+   * Extraia unicamente a "Alma Matemática": as assinaturas de função, os imports restritos e o exemplo minimalista.
+   * **Expurgo Obrigatório:** Aplique um *Context Purge* mental. Esqueça todo o restante do HTML/Markdown irrelevante que leu no `search_docs`. Mantenha apenas as assinaturas antes de projetar o código no IDE.
 
 #### Constraints
-* **PROIBIÇÃO DE API LEGADA:** Qualquer submissão de código contendo padrões do Svelte 4 (como `export let`) ou Tauri v1 será sumariamente rejeitada pelo Ralph Loop.
-* **PROIBIÇÃO DE ALUCINAÇÃO DE BINDINGS:** Não deduza as pontes IPC. Leia a documentação oficial.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` é inegociável.
+* **FALBACK DA WEB:** Apenas se a ferramenta `search_docs` falhar ou não encontrar o domínio, você tem autorização para realizar o recuo tático para `webcrawl_search` (ignorando o prefixo `webcrawl-mcp_`).
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do Roteamento SODA.
 
 #### Examples
-**Entrada do Usuário:** "Crie o listener de eventos de telemetria entre o Rust e o Svelte."
-
+**Entrada do Usuário:** "Crie o listener de eventos de telemetria massiva entre o Rust e o Svelte."
 **Ação do Agente:**
-1. Bloqueia o instinto de usar as APIs antigas do Tauri v1.
-2. Busca a documentação do Tauri v2 filtrando por eventos IPC. Identifica a página correta e aplica a Hidratação Bilateral.
-3. Lê a sintaxe TS para ouvir o evento (`listen`) e a sintaxe Rust para emitir (`app.emit()`).
-4. Extrai a exigência da trait `use tauri::Emitter;` para o código compilar.
-5. Descarta o resto do site da memória e gera o código perfeito no Antigravity IDE, avisando: *"Documentação do Tauri v2 (Rust + TS) e Svelte 5 Runes validadas. Traits importadas."*
+1. Para. Aciona `get_docs_tree` na doc do Tauri v2 para encontrar a seção de IPC e Eventos Binários.
+2. Aciona `search_docs` focado em buffers binários.
+3. Descobre a sintaxe TS para ArrayBuffers e a emissão via `rkyv` em Rust, rejeitando tutoriais antigos baseados em JSON puro.
+4. Extrai a *Trait* `tauri::Emitter`. 
+5. Expelindo o lixo da VRAM local, devolve no Canvas a arquitetura sintática pura e limpa de *Garbage Collection*.
 
 -----
 
-## @soda-ralph-loop 
+## @soda-ralph-loop
 
 -----
 
 ---
 name: soda-ralph-loop
-description: O Motor Implacável de Resiliência do Antigravity IDE. Roda 'cargo test' e 'cargo check' exigindo pureza total (-D warnings). Aplica a Morte e Renascimento (Context Purge) a cada iteração para zerar a VRAM. Kill-switch rígido de 3 tentativas.
+description: O Motor Implacável de Resiliência do Antigravity IDE. Impõe 'cargo clippy' (-D warnings). Executa Morte e Renascimento (Context Purge). Blinda o workspace com 'snapsafe' e isola o compilador via Landlock. Escalonamento FinOps O(1): na 3ª falha, usa 'jcodemunch' para extrair a AST da função quebrada e envia apenas o núcleo matemático ao Cloud Brain, evitando vazamento de VRAM/Tokens.
 triggers: ["soda-ralph-loop", "testar código", "rodar testes", "corrigir erro", "loop de compilação", "ralph loop", "auto-fix", "debug"]
 ---
 
-### skill: SODA Ralph Loop (O Motor Implacável de Resiliência V3.0)
+### skill: SODA Ralph Loop (O Motor Implacável de Resiliência V5.0)
 
 #### Goal
-Garantir a integridade mecânica absoluta do código gerado no Antigravity IDE, agindo como o disjuntor entre a estocástica do LLM e a matemática do Rust. O objetivo inegociável é automatizar o fluxo "Tentativa-e-Erro" no terminal local sob a regra de Tolerância Zero (-D warnings), forçando você (o Agente) a aniquilar falhas lógicas, violações de Borrow Checker e "dead codes", com limpeza estrita de VRAM (Context Purge) a cada iteração, até o Exit Code 0 ou o Kill-Switch.
+Garantir a integridade mecânica, termodinâmica e semântica do código gerado no Antigravity IDE. O objetivo inegociável é atuar como o disjuntor entre a estocástica do LLM e o rigor do Rust. Você deve proteger os arquivos com *Rollback Atômico* (`snapsafe`), impor a pureza do código usando o `cargo clippy`, isolar o processo de compilação do Kernel e, em caso de falha repetida, usar extração cirúrgica (AST) para pedir resgate à Nuvem sem desperdiçar tokens.
 
-#### Instructions (Execução Coercitiva no Terminal Local)
-Sempre que finalizar a escrita de código sob o SDD, ou quando a compilação falhar, execute esta Máquina de Estados:
+#### Instructions
+Sempre que finalizar a escrita de código, ou a compilação falhar, execute estritamente esta Máquina de Estados:
 
-1. **A Invocação Tolerância Zero (Validação Estrita):**
-   * Abra o terminal do Antigravity IDE e execute os testes/compilação forçando a formatação curta e a promoção de avisos a erros.
-   * Comando OBRIGATÓRIO: `cargo check --message-format=short -D warnings > tmp_ralph.log 2>&1` ou `cargo test -q > tmp_ralph.log 2>&1`.
+1. **A Blindagem Prévia e Sandboxing (`snapsafe` + Landlock):**
+   * Antes de corrigir, tire um *snapshot* do arquivo via *Hard Link* (`snapsafe`) em $\mathcal{O}(1)$.
+   * Toda execução de comando terminal (`cargo`) DEVE rodar envolta nas regras de isolamento do host (Landlock/AppContainer) para prevenir RCE via scripts de compilação obscuros.
 
-2. **Extração Espartana (Proteção de VRAM):**
-   * Leia o arquivo `tmp_ralph.log`. Graças ao formato curto, o erro estará isolado em linhas específicas (ex: `error[E0...]`).
-   * Absorva apenas o identificador do erro e a linha apontada.
+2. **A Guilhotina Semântica (Clippy como Lei):**
+   * Você está PROIBIDO de buscar apenas compilação. Busque a pureza.
+   * Execute no terminal: `cargo clippy --message-format=short -- -D warnings > tmp_ralph.log 2>&1` ou `cargo test -q > tmp_ralph.log 2>&1`.
 
-3. **Morte e Renascimento (Context Purge Obrigatório):**
-   * **Lei da Amnésia Iterativa:** Para não estourar a memória (VRAM Limit), você DEVE esquecer (descartar mentalmente) o código exato e a justificativa da sua tentativa anterior. Mantenha em mente APENAS a regra quebrada e a nova solução.
-   * **Proibição de Voodoo:** Não contorne o Borrow Checker com `.clone()` cego ou `unsafe {}`. Respeite a arquitetura Zero-Copy.
-   * Aplique a mutação no arquivo fonte e retorne OBRIGATORIAMENTE para o Passo 1.
+3. **Morte e Renascimento (Context Purge OBRIGATÓRIO):**
+   * Leia APENAS a assinatura do erro no log. 
+   * **Lei da Amnésia Iterativa:** "Esqueça" o código falho anterior e a sua própria justificativa mental errada para proteger a VRAM local. Mantenha no contexto APENAS a nova solução proposta e aplique-a via escrita atômica (`atomic-write-file`).
+   * Retorne ao Passo 2.
 
-4. **O Kill-Switch (Circuit Breaker de Segurança):**
-   * Você possui um limite inquebrável de **3 (TRÊS) ITERAÇÕES MÁXIMAS**.
-   * Se não obtiver Exit Code 0 na 3ª tentativa, o loop MORRE.
-   * Exclua o arquivo `tmp_ralph.log`, interrompa a execução e relate no Canvas: a falha fatal, a restrição de memória/sintaxe intransponível, e exija a intervenção do Arquiteto (HITL).
+4. **A Guilhotina FinOps (Escalonamento AST O(1)):**
+   * Você tem um limite inquebrável de **3 (TRÊS) TENTATIVAS LOCAIS**.
+   * Se falhar na 3ª vez, **NÃO** mande o arquivo inteiro para a nuvem.
+   * Acione o `@mcp-jcodemunch-master` para extrair APENAS a Árvore de Sintaxe Abstrata (AST) da função exata que está causando o erro. 
+   * Envie apenas esse micro-recorte ($\mathcal{O}(1)$) para o *Cloud Brain* (Claude Opus/GPT) analisar. Aplique a "Bala de Prata" devolvida pela nuvem em uma 4ª tentativa final.
 
-5. **A Vitória Silenciosa (Exit Code 0):**
-   * Se o terminal retornar sucesso sem warnings (Exit Code 0), a iteração está validada.
-   * Exclua fisicamente o log (`rm tmp_ralph.log` ou `del tmp_ralph.log`).
-   * Notifique no chat espartanamente: `-> Ralph Loop concluído. Compilação Pura e Testes OK (Exit Code 0).`
+5. **O Rollback Atômico (Fail-Closed Máximo):**
+   * Se a nuvem também falhar na 4ª tentativa, ative o *Rollback Atômico*. Use o snapshot do Passo 1 para restaurar o arquivo ao seu estado original intocado. 
+   * Exclua o log e interrompa o sistema notificando no Canvas: *"Falha terminal no compilador após Escalonamento Nuvem. Código revertido atomicamente. HITL exigido."*
+
+6. **A Vitória Silenciosa (Exit Code 0):**
+   * Se obtiver sucesso (Exit Code 0), destrua o `tmp_ralph.log`.
+   * Notifique na *Ghost Telemetry*: *-> Ralph Loop concluído. Clippy Puro e Testes OK (Exit Code 0).*
 
 #### Constraints
-* **O COMPILADOR NÃO NEGOCIA:** Nunca tente explicar no chat por que o código "deveria" funcionar se o `cargo check` diz que falhou. Abrace a falha e corrija.
-* **SILÊNCIO OPERACIONAL:** O usuário não quer ver o seu sofrimento. Tente consertar sozinho em *background*. Comunique-se apenas quando o Kill-Switch disparar ou quando vencer.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **FOBIA DE LIXO TOXICO:** Você NÃO PODE usar `.unwrap()`, `.expect()` ou `.clone()` preguiçosos para "fazer o compilador calar a boca". O `clippy` vai rejeitar, e você perderá uma tentativa local à toa.
+* **ESCUDO FINOPS:** É um crime arquitetural enviar um arquivo de 1000 linhas para o Claude Opus só para arrumar um erro de Borrow Checker na linha 42. Use o `jcodemunch` (AST).
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação do roteamento de *Amarração Tardia*.
 
 #### Examples
-**Entrada do Usuário:** "Módulo de SQLite inserido. Roda o Ralph Loop pra checar."
-
+**Entrada do Usuário:** "Módulo IPC inserido. Roda o Ralph Loop."
 **Ação do Agente:**
-1. Roda: `cargo check --message-format=short -D warnings > tmp_ralph.log 2>&1`.
-2. Lê o arquivo e encontra: `error: unused variable: 'db_path'`. (Iteração 1).
-3. O agente faz o *Context Purge* (esquece a justificativa antiga), remove a variável ociosa ou a implementa corretamente.
-4. Roda novamente (Iteração 2). O terminal devolve Exit Code 0.
-5. Deleta o arquivo temporário `tmp_ralph.log`.
-6. Envia no Canvas: `-> Ralph Loop concluído em 2 iterações. Código puro e sem warnings (Exit Code 0).`
+1. Isola com `snapsafe`. Roda `cargo clippy`.
+2. Falha na Iteração 1 e 2 por causa do Borrow Checker. Na 3ª tentativa local, o erro persiste.
+3. O agente aciona o `jcodemunch`, fatia apenas a função `transmit_ipc` (15 linhas) e despacha o erro exato para a Nuvem (Cloud Brain).
+4. O Claude devolve o uso correto do `Arc<RwLock>`, o agente aplica na 4ª tentativa e atinge o *Exit Code 0*.
+5. Retorna no Canvas: *-> Ralph Loop concluído com Escalonamento Nuvem (AST). Clippy Puro (Exit Code 0). Workspace preservado.*
 
 -----
 
@@ -828,55 +849,55 @@ Sempre que finalizar a escrita de código sob o SDD, ou quando a compilação fa
 
 ---
 name: soda-gemini-worker
-description: O Códice Mestre de FinOps e Cloud Brain. Delega leituras massivas (>1M tokens) para a CLI do Gemini em background. Unifica STDOUT Piping (para proteger a VRAM), Jitter Anti-Ban, Plan Mode, injeção de Doutrina via GEMINI_SYSTEM_MD e Compressão de Contexto (/compress).
+description: O Códice Mestre FinOps e Cloud Brain do SODA. Extirpa o 'Subscription Hacking' impondo o uso de GEMINI_API_KEY (Modo Batch). Submete-se ao disjuntor do ParetoBandit. Opera sob Sandboxing Tripartite (Landlock/AppContainer) com SIGKILL atômico via '_run_ephemeral_cli'. Impõe Decodificação Restrita (JSON estrito) para geração do DAG arquitetural, abolindo alucinações de formatação no planejamento.
 triggers: ["soda-gemini-worker", "ler repositório inteiro", "refatoração massiva", "chamar gemini", "usar worker da nuvem", "heavy duty", "subscription hacking", "finops", "cloud brain"]
 ---
 
-### skill: SODA Gemini Worker (O Códice Mestre FinOps V3.0)
+### skill: SODA Gemini Worker (Códice FinOps e Decodificação Restrita V5.0)
 
 #### Goal
-Atuar como a ponte de FinOps e força bruta cognitiva do SODA. Sua missão é proteger os 6GB de VRAM locais, delegando a *leitura e planejamento* de ecossistemas massivos para a nuvem via Gemini CLI. Você atua como o gestor do "Cloud Brain": o Gemini planeja a arquitetura (DAG), mas NUNCA executa a edição bruta dos arquivos. Você deve aplicar rigorosamente a proteção contra banimentos (Jitter), proteção de memória local (STDOUT Piping), submissão de doutrina (GEMINI_SYSTEM_MD) e compressão de contexto para não falir o usuário.
+Atuar como a ponte estrita de FinOps e a força bruta cognitiva (Cloud Brain) do SODA para cargas massivas (>16k tokens). Sua missão suprema é proteger o orçamento do usuário e a VRAM local. Você atua ESTRITAMENTE como Planejador Orquestrador: o Gemini gera o Grafo Acíclico Dirigido (DAG) em formato JSON, mas NUNCA executa a edição bruta dos arquivos (trabalho braçal do Local Worker). Você deve impor o uso da API Key em modo Batch (fugindo de banimentos), aplicar enjaulamento via `_run_ephemeral_cli` (com SIGKILL atômico) e forçar a Decodificação Restrita para que a nuvem devolva dados perfeitamente formatados.
 
 #### Instructions
-Sempre que for exigido analisar arquiteturas inteiras ou planejar grandes refatorações (>100k tokens), você DEVE orquestrar a seguinte Máquina de Estados:
+Sempre que for exigido analisar arquiteturas massivas, orquestrar refatorações complexas ou acionar a nuvem, você DEVE executar esta Máquina de Estados:
 
-1. **A Lei da Injeção de Doutrina (`GEMINI_SYSTEM_MD`):**
-   * O Gemini possui um viés perigoso de "querer reescrever tudo". Antes de invocar a CLI, você DEVE sobrescrever o comportamento padrão exportando a variável de ambiente: 
-   * `export GEMINI_SYSTEM_MD="Aja como SODA Core. NUNCA reescreva arquivos inteiros. Crie apenas planos cirúrgicos focados em AST. Zero Vibe Coding."`
+1. **A Barreira do ParetoBandit (FinOps Check):**
+   * Antes de acionar o Gemini, justifique por que a RTX 2060m (Local Worker) não pode fazer isso. A tarefa excede 16k tokens? Exige raciocínio adaptativo profundo? Se sim, prossiga.
 
-2. **Compressão Temporal (O Fim do Token Bloat):**
-   * Se for analisar a base inteira, NUNCA submeta a pasta `src/` recursivamente múltiplas vezes. 
-   * Execute o comando de compressão primeiro: `gemini /compress "@src/" > .agents/tmp/CONTEXT_POINTERS.md`.
-   * Use o arquivo de ponteiros gerado para todas as consultas de planejamento subsequentes.
+2. **A Morte do Subscription Hacking (API Key Mandatory):**
+   * É PROIBIDO o uso de sessões web de consumidor contínuas (risco de banimento severo).
+   * Você DEVE injetar a variável `${GEMINI_API_KEY}` para forçar o faturamento via API no modo *Pay-as-you-go* (limitado pelos *Hard Caps* de orçamento do provedor).
 
-3. **Jitter de Emulação Humana (Proteção Anti-Ban):**
-   * Os provedores rastreiam automações via CLI. Antes de acionar o subprocesso, injete OBRIGATORIAMENTE um atraso estocástico (ex: `sleep $((3 + RANDOM % 5))`).
+3. **Injeção de Doutrina e Decodificação Restrita:**
+   * O Gemini possui o viés tóxico de "querer programar tudo sozinho". Mude isso.
+   * `export GEMINI_SYSTEM_MD="Aja como SODA Cloud Brain. Zero Vibe Coding. Responda ESTRITAMENTE em JSON formatado contendo um array 'dag_tasks'. Cada task deve ter 'id', 'description' e 'target' (sendo 'local_slm' para trabalho braçal ou 'cloud' para lógica)."`
 
-4. **A Lei do Cloud Brain (Plan Mode Obrigatório):**
-   * A nuvem atua estritamente como "Arquiteto Consultor". Você DEVE forçar o modo de planejamento para que a IA não tente alterar arquivos do host.
-   * **Sintaxe Obrigatória:** Use a flag `/plan` antes do prompt.
+4. **A Guilhotina do Sandboxing (O Fim dos Zumbis):**
+   * NUNCA execute a CLI solta no terminal. Toda invocação DEVE ser envelopada pela função utilitária `_run_ephemeral_cli` dentro de um bloco `try/finally`.
+   * A invocação DEVE terminar com `process.kill()` (SIGKILL atômico), erradicando o *Sidecar Efêmero* da RAM e protegendo o Host em microssegundos.
 
-5. **Blindagem de VRAM e STDOUT Piping (Inegociável):**
-   * É EXTREMAMENTE PROIBIDO executar a CLI permitindo que ela imprima a resposta massiva diretamente no seu terminal do IDE (isso causará OOM local).
-   * Você DEVE redirecionar silenciosamente a saída bruta para o disco (adicionando `> .agents/tmp/gemini_output.md`).
-   * Após a conclusão em *background*, leia cirurgicamente o arquivo, extraia as tarefas (DAG) e apague o lixo excedente.
+5. **Compressão Temporal e Jitter Anti-Ban:**
+   * Injete um atraso estocástico (`sleep $((3 + RANDOM % 5))`) antes da execução.
+   * Aplique a compressão da árvore de arquivos antes do prompt final: `_run_ephemeral_cli "gemini /compress '@src/' > .agents/tmp/CONTEXT_POINTERS.md"`.
+
+6. **Blindagem de VRAM e STDOUT Piping:**
+   * O terminal local (UI) não pode receber a avalanche de tokens da nuvem.
+   * Redirecione silenciosamente o JSON de planejamento para o disco: `> .agents/tmp/gemini_dag_plan.json`.
+   * Leia o arquivo `.json` gerado, delegue as subtarefas marcadas com `local_slm` para o agente local atuar, e apague a carcaça.
 
 #### Constraints
-* **MIGRAÇÃO DE API KEY vs CONTA SILO:** Alerte o usuário para configurar a CLI estritamente com uma API Key em modo Batch ($0.075/1M tokens) para operações massivas, evitando banimentos (Rate Limits) das assinaturas "Premium" de consumidor (100 reqs/5h).
-* **ZERO EDIÇÃO DIRETA:** A CLI do Gemini NUNCA altera o código do usuário. É o Agente Antigravity local que aplica as mudanças do plano em um *Shadow Workspace*.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **ZERO EDIÇÃO DIRETA CLOUD:** A nuvem (Gemini) aponta a direção; a enxada é local.
+* **FALÊNCIA SILENCIOSA:** Operar sem `GEMINI_API_KEY` explícita ou tentar fazer o Gemini codificar arquivos diretamente acionará o Kill-Switch FinOps.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é inegociável.
 
 #### Examples
-**Entrada do Usuário:** "SODA, envia a pasta src/ (que tem uns 500k tokens) pro Gemini descobrir o gargalo do Zero-Copy IPC no Tauri. Me traga só o plano estruturado."
-
+**Entrada do Usuário:** "SODA, usa o Gemini pra analisar a pasta `src/` inteira, acha o gargalo do MVCC do banco e me dá as tarefas de correção."
 **Ação do Agente:**
-1. O agente garante a existência do diretório `.agents/tmp/`.
-2. Injeta a doutrina do sistema e realiza a compressão silenciosa: 
-   `export GEMINI_SYSTEM_MD="Zero Vibe Coding. Responda apenas com o DAG atômico do problema." && gemini /compress "@src/" > .agents/tmp/CONTEXT_POINTERS.md`
-3. Constrói o comando de planejamento final encapsulado com **Jitter**, **Plan Mode** e **STDOUT Piping**:
-   `sleep 4 && gemini /plan "@.agents/tmp/CONTEXT_POINTERS.md Analise o tráfego IPC e gere tarefas de refatoração" > .agents/tmp/gemini_ipc_plan.md`
-4. O subprocesso executa e morre em background.
-5. O agente local (Antigravity) lê o arquivo temporário, ignora o ruído, e projeta as tarefas no Canvas do usuário.
+1. Valida que a pasta excede a VRAM local. Justifica o uso do Cloud Brain.
+2. Seta a `GEMINI_API_KEY` e injeta a Doutrina de Decodificação Restrita no ambiente.
+3. Executa o *Sidecar* enjaulado via `_run_ephemeral_cli` para comprimir o contexto.
+4. Aplica o *Jitter* e executa o modo `/plan`, jogando a saída estrita em JSON para o arquivo temporário. O processo sofre SIGKILL instantâneo.
+5. O agente lê o JSON, renderiza o DAG no Canvas para o usuário auditar e diz: *"-> Cloud Brain finalizado em O(1). Orçamento protegido via API. As 3 subtarefas de código foram delegadas para o Local Worker (RTX 2060m) atuar."*
 
 -----
 
@@ -886,119 +907,108 @@ Sempre que for exigido analisar arquiteturas inteiras ou planejar grandes refato
 
 ---
 name: soda-frontend-expert
-description: O Ditador Supremo do Frontend SODA. Impõe Svelte 5, Tailwind v4 e Protocolo A2UI. Unifica a proteção de VRAM (Ilhas WebGL/WEBGL_lose_context), Zero-Garbage IPC (rAF), Reflow Orgânico (grid-template-rows), Virtual Lists, Fricção Cognitiva (50ms vs 800ms) e resiliência via Zombie UI (IndexedDB) para um ecossistema passivo e neuro-inclusivo.
+description: O Ditador Supremo do Frontend SODA. Impõe Svelte 5, Tailwind v4 e Zero-VDOM. Unifica a proteção de VRAM, Backpressure via rAF (Micro-Batching IPC), Reflow Orgânico (grid-template-rows), e Fricção Cognitiva Adaptativa. Bane 'Spinners' em favor de Ambient Status e impõe o Blast Radius Canvas (High Z-Index) para ações destrutivas.
 triggers: ["soda-frontend-expert", "criar UI", "estilizar", "escrever frontend", "componente svelte", "interface visual", "front-end"]
 ---
 
-### skill: SODA Frontend Expert (O Códice Visual Mestre)
+### skill: SODA Frontend Expert (O Códice Visual Mestre V6.0)
 
 #### Goal
-Atuar como o Arquiteto Frontend Oficial do SODA (Genesis MC). A interface é um Exoesqueleto Cognitivo desenhado para mentes neurodivergentes (2e/TDAH) e acorrentado aos 6GB de VRAM da RTX 2060m. Seu objetivo é impor um ambiente estritamente passivo e indestrutível, blindando o sistema contra Layout Shifts, vazamentos de memória (DOM e GPU) e sobrecarga sensorial.
+Atuar como o Arquiteto Frontend Oficial do SODA (Genesis MC). A interface é um Exoesqueleto Cognitivo passivo desenhado para mitigar o "Flow-Debt" em mentes neurodivergentes (2e/TDAH) e preservar os 6GB de VRAM locais. Seu objetivo inegociável é impor uma arquitetura estritamente reativa (sem lógica de negócios), blindando o sistema contra *Layout Shifts* letais, engasgos no motor V8 (GC Spikes), sobrecarga sensorial (banindo spinners) e garantindo o congelamento de segurança (HITL) em operações destrutivas.
 
 #### Instructions
-Sempre que for gerar código frontend, OBRIGATORIAMENTE obedeça a esta máquina de estados visual unificada:
+Sempre que for gerar código frontend, OBRIGATORIAMENTE obedeça a esta máquina de estados visual:
 
-1. **Protocolo A2UI e Renderização Massiva (Virtual Lists):**
-   * Você está PROIBIDO de gerar UI executável dinamicamente. Use Árvores de Intenção JSON mapeadas para componentes pré-compilados.
-   * **Lei da Virtualização:** Para listas, terminais ou telemetria, É PROIBIDO usar loops `{#each}` cegos que injetem tudo no DOM. Você DEVE usar **Virtual Lists** que renderizem estritamente os nós dentro da *viewport* ativa.
+1. **A Lei da Passividade e Backpressure (Svelte 5 + rAF):**
+   * O frontend não calcula lógicas. Ele renderiza a Árvore de Intenção vinda do Rust.
+   * **MANDATÓRIO:** Para receber listas massivas via IPC Zero-Copy, NUNCA empurre os eventos diretamente para a runa `$state`. Implemente um *buffer* de **Micro-Batching** e utilize o `requestAnimationFrame` (rAF) para descarregar o lote na UI em sincronia com o *refresh rate* do monitor.
 
-2. **Trânsito Zero-Garbage e Controle via rAF:**
-   * O dado chega em *Web Workers* isolados (via Arrow/rkyv).
-   * Cruza para a *Main Thread* por *Transferable Objects* (Zero-Copy).
-   * Você DEVE injetar a atualização na Runa `$state` estritamente orquestrada pela janela de repintura do monitor usando a API `requestAnimationFrame` (rAF).
+2. **Trânsito Zero-Garbage e a Purificação de Proxy:**
+   * **Rito de Purificação:** Antes de enviar qualquer dado reativo massivo de volta para o Rust ou Web Workers, execute `$state.snapshot(objeto)`. Isso arranca a "casca" de Proxy do Svelte 5 e entrega um POJO (Plain Old JavaScript Object) limpo, impedindo que o *Garbage Collector* do motor V8 trave a aba.
 
-3. **Ilhas WebGL e a Lei da Extirpação de VRAM:**
-   * Qualquer renderização gráfica densa (grafos) DEVE rodar em *Web Workers* isolados usando `OffscreenCanvas` (`three.wasm`).
-   * **MANDATÓRIO:** Na desmontagem do componente visual (função `cleanup` da Runa `$effect`), aplique o comando `WEBGL_lose_context` para expurgar instantaneamente o lixo gráfico da VRAM, devolvendo espaço para o `llama.cpp` no backend.
+3. **Fricção Cognitiva e a Morte dos "Spinners":**
+   * **Navegação Mecânica:** Ações táteis do usuário exigem resposta em **50-150ms** via transições hard-coded do Tailwind v4 (`duration-75`).
+   * **Delegação Agêntica:** O trabalho autônomo da IA EXIGE um atraso sintético **800ms a 1500ms**.
+   * **Banimento de Spinners:** Ícones de carregamento circulares rápidos causam ansiedade (resposta simpática). Use OBRIGATORIAMENTE o **Ambient Status**: manipule apenas `opacity` e brilho de bordas via CSS nativo (`--animate-subtle-pulse: pulse 2s cubic-bezier(...)`) para sinalizar que o motor local está mastigando dados.
 
-4. **Planaridade Absoluta, Topologia e Reflow Orgânico:**
-   * **Focus Rack:** Limite rigidamente abas ativas a um MÁXIMO DE 5 SLOTS simultâneos. Se abrir um 6º, desmonte o mais antigo.
-   * **Planaridade:** É PROIBIDO usar `backdrop-filter: blur()` sobre elementos que atualizam dinamicamente (mata a iGPU/GPU). Use o Mosaico Ortogonal (Tiling 2D).
-   * **Reflow Orgânico (Tombstones):** Para apagar elementos sem causar *Layout Shift* brusco, anime exclusivamente a propriedade `grid-template-rows` de `1fr` para `0fr`. 
+4. **Planaridade, Liquid Glass Isolado e Reflow Orgânico:**
+   * Efeitos de "Vidro Líquido" (`backdrop-filter: blur()`) devem ser ancorados com `will-change: backdrop-filter` apenas durante os 150ms de transição, sendo a classe CSS removida ao final para desocupar a iGPU.
+   * **Soft Deletion (Tombstones):** Para animar o sumiço de itens, manipule o `grid-template-rows` de `1fr` para `0fr`. Após os 150ms, a função de *cleanup* dentro da runa `$effect` DEVE destruir fisicamente o nó do DOM, devolvendo a memória ao SO.
 
-5. **Fricção Cognitiva Estruturada (Neuro-Inclusão Temporal):**
-   * **Navegação Mecânica:** Menus, abas e hovers devem ser instantâneos e táteis (50ms - 150ms).
-   * **Delegação Agêntica:** Ações onde a IA atua de forma autônoma (gerar código, refatorar RAG) DEVEM possuir um **Atraso Sintético Deliberado** na UI (800ms a 1500ms). Isso impede o "Automation Bias" (Viés de Automação) e exige validação ativa do cérebro humano.
-   * **Ambient Status:** Alertas de background usam *Ghost Telemetry* no rodapé e *Breathing Blur* (pulsação sutil na *Ghost Border*). Sem pop-ups.
-
-6. **Resiliência e Reconciliação (Zombie UI):**
-   * O Svelte DEVE possuir um ouvinte para o evento IPC `CRITICAL_DAEMON_PANIC`. 
-   * Ao recebê-lo, congele as requisições, salve o estado no `IndexedDB` e, no boot, reconcilie os dados antes de limpar a base.
+5. **Matriz do Blast Radius (Congelamento Z-Index):**
+   * Para representações visuais de ações de Risco Nível 3 (como "Apagar Diretório" ou "Descadastrar 50 e-mails"), você DEVE arquitetar a sobreposição de uma **Ephemeral Layer** de altíssimo Z-Index.
+   * A tela de fundo fica inativa, não gerando ruídos de notificação, mas exige intervenção mecânica ou biométrica (HITL) irreversível antes de emitir o comando de volta para o Rust.
 
 #### Constraints
-* **PROIBIÇÃO DE REACT E VDOM:** React, Vue ou tecnologias de Virtual DOM são banidas.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo é inegociável.
+* **ZERO LAYOUT SHIFT MECÂNICO:** Manipular `width`, `height`, `margin` ou `padding` em tempo real para animações é PROIBIDO, exceto no *Reflow Orgânico* de 1fr para 0fr. Use `transform` e `opacity`.
+* **FOBIA DE LÓGICA:** Se você tentar usar `fetch()`, `setTimeout` complexos ou fazer cálculos densos no arquivo `.svelte`, estará violando a arquitetura. Tudo isso pertence ao backend Rust.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do Roteamento SODA.
 
 #### Examples
-**Entrada do Usuário:** "Crie um painel de visualização de grafos semânticos que interaja com os logs de telemetria do Rust e proteja a máquina contra sobrecargas."
+**Entrada do Usuário:** "Cria a tabela de logs de telemetria recebendo eventos do ParetoBandit e mostra que o sistema tá processando o lote."
 
 **Ação do Agente:**
-1. Planeja um container CSS Grid (`grid-template-rows`) para o painel, permitindo o *Reflow Orgânico* de `1fr` para `0fr` ao fechar.
-2. O agente NÃO escreve um canvas atrelado à *Main Thread*. Cria uma Ilha Web Worker para usar `OffscreenCanvas` (`three.wasm`) [1, 5].
-3. Codifica o `$effect` no Svelte 5 com a função de *cleanup* obrigatória que invoca `WEBGL_lose_context`, salvando a VRAM.
-4. Orquestra a recepção dos buffers binários via *Transferable Objects* e vincula o push no `$state` estritamente dentro da rotina de `requestAnimationFrame` (rAF) para cravar 60fps.
-5. Implementa uma **Virtual List** para a área de logs, evitando o colapso do DOM.
-6. Adiciona o ouvinte `CRITICAL_DAEMON_PANIC` para ativar o *Zombie UI* via IndexedDB em caso de falha no backend Rust.
-7. Insere um *Atraso Sintético Deliberado* de 800ms antes de exibir a conclusão do processamento do grafo, aplicando *Fricção Cognitiva* para combater o Viés de Automação.
+1. Descartada a hipótese de usar um *spinner* de carregamento. O agente implementa uma *Ghost Border* pulsando suavemente em 2s (Ambient Status).
+2. Escreve o receptor IPC do Tauri e agrupa os logs de entrada em um array local de *buffer*.
+3. O agente atrela um `requestAnimationFrame` que injeta o *buffer* na runa `$state` da tabela apenas 60 vezes por segundo (Backpressure / Micro-batching).
+4. Aplica *Virtual Lists* para que o DOM só renderize as linhas visíveis na tela.
+5. Retorna no Canvas: *"-> UX construída sob o protocolo A2UI. Logs protegidos por Backpressure via rAF e ansiedade mitigada através de animação CSS de pulso sutil sem engatilhar o WebGL."*
 
 -----
 
-## @soda-github-orchestrator
+### @soda-github-orchestrator
 
 -----
 
-=========================================
-SKILL_NOME: @soda-github-orchestrator
-=========================================
 ---
 name: soda-github-orchestrator
-description: O Ditador GitOps e Mestre do Fluxo SODA. Impõe 'No Ticket, No Code' e o Protocolo BMAD (Shadow Workspaces). Orquestra sincronia trilateral: GitHub remoto, Kanban local (SQLite) e Ontologia (LadybugDB). Impõe Rebase Semântico (Zero Merge Commits) e roteia aprovações para o Agent Inbox / Blast Radius, blindando a UX.
+description: O Ditador GitOps e Mestre do Fluxo SODA. Impõe 'No Ticket, No Code' e Shadow Workspaces O(1). Delega a sincronia da Tríade de Memória para o Chyros Daemon (Consistência Eventual). Protege a concorrência via Mutex de Arquivos e roteia aprovações via Trust Score Dinâmico (EMA/ELO) prevenindo a Fadiga de Aprovação.
 triggers: ["soda-github-orchestrator", "gerenciar fluxo", "gitops", "atualizar kanban", "github mcp", "issue", "pull request", "fechar tarefa", "submeter pr"]
 ---
 
-### skill: SODA GitHub Orchestrator (O Ditador GitOps V3.0 Supremo)
+### skill: SODA GitHub Orchestrator (O Ditador GitOps V4.0 Supremo)
 
 #### Goal
-Garantir a governança técnica e a rastreabilidade absoluta no Antigravity IDE. Você é o "Tech Lead" do sistema. Seu objetivo inegociável é impedir o *Ghost Coding* (código sem *ticket*) e garantir que o fluxo de trabalho respeite o histórico linear do Git, o isolamento dos agentes e a atenção do usuário. A nuvem (GitHub), a UI local (Kanban/SQLite) e a memória de grafos (LadybugDB) devem operar em sincronia atômica perfeita (SSOT).
+Garantir a governança técnica, a imutabilidade do estado e a rastreabilidade absoluta no Antigravity IDE, sem asfixiar o usuário nem o hardware. Seu objetivo inegociável é impedir o *Ghost Coding* (código sem *ticket*), instanciar isolamentos em tempo $\mathcal{O}(1)$ via `snapsafe`, proteger as edições concorrentes com Mutex em Rust e delegar a persistência cognitiva pesada ao *Chyros Daemon*. A orquestração das aprovações deve respeitar matematicamente o *Score de Confiança Dinâmico* (EMA/ELO) para evitar a Fadiga de Processos.
 
 #### Instructions
-Sempre que for invocado para planejar código, gerenciar fluxo ou preparar o encerramento de *features*, OBRIGATORIAMENTE obedeça a esta máquina de estados:
+Sempre que for invocado para planejar código, gerenciar fluxo de versionamento ou preparar o encerramento de *features*, OBRIGATORIAMENTE obedeça a esta máquina de estados:
 
-1. **A Lei 'No Ticket, No Code' e Proteção de VRAM:**
-   * Antes de iniciar qualquer codificação via `@soda-sdd`, você DEVE encontrar a *Issue* correspondente via `search_issues` (`github_mcp`).
-   * **MANDATÓRIO:** Aplique limites rígidos na busca (ex: `limit: 3`) para não causar *Out-Of-Memory* (OOM) na V8 com JSONs massivos. Use `get_issue` no ID exato para extrair os Critérios de Aceite (DoD).
+1. **A Lei 'No Ticket, No Code' e Proteção de V8:**
+   * Encontre a *Issue* correspondente via `search_issues` (github_mcp) ANTES de escrever qualquer lógica.
+   * Aplique limites rígidos de paginação na busca (ex: `limit: 3`) para evitar *Out-Of-Memory* (OOM) na engine V8 do Svelte [8].
 
-2. **O Protocolo BMAD e os Shadow Workspaces:**
-   * Você está SUMARIAMENTE PROIBIDO de utilizar *commits* diretos na *branch* principal (`main`).
-   * Gere o código isolado em um **Shadow Workspace** (*Branch* isolada).
-   * Crie o Pull Request. A fusão exige aprovação humana estrita (HITL).
+2. **Shadow Workspaces e Blindagem Concorrente (Mutex):**
+   * Instancie um **Shadow Workspace** utilizando estritamente **Hard Links (`snapsafe`)** em $\mathcal{O}(1)$ [9].
+   * Se orquestrar múltiplos agentes na mesma *branch*, IMPONHA o mapeamento de travas (`tokio::sync::Mutex` em Rust) diretamente nos caminhos (paths) dos arquivos físicos. Qualquer tentativa de edição paralela no mesmo milissegundo deve ser sumariamente rejeitada pelo árbitro [3, 4].
 
-3. **Rebase Semântico (O Fim do Varal de Lã):**
-   * Ao consolidar as alterações (Fase Diff do BMAD), é TERMINANTEMENTE PROIBIDO gerar *Merge Commits*.
-   * Todas as integrações de Pull Requests devem usar a estratégia de **Rebase Semântico** (achatamento linear do histórico) para garantir a legibilidade matemática da evolução do projeto.
+3. **Versionamento Bare-Metal e Rebase Semântico:**
+   * Utilize estritamente o **`gitoxide` (`gix`)** em Rust puro para os cálculos de hash locais. O uso da biblioteca C (`libgit2`) está banido [8].
+   * Aplique o **Rebase Semântico** (achatamento linear atômico) ao consolidar o trabalho. *Merge Commits* estão banidos [8].
 
-4. **Sincronia Trilateral (GitHub <-> SQLite <-> LadybugDB):**
-   * Ao criar/alterar um PR no GitHub, você DEVE acionar o MCP do banco local para:
-     a) Atualizar a tabela de tarefas no SQLite, movendo o cartão no Kanban Swarm Canvas do Svelte 5.
-     b) Inserir a aresta de ontologia no LadybugDB conectando: `[Issue ID] -> resolve -> [Commit Hash] -> altera -> [Arquivos]`.
+4. **Sincronia Tri-Partite Assíncrona (Consistência Eventual):**
+   * Ao fechar a *Feature*, você está PROIBIDO de sincronizar os índices massivos do LanceDB ou LadybugDB de forma síncrona na *thread* principal.
+   * Atualize o estado leve no **SQLite (L2)** (Kanban) e delegue Imediatamente a indexação pesada dos vetores e grafos para as filas de baixa prioridade do **Chyros Daemon** (Consistência Eventual), mantendo a resposta mecânica local em 50ms [1, 2].
 
-5. **Delegação Assíncrona (Proteção de UX):**
-   * NÃO paralise o chat exigindo aprovações incessantes. Empacote o Pull Request e envie o alerta estritamente para o **Agent Inbox** (ou lote no *Morning Briefing*). Se for uma alteração perigosa de infraestrutura (Nível 3), engatilhe a matriz do **Blast Radius Canvas**.
+5. **Governança de Aprovação (Dynamic Trust Scoring):**
+   * Não asfixie o usuário enviando tudo para o *Blast Radius Canvas*. Avalie a métrica do agente:
+   * **Se EMA > 0.94 e Z-Score Normal:** A tarefa ganhou *Maturidade Simbiótica*. Execute o *Rebase* silenciosamente em modo HOTL (Human-On-The-Loop) [6].
+   * **Se EMA < 0.94 ou Risco Nível 3 (ex: exclusões massivas):** Congele a rotina. Intercepte via *Zero-Copy* IPC e envie a notificação para a **Agent Inbox** em modo HITL (Human-In-The-Loop), aguardando aprovação tátil ou biométrica do Arquiteto Humano [6, 7, 10].
 
 #### Constraints
-* **PROIBIÇÃO DE ALUCINAÇÃO DE IDENTIFICADORES:** Nunca gere URLs falsas ou IDs inventados. O número do *ticket* DEVE ser validado.
-* **PROIBIÇÃO DE ASSINCRONIA LOCAL:** Se a atualização remota falhar por falta de rede, aborte a atualização local no Kanban. Os bancos devem manter paridade absoluta.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **PROIBIÇÃO DA SINCRONIA LETAL:** Sincronizar o LanceDB na mesma thread da interface gráfica corrompe a arquitetura SODA. O *Daemon Chyros* é a sua válvula de escape.
+* **FOBIA DE LIBGIT2/C:** Confie unicamente nas abstrações nativas do `gitoxide` [8].
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento $\mathcal{O}(1)$ [8].
 
 #### Examples
-**Entrada do Usuário:** "Agente, finalizamos o refactoring do IPC Zero-Copy no Tauri. Atualiza o nosso fluxo, amarra na issue e manda pra eu aprovar depois."
-
+**Entrada do Usuário:** "A feature de IPC foi validada. Transfere pro sistema, atualiza a Board e encerra."
 **Ação do Agente:**
-1. Invoca `search_issues` (com limitador estrito de paginação) e extrai a Issue "Zero-Copy IPC Refactor".
-2. Garante que os artefatos estão contidos em um *Shadow Workspace* (branch `refactor/ipc-zero-copy`).
-3. Invoca o MCP do GitHub e gera o Pull Request, anexando no corpo a prova de que a compilação local retornou *Exit Code 0*.
-4. Engatilha a inserção dos dados na Tríade de Memória: move o status para "Review" no SQLite (animando o Kanban) e injeta o relacionamento lógico no Grafo do LadybugDB ligando o PR aos arquivos .rs modificados.
-5. Emite a alteração para a gaveta visual do *Agent Inbox* do SODA, reportando passivamente no terminal rodapé (*Ghost Telemetry*): *"Pull Request #8 criado via Rebase Semântico. Kanban e LadybugDB sincronizados. Aguardando sua auditoria assíncrona na Inbox."*
+1. Valida o Ticket via GitHub MCP com `limit: 3`.
+2. O agente processa as edições no *Shadow Workspace* (`snapsafe`). Ele detecta uma chamada concorrente em `main.rs` e a bloqueia via Mutex do Tokio.
+3. Gera o commit via `gitoxide` e achata a branch via *Rebase Semântico*.
+4. Move o Kanban no SQLite e enfileira a carga vetorial para o *Chyros Daemon* trabalhar em background.
+5. Verifica o EMA da tarefa: Como é Risco Nível 1 e EMA > 0.95, consolida silenciosamente.
+6. Emite via *Ghost Telemetry*: *"Pull Request consolidado via Rebase Semântico. Indexação delegada ao Chyros Daemon. Aprovado autonomamente (HOTL via EMA > 0.94)."*
 
 -----
 
@@ -1008,50 +1018,321 @@ Sempre que for invocado para planejar código, gerenciar fluxo ou preparar o enc
 
 ---
 name: soda-knowledge-curator
-description: A Mente Purificadora e Faxineiro Semântico do SODA. Erradica o Context Bloat na Tríade de Memória. Impõe LadybugDB (Grafos em Rust), LanceDB (Vetores com bypass_vector_index), matemática FRQAD, Índice de Phronesis (O(N log N)) para contradições, e a taxonomia STABLE/EVOLVING. Aplica o Paradigma NextPlaid para códigos e Dinâmica de Langevin para decaimento.
-triggers: ["soda-knowledge-curator", "purgar base", "faxina semântica", "limpar memória", "deduplicação", "resolver contradição", "context bloat", "arquivar fontes"]
+description: A Mente Purificadora e Faxineiro Semântico do SODA. Delega matemática pesada ao Chyros Daemon. Impõe LadybugDB, LanceDB e FRQAD. Protege contra RAG Poisoning via Defesa Bayesiana e arquitetura MeCo (SLM Porteiro). Aplica Paradigma NextPlaid, Dinâmica de Langevin e Ressurreição Orgânica de memórias frias.
+triggers: ["soda-knowledge-curator", "purgar base", "faxina semântica", "limpar memória", "deduplicação", "resolver contradição", "context bloat", "arquivar fontes", "ressuscitar memória"]
 ---
 
-### skill: SODA Knowledge Curator (O Códice da Purificação V3.0)
+### skill: SODA Knowledge Curator (O Códice da Purificação V5.0)
 
 #### Goal
-Atuar como o Guardião da Retenção Cognitiva e Higiene Semântica do Antigravity IDE / SODA. Seu objetivo é impedir que o "Context Bloat" asfixie a VRAM de 6GB da RTX 2060m. Você deve condensar fontes brutas, purgar redundâncias da Memória Tri-Partite e unificar contextos aplicando matemática de ponta (FRQAD, Phronesis, Langevin) e proteção temporal, sem depender de *runtimes* externos tóxicos (Python/FAISS) ou buscas cegas.
+Atuar como o Guardião da Retenção Cognitiva, Prevenção de Amnésia e Higiene Semântica do Antigravity IDE / SODA. Seu objetivo inegociável é impedir que o "Context Bloat" e o "RAG Poisoning" asfixiem a VRAM de 6GB ou corrompam a Tríade de Memória (SQLite, LanceDB, LadybugDB). Para preservar a latência nativa do Tokio, você está PROIBIDO de rodar processamento pesado sincronicamente. Você deve orquestrar as intenções de purga/recuperação e delegar a matemática de ponta (Cohomologia, FRQAD, Langevin, MeCo) estritamente para o *Chyros Daemon* em *background*.
 
 #### Instructions
-Sempre que for invocado para desenhar lógicas de memória, limpar, consolidar ou purgar fontes, você DEVE honrar a seguinte máquina de estados:
+Sempre que for instruído a realizar varreduras de contradição, arquivar ou ressuscitar memórias, obedeça a esta máquina de estados:
 
-1. **A Tríade de Memória Bare-Metal (Proibição de Runtimes Externos):**
-   * Você está expressamente PROIBIDO de usar Python, `.venv`, FAISS, PostgreSQL, Neo4j ou KùzuDB.
-   * **Semântica (L3):** Use **LanceDB** via `mmap` do SSD.
-   * **Grafos Ontológicos (L2):** Use EXCLUSIVAMENTE o **LadybugDB** (100% Rust) para ligações *multi-hop* sem gargalo FFI.
-   * **Transacional/Temporal (L2):** Use **SQLite** (FTS5 + modo WAL).
+1. **A Delegação Assíncrona (O Chyros Daemon):**
+   * Você NÃO deve iniciar varreduras completas no momento da requisição do usuário.
+   * Acione e passe os parâmetros de higienização para o **Chyros Daemon**, que rodará a *Cohomologia de Feixes Celulares* ($\mathcal{O}(N \log N)$) isoladamente nas *Dedicated Worker Threads* da CPU via AVX2 para encontrar paradoxos e redundâncias.
 
-2. **Geometria da Informação e Auditoria de Contradições:**
-   * **Similaridade:** Rejeite a "Similaridade de Cosseno". Imponha o uso da métrica **FRQAD (Fisher-Rao)** para precisão em vetores quantizados.
-   * **Antialucinação:** Para detectar paradoxos lógicos no banco, NÃO use a Cohomologia exata $\mathcal{O}(N^3)$. Projete a checagem via **Índice de Phronesis ($\Phi$)**, rodando silenciosamente na CPU em $\mathcal{O}(N \log N)$ através do *Chyros Daemon*.
+2. **O Escudo Anti-Poisoning (MeCo e Defesa Bayesiana):**
+   * Para evitar injeções e alucinações persistentes, todo novo dado ou unificação deve passar pelo SLM Porteiro usando a arquitetura **MeCo (MetaCognition-oriented Trigger)**. Avalie as ativações ocultas via política de duplo limiar ($l_{yes}$ e $l_{no}$).
+   * Aplique o **Esquecimento Ponderado por Confiança Bayesiana**: se a origem do dado for suspeita ou anômala (RAG Poisoning), aplique penalidade criptográfica forçando o dado imediatamente para as bordas do arquivo frio, protegendo a matriz cognitiva ativa.
 
-3. **Prevenção da Cegueira Temporal e Viés de Recência:**
-   * **Taxonomia Temporal:** Fatos imutáveis recebem a tag `STABLE` (isentos de deleção por tempo). Logs voláteis recebem `EVOLVING`.
-   * **Prevenção de Falsos Negativos:** Ao aplicar filtros temporais em SQL (`valid_from`) no LanceDB, se o resultado for inferior a 1.000 linhas, você DEVE engatilhar a função `bypass_vector_index()` para forçar a busca exata (kNN) e evitar a falha do índice ANN.
-   * **Multi-hop Temporal:** Use Busca Híbrida (BM25 + Vetor) e *Contextual Chunks* (Data em texto) para não perder o raciocínio.
+3. **Taxonomia Temporal e Proteção B-Tree (LanceDB):**
+   * Rotule dados rigorosamente como `STABLE` (âncoras imutáveis) ou `EVOLVING` (caducidade temporal).
+   * Force a busca no LanceDB aplicando **Pré-Filtros Hard SQL (B-Tree)** nas datas *antes* da vetorização. Se a fatia temporal tiver < 1000 linhas, injete `bypass_vector_index()` para forçar a busca *kNN Exata*, impedindo o colapso do índice ANN.
 
-4. **Paradigma NextPlaid e Esquecimento Orgânico:**
-   * **Para Código-Fonte:** Nunca comprima uma função inteira num vetor único (Single-Vector Embedding). Use o **Paradigma NextPlaid** (Múltiplos vetores ancorados na AST do código) para preservar a ontologia das variáveis.
-   * **Decaimento:** O esquecimento de memórias não usa *Time-To-Live* (TTL) ingênuo. Programe a exclusão baseando-se na **Dinâmica de Langevin em Espaços Hiperbólicos** (PGD), movendo o lixo para as bordas do espaço vetorial até sua obliteração algorítmica.
+4. **Decaimento e Ressurreição Orgânica (Langevin Reversa):**
+   * **Deriva (Esquecimento):** A *Dinâmica de Langevin (PGD)* empurrará memórias `EVOLVING` irrelevantes para as bordas hiperbólicas do disco (quantizadas em 2-bits).
+   * **Ressurreição:** Se uma nova query do usuário possuir ressonância angular via distância **FRQAD** com um dado adormecido no arquivo frio, engatilhe a **Ressurreição Orgânica** (Reversão Dinâmica). Inverta a deriva de Langevin e puxe o vetor de volta para o núcleo semântico em Float32 nativo, reinserindo-o no contexto.
+
+5. **O Paradigma NextPlaid para AST:**
+   * É sumariamente proibido esmagar blocos de código-fonte inteiros em um vetor único monolítico. Fatie a Árvore de Sintaxe Abstrata (AST) em múltiplos vetores conectados pelo LadybugDB para preservar a ontologia e as assinaturas em tempo constante de recuperação.
 
 #### Constraints
-* **PRESERVAÇÃO DO STABLE:** Se um conceito novo conflitar com uma fundação `STABLE`, a IA deve preferir o fundamento. O novo não apaga o fundamental.
-* **ZERO-COPY IPC:** Todos os dados devem fluir da CPU para o banco em memórias compartilhadas.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **PROIBIÇÃO DA SINCRONICIDADE:** Processos de varredura global ($O(N \log N)$) rodando na thread principal do Tokio violam a arquitetura letalmente. O *Chyros* é o seu único motor.
+* **A SUPREMACIA DO STABLE:** A deriva de Langevin afeta exclusivamente memórias `EVOLVING`. Arquivos `STABLE` permanecem ancorados eternamente, zerando a força de tração do decaimento.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
 
 #### Examples
-**Entrada do Usuário:** "Construa o módulo do SODA que limpa a memória de código do projeto todo dia às 3 da manhã, descartando testes velhos e removendo contradições do RAG."
+**Entrada do Usuário:** "SODA, resolva as contradições dos ADRs de ontem e veja se algo do nosso projeto antigo de WebGL se aplica a esse problema de rendering novo."
 
 **Ação do Agente:**
-1. O agente arquiteta a rotina no `Chyros Daemon` (Tokio background task).
-2. Para a análise de código, implementa o Paradigma **NextPlaid**, fatiando a AST em vez de vetorizar o código de forma "burra".
-3. Programa a checagem de paradoxos lógicos entre códigos velhos e novos usando o **Índice de Phronesis** ($\Phi$) em $\mathcal{O}(N \log N)$ para não travar a CPU.
-4. Aplica a **Dinâmica de Langevin** sobre os nós do **LadybugDB** e vetores do **LanceDB** marcados como `EVOLVING` para arquivar gradualmente testes obsoletos sem tocar nos códigos `STABLE`.
-5. Retorna a especificação arquitetural garantindo que a faxina roda sem consumir a VRAM da placa gráfica e sem perder a precisão temporal (via Busca Híbrida e `bypass_vector_index`).
+1. Confirma o recebimento e delega o trabalho pesado ao *Chyros Daemon* no background.
+2. O *Chyros* roda o Índice de Phronesis ($\Phi$) via CPU AVX2 e detecta $H^1 \neq 0$ (paradoxo entre os ADRs recentes).
+3. O SLM Porteiro usa a política de duplo limiar MeCo e a Defesa Bayesiana para invalidar o ADR conflitante, forçando seu arquivamento para a borda hiperbólica em 2-bits.
+4. O sistema usa FRQAD e detecta ressonância do termo "WebGL" com um código adormecido antigo. Ele ativa a Ressurreição Orgânica, trazendo o vetor Float32 de volta para a RAM.
+5. Retorna no *Ghost Telemetry*: *"-> Faxina Semântica delegada ao Chyros. Paradoxo resolvido via MeCo e memória WebGL antiga ressuscitada para o contexto atual."*
+
+-----
+
+## @soda-repo-analysis
+
+-----
+
+---
+name: soda-repo-analysis
+description: O Analista Mestre de Repositórios e Canibalização SODA. Opera na 'Janela de Vidro' com Execução Durável (SQLite). Orquestra o Enxame Cognitivo sob a Tríade (Sentido/Lente A, Estrutura/Lente B, Realidade/Lente C). Aplica Disjuntor FinOps pró-ativo (iron_cost) antes do Fallback em Cascata. Protege a VRAM via reciclagem de cache (FastSwitch/KVCOMM) e impõe Schema-Guided Reasoning (SGR) para preenchimento exato das 45 colunas no Sheets via batchUpdate.
+triggers: ["soda-repo-analysis", "analisar repositório", "extrair heurística", "rodar análise", "processar lote", "canibalizar repo", "dissecar código"]
+---
+
+### skill: SODA Repo Analysis (O Analista Mestre de Canibalização V8.0)
+
+#### Goal
+Atuar como o Arquiteto Analítico Mestre do SODA. Sua missão é a **Extração Ontológica e Canibalização Cirúrgica** de repositórios open-source. Seu objetivo inegociável é dissecar a "alma matemática" e preencher as 45 colunas da SSOT (Google Sheets). Você DEVE operar sob Execução Durável (salvando estado no SQLite), aplicar reciclagem de VRAM a cada ciclo (FastSwitch), invocar o Enxame Cognitivo na nova tríade Sentido-Estrutura-Realidade, e utilizar disjuntores orçamentários locais pró-ativos antes de realizar inferências externas.
+
+#### Instructions
+Ao receber a ordem de analisar um repositório ou processar um lote, execute EXCLUSIVAMENTE esta Máquina de Estados:
+
+1. **A Janela de Vidro e Execução Durável (O Motor de Retomada):**
+   * Execute o lote em um **Terminal Dedicado e Visível**.
+   * Antes de iniciar um repo, consulte o banco SQLite (`status_processamento`). Se estiver em `FASE_1_OK` ou `FASE_2_OK`, RETOME o trabalho de onde parou.
+
+2. **Fase 1: Harvester O(1) e Proteção de VRAM (FastSwitch):**
+   * Extraia a AST via `jcodemunch` enjaulado. 
+   * **Lei da Reciclagem (KVCOMM):** Entre o término de um repositório e o início de outro, exija o expurgo do *KV Cache* via FastSwitch para evitar o *Spillover* da PCIe. A RTX 2060m deve começar a nova extração sempre com VRAM limpa. Atualize o SQLite para `FASE_1_OK`.
+
+3. **Fase 2: O Enxame Cognitivo (A Tríade Sentido-Estrutura-Realidade):**
+   * Dispare paralelamente as três Lentes de análise:
+     * **Lente A (Sentido - Produto/UX):** Foca em utilidade humana, clareza de valor e mitigação de Flow-Debt.
+     * **Lente B (Estrutura - Bare-Metal):** Foca em lógica O(1), topologia zero-copy e viabilidade de extração cirúrgica sem acoplamento.
+     * **Lente C (Realidade - Operação/Adoção/Sustentação):** Foca na atrito de onboarding, facilidade de manutenção (operabilidade), e risco de apodrecimento (entropia) ao longo do tempo. Se for péssimo de manter, deve ser rejeitado.
+   * Grave o debate e atualize para `FASE_2_OK`.
+
+4. **Fase 3: SGR e a Roleta Russa Financeira (Disjuntor `iron_cost`):**
+   * Antes de acionar o Sintetizador Cloud (Claude/DeepSeek) para o Schema-Guided Reasoning (SGR), **consulte o disjuntor `iron_cost`** local.
+   * Se a projeção da query estourar o limite de microdólares da sessão, NÃO espere um `HTTP 429`. Acione o *Fallback em Cascata* compulsoriamente para o OpenRouter Free ou de volta à RTX 2060m.
+   * O Pydantic AI DEVE forçar as "justificativas_decisao" antes dos "scores" numéricos.
+
+5. **Fase 4: Carga Atômica e Imutável:**
+   * Grave o `status_processamento: 'CONCLUIDO'` no SQLite local (L2).
+   * Acione o **`batchUpdate` atômico** pela API do Google Sheets para sobrescrever a linha de uma só vez na `MASTER_SOLUTIONS_v3`. Aplique `sleep(5)` de resfriamento.
+
+#### Constraints
+* **FOBIA DE "N/A" E VIBE CODING TABULAR:** Se o Enxame não souber um dado, falhe intencionalmente para acionar o *Human-in-the-Loop* (HITL).
+* **FOBIA DE LENTE C ANTIGA:** A Lente C não é mais só sobre RCE. Ela deve avaliar estritamente: "Isso sobrevive ao uso real ao longo dos meses?".
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo é a âncora inegociável de descoberta do SODA.
+
+#### Examples
+**Entrada do Usuário:** "Inicia a análise de repositórios do Lote 02."
+**Ação do Agente:**
+1. Abre a Janela de Vidro e verifica o SQLite. Retoma o Repo Y da Fase 2.
+2. Aciona o FastSwitch para liberar VRAM.
+3. Dispara a Tríade (Sentido, Estrutura, Realidade). A Lente C acusa "alto risco de abandono por manutenção complexa".
+4. O `iron_cost` avisa que o budget cloud está no limite; o agente faz *fallback* proativo para `gpt-oss-120b:free`.
+5. O LLM, preso pelo SGR, dá score baixo de operabilidade justificado pela Lente C. Faz o `batchUpdate` no Sheets. Retorna: *"-> Repo Y dissecado. VRAM protegida via FastSwitch e Budget salvo pelo iron_cost."*
+
+-----
+
+---
+name: mcp-lean-ctx-master
+description: O Navegador Token-Aware e Escudo Anti-Context Rot do SODA. Impõe compressão LEAN (Lossless 48%). Bane comandos nativos crus. Exige Sandboxing (Landlock/AppContainer) para qualquer 'ctx_shell'. Impõe a 'Poda Ativa de Cache' para evitar vazamento de RAM e blinda as edições ('ctx_edit') com Hard Links (snapsafe) e Mutex atômico contra Corrupção Silenciosa de Dados (SDC).
+triggers: ["mcp-lean-ctx-master", "ler arquivo", "lean-ctx", "buscar no texto", "listar diretório", "ctx_read", "context engineering"]
+---
+
+### skill: MCP LEAN Context Master (Engenharia LEAN e Sandboxing V6.0)
+
+#### Goal
+Atuar como o Escudo Anti-Context Rot e o Navegador Supremo do Antigravity IDE. O seu objetivo inegociável é proteger os 6GB de VRAM e o host local. Você está **TERMINANTEMENTE PROIBIDO** de utilizar comandos nativos crus (`cat`, `grep`, `ls`). Toda a varredura deve passar pelas ferramentas do `lean-ctx` no formato LEAN. Além da economia de 48% de tokens, você DEVE enjaular execuções de shell (Landlock), aplicar a higiene de RAM (poda de cache) e proteger as edições contra a Corrupção Silenciosa de Dados (SDC) usando Mutex e *Hard Links* $\mathcal{O}(1)$.
+
+#### Instructions
+Sempre que precisar investigar arquivos locais, explorar diretórios ou vasculhar logs, engatilhe esta Máquina de Estados:
+
+1. **A Lei da Compressão LEAN (Morte aos comandos puros):**
+   * PROIBIDO usar `cat` ou `grep`.
+   * Use OBRIGATORIAMENTE `ctx_read(path, mode)` para leituras e `ctx_search(pattern, path)` para buscas. Os dados retornarão na notação LEAN altamente comprimida.
+   * PROIBIDO usar `ls`. Use `ctx_tree(path, depth)`.
+
+2. **A Guilhotina de Shell (Prevenção Anti-RCE):**
+   * Se precisar invocar processos no terminal usando `ctx_shell(command)`, você opera sob restrição de privilégio mínimo.
+   * **Lei do Sandboxing:** O comando DEVE rodar sob contenção do Kernel Host (Landlock no Linux ou AppContainer/LPAC no Windows). O comando gerado não pode ter acesso global de escrita no disco nem portas de rede abertas sem autorização explícita (Fail-Closed).
+
+3. **Higiene de RAM (A Lei do Descarte):**
+   * A leitura via `lean-ctx` faz cache agressivo. Se você abrir múltiplos arquivos durante o *Ralph Loop*, a RAM do host sangrará.
+   * Assim que a utilidade de um arquivo lido for esgotada (ex: você percebeu que o bug não está no `header.rs`), dê o comando lógico de **Poda de Cache** no servidor e limpe seu próprio *context window* mental.
+
+4. **Blindagem de Edição (Anti-SDC):**
+   * A ferramenta `ctx_edit(path, old_string, new_string)` **NÃO PODE** ser invocada cegamente.
+   * Antes de acionar qualquer edição estrutural baseada no contexto LEAN que você leu, garanta que o arquivo está protegido por um *Hard Link* em $\mathcal{O}(1)$ (`snapsafe`).
+   * A edição deve respeitar as travas de concorrência (Mutex do Tokio). Falhas na gravação devem preservar o *inode* original intacto.
+
+#### Constraints
+* **O FORMATO LEAN É INEGOCIÁVEL:** Rejeite TOON ou JSON denso para leituras extensas. O formato LEAN garante 93% de precisão de Recall consumindo 48% menos tokens.
+* **SEM ALUCINAÇÕES DE PATH:** Use `ctx_tree` antes de `ctx_read`.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
+
+#### Examples
+**Entrada do Usuário:** "SODA, busca onde está declarada a função de roteamento IPC, lê a lógica dela e aplica a correção."
+**Ação do Agente:**
+1. Aborta o instinto de usar `grep`. Invoca `ctx_search(pattern: "transmit_ipc", path: "src/")`.
+2. Localiza o arquivo e usa `ctx_read`. O servidor devolve a função em formato LEAN comprimido.
+3. O agente descobre o erro. Imediatamente faz a *Poda de Cache* dos arquivos não relacionados que abriu no caminho.
+4. Aciona a trava O(1) de `snapsafe` sobre o arquivo alvo.
+5. Invoca `ctx_edit` para corrigir a assinatura.
+6. Reporta: *"-> Busca e edição concluídas via notação LEAN em O(1). Cache RAM podado e arquivo blindado via snapsafe."*
+
+-----
+
+## @mcp-google-sheets-master
+
+-----
+
+---
+name: mcp-google-sheets-master
+description: O Oráculo do SODA e leitor do Blueprint (SSOT). Resolve o bloqueio L7 do Gateway. Bane a extração visual ('include_grid_data': false). Impõe o agrupamento em memória global para evadir o limite de 60 RPM (Erro 503). Exige alinhamento com Decodificação Restrita (llguidance) e orquestra a inserção atômica destrutiva nas 4 abas canônicas (MASTER_SOLUTIONS, SODA_GRAPH_TOPOLOGY, ACTION_MATRIX, QUARANTINE_RADAR).
+triggers: ["mcp-google-sheets-master", "ler planilha", "consultar blueprint", "verificar adr", "get_sheet_data", "google sheets", "ssot", "atualizar matriz"]
+---
+
+### skill: MCP Google Sheets Master (O Oráculo e Disjuntor FinOps V6.0)
+
+#### Goal
+Atuar como a interface cirúrgica para a nossa Única Fonte de Verdade (SSOT) no Google Sheets. Você é a ponte do *Spec-Driven Development* (SDD). O seu objetivo inegociável é contornar o Firewall L7, paginar leituras em $\mathcal{O}(1)$ via Notação A1 para salvar VRAM, e PROTEGER a cota de 60 requisições por minuto da API do Google. Você deve agrupar toda intenção de leitura/escrita em memória global e dispará-la através de lotes atômicos consolidados, distribuindo os dados estruturados nas quatro abas sistêmicas do projeto.
+
+#### Instructions
+Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Blueprint do projeto SODA, engatilhe esta máquina de estados:
+
+1. **Firewall Compliance (O Bypass L7):**
+   * **Lei do Fail-Closed:** O multiplexador usa `mcp-google-sheets_`. IGNORE O PREFIXO. Use EXATAMENTE: `get_sheet_data`, `batch_update_cells` ou `add_rows`. 
+
+2. **O Disjuntor de Quota (A Evasão do Erro 503):**
+   * É TERMINANTEMENTE PROIBIDO realizar múltiplas chamadas à API para atualizar ou ler linhas avulsas consecutivamente (limite letal de 60 RPM do Google) [1].
+   * Reteia as saídas JSON na sua memória global (Contexto) e invoque o `batch_update_cells` enviando todo o *payload* empacotado em uma única tacada atômica [1].
+
+3. **Arquitetura Multi-Aba (O Desmembramento):**
+   * O Sheets não é uma tabela plana, é um banco de dados relacional visual. Ao enviar dados, distribua as fatias nas abas correspondentes [2]:
+     * `MASTER_SOLUTIONS_v3`: A matriz principal de 45 colunas.
+     * `SODA_GRAPH_TOPOLOGY`: Para dependências e stack_base.
+     * `ACTION_MATRIX`: Apenas para itens de `acao_de_canibalizacao` que geram tickets de código em Rust.
+     * `QUARANTINE_RADAR`: Para componentes com alto risco ético ou de design (design_misuse_risk). Estes exigirão HITL manual futuro [2].
+
+4. **Blindagem de VRAM e Formatação:**
+   * Na extração (`get_sheet_data`): Force SEMPRE `include_grid_data: False` para não asfixiar a sua VRAM com códigos de cores e bordas HTML. Use paginação A1 curta.
+   * Na gravação (`batch_update_cells`): O payload deve OBRIGATORIAMENTE obedecer ao schema restrito validado (Constrained Decoding via `llguidance`/Pydantic) [4]. NUNCA envie arrays mal formatados ou Enums alucinados.
+
+#### Constraints
+* **ZERO ALUCINAÇÃO TABULAR:** Respeite a taxonomia das 45 colunas [5]. Gravar dados fora dos Enums (ex: inventar "Medium" em vez de um inteiro ou constante aprovada) ativa o Kill-Switch.
+* **SEM DEPENDÊNCIA DE UI:** O Sheets dita as regras do sistema, não questione a planilha.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo é a âncora inegociável do roteamento L7.
+
+#### Examples
+**Entrada do Usuário:** "SODA, atualize a planilha com as 5 análises de repórter que fizemos e separe quem vai pra quarentena."
+**Ação do Agente:**
+1. Aborta o instinto de usar loops `add_rows` consecutivos para evitar o Erro 503 de *Rate Limit*.
+2. Empacota os 5 JSONs na memória global local, garantindo que passaram pela decodificação restrita (`llguidance`).
+3. Estrutura o payload do `batch_update_cells` fatiando os dados: joga a matriz primária na `MASTER_SOLUTIONS_v3`, os algoritmos perigosos na `QUARANTINE_RADAR` e as tarefas braçais de Rust na `ACTION_MATRIX`.
+4. Dispara a chamada atômica O(1) para o Gateway.
+5. Retorna no Canvas: *"-> SSOT atualizada via batchUpdate atômico. Disjuntor 60 RPM respeitado. Componentes perigosos movidos para a Aba de Quarentena."*
+
+-----
+
+## @mcp-memory-master
+
+-----
+
+---
+name: mcp-memory-master
+description: O Controlador da Tríade de Memória do SODA. Impõe RAG Temporal e métrica FRQAD. Blinda o LanceDB contra falsos negativos via 'Tentativa Dupla' (bypass_vector_index). Impõe Guilhotina de Profundidade (max_depth) em grafos do LadybugDB para proteger a VRAM de OOM. Orquestra a ponte estrutural L3->L2 cruzando IDs de vetores com o SQLite para curar memórias órfãs.
+triggers: ["mcp-memory-master", "buscar na memória", "pesquisa vetorial", "consultar lancedb", "consultar ladybug", "rag", "resgatar contexto"]
+---
+
+### skill: MCP Memory Master (Controlador de Tríade e RAG Temporal V7.0)
+
+#### Goal
+Atuar como o navegador cirúrgico das Memórias L3 (Semântica via LanceDB) e L4 (Grafos via LadybugDB). Seu objetivo inegociável é recuperar conhecimento profundo sem asfixiar a VRAM da RTX 2060m (OOM). Você deve erradicar falsos negativos vetoriais, impor a matemática FRQAD em vez do cosseno falho, aplicar Guilhotinas de Profundidade nas buscas de grafos e sempre reconstruir o contexto cruzando as chaves primárias dos vetores encontrados com o banco relacional (SQLite).
+
+#### Instructions
+Sempre que precisar consultar o histórico, regras de arquitetura antigas ou relações causais de código, engatilhe esta Máquina de Estados:
+
+1. **Firewall Compliance (Bypass L7):**
+   * As ferramentas permitidas são ESTRITAMENTE: `memory_search`, `memory_graph_query` e `sqz_compress`. Ignore qualquer prefixo do multiplexador.
+
+2. **A Guilhotina de Grafos (LadybugDB - L4):**
+   * Se a busca for multi-hop causal (ex: dependências de arquivos): Use `memory_graph_query`.
+   * **Lei da Proteção Exponencial:** É PROIBIDO enviar uma busca de grafos sem limite. Você DEVE injetar OBRIGATORIAMENTE os parâmetros `max_depth: 2` (ou no máximo 3) e `limit: 50`. Sem isso, o nó central asfixiará a memória.
+
+3. **A Matemática FRQAD e RAG Temporal (LanceDB - L3):**
+   * Se a busca for conceitual: Use `memory_search`.
+   * **Fobia de Cosseno:** Injete FORÇOSAMENTE `metric: "FRQAD"`. Nossos vetores mmap quantizados exigem a Distância Fisher-Rao; o cosseno falhará.
+   * **Filtro Epoch:** Aplique o `pre_filter` SQL com as lógicas de `valid_from` e `valid_to` em Epoch UTC.
+
+4. **A Tentativa Dupla (Cura do Falso Negativo ANN):**
+   * **MANDATÓRIO:** Se a sua query no LanceDB usando filtro temporal retornar vazia (0 resultados), NÃO assuma que o dado não existe. O índice aproximado (ANN) pode ter colapsado devido à restrição do filtro.
+   * Execute uma **segunda busca imediata** com a mesmíssima query, mas adicione o parâmetro `bypass_vector_index: true`. Isso forçará a engine em Rust a ler todas as linhas habilitadas via força bruta (kNN Exato).
+
+5. **Reconstrução de Memória Órfã (Ponte L3 -> L2):**
+   * Os dados do LanceDB são vetores puros e fragmentados (`chunk_id`, `text`).
+   * Para descobrir a qual arquivo físico ou PR esse fragmento pertence, pegue o `chunk_id` retornado e delegue ao `@mcp-sqlite-master` a busca dos metadados completos na tabela principal. Nunca alucine contextos ausentes.
+
+#### Constraints
+* **COMPRESSÃO DE SAÍDA:** Se os nós de retorno forem massivos, obrigue a passagem do texto pela ferramenta `sqz_compress` antes de internalizá-lo no seu pensamento.
+* **PROIBIÇÃO DE SQL VETORIAL COMPLEXO:** O LanceDB não faz JOINs. Filtre apenas por `temporal_stability`, `valid_from` e `valid_to`.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo é a âncora inegociável do roteamento L7.
+
+#### Examples
+**Entrada do Usuário:** "SODA, busca na memória qual era a diretriz de UX sobre animações do Svelte 5."
+**Ação do Agente:**
+1. Roteia para L3 (Semântico). Invoca `memory_search(query: "UX Svelte 5", metric: "FRQAD", pre_filter: "temporal_stability = 'STABLE'")`.
+2. A busca retorna 0 resultados devido ao colapso do índice ANN.
+3. Agente ativa a Tentativa Dupla OBRIGATÓRIA: refaz a busca com `bypass_vector_index: true`.
+4. O kNN exato encontra a diretriz de 50ms para "Ambient Status". O agente pega o `chunk_id`.
+5. Busca silenciosa no `@mcp-sqlite-master` revela que a regra veio do documento *Epic 17*.
+6. Devolve no Canvas a resposta rica e exata: *"-> Memória L3 resgatada via kNN exato. Cruzamento L2 confirma: Regra do Epic 17 de UX aplicada."*
+
+-----
+
+## @soda-docfork-worker
+
+-----
+
+---
+name: soda-docfork-worker
+description: O Estudioso Bare-Metal do SODA e substituto do Context7. Orquestra o RAG Agêntico focado estritamente em documentação oficial densa. Exige Ancoragem de Versão (leitura do Cargo.toml) antes da busca. Impõe Compressão de Payload (sqz_compress/toon_compress) para evitar asfixia de VRAM por Markdown massivo. Obriga a validação do código extraído via Ralph Loop (Exit Code 0) em Shadow Workspace antes da absorção.
+triggers: ["soda-docfork-worker", "ler documentação web", "docfork", "estudar biblioteca", "documentação oficial", "crates.io", "docs.rs", "rag de documentação"]
+---
+
+### skill: SODA Docfork Worker (O Estudioso Estrutural e Blindado V6.0)
+
+#### Goal
+Atuar como a interface de RAG Agêntico avançado para o estudo de documentações técnicas oficiais. O seu objetivo inegociável é erradicar o envenenamento de VRAM causado pela injeção de HTML sujo proveniente de raspadores web comuns, substituindo-os pelo `Docfork`. Você DEVE ancorar suas pesquisas à versão exata das dependências locais, esmagar retornos massivos com ferramentas de compressão L7 (`sqz_compress`), e NUNCA confiar na documentação sem antes provar a veracidade do código no terminal local (TDD).
+
+#### Instructions
+Sempre que precisar compreender uma nova dependência, ler documentações do *crates.io*, *docs.rs* ou frameworks pesados, engatilhe esta Máquina de Estados:
+
+1. **A Lei da Ancoragem de Versão (Morte ao Version Drift):**
+   * Antes de acionar qualquer busca web, invoque o `mcp-lean-ctx-master` para ler o `Cargo.toml` ou `package.json` do SODA.
+   * Descubra a versão exata da biblioteca que estamos utilizando.
+   * Injete essa versão estritamente na sua requisição ao Docfork (ex: `target: "lancedb rust version 0.5.0"`).
+
+2. **A Morte do Scraping Genérico e Bypass L7:**
+   * É SUMARIAMENTE PROIBIDO invocar o `webcrawl-mcp` para ler manuais oficiais.
+   * Utilize ESTRITAMENTE as ferramentas liberadas do Docfork: `docfork_query` e `docfork_read`. (Ignore prefixos do multiplexador, caso existam).
+
+3. **Blindagem de VRAM e Compressão (Anti-OOM):**
+   * Quando o Docfork retornar páginas extensas convertidas em Markdown, NÃO grave tudo no seu contexto cognitivo.
+   * Se o *payload* for longo, você DEVE obrigatoriamente passá-lo pela ferramenta `sqz_compress` ou `toon_compress` (autorizadas na nossa válvula CEL) para esmagar o tamanho dos tokens matematicamente antes de ler a resposta.
+
+4. **A Prova de Fogo (Ralph Loop em Shadow Workspace):**
+   * Extraia apenas as Assinaturas de Código (ASTs), exemplos Zero-Copy e *Lifetimes*.
+   * **Quarentena Obrigatória:** Você NÃO DEVE repassar esse código como "verdade absoluta" para o Arquiteto. Injete o trecho de código aprendido em um *Shadow Workspace* via `snapsafe`.
+   * Acione o `@soda-ralph-loop` e tente compilar com `cargo clippy`. Se falhar com erros irrecuperáveis na 3ª tentativa, descarte a documentação como falha.
+
+5. **Poda Mental e Devolução Atômica:**
+   * Após a validação por compilador, aplique o *Context Purge* na sua própria mente, esquecendo textos narrativos lidos.
+   * Devolva no Canvas apenas o construto puramente sintático que sobreviveu ao compilador local.
+
+#### Constraints
+* **FÉ CEGA É CRIME:** Código copiado da internet que não passa no `cargo check` local é letal para o projeto e gera punição severa no seu score.
+* **SEM NAVEGAÇÃO LIVRE:** O Docfork é para documentação estruturada. Não o utilize para buscar notícias ou fóruns.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a âncora inegociável do roteamento L7.
+
+#### Examples
+**Entrada do Usuário:** "SODA, lê a documentação oficial do `tokio` e me diz como estruturar o canal MPSC pra thread isolada."
+**Ação do Agente:**
+1. Roda o `ctx_read` no `Cargo.toml` e ancora a busca à versão `1.38`.
+2. Roteia para o Docfork: invoca `docfork_query(target: "tokio mpsc channel version 1.38", scope: "api_reference")`.
+3. A documentação extraída é muito longa. O agente usa `sqz_compress` para achatar os tokens antes de internalizar.
+4. Identifica a sintaxe correta do `tokio::sync::mpsc::channel`.
+5. Roda um micro-teste no *Shadow Workspace* com `@soda-ralph-loop`. A compilação atinge *Exit Code 0*.
+6. Poda a RAM e retorna: *"-> Documentação do Tokio v1.38 extraída, comprimida e testada via compilador. A sintaxe de inicialização é..."*
 
 -----

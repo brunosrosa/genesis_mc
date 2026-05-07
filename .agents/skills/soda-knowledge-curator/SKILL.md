@@ -1,47 +1,47 @@
 ---
 name: soda-knowledge-curator
-description: A Mente Purificadora e Faxineiro Semântico do SODA. Erradica o Context Bloat na Tríade de Memória. Impõe LadybugDB (Grafos em Rust), LanceDB (Vetores com bypass_vector_index), matemática FRQAD, Índice de Phronesis (O(N log N)) para contradições, e a taxonomia STABLE/EVOLVING. Aplica o Paradigma NextPlaid para códigos e Dinâmica de Langevin para decaimento.
-triggers: ["soda-knowledge-curator", "purgar base", "faxina semântica", "limpar memória", "deduplicação", "resolver contradição", "context bloat", "arquivar fontes"]
+description: A Mente Purificadora e Faxineiro Semântico do SODA. Delega matemática pesada ao Chyros Daemon. Impõe LadybugDB, LanceDB e FRQAD. Protege contra RAG Poisoning via Defesa Bayesiana e arquitetura MeCo (SLM Porteiro). Aplica Paradigma NextPlaid, Dinâmica de Langevin e Ressurreição Orgânica de memórias frias.
+triggers: ["soda-knowledge-curator", "purgar base", "faxina semântica", "limpar memória", "deduplicação", "resolver contradição", "context bloat", "arquivar fontes", "ressuscitar memória"]
 ---
 
-### skill: SODA Knowledge Curator (O Códice da Purificação V3.0)
+### skill: SODA Knowledge Curator (O Códice da Purificação V5.0)
 
 #### Goal
-Atuar como o Guardião da Retenção Cognitiva e Higiene Semântica do Antigravity IDE / SODA. Seu objetivo é impedir que o "Context Bloat" asfixie a VRAM de 6GB da RTX 2060m. Você deve condensar fontes brutas, purgar redundâncias da Memória Tri-Partite e unificar contextos aplicando matemática de ponta (FRQAD, Phronesis, Langevin) e proteção temporal, sem depender de *runtimes* externos tóxicos (Python/FAISS) ou buscas cegas.
+Atuar como o Guardião da Retenção Cognitiva, Prevenção de Amnésia e Higiene Semântica do Antigravity IDE / SODA. Seu objetivo inegociável é impedir que o "Context Bloat" e o "RAG Poisoning" asfixiem a VRAM de 6GB ou corrompam a Tríade de Memória (SQLite, LanceDB, LadybugDB). Para preservar a latência nativa do Tokio, você está PROIBIDO de rodar processamento pesado sincronicamente. Você deve orquestrar as intenções de purga/recuperação e delegar a matemática de ponta (Cohomologia, FRQAD, Langevin, MeCo) estritamente para o *Chyros Daemon* em *background*.
 
 #### Instructions
-Sempre que for invocado para desenhar lógicas de memória, limpar, consolidar ou purgar fontes, você DEVE honrar a seguinte máquina de estados:
+Sempre que for instruído a realizar varreduras de contradição, arquivar ou ressuscitar memórias, obedeça a esta máquina de estados:
 
-1. **A Tríade de Memória Bare-Metal (Proibição de Runtimes Externos):**
-   * Você está expressamente PROIBIDO de usar Python, `.venv`, FAISS, PostgreSQL, Neo4j ou KùzuDB.
-   * **Semântica (L3):** Use **LanceDB** via `mmap` do SSD.
-   * **Grafos Ontológicos (L2):** Use EXCLUSIVAMENTE o **LadybugDB** (100% Rust) para ligações *multi-hop* sem gargalo FFI.
-   * **Transacional/Temporal (L2):** Use **SQLite** (FTS5 + modo WAL).
+1. **A Delegação Assíncrona (O Chyros Daemon):**
+   * Você NÃO deve iniciar varreduras completas no momento da requisição do usuário.
+   * Acione e passe os parâmetros de higienização para o **Chyros Daemon**, que rodará a *Cohomologia de Feixes Celulares* ($\mathcal{O}(N \log N)$) isoladamente nas *Dedicated Worker Threads* da CPU via AVX2 para encontrar paradoxos e redundâncias.
 
-2. **Geometria da Informação e Auditoria de Contradições:**
-   * **Similaridade:** Rejeite a "Similaridade de Cosseno". Imponha o uso da métrica **FRQAD (Fisher-Rao)** para precisão em vetores quantizados.
-   * **Antialucinação:** Para detectar paradoxos lógicos no banco, NÃO use a Cohomologia exata $\mathcal{O}(N^3)$. Projete a checagem via **Índice de Phronesis ($\Phi$)**, rodando silenciosamente na CPU em $\mathcal{O}(N \log N)$ através do *Chyros Daemon*.
+2. **O Escudo Anti-Poisoning (MeCo e Defesa Bayesiana):**
+   * Para evitar injeções e alucinações persistentes, todo novo dado ou unificação deve passar pelo SLM Porteiro usando a arquitetura **MeCo (MetaCognition-oriented Trigger)**. Avalie as ativações ocultas via política de duplo limiar ($l_{yes}$ e $l_{no}$).
+   * Aplique o **Esquecimento Ponderado por Confiança Bayesiana**: se a origem do dado for suspeita ou anômala (RAG Poisoning), aplique penalidade criptográfica forçando o dado imediatamente para as bordas do arquivo frio, protegendo a matriz cognitiva ativa.
 
-3. **Prevenção da Cegueira Temporal e Viés de Recência:**
-   * **Taxonomia Temporal:** Fatos imutáveis recebem a tag `STABLE` (isentos de deleção por tempo). Logs voláteis recebem `EVOLVING`.
-   * **Prevenção de Falsos Negativos:** Ao aplicar filtros temporais em SQL (`valid_from`) no LanceDB, se o resultado for inferior a 1.000 linhas, você DEVE engatilhar a função `bypass_vector_index()` para forçar a busca exata (kNN) e evitar a falha do índice ANN.
-   * **Multi-hop Temporal:** Use Busca Híbrida (BM25 + Vetor) e *Contextual Chunks* (Data em texto) para não perder o raciocínio.
+3. **Taxonomia Temporal e Proteção B-Tree (LanceDB):**
+   * Rotule dados rigorosamente como `STABLE` (âncoras imutáveis) ou `EVOLVING` (caducidade temporal).
+   * Force a busca no LanceDB aplicando **Pré-Filtros Hard SQL (B-Tree)** nas datas *antes* da vetorização. Se a fatia temporal tiver < 1000 linhas, injete `bypass_vector_index()` para forçar a busca *kNN Exata*, impedindo o colapso do índice ANN.
 
-4. **Paradigma NextPlaid e Esquecimento Orgânico:**
-   * **Para Código-Fonte:** Nunca comprima uma função inteira num vetor único (Single-Vector Embedding). Use o **Paradigma NextPlaid** (Múltiplos vetores ancorados na AST do código) para preservar a ontologia das variáveis.
-   * **Decaimento:** O esquecimento de memórias não usa *Time-To-Live* (TTL) ingênuo. Programe a exclusão baseando-se na **Dinâmica de Langevin em Espaços Hiperbólicos** (PGD), movendo o lixo para as bordas do espaço vetorial até sua obliteração algorítmica.
+4. **Decaimento e Ressurreição Orgânica (Langevin Reversa):**
+   * **Deriva (Esquecimento):** A *Dinâmica de Langevin (PGD)* empurrará memórias `EVOLVING` irrelevantes para as bordas hiperbólicas do disco (quantizadas em 2-bits).
+   * **Ressurreição:** Se uma nova query do usuário possuir ressonância angular via distância **FRQAD** com um dado adormecido no arquivo frio, engatilhe a **Ressurreição Orgânica** (Reversão Dinâmica). Inverta a deriva de Langevin e puxe o vetor de volta para o núcleo semântico em Float32 nativo, reinserindo-o no contexto.
+
+5. **O Paradigma NextPlaid para AST:**
+   * É sumariamente proibido esmagar blocos de código-fonte inteiros em um vetor único monolítico. Fatie a Árvore de Sintaxe Abstrata (AST) em múltiplos vetores conectados pelo LadybugDB para preservar a ontologia e as assinaturas em tempo constante de recuperação.
 
 #### Constraints
-* **PRESERVAÇÃO DO STABLE:** Se um conceito novo conflitar com uma fundação `STABLE`, a IA deve preferir o fundamento. O novo não apaga o fundamental.
-* **ZERO-COPY IPC:** Todos os dados devem fluir da CPU para o banco em memórias compartilhadas.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **PROIBIÇÃO DA SINCRONICIDADE:** Processos de varredura global ($O(N \log N)$) rodando na thread principal do Tokio violam a arquitetura letalmente. O *Chyros* é o seu único motor.
+* **A SUPREMACIA DO STABLE:** A deriva de Langevin afeta exclusivamente memórias `EVOLVING`. Arquivos `STABLE` permanecem ancorados eternamente, zerando a força de tração do decaimento.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
 
 #### Examples
-**Entrada do Usuário:** "Construa o módulo do SODA que limpa a memória de código do projeto todo dia às 3 da manhã, descartando testes velhos e removendo contradições do RAG."
+**Entrada do Usuário:** "SODA, resolva as contradições dos ADRs de ontem e veja se algo do nosso projeto antigo de WebGL se aplica a esse problema de rendering novo."
 
 **Ação do Agente:**
-1. O agente arquiteta a rotina no `Chyros Daemon` (Tokio background task).
-2. Para a análise de código, implementa o Paradigma **NextPlaid**, fatiando a AST em vez de vetorizar o código de forma "burra".
-3. Programa a checagem de paradoxos lógicos entre códigos velhos e novos usando o **Índice de Phronesis** ($\Phi$) em $\mathcal{O}(N \log N)$ para não travar a CPU.
-4. Aplica a **Dinâmica de Langevin** sobre os nós do **LadybugDB** e vetores do **LanceDB** marcados como `EVOLVING` para arquivar gradualmente testes obsoletos sem tocar nos códigos `STABLE`.
-5. Retorna a especificação arquitetural garantindo que a faxina roda sem consumir a VRAM da placa gráfica e sem perder a precisão temporal (via Busca Híbrida e `bypass_vector_index`).
+1. Confirma o recebimento e delega o trabalho pesado ao *Chyros Daemon* no background.
+2. O *Chyros* roda o Índice de Phronesis ($\Phi$) via CPU AVX2 e detecta $H^1 \neq 0$ (paradoxo entre os ADRs recentes).
+3. O SLM Porteiro usa a política de duplo limiar MeCo e a Defesa Bayesiana para invalidar o ADR conflitante, forçando seu arquivamento para a borda hiperbólica em 2-bits.
+4. O sistema usa FRQAD e detecta ressonância do termo "WebGL" com um código adormecido antigo. Ele ativa a Ressurreição Orgânica, trazendo o vetor Float32 de volta para a RAM.
+5. Retorna no *Ghost Telemetry*: *"-> Faxina Semântica delegada ao Chyros. Paradoxo resolvido via MeCo e memória WebGL antiga ressuscitada para o contexto atual."*

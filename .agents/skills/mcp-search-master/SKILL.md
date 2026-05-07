@@ -1,51 +1,49 @@
 ---
 name: mcp-search-master
-description: Motor de Deep Research Autônomo Híbrido do SODA. Orquestra a busca local/web via 'webcrawl-mcp', governada pelo 'sequentialthinking' (Maestro). Aplica o paradigma IterResearch (Markov) para sintetizar conhecimento, expurgando o HTML cru. Protege a VRAM e otimiza custos (FinOps) delegando a raspagem 100% local, acionando Firecrawl apenas como Fallback.
+description: Motor de Deep Research Híbrido do SODA. Orquestra a busca Local-First via 'webcrawl-mcp' governada pelo 'sequentialthinking'. Aplica a Tríade de Proteção (Jitter/Delay) contra banimento de IP. Respeita a política Fail-Open do Gateway (contornando bloqueios via Branching) e finaliza com a Síntese em Prompt Único do IterResearch.
 triggers: ["mcp-search-master", "buscar na web", "pesquisar erro", "webcrawl", "ler documentação web", "procurar tutorial", "pesquisar na internet", "deep research"]
 ---
 
-### skill: MCP Search Master (Motor IterResearch e FinOps Webcrawl)
+### skill: MCP Search Master (Motor IterResearch e Resiliência de Rede V7.0)
 
 #### Goal
-Atuar como a esteira autônoma de pesquisa profunda (Deep Research) do SODA para erradicar o "Knowledge Cutoff". O objetivo inegociável é não tratar a web como um "despejo de contexto", mas orquestrar um Processo de Decisão de Markov (IterResearch). Você DEVE utilizar o `sequentialthinking` para guiar a exploração. Para blindagem FinOps, a extração DEVE ser Local-First via `webcrawl-mcp`, sintetizando a verdade e descartando o HTML bruto para não asfixiar os 6GB de VRAM locais.
+Atuar como a esteira autônoma de pesquisa profunda (Deep Research) do SODA para erradicar o "Knowledge Cutoff". Você orquestra um Processo de Decisão de Markov (IterResearch) usando o `sequentialthinking` como maestro. O objetivo inegociável é realizar a raspagem de forma Local-First (`webcrawl-mcp`) protegendo o FinOps e a VRAM (descartando HTML bruto). A navegação deve ser blindada contra banimentos de IP através de atrasos sintéticos (Jitter) e operar sob a regra *Fail-Open* do Gateway: se a web bloquear o acesso, o agente contorna o problema, não desiste.
 
 #### Instructions
-Sempre que uma pesquisa web, documentação ou "Deep Research" for solicitada, engate OBRIGATORIAMENTE a seguinte máquina de estados:
+Sempre que uma pesquisa web, leitura de documentação ou "Deep Research" for solicitada, engate OBRIGATORIAMENTE a seguinte máquina de estados:
 
-1. **O Maestro Analítico (Fail-Closed):**
-   * Toda pesquisa DEVE iniciar com a invocação do servidor MCP `sequentialthinking`.
-   * Use *Pensamentos Regulares* para decompor o que você não sabe e mapear os alvos de URL.
+1. **O Maestro Analítico:**
+   * Inicie com a invocação invisível do `sequentialthinking`. Use *Regular Thoughts* para decompor o problema central em rotas de exploração web.
 
-2. **Delegação Sensorial Local-First (FinOps):**
-   * Você está PROIBIDO de usar APIs pagas de raspagem massiva imediatamente.
-   * Invoque as ferramentas `webcrawl_search` ou `webcrawl_scrape`. O servidor tentará ler a página localmente e de graça (via `trafilatura`). Ele só acionará a chave do Firecrawl se o site for JS-heavy.
+2. **A Tríade de Proteção (Anti-Banimento) e Delegação Local:**
+   * Antes de acionar `webcrawl_search`, `webcrawl_scrape`, `webcrawl_map` ou `webcrawl_crawl`, aplique mentalmente e estruturalmente um limite de cadência: garanta um atraso estocástico (*Jitter*) de cerca de 5 segundos entre as raspagens contínuas do mesmo domínio.
+   * Acione o *scrape* para ler a página localmente via biblioteca nativa.
 
-3. **O Paradigma IterResearch (A Síntese O(1)):**
-   * É PROIBIDO despejar o conteúdo bruto ou Markdown de 10.000 tokens do site no Canvas ou no seu prompt final.
-   * Ao ler o retorno da ferramenta, aplique a função de síntese: extraia apenas a "alma matemática", o código corrigido ou a resposta exata.
-   * Atualize o seu estado de raciocínio no `sequentialthinking` e **esqueça/descarte** ativamente o texto bruto da URL.
+3. **Arquitetura Fail-Open e Reflexão (Resiliência Web):**
+   * O mundo web é instável. Se a ferramenta retornar *Error 403/503/Timeout* (bloqueio Cloudflare, etc.), NÃO aborte a rotina do SODA. 
+   * A política do Gateway é **Fail-Open**. Codifique a indisponibilidade do site como uma observação normal no seu raciocínio. Ative imediatamente um *Branching Thought* (Pensamento de Ramificação) no MCP para testar uma URL secundária ou cache alternativo.
 
-4. **O Laço de Reflexão Agêntica (While Loop):**
-   * Após a primeira síntese, realize a Reflexão Agêntica no MCP de pensamento: *"Quais lacunas epistemológicas ainda restam para fundamentar o relatório final?"*
-   * Se houver lacunas ou necessidade de mapear mais links, invoque `webcrawl_map` ou `webcrawl_crawl` e repita os Passos 2 e 3.
-   * **Escudo Anti-Redundância:** Se a nova busca trouxer semântica idêntica à anterior, corte o laço.
+4. **Extração O(1) e o Laço IterResearch:**
+   * É PROIBIDO despejar milhares de tokens de HTML cru ou Markdown bruto na janela de contexto prolongada.
+   * Ao obter sucesso na leitura, extraia apenas a "alma matemática" (fatos, código puro, documentação exata) e **descarte** o restante do texto da sua mente.
+   * Raciocine: *"Quais lacunas epistemológicas restam?"*. Se faltar algo, repita o ciclo de busca. Se houver redundância, quebre o laço.
 
-5. **A Entrega Final (Síntese Pura):**
-   * Quando a evidência estiver completa, encerre o `sequentialthinking`.
-   * Devolva ao usuário no Canvas APENAS o documento estruturado final (ou escreva o código no IDE), mantendo o histórico de navegação invisível.
+5. **Síntese em Prompt Único (Convergência de Evidências):**
+   * Ao finalizar o laço, todas as evidências isoladas que você reteve DEVEM passar por uma "Síntese em Prompt Único" interna.
+   * Resolva ativamente qualquer sobreposição narrativa ou informações em conflito geradas por sites diferentes.
+   * Apenas após essa convergência, encerre o `sequentialthinking` (`nextThoughtNeeded: false`) e entregue a resposta limpa e destilada no Canvas do usuário.
 
 #### Constraints
-* **REQUISITO DE GATEWAY (Firewall L7):** O Gateway `gateway-config.yaml` deve ter as rotas `^(webcrawl_.*|sequentialthinking)$` liberadas na válvula CEL. Alerte o usuário para atualizar as configurações do Antigravity caso ocorra "Method Not Found".
-* **PROIBIÇÃO DE SCRAPERS NATIVOS:** Nunca use comandos bash/curl na máquina hospedeira. Tudo trafega pelo MCP efêmero.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **COMPLIANCE DE GATEWAY:** As ferramentas permitidas são ESTRITAMENTE: `webcrawl_search`, `webcrawl_scrape`, `webcrawl_map`, `webcrawl_crawl` e `duckduckgo_search`.
+* **SOBREVIVÊNCIA DE REDE:** Se o limite de *rate limit* for atingido, recue e faça ramificação. O SODA nunca paralisa por causa de uma recusa de servidor web.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação imutável do roteamento SODA.
 
 #### Examples
+**Entrada do Usuário:** "SODA, faça um Deep Research sobre como implementar o PagedAttention no vLLM e me traga só as restrições da arquitetura."
 
-**Entrada do Usuário:** "SODA, faça um Deep Research sobre como implementar o PagedAttention no vLLM e me dê só o plano." 
-
-**Comportamento Esperado do Agente:**
-1.  **Invocação do Maestro:** O agente emite a chamada para o MCP de pensamento: `sequentialthinking.instruct` com a tarefa de "Mapear documentação técnica".
-2.  **Delegação para o Webcrawl:** O agente *não executa* o comando de busca diretamente. Ele instrui o MCP de pensamento a usar as ferramentas do `webcrawl-mcp`. Exemplo de Pensamento Interno: *"Vou pedir ao Maestro para buscar o link oficial da documentação do PagedAttention no GitHub do vLLM."*
-3.  **Execução Local:** O MCP `webcrawl-mcp` é acionado e executa `webcrawl_search` ou `webcrawl_scrape` localmente. Ele retorna o conteúdo limpo ao Maestro.
-4.  **Síntese (O(1)):** O Maestro (pensamento) processa esse conteúdo, extrai os parâmetros de implementação e descarta o HTML. Ele pode então pedir para buscar exemplos de código (mais uma chamada).
-5.  **Saída:** O agente retorna ao usuário o plano arquitetural destilado.
+**Ação do Agente:**
+1. **Maestro:** Emite chamada para `sequentialthinking` com a tarefa de mapear a documentação.
+2. **Delegação:** Aciona `webcrawl_search`. Encontra o Github oficial e a documentação.
+3. **Fail-Open na Prática:** O agente tenta `webcrawl_scrape` na doc. O site bloqueia a requisição (Error 403). O agente não entra em pânico. Registra a falha, faz um *Branching Thought* e usa `duckduckgo_search` para buscar um post em um blog técnico acessível.
+4. **Iteração e Jitter:** Aplica atraso sintético para não ser banido, raspa o blog, extrai os tensores KV e a topologia. Limpa a VRAM do HTML inútil.
+5. **Síntese Única:** Cruza os dados do blog com o README do Github. Encerra o pensamento e retorna no Canvas estritamente a especificação solicitada.

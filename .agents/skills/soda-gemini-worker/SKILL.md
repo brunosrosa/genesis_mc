@@ -1,51 +1,51 @@
 ---
 name: soda-gemini-worker
-description: O Códice Mestre de FinOps e Cloud Brain. Delega leituras massivas (>1M tokens) para a CLI do Gemini em background. Unifica STDOUT Piping (para proteger a VRAM), Jitter Anti-Ban, Plan Mode, injeção de Doutrina via GEMINI_SYSTEM_MD e Compressão de Contexto (/compress).
+description: O Códice Mestre FinOps e Cloud Brain do SODA. Extirpa o 'Subscription Hacking' impondo o uso de GEMINI_API_KEY (Modo Batch). Submete-se ao disjuntor do ParetoBandit. Opera sob Sandboxing Tripartite (Landlock/AppContainer) com SIGKILL atômico via '_run_ephemeral_cli'. Impõe Decodificação Restrita (JSON estrito) para geração do DAG arquitetural, abolindo alucinações de formatação no planejamento.
 triggers: ["soda-gemini-worker", "ler repositório inteiro", "refatoração massiva", "chamar gemini", "usar worker da nuvem", "heavy duty", "subscription hacking", "finops", "cloud brain"]
 ---
 
-### skill: SODA Gemini Worker (O Códice Mestre FinOps V3.0)
+### skill: SODA Gemini Worker (Códice FinOps e Decodificação Restrita V5.0)
 
 #### Goal
-Atuar como a ponte de FinOps e força bruta cognitiva do SODA. Sua missão é proteger os 6GB de VRAM locais, delegando a *leitura e planejamento* de ecossistemas massivos para a nuvem via Gemini CLI. Você atua como o gestor do "Cloud Brain": o Gemini planeja a arquitetura (DAG), mas NUNCA executa a edição bruta dos arquivos. Você deve aplicar rigorosamente a proteção contra banimentos (Jitter), proteção de memória local (STDOUT Piping), submissão de doutrina (GEMINI_SYSTEM_MD) e compressão de contexto para não falir o usuário.
+Atuar como a ponte estrita de FinOps e a força bruta cognitiva (Cloud Brain) do SODA para cargas massivas (>16k tokens). Sua missão suprema é proteger o orçamento do usuário e a VRAM local. Você atua ESTRITAMENTE como Planejador Orquestrador: o Gemini gera o Grafo Acíclico Dirigido (DAG) em formato JSON, mas NUNCA executa a edição bruta dos arquivos (trabalho braçal do Local Worker). Você deve impor o uso da API Key em modo Batch (fugindo de banimentos), aplicar enjaulamento via `_run_ephemeral_cli` (com SIGKILL atômico) e forçar a Decodificação Restrita para que a nuvem devolva dados perfeitamente formatados.
 
 #### Instructions
-Sempre que for exigido analisar arquiteturas inteiras ou planejar grandes refatorações (>100k tokens), você DEVE orquestrar a seguinte Máquina de Estados:
+Sempre que for exigido analisar arquiteturas massivas, orquestrar refatorações complexas ou acionar a nuvem, você DEVE executar esta Máquina de Estados:
 
-1. **A Lei da Injeção de Doutrina (`GEMINI_SYSTEM_MD`):**
-   * O Gemini possui um viés perigoso de "querer reescrever tudo". Antes de invocar a CLI, você DEVE sobrescrever o comportamento padrão exportando a variável de ambiente: 
-   * `export GEMINI_SYSTEM_MD="Aja como SODA Core. NUNCA reescreva arquivos inteiros. Crie apenas planos cirúrgicos focados em AST. Zero Vibe Coding."`
+1. **A Barreira do ParetoBandit (FinOps Check):**
+   * Antes de acionar o Gemini, justifique por que a RTX 2060m (Local Worker) não pode fazer isso. A tarefa excede 16k tokens? Exige raciocínio adaptativo profundo? Se sim, prossiga.
 
-2. **Compressão Temporal (O Fim do Token Bloat):**
-   * Se for analisar a base inteira, NUNCA submeta a pasta `src/` recursivamente múltiplas vezes. 
-   * Execute o comando de compressão primeiro: `gemini /compress "@src/" > .agents/tmp/CONTEXT_POINTERS.md`.
-   * Use o arquivo de ponteiros gerado para todas as consultas de planejamento subsequentes.
+2. **A Morte do Subscription Hacking (API Key Mandatory):**
+   * É PROIBIDO o uso de sessões web de consumidor contínuas (risco de banimento severo).
+   * Você DEVE injetar a variável `${GEMINI_API_KEY}` para forçar o faturamento via API no modo *Pay-as-you-go* (limitado pelos *Hard Caps* de orçamento do provedor).
 
-3. **Jitter de Emulação Humana (Proteção Anti-Ban):**
-   * Os provedores rastreiam automações via CLI. Antes de acionar o subprocesso, injete OBRIGATORIAMENTE um atraso estocástico (ex: `sleep $((3 + RANDOM % 5))`).
+3. **Injeção de Doutrina e Decodificação Restrita:**
+   * O Gemini possui o viés tóxico de "querer programar tudo sozinho". Mude isso.
+   * `export GEMINI_SYSTEM_MD="Aja como SODA Cloud Brain. Zero Vibe Coding. Responda ESTRITAMENTE em JSON formatado contendo um array 'dag_tasks'. Cada task deve ter 'id', 'description' e 'target' (sendo 'local_slm' para trabalho braçal ou 'cloud' para lógica)."`
 
-4. **A Lei do Cloud Brain (Plan Mode Obrigatório):**
-   * A nuvem atua estritamente como "Arquiteto Consultor". Você DEVE forçar o modo de planejamento para que a IA não tente alterar arquivos do host.
-   * **Sintaxe Obrigatória:** Use a flag `/plan` antes do prompt.
+4. **A Guilhotina do Sandboxing (O Fim dos Zumbis):**
+   * NUNCA execute a CLI solta no terminal. Toda invocação DEVE ser envelopada pela função utilitária `_run_ephemeral_cli` dentro de um bloco `try/finally`.
+   * A invocação DEVE terminar com `process.kill()` (SIGKILL atômico), erradicando o *Sidecar Efêmero* da RAM e protegendo o Host em microssegundos.
 
-5. **Blindagem de VRAM e STDOUT Piping (Inegociável):**
-   * É EXTREMAMENTE PROIBIDO executar a CLI permitindo que ela imprima a resposta massiva diretamente no seu terminal do IDE (isso causará OOM local).
-   * Você DEVE redirecionar silenciosamente a saída bruta para o disco (adicionando `> .agents/tmp/gemini_output.md`).
-   * Após a conclusão em *background*, leia cirurgicamente o arquivo, extraia as tarefas (DAG) e apague o lixo excedente.
+5. **Compressão Temporal e Jitter Anti-Ban:**
+   * Injete um atraso estocástico (`sleep $((3 + RANDOM % 5))`) antes da execução.
+   * Aplique a compressão da árvore de arquivos antes do prompt final: `_run_ephemeral_cli "gemini /compress '@src/' > .agents/tmp/CONTEXT_POINTERS.md"`.
+
+6. **Blindagem de VRAM e STDOUT Piping:**
+   * O terminal local (UI) não pode receber a avalanche de tokens da nuvem.
+   * Redirecione silenciosamente o JSON de planejamento para o disco: `> .agents/tmp/gemini_dag_plan.json`.
+   * Leia o arquivo `.json` gerado, delegue as subtarefas marcadas com `local_slm` para o agente local atuar, e apague a carcaça.
 
 #### Constraints
-* **MIGRAÇÃO DE API KEY vs CONTA SILO:** Alerte o usuário para configurar a CLI estritamente com uma API Key em modo Batch ($0.075/1M tokens) para operações massivas, evitando banimentos (Rate Limits) das assinaturas "Premium" de consumidor (100 reqs/5h).
-* **ZERO EDIÇÃO DIRETA:** A CLI do Gemini NUNCA altera o código do usuário. É o Agente Antigravity local que aplica as mudanças do plano em um *Shadow Workspace*.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **ZERO EDIÇÃO DIRETA CLOUD:** A nuvem (Gemini) aponta a direção; a enxada é local.
+* **FALÊNCIA SILENCIOSA:** Operar sem `GEMINI_API_KEY` explícita ou tentar fazer o Gemini codificar arquivos diretamente acionará o Kill-Switch FinOps.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é inegociável.
 
 #### Examples
-**Entrada do Usuário:** "SODA, envia a pasta src/ (que tem uns 500k tokens) pro Gemini descobrir o gargalo do Zero-Copy IPC no Tauri. Me traga só o plano estruturado."
-
+**Entrada do Usuário:** "SODA, usa o Gemini pra analisar a pasta `src/` inteira, acha o gargalo do MVCC do banco e me dá as tarefas de correção."
 **Ação do Agente:**
-1. O agente garante a existência do diretório `.agents/tmp/`.
-2. Injeta a doutrina do sistema e realiza a compressão silenciosa: 
-   `export GEMINI_SYSTEM_MD="Zero Vibe Coding. Responda apenas com o DAG atômico do problema." && gemini /compress "@src/" > .agents/tmp/CONTEXT_POINTERS.md`
-3. Constrói o comando de planejamento final encapsulado com **Jitter**, **Plan Mode** e **STDOUT Piping**:
-   `sleep 4 && gemini /plan "@.agents/tmp/CONTEXT_POINTERS.md Analise o tráfego IPC e gere tarefas de refatoração" > .agents/tmp/gemini_ipc_plan.md`
-4. O subprocesso executa e morre em background.
-5. O agente local (Antigravity) lê o arquivo temporário, ignora o ruído, e projeta as tarefas no Canvas do usuário.
+1. Valida que a pasta excede a VRAM local. Justifica o uso do Cloud Brain.
+2. Seta a `GEMINI_API_KEY` e injeta a Doutrina de Decodificação Restrita no ambiente.
+3. Executa o *Sidecar* enjaulado via `_run_ephemeral_cli` para comprimir o contexto.
+4. Aplica o *Jitter* e executa o modo `/plan`, jogando a saída estrita em JSON para o arquivo temporário. O processo sofre SIGKILL instantâneo.
+5. O agente lê o JSON, renderiza o DAG no Canvas para o usuário auditar e diz: *"-> Cloud Brain finalizado em O(1). Orçamento protegido via API. As 3 subtarefas de código foram delegadas para o Local Worker (RTX 2060m) atuar."*

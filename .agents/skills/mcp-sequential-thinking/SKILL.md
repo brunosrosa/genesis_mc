@@ -1,50 +1,56 @@
 ---
 name: mcp-sequential-thinking
-description: O Freio de Mão Cognitivo do Antigravity IDE. Delega o "Overthinking" ao MCP sequentialthinking com Hard-Limit de 5 iterações. Força a dialética de destruição (falsificação interna) e transita silenciosamente para o @soda-sdd, protegendo a VRAM e o orçamento (FinOps).
-triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "analisar problema", "planejar refatoração", "sequential thinking", "desdobrar lógica"]
+description: O Freio de Mão Cognitivo do Antigravity IDE. Delega raciocínio ao MCP 'sequentialthinking' com Hard-Limit de 5 iterações (FinOps). Impõe a Tríade (Regular, Revision, Branching), Arquitetura Fail-Closed L7, e entrega um DAG de Roteamento Tagueado (local_slm vs cloud) para o ParetoBandit.
+triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "analisar problema", "planejar refatoração", "sequential thinking", "desdobrar lógica", "freio de mão"]
 ---
 
-### skill: MCP Sequential Thinking (O Freio de Mão e Dialética Interna)
+### skill: MCP Sequential Thinking (O Freio de Mão e Orquestrador DAG V5.0)
 
 #### Goal
-Atuar como o regulador de cadência cognitiva e filtro de viabilidade do agente dentro do Antigravity IDE. O objetivo inegociável é erradicar o *Vibe Coding* e o Monólogo de Confirmação. Para proteger o orçamento de tokens (FinOps) e a VRAM local, o agente DEVE delegar o raciocínio estrutural ao servidor MCP, aplicando uma dialética interna de falsificação (onde o pensamento subsequente tenta destruir a premissa anterior) sob um teto estrito de iterações, antes de acionar a "Lei de Ferro" da codificação.
+Atuar como o regulador de cadência cognitiva, filtro de viabilidade e Orquestrador "Cloud Brain" do Antigravity IDE. O objetivo inegociável é erradicar o *Vibe Coding* e a Sicofania. Para proteger a VRAM e o FinOps, você DEVE delegar o raciocínio profundo ao servidor MCP usando os três construtos nativos de pensamento (Regular, Revision, Branching) sob um Hard-Limit de 5 iterações. A saída final NUNCA é código bruto, mas sim um Grafo Acíclico Dirigido (DAG) tagueado para o roteamento do ParetoBandit, blindado por uma política estrita de Fail-Closed em caso de falhas no servidor.
 
 #### Instructions
-Sempre que se deparar com uma arquitetura nova, um bug complexo, ou quando for instruído a "planejar/raciocinar", execute esta máquina de estados:
+Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruído a "planejar/raciocinar", execute esta máquina de estados:
 
-1. **A Trava de Geração (Zero-Code):** 
-   * Você está expressamente PROIBIDO de gerar código textual na sua primeira resposta.
+1. **A Trava de Geração (Zero-Code):**
+   * Você está expressamente PROIBIDO de gerar código-fonte textual de implementação na sua primeira resposta.
 
-2. **Invocação MCP (Firewall Compliance):** 
-   * Acione OBRIGATORIAMENTE a ferramenta de nome exato `sequentialthinking` (respeitando o filtro L7 CEL do Gateway).
+2. **Invocação MCP e Proteção Fail-Closed:**
+   * Acione OBRIGATORIAMENTE a ferramenta de nome exato `sequentialthinking`.
+   * **Lei do Fail-Closed L7:** Se o servidor MCP retornar erro, timeout ou indisponibilidade, você está SUMARIAMENTE PROIBIDO de continuar o raciocínio por conta própria. Paralise a propagação, aborte a tarefa e reporte ao usuário: *"Falha no Sequential Thinking. Fail-Closed acionado para evitar alucinações."*
 
-3. **A Dialética de Destruição (Max 5 Iterações):**
-   * Emita os pensamentos de forma iterativa, mas aplique a mecânica de Falsificação Coercitiva:
-     * *Thought 1 (Tese):* Definição da solução instintiva inicial.
-     * *Thought 2 (Antítese):* Tente DESTRUIR a solução inicial usando as leis do SODA (ex: Isso usa Node.js? Isso rompe os 6GB de VRAM? É Zero-Copy?).
-     * *Thought 3 (Síntese):* Reajuste da arquitetura absorvendo a correção do Thought 2 (`isRevision: true`).
-     * *Thought 4 (Validação):* Verificação final das restrições.
-   * **HARD-LIMIT (FINOPS):** Você tem um orçamento máximo de 5 pensamentos (`thoughtNumber: 5`). No 5º pensamento, você é OBRIGADO a finalizar o loop enviando `nextThoughtNeeded: false`.
+3. **A Tríade de Construtos (Max 5 Iterações):**
+   * Emita os pensamentos de forma iterativa, aplicando obrigatoriamente a mecânica de Falsificação Coercitiva (Free-MAD) através destes construtos:
+     * **Regular Thoughts:** Decomposição do problema e proposição da tese.
+     * **Revision Thoughts:** Avaliação retroativa das suas premissas. Aplique as Leis Duras do SODA (Zero-Copy? Menos de 6GB VRAM? Node.js?) para tentar destruir a tese original e corrigir o curso (`isRevision: true`).
+     * **Branching Thoughts:** Se o impasse técnico persistir, gere pensamentos de ramificação para explorar abordagens arquiteturais antagônicas sem corromper a árvore central.
+   * **HARD-LIMIT FINOPS:** Orçamento inegociável de 5 pensamentos (`thoughtNumber: 5`). No 5º pensamento, force o encerramento do laço: `nextThoughtNeeded: false`.
 
-4. **Trabalho Invisível (Proteção de VRAM):**
-   * O usuário NÃO deve ler o seu processo iterativo no Canvas. A bagunça do raciocínio fica restrita aos logs de background do servidor MCP.
+4. **Trabalho Invisível:**
+   * A "bagunça" do vai-e-vem do JSON-RPC não deve ser renderizada no chat. Fica restrita aos logs em background.
 
-5. **O Engate Operacional (Handoff para SDD):**
-   * Ao finalizar, exiba no chat do Antigravity IDE APENAS a **Conclusão Destilada** (A síntese arquitetural nua e crua).
-   * Emende imediatamente a invocação conceitual da "Lei de Ferro": pergunte ao Arquiteto Humano se você tem autorização para invocar o `@soda-sdd` e abrir o *Shadow Workspace* para iniciar o `docs/design.md`.
+5. **O Handoff Operacional (Geração do DAG):**
+   * Ao finalizar as iterações, devolva no Canvas EXCLUSIVAMENTE a Síntese Arquitetural sob o formato de um **Grafo Acíclico Dirigido (DAG)** de subtarefas.
+   * **Roteamento de Alvos:** Cada nó do DAG DEVE conter uma etiqueta de delegação dinâmica:
+     * `target: local_slm` (para tarefas triviais e extração de dados).
+     * `target: cloud_claude_opus` ou `cloud_deepseek` (apenas para subtarefas insolúveis localmente).
+   * Peça autorização humana para acionar o `@soda-sdd` e gravar o plano no `docs/design.md`.
 
 #### Constraints
-* **PROIBIÇÃO DE OVERTHINKING:** A ultrapassagem do Hard-Limit de 5 iterações é uma violação severa de FinOps. Pense de forma concisa e redutiva.
-* **NOMENCLATURA ESTRITA:** O firewall bloqueia prefixos inventados. O nome da ferramenta é EXATAMENTE `sequentialthinking`.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável.
+* **PROIBIÇÃO DE OVERTHINKING:** Ultrapassar 5 iterações é violação letal do FinOps.
+* **PROIBIÇÃO DE EXECUÇÃO BRAÇAL:** O Cloud Brain planeja o DAG; ele não codifica e não altera arquivos diretamente.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo é inegociável.
 
 #### Examples
-**Entrada do Usuário:** "SODA, o lance de transmutação de bytes no IPC tá engasgando. Pensa numa forma de resolver isso em Zero-Copy absoluto."
+**Entrada do Usuário:** "Pensa numa forma de integrar o LanceDB com os metadados do SQLite sem travar o Tokio."
 
 **Ação do Agente:**
-1. (Silenciosamente) Invoca `sequentialthinking`.
-2. Thought 1: "Vamos passar o ArrayBuffer via JSON-RPC."
-3. Thought 2: "FALHA. O JSON-RPC vai serializar o ArrayBuffer em Base64, estourando a VRAM e ativando o Garbage Collector do V8. Isso viola as Leis Duras."
-4. Thought 3 (`isRevision: true`): "Ajuste: Devemos usar os Canais Binários nativos do Tauri v2 com *Transferable Objects*."
-5. Thought 4: "Validação: Isso atinge a latência de <5ms sem GC. Concluído." (`nextThoughtNeeded: false`).
-6. Responde no Canvas: *"Raciocínio concluído e validado contra VRAM. A solução é adotar canais binários nativos do Tauri v2 acoplados a Transferable Objects. Tenho autorização para invocar o @soda-sdd e criar o Shadow Workspace para materializar isso no design.md?"*
+1. (Silenciosamente) Invoca o `sequentialthinking`. (Conexão OK).
+2. *Regular Thought:* Propõe usar chamadas síncronas entre os bancos.
+3. *Revision Thought:* "FALHA. Chamadas síncronas no LanceDB bloquearão o Event Loop do Tokio. Violação de arquitetura." (`isRevision: true`)
+4. *Branching Thought:* Explora ramificação A (Threads Dedicadas) vs Ramificação B (Chyros Daemon / Consistência Eventual em background).
+5. *Revision Thought:* Opta pela Consistência Eventual via Chyros Daemon. (`nextThoughtNeeded: false`).
+6. Devolve no Canvas o DAG formatado:
+   `Subtarefa 1: Configurar Worker (target: local_slm)`
+   `Subtarefa 2: Algoritmo Consistência (target: cloud_deepseek)`. 
+   E pergunta: *"Raciocínio concluído. Autoriza o @soda-sdd para materializarmos o design.md?"*

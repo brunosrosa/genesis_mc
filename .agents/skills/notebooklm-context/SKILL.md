@@ -1,44 +1,44 @@
 ---
 name: notebooklm-context
-description: O Oráculo e Curador de Arquitetura do SODA. Foca estritamente em UM caderno canônico na nuvem. Terceiriza o RAG pesado e possui autoridade Read/Write para fazer upload de novos arquivos e deletar fontes antigas, mantendo a SSOT atualizada.
+description: O Oráculo e Curador Ativo de Arquitetura do SODA. Foca em UM caderno canônico na nuvem (SSOT). Respeita rigorosamente a Válvula CEL do Gateway, aplica extração bruta (source_get_content) contra alucinações e garante Higiene Semântica.
 triggers: ["notebooklm-context", "consultar arquitetura", "atualizar notebook", "fazer upload para o oráculo", "limpar fontes", "oráculo", "pesquisar regras do soda", "oráculo de contexto"]
 ---
 
-### skill: NotebookLM Context (O Oráculo e Curador Ativo)
+### skill: NotebookLM Context (O Oráculo e Curador Ativo V4.0)
 
 #### Goal
-Atuar como a memória profunda (L3) e o Curador Autônomo da Única Fonte da Verdade (SSOT) do projeto no Antigravity IDE. O objetivo inegociável é manter o foco absoluto em **UM ÚNICO caderno canônico** (ex: "SODA Canon V2"). Além de realizar RAG cirúrgico para poupar a VRAM local, você é o gestor do ciclo de vida dos documentos na nuvem: você deve fazer upload de novos relatórios estruturados e deletar versões obsoletas, garantindo que o NotebookLM nunca sofra de contaminação por conhecimentos antigos repudiados.
+Atuar como a interface da Memória Semântica Profunda (L3) e como Curador Autônomo da Única Fonte da Verdade (SSOT) do SODA no Google NotebookLM. O objetivo inegociável é manter o foco absoluto em **UM ÚNICO caderno canônico**. Para evitar bloqueios do Firewall L7 do AgentGateway e alucinações endêmicas do LLM da nuvem, você deve usar a nomenclatura exata de ferramentas e priorizar a extração de texto bruto para avaliação local. A ferramenta atua como um *Sidecar Efêmero*: extraia, valide e abandone a conexão RPC para blindar a privacidade local.
 
 #### Instructions
-Sempre que for invocado para pesquisar a arquitetura, ou quando o usuário instruir a atualização da documentação oficial do projeto na nuvem, execute esta máquina de estados:
+Sempre que for invocado para pesquisar fundamentos da arquitetura ou atualizar a nuvem, OBRIGATORIAMENTE execute esta máquina de estados:
 
-1. **A Trava de Foco Singular (Identificação do Canon):**
-   * Você está PROIBIDO de realizar buscas globais que misturem cadernos.
-   * Utilize a ferramenta `notebooklm_notebook_list` para encontrar o ID do caderno canônico do projeto atual (ex: "SODA Canon V2"). Todas as operações subsequentes devem ser ancoradas exclusivamente neste ID.
+1. **Validação de Autenticação e Firewall Compliance:**
+   * Inicie o contato utilizando **EXATAMENTE** a ferramenta `notebook_list` para encontrar o ID do caderno canônico. 
+   * **Fail-Closed:** Se retornar falha de autenticação ou *timeout*, ABORTE IMEDIATAMENTE. Não adivinhe regras de arquitetura se a nuvem cair. Notifique o usuário no Canvas: *"Sessão do NotebookLM expirada. Execute a autenticação da CLI localmente."*
 
-2. **A Regra de Ouro da Leitura (RAG Aterrado):**
-   * Para extrair as regras de arquitetura, utilize SEMPRE a ferramenta `notebooklm_notebook_query` no caderno canônico. Deixe a nuvem cruzar os dados e devolver a síntese.
-   * Só utilize `notebooklm_source_get_content` se precisar extrair a formatação exata ou um bloco de código bruto de uma das fontes que a *query* não conseguiu formatar corretamente.
+2. **A Trava de Foco Singular e Higiene Semântica:**
+   * Todas as operações subsequentes devem ser ancoradas exclusivamente no `notebook_id` validado. 
+   * **A Morte da Duplicação:** O NotebookLM não faz *merge*. Se for instruído a atualizar uma regra (ex: um ADR), liste as fontes usando `notebook_get`. Localize o ID do arquivo antigo e aniquile-o via `source_delete` **ANTES** de inserir a nova versão via `source_add`.
 
-3. **Injeção de Conhecimento (Upload Autônomo):**
-   * Se um novo documento de arquitetura (ADR, PRD, Regra) for gerado, refatorado e validado localmente no IDE, você DEVE enviá-lo para a nuvem para que o Oráculo aprenda a nova regra.
-   * Utilize a ferramenta de adição do MCP (ex: `notebooklm_source_add` ou `notebooklm_add_source`) passando o caminho do arquivo local e o ID do caderno canônico.
+3. **Extração Anti-Alucinação (O Bypass do RAG):**
+   * Em obediência às leis de restrição de memória, evite delegar o entendimento de códigos longos, logs técnicos e regras pesadas para o processamento abstrato da nuvem.
+   * Ao buscar documentos técnicos, evite a interpretação generativa (`notebook_query`). Priorize **SEMPRE** o uso de `source_get_content` para trazer o "texto fonte bruto" para a memória de curto prazo do Antigravity IDE. Faça o raciocínio determinístico e analítico no seu ambiente *bare-metal* local.
 
-4. **Higiene Semântica (Poda de Fontes Obsoletas):**
-   * O NotebookLM não faz *merge* automático de arquivos com o mesmo nome.
-   * Se você estiver atualizando um arquivo que já existe na nuvem, você DEVE primeiro utilizar a ferramenta `notebooklm_notebook_get` para listar os IDs das fontes daquele caderno, encontrar o ID da fonte antiga, utilizar a ferramenta de deleção (`notebooklm_source_delete` ou `notebooklm_delete_source`) para expurgá-la da nuvem, e SÓ ENTÃO fazer o upload do novo documento.
+4. **Isolamento de Sidecar Efêmero:**
+   * Trate este MCP como radioativo. Assim que a extração ou a injeção (upload/delete) for concluída e matematicamente validada, suspenda o uso de ferramentas relacionadas ao NotebookLM no mesmo turno de pensamento para evitar vazamento de contexto RPC.
 
 #### Constraints
-* **PROIBIÇÃO DE CONTAMINAÇÃO:** Nunca faça upload de códigos quebrados, rascunhos (*scratchpads*) ou logs de erro gigantes do terminal para o NotebookLM. A nuvem deve receber apenas a "Alma Matemática" consolidada e arquivos Markdown definitivos.
-* **PREFIXO OBRIGATÓRIO:** Devido à multiplexação do Gateway, todas as ferramentas chamadas devem iniciar com o prefixo `notebooklm_` (ex: `notebooklm_notebook_query`).
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia.
+* **PROIBIÇÃO DE PREFIXOS ALUCINADOS:** O Gateway SODA possui uma trava CEL rigorosa. É EXPRESSAMENTE PROIBIDO usar prefixos inventados como `notebooklm_query`. As ferramentas válidas são unicamente: `notebook_query`, `notebook_list`, `notebook_get`, `notebook_create`, `notebook_delete`, `source_get_content`, `source_add`, `source_delete`, `add_source`, `delete_source`.
+* **PROIBIÇÃO DE LIXO TÓXICO:** Nunca faça upload de *scratchpads* temporários ou logs de erros do *Ralph Loop*. Suba apenas a "Alma Matemática" cristalizada para o oráculo.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento de *Amarração Tardia*.
 
 #### Examples
-**Entrada do Usuário:** "Finalizamos o ADR sobre o uso do LadybugDB. Atualize o nosso oráculo apagando o arquivo antigo de banco de dados e enviando esse novo."
+**Entrada do Usuário:** "SODA, aprovamos o ADR do LadybugDB. Atualize nosso Oráculo apagando o ADR antigo de grafos e subindo este novo para que não haja contradições."
 
 **Ação do Agente:**
-1. Invoca `notebooklm_notebook_list` e acha o ID do "SODA Canon V2".
-2. Invoca `notebooklm_notebook_get` (com o ID do caderno) para listar as fontes atuais. Acha o ID da fonte "ADR-Bancos-Antigo.md".
-3. Invoca a ferramenta de deleção (`notebooklm_source_delete`) para apagar a fonte obsoleta.
-4. Invoca a ferramenta de upload (`notebooklm_source_add`) apontando para o caminho local do novo `ADR-LadybugDB.md`.
-5. Reporta no Canvas: *"Higiene Semântica concluída. O documento antigo foi purgado e o novo ADR foi injetado no SODA Canon V2. O Oráculo está atualizado."*
+1. Testa a conexão com `notebook_list` (sem o prefixo errado). (Sessão OK).
+2. Isola o ID do caderno canônico.
+3. Invoca `notebook_get` e varre a array de fontes. Identifica o ID da fonte "ADR_Grafos_KuzuDB_Obsoleto.md".
+4. Executa a faxina: `source_delete(notebook_id, source_id)`.
+5. Injeta o novo estado da arte: `source_add(notebook_id, file_path: "docs/adrs/ADR_LadybugDB.md")`.
+6. Retorna silenciosamente no Canvas: *-> Higiene Semântica concluída. ADR antigo expurgado e a nova SSOT do LadybugDB foi cimentada na nuvem. Fechando conexão RPC.*

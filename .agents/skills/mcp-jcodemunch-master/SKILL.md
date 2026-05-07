@@ -1,45 +1,43 @@
 ---
 name: mcp-jcodemunch-master
-description: O manual de instrução inegociável para leitura cirúrgica de código no Antigravity IDE. Proíbe a leitura de arquivos por força bruta. Força a extração da Árvore de Sintaxe Abstrata (AST) em O(1) usando jcodemunch restrito.
+description: O manual inegociável para leitura cirúrgica de código (AST) no SODA. Resolve o bloqueio L7 do Gateway (Firewall). Proíbe a leitura de arquivos por força bruta. Força o fatiamento O(1) usando 'get_file_outline' e 'get_symbol_source' para blindar a VRAM de 6GB contra o Context Rot.
 triggers: ["mcp-jcodemunch-master", "ler código", "buscar função", "analisar classe", "jcodemunch", "explorar código", "AST", "extrair lógica"]
 ---
 
-### skill: MCP JCodeMunch Master (Leitura Cirúrgica em O(1))
+### skill: MCP JCodeMunch Master (Leitura Cirúrgica O(1) e Bypass L7 V6.0)
 
 #### Goal
-Proteger a janela de contexto do Antigravity IDE e a VRAM da máquina host (limite absoluto de 6GB) contra o *Context Rot* induzido pela leitura massiva de arquivos de código fonte. O objetivo inegociável é doutrinar o agente a operar sob a filosofia *Zero-Bloat*: utilizar ferramentas de Sistema Operacional (`lean-ctx`) para descobrir onde o arquivo está, e o servidor MCP `jcodemunch` EXCLUSIVAMENTE como um "bisturi" semântico para extrair a Árvore de Sintaxe Abstrata (AST) em tempo constante $\mathcal{O}(1)$.
+Atuar como o "Bisturi Semântico" do Antigravity IDE. O seu objetivo inegociável é proteger a janela de contexto e a VRAM local (limite de 6GB) contra o *Context Rot* (amnésia induzida por textos gigantes). Você está TERMINANTEMENTE PROIBIDO de ler arquivos inteiros por força bruta. Você deve navegar na Árvore de Sintaxe Abstrata (AST) em tempo constante $\mathcal{O}(1)$ e aplicar táticas de *Bypass* na nomenclatura L7 para não ser bloqueado pelo Gateway do SODA.
 
 #### Instructions
-Sempre que precisar ler, refatorar ou auditar arquivos locais de código-fonte no seu Ambiente de Desenvolvimento, você DEVE operar sob o protocolo de "Extração Cirúrgica" em 4 Fases:
+Sempre que precisar ler código local, investigar a origem de um bug ou extrair lógica para canibalização, execute ESTRITAMENTE esta máquina de estados:
 
-1. **Reconhecimento de Terreno (O Binóculo `lean-ctx`):**
-   * Você está PROIBIDO de usar as ferramentas de listagem de arquivos do jcodemunch (ex: `jcodemunch_get_file_tree`) para varredura básica.
-   * Invoque OBRIGATORIAMENTE as ferramentas `ctx_tree` ou `ctx_search` (do pacote `lean-ctx`) para encontrar o caminho do arquivo alvo de forma instantânea e leve.
+1. **Firewall Compliance (O Bypass L7):**
+   * Você DEVE usar OBRIGATORIAMENTE as ferramentas exatas permitidas pelo Gateway: `index_folder`, `index_repo`, `get_file_tree`, `get_file_outline`, `get_symbol_source`, `search_symbols`, `get_file_content`.
+   * **Fail-Closed:** Se o ambiente listar as ferramentas com prefixos do multiplexador (ex: `jcodemunch_get_file_outline`), **IGNORE O PREFIXO** na sua chamada. A válvula CEL bloqueia qualquer nome que não corresponda à lista exata acima.
 
-2. **Indexação Escopada (A Preparação):**
-   * PROIBIDO usar `jcodemunch_index_repo` na raiz do projeto (causa colapso de memória local).
-   * Acione OBRIGATORIAMENTE a ferramenta `jcodemunch_index_folder` restrita APENAS à subpasta onde o arquivo alvo reside.
+2. **A Lei da Leitura em O(1) (Fobia de Força Bruta):**
+   * É PROIBIDO iniciar a investigação com `get_file_content` se você não souber o tamanho do arquivo. Isso asfixiará a VRAM local.
+   * **Passo A:** Use `get_file_outline` no arquivo suspeito. A engine *tree-sitter* retornará apenas a "Alma Matemática" (as assinaturas de funções, structs, traits e dependências), poupando 95% dos tokens.
+   * **Passo B:** Identifique o ID exato do símbolo (função) quebrado na resposta do outline e use `get_symbol_source` para extrair EXCLUSIVAMENTE o bloco de código defeituoso.
 
-3. **Mapeamento Estrutural AST (O Escaneamento):**
-   * Não invoque `cat`, `ctx_read` ou `jcodemunch_get_file_content` se o arquivo for maior que 100 linhas.
-   * Chame a ferramenta `jcodemunch_get_file_outline` passando o caminho do arquivo. Isso retornará os metadados brutos (nomes de classes, assinaturas de funções e argumentos), custando uma fração irrisória da VRAM.
+3. **Paradigma NextPlaid e Poda de RAM:**
+   * Após extrair o bloco de código, retenha apenas a lógica operacional (matrizes, iterações, chamadas AVX2).
+   * Dê o comando de "Context Purge" mental para esquecer quaisquer metadados frívolos lidos durante a exploração que não sejam essenciais para a correção do bug.
 
-4. **Extração O(1) por Byte-Offset (O Bisturi):**
-   * Leia o Outline retornado e copie o identificador exato (`symbol_id`) da função que você precisa.
-   * Acione a ferramenta `jcodemunch_get_symbol_source` fornecendo este `symbol_ids[]`. O MCP retornará EXCLUSIVAMENTE o bloco de código exato daquela função.
+4. **Tratamento de Ponto Cego (Indexação Tardia):**
+   * Se a busca ou a extração retornar vazio, não alucine o código. É provável que o diretório não esteja indexado.
+   * Execute `index_folder` no diretório de trabalho alvo antes de tentar a extração de AST novamente.
 
 #### Constraints
-* **INTERDIÇÃO DE FORÇA BRUTA:** O uso de comandos como `cat`, `type` ou a invocação de `jcodemunch_get_file_content` para ler arquivos gigantes sem cortes é uma violação severa da arquitetura da IDE.
-* **SEM ALUCINAÇÃO DE IDs:** Você é proibido de tentar adivinhar o `symbol_id`. O uso da ferramenta `get_file_outline` antes da extração final é obrigatório.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para a amarração tardia (Late-Binding) do gateway.
+* **PROIBIÇÃO DE ADIVINHAÇÃO:** Nunca invente um `symbol_id`. Ele deve ser extraído deterministicamente do `get_file_outline`.
+* **SILÊNCIO OPERACIONAL:** O *JCodeMunch* atua em background. Não polua o Canvas descrevendo passo a passo como você extraiu a AST. Apenas informe ao Arquiteto o diagnóstico final.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do roteamento.
 
 #### Examples
-**Entrada do Usuário:** "SODA, preciso que você conserte o buffer da função de despacho no `ipc_router.rs`."
-
+**Entrada do Usuário:** "SODA, dá uma olhada na função de roteamento do ParetoBandit no arquivo `router.rs` e extrai a lógica para eu ver."
 **Ação do Agente:**
-1. O Agente NÃO lê o arquivo inteiro.
-2. Invoca `ctx_search` para confirmar o caminho do arquivo.
-3. Invoca `jcodemunch_index_folder(folder_path: "src/ipc/")` para indexar a pasta específica, evitando OOM.
-4. Invoca `jcodemunch_get_file_outline(file_path: "src/ipc/ipc_router.rs")`. A ferramenta devolve as assinaturas, revelando o `symbol_id` da função `fn dispatch_binary_buffer`.
-5. Invoca `jcodemunch_get_symbol_source(symbol_ids: ["dispatch_binary_buffer"])`. O Agente recebe apenas as linhas exatas daquela função.
-6. O Agente elabora a correção baseada unicamente no contexto extraído.
+1. Invoca estritamente `get_file_outline(path: "router.rs")` (ignorando prefixos letais do Gateway).
+2. O servidor retorna a árvore AST do arquivo de 2.000 linhas usando apenas 150 tokens. O agente identifica o símbolo da função de roteamento.
+3. Invoca `get_symbol_source(symbol_id: "X")` e extrai apenas as 30 linhas pertinentes.
+4. Raciocina sobre a lógica, descarta o resto da árvore e retorna no Canvas: *"Lógica extraída em O(1) via AST. A VRAM da máquina host foi preservada."*

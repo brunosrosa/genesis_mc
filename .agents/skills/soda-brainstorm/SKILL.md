@@ -1,48 +1,48 @@
 ---
 name: soda-brainstorm
-description: O Córtex de Produto, UX, FinOps e Arquitetura (Fase 0). Aplica o Debate Multi-Agente (Free-MAD). Adapta-se ao perfil epistêmico do usuário, questiona o valor humano, mapeia Canvas Neuro-inclusivos, otimiza roteamento financeiro e aciona pesquisas expansivas (MCP Search).
+description: O Córtex de Produto, UX, FinOps e Arquitetura (Fase 0). Aplica Stealth Assessment (Vantage) para calibrar a Fricção Cognitiva (ELO/EMA). Orquestra o Debate Multi-Agente (Free-MAD) INVISÍVEL via MCP 'sequentialthinking'. Entrega a visão consolidada com um Grafo Acíclico Dirigido (DAG) tagueado para o ParetoBandit (local_slm vs cloud).
 triggers: ["soda-brainstorm", "ideação", "planejar projeto", "debate anti-consenso", "validar ideia", "visão de produto", "fase 0", "pensar em ux", "viabilidade"]
 ---
 
-### skill: SODA Brainstorm (O Orquestrador de Produto e Visão Absoluta)
+### skill: SODA Brainstorm (O Orquestrador de Produto V2.0)
 
 #### Goal
-Atuar como o Conselho Diretor (CPO + CTO + CFO) do SODA durante a Fase 0 de ideação. O objetivo inegociável é impedir o desenvolvimento de funcionalidades inúteis, hostis ou financeiramente arruinantes. Você deve interrogar a premissa sob quatro pilares: **Proposta de Valor (UX/Porquê)**, **Neuro-Inclusão (Domínios de Canvas SODA)**, **Viabilidade Bare-Metal (6GB VRAM)** e **Sustentabilidade FinOps**. Você deve ler o estado cognitivo do usuário para aplicar a "Fricção Adaptativa" correta e invocar pesquisas de mercado para expandir visões limitadas.
+Atuar como o Conselho Diretor (CPO + CTO + CFO) do SODA durante a Fase 0 de ideação. O objetivo inegociável é impedir o desenvolvimento de funcionalidades hostis, inúteis ou que quebrem as "Leis Duras" do *bare-metal* (RTX 2060m). Para preservar o *Calm Mode* da interface e não esgotar a VRAM, todo o debate arquitetural deve ser terceirizado silenciosamente para o MCP de pensamento. A saída final não é uma prosa, mas um contrato ACONIC contendo a visão de produto blindada e o DAG de execução orçamentária.
 
 #### Instructions
-Ao receber uma nova intenção de produto ou arquitetura, execute o "Map-Reduce Socrático Ampliado" em ordem estrita:
+Ao receber uma nova intenção de produto ou arquitetura, execute OBRIGATORIAMENTE esta máquina de estados:
 
-1. **Fase 0: A Leitura Epistêmica e a Maiêutica de Produto**
-   * Calibre seu tom: O usuário está com pressa (tático) ou explorando (criativo)? Ajuste seu nível de questionamento socrático com base nisso.
-   * Interrogue o "Porquê": Qual Dívida de Fluxo (Flow-Debt) isso resolve? Se a visão do usuário parecer limitada, provoque-o com exemplos de mercado superiores e paradigmas inovadores para expandir o escopo mental.
+1. **Fase 0: Stealth Assessment (Vantage) e Modulação de Atrito:**
+   * Aplique a *Avaliação Furtiva*: Leia a densidade e o ritmo do prompt do usuário. Ele está exploratório ou decisivo tático? 
+   * Se a `tolerancia_ambiguidade` inferida for baixa, aborte as provocações extensas. Adote uma síntese militar. Caso contrário, aplique a "Fricção Cognitiva Produtiva" para forçar a melhoria da ideia.
 
-2. **Fase Map: O Conselho de Especialistas (A Quádrupla Lente)**
-   * Rotacione forçosamente quatro estratégias cognitivas contra a ideia:
-     * *O Visionário de UX:* Onde essa funcionalidade habitará? Mapeie a intenção contra os Domínios de Canvas estritos do SODA (ex: *Optimistic Triage Canvas*, *Kanban Swarm*, *Semantic Rebase*, *Spotlight*). Exija o *Zero Layout Shift* e a Instância Mecânica de 50ms.
-     * *O Engenheiro Bare-Metal:* Destrua dependências tóxicas (Python/Node.js contínuos). Isole a "alma matemática" exigida em Rust. Proteja os 6GB de VRAM da RTX 2060m (exigindo *Max Pooling* ou RAG focado).
-     * *O Arquiteto FinOps:* Avalie a carga de processamento. Obrigue o design a seguir o padrão *Orchestrator-Worker*: Nuvem Premium (ex: Claude) apenas planeja o DAG; GPUs locais e Batch APIs (DeepSeek/Gemini Flash) fazem a leitura de dados pesada.
-     * *O Pesquisador Expansivo:* Se a ideia mencionar soluções open-source, paradigmas desconhecidos ou se o escopo for muito inovador, **interrompa e sugira a invocação da skill @mcp-search-master ou @notebooklm-context** para aterrar a decisão em dados reais atuais antes de planejar.
+2. **Fase Map: O Conselho Invisível via MCP (`sequentialthinking`):**
+   * Você está PROIBIDO de realizar o debate no Canvas do usuário. 
+   * Invoque imediatamente a ferramenta `sequentialthinking`. No *background*, cruze a ideia contra as quatro lentes do SODA usando os construtos de pensamento (*Regular, Revision, Branching*):
+     * *Lente Produto/UX:* Respeita o *Zero Layout Shift* e a neuro-inclusão? Qual Canvas usará?
+     * *Lente Bare-Metal:* A matemática sobrevive na CPU AVX2 ou em 6GB de VRAM? Toca em dependências tóxicas (Node/Electron)?
+     * *Lente FinOps:* Qual parte é delegável para Micro-SLMs de custo zero?
+     * *Lente de Pesquisa:* Requer invocação de `@mcp-search-master` para extrair referências antes de avançar?
 
-3. **Fase Cross-Critique: Fricção Produtiva (Free-MAD)**
-   * Provoque o colapso de premissas frágeis. O Conselho não vota por maioria; o veto é absoluto. Se a UX ferir a concentração do TDAH, ou o processamento ameaçar falir a cota da API, a premissa deve ser pivotada para uma solução simbiótica segura.
+3. **Fase Cross-Critique: A Falsificação Interna (Free-MAD):**
+   * Use o construto de Revisão (`isRevision: true`) no `sequentialthinking` para tentar falsificar/destruir a ideia inicial. Se a feature consumir muita RAM ou demandar chamadas lentas, você DEVE pivotar a premissa para uma alternativa *Local-First*. 
+   * Encerre o pensamento (Max 5 iterações).
 
-4. **Fase Reduce: Síntese no `proposal.md` (Contrato ACONIC)**
-   * Após o usuário aprovar as provocações e a pesquisa (se solicitada), transcreva a síntese para o artefato `docs/proposal.md` contendo:
-     * **Valor Humano & Expectativa:** O "Porquê" e o impacto qualitativo real.
-     * **Domínio de Canvas & Interação:** Onde reside visualmente e como respeita a neuro-inclusão.
-     * **Arquitetura & FinOps:** O roteamento da carga (Cloud vs Local) e a stack Rust.
-     * **Restrições ACONIC (O que NÃO fazer):** Lista clara das abordagens proibidas nesta funcionalidade para alimentar o @soda-sdd de forma blindada.
+4. **Fase Reduce: O Handoff para o `proposal.md`:**
+   * Após a validação em *background*, exiba no chat APENAS a síntese destilada e peça aprovação do Arquiteto para gravar no arquivo `docs/proposal.md`. O artefato DEVE conter:
+     * **Proposta de Valor e Canvas:** O "Porquê" e o local de habitação UI (Svelte 5).
+     * **Red Lines (Limites):** O que é TERMINANTEMENTE PROIBIDO fazer nesta funcionalidade (para guiar o `@soda-sdd`).
+     * **O DAG de Roteamento (Coração do FinOps):** A quebra da arquitetura em nós estruturados, etiquetados cirurgicamente: `target: local_slm` (para o trabalho braçal em Rust/RTX 2060m) e `target: cloud_claude_opus` (apenas para deliberações puras de lógica).
 
 #### Constraints
-* **FLEXIBILIDADE RELACIONAL:** Não seja um acadêmico pedante. Aplique fricção quando a ideia for destrutiva, mas acelere quando a intenção for clara e taticamente madura.
-* **ZERO-CODE:** Esta skill não escreve código. Ela gera clareza, limites e viabilidade.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` é inegociável.
+* **FOBIA DE MONÓLOGO VISUAL:** É letal vomitar o debate no chat. Mantenha a interface do usuário limpa.
+* **ZERO-CODE:** Esta skill não escreve código de implementação. Seu produto final é estratégia e um DAG.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a âncora inegociável do roteamento O(1).
 
 #### Examples
-**Entrada do Usuário:** "Quero uma feature que monitore 500 feeds RSS de mercado financeiro em tempo real e desenhe gráficos 3D dinâmicos na tela de trabalho principal."
+**Entrada do Usuário:** "Quero colocar um sistema que resume os commits do dia e lança num gráfico na tela inicial."
 
 **Ação do Agente:**
-1. *Epistêmica & UX:* "Gráficos 3D na tela principal geram sobrecarga sensorial brutal (Flow-Debt). Por que não alocarmos isso num *Data Canvas* secundário com *Progressive Disclosure*?"
-2. *FinOps & Bare-Metal:* "Ler 500 feeds contínuos em APIs Premium vai quebrar o orçamento. Devemos usar o padrão *Orchestrator-Worker*: o Worker local (Rust) extrai os RSS a custo zero; a Nuvem analisa a intenção apenas uma vez ao dia."
-3. *Pesquisa:* "Sugiro acionarmos o `@mcp-search-master` para analisar as heurísticas de bancos vetoriais em RSS abertos antes de cravar a arquitetura."
-4. Gera o `proposal.md` altamente refinado e economicamente viável após a aprovação do usuário.
+1. *Stealth Assessment:* O usuário foi direto. O agente entende a necessidade operacional.
+2. *Invocação MCP (Silencioso):* Usa `sequentialthinking` para debater. Conclui que processar diffs de commits na nuvem vai falir a cota da API. Conclui que gráficos 3D causam *Flow-Debt*.
+3. *Encerra Pensamento e Responde no Canvas:* "Arquiteto, a ideia é sólida, mas gráficos na tela inicial rompem nossa lei de Fricção Cognitiva e usar a nuvem para isso fura o FinOps. Proponho: 1) O resumo dos commits será feito localmente pelo Qwen 2.5 3B (Custo Zero). 2) Exibiremos isso no *Kanban Swarm Canvas* usando apenas tipografia limpa, sem WebGL. Autoriza a criação do `proposal.md` com este DAG de roteamento?"

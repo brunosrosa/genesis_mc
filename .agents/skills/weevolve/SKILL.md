@@ -1,41 +1,52 @@
 ---
 name: weevolve
-description: O Córtex de Aprendizado Relacional do Antigravity IDE. Extrai a "Alma Matemática" de bugs resolvidos e injeta as heurísticas no SQLite local da IDE. Erradica o Context Rot do agente desenvolvedor sem criar arquivos de log massivos.
+description: O Córtex de Aprendizado Relacional do Antigravity IDE. Extrai heurísticas matemáticas e delega a gravação assíncrona via canais MPSC para a Memória L2 (SQLite) e Event Sourcing (Gitoxide). Aplica detecção de 'conflito_memoria' via Hipocampo para proteger o núcleo STABLE contra envenenamento.
 triggers: ["weevolve", "salvar heurística", "bug resolvido", "aprendizado contínuo", "extrair padrão", "documentar erro"]
 ---
 
-### skill: WeEvolve v2.1 (O Córtex de Aprendizado do Ambiente de Desenvolvimento)
+### skill: WeEvolve V4.0 (O Córtex de Aprendizado Bare-Metal)
 
 #### Goal
-Erradicar a amnésia de sessão (Context Rot) e a dívida de VRAM causada pelo acúmulo de arquivos de log Markdown durante o desenvolvimento no Antigravity IDE. O objetivo é abstrair a resolução de um bug de código, erro de compilação ou falha de arquitetura em uma heurística matemática pura. Em vez de registrar o erro em textos longos, você deve estruturá-lo de forma relacional para ser ingerido pelo banco de dados do seu próprio ambiente de desenvolvimento local (SQLite com `sqlite-vec`), consolidando o aprendizado instantaneamente.
+Erradicar o *Context Rot* e o acúmulo tóxico de arquivos Markdown de log no ambiente de desenvolvimento. Seu objetivo inegociável é destilar a "Alma Matemática" de bugs e soluções arquiteturais e empacotá-las em uma **Matriz 4D**. Para proteger os 6GB de VRAM e não asfixiar o Event Loop do Tokio, você DEVE delegar a gravação dessa matriz estritamente via canais MPSC para um *Background Worker*, que fará a persistência atômica no SQLite (L2) e o versionamento irreversível via `gitoxide` (Event Sourcing).
 
 #### Instructions
-Sempre que você solucionar um problema complexo no código, corrigir uma falha do compilador Rust, ou receber a ordem de "aprender com isso", você DEVE executar estas ações em ordem estrita:
+Sempre que solucionar um problema complexo, contornar uma falha de compilador Rust ou receber a ordem de "aprender com isso", execute esta máquina de estados rigorosa:
 
-1. **Destilação da Alma Matemática:** Isole a falha das variáveis específicas e nomes de arquivos temporários. Identifique o princípio arquitetural ou a regra do sistema (ex: Borrow Checker do Rust, reatividade do Svelte 5) que foi violada e corrigida.
+1. **A Destilação da Alma Matemática:**
+   * Isole a falha expurgando nomes de variáveis locais, caminhos efêmeros e dados temporários.
+   * Identifique o princípio computacional, lei termodinâmica ou restrição de linguagem violada.
 
-2. **Formatação Heurística (Matriz 4D):** Você deve estruturar o aprendizado OBRIGATORIAMENTE em quatro eixos lógicos relacionais:
-   * **The Insight (A Percepção):** O princípio computacional ou limitação de hardware descoberta (ex: bloqueio de thread no Tokio).
-   * **Why This Matters (A Relevância):** O sintoma exato que causará o colapso do sistema alvo se esta regra for ignorada futuramente (ex: Deadlock, Out-Of-Memory, Layout Shift).
-   * **Recognition Pattern (Padrão de Reconhecimento):** Gatilhos sintáticos ou arquiteturas de código que indicam o risco desse erro voltar a acontecer.
-   * **The Approach (A Abordagem):** A regra inegociável de contorno ou a sintaxe exata para a solução aprovada.
+2. **Formatação Heurística (A Matriz 4D Estrita):**
+   * Estruture o payload OBRIGATORIAMENTE mapeando as chaves exatas para o banco de dados:
+     * **learning_id:** Hash SHA-256 determinístico do conteúdo (Chave Primária).
+     * **the_insight:** A regra física ou de hardware violada (ex: Pânico no Tokio).
+     * **why_this_matters:** O sintoma fatal (ex: OOM, *Layout Shift*, *Spillover* PCIe).
+     * **recognition_pattern:** O gatilho sintático na AST que prevê esse risco no futuro.
+     * **the_approach:** A sintaxe de contorno exata e aprovada.
+     * **temporal_stability:** Defina como `STABLE` (leis imutáveis do Rust/SODA) ou `EVOLVING` (soluções provisórias de bibliotecas instáveis).
+     * **timestamp:** UNIX Epoch Int64 UTC.
 
-3. **Injeção de Memória (Proibição de Textos Planos):** Você está expressamente PROIBIDO de salvar essas lições acumulando texto em arquivos de log contínuos como `.md` ou `.txt`. O limite de VRAM da máquina de desenvolvimento não suporta leitura infinita de histórico.
+3. **Triagem de Conflito (O Portão do Hipocampo):**
+   * Antes de ordenar a gravação, avalie: essa nova abordagem contraria alguma regra `STABLE` preexistente?
+   * Se inferir que há um alto score de `conflito_memoria` (a IA entra em contradição com seus princípios basilares), você está PROIBIDO de seguir adiante. 
+   * **Invoque o HITL:** Pergunte ao Arquiteto no Canvas: *"Esta heurística conflita com nossos fundamentos STABLE. Deseja promover uma transição sistêmica ou descartar a lição?"*
 
-4. **Persistência Relacional:** Formate a Matriz 4D em um payload JSON limpo e invoque a ferramenta MCP do seu banco de dados local (SQLite) ou utilize o protocolo de escrita estruturada do Antigravity IDE para salvar este registro no seu próprio `sqlite-vec` local de metadados.
+4. **Injeção Assíncrona e Event Sourcing (O Caminho Feliz):**
+   * Se não houver conflito (ou após aprovação humana), NÃO inicie rotinas síncronas pesadas de I/O.
+   * Orquestre o envio do payload estruturado via canal **MPSC (`tokio::sync::mpsc`)** em tempo $\mathcal{O}(1)$.
+   * O *Background Worker* solitário fará a inserção dupla: executará o `UPSERT` na tabela `weevolve_learnings` do **SQLite (L2)** e emitirá um *auto-commit* via **`gitoxide`** garantindo o *Event Sourcing* para *rollback* atômico.
 
 #### Constraints
-* **FOCO ESTREITO NO AMBIENTE DE DEV:** Você atua na fábrica (IDE). Grave os dados estruturados no SQLite local de forma enxuta e retorne imediatamente para a codificação. Não alucine mecanismos de grafos ou embeddings complexos da nuvem.
-* **PROIBIÇÃO DE LIXO SEMÂNTICO:** NÃO copie logs maciços do terminal ou *stacktraces* inteiros de erro. Salve estritamente a heurística deduzida.
-* **FRONTMATTER ABSOLUTO:** É inegociável manter o bloco YAML `---` no topo desta skill para garantir a Divulgação Progressiva no IDE.
+* **PROIBIÇÃO DA SINCRONIA SUICIDA:** Jamais retenha um *lock* síncrono ou comande a escrita em disco diretamente na *thread* do agente. Envie o pacote de memória e libere a máquina em milissegundos.
+* **PROIBIÇÃO DE LIXO SEMÂNTICO:** É expressamente proibido empurrar *stacktraces* brutos do compilador para a Matriz 4D.
+* **FRONTMATTER ABSOLUTO:** A ausência do bloco YAML `---` destrói a arquitetura de roteamento $\mathcal{O}(1)$.
 
 #### Examples
 **Entrada do Usuário:** "O bug era no `spawn_blocking` que estava travando a UI porque a função não retornava no Web Worker. Finalmente resolvemos. Roda o weevolve."
+
 **Ação do Agente:**
-1. O agente gera o Payload JSON:
-   - **Insight:** Funções bloqueantes em Rust paralisam o Event Loop do Tokio se não encapsuladas corretamente.
-   - **Why:** O canal IPC trava e a interface Svelte não recebe a sincronização do frame, congelando a UI.
-   - **Pattern:** Uso de `std::fs` síncrono ou loops pesados dentro de chamadas `async` do Tauri.
-   - **Approach:** OBRIGATÓRIO envelopar operações bloqueantes em `tokio::task::spawn_blocking`.
-2. Salva o registro no SQLite do Antigravity IDE.
-3. Responde no chat: *"Heurística salva no banco local da IDE. O erro de bloqueio assíncrono não se repetirá em futuras implementações."*
+1. Ignora o *stacktrace* efêmero e destila a falha do *Event Loop*.
+2. Verifica se a solução colide com as regras de assincronicidade (Nenhum conflito detectado).
+3. Formata o Payload JSON com a Matriz 4D, cravando `temporal_stability: STABLE` e gerando o SHA-256.
+4. Simula a injeção em $\mathcal{O}(1)$: joga a heurística na fila do MPSC e finaliza a sua tarefa em microssegundos.
+5. Retorna no Canvas: *-> Heurística destilada (STABLE) e despachada via MPSC. O Background Worker confirmou a escrita no SQLite e o commit no gitoxide. O Event Loop está a salvo.*

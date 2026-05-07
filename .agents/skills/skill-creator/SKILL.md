@@ -1,47 +1,54 @@
 ---
 name: skill-creator
-description: A Forja do SODA. Meta-habilidade estrutural ativada para extrair lógicas de repositórios e gerar novas habilidades agênticas. Orquestra a Divulgação Progressiva, criando o SKILL.md e isolando lógicas em scripts atômicos.
-triggers: ["criar skill", "destilar repositório", "gerar habilidade", "nova skill", "criar agente", "skill-creator"]
+description: A Forja do SODA. Meta-habilidade estrutural ativada para canibalizar repositórios e gerar novas habilidades agênticas. Aplica filtro de Creep Risk, decomposição Must/Nice/Não e orquestra a Divulgação Progressiva em 3 Níveis, isolando lógicas com SIGKILL.
+triggers: ["criar skill", "destilar repositório", "gerar habilidade", "nova skill", "criar agente", "skill-creator", "canibalizar"]
 ---
 
 ### skill: Skill Creator (A Forja de Habilidades SODA)
 
 #### Goal
-Atuar como a "skill que cria skills" (A Forja Matriz) dentro do ecossistema Antigravity IDE. Sua missão é extrair a "alma matemática" de repositórios ou lógicas propostas, empacotando-as no padrão agentskills.io (Divulgação Progressiva em 3 Níveis) sob as "Leis Duras" do SODA. O objetivo inegociável é garantir que toda nova ferramenta gerada seja encapsulada com um Frontmatter YAML para roteamento O(1), opere com 6GB de VRAM, seja coberta por TDD (Exit Code 0), utilize IPC Zero-Copy e seja imune a Context Rot.
+Atuar como a "skill que cria skills" (A Forja Matriz) do ecossistema Antigravity IDE. Sua missão é agir como um engenheiro reverso implacável: você deve extrair a "alma matemática" de repositórios ou lógicas propostas, blindando o sistema contra o *Feature Creep* e empacotando-as no padrão de Divulgação Progressiva (3 Níveis). Seu objetivo inegociável é garantir que toda nova ferramenta gere valor estrutural, opere dentro dos 6GB de VRAM, seja coberta por TDD (Exit Code 0), utilize o encapsulamento efêmero (`SIGKILL`) e seja expurgada de dependências tóxicas (React, Node.js contínuos).
 
 #### Instructions
-Sempre que o usuário solicitar a criação de uma nova habilidade ou a canibalização de um repositório, você DEVE executar esta máquina de estados rigorosa:
+Sempre que for instruído a criar uma skill ou canibalizar uma solução, execute esta máquina de estados estrita:
 
-1. **Context Engineering & Ingestão O(1) (Proibição de Força Bruta):**
-   * Você NUNCA deve ler arquivos inteiros massivamente.
-   * Utilize OBRIGATORIAMENTE as ferramentas do `lean-ctx` (`ctx_tree`, `ctx_search`, `ctx_read`) para mapeamento estrutural compacto.
-   * Acione o MCP `@mcp-jcodemunch-master` para rasgar a Árvore de Sintaxe Abstrata (AST) do alvo, extraindo heurísticas lógicas em tempo constante $O(1)$.
+1. **Descompressão Semântica e Filtro de Creep (Protocolo de Canibalização):**
+   * Antes de extrair o código, avalie a intenção contra os riscos de **Creep Funcional, Identitário e de Infra** do SODA. A solução tenta transformar o SODA numa plataforma genérica? Se sim, ABORTE e notifique o usuário.
+   * Aplique a decomposição OBRIGATÓRIA: identifique o que é **Must** (o núcleo transplantável), o que é **Nice** e o que é **Não** (o lixo tóxico que deve ser sumariamente ignorado).
 
-2. **CSDD & Poda Tóxica (Constitutional Spec-Driven Development):**
-   * Elimine lixo tóxico do código extraído (React, Virtual DOM, daemons Node.js, contêineres pesados).
-   * Se a nova habilidade requerer lógica executável, aplique TDD Estrito (Red-Green-Refactor). Crie o Scaffold e escreva o teste de compilação (Rust/Wasm) que falha ANTES de codificar o script do Nível 3.
+2. **Ingestão $\mathcal{O}(1)$ e Paradigma NextPlaid (Zero Força Bruta):**
+   * Utilize `lean-ctx` (`ctx_tree`, `ctx_search`) para o mapeamento e NÃO leia repositórios inteiros por força bruta.
+   * Acione o MCP `@mcp-jcodemunch-master` para rasgar a Árvore de Sintaxe Abstrata (AST) do alvo. 
+   * Aplique o **Paradigma NextPlaid**: fatie a lógica extraída em vetores menores e atômicos, proibindo a criação de monolitos de código inavegáveis na memória.
 
-3. **Geração da Taxonomia de 3 Níveis (Late-Binding):** 
-   Crie a estrutura na pasta `.agents/skills/<nome-da-skill>/` respeitando a Divulgação Progressiva:
-   * **Nível 1 (Frontmatter YAML OBRIGATÓRIO):** O arquivo `SKILL.md` DEVE iniciar rigorosamente com um bloco YAML delimitado por `---`, contendo APENAS `name`, `description` e `triggers`. Isso é vital para a amarração tardia.
-   * **Nível 2 (Instruções Core):** Corpo do `SKILL.md` (abaixo do YAML) definindo `Goal`, `Instructions` (em passos imperativos curtos), `Constraints` e `Examples`.
-   * **Nível 3 (Sidecars Efêmeros e Validação):** Crie as subpastas `scripts/`, `assets/` e `references/`. Qualquer extração estruturada (JSON/ETL) DEVE impor Decodificação Restrita (`llguidance` ou modo estrito FastMCP) para aniquilar alucinações de schema.
+3. **CSDD, Poda Tóxica e a Guilhotina (`SIGKILL`):**
+   * Elimine lixo tóxico estrutural (Virtual DOM, contêineres pesados).
+   * Crie o *Scaffold* via TDD Estrito (Red-Green-Refactor) no terminal.
+   * **Lei da Higiene de RAM:** Qualquer script executável gerado para o Nível 3 (Sidecars MCP) DEVE ser encapsulado em rotinas equivalentes a `_run_ephemeral_cli`, garantindo que o processo nasça, execute e sofra um `SIGKILL` atômico no encerramento. Zumbis são banidos.
 
-4. **Agent Inbox e Injeção no Grafo (Prevenção SDC):**
-   * Você está PROIBIDO de gravar a skill final diretamente na ramificação principal do usuário.
-   * A construção deve ocorrer em um *Shadow Workspace*. Gere um *Pull Request* (Diff) para a **Agent Inbox**, aguardando aprovação HITL (Human-in-the-Loop).
-   * Prepare o comando de injeção relacional para o **LadybugDB**, mapeando as dependências da nova *skill* para garantir a ontologia do agente.
+4. **Geração da Taxonomia (Late-Binding em 3 Níveis):**
+   * Crie a estrutura em `.agents/skills/<nome-da-skill>/`:
+   * **Nível 1 (Frontmatter YAML OBRIGATÓRIO):** Inicie o `SKILL.md` com `---`, definindo APENAS `name`, `description` e `triggers` para o roteamento semântico de $\mathcal{O}(1)$.
+   * **Nível 2 (Instruções Core):** Corpo contendo `Goal`, `Instructions`, `Constraints` e `Examples`.
+   * **Nível 3 (Sidecars e Dependências):** `scripts/`, `assets/`, `references/`. Para extração estruturada (JSON), FORCE a Decodificação Restrita via `llguidance`.
+
+5. **Agent Inbox e Injeção no Grafo:**
+   * Toda a construção DEVE ocorrer em um *Shadow Workspace* (branch temporária isolada).
+   * PROIBIDO gravar diretamente na `main` (risco SDC).
+   * Gere um *Pull Request* Semântico para a **Agent Inbox** (HITL).
+   * Imprima o comando ontológico para que a skill seja vinculada no **LadybugDB**, preservando o grafo causal do SODA.
 
 #### Constraints
-* **FRONTMATTER ABSOLUTO:** Nenhuma skill pode ser gerada sem o bloco `---` inicial com nome, descrição e triggers. É a fundação do Roteamento Semântico.
-* **SOBREVIVÊNCIA BARE-METAL:** Scripts pesados na pasta `scripts/` devem ser explicitamente desenhados como *Sidecars Efêmeros* confinados em Wasmtime (WASI 0.2) ou Micro-VMs (KVM), abortáveis atómicamente.
-* **SEM DEPENDÊNCIAS FANTASMAS:** Toda ferramenta MCP ou pacote invocado pela nova skill deve estar validado no `gateway-config.yaml` ou ser empacotado puramente em Rust.
+* **PREVENÇÃO DE CREEP:** Nenhuma skill pode ser gerada sem antes isolar e justificar qual é a "alma matemática" ou a "capacidade infra-semântica" que será assimilada.
+* **FRONTMATTER ABSOLUTO:** A ausência do bloco YAML `---` destrói a arquitetura de roteamento e resulta em falha de compilação da skill.
+* **SOBREVIVÊNCIA BARE-METAL:** Dependências externas ou binários de host DEVEM rodar como *Sidecars Efêmeros* enjaulados (Landlock/AppContainer ou Wasmtime).
 
 #### Examples
-**Entrada do Usuário:** "SODA, extraia a lógica de parsing daquele repositório de markdown e crie a skill @soda-md-parser."
+**Entrada do Usuário:** "Canibaliza o repositório `TrackArr` para criarmos a skill `@soda-tracker`. Extrai só a lógica temporal e expurga todo o backend Express deles."
 **Ação do Agente:**
-1. Mapeia a estrutura em $O(1)$ usando `ctx_tree` e extrai o núcleo de parsing usando `jcodemunch` (AST).
-2. Purifica a lógica descartando dependências de Python regex legadas, planejando um script em Rust puro (CSDD).
-3. Escreve os testes no *Shadow Workspace* e codifica a lógica até obter Exit Code 0.
-4. Gera o `SKILL.md` iniciando estritamente com o bloco YAML `--- name: soda-md-parser ... ---` e estrutura a subpasta `scripts/`.
-5. Reporta no Canvas: *"Forja concluída e testada via TDD. A skill @soda-md-parser foi enviada à Agent Inbox para sua revisão."*
+1. Roda a triagem de Creep: Aprova a "alma matemática" de observabilidade contínua (Must), descarta o backend web (Não).
+2. Isola a lógica via `jcodemunch` (AST) fatiando em *NextPlaid*. 
+3. Desenha um script nativo Rust (CSDD) envelopado em `_run_ephemeral_cli` para garantir a aniquilação via `SIGKILL` pós-execução.
+4. Usa o *Ralph Loop* no *Shadow Workspace* até o `cargo check` dar Exit Code 0.
+5. Gera o `SKILL.md` iniciando com o YAML `--- name: soda-tracker ... ---`.
+6. Retorna no Canvas: *"Forja concluída. Risco de creep mitigado (backend Express amputado). Lógica extraída em Rust e enviada como Pull Request para a sua Agent Inbox."*

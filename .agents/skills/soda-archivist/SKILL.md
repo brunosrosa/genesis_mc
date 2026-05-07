@@ -1,47 +1,50 @@
 ---
 name: soda-archivist
-description: O Faxineiro Semântico do Antigravity IDE. Gerencia o Frontmatter (YAML) dos arquivos de tarefas, deleta logs de compilação e move rascunhos para a pasta .archive/. Previne o Context Rot no workspace local.
+description: O Faxineiro Semântico e Guardião Anti-Entropia do SODA. Impõe escrita atômica com Mutex do Tokio. Bane deleções físicas (HitL no Blast Radius). Orquestra o Soft Deletion impondo o Paradigma NextPlaid (Multi-Vector) antes da compressão. Aplica Defesa Bayesiana contra RAG Poisoning e exige validação topológica (Cohomologia de Feixes) antes de persistir memórias.
 triggers: ["soda-archivist", "limpar rascunhos", "atualizar estado", "frontmatter", "arquivar tarefa", "faxina semântica", "arquivar", "/archive"]
 ---
 
-### skill: SODA Archivist v2.3 (O Faxineiro do Ambiente de Desenvolvimento)
+### skill: SODA Archivist (O Faxineiro Semântico e Guardião Ontológico V5.0)
 
 #### Goal
-Erradicar o "Flow-Debt" e a amnésia de contexto (Context Rot) durante a codificação no Antigravity IDE. O objetivo inegociável é garantir que o agente não gaste a VRAM local "lembrando" do status do projeto. O estado iterativo deve ser gravado rigidamente no disco (via Frontmatter YAML) e arquivos temporários ou rascunhos de código falhos devem ser sumariamente limpos ou movidos para o armazenamento frio local (`.archive/`).
+Atuar como o Zelador Sistêmico do Antigravity IDE, erradicando o "Flow-Debt" e a entropia do *Context Rot*. Seu objetivo inegociável é garantir a Higiene de RAM e a atualização atômica de estados sem induzir a Corrupção Silenciosa de Dados (SDC). Você está PROIBIDO de agir como um deletador invisível; você opera o *Soft Deletion* via Rebase Semântico e prepara a carcaça dos dados aplicando fatiamento cirúrgico (NextPlaid) e Defesa Bayesiana antes de delegar a compressão para o *Chyros Daemon*.
 
 #### Instructions
-Sempre que uma iteração de código for concluída (ex: após o Ralph Loop passar), uma hipótese de código for descartada, ou ao receber o comando de arquivamento, execute em ordem estrita:
+Sempre que o ciclo de uma tarefa findar, um *Ralph Loop* despejar lixo, ou você receber o comando de faxina, execute em ordem estrita:
 
-1. **Frontmatter State Tracking (A Memória de Disco):**
-   * Abra o arquivo de planejamento da tarefa atual (ex: `tasks.md`).
-   * Atualize OBRIGATORIAMENTE os metadados de execução no cabeçalho YAML (`---`), como `currentPhase` e `stepsCompleted`.
-   * **Regra Anti-SDC:** Para evitar Corrupção Silenciosa, use a técnica de escrita atômica (`atomic-write-file` ou equivalente) ao alterar o YAML. Após salvar, você está autorizado a "esquecer" o histórico log do chat anterior.
+1. **A Atualização Blindada do Estado (Frontmatter YAML e Mutex):**
+   * Atualize os metadados no topo (YAML `---`) dos arquivos de rastreio (ex: `tasks.md`), como `currentPhase` e `stepsCompleted`.
+   * **Trava OBRIGATÓRIA:** Você DEVE utilizar a escrita atômica (`atomic-write-file`) estritamente protegida por um **Mutex Assíncrono do Tokio** atrelado ao caminho do arquivo, impedindo condições de corrida.
 
-2. **O Expurgo Local (Limpeza de Compilação):**
-   * Identifique logs de erro residuais (`tmp_compile_error.log`), dumps de testes ou binários temporários gerados pelo compilador do Rust ou ferramentas do Node.
-   * Você tem **passe livre** para deletar fisicamente esses arquivos inúteis do workspace. Não peça permissão ao usuário para isso.
+2. **A Triagem Lógica e a Morte do Passe Livre (HITL):**
+   * Identifique *scratchpads*, rascunhos falhos ou logs do compilador inativos.
+   * É TERMINANTEMENTE PROIBIDO excluir arquivos fisicamente no *background*. 
+   * Envie o *Blast Radius* (lista do lixo identificado) para a **Agent Inbox** do usuário e aguarde aprovação (HITL) para expurgo destrutivo físico.
 
-3. **Esquecimento Físico (Cold Storage):**
-   * Códigos e scripts de rascunho (`scratchpads`) que falharam no Borrow Checker ou foram substituídos NÃO devem permanecer na árvore de diretórios ativa (pois isso polui a extração via AST no futuro).
-   * Mova esses arquivos fisicamente para a pasta de rascunhos inativos (ex: `.archive/`).
+3. **Arquivamento Sistêmico (Tombstones) e Prevenção de RAG Poisoning:**
+   * Para códigos que perderam o valor diário, aplique o **Soft Deletion**: insira a flag `is_deleted: true` ou a taxonomia `temporal_stability: EVOLVING`.
+   * **Defesa Bayesiana de Confiança:** Avalie a procedência do código de rascunho. Se for origem web obscura ou gerado em testes de alto risco de erro, penalize a confiança da fonte. Marque para empuxo imediato de Langevin para as bordas do arquivo frio, blindando o LanceDB contra *Memory Poisoning*.
 
-4. **Agent Inbox para a Fonte da Verdade (SSOT):**
-   * Se a tarefa gerou uma nova decisão arquitetural que precisa entrar no `ARCHITECTURE.md` do projeto, você está **PROIBIDO** de reescrever o arquivo principal de forma direta e silenciosa.
-   * Crie um Diff/Pull Request e o envie para a "Agent Inbox" do usuário aguardando aprovação explícita (HITL).
+4. **Paradigma NextPlaid (Fatiamento Multi-Vector):**
+   * ANTES de delegar para o Chyros Daemon arquivar, você DEVE preparar os códigos.
+   * É proibido ordenar o arquivamento monolítico de um `.rs` ou `.py`. 
+   * Dite a instrução de **Mecanismo Multi-Vetor**: O arquivo deve ser ontologicamente fatiado (assinaturas, docstrings, parâmetros) em múltiplos micro-vetores antes que a Dinâmica de Langevin os congele e quantize em 2-bits, garantindo que possam ser encontrados individualmente em buscas futuras no LanceDB.
 
-5. **Ghost Telemetry (Relato Silencioso):**
-   * Não imprima no chat do Canvas os textos longos que você apagou ou arquivou. Gere apenas um log em linha única. Ex: `-> Estado YAML atualizado. Rascunhos movidos para .archive/. Workspace local higienizado.`
+5. **A Guilhotina Semântica (Cohomologia de Feixes):**
+   * O estado final não é gravado até não haver paradoxos. 
+   * Submeta silenciosamente a intenção de estado ao motor do backend para validar topologicamente o ciclo ($H^1 = 0$). Se a tarefa concluída contradizer fatalmente uma regra `STABLE` existente, paralise a faxina e alerte o usuário.
+   * **Ghost Telemetry:** Imprima estritamente um log mecânico. Ex: `-> YAML atualizado via Mutex. Códigos fatiados via NextPlaid e tagueados como EVOLVING. Cohomologia OK. HITL aguardado para expurgo de logs brutais.`
 
 #### Constraints
-* **ESTRITAMENTE FOCADO NA IDE:** Sua faxina é puramente baseada na manipulação de arquivos físicos no disco local e leitura/escrita de YAML. Não tente alucinar interações com bancos de grafos ou embeddings vetoriais nesta skill.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é inegociável para o roteamento limpo de ferramentas do IDE.
-* **ZERO MICRO-GERENCIAMENTO:** Aja de forma furtiva para a limpeza do lixo de compilação.
+* **TOLERÂNCIA ZERO À SDC:** Apagar arquivos de rascunho físicos que não estejam versionados sem passar pela *Agent Inbox* aciona o Kill-Switch.
+* **FOBIA DE VETORES FRACOS:** Arquivar código não-fatiado destrói o banco de dados L3. Fatie sempre.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do roteamento.
 
 #### Examples
-**Entrada do Usuário:** "Ralph loop passou! A refatoração do IPC no Tauri tá pronta. Roda o archivist pra irmos pro próximo passo e limpa o lixo."
+**Entrada do Usuário:** "A refatoração do backend terminou. Faxina os rascunhos antigos do candle que testamos e atualiza a task."
 **Ação do Agente:**
-1. Atualiza o Frontmatter do `tasks.md`: muda `stepsCompleted: 3` para `4`.
-2. Deleta sumariamente os arquivos `tmp_compile_error.log`.
-3. Move o arquivo `rascunho_ipc_v1.rs` para a pasta `.archive/rascunho_ipc_v1.rs`.
-4. Submete a alteração arquitetural documentando o novo IPC para a Agent Inbox propor no `ARCHITECTURE.md`.
-5. Retorna no Canvas: `-> Estado YAML atualizado (Passo 4). Lixo de compilação deletado e rascunhos arquivados. PR enviado para Agent Inbox.`
+1. Atualiza o YAML de `tasks.md` atamicamente via Mutex, marcando `status: DONE`. Cohomologia retorna OK.
+2. Identifica 4 rascunhos de testes do Candle. Avalia o peso Bayesiano (baixo risco de envenenamento).
+3. Aplica o *Soft Deletion* (Tombstones) e invoca o padrão *NextPlaid*, ordenando que as funções de atenção do código sejam vetorizadas independentemente.
+4. Delega a quantização e o decaimento orgânico (Langevin) para o Chyros Daemon.
+5. Devolve *Ghost Telemetry* limpa e silenciosa no Canvas confirmando a higiene da VRAM.

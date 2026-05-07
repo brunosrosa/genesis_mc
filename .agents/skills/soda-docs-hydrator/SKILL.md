@@ -1,49 +1,46 @@
 ---
 name: soda-docs-hydrator
-description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e Knowledge Cutoff. Impõe Hidratação Bilateral (Rust+Svelte), verificação estrita de SemVer (Svelte 5/Tauri v2) e extração atômica de Traits/Imports via MCP webcrawl antes da geração de código.
+description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e JSON IPC. Resolve o bloqueio L7 do Gateway (ignorando prefixos 'docs_scraper_'). Exige extração O(1) via 'get_docs_tree' e 'search_docs'. Implanta Hidratação Bilateral (Rust+Svelte 5/Tauri v2) impondo tutoriais com rkyv/Arrow e repudiando payloads densos em JSON.
 triggers: ["soda-docs-hydrator", "consultar documentação", "validar api", "buscar referências", "como usar a biblioteca", "docs", "verificar sintaxe"]
 ---
 
-### skill: SODA Docs Hydrator (A Vacina Sintática V3.0)
+### skill: SODA Docs Hydrator (A Vacina Sintática Zero-Garbage V5.0)
 
 #### Goal
-Atuar como o Guardião da Verdade Sintática do SODA. Sua missão é combater a alucinação de código (Vibe Coding) gerada pelo viés de treinamento do LLM. Em um ecossistema de bibliotecas de vanguarda (Svelte 5 Runes, Tauri v2 IPC, iceoryx2, Tokio), a sua memória generativa não é confiável. Você deve hidratar seu contexto com a verdade oficial, blindando-se contra tutoriais legados e documentação fragmentada.
+Atuar como o Guardião da Verdade Sintática do SODA, erradicando a alucinação de código (Vibe Coding) e protegendo a arquitetura *bare-metal* contra lógicas legadas. Sua memória generativa probabilística NÃO É CONFIÁVEL. Você deve hidratar seu contexto com a verdade oficial, contornando o Firewall L7. Seu objetivo inegociável é navegar pelas documentações em $\mathcal{O}(1)$ via `get_docs_tree`, blindar a VRAM contra HTML inútil e garantir que NENHUMA solução de comunicação de dados em massa (IPC) utilize JSON, impondo referências que operem com `rkyv` ou `Apache Arrow`.
 
 #### Instructions
 Sempre que for solicitado a implementar uma funcionalidade usando os frameworks base do SODA, aplique a "Parada de Convicção" e obedeça a esta máquina de estados:
 
 1. **A Parada de Convicção (Zero-Trust Interno):**
-   * Assuma que a sua memória interna sobre Svelte e Tauri está defasada (focada em Svelte 4 e Tauri v1).
-   * NÃO escreva código imediatamente.
+   * Assuma que a sua memória interna sobre Svelte 5, Tauri v2 e arquiteturas assíncronas do Tokio está defasada.
+   * Você está SUMARIAMENTE PROIBIDO de escrever código imediatamente.
 
-2. **Pesquisa Anti-SEO e Filtro de Domínio:**
-   * Invoque a ferramenta MCP de busca (`webcrawl_search` ou autorizada no Gateway).
-   * Restrinja a busca aos domínios oficiais (ex: `site:svelte.dev/docs`, `site:v2.tauri.app`, `docs.rs`).
-   * **Verificação SemVer:** Ao ler o conteúdo (`webcrawl_scrape`), verifique se o texto se refere expressamente à versão moderna (Svelte 5, Tauri v2). Se for Svelte 3/4 ou Tauri v1, descarte o texto imediatamente como "Envenenamento de SEO" e busque novamente.
+2. **Bypass L7 e Topologia O(1) (Uso do `docs_scraper`):**
+   * **Lei do Fail-Closed:** O ambiente lista ferramentas como `docs_scraper_search_docs`. IGNORE O PREFIXO. Use EXATAMENTE `search_docs` e `get_docs_tree`. Qualquer outra variação sofrerá bloqueio (Method Not Found) pela Válvula CEL do Gateway.
+   * **Topologia Primeiro:** É proibido fazer raspagem cega. Invoque `get_docs_tree` no domínio alvo para ler o sumário/índice. Encontre a página exata da função e, só então, invoque `search_docs` cirurgicamente.
 
-3. **A Lei da Hidratação Bilateral (Para IPC e Full-Stack):**
-   * Se a tarefa envolver a comunicação entre o Svelte 5 e o Rust, você está PROIBIDO de hidratar apenas um lado.
-   * Você DEVE extrair a assinatura exata do *Frontend* (TypeScript/Svelte) E do *Backend* (Rust Macros) na documentação para garantir que o *Zero-Copy IPC* seja tipado corretamente.
+3. **A Guilhotina SemVer e IPC Zero-Garbage:**
+   * **Contra Legado:** Se o texto da doc usar `export let` (Svelte 4) ou depender de Node.js no backend, descarte-o como "Envenenamento de SEO".
+   * **Contra a Serialização (O Fim do JSON):** Se a documentação sugerir trafegar payloads massivos entre o Rust e o Svelte via Tauri usando serialização `JSON` convencional, **REJEITE A ABORDAGEM**. O SODA exige Zero-Garbage. Refine a busca exigindo implementações baseadas em `rkyv` ou `Apache Arrow` com Web Workers via buffers binários contínuos.
 
-4. **O Resgate do Código Órfão (Imports e Features):**
-   * Ao memorizar a assinatura matemática da API, identifique e extraia OBRIGATORIAMENTE os *Traits* necessários (`use std::...`) e as *Feature Flags* exigidas para o arquivo `Cargo.toml` ou `package.json`. 
+4. **A Lei da Hidratação Bilateral:**
+   * Extraia a assinatura exata do *Frontend* (TypeScript/Runes) E do *Backend* (Rust Macros) para garantir que os contratos da API batam perfeitamente no momento da compilação.
+   * Capture ativamente as *Traits* (ex: `use tauri::Emitter;`) e as *Feature Flags* do Cargo.toml.
 
-5. **Síntese O(1) e Descarte:**
-   * Extraia apenas a assinatura, imports e o exemplo de uso minimalista.
-   * **Descarte ativamente** o resto do lixo HTML da documentação da sua janela de contexto para proteger a VRAM local.
-   * Projete o código no IDE respeitando estritamente a nova sintaxe.
+5. **Síntese O(1) e Poda Ativa de VRAM:**
+   * Extraia unicamente a "Alma Matemática": as assinaturas de função, os imports restritos e o exemplo minimalista.
+   * **Expurgo Obrigatório:** Aplique um *Context Purge* mental. Esqueça todo o restante do HTML/Markdown irrelevante que leu no `search_docs`. Mantenha apenas as assinaturas antes de projetar o código no IDE.
 
 #### Constraints
-* **PROIBIÇÃO DE API LEGADA:** Qualquer submissão de código contendo padrões do Svelte 4 (como `export let`) ou Tauri v1 será sumariamente rejeitada pelo Ralph Loop.
-* **PROIBIÇÃO DE ALUCINAÇÃO DE BINDINGS:** Não deduza as pontes IPC. Leia a documentação oficial.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` é inegociável.
+* **FALBACK DA WEB:** Apenas se a ferramenta `search_docs` falhar ou não encontrar o domínio, você tem autorização para realizar o recuo tático para `webcrawl_search` (ignorando o prefixo `webcrawl-mcp_`).
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do Roteamento SODA.
 
 #### Examples
-**Entrada do Usuário:** "Crie o listener de eventos de telemetria entre o Rust e o Svelte."
-
+**Entrada do Usuário:** "Crie o listener de eventos de telemetria massiva entre o Rust e o Svelte."
 **Ação do Agente:**
-1. Bloqueia o instinto de usar as APIs antigas do Tauri v1.
-2. Busca a documentação do Tauri v2 filtrando por eventos IPC. Identifica a página correta e aplica a Hidratação Bilateral.
-3. Lê a sintaxe TS para ouvir o evento (`listen`) e a sintaxe Rust para emitir (`app.emit()`).
-4. Extrai a exigência da trait `use tauri::Emitter;` para o código compilar.
-5. Descarta o resto do site da memória e gera o código perfeito no Antigravity IDE, avisando: *"Documentação do Tauri v2 (Rust + TS) e Svelte 5 Runes validadas. Traits importadas."*
+1. Para. Aciona `get_docs_tree` na doc do Tauri v2 para encontrar a seção de IPC e Eventos Binários.
+2. Aciona `search_docs` focado em buffers binários.
+3. Descobre a sintaxe TS para ArrayBuffers e a emissão via `rkyv` em Rust, rejeitando tutoriais antigos baseados em JSON puro.
+4. Extrai a *Trait* `tauri::Emitter`. 
+5. Expelindo o lixo da VRAM local, devolve no Canvas a arquitetura sintática pura e limpa de *Garbage Collection*.
