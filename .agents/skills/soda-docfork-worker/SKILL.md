@@ -19,7 +19,7 @@ Sempre que precisar compreender uma nova dependência, ler documentações do *c
 
 2. **A Morte do Scraping Genérico e Bypass L7:**
    * É SUMARIAMENTE PROIBIDO invocar o `webcrawl-mcp` para ler manuais oficiais.
-   * Utilize ESTRITAMENTE as ferramentas liberadas do Docfork: `docfork_query` e `docfork_read`. (Ignore prefixos do multiplexador, caso existam).
+   * Utilize ESTRITAMENTE as ferramentas liberadas do Docfork: `docfork_search_docs` (para buscar) e `fetch_doc` (para extrair a URL resultante). (Ignore prefixos do multiplexador, caso existam).
 
 3. **Blindagem de VRAM e Compressão (Anti-OOM):**
    * Quando o Docfork retornar páginas extensas convertidas em Markdown, NÃO grave tudo no seu contexto cognitivo.
@@ -43,7 +43,7 @@ Sempre que precisar compreender uma nova dependência, ler documentações do *c
 **Entrada do Usuário:** "SODA, lê a documentação oficial do `tokio` e me diz como estruturar o canal MPSC pra thread isolada."
 **Ação do Agente:**
 1. Roda o `ctx_read` no `Cargo.toml` e ancora a busca à versão `1.38`.
-2. Roteia para o Docfork: invoca `docfork_query(target: "tokio mpsc channel version 1.38", scope: "api_reference")`.
+2. Roteia para o Docfork: invoca `docfork_search_docs(target: "tokio mpsc channel version 1.38", scope: "api_reference")`.
 3. A documentação extraída é muito longa. O agente usa `sqz_compress` para achatar os tokens antes de internalizar.
 4. Identifica a sintaxe correta do `tokio::sync::mpsc::channel`.
 5. Roda um micro-teste no *Shadow Workspace* com `@soda-ralph-loop`. A compilação atinge *Exit Code 0*.

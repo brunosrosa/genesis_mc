@@ -27,3 +27,5 @@ dist-ssr
 .env
 tmp/*
 .agents/scratch/*/
+
+.soda_data/

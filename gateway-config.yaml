@@ -10,26 +10,28 @@ binds:
                 allowOrigins: ['*']
                 allowHeaders: ['*']
                 exposeHeaders: ['Mcp-Session-Id']
+              requestHeaderModifier:
+                set:
+                  DOCFORK_API_KEY: '${DOCFORK_API_KEY}'
               mcpAuthorization:
+                # VÁLVULA INTELIGENTE CEL (FIREWALL L7) (v1.2 07/05/2026)
+                # Usando short-circuit com !has() para proteger o handshake de inicialização
                 rules:
-                  # VÁLVULA INTELIGENTE CEL (FIREWALL L7) (v1.1 22/04/2026)
-                  # Usando short-circuit com !has() para proteger o handshake de inicialização
                   - >
                     !has(mcp.tool) 
-                    || mcp.tool.name.matches("^(index_folder|index_repo|get_file_tree|get_file_outline|get_symbol_source|search_symbols|get_file_content)$") 
-                    || mcp.tool.name.matches("^(get_current_time|read_query|list_tables|describe_table|sequentialthinking)$") 
-                    || mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$") 
+                    || mcp.tool.name.matches("^(index_folder|index_repo|get_file_tree|get_file_outline|get_symbol_source|search_symbols|get_file_content)$")
+                    || mcp.tool.name.matches("^(get_current_time|read_query|list_tables|describe_table|sequentialthinking)$")
+                    || mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$")
                     || mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|notebook_create|notebook_delete|source_get_content|source_add|source_delete|add_source|delete_source)$")
                     || mcp.tool.name.matches("^(web_search|duckduckgo_search|fetch_content)$")
                     || mcp.tool.name.matches("^(webcrawl_search|webcrawl_scrape|webcrawl_map|webcrawl_crawl)$")
                     || mcp.tool.name.matches("^(get_sheet_data|add_rows|batch_update_cells)$")
-                    || mcp.tool.name.matches("^(search_docs|get_docs_tree)$")
+                    || mcp.tool.name.matches("^(search_docs|get_docs_tree|docfork_search_docs|fetch_doc)$")
                     || mcp.tool.name.matches("^(memory_.*|sqlite_.*|lean_.*|sqz_.*|toon_compress)$")
             backends:
-              # =====================================================================
-              # BLOCO A: NÚCLEO COGNITIVO E DE SEGURANÇA (FAIL CLOSED)
-              # Se o Hipocampo ou o Filtro caírem, trava tudo para evitar amnésia.
-              # =====================================================================
+              # ==========================================
+              # NÚCLEO COGNITIVO SODA (FAIL CLOSED)
+              # ==========================================
               - mcp:
                   failureMode: failClosed
                   targets:
@@ -37,26 +39,32 @@ binds:
                       stdio:
                         cmd: 'lean-ctx.exe'
                         args: []
+                        env:
+                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: sequential_thinking
                       stdio:
                         cmd: 'sequential-thinking-server.exe'
                         args: []
+                        env:
+                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+                          RUST_LOG: 'off'
                     - name: memory-mcp-rs
                       stdio:
                         cmd: 'memory-mcp-rs.exe'
-                        args: []
-
-              # =====================================================================
-              # BLOCO B: UTILITÁRIOS E PERIFÉRICOS (FAIL OPEN)
-              # Se a web ou o github caírem, o agente sobrevive e continua a tarefa.
-              # =====================================================================
+                        args: ['--db-path', 'C:/Users/rosas/Dev_Projects/genesis_mc/.soda_data/soda_state.db']
+                        env:
+                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+              # ==========================================
+              # ENXAME DE FERRAMENTAS (FAIL OPEN)
+              # Se uma tool falhar, isole e continue.
+              # ==========================================
               - mcp:
                   failureMode: failOpen
                   targets:
                     - name: jcodemunch
                       stdio:
                         cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['--quiet', 'jcodemunch-mcp']
+                        args: ['jcodemunch-mcp']
                     - name: time_server
                       stdio:
                         cmd: 'mcp-server-time.exe'
@@ -66,33 +74,35 @@ binds:
                     - name: duckduckgo_search
                       stdio:
                         cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['--quiet', 'duckduckgo-mcp-server']
+                        args: ['duckduckgo-mcp-server']
                     - name: github_mcp
                       stdio:
                         cmd: 'npx.cmd'
-                        args: ['-y', '--quiet', '@modelcontextprotocol/server-github']
+                        args: ['-y', '@modelcontextprotocol/server-github']
                         env:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
                     - name: notebooklm
                       stdio:
                         cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['--quiet', '--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
-                    # Movido para Fail Open para não engasgar o gateway se o arquivo DB faltar
+                        args: ['--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
                     - name: sqlite
                       stdio:
                         cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['--quiet', 'mcp-server-sqlite', '--db-path', 'C:/Users/rosas/Dev_Projects/genesis_mc/genesis.db']
+                        args: ['mcp-server-sqlite', '--db-path', 'C:/Users/rosas/Dev_Projects/genesis_mc/.soda_data/soda_state.db']
                     - name: docs_scraper
                       stdio:
                         cmd: 'npx.cmd'
-                        args: ['-y', '--quiet', 'mcp-docs-scraper']
+                        args: ['-y', 'mcp-docs-scraper']
                     - name: webcrawl-mcp
                       stdio:
                         cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['--quiet', 'webcrawl-mcp']
+                        args: ['webcrawl-mcp']
                     - name: mcp-google-sheets
                       stdio:
                         cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['--quiet', 'mcp-google-sheets']
+                        args: ['mcp-google-sheets']
                         env:
                           GOOGLE_APPLICATION_CREDENTIALS: '${GOOGLE_APPLICATION_CREDENTIALS}'
+                    - name: docfork
+                      mcp:
+                        host: 'https://mcp.docfork.com/mcp'

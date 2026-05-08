@@ -9,26 +9,22 @@ triggers: ["soda-sdd", "iniciar feature", "escrever código", "planejar tarefa",
 #### Goal
 Atuar como o chicote metodológico e orquestrador de código do Antigravity IDE. Seu objetivo inegociável é erradicar o *Flow-Debt* e as alucinações derivadas do *Vibe Coding*. Você (o Agente) NUNCA deve escrever uma linha de código-fonte sem antes: validar a "Ação de Canibalização" e a "Linha Vermelha" na Tabela Mestre (SSOT), gravar diagramas arquiteturais físicos com topologia FinOps, e provar a lógica no silício através do TDD rigoroso (Red-Green-Refactor) no terminal.
 
-#### Instructions
+###### Instructions
 Sempre que for solicitada a codificação de uma nova funcionalidade, refatoração ou injeção de componente, você DEVE executar esta máquina de estados sob o protocolo BMAD:
-
 1. **Fase 1: Ingestão SSOT e Isolamento Físico (Branch):**
-   * **Consumo de Fronteira:** Acesse o banco de dados/planilha (ex: `MASTER_SOLUTIONS_v3` ou `DEEP_COMPONENTS`) e extraia a `acao_de_canibalizacao` e a `red_line`. Você está proibido de codificar o que violar a Linha Vermelha.
-   * **Shadow Workspace:** Isole o ambiente usando ramificações temporárias e *Hard Links* (`snapsafe`) em tempo $\mathcal{O}(1)$ consumindo 0 bytes extras. Comando: `git checkout -b feat/<nome>`.
-
-2. **Fase 2: O Tratado ACONIC e FinOps (Plan):**
-   * Escreva o `docs/design.md`. Além do diagrama Mermaid obrigatório, você DEVE mapear o padrão **Orchestrator-Worker**: defina explicitamente qual parte da lógica exigirá o "Cloud Brain" (APIs premium) e o que rodará no "Local Worker" (RTX 2060m/AVX2).
-   * Pare e exija a autorização explícita do usuário: *"Arquiteto, o design e o roteamento FinOps estão aprovados?"*
-
+   * **Consumo de Fronteira:** Acesse o banco de dados/planilha e extraia a `acao_de_canibalizacao` e a `red_line`. Você está proibido de codificar o que violar a Linha Vermelha.
+   * **Shadow Workspace:** Isole o ambiente usando ramificações temporárias e *Hard Links* (snapsafe) em tempo $\mathcal{O}(1)$ consumindo 0 bytes extras. Comando: `git checkout -b feat/<nome>`.
+2. **Fase 2: O Tratado ACONIC e Agnosticismo Hardware:**
+   * Escreva o `docs/design.md`. Além do diagrama Mermaid obrigatório, você DEVE mapear o padrão **Orchestrator-Worker**.
+   * O design da lógica local DEVE garantir o **Agnosticismo de Hardware**. A solução não deve ser engessada para a RTX 2060m, mas sim estruturada de forma transmutável (preparada para ser recompilada via ecossistema CubeCL/Burn para Metal/Vulkan/NPU), usando a RTX 2060m exclusivamente como nosso "Treino de Gravidade" (piso de validação).
+   * Pare e exija a autorização explícita do usuário: *"Arquiteto, o design e o roteamento agnóstico estão aprovados?"*
 3. **Fase 3: Desfragmentação e DoD (Tasks):**
    * Quebre o design em passos atômicos dentro de `tasks.md`.
    * **Lei do Scaffold:** Cada tarefa deve ter uma *Definition of Done (DoD)* rigorosa, exigindo infraestrutura executável (testes vazios de falha) antes da lógica real.
-
 4. **Fase 4: Mutação Atômica e Delegação (Mutate):**
-   * A escrita em disco é sagrada. Utilize **OBRIGATORIAMENTE** `atomic-write-file` ou edição por *offset* protegida por Mutex assíncrono do Tokio. É proibida a alteração *in-place* para evitar Corrupção Silenciosa de Dados (SDC).
+   * A escrita em disco é sagrada. Utilize **OBRIGATORIAMENTE** `atomic-write-file` ou edição por *offset* protegida por Mutex assíncrono do Tokio.
    * Escreva o teste (Red), escreva o código, e rode `cargo check`.
    * Se o compilador quebrar, NÃO alucine uma resposta. Delegue IMEDIATAMENTE o erro invocando a skill mecânica `@soda-ralph-loop` para aplicar a correção sob o teto de 3 tentativas (*Fail-Closed*).
-
 5. **Fase 5: Anti-Consenso e Rebase Semântico (Approve & Diff):**
    * Ao atingir o *Exit Code 0*, NÃO faça *merge* e NÃO gere *Merge Commits* poluídos.
    * Compile o **Blast Radius** (arquivos tocados) e envie a notificação para a **Agent Inbox** do usuário. O sistema aguardará passivamente a aprovação em modo *Human-in-the-Loop* (HITL) para consolidar o *Rebase Semântico* em direção à branch principal.
