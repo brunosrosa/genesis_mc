@@ -1,0 +1,265 @@
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+use thiserror::Error;
+use tokio::time::timeout;
+use super::git::RepoPath;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SandboxPolicy {
+    ReadOnly,
+    ReadWrite,
+}
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum SandboxError {
+    #[error("Privilege error: {reason}")]
+    PrivilegeError { reason: String },
+
+    #[error("Policy violation: {detail}")]
+    PolicyViolation { detail: String },
+
+    #[error("Spawn failed: {reason}")]
+    ProcessSpawnFailed { reason: String },
+
+    #[error("Execution timed out")]
+    Timeout,
+
+    #[error("Platform not supported")]
+    UnsupportedPlatform,
+}
+
+#[derive(Debug)]
+pub struct SandboxHandle {
+    repo_path: PathBuf,
+    policy: SandboxPolicy,
+    is_mock: bool,
+    active_pids: Arc<Mutex<HashSet<u32>>>,
+}
+
+impl SandboxHandle {
+    /// Helper para acessar o Mutex de PIDs de forma segura contra poisoning.
+    /// Se o Mutex estiver envenenado (panic em outra thread), recupera o lock
+    /// ao invés de propagar o panic — Fail-Safe obrigatório em produção.
+    fn lock_pids(&self) -> std::sync::MutexGuard<'_, HashSet<u32>> {
+        self.active_pids.lock().unwrap_or_else(|poisoned| {
+            // Recupera o guard do Mutex envenenado — os dados internos ainda são válidos.
+            // Em produção, o comportamento correto é continuar operando para garantir
+            // que o Drop consiga limpar os processos órfãos.
+            poisoned.into_inner()
+        })
+    }
+
+    pub async fn execute(
+        &self,
+        command: &str,
+        args: &[&str],
+    ) -> Result<Vec<u8>, SandboxError> {
+        if self.is_mock {
+            // 1. Spawning do comando no diretório do repo_path
+            let mut child = tokio::process::Command::new(command)
+                .args(args)
+                .current_dir(&self.repo_path)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| SandboxError::ProcessSpawnFailed { reason: e.to_string() })?;
+
+            let pid = child.id().ok_or_else(|| {
+                SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar PID do processo".to_string() }
+            })?;
+
+            // Registra o PID ativo na guilhotina (D1: lock seguro contra poisoning)
+            self.lock_pids().insert(pid);
+
+            // Captura os streams de stdout e stderr ANTES do wait
+            let mut stdout_stream = child.stdout.take().ok_or_else(|| {
+                SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
+            })?;
+            let mut stderr_stream = child.stderr.take().ok_or_else(|| {
+                SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
+            })?;
+
+            // 2. D2 CORRIGIDO: Leitura de stdout/stderr CONCORRENTE com wait() via tokio::join!
+            //    Evita deadlock quando o processo filho gera saída maior que o buffer do pipe
+            //    do SO (~65KB no Windows). Se read_to_end rodar só após wait(), o filho
+            //    pode bloquear tentando escrever no pipe cheio, e wait() nunca retorna.
+            let mut stdout_buffer = Vec::new();
+            let mut stderr_buffer = Vec::new();
+
+            let run_fut = async {
+                use tokio::io::AsyncReadExt;
+                let (status, stdout_res, stderr_res) = tokio::join!(
+                    child.wait(),
+                    stdout_stream.read_to_end(&mut stdout_buffer),
+                    stderr_stream.read_to_end(&mut stderr_buffer),
+                );
+                // Ignoramos erros de leitura dos streams — o status do processo é o que importa
+                let _ = stdout_res;
+                let _ = stderr_res;
+                status
+            };
+
+            let wait_result = timeout(Duration::from_secs(30), run_fut).await;
+
+            // Remove o PID ativo da guilhotina (D1: lock seguro contra poisoning)
+            self.lock_pids().remove(&pid);
+
+            match wait_result {
+                Ok(Ok(status)) => {
+                    if status.success() {
+                        Ok(stdout_buffer)
+                    } else {
+                        let stderr_msg = String::from_utf8_lossy(&stderr_buffer);
+                        Err(SandboxError::ProcessSpawnFailed {
+                            reason: format!("Comando falhou com código {:?}: {}", status.code(), stderr_msg.trim()),
+                        })
+                    }
+                }
+                Ok(Err(e)) => Err(SandboxError::ProcessSpawnFailed { reason: e.to_string() }),
+                Err(_) => {
+                    // Timeout! Executa o kill incondicional e assíncrono
+                    let _ = child.kill().await;
+                    // D3 CORRIGIDO: Remove o PID após o kill para evitar que o Drop
+                    // mate um processo inocente que herdou o PID reciclado pelo SO.
+                    self.lock_pids().remove(&pid);
+                    Err(SandboxError::Timeout)
+                }
+            }
+        } else {
+            // Em produção real sem mock, se LPAC ou Landlock não forem ativados nativamente, falha-se
+            Err(SandboxError::UnsupportedPlatform)
+        }
+    }
+
+    pub fn repo_path(&self) -> &Path {
+        &self.repo_path
+    }
+
+    pub fn policy(&self) -> SandboxPolicy {
+        self.policy
+    }
+}
+
+// Implementação do Drop RAII à prova de falhas com thread spawn + join para aniquilar processos ativos.
+// D1 CORRIGIDO: Usa unwrap_or_else para recuperar de Mutex poisoned ao invés de panic.
+impl Drop for SandboxHandle {
+    fn drop(&mut self) {
+        let pids: Vec<u32> = {
+            let guard = self.active_pids.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            guard.iter().copied().collect()
+        };
+
+        if !pids.is_empty() {
+            // Executa a guilhotina em uma thread dedicada do sistema operacional (PT-3).
+            // O join() garante que o Drop é síncrono: o SandboxHandle não é destruído
+            // até que todos os processos filhos tenham sido exterminados.
+            let _ = std::thread::spawn(move || {
+                for pid in pids {
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/F", "/PID", &pid.to_string()])
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .status();
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        let _ = std::process::Command::new("kill")
+                            .args(["-9", &pid.to_string()])
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .status();
+                    }
+                }
+            }).join();
+        }
+    }
+}
+
+pub struct SandboxOrchestrator;
+
+impl SandboxOrchestrator {
+    pub async fn create(
+        repo_path: &RepoPath,
+        policy: SandboxPolicy,
+        is_mock: bool,
+    ) -> Result<SandboxHandle, SandboxError> {
+        if is_mock {
+            Ok(SandboxHandle {
+                repo_path: repo_path.as_ref().to_path_buf(),
+                policy,
+                is_mock: true,
+                active_pids: Arc::new(Mutex::new(HashSet::new())),
+            })
+        } else {
+            // Em ambiente real e de produção, caso o suporte nativo do SO para sandboxes
+            // não tenha sido inicializado via crate rappct/landlock, lançamos o erro adequado
+            Err(SandboxError::UnsupportedPlatform)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::OnceLock;
+
+    static TEST_MUTEX: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+    async fn get_test_mutex() -> &'static tokio::sync::Mutex<()> {
+        TEST_MUTEX.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    #[tokio::test]
+    async fn test_create_sandbox_success() {
+        let _guard = get_test_mutex().await.lock().await;
+        
+        // Criamos um mock RepoPath usando o diretório temporário nativo do sistema operacional
+        let temp_dir = std::env::temp_dir();
+        let repo_path = RepoPath(temp_dir);
+
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly, true)
+            .await
+            .expect("Deveria criar sandbox mock com sucesso");
+
+        assert_eq!(sandbox.policy(), SandboxPolicy::ReadOnly);
+        assert_eq!(sandbox.repo_path(), repo_path.as_ref());
+    }
+
+    #[tokio::test]
+    async fn test_execute_in_sandbox() {
+        let _guard = get_test_mutex().await.lock().await;
+        
+        let temp_dir = std::env::temp_dir();
+        let repo_path = RepoPath(temp_dir);
+
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly, true)
+            .await
+            .unwrap();
+
+        // Executa comando básico trivial do próprio sistema para verificar I/O
+        #[cfg(target_os = "windows")]
+        let output = sandbox.execute("cmd", &["/C", "echo SODA_SANDBOX"]).await.unwrap();
+        
+        #[cfg(not(target_os = "windows"))]
+        let output = sandbox.execute("echo", &["SODA_SANDBOX"]).await.unwrap();
+
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.trim().contains("SODA_SANDBOX"));
+    }
+
+    #[tokio::test]
+    async fn test_no_fallback_without_sandbox() {
+        let _guard = get_test_mutex().await.lock().await;
+        
+        let temp_dir = std::env::temp_dir();
+        let repo_path = RepoPath(temp_dir);
+
+        // Se is_mock for falso e o suporte nativo do SO não estiver ativado, deve falhar
+        let res = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly, false).await;
+        assert_eq!(res.unwrap_err(), SandboxError::UnsupportedPlatform);
+    }
+}

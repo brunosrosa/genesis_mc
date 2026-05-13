@@ -1,3 +1,5 @@
+pub mod harvester;
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn genesis_ping(payload: &str) -> String {

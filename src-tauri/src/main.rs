@@ -5,6 +5,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+#[allow(clippy::zombie_processes)]
 fn main() {
     // genesis_mc_lib::run()
     tauri::Builder::default()
