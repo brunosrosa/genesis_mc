@@ -46,6 +46,6 @@ Em impasses arquiteturais ou falhas de TDD:
 
 ### LEI DA HIGIENE DE WORKSPACE (FOBIA DE RAIZ):
 É TERMINANTEMENTE PROIBIDO despejar scripts de automação, meta-programação, logs, testes ou arquivos temporários na raiz do repositório.
-- A pasta `/.session_board/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
+- A pasta `.soda_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
 - A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
 - Lixo não sobrevivente deve ser apagado fisicamente após o uso.
