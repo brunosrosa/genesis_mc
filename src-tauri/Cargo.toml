@@ -29,6 +29,9 @@ tracing = "0.1"
 url = "2"
 sha2 = "0.10"
 toml = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3"
+mockito = "1.5"

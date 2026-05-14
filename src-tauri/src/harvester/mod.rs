@@ -5,3 +5,4 @@ pub mod detect;
 pub mod router;
 pub mod sidecar;
 pub mod extract;
+pub mod community;
