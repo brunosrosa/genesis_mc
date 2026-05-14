@@ -25,6 +25,17 @@ pub struct DependencyEntry {
     pub version_spec: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpsPayload {
+    pub infra_files: Vec<InfraFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InfraFile {
+    pub path: String,
+    pub content: String,
+}
+
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ExtractionError {
     #[error("No manifest files found in repository root")]
@@ -49,6 +60,91 @@ pub struct ManifestInput<'a> {
 }
 
 pub struct ManifestExtractor;
+
+pub struct OpsInput<'a> {
+    pub repo_path: &'a RepoPath,
+}
+
+pub struct OpsBlueprintExtractor;
+
+impl OpsBlueprintExtractor {
+    pub async fn extract(input: OpsInput<'_>) -> Result<OpsPayload, ExtractionError> {
+        let root_targets = [
+            "Dockerfile",
+            "docker-compose.yml",
+            "docker-compose.yaml",
+            "Makefile",
+        ];
+
+        let mut infra_files = Vec::new();
+
+        // 1. Root files
+        for &file_name in &root_targets {
+            let path = input.repo_path.join(file_name);
+            if let Some(infra) = Self::read_infra_file(&path, file_name).await? {
+                infra_files.push(infra);
+            }
+        }
+
+        // 2. Workflows (.github/workflows/) - Level 1 only
+        let workflows_path = input.repo_path.join(".github/workflows");
+        if let Ok(mut entries) = fs::read_dir(workflows_path).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let file_type = match entry.file_type().await {
+                    Ok(ft) => ft,
+                    Err(_) => continue,
+                };
+
+                if file_type.is_file() {
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    if file_name.ends_with(".yml") || file_name.ends_with(".yaml") {
+                        let path = entry.path();
+                        let rel_path = format!(".github/workflows/{}", file_name);
+                        if let Some(infra) = Self::read_infra_file(&path, &rel_path).await? {
+                            infra_files.push(infra);
+                        }
+                    }
+                }
+            }
+        }
+
+        if infra_files.is_empty() {
+            Err(ExtractionError::NotFound)
+        } else {
+            Ok(OpsPayload { infra_files })
+        }
+    }
+
+    async fn read_infra_file(path: &std::path::Path, rel_path: &str) -> Result<Option<InfraFile>, ExtractionError> {
+        let metadata = match fs::metadata(path).await {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(ExtractionError::IoError {
+                file: rel_path.to_string(),
+                reason: e.to_string(),
+            }),
+        };
+
+        let size = metadata.len();
+        if size > MAX_MANIFEST_SIZE {
+            return Err(ExtractionError::FileTooLarge {
+                file: rel_path.to_string(),
+                size_bytes: size,
+                limit_bytes: MAX_MANIFEST_SIZE,
+            });
+        }
+
+        let content = fs::read_to_string(path).await.map_err(|e| ExtractionError::IoError {
+            file: rel_path.to_string(),
+            reason: e.to_string(),
+        })?;
+
+        Ok(Some(InfraFile {
+            path: rel_path.to_string(),
+            content,
+        }))
+    }
+}
 
 use std::collections::BTreeMap;
 
@@ -404,5 +500,62 @@ tempfile = "3"
         // Deve conter apenas o Cargo.toml
         assert_eq!(result.manifests.len(), 1);
         assert_eq!(result.manifests[0].file_name, "Cargo.toml");
+    }
+
+    #[tokio::test]
+    async fn test_ops_extract_root_files() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("Dockerfile"), "FROM rust").await.unwrap();
+        fs::write(dir.path().join("Makefile"), "build:").await.unwrap();
+        fs::write(dir.path().join("docker-compose.yml"), "version: '3'").await.unwrap();
+        
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await.unwrap();
+        
+        assert_eq!(result.infra_files.len(), 3);
+        assert!(result.infra_files.iter().any(|f| f.path == "Dockerfile"));
+        assert!(result.infra_files.iter().any(|f| f.path == "Makefile"));
+    }
+
+    #[tokio::test]
+    async fn test_ops_extract_workflows_shallow() {
+        let dir = TempDir::new().unwrap();
+        let workflows_dir = dir.path().join(".github/workflows");
+        fs::create_dir_all(&workflows_dir).await.unwrap();
+        
+        fs::write(workflows_dir.join("ci.yml"), "name: CI").await.unwrap();
+        fs::write(workflows_dir.join("deploy.yaml"), "name: Deploy").await.unwrap();
+        
+        // Criar subdiretório para provar que a recursão ignora
+        let nested_dir = workflows_dir.join("nested");
+        fs::create_dir_all(&nested_dir).await.unwrap();
+        fs::write(nested_dir.join("ignored.yml"), "should be ignored").await.unwrap();
+        
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await.unwrap();
+        
+        // Dockerfile/Makefile não existem aqui, então só os 2 workflows da raiz da pasta
+        assert_eq!(result.infra_files.len(), 2);
+        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/ci.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/deploy.yaml"));
+        assert!(!result.infra_files.iter().any(|f| f.path.contains("ignored.yml")));
+    }
+
+    #[tokio::test]
+    async fn test_ops_file_too_large() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("Dockerfile");
+        
+        let mut file = std::fs::File::create(&path).unwrap();
+        let buffer = vec![0u8; (MAX_MANIFEST_SIZE + 100) as usize];
+        file.write_all(&buffer).unwrap();
+        
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await;
+        
+        match result {
+            Err(ExtractionError::FileTooLarge { file, .. }) => assert_eq!(file, "Dockerfile"),
+            _ => panic!("Deveria ter falhado com FileTooLarge para Dockerfile gigante"),
+        }
     }
 }

@@ -50,11 +50,15 @@ impl CommunityMetaFetcher {
     ) -> Result<CommunityMetaPayload, FetchError> {
         limiter.check().await;
         
-        let client = reqwest::Client::builder()
+        let client_result = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .user_agent("SODA-Harvester/1.0")
-            .build()
-            .map_err(|e| FetchError::Network(e.to_string()))?;
+            .build();
+            
+        let client = match client_result {
+            Ok(c) => c,
+            Err(_) => return Ok(CommunityMetaPayload::empty()), // Fail-Soft na inicialização do Client (ex: falha TLS)
+        };
 
         // Mapeamento de URL GitHub para API
         let api_url = if repo_url.host_str() == Some("github.com") {
