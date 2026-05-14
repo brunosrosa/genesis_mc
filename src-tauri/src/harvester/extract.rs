@@ -1,17 +1,17 @@
 use tokio::fs;
 use thiserror::Error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use super::git::RepoPath;
 
 /// Tamanho máximo permitido para um arquivo de manifesto (1 MiB).
 const MAX_MANIFEST_SIZE: u64 = 1_048_576;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestPayload {
     pub manifests: Vec<ManifestInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestInfo {
     pub file_name: String,
     pub dependencies: Vec<DependencyEntry>,
@@ -19,18 +19,18 @@ pub struct ManifestInfo {
     pub file_size_bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DependencyEntry {
     pub name: String,
     pub version_spec: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct OpsPayload {
     pub infra_files: Vec<InfraFile>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct InfraFile {
     pub path: String,
     pub content: String,
