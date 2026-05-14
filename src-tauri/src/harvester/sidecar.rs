@@ -88,6 +88,18 @@ async fn execute_sidecar<E: SandboxExecutor>(
                 Err(SidecarError::ExecutionFailed { reason })
             }
         }
+        // Match numérico explícito no exit code — sem manipulação de string.
+        // Exit code 1: linters sinalizam violações encontradas (sucesso de negócio).
+        // Exit code 2+: erro real de execução (config inválida, crash).
+        Err(SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout }) => {
+            if exit_code == 1 {
+                Ok(stdout)
+            } else {
+                Err(SidecarError::ExecutionFailed {
+                    reason: format!("exit code {exit_code}: {stderr}"),
+                })
+            }
+        }
         Err(e) => {
             Err(SidecarError::ExecutionFailed {
                 reason: e.to_string(),
@@ -150,6 +162,44 @@ impl OxcSidecar {
         let args = ["lint", "--format", "json", "--quiet", "."];
         let bytes = execute_sidecar(input.executor, "oxlint", &args, input.timeout_secs).await?;
         serde_json::from_slice::<UxContractsPayload>(&bytes).map_err(|e| SidecarError::ParseError {
+            reason: e.to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct LintViolation {
+    pub rule_id: String,
+    pub severity: String,
+    pub message: String,
+    pub file_path: String,
+    pub line: u32,
+    pub column: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct StaticAnalysisPayload {
+    pub violations: Vec<LintViolation>,
+    pub files_analyzed: u32,
+    pub linter_name: String,
+}
+
+pub struct StaticAnalysisInput<'a, E: SandboxExecutor> {
+    pub executor: &'a E,
+    pub timeout_secs: u64,
+}
+
+pub struct StaticAnalysisSidecar;
+
+impl StaticAnalysisSidecar {
+    /// Extrai as violações de qualidade de código usando um linter no sandbox.
+    pub async fn extract<E: SandboxExecutor>(
+        input: StaticAnalysisInput<'_, E>,
+        linter: &str,
+        args: &[&str],
+    ) -> Result<StaticAnalysisPayload, SidecarError> {
+        let bytes = execute_sidecar(input.executor, linter, args, input.timeout_secs).await?;
+        serde_json::from_slice::<StaticAnalysisPayload>(&bytes).map_err(|e| SidecarError::ParseError {
             reason: e.to_string(),
         })
     }
@@ -252,8 +302,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_execution_failed() {
-        let run_err = SandboxError::ProcessSpawnFailed {
-            reason: "Comando falhou com código Some(1): error: failed to compile".to_string(),
+        let run_err = SandboxError::ProcessNonZeroExit {
+            exit_code: 2,
+            stderr: "fatal error".to_string(),
+            stdout: Vec::new(),
         };
         let executor = MockExecutor::new(Err(run_err));
         let input = JCodemunchInput {
@@ -265,7 +317,7 @@ mod tests {
         assert_eq!(
             result,
             Err(SidecarError::ExecutionFailed {
-                reason: "Comando falhou com código Some(1): error: failed to compile".to_string()
+                reason: "exit code 2: fatal error".to_string()
             })
         );
     }
@@ -392,8 +444,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_oxc_execution_failed() {
-        let run_err = SandboxError::ProcessSpawnFailed {
-            reason: "oxlint failed".to_string(),
+        let run_err = SandboxError::ProcessNonZeroExit {
+            exit_code: 2,
+            stderr: "oxlint crashed".to_string(),
+            stdout: Vec::new(),
         };
         let executor = MockExecutor::new(Err(run_err));
         let input = OxcInput {
@@ -405,7 +459,7 @@ mod tests {
         assert_eq!(
             result,
             Err(SidecarError::ExecutionFailed {
-                reason: "oxlint failed".to_string()
+                reason: "exit code 2: oxlint crashed".to_string()
             })
         );
     }
@@ -461,5 +515,79 @@ mod tests {
         let payload = result.unwrap();
         assert_eq!(payload.files_analyzed, 0);
         assert!(payload.components.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_static_analysis_success_exit_1() {
+        let valid_json = r#"{
+            "violations": [
+                {
+                    "rule_id": "rule_1",
+                    "severity": "error",
+                    "message": "msg 1",
+                    "file_path": "src/main.rs",
+                    "line": 10,
+                    "column": 5
+                }
+            ],
+            "files_analyzed": 1,
+            "linter_name": "ruff"
+        }"#;
+
+        // Simula exit code 1 via variante estruturada
+        let err_exit_1 = SandboxError::ProcessNonZeroExit {
+            exit_code: 1,
+            stderr: "issues found".to_string(),
+            stdout: valid_json.as_bytes().to_vec(),
+        };
+        let executor = MockExecutor::new(Err(err_exit_1));
+        let input = StaticAnalysisInput {
+            executor: &executor,
+            timeout_secs: 30,
+        };
+
+        let result = StaticAnalysisSidecar::extract(input, "ruff", &["check"]).await;
+        assert!(result.is_ok(), "Exit code 1 deveria ser sucesso para análise estática: {:?}", result);
+        let payload = result.unwrap();
+        assert_eq!(payload.violations.len(), 1);
+        assert_eq!(payload.violations[0].rule_id, "rule_1");
+    }
+
+    #[tokio::test]
+    async fn test_static_analysis_success_exit_0() {
+        let empty_json = r#"{
+            "violations": [],
+            "files_analyzed": 10,
+            "linter_name": "ruff"
+        }"#;
+
+        let executor = MockExecutor::new(Ok(empty_json.as_bytes().to_vec()));
+        let input = StaticAnalysisInput {
+            executor: &executor,
+            timeout_secs: 30,
+        };
+
+        let result = StaticAnalysisSidecar::extract(input, "ruff", &["check"]).await;
+        assert!(result.is_ok());
+        let payload = result.unwrap();
+        assert!(payload.violations.is_empty());
+        assert_eq!(payload.files_analyzed, 10);
+    }
+
+    #[tokio::test]
+    async fn test_static_analysis_execution_failed_exit_2() {
+        let run_err = SandboxError::ProcessNonZeroExit {
+            exit_code: 2,
+            stderr: "config error".to_string(),
+            stdout: Vec::new(),
+        };
+        let executor = MockExecutor::new(Err(run_err));
+        let input = StaticAnalysisInput {
+            executor: &executor,
+            timeout_secs: 30,
+        };
+
+        let result = StaticAnalysisSidecar::extract(input, "ruff", &["check"]).await;
+        assert!(matches!(result, Err(SidecarError::ExecutionFailed { .. })));
     }
 }

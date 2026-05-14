@@ -23,6 +23,17 @@ pub enum SandboxError {
     #[error("Spawn failed: {reason}")]
     ProcessSpawnFailed { reason: String },
 
+    /// Processo terminou com exit code != 0. Diferente de ProcessSpawnFailed,
+    /// aqui o processo NASCEU e EXECUTOU, mas retornou um código de erro.
+    /// O stdout é preservado porque linters usam exit code 1 para sinalizar
+    /// violações encontradas (não é crash).
+    #[error("Process exited with code {exit_code}")]
+    ProcessNonZeroExit {
+        exit_code: i32,
+        stderr: String,
+        stdout: Vec<u8>,
+    },
+
     #[error("Execution timed out")]
     Timeout,
 
@@ -111,9 +122,12 @@ impl SandboxHandle {
                     if status.success() {
                         Ok(stdout_buffer)
                     } else {
-                        let stderr_msg = String::from_utf8_lossy(&stderr_buffer);
-                        Err(SandboxError::ProcessSpawnFailed {
-                            reason: format!("Comando falhou com código {:?}: {}", status.code(), stderr_msg.trim()),
+                        let stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
+                        let exit_code = status.code().unwrap_or(-1);
+                        Err(SandboxError::ProcessNonZeroExit {
+                            exit_code,
+                            stderr: stderr_msg,
+                            stdout: stdout_buffer,
                         })
                     }
                 }
