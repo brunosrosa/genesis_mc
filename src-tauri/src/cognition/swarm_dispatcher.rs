@@ -12,12 +12,14 @@ pub enum SwarmError {
 
 pub struct CognitiveSwarmDispatcher;
 
+use crate::cognition::sgr_synthesizer::SwarmDebate;
+
 impl CognitiveSwarmDispatcher {
     pub async fn dispatch_swarm(
-        _repo_id: &str,
+        repo_id: &str,
         tokens_count: usize,
         target_tier: ModelTier,
-    ) -> Result<(), SwarmError> {
+    ) -> Result<SwarmDebate, SwarmError> {
         // 1. Catraca FinOps (Síncrona O(1))
         // PT-SWARM: O disjuntor blinda a rede
         IronCostBreaker::calculate_and_route(tokens_count, target_tier)
@@ -32,10 +34,12 @@ impl CognitiveSwarmDispatcher {
         );
 
         // 3. Persistência Atômica (Simulada aqui conforme Phase C)
-        // Em um cenário real, salvaríamos lente_a, lente_b, lente_c no SQLite
-        let _ = (lente_a, lente_b, lente_c);
-
-        Ok(())
+        Ok(SwarmDebate {
+            repo_id: repo_id.to_string(),
+            lente_a,
+            lente_b,
+            lente_c,
+        })
     }
 
     async fn exec_lente_a() -> String {

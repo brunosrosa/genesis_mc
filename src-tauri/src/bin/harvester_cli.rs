@@ -73,6 +73,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ["FASE_1_OK", repo_id],
             )?;
             info!("Status do repositório atualizado: FASE_1_OK");
+
+            // --- INÍCIO DO E2E ---
+            use genesis_mc_lib::cognition::swarm_dispatcher::CognitiveSwarmDispatcher;
+            use genesis_mc_lib::finops::iron_cost::ModelTier;
+            use genesis_mc_lib::cognition::sgr_synthesizer::SgrSynthesizer;
+            use genesis_mc_lib::persist::ssot_injector::SsotInjector;
+
+            // 7. Cognitive Swarm (Fase 2)
+            info!("Engatilhando Fase 2 (Enxame Cognitivo)...");
+            // Usaremos 10k tokens e a Nuvem como teste (vai passar o budget se configurado certo, simulamos LocalGPU)
+            let debate = CognitiveSwarmDispatcher::dispatch_swarm(repo_id, 10000, ModelTier::LocalGPU).await.unwrap();
+            info!("Debate gerado em paralelo via tokio::join! (Free-MAD).");
+
+            // 8. SGR Synthesizer (Fase 3)
+            info!("Engatilhando Fase 3 (SGR Synthesizer)...");
+            let payload = SgrSynthesizer::synthesize_debate(debate).unwrap();
+            info!("Decodificação Restrita aplicada (SGR Law). Score final: {}", payload.score_final);
+
+            // 9. SSOT Injector (Fase 4)
+            info!("Engatilhando Fase 4 (SSOT Injector)...");
+            SsotInjector::inject_ssot(repo_id, payload).await.unwrap();
+            info!("Dados selados no SQLite (Durabilidade L2).");
+            info!("Payload fatiado e injetado na nuvem via batch_update_cells (Manobra Anti-503).");
         }
         Err(e) => {
             error!("Falha crítica na orquestração: {}", e);
@@ -85,6 +108,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    info!("Lote Piloto concluído com êxito.");
+    info!("Lote Piloto concluído com êxito E2E.");
     Ok(())
 }

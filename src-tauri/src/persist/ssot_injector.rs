@@ -18,7 +18,7 @@ impl SsotInjector {
         // 1. Selagem L2 (Execução Durável)
         // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
         Self::update_local_status(repo_id, "CONCLUIDO")
-            .map_err(|e| SsotError::L2Failure(e))?;
+            .map_err(SsotError::L2Failure)?;
 
         // 2. Manobra Anti-503: Desmembramento e Agregação na RAM
         let _batch_payload = Self::prepare_batch_payload(repo_id, payload);
