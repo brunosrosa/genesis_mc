@@ -3,7 +3,7 @@ use url::Url;
 use rusqlite::Connection;
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use tracing::{info, error};
-use tracing_subscriber;
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,9 +15,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("SODA Lote Piloto: Iniciando Teste de Fogo (Goose)");
 
-    // 2. Setup Banco de Dados Real (soda_heuristic_vault.db)
-    let db_path = "soda_heuristic_vault.db";
-    let conn = Connection::open(db_path)?;
+    // 2. Setup Banco de Dados Real (soda_heuristic_vault.db) na raiz do projeto
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let root_dir = std::path::Path::new(manifest_dir).parent().expect("Falha ao resolver raiz do projeto");
+    let soda_data_dir = root_dir.join(".soda_data");
+    
+    tokio::fs::create_dir_all(&soda_data_dir).await?;
+    let db_path = soda_data_dir.join("soda_heuristic_vault.db");
+    let conn = Connection::open(&db_path)?;
     
     // 3. Criar Tabelas (Dicionário SODA V3)
     conn.execute(
