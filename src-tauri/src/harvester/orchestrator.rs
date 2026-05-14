@@ -32,10 +32,11 @@ impl HarvesterOrchestrator {
     /// Maestro do pipeline SODA ETL (Fase 1).
     /// Coordena o fluxo determinístico [N1] -> [N13].
     pub async fn run(
+        repo_id: &str,
         repo_url: &Url,
         conn: Arc<Mutex<Connection>>,
     ) -> Result<(), OrchestratorError> {
-        info!(url = %repo_url, "Iniciando HarvesterOrchestrator (N14)");
+        info!(url = %repo_url, repo_id = %repo_id, "Iniciando HarvesterOrchestrator (N14)");
 
         // 1. [N1] Setup Físico (Fail-Fast)
         // PT-3: Alocação assíncrona para não bloquear o Event Loop.
@@ -46,7 +47,7 @@ impl HarvesterOrchestrator {
         let mut sandbox_handle: Option<SandboxHandle> = None;
         
         // 2. Execução do Pipeline com Garantia de Vida (PurgeGuard)
-        let result = Self::pipeline_core(repo_url, &ramdisk, conn, &mut sandbox_handle).await;
+        let result = Self::pipeline_core(repo_id, repo_url, &ramdisk, conn, &mut sandbox_handle).await;
 
         // 6. [N13] PurgeGuard (Lifeline Incondicional)
         // Consome as instâncias por VALOR para garantir a higiene RAII.
@@ -64,6 +65,7 @@ impl HarvesterOrchestrator {
     /// Execução do núcleo lógico do pipeline.
     /// Captura o SandboxHandle para garantir que o PurgeGuard possa limpá-lo.
     async fn pipeline_core(
+        repo_id: &str,
         repo_url: &Url,
         ramdisk: &RamdiskHandle,
         conn: Arc<Mutex<Connection>>,
@@ -140,8 +142,7 @@ impl HarvesterOrchestrator {
 
         // [N12] Persistência Atômica
         // PT-BLOB-1: Injeção individualizada no banco episódico.
-        let repo_id = repo_url.path().trim_start_matches('/').replace('/', "_");
-        BlobNormalizer::persist(repo_id, blobs, conn)
+        BlobNormalizer::persist(repo_id.to_string(), blobs, conn)
             .await
             .map_err(|e| OrchestratorError::PersistenceError(e.to_string()))?;
 
@@ -186,7 +187,7 @@ mod tests {
         // Nota: Em um ambiente de TDD rigoroso, faríamos o orchestrator receber o tamanho ou o allocator.
         // Mas o PRD-014 fixou 256MB. Vamos forçar erro via falta de git se necessário, ou mockar a URL.
         
-        let result = HarvesterOrchestrator::run(&repo_url, conn).await;
+        let result = HarvesterOrchestrator::run("test/repo", &repo_url, conn).await;
         
         // No CI/Ambiente de Teste, o git pode não estar instalado ou a URL ser inválida.
         // O importante é que se houver erro, ele seja capturado.

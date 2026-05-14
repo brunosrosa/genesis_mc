@@ -19,7 +19,7 @@ impl SsotInjector {
     pub async fn inject_ssot(repo_id: &str, payload: SgrPayload) -> Result<(), SsotError> {
         // 1. Selagem L2 (Execução Durável)
         // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
-        Self::update_local_status(repo_id, "CONCLUIDO")
+        Self::update_local_status(repo_id, "CONCLUIDO", &payload)
             .map_err(SsotError::L2Failure)?;
 
         // 2. Manobra Anti-503: Desmembramento e Agregação na RAM
@@ -31,55 +31,56 @@ impl SsotInjector {
         Ok(())
     }
 
-    fn update_local_status(repo_id: &str, status_value: &str) -> Result<(), String> {
+    fn update_local_status(repo_id: &str, status_value: &str, payload: &SgrPayload) -> Result<(), String> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let root_dir = std::path::Path::new(manifest_dir).parent().unwrap_or_else(|| std::path::Path::new("."));
         let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
         
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Falha ao conectar no SQLite: {}", e))?;
+
+        let project_name = repo_id.split('/').next_back().unwrap_or(repo_id);
+        let repo_url = format!("https://github.com/{}", repo_id);
             
-        // I/O L2 Real: Usamos 'id' e 'status' conforme schema original do Harvester CLI
-        let rows_updated = conn.execute(
+        // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
+        conn.execute(
+            "INSERT OR REPLACE INTO repo_heuristics (
+                repo_id, project_name, repo_url, justificativa_decisao, 
+                executive_verdict, acao_de_canibalizacao, score_bare_metal_fit, score_final, observacoes
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                repo_id,
+                project_name,
+                repo_url,
+                payload.justificativa_decisao,
+                format!("{:?}", payload.executive_verdict),
+                format!("{:?}", payload.cannibalization_action),
+                payload.score_bare_metal_fit as f64,
+                payload.score_final as f64,
+                payload.visao_do_enxame
+            ],
+        ).map_err(|e| format!("Falha ao executar INSERT repo_heuristics: {}", e))?;
+
+        // Atualizando o status em repositorios
+        let _ = conn.execute(
             "UPDATE repositorios SET status = ?1 WHERE id = ?2",
-            [status_value, repo_id],
-        ).map_err(|e| format!("Falha ao executar UPDATE: {}", e))?;
+            rusqlite::params![status_value, repo_id],
+        ).map_err(|e| format!("Falha ao executar UPDATE repositorios: {}", e))?;
         
-        if rows_updated == 0 {
-            // Em caso de zero linhas, podemos apenas logar ou retornar sucesso, pois o ID pode não existir no teste unitário
-        }
         Ok(())
     }
 
     fn prepare_batch_payload(_repo_id: &str, payload: SgrPayload) -> Value {
-        // PT-SSOT-1: Agrega as 4 abas em um único objeto JSON para batch_update
+        // Formato correto esperado pelo MCP batch_update_cells (dict)
         json!({
-            "requests": [
-                {
-                    "sheet": "MASTER_SOLUTIONS",
-                    "data": {
-                        "verdict": format!("{:?}", payload.executive_verdict),
-                        "score": payload.score_final
-                    }
-                },
-                {
-                    "sheet": "SODA_GRAPH_TOPOLOGY",
-                    "data": {
-                        "vision": payload.visao_do_enxame
-                    }
-                },
-                {
-                    "sheet": "ACTION_MATRIX",
-                    "data": {
-                        "action": format!("{:?}", payload.cannibalization_action)
-                    }
-                },
-                {
-                    "sheet": "QUARANTINE_RADAR",
-                    "data": {
-                        "risk": "Low" // Exemplo condicional
-                    }
-                }
+            "A2:H2": [
+                [
+                    _repo_id,
+                    payload.score_final.to_string(),
+                    format!("{:?}", payload.executive_verdict),
+                    payload.visao_do_enxame,
+                    format!("{:?}", payload.cannibalization_action)
+                ]
             ]
         })
     }
@@ -117,8 +118,9 @@ impl SsotInjector {
             "params": {
                 "name": "batch_update_cells",
                 "arguments": {
-                    "spreadsheetId": sheets_id,
-                    "requests": payload["requests"]
+                    "spreadsheet_id": sheets_id,
+                    "sheet": "MASTER_SOLUTIONS",
+                    "ranges": payload
                 }
             }
         });
@@ -133,12 +135,9 @@ impl SsotInjector {
             .map_err(|e| SsotError::CloudFailure(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
 
         if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(init_req.to_string().as_bytes()).await;
-            let _ = stdin.write_all(b"\n").await;
-            let _ = stdin.write_all(initialized_notif.to_string().as_bytes()).await;
-            let _ = stdin.write_all(b"\n").await;
-            let _ = stdin.write_all(mcp_request.to_string().as_bytes()).await;
-            let _ = stdin.write_all(b"\n").await;
+            let _ = stdin.write_all(format!("{}\n", init_req).as_bytes()).await;
+            let _ = stdin.write_all(format!("{}\n", initialized_notif).as_bytes()).await;
+            let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
         }
 
         let output = child.wait_with_output().await.map_err(|e| SsotError::CloudFailure(e.to_string()))?;
@@ -186,7 +185,7 @@ mod tests {
 
         // Ordem esperada: DB = 1, Cloud = 2
         // Simulando a injeção
-        let _ = SsotInjector::update_local_status("test", "CONCLUIDO");
+        let _ = SsotInjector::update_local_status("test", "CONCLUIDO", &mock_payload());
         DB_CALL_ORDER.store(1, Ordering::SeqCst);
         
         let _ = SsotInjector::dispatch_to_cloud(json!({})).await;

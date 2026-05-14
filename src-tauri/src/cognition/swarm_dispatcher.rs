@@ -28,9 +28,9 @@ impl CognitiveSwarmDispatcher {
         // 2. Mecânica Free-MAD (Tripartite Paralela)
         // PT-SWARM-1: Retornos são String (texto livre)
         let (lente_a, lente_b, lente_c) = join!(
-            Self::exec_lente_a(),
-            Self::exec_lente_b(),
-            Self::exec_lente_c()
+            Self::exec_lente_a(repo_id),
+            Self::exec_lente_b(repo_id),
+            Self::exec_lente_c(repo_id)
         );
 
         // 3. Persistência Atômica (Simulada aqui conforme Phase C)
@@ -42,21 +42,41 @@ impl CognitiveSwarmDispatcher {
         })
     }
 
-    async fn exec_lente_a() -> String {
-        // Mock de processamento
-        "Laudo Lente A: Sentido/UX".to_string()
+    async fn chama_gemini(prompt: &str) -> String {
+        let api_key = std::env::var("GOOGLE_API_KEY").unwrap_or_default();
+        if api_key.is_empty() { return "API KEY MISSING".to_string(); }
+        let url = format!("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}", api_key);
+        let client = reqwest::Client::new();
+        let body = serde_json::json!({
+            "contents": [{"parts":[{"text": prompt}]}]
+        });
+        
+        match client.post(&url).json(&body).send().await {
+            Ok(res) => {
+                if let Ok(json) = res.json::<serde_json::Value>().await {
+                    if let Some(text) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+                        return text.to_string();
+                    }
+                }
+                "Falha ao extrair texto da API".to_string()
+            }
+            Err(e) => format!("Erro de rede: {}", e),
+        }
     }
 
-    async fn exec_lente_b() -> String {
-        // Mock de processamento
-        "Laudo Lente B: Estrutura/Architecture".to_string()
+    async fn exec_lente_a(repo_id: &str) -> String {
+        Self::chama_gemini(&format!("Atue como Lente A (Sentido/UX) e avalie o repositório {} em um parágrafo.", repo_id)).await
     }
 
-    async fn exec_lente_c() -> String {
-        // Mock de processamento
-        "Laudo Lente C: Realidade/FinOps".to_string()
+    async fn exec_lente_b(repo_id: &str) -> String {
+        Self::chama_gemini(&format!("Atue como Lente B (Estrutura/Architecture) e avalie o repositório {} em um parágrafo.", repo_id)).await
+    }
+
+    async fn exec_lente_c(repo_id: &str) -> String {
+        Self::chama_gemini(&format!("Atue como Lente C (Realidade/FinOps) e avalie o repositório {} em um parágrafo.", repo_id)).await
     }
 }
+
 
 #[cfg(test)]
 mod tests {

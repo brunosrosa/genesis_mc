@@ -29,6 +29,10 @@ impl BlobNormalizer {
             // Início da Transação Atômica
             let tx = conn.transaction().map_err(|e| HarvesterError::StorageError(e.to_string()))?;
 
+            // Estrangula a redundância (Idempotência)
+            tx.execute("DELETE FROM artefatos_brutos WHERE repo_id = ?1", params![&repo_id])
+                .map_err(|e| HarvesterError::StorageError(e.to_string()))?;
+
             for blob in blobs {
                 // PT-BLOB-1: Inserção individual de artefatos
                 tx.execute(

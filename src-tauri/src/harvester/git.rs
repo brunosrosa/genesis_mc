@@ -108,7 +108,7 @@ impl BloblessCloner {
             }
         })?;
 
-        // 4. Executar concorrentemente wait() e leitura de stderr com Timeout de 120s
+        // 4. Executar concorrentemente wait() e leitura de stderr com Timeout de 600s
         let mut stderr_buffer = Vec::new();
         let run_fut = async {
             use tokio::io::AsyncReadExt;
@@ -117,7 +117,7 @@ impl BloblessCloner {
             status
         };
 
-        let wait_result = timeout(Duration::from_secs(120), run_fut).await;
+        let wait_result = timeout(Duration::from_secs(600), run_fut).await;
 
         if wait_result.is_err() {
             // Timeout expirou! Matamos o processo de forma assíncrona
