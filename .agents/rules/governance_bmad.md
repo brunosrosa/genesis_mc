@@ -43,3 +43,9 @@ Em impasses arquiteturais ou falhas de TDD:
 *   **Extração AST $\mathcal{O}(1)$:** OBRIGATÓRIO usar `jcodemunch` (Byte-Offset) para extrair a "alma matemática". NUNCA leia repositórios inteiros por força bruta.
 *   **Descarte do Monólito:** Após sugar a lógica, DESTRUA arquivos Node.js, Python e Docker pesados da biblioteca original. O *Rebase* absorve estritamente o código Rust purificado.
  acompanharem o repositório original. O SODA consome a lógica estrutural em Rust/Wasm e descarta o lixo.
+
+### LEI DA HIGIENE DE WORKSPACE (FOBIA DE RAIZ):
+É TERMINANTEMENTE PROIBIDO despejar scripts de automação, meta-programação, logs, testes ou arquivos temporários na raiz do repositório.
+- A pasta `/.session_board/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
+- A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
+- Lixo não sobrevivente deve ser apagado fisicamente após o uso.

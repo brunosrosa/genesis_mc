@@ -9,31 +9,188 @@ pub struct SwarmDebate {
     pub lente_c: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum TerminalClassification {
+    #[default]
     AprovadoParaProducao,
     AprovadoComRessalvas,
     RejeitadoDescarte,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum CannibalizationAction {
+    #[default]
     Nenhuma,
     AbsorverLogica,
     ExtrairScripts,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct SgrPayload {
-    // LEI SGR: Campos textuais primeiro para guiar o KV Cache
+    #[serde(default)]
+    pub project_name: String,
+    #[serde(default)]
+    pub repo_url: String,
+    #[serde(default)]
+    pub repo_version: String,
+    #[serde(default)]
+    pub ultima_versao_online: Option<String>,
+    #[serde(default)]
+    pub lote_id: String,
+    #[serde(default)]
+    pub data_ultima_analise: i64,
+    #[serde(default)]
+    pub analise_origem: String,
+    #[serde(default)]
+    pub declared_description: String,
+    #[serde(default)]
+    pub proposta_original_resumo: String,
+    #[serde(default)]
+    pub stack_base: String,
+    #[serde(default)]
+    pub licenca: Option<String>,
+    #[serde(default)]
+    pub lente_a_sentido_prod_ux: Option<String>,
+    #[serde(default)]
+    pub lente_b_estrutura_arq: Option<String>,
+    #[serde(default)]
+    pub lente_c_realidade_ops: Option<String>,
+    #[serde(default)]
     pub visao_do_enxame: String,
+    #[serde(default)]
     pub justificativa_decisao: String,
-    
-    // Campos numéricos/categóricos depois
+    #[serde(default)]
     pub executive_verdict: TerminalClassification,
-    pub cannibalization_action: CannibalizationAction,
-    pub score_bare_metal_fit: i32,
-    pub score_final: i32,
+    #[serde(default)]
+    pub classificacao_terminal: String,
+    #[serde(default)]
+    pub acao_de_canibalizacao: CannibalizationAction,
+    #[serde(default)]
+    pub categoria_arquitetural: String,
+    #[serde(default)]
+    pub horizonte_extracao: String,
+    #[serde(default)]
+    pub tipo_integracao: String,
+    #[serde(default)]
+    pub categoria_nuance_tecnica: String,
+    #[serde(default)]
+    pub integracao_papel_exato: String,
+    #[serde(default)]
+    pub ouro_a_extrair: String,
+    #[serde(default)]
+    pub deep_pattern: String,
+    #[serde(default)]
+    pub transplantable_core: String,
+    #[serde(default)]
+    pub logic_math_heuristic: String,
+    #[serde(default)]
+    pub real_structural_problem: String,
+    #[serde(default)]
+    pub must_components_prod_ux: String,
+    #[serde(default)]
+    pub must_components_arq: String,
+    #[serde(default)]
+    pub must_components_ops: String,
+    #[serde(default)]
+    pub detected_toxic_deps: String,
+    #[serde(default)]
+    pub do_not_absorb: String,
+    #[serde(default)]
+    pub where_ai_should_not_enter: String,
+    #[serde(default)]
+    pub bare_metal_fit: String,
+    #[serde(default)]
+    pub extractability_level: String,
+    #[serde(default)]
+    pub operability_level: String,
+    #[serde(default)]
+    pub entropy_risk: String,
+    #[serde(default)]
+    pub design_misuse_risk: String,
+    #[serde(default)]
+    pub intrinsic_ethics_risk: String,
+    #[serde(default)]
+    pub discipline_dependency: String,
+    #[serde(default)]
+    pub risco_principal: String,
+    #[serde(default)]
+    pub risco_linha_vermelha: String,
+    #[serde(default)]
+    pub observacoes: String,
+    #[serde(default)]
+    pub score_final: f64,
+    #[serde(default)]
+    pub score_fit_geral_soda: f64,
+    #[serde(default)]
+    pub score_philosophical_fit: i64,
+    #[serde(default)]
+    pub score_bare_metal_fit: i64,
+    #[serde(default)]
+    pub score_architectural_extractability: i64,
+    #[serde(default)]
+    pub score_operability: i64,
+    #[serde(default)]
+    pub score_creep_risk: i64,
+    #[serde(default)]
+    pub score_runtime_sovereignty: i64,
+    #[serde(default)]
+    pub score_model_logic_value: i64,
+    #[serde(default)]
+    pub score_ethics_safety: i64,
+    #[serde(default)]
+    pub score_intrinsic_risk: i64,
+    #[serde(default)]
+    pub capability_nature_primary: String,
+    #[serde(default)]
+    pub architectural_topology: String,
+    #[serde(default)]
+    pub runtime_sovereignty_fit: String,
+    #[serde(default)]
+    pub local_first_fit: String,
+    #[serde(default)]
+    pub temporal_stability: String,
+    #[serde(default)]
+    pub adoptability_level: String,
+    #[serde(default)]
+    pub longitudinal_sustainability: String,
+    #[serde(default)]
+    pub abandonment_risk: String,
+    #[serde(default)]
+    pub maintenance_burden: String,
+    #[serde(default)]
+    pub onboarding_friction: String,
+    #[serde(default)]
+    pub observability_operational: String,
+    #[serde(default)]
+    pub recoverability_level: String,
+    #[serde(default)]
+    pub degradation_behavior: String,
+    #[serde(default)]
+    pub curation_burden: String,
+    #[serde(default)]
+    pub time_to_first_clear_value: String,
+    #[serde(default)]
+    pub imperfection_tolerance: String,
+    #[serde(default)]
+    pub evolution_cost: String,
+    #[serde(default)]
+    pub regulatory_risk: String,
+    #[serde(default)]
+    pub score_architectural_priority: f64,
+    #[serde(default)]
+    pub score_human_product_priority: f64,
+    #[serde(default)]
+    pub score_absorption_readiness: f64,
+    #[serde(default)]
+    pub score_operational_priority: f64,
+    #[serde(default)]
+    pub score_sustainability_adjusted_fit: f64,
+    #[serde(default)]
+    pub valid_from: i64,
+    #[serde(default)]
+    pub valid_to: Option<i64>,
+    #[serde(default)]
+    pub embargo_status: i64,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -85,8 +242,14 @@ impl SgrSynthesizer {
                             .trim_start_matches("```")
                             .trim_end_matches("```")
                             .trim();
-                        let payload: SgrPayload = serde_json::from_str(clean_text)
+                        let mut payload: SgrPayload = serde_json::from_str(clean_text)
                             .map_err(|e| SgrError::DecodingError(format!("JSON inválido: {}", e)))?;
+                        
+                        if Self::contains_toxic_stack(&debate) {
+                            payload.score_bare_metal_fit = 0;
+                            payload.bare_metal_fit = "LOW".to_string();
+                        }
+                        
                         return Ok(payload);
                     }
                 }
@@ -113,9 +276,10 @@ mod tests {
             visao_do_enxame: "V".to_string(),
             justificativa_decisao: "J".to_string(),
             executive_verdict: TerminalClassification::AprovadoParaProducao,
-            cannibalization_action: CannibalizationAction::Nenhuma,
+            acao_de_canibalizacao: CannibalizationAction::Nenhuma,
             score_bare_metal_fit: 90,
-            score_final: 95,
+            score_final: 95.0,
+            ..Default::default()
         };
 
         let json = serde_json::to_string(&payload).unwrap();
@@ -149,7 +313,7 @@ mod tests {
         
         if let Ok(res) = SgrSynthesizer::synthesize_debate(debate).await {
             assert_eq!(res.score_bare_metal_fit, 0);
-            assert!(res.score_final < 20);
+            assert!(res.score_final < 20.0);
         }
     }
 
