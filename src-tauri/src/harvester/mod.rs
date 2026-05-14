@@ -7,3 +7,4 @@ pub mod sidecar;
 pub mod extract;
 pub mod community;
 pub mod persist;
+pub mod guard;
