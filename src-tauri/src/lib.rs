@@ -1,5 +1,7 @@
 pub mod harvester;
+pub mod persist;
 pub mod finops;
+pub mod cognition;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
