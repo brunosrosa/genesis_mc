@@ -67,11 +67,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Orquestração finalizada com SUCESSO para {}", repo_id);
             
             // 6. Atualizar Status para FASE_1_OK
-            let conn_lock = conn_arc.lock().unwrap();
-            conn_lock.execute(
-                "UPDATE repositorios SET status = ?1, last_processed = datetime('now') WHERE id = ?2",
-                ["FASE_1_OK", repo_id],
-            )?;
+            {
+                let conn_lock = conn_arc.lock().unwrap();
+                conn_lock.execute(
+                    "UPDATE repositorios SET status = ?1, last_processed = datetime('now') WHERE id = ?2",
+                    ["FASE_1_OK", repo_id],
+                )?;
+            }
             info!("Status do repositório atualizado: FASE_1_OK");
 
             // --- INÍCIO DO E2E ---

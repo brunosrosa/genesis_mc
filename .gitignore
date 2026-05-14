@@ -25,7 +25,8 @@ dist-ssr
 
 *.venv
 .env
-tmp/*
+*/tmp/*
 .agents/scratch/*/
 
 .soda_data/
+.archive/

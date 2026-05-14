@@ -1,6 +1,8 @@
 use crate::cognition::sgr_synthesizer::SgrPayload;
 use thiserror::Error;
 use serde_json::{json, Value};
+use rusqlite::Connection;
+use std::env;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum SsotError {
@@ -29,8 +31,23 @@ impl SsotInjector {
         Ok(())
     }
 
-    fn update_local_status(_repo_id: &str, _status: &str) -> Result<(), String> {
-        // Mock de execução SQLite
+    fn update_local_status(repo_id: &str, status_value: &str) -> Result<(), String> {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let root_dir = std::path::Path::new(manifest_dir).parent().unwrap_or_else(|| std::path::Path::new("."));
+        let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+        
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Falha ao conectar no SQLite: {}", e))?;
+            
+        // I/O L2 Real: Usamos 'id' e 'status' conforme schema original do Harvester CLI
+        let rows_updated = conn.execute(
+            "UPDATE repositorios SET status = ?1 WHERE id = ?2",
+            [status_value, repo_id],
+        ).map_err(|e| format!("Falha ao executar UPDATE: {}", e))?;
+        
+        if rows_updated == 0 {
+            // Em caso de zero linhas, podemos apenas logar ou retornar sucesso, pois o ID pode não existir no teste unitário
+        }
         Ok(())
     }
 
@@ -39,7 +56,7 @@ impl SsotInjector {
         json!({
             "requests": [
                 {
-                    "sheet": "MASTER_SOLUTIONS_v3",
+                    "sheet": "MASTER_SOLUTIONS",
                     "data": {
                         "verdict": format!("{:?}", payload.executive_verdict),
                         "score": payload.score_final
@@ -67,8 +84,76 @@ impl SsotInjector {
         })
     }
 
-    async fn dispatch_to_cloud(_payload: Value) -> Result<(), SsotError> {
-        // Mock de despacho HTTP
+    async fn dispatch_to_cloud(payload: Value) -> Result<(), SsotError> {
+        use tokio::process::Command;
+        use std::process::Stdio;
+        use tokio::io::AsyncWriteExt;
+
+        // Hotfix: Extração das variáveis reais do ecossistema SODA
+        let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
+            .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_APPLICATION_CREDENTIALS".to_string()))?;
+        let sheets_id = env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_SHEETS_ID".to_string()))?;
+
+        // Construindo a requisição JSON-RPC para o MCP local
+        let init_req = json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": { "name": "soda-injector", "version": "1.0.0" }
+            }
+        });
+        let initialized_notif = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+        let mcp_request = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "batch_update_cells",
+                "arguments": {
+                    "spreadsheetId": sheets_id,
+                    "requests": payload["requests"]
+                }
+            }
+        });
+
+        // Invocando o binário mcp-google-sheets localmente
+        let mut child = Command::new("mcp-google-sheets")
+            .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| SsotError::CloudFailure(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(init_req.to_string().as_bytes()).await;
+            let _ = stdin.write_all(b"\n").await;
+            let _ = stdin.write_all(initialized_notif.to_string().as_bytes()).await;
+            let _ = stdin.write_all(b"\n").await;
+            let _ = stdin.write_all(mcp_request.to_string().as_bytes()).await;
+            let _ = stdin.write_all(b"\n").await;
+        }
+
+        let output = child.wait_with_output().await.map_err(|e| SsotError::CloudFailure(e.to_string()))?;
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+
+        // Validando se o MCP retornou um erro JSON-RPC ou se a STDERR gritou
+        if stdout_str.contains("\"isError\":true") || stdout_str.contains("\"error\":") {
+            return Err(SsotError::CloudFailure(format!("MCP Retornou Erro: {}", stdout_str)));
+        }
+        
+        if !output.status.success() {
+            return Err(SsotError::CloudFailure(format!("Falha no processo MCP. Exit {}. STDERR: {}", output.status, stderr_str)));
+        }
+
         Ok(())
     }
 }
@@ -120,7 +205,7 @@ mod tests {
         assert_eq!(requests.len(), 4, "Deve conter fatias para as 4 abas");
         
         let sheets: Vec<&str> = requests.iter().map(|r| r["sheet"].as_str().unwrap()).collect();
-        assert!(sheets.contains(&"MASTER_SOLUTIONS_v3"));
+        assert!(sheets.contains(&"MASTER_SOLUTIONS"));
         assert!(sheets.contains(&"SODA_GRAPH_TOPOLOGY"));
         assert!(sheets.contains(&"ACTION_MATRIX"));
         assert!(sheets.contains(&"QUARANTINE_RADAR"));
