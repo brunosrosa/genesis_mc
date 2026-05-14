@@ -6,3 +6,4 @@ pub mod router;
 pub mod sidecar;
 pub mod extract;
 pub mod community;
+pub mod persist;
