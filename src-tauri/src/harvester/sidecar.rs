@@ -1,6 +1,7 @@
 use std::path::Path;
 use thiserror::Error;
 use serde::Deserialize;
+use tracing::error;
 use crate::harvester::sandbox::SandboxError;
 
 /// Trait para abstrair a execução no sandbox, permitindo mocks nos testes.
@@ -65,6 +66,22 @@ pub struct JCodemunchInput<'a, E: SandboxExecutor> {
     pub timeout_secs: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SidecarExitPolicy {
+    StrictZeroOnly,
+    AllowFindingsExitOne,
+}
+
+fn stdout_is_blank(bytes: &[u8]) -> bool {
+    bytes.iter().all(|byte| byte.is_ascii_whitespace())
+}
+
+impl AstPayload {
+    fn is_empty(&self) -> bool {
+        self.files_processed == 0 && self.symbols.is_empty() && self.dependency_edges.is_empty()
+    }
+}
+
 /// Executa um binário sidecar no sandbox e retorna os bytes brutos do stdout.
 /// Centraliza a tradução SandboxError → SidecarError para todos os sidecars.
 async fn execute_sidecar<E: SandboxExecutor>(
@@ -72,6 +89,7 @@ async fn execute_sidecar<E: SandboxExecutor>(
     binary: &str,
     args: &[&str],
     timeout_secs: u64,
+    exit_policy: SidecarExitPolicy,
 ) -> Result<Vec<u8>, SidecarError> {
     match executor.execute(binary, args).await {
         Ok(bytes) => Ok(bytes),
@@ -79,6 +97,7 @@ async fn execute_sidecar<E: SandboxExecutor>(
             Err(SidecarError::Timeout { timeout_secs })
         }
         Err(SandboxError::ProcessSpawnFailed { reason }) => {
+            error!(binary = %binary, reason = %reason, "Falha ao iniciar sidecar");
             let lower_reason = reason.to_lowercase();
             if lower_reason.contains("not found") || lower_reason.contains("os error 2") {
                 Err(SidecarError::BinaryNotFound {
@@ -92,9 +111,15 @@ async fn execute_sidecar<E: SandboxExecutor>(
         // Exit code 1: linters sinalizam violações encontradas (sucesso de negócio).
         // Exit code 2+: erro real de execução (config inválida, crash).
         Err(SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout }) => {
-            if exit_code == 1 {
+            if exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) {
                 Ok(stdout)
             } else {
+                error!(
+                    binary = %binary,
+                    exit_code,
+                    stderr = %stderr,
+                    "Sidecar terminou com exit code nao zero"
+                );
                 Err(SidecarError::ExecutionFailed {
                     reason: format!("exit code {exit_code}: {stderr}"),
                 })
@@ -116,10 +141,38 @@ impl JCodemunchSidecar {
         input: JCodemunchInput<'_, E>,
     ) -> Result<AstPayload, SidecarError> {
         let args = ["index", "--format", "json", "--stdout", "."];
-        let bytes = execute_sidecar(input.executor, "jcodemunch", &args, input.timeout_secs).await?;
-        serde_json::from_slice::<AstPayload>(&bytes).map_err(|e| SidecarError::ParseError {
+        let bytes = execute_sidecar(
+            input.executor,
+            "jcodemunch",
+            &args,
+            input.timeout_secs,
+            SidecarExitPolicy::StrictZeroOnly,
+        )
+        .await?;
+
+        if stdout_is_blank(&bytes) {
+            error!(binary = "jcodemunch", "Sidecar AST retornou stdout vazio");
+            return Err(SidecarError::ExecutionFailed {
+                reason: "jcodemunch returned empty stdout".to_string(),
+            });
+        }
+
+        let payload = serde_json::from_slice::<AstPayload>(&bytes).map_err(|e| SidecarError::ParseError {
             reason: e.to_string(),
-        })
+        })?;
+
+        if payload.is_empty() {
+            error!(
+                binary = "jcodemunch",
+                files_processed = payload.files_processed,
+                "Sidecar AST retornou payload vazio"
+            );
+            return Err(SidecarError::ExecutionFailed {
+                reason: "jcodemunch returned an empty AST payload".to_string(),
+            });
+        }
+
+        Ok(payload)
     }
 }
 
@@ -160,7 +213,14 @@ impl OxcSidecar {
         input: OxcInput<'_, E>,
     ) -> Result<UxContractsPayload, SidecarError> {
         let args = ["lint", "--format", "json", "--quiet", "."];
-        let bytes = execute_sidecar(input.executor, "oxlint", &args, input.timeout_secs).await?;
+        let bytes = execute_sidecar(
+            input.executor,
+            "oxlint",
+            &args,
+            input.timeout_secs,
+            SidecarExitPolicy::StrictZeroOnly,
+        )
+        .await?;
         serde_json::from_slice::<UxContractsPayload>(&bytes).map_err(|e| SidecarError::ParseError {
             reason: e.to_string(),
         })
@@ -198,7 +258,14 @@ impl StaticAnalysisSidecar {
         linter: &str,
         args: &[&str],
     ) -> Result<StaticAnalysisPayload, SidecarError> {
-        let bytes = execute_sidecar(input.executor, linter, args, input.timeout_secs).await?;
+        let bytes = execute_sidecar(
+            input.executor,
+            linter,
+            args,
+            input.timeout_secs,
+            SidecarExitPolicy::AllowFindingsExitOne,
+        )
+        .await?;
         serde_json::from_slice::<StaticAnalysisPayload>(&bytes).map_err(|e| SidecarError::ParseError {
             reason: e.to_string(),
         })
@@ -356,7 +423,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_empty_repo_valid_json() {
+    async fn test_empty_repo_payload_fails_closed() {
         let empty_json = r#"{
             "symbols": [],
             "dependency_edges": [],
@@ -370,11 +437,51 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert!(result.is_ok());
-        let payload = result.unwrap();
-        assert_eq!(payload.files_processed, 0);
-        assert!(payload.symbols.is_empty());
-        assert!(payload.dependency_edges.is_empty());
+        assert_eq!(
+            result,
+            Err(SidecarError::ExecutionFailed {
+                reason: "jcodemunch returned an empty AST payload".to_string()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_empty_stdout_fails_closed() {
+        let executor = MockExecutor::new(Ok(Vec::new()));
+        let input = JCodemunchInput {
+            executor: &executor,
+            timeout_secs: 30,
+        };
+
+        let result = JCodemunchSidecar::extract(input).await;
+        assert_eq!(
+            result,
+            Err(SidecarError::ExecutionFailed {
+                reason: "jcodemunch returned empty stdout".to_string()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_exit_code_1_fails_for_jcodemunch() {
+        let run_err = SandboxError::ProcessNonZeroExit {
+            exit_code: 1,
+            stderr: "usage error".to_string(),
+            stdout: Vec::new(),
+        };
+        let executor = MockExecutor::new(Err(run_err));
+        let input = JCodemunchInput {
+            executor: &executor,
+            timeout_secs: 30,
+        };
+
+        let result = JCodemunchSidecar::extract(input).await;
+        assert_eq!(
+            result,
+            Err(SidecarError::ExecutionFailed {
+                reason: "exit code 1: usage error".to_string()
+            })
+        );
     }
 
     #[tokio::test]

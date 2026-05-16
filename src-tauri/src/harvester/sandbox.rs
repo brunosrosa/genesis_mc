@@ -1,3 +1,4 @@
+use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::collections::HashSet;
@@ -49,6 +50,168 @@ pub struct SandboxHandle {
     active_pids: Arc<Mutex<HashSet<u32>>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedCommand {
+    program: PathBuf,
+    args: Vec<String>,
+}
+
+fn parse_env_assignment(line: &str, key: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+        return None;
+    }
+
+    let trimmed = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+    let (name, value) = trimmed.split_once('=')?;
+    if name.trim() != key {
+        return None;
+    }
+
+    let value = value.trim();
+    let unquoted = value
+        .strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'))
+        .or_else(|| value.strip_prefix('\'').and_then(|inner| inner.strip_suffix('\'')))
+        .unwrap_or(value);
+
+    Some(unquoted.trim().to_string())
+}
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+}
+
+fn read_local_env_var(key: &str) -> Option<String> {
+    let candidates = [
+        workspace_root().join(".env"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"),
+    ];
+
+    for candidate in candidates {
+        let Ok(content) = std::fs::read_to_string(candidate) else {
+            continue;
+        };
+        for line in content.lines() {
+            if let Some(value) = parse_env_assignment(line, key) {
+                return Some(value);
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_configured_path(raw: &str) -> Option<PathBuf> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if candidate.is_absolute() {
+        Some(candidate)
+    } else {
+        Some(workspace_root().join(candidate))
+    }
+}
+
+fn resolve_uvx_path() -> Option<PathBuf> {
+    if let Some(value) = env::var_os("SODA_UV_PATH") {
+        if let Some(candidate) = resolve_configured_path(&value.to_string_lossy()) {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    if let Some(value) = read_local_env_var("SODA_UV_PATH") {
+        if let Some(candidate) = resolve_configured_path(&value) {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    let executable_names = if cfg!(target_os = "windows") {
+        vec!["uvx.exe", "uvx.cmd", "uvx.bat", "uvx"]
+    } else {
+        vec!["uvx"]
+    };
+
+    if let Some(path_var) = env::var_os("PATH") {
+        for path_entry in env::split_paths(&path_var) {
+            for executable_name in &executable_names {
+                let candidate = path_entry.join(executable_name);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+
+    if cfg!(target_os = "windows") {
+        let mut well_known = Vec::new();
+
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            let base = PathBuf::from(local_app_data);
+            well_known.push(
+                base.join("Microsoft")
+                    .join("WinGet")
+                    .join("Packages")
+                    .join("astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe")
+                    .join("uvx.exe"),
+            );
+            well_known.push(base.join("Programs").join("uv").join("uvx.exe"));
+        }
+
+        if let Some(app_data) = env::var_os("APPDATA") {
+            well_known.push(PathBuf::from(app_data).join("uv").join("uvx.exe"));
+        }
+
+        if let Some(user_profile) = env::var_os("USERPROFILE") {
+            well_known.push(PathBuf::from(user_profile).join(".local").join("bin").join("uvx.exe"));
+        }
+
+        for candidate in well_known {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_command(command: &str, args: &[&str]) -> Result<ResolvedCommand, SandboxError> {
+    match command {
+        "jcodemunch" => {
+            let uvx_path = resolve_uvx_path().ok_or_else(|| SandboxError::ProcessSpawnFailed {
+                reason: "uvx not found; configure SODA_UV_PATH in .env or install uv/uvx in PATH".to_string(),
+            })?;
+
+            let mut resolved_args = vec![
+                "--from".to_string(),
+                "jcodemunch-mcp".to_string(),
+                "jcodemunch".to_string(),
+            ];
+            resolved_args.extend(args.iter().map(|arg| (*arg).to_string()));
+
+            Ok(ResolvedCommand {
+                program: uvx_path,
+                args: resolved_args,
+            })
+        }
+        _ => Ok(ResolvedCommand {
+            program: PathBuf::from(command),
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+        }),
+    }
+}
+
 impl SandboxHandle {
     /// Helper para acessar o Mutex de PIDs de forma segura contra poisoning.
     /// Se o Mutex estiver envenenado (panic em outra thread), recupera o lock
@@ -68,9 +231,11 @@ impl SandboxHandle {
         args: &[&str],
     ) -> Result<Vec<u8>, SandboxError> {
         if self.is_mock {
+            let resolved = resolve_command(command, args)?;
+
             // 1. Spawning do comando no diretório do repo_path
-            let mut child = tokio::process::Command::new(command)
-                .args(args)
+            let mut child = tokio::process::Command::new(&resolved.program)
+                .args(&resolved.args)
                 .current_dir(&self.repo_path)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
@@ -219,6 +384,7 @@ impl SandboxOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
     use std::sync::OnceLock;
 
     static TEST_MUTEX: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
@@ -275,5 +441,34 @@ mod tests {
         // Se is_mock for falso e o suporte nativo do SO não estiver ativado, deve falhar
         let res = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly, false).await;
         assert_eq!(res.unwrap_err(), SandboxError::UnsupportedPlatform);
+    }
+
+    #[test]
+    fn test_parse_env_assignment_reads_soda_uv_path() {
+        let parsed = parse_env_assignment(
+            r#"SODA_UV_PATH="C:\Tools\uvx.exe""#,
+            "SODA_UV_PATH",
+        );
+        assert_eq!(parsed.as_deref(), Some(r"C:\Tools\uvx.exe"));
+    }
+
+    #[test]
+    fn test_resolve_configured_path_relative_to_workspace_root() {
+        let path = resolve_configured_path(r".soda_scratchpad\bin\uvx.exe")
+            .expect("path relativo deve ser resolvido");
+        assert!(path.ends_with(Path::new(".soda_scratchpad").join("bin").join("uvx.exe")));
+    }
+
+    #[test]
+    fn test_resolve_uvx_path_prefers_process_env() {
+        let temp_dir = TempDir::new().unwrap();
+        let uvx_path = temp_dir.path().join("uvx.exe");
+        std::fs::write(&uvx_path, b"").unwrap();
+
+        std::env::set_var("SODA_UV_PATH", &uvx_path);
+        let resolved = resolve_uvx_path();
+        std::env::remove_var("SODA_UV_PATH");
+
+        assert_eq!(resolved, Some(uvx_path));
     }
 }

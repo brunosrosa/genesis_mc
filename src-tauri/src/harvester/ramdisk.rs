@@ -2,6 +2,11 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use sysinfo::System;
 use tracing::warn;
+use tokio::time::{sleep, Duration};
+
+const WINDOWS_IMDISK_NTFS_FORMAT_ARGS: &str = "/fs:ntfs /q /y";
+const RAMDISK_READY_RETRIES: u32 = 20;
+const RAMDISK_READY_DELAY_MS: u64 = 150;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum RamdiskError {
@@ -95,6 +100,44 @@ impl Drop for RamdiskHandle {
 
 pub struct RamdiskAllocator;
 
+#[cfg(target_os = "windows")]
+fn windows_drive_root(letter: char) -> PathBuf {
+    PathBuf::from(format!(r"{}:\", letter))
+}
+
+async fn wait_until_writable(path: &Path) -> Result<(), RamdiskError> {
+    let probe_file = path.join(format!(
+        ".soda_ramdisk_probe_{}_tmp",
+        std::process::id()
+    ));
+    let mut last_error = String::from("ramdisk ainda nao respondeu ao health check");
+
+    for _ in 0..RAMDISK_READY_RETRIES {
+        if tokio::fs::metadata(path).await.is_ok() {
+            match tokio::fs::write(&probe_file, b"SODA_READY").await {
+                Ok(()) => {
+                    if let Err(e) = tokio::fs::remove_file(&probe_file).await {
+                        warn!(path = %probe_file.display(), error = %e, "Falha ao remover probe file do health check do ramdisk");
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    last_error = e.to_string();
+                }
+            }
+        }
+
+        sleep(Duration::from_millis(RAMDISK_READY_DELAY_MS)).await;
+    }
+
+    Err(RamdiskError::AllocationFailed {
+        reason: format!(
+            "Ramdisk montado, mas nao ficou gravavel apos {} tentativas: {}",
+            RAMDISK_READY_RETRIES, last_error
+        ),
+    })
+}
+
 impl RamdiskAllocator {
     pub async fn allocate(tamanho_mb: u32) -> Result<RamdiskHandle, RamdiskError> {
         // 1. Memory Check
@@ -167,7 +210,7 @@ impl RamdiskAllocator {
                 .arg("-m")
                 .arg(format!("{}:", drive_letter))
                 .arg("-p")
-                .arg("/fs:ntfs /q /y")
+                .arg(WINDOWS_IMDISK_NTFS_FORMAT_ARGS)
                 .output()
                 .await
                 .map_err(|e| RamdiskError::AllocationFailed {
@@ -181,7 +224,8 @@ impl RamdiskAllocator {
                 });
             }
 
-            let path = PathBuf::from(format!("{}:\\", drive_letter));
+            let path = windows_drive_root(drive_letter);
+            wait_until_writable(&path).await?;
             Ok(RamdiskHandle {
                 path,
                 is_mock: false,
@@ -303,5 +347,19 @@ mod tests {
         assert!(result.is_err());
         // Garante que não foi criado nenhum diretório temporário no workspace de fallback
         assert!(!Path::new("R:\\").exists() && !Path::new("/mnt/soda_ramdisk").exists());
+    }
+
+    #[tokio::test]
+    async fn test_wait_until_writable_accepts_real_writes() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let result = wait_until_writable(temp_dir.path()).await;
+        assert!(result.is_ok(), "Health check deve aprovar diretório gravavel");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_windows_drive_root_joins_without_double_separators() {
+        let joined = windows_drive_root('Z').join("soda_clone_abc");
+        assert_eq!(joined, PathBuf::from(r"Z:\soda_clone_abc"));
     }
 }

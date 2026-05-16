@@ -24,24 +24,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_path = soda_data_dir.join("soda_heuristic_vault.db");
     let conn = Connection::open(&db_path)?;
     
-    // 3. Criar Tabelas (Dicionário SODA V3)
+    // 3. Tabelas Forjadas (Dicionário SODA V3) - Respeitando o forge_db.py
     conn.execute(
         "CREATE TABLE IF NOT EXISTS repositorios (
-            id TEXT PRIMARY KEY,
-            url TEXT NOT NULL,
-            status TEXT NOT NULL,
-            last_processed TEXT
+            project_name TEXT PRIMARY KEY,
+            lote_id TEXT NOT NULL,
+            repo_url TEXT NOT NULL UNIQUE,
+            soda_universal_uuid TEXT NOT NULL UNIQUE,
+            status_processamento TEXT NOT NULL,
+            timestamp_fase_1 INTEGER,
+            timestamp_fase_3 INTEGER,
+            retry_count INTEGER NOT NULL
         )",
         [],
     )?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS artefatos_brutos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            repo_id TEXT NOT NULL,
-            artifact_type TEXT NOT NULL,
-            payload_blob BLOB NOT NULL,
-            FOREIGN KEY(repo_id) REFERENCES repositorios(id)
+            artifact_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id TEXT NOT NULL REFERENCES repositorios(project_name),
+            payload_blob TEXT NOT NULL,
+            timestamp_extracao INTEGER NOT NULL,
+            artifact_type TEXT NOT NULL
         )",
         [],
     )?;
@@ -59,8 +63,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let repo_url_str = format!("https://github.com/{}", repo_id);
     conn.execute(
-        "INSERT OR IGNORE INTO repositorios (id, url, status) VALUES (?1, ?2, ?3)",
-        [&repo_id, &repo_url_str, "PENDENTE"],
+        "INSERT OR IGNORE INTO repositorios (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, retry_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![&repo_id, "LOTE_01_ALPHA", &repo_url_str, format!("UUID-{}", repo_id), "PENDENTE", 0],
     )?;
 
     info!(repo_id = %repo_id, "Registro base inserido/verificado. Iniciando orquestração...");
@@ -77,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let conn_lock = conn_arc.lock().unwrap();
                 conn_lock.execute(
-                    "UPDATE repositorios SET status = ?1, last_processed = datetime('now') WHERE id = ?2",
+                    "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
                     ["FASE_1_OK", &repo_id],
                 )?;
             }
@@ -110,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             error!("Falha crítica na orquestração: {}", e);
             let conn_lock = conn_arc.lock().unwrap();
             conn_lock.execute(
-                "UPDATE repositorios SET status = ?1 WHERE id = ?2",
+                "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
                 ["ERRO_FASE_1", &repo_id],
             )?;
             return Err(e.into());

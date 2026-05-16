@@ -34,10 +34,15 @@ impl BlobNormalizer {
                 .map_err(|e| HarvesterError::StorageError(e.to_string()))?;
 
             for blob in blobs {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                    
                 // PT-BLOB-1: Inserção individual de artefatos
                 tx.execute(
-                    "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob) VALUES (?1, ?2, ?3)",
-                    params![repo_id, blob.artifact_type, blob.payload_blob],
+                    "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao) VALUES (?1, ?2, ?3, ?4)",
+                    params![repo_id, blob.artifact_type, blob.payload_blob, now],
                 ).map_err(|e| HarvesterError::StorageError(e.to_string()))?;
             }
 
