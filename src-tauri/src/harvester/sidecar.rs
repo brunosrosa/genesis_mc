@@ -1,20 +1,22 @@
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+use rusqlite::params;
 use thiserror::Error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 use crate::harvester::sandbox::SandboxError;
 
 /// Trait para abstrair a execução no sandbox, permitindo mocks nos testes.
 #[allow(async_fn_in_trait)]
 pub trait SandboxExecutor {
-    async fn execute(&self, command: &str, args: &[&str]) -> Result<Vec<u8>, SandboxError>;
+    async fn execute(&self, command: &str, args: &[&str], timeout_secs: u64) -> Result<Vec<u8>, SandboxError>;
     fn repo_path(&self) -> &Path;
 }
 
 /// Implementação da trait SandboxExecutor para o SandboxHandle concreto.
 impl SandboxExecutor for crate::harvester::sandbox::SandboxHandle {
-    async fn execute(&self, command: &str, args: &[&str]) -> Result<Vec<u8>, SandboxError> {
-        self.execute(command, args).await
+    async fn execute(&self, command: &str, args: &[&str], timeout_secs: u64) -> Result<Vec<u8>, SandboxError> {
+        self.execute(command, args, timeout_secs).await
     }
 
     fn repo_path(&self) -> &Path {
@@ -22,7 +24,7 @@ impl SandboxExecutor for crate::harvester::sandbox::SandboxHandle {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SymbolOutline {
     pub name: String,
     pub kind: String,
@@ -32,14 +34,14 @@ pub struct SymbolOutline {
     pub signature: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DependencyEdge {
     pub source_file: String,
     pub target: String,
     pub edge_type: String,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AstPayload {
     pub symbols: Vec<SymbolOutline>,
     pub dependency_edges: Vec<DependencyEdge>,
@@ -64,6 +66,13 @@ pub enum SidecarError {
 pub struct JCodemunchInput<'a, E: SandboxExecutor> {
     pub executor: &'a E,
     pub timeout_secs: u64,
+    pub persist_artifact: Option<PersistArtifactConfig<'a>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PersistArtifactConfig<'a> {
+    pub repo_id: &'a str,
+    pub artifact_type: &'a str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +91,118 @@ impl AstPayload {
     }
 }
 
+fn digest_json_is_empty(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => true,
+        serde_json::Value::Object(map) => map.is_empty(),
+        serde_json::Value::Array(items) => items.is_empty(),
+        serde_json::Value::String(text) => text.trim().is_empty(),
+        _ => false,
+    }
+}
+
+fn payload_from_digest_json(
+    repo_path: &Path,
+    digest: serde_json::Value,
+) -> Result<AstPayload, SidecarError> {
+    if digest_json_is_empty(&digest) {
+        return Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp returned an empty digest payload".to_string(),
+        });
+    }
+
+    let summary = serde_json::to_string(&digest).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })?;
+
+    Ok(AstPayload {
+        symbols: vec![SymbolOutline {
+            name: "repo_digest".to_string(),
+            kind: "digest".to_string(),
+            file_path: repo_path.display().to_string(),
+            start_line: 1,
+            end_line: 1,
+            signature: Some(summary),
+        }],
+        dependency_edges: Vec::new(),
+        files_processed: 1,
+    })
+}
+
+fn code_index_path_for_repo(repo_path: &Path) -> String {
+    repo_path
+        .parent()
+        .unwrap_or(repo_path)
+        .join(".jcodemunch_index")
+        .display()
+        .to_string()
+}
+
+fn validate_index_response(bytes: &[u8]) -> Result<(), SidecarError> {
+    if stdout_is_blank(bytes) {
+        return Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp index returned empty stdout".to_string(),
+        });
+    }
+
+    let index_json = serde_json::from_slice::<serde_json::Value>(bytes).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })?;
+
+    match index_json.get("success").and_then(|value| value.as_bool()) {
+        Some(true) => Ok(()),
+        Some(false) => {
+            let detail = index_json
+                .get("error")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown indexing failure");
+            Err(SidecarError::ExecutionFailed {
+                reason: format!("jcodemunch-mcp index failed: {}", detail),
+            })
+        }
+        None => Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp index returned a payload without success flag".to_string(),
+        }),
+    }
+}
+
+async fn persist_artifact_blob(config: PersistArtifactConfig<'_>, payload_blob: Vec<u8>) -> Result<(), SidecarError> {
+    let repo_id = config.repo_id.to_string();
+    let artifact_type = config.artifact_type.to_string();
+    tokio::task::spawn_blocking(move || {
+        let db_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")))
+            .join(".soda_data")
+            .join("soda_heuristic_vault.db");
+
+        let conn = rusqlite::Connection::open(&db_path).map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao conectar no SQLite para persistir artefato: {}", e),
+        })?;
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao calcular timestamp de extracao: {}", e),
+            })?
+            .as_secs() as i64;
+
+        conn.execute(
+            "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao) VALUES (?1, ?2, ?3, ?4)",
+            params![repo_id, artifact_type, payload_blob, now],
+        )
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao persistir artefato no SQLite: {}", e),
+        })?;
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao aguardar persistencia do artefato: {}", e),
+    })?
+}
+
 /// Executa um binário sidecar no sandbox e retorna os bytes brutos do stdout.
 /// Centraliza a tradução SandboxError → SidecarError para todos os sidecars.
 async fn execute_sidecar<E: SandboxExecutor>(
@@ -91,7 +212,7 @@ async fn execute_sidecar<E: SandboxExecutor>(
     timeout_secs: u64,
     exit_policy: SidecarExitPolicy,
 ) -> Result<Vec<u8>, SidecarError> {
-    match executor.execute(binary, args).await {
+    match executor.execute(binary, args, timeout_secs).await {
         Ok(bytes) => Ok(bytes),
         Err(SandboxError::Timeout) => {
             Err(SidecarError::Timeout { timeout_secs })
@@ -140,35 +261,64 @@ impl JCodemunchSidecar {
     pub async fn extract<E: SandboxExecutor>(
         input: JCodemunchInput<'_, E>,
     ) -> Result<AstPayload, SidecarError> {
-        let args = ["index", "--format", "json", "--stdout", "."];
+        let storage_path = code_index_path_for_repo(input.executor.repo_path());
+        let index_args = vec!["index".to_string(), "--no-ai-summaries".to_string()];
+        let index_arg_refs: Vec<&str> = index_args.iter().map(String::as_str).collect();
+        let index_bytes = execute_sidecar(
+            input.executor,
+            "jcodemunch-mcp",
+            &index_arg_refs,
+            input.timeout_secs,
+            SidecarExitPolicy::StrictZeroOnly,
+        )
+        .await?;
+        validate_index_response(&index_bytes)?;
+
+        let digest_args = vec![
+            "digest".to_string(),
+            "--json".to_string(),
+            "--storage-path".to_string(),
+            storage_path,
+        ];
+        let digest_arg_refs: Vec<&str> = digest_args.iter().map(String::as_str).collect();
         let bytes = execute_sidecar(
             input.executor,
-            "jcodemunch",
-            &args,
+            "jcodemunch-mcp",
+            &digest_arg_refs,
             input.timeout_secs,
             SidecarExitPolicy::StrictZeroOnly,
         )
         .await?;
 
         if stdout_is_blank(&bytes) {
-            error!(binary = "jcodemunch", "Sidecar AST retornou stdout vazio");
+            error!(binary = "jcodemunch-mcp", "Sidecar AST retornou stdout vazio");
             return Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch returned empty stdout".to_string(),
+                reason: "jcodemunch-mcp returned empty stdout".to_string(),
             });
         }
 
-        let payload = serde_json::from_slice::<AstPayload>(&bytes).map_err(|e| SidecarError::ParseError {
+        if let Some(config) = input.persist_artifact {
+            persist_artifact_blob(config, bytes.clone()).await?;
+        }
+
+        let digest_json = serde_json::from_slice::<serde_json::Value>(&bytes).map_err(|e| SidecarError::ParseError {
             reason: e.to_string(),
         })?;
+        let payload = serde_json::from_value::<AstPayload>(digest_json.clone())
+            .or_else(|_| payload_from_digest_json(input.executor.repo_path(), digest_json))
+            .map_err(|e| match e {
+                SidecarError::ParseError { reason } => SidecarError::ParseError { reason },
+                other => other,
+            })?;
 
         if payload.is_empty() {
             error!(
-                binary = "jcodemunch",
+                binary = "jcodemunch-mcp",
                 files_processed = payload.files_processed,
                 "Sidecar AST retornou payload vazio"
             );
             return Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch returned an empty AST payload".to_string(),
+                reason: "jcodemunch-mcp returned an empty AST payload".to_string(),
             });
         }
 
@@ -296,7 +446,7 @@ mod tests {
     }
 
     impl SandboxExecutor for MockExecutor {
-        async fn execute(&self, _command: &str, _args: &[&str]) -> Result<Vec<u8>, SandboxError> {
+        async fn execute(&self, _command: &str, _args: &[&str], _timeout_secs: u64) -> Result<Vec<u8>, SandboxError> {
             let guard = self.response.lock().unwrap();
             guard.clone()
         }
@@ -334,6 +484,7 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -356,13 +507,14 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
         assert_eq!(
             result,
             Err(SidecarError::BinaryNotFound {
-                binary: "jcodemunch".to_string()
+                binary: "jcodemunch-mcp".to_string()
             })
         );
     }
@@ -378,6 +530,7 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -395,6 +548,7 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 45,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -411,6 +565,7 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -434,13 +589,14 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
         assert_eq!(
             result,
             Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch returned an empty AST payload".to_string()
+                reason: "jcodemunch-mcp returned an empty AST payload".to_string()
             })
         );
     }
@@ -451,13 +607,14 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
         assert_eq!(
             result,
             Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch returned empty stdout".to_string()
+                reason: "jcodemunch-mcp returned empty stdout".to_string()
             })
         );
     }
@@ -473,6 +630,7 @@ mod tests {
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
+            persist_artifact: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;

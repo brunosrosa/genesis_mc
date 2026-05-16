@@ -1,0 +1,591 @@
+// jcodemunch-mcp configuration
+// Global: ~/.code-index/config.jsonc
+// Project: {project_root}/.jcodemunch.jsonc (optional, overrides global)
+//
+// All values below show defaults. Uncomment to override.
+// Env vars still work as fallback but are deprecated.
+{
+  // Config version - do not edit. Used for additive migrations.
+  "version": "1.108.13",
+
+  // === Indexing ===
+  // "trusted_folders": [],
+  //   Directories allowed for indexing when whitelist_mode is true.
+  //   In whitelist mode (default), only these folders can be indexed.
+  //   In blacklist mode (whitelist_mode=false), these folders are blocked.
+
+  // "trusted_folders_whitelist_mode": true,
+  //   true = only trust folders in trusted_folders list (default, secure).
+  //   false = trust all folders EXCEPT those in trusted_folders (blocklist mode).
+
+  // "max_folder_files": 2000,
+  //   Maximum number of files to index when indexing a local folder.
+  //   Prevents accidental massive indexing jobs.
+
+  // "gitignore_warn_threshold": 500,
+  //   Emit a warning during index_folder when no root .gitignore is found
+  //   and the indexed file count reaches this value. Helps catch accidental
+  //   indexing of build artifacts or vendored dependencies before they
+  //   bloat the index. Set 0 to disable the warning entirely.
+
+  // "max_index_files": 10000,
+  //   Maximum number of files to index when indexing a GitHub repo.
+  //   Separate cap from max_folder_files for different use cases.
+
+  // "staleness_days": 7,
+  //   Days before an index is considered stale (warning only, no blocking).
+
+  // "max_results": 500,
+  //   Maximum number of results returned by search operations.
+
+  // "file_tree_max_files": 500,
+  //   Maximum number of files returned by get_file_tree in a single call.
+  //   Prevents token overflow on large or bloated indexes. The response
+  //   includes a hint to use path_prefix when this cap is hit.
+  //   Can also be overridden per-call via the max_files tool parameter.
+
+  // "extra_ignore_patterns": [],
+  //   Additional gitignore-style patterns to exclude from indexing.
+  //   Merged with JCODEMUNCH_EXTRA_IGNORE_PATTERNS env var.
+
+  // "exclude_secret_patterns": [],
+  //   Glob patterns to exclude from *secret* detection.
+  //   Use when *secret* has false positives on specific paths.
+
+  // "exclude_skip_directories": [],
+  //   Directory names to remove from the built-in skip list.
+  //   Example: ["proto"] to index protobuf directories.
+
+  // "extra_extensions": {},
+  //   Map additional file extensions to languages.
+  //   Example: {".mpl": "cpp"} to parse .mpl files as C++.
+
+  // "context_providers": true,
+  //   Enable context providers for enhanced AI summarization.
+  //   Set false to disable (faster indexing, less context).
+
+  // "identity_mode": "git",
+  //   How index_folder derives the repo identifier for a local path.
+  //   Existing indexes keep their current identity regardless of this
+  //   setting — this only affects NEW indexes.
+  //
+  //   Choices:
+  //     "local" (default) — repo ID is `local/<basename>-<hash>`.
+  //       No git subprocess, no remote detection. Fast and portable.
+  //       Each folder gets its own index. Works for non-git projects,
+  //       local-only clones, and simple git workflows.
+  //
+  //     "git" — repo ID is `<owner>/<repo>` derived from the origin
+  //       remote URL. Runs a git subprocess on every index/reindex.
+  //       Enables monorepo subdir merging (multiple subdirs of the
+  //       same git root share one index). Requires a git working tree
+  //       with an origin remote. Falls back to local when detection
+  //       fails.
+  //
+  //   To switch an existing index: run invalidate_cache first, then
+  //   re-index with the new mode.
+
+  // "git_root_identity": true,
+  //   Deprecated boolean alias for identity_mode. When identity_mode
+  //   is not set, `true` here is equivalent to `"identity_mode": "git"`.
+  //   Prefer identity_mode for new configurations.
+
+  // === Meta Response Control ===
+  // Allowlist of _meta fields to include in responses.
+  // [] (default) = no _meta at all (maximum token savings).
+  // null = all fields included (set explicitly to opt in).
+  // Uncomment and set to a list of field names to include only those fields.
+  // All available meta fields (sorted alphabetically, each on its own line):
+  "meta_fields": [
+  // "candidates_scored",
+  // "powered_by",
+  // "timing_ms",
+  // "token_budget",
+  // "tokens_remaining",
+  // "tokens_used",
+  ],
+
+  // === Languages ===
+  // All supported languages. Comment out to disable a language
+  // and its dependent features (e.g. "sql" disables dbt parsing
+  // and search_columns tool).
+  // Each language on its own line (sorted alphabetically):
+  "languages": [
+     "ada",
+  "al",
+  "ansible",
+  "apex",
+  "arduino",
+  "asm",
+  "autohotkey",
+  "bash",
+  "blade",
+  "c",
+  "clojure",
+  "cobol",
+  "commonlisp",
+  "cpp",
+  "csharp",
+  "css",
+  "dart",
+  "dlang",
+  "ejs",
+  "elisp",
+  "elixir",
+  "erlang",
+  "fortran",
+  "fsharp",
+  "gdscript",
+  "gleam",
+  "go",
+  "graphql",
+  "groovy",
+  "haskell",
+  "hcl",
+  "java",
+  "javascript",
+  "json",
+  "julia",
+  "kotlin",
+  "less",
+  "lua",
+  "luau",
+  "matlab",
+  "nim",
+  "nix",
+  "objc",
+  "ocaml",
+  "openapi",
+  "pascal",
+  "perl",
+  "php",
+  "powershell",
+  "proto",
+  "python",
+  "r",
+  "razor",
+  "ruby",
+  "rust",
+  "sass",
+  "scala",
+  "scss",
+  "solidity",
+  "sql",
+  "styl",
+  "swift",
+  "tcl",
+  "toml",
+  "tsx",
+  "typescript",
+  "verilog",
+  "verse",
+  "vhdl",
+  "vue",
+  "xml",
+  "yaml",
+  "zig",
+  ],
+
+  // "languages_adaptive": false,
+  //   When true, jcodemunch auto-manages the languages list in this
+  //   project's .jcodemunch.jsonc based on detected languages.
+  //   Detected languages are uncommented; unused ones are commented out.
+  //   Runs on every index_folder call (full and incremental).
+  //   Set in global config to auto-create project configs on first index.
+  //   Set in project config to enable ongoing adaptation.
+
+  // === Tool Profile ===
+  // Controls how many tools are loaded into the LLM context.
+  //   "core"     — ~16 essential tools (indexing, search, retrieval). Lowest token cost.
+  //   "standard" — core + analytics, architecture, quality tools (~40 tools).
+  //   "full"     — all tools including refactoring, session, and diagnostics (default).
+  // Tip: "core" saves ~5-6k schema tokens per session.
+  // "tool_profile": "full",
+
+  // === Compact Schemas ===
+  // When true, strips rarely-used advanced parameters (debug, fusion, semantic_*,
+  // fuzzy_*, etc.) from tool schemas. The server still accepts them — they're just
+  // hidden from the LLM to save tokens. Saves ~1-2k tokens on top of any profile.
+  // "compact_schemas": false,
+
+  // === Server Output ===
+  // Controls how tool responses are emitted:
+  //   "raw"      - always emit JSON output.
+  //   "encoded"  - always emit MUNCH-encoded output.
+  //   "adaptive" - compare JSON vs MUNCH size and encode only when savings clear
+  //                the threshold below (default).
+  // Legacy aliases "json"/"compact"/"auto" are still accepted.
+  // "server_output": "adaptive",
+  // "server_output_threshold": 0.15,
+  //   Minimum savings ratio required for adaptive mode to emit MUNCH.
+  //   Example: 0.15 means encoded output must be at least 15% smaller.
+
+  // === Disabled Tools ===
+  // Global: tools listed here are removed from the schema entirely.
+  // Project: tools listed here are rejected at call_tool() with an
+  //   explanatory error (schema is global, can't be changed per-project).
+  // Default: test_summarizer disabled. Uncomment others to disable them.
+  "disabled_tools": [
+    // test_summarizer — diagnostic: sends a probe to the AI summarizer and
+    //   reports status (ok, timeout, error, misconfigured, disabled).
+    //   Remove from this list to enable it, then call it from your MCP client.
+    "test_summarizer",
+  // "analyze_perf",
+  // "announce_model",
+  // "assemble_task_context",
+  // "audit_agent_config",
+  // "check_delete_safe",
+  // "check_embedding_drift",
+  // "check_references",
+  // "check_rename_safe",
+  // "diff_health_radar",
+  // "digest",
+  // "embed_repo",
+  // "find_dead_code",
+  // "find_hot_paths",
+  // "find_implementations",
+  // "find_importers",
+  // "find_references",
+  // "find_similar_symbols",
+  // "find_unused_paths",
+  // "get_blast_radius",
+  // "get_call_hierarchy",
+  // "get_changed_symbols",
+  // "get_churn_rate",
+  // "get_class_hierarchy",
+  // "get_context_bundle",
+  // "get_coupling_metrics",
+  // "get_cross_repo_map",
+  // "get_dead_code_v2",
+  // "get_dependency_cycles",
+  // "get_dependency_graph",
+  // "get_extraction_candidates",
+  // "get_file_content",
+  // "get_file_outline",
+  // "get_file_risk",
+  // "get_file_tree",
+  // "get_group_contracts",
+  // "get_hotspots",
+  // "get_impact_preview",
+  // "get_layer_violations",
+  // "get_pr_risk_profile",
+  // "get_project_intel",
+  // "get_ranked_context",
+  // "get_redaction_log",
+  // "get_related_symbols",
+  // "get_repo_health",
+  // "get_repo_map",
+  // "get_repo_outline",
+  // "get_runtime_coverage",
+  // "get_session_context",
+  // "get_session_snapshot",
+  // "get_session_stats",
+  // "get_signal_chains",
+  // "get_symbol_complexity",
+  // "get_symbol_diff",
+  // "get_symbol_importance",
+  // "get_symbol_provenance",
+  // "get_symbol_source",
+  // "get_tectonic_map",
+  // "get_untested_symbols",
+  // "get_watch_status",
+  // "import_runtime_signal",
+  // "index_file",
+  // "index_folder",
+  // "index_repo",
+  // "invalidate_cache",
+  // "jcodemunch_guide",
+  // "list_repos",
+  // "list_workspaces",
+  // "plan_refactoring",
+  // "plan_turn",
+  // "register_edit",
+  // "render_diagram",
+  // "resolve_repo",
+  // "search_ast",
+  // "search_columns",
+  // "search_symbols",
+  // "search_text",
+  // "set_tool_tier",
+  // "suggest_queries",
+  // "summarize_repo",
+  // "test_summarizer",
+  // "tune_weights",
+  // "winnow_symbols",
+  ],
+
+  // === Tier-control escape hatch (issue #299) ===
+  // By default, `set_tool_tier` and `announce_model` survive `disabled_tools`
+  // so users can't lock themselves out of in-session tier switching. Set this
+  // to true to opt out of that safety net — useful when you're at a hard tool
+  // cap (e.g. Antigravity's 50-tool limit) and want to claw back two slots,
+  // and you accept that you can't switch tiers mid-session.
+  // "allow_disabling_tier_controls": false,
+
+  // === Tool Tier Bundles ===
+  // Which tools belong to each tier. Edit freely. Both tool_profile (below)
+  // and the runtime set_tool_tier / announce_model tools read from here.
+  // NOTE: disabled_tools applies AFTER tier filtering — a tool listed both
+  // in a bundle and in disabled_tools will not be exposed regardless of tier.
+  "tool_tier_bundles": {
+    "core": [
+      "index_repo", "index_folder", "index_file",
+      "list_repos", "resolve_repo",
+      "get_repo_outline", "get_file_tree", "get_file_outline",
+      "search_symbols", "get_symbol_source", "get_file_content",
+      "search_text", "get_context_bundle", "get_ranked_context",
+      "assemble_task_context",
+      "find_importers", "find_references"
+    ],
+    "standard": [
+      "index_repo", "index_folder", "index_file",
+      "list_repos", "resolve_repo",
+      "get_repo_outline", "get_file_tree", "get_file_outline",
+      "search_symbols", "get_symbol_source", "get_file_content",
+      "search_text", "get_context_bundle", "get_ranked_context",
+      "assemble_task_context",
+      "find_importers", "find_references",
+      "summarize_repo", "embed_repo", "suggest_queries",
+      "search_columns", "check_references",
+      "get_dependency_graph", "get_class_hierarchy",
+      "get_related_symbols", "get_call_hierarchy",
+      "get_blast_radius", "check_rename_safe", "check_delete_safe",
+      "find_implementations",
+      "get_impact_preview", "get_changed_symbols",
+      "get_symbol_diff", "get_symbol_provenance",
+      "get_pr_risk_profile", "get_symbol_complexity",
+      "get_churn_rate", "get_hotspots",
+      "get_symbol_importance", "get_repo_map", "find_dead_code",
+      "get_dead_code_v2", "get_untested_symbols", "find_similar_symbols",
+      "get_repo_health", "search_ast", "winnow_symbols",
+      "get_dependency_cycles", "get_coupling_metrics",
+      "get_layer_violations", "get_cross_repo_map", "get_group_contracts",
+      "get_tectonic_map", "get_signal_chains", "render_diagram",
+      "get_project_intel", "list_workspaces", "invalidate_cache"
+    ]
+  },
+
+  // === Model → Tier Map ===
+  // Maps model identifiers (self-reported by the agent via plan_turn(model=...)
+  // or announce_model) to a tier. Matching is fuzzy: normalize (lowercase,
+  // strip provider prefix / date suffix / bracket suffix), then try exact,
+  // glob, substring, "*", hardcoded "full" fallback in that order.
+  // Keep keys specific where possible: very short substrings (e.g. "o1") can
+  // over-match model ids that merely contain that token.
+  "model_tier_map": {
+    "claude-opus": "full",
+    "claude-sonnet": "standard",
+    "claude-haiku": "core",
+    "gpt-4o": "standard",
+    "gpt-5": "full",
+    "o1": "full",
+    "llama": "core",
+    "*": "full"
+  },
+
+  // === Adaptive Tiering (opt-in) ===
+  // When true, the exposed tool list narrows at runtime based on the model
+  // identifier self-reported by the agent via plan_turn(model=...) or
+  // announce_model(). When false (default), the static tool_profile above
+  // controls the exposed tools for the whole session — the runtime tools
+  // accept their arguments but do not switch tiers. set_tool_tier is always
+  // honored regardless of this flag (explicit user override, not automatic
+  // behavior).
+  // "adaptive_tiering": false,
+
+  // === Descriptions ===
+  // Append text to shortened tool/param descriptions.
+  // Empty string = use hardcoded minimal base only.
+  // _tool = tool-level description, other keys = param names.
+  // _shared applies across all tools (tool-specific overrides _shared).
+  // Tools not listed here keep their full current descriptions unchanged.
+  "descriptions": {
+    // === Example: Uncomment to enable ===
+    // "search_symbols": {
+    //   "_tool": "",
+    //   "debug": "",
+    //   "detail_level": "",
+    //   "language": ""
+    // },
+    // "find_importers": { "_tool": "" },
+    // "find_references": { "_tool": "" },
+    // "get_blast_radius": { "_tool": "" },
+    // "get_context_bundle": { "_tool": "" },
+    // "suggest_queries": { "_tool": "" },
+    // "_shared": { "repo": "" }
+  },
+
+  // === Transport ===
+  // Protocol for MCP server communication:
+  //   stdio            - Default. Uses stdin/stdout. Works everywhere.
+  //   sse              - Server-Sent Events over HTTP. Persistent connection.
+  //   streamable-http  - Streamable HTTP. Alternative persistent HTTP mode.
+  // When using sse or streamable-http, also set host and port.
+  // "transport": "stdio",
+  // "host": "127.0.0.1",
+  //   Bind address for HTTP transports. Use 0.0.0.0 for all interfaces.
+  // "port": 8901,
+  //   Port for HTTP transports (sse, streamable-http).
+  // "rate_limit": 0,
+  //   Max requests per minute per client IP. 0 = disabled (default).
+
+  // === Watcher ===
+  // "watch": false,
+  //   Enable automatic reindexing when files change.
+  //   Use "jcodemunch-mcp watch <paths>" CLI command to activate.
+  // "watch_debounce_ms": 2000,
+  //   Milliseconds to wait after a file change before reindexing.
+  //   Higher values reduce CPU usage but slower detection.
+  // "freshness_mode": "relaxed",
+  //   relaxed - Default. Index remains queryable during reindex.
+  //             Best for interactive use (IDE, chat).
+  //   strict  - Blocks queries until fresh index is ready.
+  //             Best for automation/CI where consistency matters.
+  // "strict_timeout_ms": 500,
+  //   Maximum milliseconds to block queries waiting for a reindex in strict mode.
+  //   After this timeout the query proceeds with the stale index.
+  //   Only applies when freshness_mode is "strict". Default: 500.
+  // "claude_poll_interval": 5.0,
+  //   Seconds between polling Claude Code worktrees for changes.
+  // "worktree_base_path": "",
+  //   Absolute path for git worktrees created by hook-event.
+  //   Default: <cwd>/.claude/worktrees/<name> (Claude Code convention).
+  //   Set to e.g. "~/.claude-worktrees" to store all worktrees centrally.
+
+  // === Logging ===
+  // "log_level": "WARNING",
+  //   DEBUG, INFO, WARNING, ERROR, CRITICAL. WARNING is default for less noise.
+  // "log_file": null,
+  //   Path to log file. null = write to stderr.
+
+  // === Identity & Indexing Behavior ===
+  // "git_root_identity": true,
+  //   When the indexed path lives inside a git working tree, anchor
+  //   `index_folder` at the git root. Indexing a subdir then walks the
+  //   subdir only, but file paths are stored git-root-relative — so
+  //   `index ./packages` and `index ./scripts` coalesce into one repo
+  //   index per clone. Useful for monorepos and worktrees.
+  //   Set false to revert to pre-v1.96 behavior: `local/<folder>-<hash>`
+  //   identity derived from the resolved path, with no retargeting.
+  //   Choose `false` when you deliberately want a subdir to be its own
+  //   independent index, separate from any enclosing git repo.
+  //   (v1.108.2: the git-root probe is now properly skipped when this
+  //   is false — prior versions still paid the probe cost.)
+  // "git_blame_enabled": true,
+  //   Run the git_blame context provider during indexing to attach
+  //   `last_author` and `last_modified` to each file's context. The
+  //   walk is bounded (latest 20k commits or 2 years, whichever fires
+  //   first; 10s wall-clock cap). On legacy repos with very deep
+  //   history those bounds may still not be enough — set false to
+  //   skip the probe entirely. Index still builds; only the blame
+  //   metadata is omitted.
+
+  // === Privacy & Telemetry ===
+  // "redact_source_root": false,
+  //   Replace absolute source_root paths with display_name in responses.
+  //   Set true to hide project paths from clients.
+  // "stats_file_interval": 3,
+  //   Write session_stats.json every N tool calls. 0 = disable writes.
+  //   Lower values = more disk I/O but faster stats for external consumers.
+  // "share_savings": true,
+  //   Enable anonymous token savings telemetry (helps project funding).
+  //   Set false/0 to disable.
+  // "perf_telemetry_enabled": false,
+  //   Persist per-tool latency rows (tool, duration_ms, ok, repo) to
+  //   ~/.code-index/telemetry.db. The in-memory ring (queryable via
+  //   analyze_perf and get_session_stats) is always tracked; this flag
+  //   only controls durable persistence.
+  // "perf_telemetry_max_rows": 100000,
+  //   Rolling cap on persisted perf rows; oldest rows trimmed in 1k batches
+  //   once exceeded. Lower this on small disks or short-lived deployments.
+  // "runtime_max_rows": 100000,
+  //   Rolling cap on rows in the runtime_* tables (per-repo). Hits the cap →
+  //   FIFO eviction in 1k batches. Phase 0 ships the schema; Phase 1+ ships
+  //   the ingest tools that fill these tables.
+  // "runtime_redact_enabled": true,
+  //   Enforce PII redaction at the runtime trace ingest chokepoint. Set
+  //   false ONLY for offline debugging on synthetic data — never on
+  //   production traces.
+  // "summarizer_concurrency": 4,
+  //   Number of parallel threads for AI summarization.
+  //   Higher = faster indexing but more API calls.
+  // "summarizer_max_failures": 3,
+  //   Consecutive batch failures before the AI summarizer gives up and
+  //   falls back to signature summaries for remaining symbols.
+  //   Set 0 to disable the circuit breaker (never stop retrying).
+
+  // === Session-Aware Routing ===
+  // "negative_evidence_threshold": 0.5,
+  //   BM25 score threshold for negative evidence in search_symbols.
+  //   When the best match score is below this, the response includes
+  //   structured negative_evidence to prevent AI hallucination.
+  // "search_result_cache_max": 128,
+  //   Maximum entries in the search_symbols result cache. 0 = disable cache.
+  // "session_journal": true,
+  //   Track file reads, searches, and edits during the MCP session.
+  //   Disable to reduce memory usage in long-running sessions.
+  // "plan_turn_high_threshold": 2.0,
+  //   Minimum BM25 score for plan_turn to report "high" confidence.
+  // "plan_turn_medium_threshold": 0.5,
+  //   Minimum BM25 score for plan_turn to report "medium" confidence.
+  // "turn_budget_tokens": 20000,
+  //   Max tokens returned across all tool calls in a turn. 0 = disabled.
+  // "turn_gap_seconds": 30.0,
+  //   Seconds of silence before a new "turn" begins (heuristic).
+  // "session_resume": false,
+  //   Persist and restore session state (journal, cache) across restarts.
+  //   Writes only on clean shutdown (NVME-friendly). State validated
+  //   against git HEAD (or indexed_at for non-Git projects) on restore.
+  // "session_max_age_minutes": 30,
+  //   Discard saved session state older than this.
+  // "session_max_queries": 50,
+  //   Cap on persisted search cache entries.
+
+  // === AI Summarizer ===
+  // Controls whether AI is used to generate symbol summaries during indexing.
+  //   "auto"  — auto-detect provider from API key env vars (default behavior)
+  //   true    — use the summarizer_provider and summarizer_model values below
+  //   false   — disable AI summarization entirely (signature fallback only)
+  // "use_ai_summaries": "auto",
+
+  // AI summarizer provider to use when use_ai_summaries is true.
+  // Valid values: "anthropic", "gemini", "openai", "minimax", "glm", "openrouter", "none"
+  // Leave empty ("") to auto-detect from available API keys.
+  // "summarizer_provider": "",
+
+  // Model name to use for the selected summarizer provider.
+  // Leave empty ("") to use the provider's default model.
+  // Examples: "claude-haiku-4-5-20251001" (anthropic), "gemini-2.5-flash-lite" (gemini),
+  //           "gpt-4o-mini" (openai), "minimax-m2.7" (minimax), "glm-5" (glm),
+  //           "meta-llama/llama-3.3-70b-instruct:free" (openrouter)
+  // "summarizer_model": "",
+  // "embed_model": "",
+  //   Sentence-transformers model name for local (free) semantic embeddings.
+  //   Example: "all-MiniLM-L6-v2". Requires sentence-transformers package.
+  //   When set, takes priority over GOOGLE_API_KEY and OPENAI_API_KEY embeddings.
+  // "allow_remote_summarizer": false,
+  //   Allow remote LLM endpoints for summarization (security risk).
+  //   Default false blocks non-local summarization.
+  // "path_map": "",
+  //   Cross-platform path remapping. Format: "orig1=new1,orig2=new2".
+  //   Allows indexes built on Linux to work on Windows and vice versa.
+
+  // === Mermaid Viewer Integration ===
+  // "render_diagram_viewer_enabled": false,
+  //   When true, render_diagram exposes an extra boolean parameter
+  //   `open_in_viewer` in its tool schema. When the caller sets
+  //   open_in_viewer=true, the produced mermaid is written as a
+  //   self-contained HTML file under <index_path>/temp/mermaid/ and
+  //   opened with the viewer resolved via `mermaid_viewer_path`.
+  //   When false (default), the parameter is hidden from the schema.
+  //   The temp folder is cleaned on server startup and shutdown.
+
+  // "mermaid_viewer_path": "",
+  //   Absolute path to the mmd-viewer executable. Used only when
+  //   render_diagram_viewer_enabled is true and the caller requests
+  //   open_in_viewer=true.
+  //   - Explicit path: used as-is (e.g. "C:/tools/mmd-viewer.exe").
+  //   - Empty string: falls back to "mmd-viewer" on $PATH.
+  //   If neither resolves, render_diagram still returns the mermaid
+  //   markup and adds a non-fatal `viewer_error` field to the result.
+}

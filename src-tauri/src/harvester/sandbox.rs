@@ -1,4 +1,5 @@
 use std::env;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::collections::HashSet;
@@ -54,6 +55,14 @@ pub struct SandboxHandle {
 struct ResolvedCommand {
     program: PathBuf,
     args: Vec<String>,
+    env: BTreeMap<String, String>,
+}
+
+fn resolve_code_index_path(repo_path: &Path) -> PathBuf {
+    repo_path
+        .parent()
+        .unwrap_or(repo_path)
+        .join(".jcodemunch_index")
 }
 
 fn parse_env_assignment(line: &str, key: &str) -> Option<String> {
@@ -186,9 +195,9 @@ fn resolve_uvx_path() -> Option<PathBuf> {
     None
 }
 
-fn resolve_command(command: &str, args: &[&str]) -> Result<ResolvedCommand, SandboxError> {
+fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<ResolvedCommand, SandboxError> {
     match command {
-        "jcodemunch" => {
+        "jcodemunch" | "jcodemunch-mcp" => {
             let uvx_path = resolve_uvx_path().ok_or_else(|| SandboxError::ProcessSpawnFailed {
                 reason: "uvx not found; configure SODA_UV_PATH in .env or install uv/uvx in PATH".to_string(),
             })?;
@@ -196,18 +205,26 @@ fn resolve_command(command: &str, args: &[&str]) -> Result<ResolvedCommand, Sand
             let mut resolved_args = vec![
                 "--from".to_string(),
                 "jcodemunch-mcp".to_string(),
-                "jcodemunch".to_string(),
+                "jcodemunch-mcp".to_string(),
             ];
             resolved_args.extend(args.iter().map(|arg| (*arg).to_string()));
+
+            let mut resolved_env = BTreeMap::new();
+            resolved_env.insert(
+                "CODE_INDEX_PATH".to_string(),
+                resolve_code_index_path(repo_path).display().to_string(),
+            );
 
             Ok(ResolvedCommand {
                 program: uvx_path,
                 args: resolved_args,
+                env: resolved_env,
             })
         }
         _ => Ok(ResolvedCommand {
             program: PathBuf::from(command),
             args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            env: BTreeMap::new(),
         }),
     }
 }
@@ -229,16 +246,22 @@ impl SandboxHandle {
         &self,
         command: &str,
         args: &[&str],
+        timeout_secs: u64,
     ) -> Result<Vec<u8>, SandboxError> {
         if self.is_mock {
-            let resolved = resolve_command(command, args)?;
+            let resolved = resolve_command(command, args, &self.repo_path)?;
 
             // 1. Spawning do comando no diretório do repo_path
-            let mut child = tokio::process::Command::new(&resolved.program)
+            let mut command = tokio::process::Command::new(&resolved.program);
+            command
                 .args(&resolved.args)
                 .current_dir(&self.repo_path)
                 .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+            if !resolved.env.is_empty() {
+                command.envs(&resolved.env);
+            }
+            let mut child = command
                 .spawn()
                 .map_err(|e| SandboxError::ProcessSpawnFailed { reason: e.to_string() })?;
 
@@ -277,7 +300,7 @@ impl SandboxHandle {
                 status
             };
 
-            let wait_result = timeout(Duration::from_secs(30), run_fut).await;
+            let wait_result = timeout(Duration::from_secs(timeout_secs), run_fut).await;
 
             // Remove o PID ativo da guilhotina (D1: lock seguro contra poisoning)
             self.lock_pids().remove(&pid);
@@ -422,10 +445,10 @@ mod tests {
 
         // Executa comando básico trivial do próprio sistema para verificar I/O
         #[cfg(target_os = "windows")]
-        let output = sandbox.execute("cmd", &["/C", "echo SODA_SANDBOX"]).await.unwrap();
+            let output = sandbox.execute("cmd", &["/C", "echo SODA_SANDBOX"], 30).await.unwrap();
         
         #[cfg(not(target_os = "windows"))]
-        let output = sandbox.execute("echo", &["SODA_SANDBOX"]).await.unwrap();
+            let output = sandbox.execute("echo", &["SODA_SANDBOX"], 30).await.unwrap();
 
         let output_str = String::from_utf8_lossy(&output);
         assert!(output_str.trim().contains("SODA_SANDBOX"));

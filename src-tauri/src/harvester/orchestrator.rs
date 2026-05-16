@@ -2,17 +2,18 @@ use std::sync::{Arc, Mutex};
 use url::Url;
 use rusqlite::Connection;
 use thiserror::Error;
-use tracing::{info, debug};
+use tracing::{info, debug, error};
 
 use super::ramdisk::{RamdiskAllocator, RamdiskHandle};
 use super::git::{BloblessCloner};
 use super::sandbox::{SandboxOrchestrator, SandboxPolicy, SandboxHandle};
 use super::detect::LanguageDetector;
 use super::router::{self, ExtractionInput, ExtractionTask};
-use super::community::{CommunityMetaFetcher, RateLimiter, CommunityMetaPayload};
+use super::community::{CommunityMetaFetcher, RateLimiter};
 use super::persist::{BlobNormalizer, ArtifactBlob};
-use super::extract::{ManifestInput, OpsInput};
+use super::extract::{LocalStaticExtractor, ManifestInput, OpsInput};
 use super::guard::PurgeGuard;
+use super::sidecar::{JCodemunchInput, JCodemunchSidecar, PersistArtifactConfig};
 
 #[derive(Error, Debug)]
 pub enum OrchestratorError {
@@ -24,6 +25,9 @@ pub enum OrchestratorError {
 
     #[error("Persistence failed: {0}")]
     PersistenceError(String),
+
+    #[error("Extraction failed: {0}")]
+    ExtractionError(String),
 }
 
 pub struct HarvesterOrchestrator;
@@ -38,25 +42,24 @@ impl HarvesterOrchestrator {
     ) -> Result<(), OrchestratorError> {
         info!(url = %repo_url, repo_id = %repo_id, "Iniciando HarvesterOrchestrator (N14)");
 
-        // 1. [N1] Setup Físico (Fail-Fast)
-        // PT-3: Alocação assíncrona para não bloquear o Event Loop.
-        let ramdisk = RamdiskAllocator::allocate(256)
+        // 1. [N1] Setup do Shadow Workspace (Fail-Fast)
+        let workspace = RamdiskAllocator::allocate(256)
             .await
             .map_err(|e| OrchestratorError::InfraError(e.to_string()))?;
 
         let mut sandbox_handle: Option<SandboxHandle> = None;
         
         // 2. Execução do Pipeline com Garantia de Vida (PurgeGuard)
-        let result = Self::pipeline_core(repo_id, repo_url, &ramdisk, conn, &mut sandbox_handle).await;
+        let result = Self::pipeline_core(repo_id, repo_url, &workspace, conn, &mut sandbox_handle).await;
 
         // 6. [N13] PurgeGuard (Lifeline Incondicional)
         // Consome as instâncias por VALOR para garantir a higiene RAII.
         if let Some(sb) = sandbox_handle {
-            debug!("PurgeGuard: Iniciando limpeza atômica (Sandbox + Ramdisk)");
-            PurgeGuard::purge(sb, ramdisk);
+            debug!("PurgeGuard: Iniciando limpeza atômica (Sandbox + TempWorkspace)");
+            PurgeGuard::purge(sb, workspace);
         } else {
-            debug!("PurgeGuard: Limpando Ramdisk (Sandbox não foi inicializado)");
-            drop(ramdisk);
+            debug!("PurgeGuard: Limpando TempWorkspace via Drop do TempDir");
+            drop(workspace);
         }
 
         result
@@ -67,12 +70,12 @@ impl HarvesterOrchestrator {
     async fn pipeline_core(
         repo_id: &str,
         repo_url: &Url,
-        ramdisk: &RamdiskHandle,
+        workspace: &RamdiskHandle,
         conn: Arc<Mutex<Connection>>,
         sandbox_out: &mut Option<SandboxHandle>,
     ) -> Result<(), OrchestratorError> {
         // [N2] Clone Blobless
-        let repo_path = BloblessCloner::clone(repo_url, ramdisk)
+        let repo_path = BloblessCloner::clone(repo_url, workspace)
             .await
             .map_err(|e| OrchestratorError::CloneError(e.to_string()))?;
 
@@ -100,41 +103,81 @@ impl HarvesterOrchestrator {
         
         let mut blobs = Vec::new();
 
+        if tasks.contains(&ExtractionTask::RunJCodemunch) {
+            let sandbox_ref = sandbox_out.as_ref().ok_or_else(|| {
+                OrchestratorError::InfraError("SandboxHandle indisponivel para executar jcodemunch".to_string())
+            })?;
+            let input = JCodemunchInput {
+                executor: sandbox_ref,
+                timeout_secs: 600,
+                persist_artifact: Some(PersistArtifactConfig {
+                    repo_id,
+                    artifact_type: "blob_04_repo_outline",
+                }),
+            };
+            let payload = JCodemunchSidecar::extract(input).await.map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blob_04_repo_outline");
+                OrchestratorError::ExtractionError(e.to_string())
+            })?;
+            let json = serde_json::to_vec(&payload).map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha ao serializar blob_04_repo_outline");
+                OrchestratorError::PersistenceError(format!("Falha ao serializar AST: {}", e))
+            })?;
+            blobs.push(ArtifactBlob {
+                artifact_type: "blob_04_repo_outline".to_string(),
+                payload_blob: json,
+            });
+        }
+
+        let static_blobs = LocalStaticExtractor::extract_all(repo_path.as_ref()).await.map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair Super Pacote RAW");
+            OrchestratorError::ExtractionError(e.to_string())
+        })?;
+        blobs.extend(static_blobs);
+
         // Extrações Locais (Fase 1: Manifests e OpsBlueprint)
-        // Degradação Graciosa: Falhas em extratores não abortam o fluxo principal.
         if tasks.contains(&ExtractionTask::ExtractManifests) {
             let input = ManifestInput { repo_path: &repo_path };
-            if let Ok(payload) = super::extract::ManifestExtractor::extract(input).await {
-                for manifest in payload.manifests {
-                    if let Ok(json) = serde_json::to_vec(&manifest) {
-                        blobs.push(ArtifactBlob {
-                            artifact_type: format!("Manifest:{}", manifest.file_name),
-                            payload_blob: json,
-                        });
-                    }
-                }
+            let payload = super::extract::ManifestExtractor::extract(input).await.map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair manifestos");
+                OrchestratorError::ExtractionError(e.to_string())
+            })?;
+            for manifest in payload.manifests {
+                let artifact_type = format!("Manifest:{}", manifest.file_name);
+                let json = serde_json::to_vec(&manifest).map_err(|e| {
+                    error!(repo_id = %repo_id, artifact_type = %artifact_type, error = %e, "Falha ao serializar manifesto");
+                    OrchestratorError::PersistenceError(format!("Falha ao serializar manifesto {}: {}", artifact_type, e))
+                })?;
+                blobs.push(ArtifactBlob {
+                    artifact_type,
+                    payload_blob: json,
+                });
             }
         }
 
         if tasks.contains(&ExtractionTask::ExtractOpsBlueprint) {
             let input = OpsInput { repo_path: &repo_path };
-            if let Ok(payload) = super::extract::OpsBlueprintExtractor::extract(input).await {
-                for file in payload.infra_files {
-                    let payload_blob = file.content.into_bytes();
-                    blobs.push(ArtifactBlob {
-                        artifact_type: format!("OpsBlueprint:{}", file.path),
-                        payload_blob,
-                    });
-                }
+            let payload = super::extract::OpsBlueprintExtractor::extract(input).await.map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blueprint operacional");
+                OrchestratorError::ExtractionError(e.to_string())
+            })?;
+            for file in payload.infra_files {
+                let payload_blob = file.content.into_bytes();
+                blobs.push(ArtifactBlob {
+                    artifact_type: format!("OpsBlueprint:{}", file.path),
+                    payload_blob,
+                });
             }
         }
 
-        // [N10] Reunião da Métrica Comunitária (Fail-Soft)
-        let community_res = community_fut.await;
-        let community_blob = match community_res {
-            Ok(p) => serde_json::to_vec(&p).unwrap_or_default(),
-            Err(_) => serde_json::to_vec(&CommunityMetaPayload::empty()).unwrap_or_default(),
-        };
+        let community_payload = community_fut.await.map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha critica ao coletar metrica comunitaria");
+            OrchestratorError::ExtractionError(e.to_string())
+        })?;
+        let community_blob = serde_json::to_vec(&community_payload).map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha ao serializar metrica comunitaria");
+            OrchestratorError::PersistenceError(format!("Falha ao serializar CommunityMeta: {}", e))
+        })?;
         blobs.push(ArtifactBlob {
             artifact_type: "CommunityMeta".to_string(),
             payload_blob: community_blob,
