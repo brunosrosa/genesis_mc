@@ -89,12 +89,12 @@ impl LanguageDetector {
         match detected_stacks.len() {
             0 => Ok(StackProfile::Unknown),
             1 => {
-                // SAFETY: Este branch é atingido exclusivamente quando len() == 1,
-                // portanto next() é matematicamente garantido como Some.
-                let single = detected_stacks
-                    .into_iter()
-                    .next()
-                    .expect("Invariante violada: len()==1 mas next() retornou None");
+                let mut detected = detected_stacks.into_iter();
+                let Some(single) = detected.next() else {
+                    return Err(DetectionError::FilesystemError {
+                        reason: "Invariante violada: len()==1 mas nenhum stack foi retornado".to_string(),
+                    });
+                };
                 Ok(match single {
                     SingleStack::Rust => StackProfile::Rust,
                     SingleStack::NodeJS => StackProfile::NodeJS,

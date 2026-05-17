@@ -195,6 +195,71 @@ fn resolve_uvx_path() -> Option<PathBuf> {
     None
 }
 
+fn executable_names(base_name: &str) -> Vec<String> {
+    if cfg!(target_os = "windows") {
+        vec![
+            format!("{base_name}.exe"),
+            format!("{base_name}.cmd"),
+            format!("{base_name}.bat"),
+            base_name.to_string(),
+        ]
+    } else {
+        vec![base_name.to_string()]
+    }
+}
+
+fn resolve_from_path(base_name: &str) -> Option<PathBuf> {
+    let executable_names = executable_names(base_name);
+    let path_var = env::var_os("PATH")?;
+
+    for path_entry in env::split_paths(&path_var) {
+        for executable_name in &executable_names {
+            let candidate = path_entry.join(executable_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_local_node_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf> {
+    let bin_dir = repo_path.join("node_modules").join(".bin");
+    for executable_name in executable_names(base_name) {
+        let candidate = bin_dir.join(executable_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn resolve_local_python_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf> {
+    let candidates = if cfg!(target_os = "windows") {
+        vec![
+            repo_path.join(".venv").join("Scripts"),
+            repo_path.join("venv").join("Scripts"),
+        ]
+    } else {
+        vec![
+            repo_path.join(".venv").join("bin"),
+            repo_path.join("venv").join("bin"),
+        ]
+    };
+
+    for bin_dir in candidates {
+        for executable_name in executable_names(base_name) {
+            let candidate = bin_dir.join(executable_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
 fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<ResolvedCommand, SandboxError> {
     match command {
         "jcodemunch" | "jcodemunch-mcp" => {
@@ -219,6 +284,45 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
                 program: uvx_path,
                 args: resolved_args,
                 env: resolved_env,
+            })
+        }
+        "pytest" => {
+            let program = resolve_local_python_bin(repo_path, "pytest")
+                .or_else(|| resolve_from_path("pytest"))
+                .unwrap_or_else(|| PathBuf::from(command));
+            Ok(ResolvedCommand {
+                program,
+                args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                env: BTreeMap::new(),
+            })
+        }
+        "cargo" => {
+            let program = resolve_from_path("cargo").unwrap_or_else(|| PathBuf::from(command));
+            let mut env = BTreeMap::new();
+            env.insert("CARGO_INCREMENTAL".to_string(), "0".to_string());
+            env.insert(
+                "CARGO_TARGET_DIR".to_string(),
+                workspace_root()
+                    .join("src-tauri")
+                    .join("target")
+                    .join("native-test-list-cache")
+                    .display()
+                    .to_string(),
+            );
+            Ok(ResolvedCommand {
+                program,
+                args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                env,
+            })
+        }
+        "jest" | "vitest" => {
+            let program = resolve_local_node_bin(repo_path, command)
+                .or_else(|| resolve_from_path(command))
+                .unwrap_or_else(|| PathBuf::from(command));
+            Ok(ResolvedCommand {
+                program,
+                args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                env: BTreeMap::new(),
             })
         }
         _ => Ok(ResolvedCommand {

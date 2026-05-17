@@ -36,6 +36,8 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 tracing-subscriber = "0.3"
 tempfile = "3"
 dotenvy = "0.15"
+quote = "1"
+syn = { version = "2", features = ["full", "visit"] }
 
 [dev-dependencies]
 mockito = "1.5"

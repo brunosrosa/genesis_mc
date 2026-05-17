@@ -8,8 +8,10 @@ use oxc::{
 use tokio::fs;
 use thiserror::Error;
 use serde::{Deserialize, Serialize};
+use super::detect::StackProfile;
 use super::git::RepoPath;
 use super::persist::ArtifactBlob;
+use super::sidecar::{pack_scoped_text_blocks, NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -81,6 +83,11 @@ pub struct ManifestInput<'a> {
     pub repo_path: &'a RepoPath,
 }
 
+pub struct TestIntentInput<'a> {
+    pub repo_path: &'a RepoPath,
+    pub profile: &'a StackProfile,
+}
+
 pub struct ManifestExtractor;
 pub struct TestIntentExtractor;
 pub struct UnsafeHotspotsExtractor;
@@ -99,10 +106,20 @@ const OPS_BLOB_MAX_CHARS: usize = 25_000;
 const COMMUNITY_META_MAX_CHARS: usize = 1_000;
 const TEST_INTENT_BLOB_MAX_CHARS: usize = 30_000;
 const UNSAFE_HOTSPOTS_BLOB_MAX_CHARS: usize = 6_000;
-const UX_CONTRACTS_BLOB_MAX_CHARS: usize = 30_000;
+const UX_CONTRACTS_BLOB_MAX_CHARS: usize = 150_000;
 const MAX_SCAN_FILE_BYTES: u64 = 262_144;
-const DOMAIN_TEST_NOISE_MARKERS: [&str; 5] = ["mock", "fixtures", "test_support", "e2e", "integration_mocks"];
 const STATE_CALL_NAMES: [&str; 5] = ["useState", "createSignal", "writable", "useReducer", "$state"];
+const UX_MAX_TYPE_ENTRIES_PER_FILE: usize = 2;
+const UX_MAX_PROPS_ENTRIES_PER_FILE: usize = 1;
+const UX_MAX_STATE_ENTRIES_PER_FILE: usize = 3;
+const UX_MAX_OTHER_ENTRIES_PER_FILE: usize = 1;
+const UX_MAX_TOTAL_ENTRIES_PER_FILE: usize = 5;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CappedFileEntries {
+    items: Vec<String>,
+    omitted_count: usize,
+}
 
 #[derive(Debug, Default)]
 struct UxAstCollector<'a> {
@@ -124,12 +141,6 @@ impl<'a> UxAstCollector<'a> {
         self.entries
     }
 
-    fn push_block(&mut self, span: Span) {
-        if let Some(snippet) = slice_source_span(self.source_text, span).and_then(normalize_code_block_snippet) {
-            self.push_entry(snippet);
-        }
-    }
-
     fn push_props_parameter(&mut self, parameter: &FormalParameter<'a>) {
         let Some(snippet) = compact_props_parameter_entry(self.source_text, parameter)
         else {
@@ -148,14 +159,14 @@ impl<'a> UxAstCollector<'a> {
 impl<'a> Visit<'a> for UxAstCollector<'a> {
     fn visit_ts_interface_declaration(&mut self, declaration: &TSInterfaceDeclaration<'a>) {
         if is_ux_contract_type_name(declaration.id.name.as_str()) {
-            self.push_block(declaration.span);
+            self.push_entry(format!("interface {}", declaration.id.name.as_str()));
         }
         walk::walk_ts_interface_declaration(self, declaration);
     }
 
     fn visit_ts_type_alias_declaration(&mut self, declaration: &TSTypeAliasDeclaration<'a>) {
         if is_ux_contract_type_name(declaration.id.name.as_str()) {
-            self.push_block(declaration.span);
+            self.push_entry(format!("type {}", declaration.id.name.as_str()));
         }
         walk::walk_ts_type_alias_declaration(self, declaration);
     }
@@ -356,7 +367,19 @@ fn default_unsafe_hotspots_message() -> String {
 fn should_skip_dir(name: &str) -> bool {
     matches!(
         name,
-        ".git" | ".jj" | ".svn" | "node_modules" | "target" | "dist" | "build" | ".jcodemunch_index"
+        ".git"
+            | ".jj"
+            | ".svn"
+            | "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+            | ".jcodemunch_index"
+            | "docs"
+            | "documentation"
+            | "examples"
+            | "mock"
+            | "mocks"
     )
 }
 
@@ -369,45 +392,6 @@ fn has_code_extension(path: &Path) -> bool {
                 "rs" | "js" | "jsx" | "ts" | "tsx" | "py" | "go" | "java" | "kt" | "swift" | "svelte" | "vue" | "mjs" | "cjs"
             )
     )
-}
-
-fn is_test_file(path: &Path) -> bool {
-    if should_skip_documentation_path(path) {
-        return false;
-    }
-
-    if should_skip_non_domain_test_path(path) {
-        return false;
-    }
-
-    if should_skip_frontend_test_path(path) {
-        return false;
-    }
-
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.to_ascii_lowercase())
-        .unwrap_or_default();
-
-    path.components().any(|component| {
-        component
-            .as_os_str()
-            .to_str()
-            .map(|part| {
-                let lower = part.to_ascii_lowercase();
-                lower == "tests" || lower == "__tests__"
-            })
-            .unwrap_or(false)
-    }) || file_name.contains("test") || file_name.contains("spec")
-}
-
-fn should_skip_frontend_test_path(path: &Path) -> bool {
-    ["ui", "frontend", "storybook", "stories"].iter().any(|segment| has_path_segment(path, segment))
-}
-
-fn should_skip_non_domain_test_path(path: &Path) -> bool {
-    path_contains_semantic_marker(path, &DOMAIN_TEST_NOISE_MARKERS)
 }
 
 fn is_frontend_file(path: &Path) -> bool {
@@ -482,29 +466,6 @@ fn should_skip_ux_noise_path(path: &Path) -> bool {
         .any(|segment| has_path_segment(path, segment))
 }
 
-fn path_contains_semantic_marker(path: &Path, markers: &[&str]) -> bool {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.to_ascii_lowercase())
-        .unwrap_or_default();
-
-    if markers.iter().any(|marker| file_name.contains(marker)) {
-        return true;
-    }
-
-    path.components().any(|component| {
-        component
-            .as_os_str()
-            .to_str()
-            .map(|part| {
-                let lower = part.to_ascii_lowercase();
-                markers.iter().any(|marker| lower.contains(marker))
-            })
-            .unwrap_or(false)
-    })
-}
-
 fn slice_source_span(source: &str, span: Span) -> Option<&str> {
     source.get(span.start as usize..span.end as usize)
 }
@@ -518,32 +479,6 @@ fn capture_line_at_offset(source: &str, offset: u32) -> Option<&str> {
         .map(|idx| safe_offset + idx)
         .unwrap_or(source.len());
     source.get(start..end)
-}
-
-fn normalize_code_block_snippet(snippet: &str) -> Option<String> {
-    let mut normalized = Vec::new();
-    let mut previous_blank = false;
-
-    for line in snippet.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.trim().is_empty() {
-            if !previous_blank {
-                normalized.push(String::new());
-                previous_blank = true;
-            }
-            continue;
-        }
-
-        normalized.push(trimmed.to_string());
-        previous_blank = false;
-    }
-
-    let joined = normalized.join("\n").trim().to_string();
-    if joined.is_empty() {
-        None
-    } else {
-        Some(joined)
-    }
 }
 
 fn normalize_code_line_snippet(snippet: &str) -> Option<String> {
@@ -663,12 +598,18 @@ fn frontend_ast_input(path: &Path, content: &str) -> Option<(String, PathBuf)> {
     }
 }
 
-fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> Vec<String> {
+fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> CappedFileEntries {
     let Some((source_text, parse_path)) = frontend_ast_input(path, content) else {
-        return Vec::new();
+        return CappedFileEntries {
+            items: Vec::new(),
+            omitted_count: 0,
+        };
     };
     let Ok(source_type) = SourceType::from_path(&parse_path) else {
-        return Vec::new();
+        return CappedFileEntries {
+            items: Vec::new(),
+            omitted_count: 0,
+        };
     };
 
     let allocator = Allocator::default();
@@ -680,12 +621,55 @@ fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> Vec<St
         .parse();
 
     if parser_return.panicked {
-        return Vec::new();
+        return CappedFileEntries {
+            items: Vec::new(),
+            omitted_count: 0,
+        };
     }
 
     let mut collector = UxAstCollector::new(&source_text);
     collector.visit_program(&parser_return.program);
-    collector.finish()
+    prioritize_ux_entries(collector.finish())
+}
+
+fn prioritize_ux_entries(entries: Vec<String>) -> CappedFileEntries {
+    let total_entries = entries.len();
+    let mut types = Vec::new();
+    let mut props = Vec::new();
+    let mut states = Vec::new();
+    let mut other = Vec::new();
+
+    for entry in entries {
+        if entry.starts_with("interface ") || entry.starts_with("type ") {
+            types.push(entry);
+        } else if entry.starts_with("props") {
+            props.push(entry);
+        } else if entry.starts_with("state ") {
+            states.push(entry);
+        } else {
+            other.push(entry);
+        }
+    }
+
+    types.truncate(UX_MAX_TYPE_ENTRIES_PER_FILE);
+    props.truncate(UX_MAX_PROPS_ENTRIES_PER_FILE);
+    states.truncate(UX_MAX_STATE_ENTRIES_PER_FILE);
+    other.truncate(UX_MAX_OTHER_ENTRIES_PER_FILE);
+
+    let mut prioritized = Vec::new();
+    prioritized.extend(types);
+    prioritized.extend(props);
+    prioritized.extend(states);
+    prioritized.extend(other);
+
+    let omitted_from_categories = total_entries.saturating_sub(prioritized.len());
+    let omitted_from_total = prioritized.len().saturating_sub(UX_MAX_TOTAL_ENTRIES_PER_FILE);
+    prioritized.truncate(UX_MAX_TOTAL_ENTRIES_PER_FILE);
+
+    CappedFileEntries {
+        items: prioritized,
+        omitted_count: omitted_from_categories + omitted_from_total,
+    }
 }
 
 fn collect_repo_files(root: &Path) -> Result<Vec<PathBuf>, ExtractionError> {
@@ -755,92 +739,41 @@ fn relative_display(root: &Path, path: &Path) -> String {
 }
 
 impl TestIntentExtractor {
-    pub async fn extract_blob(repo_path: &RepoPath) -> Result<ArtifactBlob, ExtractionError> {
-        let root = repo_path.as_ref().to_path_buf();
-        tokio::task::spawn_blocking(move || {
-            let files = collect_repo_files(&root)?;
-            let mut intents = BTreeSet::new();
+    pub fn default_blob() -> ArtifactBlob {
+        blob_from_text("blob_03_test_intent", default_test_intent_message())
+    }
 
-            for path in files.into_iter().filter(|path| is_test_file(path) && has_code_extension(path)) {
-                let Some(content) = read_small_text_file(&path)? else {
-                    continue;
-                };
-                let rel = relative_display(&root, &path);
-                let mut waiting_attr = false;
-
-                for line in content.lines() {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
-
-                    if trimmed.starts_with("#[test")
-                        || trimmed.starts_with("#[tokio::test")
-                        || trimmed.starts_with("#[rstest")
-                    {
-                        waiting_attr = true;
-                        continue;
-                    }
-
-                    if trimmed.starts_with("async fn ") || trimmed.starts_with("fn ") {
-                        let name = trimmed
-                            .trim_start_matches("async ")
-                            .trim_start_matches("fn ")
-                            .split('(')
-                            .next()
-                            .unwrap_or(trimmed)
-                            .trim();
-                        if waiting_attr || name.to_ascii_lowercase().contains("test") {
-                            intents.insert(format!("{} :: {}", rel, trimmed.trim_end_matches('{').trim()));
-                        }
-                        waiting_attr = false;
-                        continue;
-                    }
-
-                    waiting_attr = false;
-
-                    if trimmed.starts_with("def test_") || trimmed.starts_with("async def test_") {
-                        intents.insert(format!("{} :: {}", rel, trimmed.trim_end_matches(':').trim()));
-                    } else if trimmed.starts_with("func Test") {
-                        intents.insert(format!("{} :: {}", rel, trimmed.trim_end_matches('{').trim()));
-                    } else if trimmed.starts_with("test(") || trimmed.starts_with("it(") {
-                        intents.insert(format!("{} :: {}", rel, trimmed.trim_end_matches('{').trim()));
-                    }
-                }
-            }
-
-            let body = if intents.is_empty() {
-                default_test_intent_message()
-            } else {
-                let mut ordered = intents.into_iter().collect::<Vec<_>>();
-                ordered.sort_by(|left, right| {
-                    let left_path = left.split(" :: ").next().unwrap_or(left.as_str());
-                    let right_path = right.split(" :: ").next().unwrap_or(right.as_str());
-                    test_intent_priority(left_path)
-                        .cmp(&test_intent_priority(right_path))
-                        .then_with(|| left_path.cmp(right_path))
-                        .then_with(|| left.cmp(right))
-                });
-                truncate_utf8(
-                    &ordered.join("\n"),
-                    TEST_INTENT_BLOB_MAX_CHARS,
-                    TEST_INTENT_BLOB_MAX_CHARS,
-                )
-            };
-
-            Ok(blob_from_text("blob_03_test_intent", body))
+    pub async fn extract_blob(input: TestIntentInput<'_>) -> Result<ArtifactBlob, ExtractionError> {
+        let payload = NativeTestDiscoverySidecar::extract(NativeTestDiscoveryInput {
+            repo_path: input.repo_path.as_ref(),
+            profile: input.profile,
         })
         .await
         .map_err(|e| ExtractionError::IoError {
             file: "blob_03_test_intent".to_string(),
             reason: e.to_string(),
-        })?
+        })?;
+
+        let body = if payload.blocks.is_empty() {
+            default_test_intent_message()
+        } else {
+            let mut ordered = payload.blocks;
+            ordered.sort_by(|left, right| {
+                test_intent_priority(&left.file_path)
+                    .cmp(&test_intent_priority(&right.file_path))
+                    .then_with(|| left.file_path.cmp(&right.file_path))
+            });
+            pack_scoped_text_blocks(&ordered, TEST_INTENT_BLOB_MAX_CHARS)
+        };
+
+        Ok(blob_from_text("blob_03_test_intent", body))
     }
 }
 
 fn test_intent_priority(path: &str) -> usize {
     let normalized = path.to_ascii_lowercase();
-    if normalized.contains("/src/core/")
+    if normalized.starts_with("cargo::")
+        || normalized.contains("/src/core/")
         || normalized.contains("/src/backend/")
         || normalized.contains("/daemon/")
         || normalized.contains("/services/")
@@ -929,20 +862,19 @@ impl UxContractsExtractor {
                 let rel = relative_display(&root, &path);
                 let semantics = extract_frontend_contracts_from_content(&path, &content);
 
-                if !semantics.is_empty() {
-                    let section = format!("### {}\n{}", rel, semantics.join("\n"));
-                    sections.push(section);
+                if !semantics.items.is_empty() {
+                    sections.push(ScopedTextBlock {
+                        file_path: rel,
+                        items: semantics.items,
+                        omitted_count: semantics.omitted_count,
+                    });
                 }
             }
 
             let body = if sections.is_empty() {
                 default_ux_contracts_message()
             } else {
-                truncate_utf8(
-                    &sections.join("\n\n"),
-                    UX_CONTRACTS_BLOB_MAX_CHARS,
-                    UX_CONTRACTS_BLOB_MAX_CHARS,
-                )
+                pack_scoped_text_blocks(&sections, UX_CONTRACTS_BLOB_MAX_CHARS)
             };
 
             Ok(blob_from_text("blob_03_ux_contracts", body))
@@ -1667,28 +1599,32 @@ tempfile = "3"
     #[tokio::test]
     async fn test_test_intent_skips_documentation_paths() {
         let dir = TempDir::new().unwrap();
-        fs::create_dir_all(dir.path().join("docs/tests")).await.unwrap();
-        fs::create_dir_all(dir.path().join("crates/app/tests")).await.unwrap();
-
+        fs::create_dir_all(dir.path().join("docs")).await.unwrap();
+        fs::create_dir_all(dir.path().join("crates/app/src")).await.unwrap();
         fs::write(
-            dir.path().join("docs/tests/readme_test.rs"),
+            dir.path().join("docs/test_docs.rs"),
             "#[test]\nfn test_docs_should_not_enter_blob() {}\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("crates/app/tests/core_rules.rs"),
+            dir.path().join("crates/app/src/core_rules.rs"),
             "#[test]\nfn test_real_business_rule() {}\n",
         )
         .await
         .unwrap();
-
         let repo_path = RepoPath(dir.path().to_path_buf());
-        let blob = TestIntentExtractor::extract_blob(&repo_path).await.unwrap();
+        let blob = TestIntentExtractor::extract_blob(TestIntentInput {
+            repo_path: &repo_path,
+            profile: &StackProfile::Rust,
+        })
+        .await
+        .unwrap();
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
-        assert!(!text.contains("docs/tests/readme_test.rs"));
-        assert!(text.contains("crates/app/tests/core_rules.rs :: fn test_real_business_rule()"));
+        assert!(!text.contains("test_docs_should_not_enter_blob"));
+        assert!(text.contains("[crates/app/src/core_rules.rs]"));
+        assert!(text.contains("- fn test_real_business_rule"));
     }
 
     #[tokio::test]
@@ -1699,55 +1635,88 @@ tempfile = "3"
         fs::create_dir_all(dir.path().join("crates/app/fixtures/tests")).await.unwrap();
         fs::create_dir_all(dir.path().join("crates/app/test_support/tests")).await.unwrap();
         fs::create_dir_all(dir.path().join("crates/app/e2e/tests")).await.unwrap();
-        fs::create_dir_all(dir.path().join("crates/app/integration_mocks/tests")).await.unwrap();
-
+        fs::create_dir_all(dir.path().join("crates/app/integration_mocks/tests"))
+            .await
+            .unwrap();
         fs::write(
-            dir.path().join("crates/app/tests/domain_rules.rs"),
+            dir.path().join("crates/app/tests/domain.rs"),
             "#[test]\nfn test_domain_logic_stays() {}\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("crates/app/mock/tests/mock_rule.rs"),
+            dir.path().join("crates/app/mock/tests/mock.rs"),
             "#[test]\nfn test_mock_should_be_ignored() {}\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("crates/app/fixtures/tests/fixture_rule.rs"),
+            dir.path().join("crates/app/fixtures/tests/fixture.rs"),
             "#[test]\nfn test_fixture_should_be_ignored() {}\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("crates/app/test_support/tests/support_rule.rs"),
+            dir.path().join("crates/app/test_support/tests/support.rs"),
             "#[test]\nfn test_support_should_be_ignored() {}\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("crates/app/e2e/tests/e2e_rule.rs"),
+            dir.path().join("crates/app/e2e/tests/e2e.rs"),
             "#[test]\nfn test_e2e_should_be_ignored() {}\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("crates/app/integration_mocks/tests/integration_mock_rule.rs"),
+            dir.path().join("crates/app/integration_mocks/tests/mock.rs"),
             "#[test]\nfn test_integration_mock_should_be_ignored() {}\n",
         )
         .await
         .unwrap();
-
         let repo_path = RepoPath(dir.path().to_path_buf());
-        let blob = TestIntentExtractor::extract_blob(&repo_path).await.unwrap();
+        let blob = TestIntentExtractor::extract_blob(TestIntentInput {
+            repo_path: &repo_path,
+            profile: &StackProfile::Rust,
+        })
+        .await
+        .unwrap();
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
-        assert!(text.contains("crates/app/tests/domain_rules.rs :: fn test_domain_logic_stays()"));
-        assert!(!text.contains("mock_rule.rs"));
-        assert!(!text.contains("fixture_rule.rs"));
-        assert!(!text.contains("support_rule.rs"));
-        assert!(!text.contains("e2e_rule.rs"));
-        assert!(!text.contains("integration_mock_rule.rs"));
+        assert!(text.contains("[crates/app/tests/domain.rs]"));
+        assert!(text.contains("- fn test_domain_logic_stays"));
+        assert!(!text.contains("test_mock_should_be_ignored"));
+        assert!(!text.contains("test_fixture_should_be_ignored"));
+        assert!(!text.contains("test_support_should_be_ignored"));
+        assert!(!text.contains("test_e2e_should_be_ignored"));
+        assert!(!text.contains("test_integration_mock_should_be_ignored"));
+    }
+
+    #[tokio::test]
+    async fn test_test_intent_caps_items_per_file_and_marks_omissions() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("crates/app/tests")).await.unwrap();
+        let mut content = String::new();
+        for index in 0..8 {
+            content.push_str(&format!("#[test]\nfn test_case_{index}() {{}}\n"));
+        }
+        fs::write(dir.path().join("crates/app/tests/domain.rs"), content)
+            .await
+            .unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = TestIntentExtractor::extract_blob(TestIntentInput {
+            repo_path: &repo_path,
+            profile: &StackProfile::Rust,
+        })
+        .await
+        .unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("[crates/app/tests/domain.rs]"));
+        assert!(text.contains("- fn test_case_0"));
+        assert!(text.contains("- ... [4 itens omitidos]"));
+        assert!(!text.contains("- fn test_case_7"));
     }
 
     #[tokio::test]
@@ -1774,10 +1743,10 @@ tempfile = "3"
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
         assert!(!text.contains("documentation/src/components/MarketingCard.tsx"));
-        assert!(text.contains("ui/desktop/src/components/AppShell.tsx"));
-        assert!(text.contains("type AppShellProps = { title: string }"));
-        assert!(text.contains("props: AppShellProps"));
-        assert!(text.contains("state [state] = useState()"));
+        assert!(text.contains("[ui/desktop/src/components/AppShell.tsx]"));
+        assert!(text.contains("- type AppShellProps"));
+        assert!(text.contains("- props: AppShellProps"));
+        assert!(text.contains("- state [state] = useState()"));
     }
 
     #[tokio::test]
@@ -1818,13 +1787,33 @@ tempfile = "3"
         assert!(!text.contains("ui/desktop/eslint.config.js"));
         assert!(!text.contains("ui/desktop/src/App.test.tsx"));
         assert!(!text.contains("ui/desktop/src/api/types.gen.ts"));
-        assert!(text.contains("ui/desktop/src/components/AppShell.tsx"));
-        assert!(text.contains("interface AppShellProps"));
-        assert!(text.contains("state [open, setOpen] = useState()"));
-        assert!(text.contains("props: AppShellProps"));
+        assert!(text.contains("[ui/desktop/src/components/AppShell.tsx]"));
+        assert!(text.contains("- interface AppShellProps"));
+        assert!(text.contains("- state [open, setOpen] = useState()"));
+        assert!(text.contains("- props: AppShellProps"));
         assert!(!text.contains("console.log"));
         assert!(!text.contains("toast.error"));
         assert!(!text.contains("<section>"));
+    }
+
+    #[tokio::test]
+    async fn test_ux_contracts_caps_items_per_file_and_marks_omissions() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("ui/desktop/src/components")).await.unwrap();
+        fs::write(
+            dir.path().join("ui/desktop/src/components/ComplexPanel.tsx"),
+            "interface A {}\ninterface B {}\ninterface C {}\ninterface D {}\nfunction ComplexPanel(props: A) { const [a, setA] = useState(false); const [b, setB] = useState(false); const [c, setC] = useState(false); const [d, setD] = useState(false); const [e, setE] = useState(false); return <main />; }\n",
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("[ui/desktop/src/components/ComplexPanel.tsx]"));
+        assert!(text.contains("- state [a, setA] = useState()"));
+        assert!(text.contains("- ... ["));
     }
 
     #[tokio::test]

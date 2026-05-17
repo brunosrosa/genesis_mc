@@ -1,9 +1,19 @@
-use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use oxc::{
+    allocator::Allocator,
+    ast::ast::CallExpression,
+    ast_visit::{walk, Visit as OxcVisit},
+    parser::{ParseOptions, Parser},
+    span::SourceType,
+};
 use rusqlite::params;
 use thiserror::Error;
 use serde::Deserialize;
+use syn::visit::Visit as SynVisit;
 use tracing::error;
+use crate::harvester::detect::{SingleStack, StackProfile};
 use crate::harvester::sandbox::SandboxError;
 
 /// Trait para abstrair a execução no sandbox, permitindo mocks nos testes.
@@ -73,12 +83,62 @@ fn digest_json_is_empty(value: &serde_json::Value) -> bool {
 const BLOB_08_HEALTH_REPORT_MAX_CHARS: usize = 4_000;
 const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = 6_500;
 const BLOB_05_ARCHITECTURE_MAP_MAX_CHARS: usize = 30_000;
+const REPO_OUTLINE_MAX_ITEMS_PER_FILE: usize = 6;
+const ARCHITECTURE_MAP_MAX_IMPORTS_PER_FILE: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JCodemunchArtifacts {
     pub repo_outline_blob: Vec<u8>,
     pub health_report_blob: Vec<u8>,
     pub architecture_map_blob: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopedTextBlock {
+    pub file_path: String,
+    pub items: Vec<String>,
+    pub omitted_count: usize,
+}
+
+fn format_scoped_text_block(block: &ScopedTextBlock) -> String {
+    let mut lines = vec![format!("[{}]", block.file_path)];
+    for item in &block.items {
+        lines.push(format!("- {}", item));
+    }
+    if block.omitted_count > 0 {
+        lines.push(format!("- ... [{} itens omitidos]", block.omitted_count));
+    }
+    lines.join("\n")
+}
+
+pub(crate) fn pack_scoped_text_blocks(blocks: &[ScopedTextBlock], max_chars: usize) -> String {
+    let mut packed = String::new();
+
+    for block in blocks {
+        let section = format_scoped_text_block(block);
+        let candidate_len = if packed.is_empty() {
+            section.chars().count()
+        } else {
+            packed.chars().count() + 2 + section.chars().count()
+        };
+
+        if candidate_len >= max_chars {
+            break;
+        }
+
+        if !packed.is_empty() {
+            packed.push_str("\n\n");
+        }
+        packed.push_str(&section);
+    }
+
+    packed
+}
+
+fn cap_items_per_file(mut items: Vec<String>, max_items_per_file: usize) -> (Vec<String>, usize) {
+    let omitted_count = items.len().saturating_sub(max_items_per_file);
+    items.truncate(max_items_per_file);
+    (items, omitted_count)
 }
 
 fn code_index_path_for_repo(repo_path: &Path) -> String {
@@ -285,11 +345,23 @@ fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError>
                 .then_with(|| a.0.cmp(&b.0))
         });
 
-        let mut lines = vec!["# Architecture Map".to_string()];
+        let mut blocks = Vec::new();
         for (path, imports) in modules {
-            lines.push(format!("- {} -> {}", path, imports.join(", ")));
+            let (items, omitted_count) = cap_items_per_file(imports, ARCHITECTURE_MAP_MAX_IMPORTS_PER_FILE);
+            blocks.push(ScopedTextBlock {
+                file_path: path,
+                items,
+                omitted_count,
+            });
         }
-        Ok(lines.join("\n"))
+
+        let mut summary = String::from("# Architecture Map");
+        let packed_blocks = pack_scoped_text_blocks(&blocks, BLOB_05_ARCHITECTURE_MAP_MAX_CHARS.saturating_sub(summary.len()));
+        if !packed_blocks.trim().is_empty() {
+            summary.push_str("\n\n");
+            summary.push_str(&packed_blocks);
+        }
+        Ok(summary)
     })?;
 
     let truncated = truncate_utf8(
@@ -463,6 +535,99 @@ fn normalize_health_report(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     Ok(truncated.into_bytes())
 }
 
+fn looks_like_repo_outline_path(value: &str) -> bool {
+    let normalized = value.trim().trim_start_matches("- ").trim();
+    if normalized.is_empty() {
+        return false;
+    }
+
+    normalized.contains('/')
+        || normalized.ends_with(".rs")
+        || normalized.ends_with(".ts")
+        || normalized.ends_with(".tsx")
+        || normalized.ends_with(".js")
+        || normalized.ends_with(".jsx")
+        || normalized.ends_with(".py")
+        || normalized.ends_with(".go")
+        || normalized.ends_with(".java")
+        || normalized.ends_with(".kt")
+        || normalized.ends_with(".swift")
+}
+
+fn normalize_repo_outline_markdown(text: &str) -> String {
+    let mut leading = Vec::new();
+    let mut blocks = Vec::new();
+    let mut current_path: Option<String> = None;
+    let mut current_items = Vec::new();
+
+    let flush_current = |blocks: &mut Vec<ScopedTextBlock>, current_path: &mut Option<String>, current_items: &mut Vec<String>| {
+        let Some(file_path) = current_path.take() else {
+            return;
+        };
+        let items = std::mem::take(current_items);
+        let (items, omitted_count) = cap_items_per_file(items, REPO_OUTLINE_MAX_ITEMS_PER_FILE);
+        blocks.push(ScopedTextBlock {
+            file_path,
+            items,
+            omitted_count,
+        });
+    };
+
+    for raw_line in text.lines() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if trimmed.starts_with('#') {
+            flush_current(&mut blocks, &mut current_path, &mut current_items);
+            leading.push(trimmed.to_string());
+            continue;
+        }
+
+        let bullet = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+            .map(str::trim);
+
+        let Some(content) = bullet else {
+            if current_path.is_some() {
+                current_items.push(trimmed.to_string());
+            } else {
+                leading.push(trimmed.to_string());
+            }
+            continue;
+        };
+
+        if looks_like_repo_outline_path(content) {
+            flush_current(&mut blocks, &mut current_path, &mut current_items);
+            current_path = Some(content.to_string());
+        } else if current_path.is_some() {
+            current_items.push(content.to_string());
+        } else {
+            leading.push(content.to_string());
+        }
+    }
+
+    flush_current(&mut blocks, &mut current_path, &mut current_items);
+    if blocks.is_empty() {
+        return text.trim().to_string();
+    }
+
+    let mut normalized = leading.join("\n");
+    let packed_blocks = pack_scoped_text_blocks(
+        &blocks,
+        BLOB_04_REPO_OUTLINE_MAX_CHARS.saturating_sub(normalized.len()),
+    );
+    if !packed_blocks.trim().is_empty() {
+        if !normalized.is_empty() {
+            normalized.push_str("\n\n");
+        }
+        normalized.push_str(&packed_blocks);
+    }
+    normalized
+}
+
 fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     if stdout_is_blank(bytes) {
         error!(binary = "jcodemunch-mcp", "Sidecar claude-md retornou stdout vazio");
@@ -472,7 +637,8 @@ fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     }
 
     let text = String::from_utf8_lossy(bytes);
-    let truncated = truncate_chars(&text, BLOB_04_REPO_OUTLINE_MAX_CHARS);
+    let normalized = normalize_repo_outline_markdown(&text);
+    let truncated = truncate_chars(&normalized, BLOB_04_REPO_OUTLINE_MAX_CHARS);
     if truncated.trim().is_empty() {
         return Err(SidecarError::ExecutionFailed {
             reason: "jcodemunch-mcp claude-md returned an empty repo outline".to_string(),
@@ -663,6 +829,460 @@ impl OxcSidecar {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestIntentPayload {
+    pub runner_name: String,
+    pub blocks: Vec<ScopedTextBlock>,
+}
+
+pub struct NativeTestDiscoveryInput<'a> {
+    pub repo_path: &'a Path,
+    pub profile: &'a StackProfile,
+}
+
+const UNIVERSAL_TEST_SKIP_SEGMENTS: [&str; 8] = [
+    "docs",
+    "documentation",
+    "examples",
+    "mock",
+    "mocks",
+    "fixtures",
+    "test_support",
+    "e2e",
+];
+const UNIVERSAL_TEST_SKIP_SUBSTRINGS: [&str; 3] = ["integration_mocks", "mock_", "/docs/"];
+const STATIC_TEST_DISCOVERY_MAX_FILE_BYTES: u64 = 262_144;
+const TEST_DISCOVERY_MAX_ITEMS_PER_FILE: usize = 4;
+
+fn primary_stack(profile: &StackProfile) -> Option<SingleStack> {
+    match profile {
+        StackProfile::Rust => Some(SingleStack::Rust),
+        StackProfile::NodeJS => Some(SingleStack::NodeJS),
+        StackProfile::Python => Some(SingleStack::Python),
+        StackProfile::Go => Some(SingleStack::Go),
+        StackProfile::JVM => Some(SingleStack::JVM),
+        StackProfile::DotNet => Some(SingleStack::DotNet),
+        StackProfile::Mixed(stacks) => stacks.first().cloned(),
+        StackProfile::Unknown => None,
+    }
+}
+
+fn should_skip_discovered_test_entry(value: &str) -> bool {
+    let normalized = value.trim().replace('\\', "/").to_ascii_lowercase();
+    if normalized.is_empty() {
+        return true;
+    }
+
+    if UNIVERSAL_TEST_SKIP_SUBSTRINGS
+        .iter()
+        .any(|marker| normalized.contains(marker))
+    {
+        return true;
+    }
+
+    normalized
+        .split(|ch| matches!(ch, '/' | ':' | '>' | ' '))
+        .filter(|part| !part.is_empty())
+        .any(|part| UNIVERSAL_TEST_SKIP_SEGMENTS.contains(&part))
+}
+
+fn is_known_test_file_path(value: &str) -> bool {
+    let lower = value.trim().replace('\\', "/").to_ascii_lowercase();
+    [
+        ".test.ts",
+        ".test.tsx",
+        ".test.js",
+        ".test.jsx",
+        ".spec.ts",
+        ".spec.tsx",
+        ".spec.js",
+        ".spec.jsx",
+        "_test.go",
+        "_test.py",
+        "test_",
+        "__tests__",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
+
+fn supports_stack(profile: &StackProfile, target: SingleStack) -> bool {
+    match profile {
+        StackProfile::Mixed(stacks) => stacks.contains(&target),
+        _ => primary_stack(profile) == Some(target),
+    }
+}
+
+fn relative_display(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn should_skip_test_dir(name: &str) -> bool {
+    matches!(
+        name,
+        ".git"
+            | ".jj"
+            | ".svn"
+            | "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+            | ".jcodemunch_index"
+            | "docs"
+            | "documentation"
+            | "examples"
+            | "mock"
+            | "mocks"
+    )
+}
+
+fn is_supported_test_file(profile: &StackProfile, path: &Path) -> bool {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+    let normalized = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+
+    match extension.as_deref() {
+        Some("rs") => supports_stack(profile, SingleStack::Rust),
+        Some("py") => {
+            supports_stack(profile, SingleStack::Python)
+                && (normalized.contains("/tests/")
+                    || normalized.ends_with("_test.py")
+                    || path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .map(|name| name.to_ascii_lowercase().starts_with("test_"))
+                        .unwrap_or(false))
+        }
+        Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
+            supports_stack(profile, SingleStack::NodeJS) && is_known_test_file_path(&normalized)
+        }
+        _ => false,
+    }
+}
+
+fn read_static_test_file(path: &Path) -> Result<Option<String>, SidecarError> {
+    let metadata = std::fs::metadata(path).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao ler metadata de '{}': {}", path.display(), e),
+    })?;
+    if metadata.len() > STATIC_TEST_DISCOVERY_MAX_FILE_BYTES {
+        return Ok(None);
+    }
+
+    let bytes = std::fs::read(path).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao ler '{}': {}", path.display(), e),
+    })?;
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(Some(text)),
+        Err(_) => Ok(None),
+    }
+}
+
+fn collect_static_test_files(
+    root: &Path,
+    profile: &StackProfile,
+    out: &mut Vec<PathBuf>,
+) -> Result<(), SidecarError> {
+    for entry in std::fs::read_dir(root).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao listar '{}': {}", root.display(), e),
+    })? {
+        let entry = entry.map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao iterar '{}': {}", root.display(), e),
+        })?;
+        let path = entry.path();
+        let file_type = entry.file_type().map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao ler tipo de '{}': {}", path.display(), e),
+        })?;
+
+        if file_type.is_dir() {
+            if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
+                if should_skip_test_dir(name) {
+                    continue;
+                }
+            }
+            collect_static_test_files(&path, profile, out)?;
+            continue;
+        }
+
+        if !file_type.is_file() || !is_supported_test_file(profile, &path) {
+            continue;
+        }
+
+        let relative = relative_display(root, &path);
+        if should_skip_discovered_test_entry(&relative) {
+            continue;
+        }
+        out.push(path);
+    }
+
+    Ok(())
+}
+
+fn capture_line_at_offset(source: &str, offset: u32) -> Option<&str> {
+    let safe_offset = usize::try_from(offset).ok()?.min(source.len());
+    let start = source[..safe_offset].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+    let end = source[safe_offset..]
+        .find('\n')
+        .map(|idx| safe_offset + idx)
+        .unwrap_or(source.len());
+    source.get(start..end)
+}
+
+fn normalize_code_line_snippet(snippet: &str) -> Option<String> {
+    let normalized = snippet.trim().to_string();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+fn compact_signature_text(signature: &str) -> Option<String> {
+    let compact = signature
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .trim_end_matches('{')
+        .trim()
+        .to_string();
+    if compact.is_empty() {
+        None
+    } else {
+        Some(compact)
+    }
+}
+
+fn frontend_test_ast_input(path: &Path, content: &str) -> Option<(String, PathBuf)> {
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())?;
+
+    match extension.as_str() {
+        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "mts" | "cts" => {
+            Some((content.to_string(), path.to_path_buf()))
+        }
+        _ => None,
+    }
+}
+
+#[derive(Default)]
+struct JsTestAstCollector<'a> {
+    source_text: &'a str,
+    entries: BTreeSet<String>,
+}
+
+impl<'a> JsTestAstCollector<'a> {
+    fn finish(self) -> Vec<String> {
+        self.entries.into_iter().collect()
+    }
+}
+
+impl<'a> OxcVisit<'a> for JsTestAstCollector<'a> {
+    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if let Some(callee_name) = call.callee_name() {
+            if matches!(callee_name, "describe" | "it" | "test") {
+                if let Some(signature) = capture_line_at_offset(self.source_text, call.span.start)
+                    .and_then(normalize_code_line_snippet)
+                    .and_then(|line| compact_signature_text(&line))
+                {
+                    self.entries.insert(signature);
+                }
+            }
+        }
+        walk::walk_call_expression(self, call);
+    }
+}
+
+fn parse_frontend_test_entries(path: &Path, content: &str) -> Vec<String> {
+    let Some((source_text, parse_path)) = frontend_test_ast_input(path, content) else {
+        return Vec::new();
+    };
+    let Ok(source_type) = SourceType::from_path(&parse_path) else {
+        return Vec::new();
+    };
+
+    let allocator = Allocator::default();
+    let parser_return = Parser::new(&allocator, &source_text, source_type)
+        .with_options(ParseOptions {
+            parse_regular_expression: true,
+            ..ParseOptions::default()
+        })
+        .parse();
+    if parser_return.panicked {
+        return Vec::new();
+    }
+
+    let mut collector = JsTestAstCollector {
+        source_text: &source_text,
+        entries: BTreeSet::new(),
+    };
+    collector.visit_program(&parser_return.program);
+    collector.finish()
+}
+
+fn rust_attr_is_test(attr: &syn::Attribute) -> bool {
+    attr.path()
+        .segments
+        .last()
+        .map(|segment| {
+            let ident = segment.ident.to_string();
+            ident == "test" || ident == "rstest"
+        })
+        .unwrap_or(false)
+}
+
+#[derive(Default)]
+struct RustTestAstCollector {
+    entries: BTreeSet<String>,
+}
+
+impl<'ast> SynVisit<'ast> for RustTestAstCollector {
+    fn visit_item_fn(&mut self, item_fn: &'ast syn::ItemFn) {
+        let is_test = item_fn.sig.ident.to_string().starts_with("test_")
+            || item_fn.attrs.iter().any(rust_attr_is_test);
+        if is_test {
+            let prefix = if item_fn.sig.asyncness.is_some() {
+                "async fn"
+            } else {
+                "fn"
+            };
+            self.entries
+                .insert(format!("{prefix} {}", item_fn.sig.ident));
+        }
+        syn::visit::visit_item_fn(self, item_fn);
+    }
+}
+
+fn parse_rust_test_entries(content: &str) -> Vec<String> {
+    let Ok(file) = syn::parse_file(content) else {
+        return Vec::new();
+    };
+
+    let mut collector = RustTestAstCollector {
+        entries: BTreeSet::new(),
+    };
+    collector.visit_file(&file);
+    collector.entries.into_iter().collect()
+}
+
+fn parse_python_test_entries(content: &str) -> Vec<String> {
+    let mut entries = BTreeSet::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        let signature = if trimmed.starts_with("async def test_") {
+            Some(trimmed.trim_end_matches(':'))
+        } else if trimmed.starts_with("def test_") {
+            Some(trimmed.trim_end_matches(':'))
+        } else {
+            None
+        };
+
+        if let Some(signature) = signature.and_then(compact_signature_text) {
+            entries.insert(signature);
+        }
+    }
+    entries.into_iter().collect()
+}
+
+fn build_scoped_blocks_from_pairs(
+    pairs: Vec<(String, String)>,
+    max_items_per_file: usize,
+) -> Vec<ScopedTextBlock> {
+    let mut grouped = BTreeMap::<String, Vec<String>>::new();
+    let mut seen = BTreeMap::<String, BTreeSet<String>>::new();
+
+    for (file_path, item) in pairs {
+        let is_new = seen
+            .entry(file_path.clone())
+            .or_default()
+            .insert(item.clone());
+        if is_new {
+            grouped.entry(file_path).or_default().push(item);
+        }
+    }
+
+    grouped
+        .into_iter()
+        .filter_map(|(file_path, items)| {
+            if items.is_empty() {
+                return None;
+            }
+            let (items, omitted_count) = cap_items_per_file(items, max_items_per_file);
+            Some(ScopedTextBlock {
+                file_path,
+                items,
+                omitted_count,
+            })
+        })
+        .collect()
+}
+
+fn discover_static_test_entries(
+    repo_path: &Path,
+    profile: &StackProfile,
+) -> Result<Vec<ScopedTextBlock>, SidecarError> {
+    let mut files = Vec::new();
+    collect_static_test_files(repo_path, profile, &mut files)?;
+
+    let mut entries = Vec::new();
+    for path in files {
+        let Some(content) = read_static_test_file(&path)? else {
+            continue;
+        };
+        let relative = relative_display(repo_path, &path);
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase());
+
+        let discovered = match extension.as_deref() {
+            Some("rs") => parse_rust_test_entries(&content),
+            Some("py") => parse_python_test_entries(&content),
+            Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
+                parse_frontend_test_entries(&path, &content)
+            }
+            _ => Vec::new(),
+        };
+
+        for entry in discovered {
+            let candidate = format!("{} :: {}", relative, entry);
+            if !should_skip_discovered_test_entry(&candidate) {
+                entries.push((relative.clone(), entry));
+            }
+        }
+    }
+
+    Ok(build_scoped_blocks_from_pairs(
+        entries,
+        TEST_DISCOVERY_MAX_ITEMS_PER_FILE,
+    ))
+}
+
+pub struct NativeTestDiscoverySidecar;
+
+impl NativeTestDiscoverySidecar {
+    pub async fn extract(input: NativeTestDiscoveryInput<'_>) -> Result<TestIntentPayload, SidecarError> {
+        let repo_path = input.repo_path.to_path_buf();
+        let profile = input.profile.clone();
+        let entries = tokio::task::spawn_blocking(move || discover_static_test_entries(&repo_path, &profile))
+            .await
+            .map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Static test discovery join failed: {}", e),
+            })??;
+
+        Ok(TestIntentPayload {
+            runner_name: "static-ast".to_string(),
+            blocks: entries,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct LintViolation {
     pub rule_id: String,
@@ -721,6 +1341,7 @@ mod tests {
         _temp_dir: TempDir,
         repo_path: PathBuf,
         responses: Mutex<VecDeque<Result<Vec<u8>, SandboxError>>>,
+        calls: Mutex<Vec<String>>,
     }
 
     impl MockExecutor {
@@ -769,12 +1390,18 @@ mod tests {
                 _temp_dir: temp_dir,
                 repo_path,
                 responses: Mutex::new(VecDeque::from(responses)),
+                calls: Mutex::new(Vec::new()),
             }
         }
+
     }
 
     impl SandboxExecutor for MockExecutor {
-        async fn execute(&self, _command: &str, _args: &[&str], _timeout_secs: u64) -> Result<Vec<u8>, SandboxError> {
+        async fn execute(&self, command: &str, args: &[&str], _timeout_secs: u64) -> Result<Vec<u8>, SandboxError> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("{} {}", command, args.join(" ")).trim().to_string());
             let mut guard = self.responses.lock().unwrap();
             guard.pop_front().unwrap_or_else(|| {
                 Err(SandboxError::ProcessSpawnFailed {
@@ -815,11 +1442,11 @@ mod tests {
         );
         assert_eq!(
             String::from_utf8(payload.repo_outline_blob).unwrap(),
-            claude_md
+            "# Repository Outline\n\n[src/main.rs]"
         );
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
-        assert!(architecture_map.contains("src/main.rs ->"));
-        assert!(architecture_map.contains("crate::config (AppConfig)"));
+        assert!(architecture_map.contains("[src/main.rs]"));
+        assert!(architecture_map.contains("- crate::config (AppConfig)"));
     }
 
     #[tokio::test]
@@ -830,7 +1457,7 @@ mod tests {
         assert!(result.is_ok(), "Normalização deveria tolerar repo outline com UTF-8 inválido: {:?}", result);
         let repo_outline = String::from_utf8(result.unwrap()).unwrap();
         assert!(repo_outline.contains("# Repository Outline"));
-        assert!(repo_outline.contains("src/main.rs"));
+        assert!(repo_outline.contains("[src/main.rs]"));
     }
 
     #[tokio::test]
@@ -1346,6 +1973,69 @@ mod tests {
         let payload = result.unwrap();
         assert_eq!(payload.files_analyzed, 0);
         assert!(payload.components.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_native_test_discovery_uses_static_ast_for_rust() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::create_dir_all(dir.path().join("docs")).unwrap();
+        std::fs::create_dir_all(dir.path().join("mock")).unwrap();
+        std::fs::write(
+            dir.path().join("src/lib.rs"),
+            "#[cfg(test)]\nmod tests {\n    #[tokio::test]\n    async fn test_domain_logic_stays() {}\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("docs/test_docs.rs"),
+            "#[test]\nfn test_docs_should_not_enter_blob() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("mock/test_mock.rs"),
+            "#[test]\nfn test_mock_should_be_ignored() {}\n",
+        )
+        .unwrap();
+        let profile = StackProfile::Rust;
+
+        let payload = NativeTestDiscoverySidecar::extract(NativeTestDiscoveryInput {
+            repo_path: dir.path(),
+            profile: &profile,
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(payload.runner_name, "static-ast");
+        assert!(payload
+            .blocks
+            .iter()
+            .any(|block| block.file_path == "src/lib.rs"
+                && block.items.contains(&"async fn test_domain_logic_stays".to_string())));
+        assert!(!payload.blocks.iter().any(|block| block.file_path.contains("docs")));
+        assert!(!payload.blocks.iter().any(|block| block.file_path.contains("mock")));
+    }
+
+    #[tokio::test]
+    async fn test_native_test_discovery_caps_items_per_file() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        let mut content = String::new();
+        for index in 0..8 {
+            content.push_str(&format!("#[test]\nfn test_case_{index}() {{}}\n"));
+        }
+        std::fs::write(dir.path().join("src/lib.rs"), content).unwrap();
+
+        let payload = NativeTestDiscoverySidecar::extract(NativeTestDiscoveryInput {
+            repo_path: dir.path(),
+            profile: &StackProfile::Rust,
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(payload.blocks.len(), 1);
+        assert_eq!(payload.blocks[0].file_path, "src/lib.rs");
+        assert_eq!(payload.blocks[0].items.len(), TEST_DISCOVERY_MAX_ITEMS_PER_FILE);
+        assert_eq!(payload.blocks[0].omitted_count, 4);
     }
 
     #[tokio::test]

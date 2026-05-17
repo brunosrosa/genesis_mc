@@ -5,10 +5,23 @@ use super::git::RepoPath;
 pub enum ExtractionTask {
     RunJCodemunch,
     RunOxc,
+    /// Descoberta estatica de testes por AST/estrutura, sem executar runners nativos.
+    DiscoverTests,
     ExtractManifests,
     RunStaticAnalysis,
     FetchCommunityMeta,
     ExtractOpsBlueprint,
+}
+
+impl ExtractionTask {
+    /// Lei da Compressao Topologica: sidecars e extratores estruturais devem emitir blocos
+    /// hierarquicos por arquivo, com poda de granularidade interna, ao inves de saida plana.
+    pub fn enforces_topology_compression(&self) -> bool {
+        matches!(
+            self,
+            Self::RunJCodemunch | Self::RunOxc | Self::DiscoverTests
+        )
+    }
 }
 
 pub struct ExtractionInput<'a> {
@@ -18,10 +31,13 @@ pub struct ExtractionInput<'a> {
 
 use crate::harvester::detect::SingleStack;
 
+pub struct ExtractionRouter;
+
 fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
     match stack {
         SingleStack::Rust => vec![
             ExtractionTask::RunJCodemunch,
+            ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
@@ -30,6 +46,7 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
         SingleStack::NodeJS => vec![
             ExtractionTask::RunJCodemunch,
             ExtractionTask::RunOxc,
+            ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
@@ -44,6 +61,7 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
         ],
         SingleStack::Python => vec![
             ExtractionTask::RunJCodemunch,
+            ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
@@ -89,34 +107,40 @@ fn profile_to_single(profile: &StackProfile) -> Option<SingleStack> {
     }
 }
 
-/// Roteia as tarefas de extração com base no perfil de stack detectado.
-/// Esta função é pura, determinística e síncrona.
-pub fn route(input: ExtractionInput<'_>) -> Vec<ExtractionTask> {
-    // Tenta converter para SingleStack primeiro — cobre Rust/NodeJS/Go/Python/JVM/DotNet
-    if let Some(single) = profile_to_single(&input.profile) {
-        return single_stack_tasks(&single);
-    }
+impl ExtractionRouter {
+    /// Roteia as tarefas de extração com base no perfil de stack detectado.
+    /// Esta função é pura, determinística e síncrona.
+    pub fn route(input: ExtractionInput<'_>) -> Vec<ExtractionTask> {
+        // Tenta converter para SingleStack primeiro — cobre Rust/NodeJS/Go/Python/JVM/DotNet
+        if let Some(single) = profile_to_single(&input.profile) {
+            return single_stack_tasks(&single);
+        }
 
-    match input.profile {
-        StackProfile::Unknown => unknown_fallback(),
-        StackProfile::Mixed(stacks) => {
-            let mut tasks = Vec::with_capacity(6);
-            for s in &stacks {
-                for t in single_stack_tasks(s) {
-                    if !tasks.contains(&t) {
-                        tasks.push(t);
+        match input.profile {
+            StackProfile::Unknown => unknown_fallback(),
+            StackProfile::Mixed(stacks) => {
+                let mut tasks = Vec::with_capacity(7);
+                for s in &stacks {
+                    for t in single_stack_tasks(s) {
+                        if !tasks.contains(&t) {
+                            tasks.push(t);
+                        }
                     }
                 }
+                if tasks.is_empty() {
+                    tasks = unknown_fallback();
+                }
+                tasks
             }
-            if tasks.is_empty() {
-                tasks = unknown_fallback();
-            }
-            tasks
+            // Inalcançável: profile_to_single já cobriu todas as variantes individuais.
+            // O fallback garante PT-ROUTE-3 (vetor nunca vazio).
+            _ => unknown_fallback(),
         }
-        // Inalcançável: profile_to_single já cobriu todas as variantes individuais.
-        // O fallback garante PT-ROUTE-3 (vetor nunca vazio).
-        _ => unknown_fallback(),
     }
+}
+
+pub fn route(input: ExtractionInput<'_>) -> Vec<ExtractionTask> {
+    ExtractionRouter::route(input)
 }
 
 #[cfg(test)]
@@ -142,6 +166,7 @@ mod tests {
             tasks,
             vec![
                 ExtractionTask::RunJCodemunch,
+                ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -163,6 +188,7 @@ mod tests {
             vec![
                 ExtractionTask::RunJCodemunch,
                 ExtractionTask::RunOxc,
+                ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -203,6 +229,7 @@ mod tests {
             tasks,
             vec![
                 ExtractionTask::RunJCodemunch,
+                ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -283,6 +310,7 @@ mod tests {
             tasks,
             vec![
                 ExtractionTask::RunJCodemunch,
+                ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -301,7 +329,7 @@ mod tests {
             repo_path: &repo,
         };
         let tasks = route(input);
-        // Nenhuma traz RunOxc, então deve deduplicar perfeitamente para 5 itens
+        // Python traz DiscoverTests; Go nao traz RunOxc. O vetor final deve manter a ordem e deduplicar.
         assert_eq!(
             tasks,
             vec![
@@ -310,6 +338,7 @@ mod tests {
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
                 ExtractionTask::ExtractOpsBlueprint,
+                ExtractionTask::DiscoverTests,
             ]
         );
     }

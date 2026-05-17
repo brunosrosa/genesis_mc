@@ -8,11 +8,11 @@ use super::ramdisk::{RamdiskAllocator, RamdiskHandle};
 use super::git::{BloblessCloner};
 use super::sandbox::{SandboxOrchestrator, SandboxPolicy, SandboxHandle};
 use super::detect::LanguageDetector;
-use super::router::{self, ExtractionInput, ExtractionTask};
+use super::router::{ExtractionInput, ExtractionRouter, ExtractionTask};
 use super::community::{CommunityMetaFetcher, RateLimiter};
 use super::persist::{BlobNormalizer, ArtifactBlob};
 use super::extract::{
-    truncate_community_meta_json, LocalStaticExtractor, ManifestInput, OpsInput,
+    truncate_community_meta_json, LocalStaticExtractor, ManifestInput, OpsInput, TestIntentInput,
     TestIntentExtractor, UnsafeHotspotsExtractor, UxContractsExtractor,
 };
 use super::guard::PurgeGuard;
@@ -95,8 +95,8 @@ impl HarvesterOrchestrator {
             .map_err(|e| OrchestratorError::InfraError(e.to_string()))?;
 
         // [N5] Roteamento de Tarefas
-        let tasks = router::route(ExtractionInput {
-            profile,
+        let tasks = ExtractionRouter::route(ExtractionInput {
+            profile: profile.clone(),
             repo_path: &repo_path,
         });
 
@@ -160,10 +160,19 @@ impl HarvesterOrchestrator {
             blobs.push(payload);
         }
 
-        let test_intent_blob = TestIntentExtractor::extract_blob(&repo_path).await.map_err(|e| {
-            error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_03_test_intent");
-            OrchestratorError::ExtractionError(e.to_string())
-        })?;
+        let test_intent_blob = if tasks.contains(&ExtractionTask::DiscoverTests) {
+            TestIntentExtractor::extract_blob(TestIntentInput {
+                repo_path: &repo_path,
+                profile: &profile,
+            })
+            .await
+            .map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_03_test_intent");
+                OrchestratorError::ExtractionError(e.to_string())
+            })?
+        } else {
+            TestIntentExtractor::default_blob()
+        };
         blobs.push(test_intent_blob);
 
         let ux_contracts_blob = UxContractsExtractor::extract_blob(&repo_path).await.map_err(|e| {
