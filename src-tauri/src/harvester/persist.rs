@@ -29,19 +29,27 @@ impl BlobNormalizer {
             // Início da Transação Atômica
             let tx = conn.transaction().map_err(|e| HarvesterError::StorageError(e.to_string()))?;
 
-            // Estrangula a redundância (Idempotência)
-            tx.execute("DELETE FROM artefatos_brutos WHERE repo_id = ?1", params![&repo_id])
-                .map_err(|e| HarvesterError::StorageError(e.to_string()))?;
+            tx.execute(
+                "DELETE FROM artefatos_brutos
+                 WHERE repo_id = ?1
+                   AND artifact_type NOT LIKE 'blob_%'",
+                params![repo_id.clone()],
+            )
+            .map_err(|e| HarvesterError::StorageError(e.to_string()))?;
 
             for blob in blobs {
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
+                    .map_err(|e| HarvesterError::StorageError(e.to_string()))?
                     .as_secs() as i64;
                     
-                // PT-BLOB-1: Inserção individual de artefatos
+                // PT-BLOB-1: UPSERT individual de artefatos (repo_id + artifact_type)
                 tx.execute(
-                    "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao) VALUES (?1, ?2, ?3, ?4)",
+                    "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao)
+                     VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(repo_id, artifact_type) DO UPDATE SET
+                        payload_blob = excluded.payload_blob,
+                        timestamp_extracao = excluded.timestamp_extracao",
                     params![repo_id, blob.artifact_type, blob.payload_blob, now],
                 ).map_err(|e| HarvesterError::StorageError(e.to_string()))?;
             }
@@ -66,7 +74,9 @@ mod tests {
                 id INTEGER PRIMARY KEY,
                 repo_id TEXT NOT NULL,
                 artifact_type TEXT NOT NULL,
-                payload_blob BLOB NOT NULL
+                payload_blob BLOB NOT NULL,
+                timestamp_extracao INTEGER NOT NULL,
+                UNIQUE(repo_id, artifact_type)
             )",
             [],
         ).unwrap();
@@ -92,27 +102,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_persist_rollback_on_failure() {
+    async fn test_persist_upserts_existing_blob() {
         let conn = Arc::new(Mutex::new(setup_db()));
-        
-        // Forçar erro via constraint de UNIQUE
-        {
-            let conn_locked = conn.lock().unwrap();
-            conn_locked.execute("CREATE UNIQUE INDEX idx_unique_type ON artefatos_brutos(artifact_type)", []).unwrap();
-        }
-
-        let blobs = vec![
+        let first_pass = vec![
             ArtifactBlob { artifact_type: "DUP".to_string(), payload_blob: b"first".to_vec() },
+        ];
+        BlobNormalizer::persist("repo_fail".to_string(), first_pass, conn.clone()).await.unwrap();
+
+        let second_pass = vec![
             ArtifactBlob { artifact_type: "DUP".to_string(), payload_blob: b"second".to_vec() },
         ];
+        let result = BlobNormalizer::persist("repo_fail".to_string(), second_pass, conn.clone()).await;
+        assert!(result.is_ok());
 
-        let result = BlobNormalizer::persist("repo_fail".to_string(), blobs, conn.clone()).await;
-        assert!(result.is_err());
-
-        // PT-BLOB-1 & Transação: Provar que o ROLLBACK funcionou (banco deve estar vazio)
         let conn_locked = conn.lock().unwrap();
-        let mut stmt = conn_locked.prepare("SELECT count(*) FROM artefatos_brutos").unwrap();
-        let count: i64 = stmt.query_row([], |row| row.get(0)).unwrap();
-        assert_eq!(count, 0);
+        let count: i64 = conn_locked
+            .query_row("SELECT count(*) FROM artefatos_brutos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+        let payload: Vec<u8> = conn_locked
+            .query_row(
+                "SELECT payload_blob FROM artefatos_brutos WHERE repo_id = ?1 AND artifact_type = ?2",
+                ["repo_fail", "DUP"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(payload, b"second".to_vec());
     }
 }

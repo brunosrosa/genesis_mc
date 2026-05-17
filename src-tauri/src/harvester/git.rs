@@ -6,6 +6,7 @@ use url::Url;
 use sha2::{Digest, Sha256};
 use tokio::time::timeout;
 use super::ramdisk::RamdiskHandle;
+use tracing::info;
 
 #[derive(Debug)]
 pub struct RepoPath(pub(crate) PathBuf);
@@ -45,9 +46,53 @@ pub enum CloneError {
 pub struct BloblessCloner;
 
 impl BloblessCloner {
+    fn workspace_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+    }
+
+    fn cache_root() -> PathBuf {
+        Self::workspace_root().join(".soda_cache").join("repo_cache")
+    }
+
+    fn repo_cache_destination(repo_url: &Url) -> PathBuf {
+        let mut segments = repo_url
+            .path_segments()
+            .map(|parts| parts.collect::<Vec<_>>())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|segment| !segment.is_empty())
+            .map(|segment| segment.trim_end_matches(".git").to_string())
+            .collect::<Vec<_>>();
+
+        if segments.len() >= 2 {
+            let repo = segments.pop().unwrap_or_else(|| "repo".to_string());
+            let owner = segments.pop().unwrap_or_else(|| "owner".to_string());
+            return Self::cache_root().join(owner).join(repo);
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(repo_url.as_str().as_bytes());
+        let hash_result = hasher.finalize();
+        let hex_string = format!("{:x}", hash_result);
+        let truncated_hash = &hex_string[..12];
+        Self::cache_root().join(format!("repo_{}", truncated_hash))
+    }
+
+    async fn directory_has_files(path: &Path) -> Result<bool, CloneError> {
+        let mut entries = tokio::fs::read_dir(path).await.map_err(|e| CloneError::NetworkError {
+            reason: format!("Falha ao inspecionar cache local do repositório: {}", e),
+        })?;
+        Ok(entries.next_entry().await.map_err(|e| CloneError::NetworkError {
+            reason: format!("Falha ao iterar cache local do repositório: {}", e),
+        })?.is_some())
+    }
+
     pub async fn clone(
         repo_url: &Url,
-        ramdisk: &RamdiskHandle,
+        _ramdisk: &RamdiskHandle,
     ) -> Result<RepoPath, CloneError> {
         // 1. Verificação preliminar e assíncrona se o Git está instalado
         match tokio::process::Command::new("git")
@@ -68,14 +113,20 @@ impl BloblessCloner {
             }
         }
 
-        // 2. Cálculo do diretório determinístico usando SHA-256
-        let mut hasher = Sha256::new();
-        hasher.update(repo_url.as_str().as_bytes());
-        let hash_result = hasher.finalize();
-        let hex_string = format!("{:x}", hash_result);
-        let truncated_hash = &hex_string[..12];
-        let dir_name = format!("soda_clone_{}", truncated_hash);
-        let dest = ramdisk.path().join(&dir_name);
+        // 2. Cache determinístico do repositório em disco local reutilizável.
+        let dest = Self::repo_cache_destination(repo_url);
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao preparar diretório pai do cache do repositório: {}", e),
+            })?;
+        }
+
+        if tokio::fs::try_exists(&dest).await.map_err(|e| CloneError::NetworkError {
+            reason: format!("Falha ao verificar existência do cache do repositório: {}", e),
+        })? && Self::directory_has_files(&dest).await? {
+            info!(path = %dest.display(), url = %repo_url, "Cache local do repositório encontrado; pulando clone");
+            return Ok(RepoPath(dest));
+        }
 
         // 3. Spawning do comando git clone de forma assíncrona com as flags otimizadas do SODA
         let mut child = match tokio::process::Command::new("git")
@@ -214,7 +265,10 @@ mod tests {
         let repo_url = Url::parse("https://github.com/octocat/Spoon-Knife").unwrap();
         
         let repo_path = BloblessCloner::clone(&repo_url, &ramdisk).await.unwrap();
-        assert!(repo_path.starts_with(ramdisk.path()), "O clone deve residir estritamente no Ramdisk");
+        assert!(
+            repo_path.starts_with(BloblessCloner::cache_root()),
+            "O clone deve residir estritamente no cache persistente do host"
+        );
     }
 
     #[tokio::test]
@@ -225,9 +279,11 @@ mod tests {
         
         let _ = BloblessCloner::clone(&repo_url, &ramdisk).await;
         
-        // Garante que nenhum diretório parcial lixo sobreviveu no ramdisk
-        let entries = std::fs::read_dir(ramdisk.path()).unwrap().count();
-        assert_eq!(entries, 0, "O Ramdisk deveria estar totalmente limpo após falha");
+        let cache_root = BloblessCloner::cache_root();
+        if cache_root.exists() {
+            let entries = std::fs::read_dir(cache_root).unwrap().count();
+            assert_eq!(entries, 0, "O cache não deve preservar diretórios parciais após falha");
+        }
     }
 
     #[tokio::test]

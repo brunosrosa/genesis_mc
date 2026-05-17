@@ -11,9 +11,13 @@ use super::detect::LanguageDetector;
 use super::router::{self, ExtractionInput, ExtractionTask};
 use super::community::{CommunityMetaFetcher, RateLimiter};
 use super::persist::{BlobNormalizer, ArtifactBlob};
-use super::extract::{LocalStaticExtractor, ManifestInput, OpsInput};
+use super::extract::{
+    truncate_community_meta_json, LocalStaticExtractor, ManifestInput, OpsInput,
+    TestIntentExtractor, UnsafeHotspotsExtractor, UxContractsExtractor,
+};
 use super::guard::PurgeGuard;
 use super::sidecar::{JCodemunchInput, JCodemunchSidecar, PersistArtifactConfig};
+use super::canon::SodaCanonExtractor;
 
 #[derive(Error, Debug)]
 pub enum OrchestratorError {
@@ -110,22 +114,25 @@ impl HarvesterOrchestrator {
             let input = JCodemunchInput {
                 executor: sandbox_ref,
                 timeout_secs: 600,
-                persist_artifact: Some(PersistArtifactConfig {
+                persist_artifacts: Some(PersistArtifactConfig {
                     repo_id,
-                    artifact_type: "blob_04_repo_outline",
                 }),
             };
             let payload = JCodemunchSidecar::extract(input).await.map_err(|e| {
                 error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blob_04_repo_outline");
                 OrchestratorError::ExtractionError(e.to_string())
             })?;
-            let json = serde_json::to_vec(&payload).map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha ao serializar blob_04_repo_outline");
-                OrchestratorError::PersistenceError(format!("Falha ao serializar AST: {}", e))
-            })?;
             blobs.push(ArtifactBlob {
                 artifact_type: "blob_04_repo_outline".to_string(),
-                payload_blob: json,
+                payload_blob: payload.repo_outline_blob,
+            });
+            blobs.push(ArtifactBlob {
+                artifact_type: "blob_05_architecture_map".to_string(),
+                payload_blob: payload.architecture_map_blob,
+            });
+            blobs.push(ArtifactBlob {
+                artifact_type: "blob_08_health_report".to_string(),
+                payload_blob: payload.health_report_blob,
             });
         }
 
@@ -135,53 +142,60 @@ impl HarvesterOrchestrator {
         })?;
         blobs.extend(static_blobs);
 
-        // Extrações Locais (Fase 1: Manifests e OpsBlueprint)
         if tasks.contains(&ExtractionTask::ExtractManifests) {
             let input = ManifestInput { repo_path: &repo_path };
-            let payload = super::extract::ManifestExtractor::extract(input).await.map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair manifestos");
+            let payload = super::extract::ManifestExtractor::extract_blob(input).await.map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha critica ao empacotar blob_02_dependency_manifest");
                 OrchestratorError::ExtractionError(e.to_string())
             })?;
-            for manifest in payload.manifests {
-                let artifact_type = format!("Manifest:{}", manifest.file_name);
-                let json = serde_json::to_vec(&manifest).map_err(|e| {
-                    error!(repo_id = %repo_id, artifact_type = %artifact_type, error = %e, "Falha ao serializar manifesto");
-                    OrchestratorError::PersistenceError(format!("Falha ao serializar manifesto {}: {}", artifact_type, e))
-                })?;
-                blobs.push(ArtifactBlob {
-                    artifact_type,
-                    payload_blob: json,
-                });
-            }
+            blobs.push(payload);
         }
 
         if tasks.contains(&ExtractionTask::ExtractOpsBlueprint) {
             let input = OpsInput { repo_path: &repo_path };
-            let payload = super::extract::OpsBlueprintExtractor::extract(input).await.map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blueprint operacional");
+            let payload = super::extract::OpsBlueprintExtractor::extract_blob(input).await.map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha critica ao empacotar blob_07_ops_blueprint");
                 OrchestratorError::ExtractionError(e.to_string())
             })?;
-            for file in payload.infra_files {
-                let payload_blob = file.content.into_bytes();
-                blobs.push(ArtifactBlob {
-                    artifact_type: format!("OpsBlueprint:{}", file.path),
-                    payload_blob,
-                });
-            }
+            blobs.push(payload);
         }
+
+        let test_intent_blob = TestIntentExtractor::extract_blob(&repo_path).await.map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_03_test_intent");
+            OrchestratorError::ExtractionError(e.to_string())
+        })?;
+        blobs.push(test_intent_blob);
+
+        let ux_contracts_blob = UxContractsExtractor::extract_blob(&repo_path).await.map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_03_ux_contracts");
+            OrchestratorError::ExtractionError(e.to_string())
+        })?;
+        blobs.push(ux_contracts_blob);
+
+        let unsafe_hotspots_blob = UnsafeHotspotsExtractor::extract_blob(&repo_path).await.map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_06_unsafe_hotspots");
+            OrchestratorError::ExtractionError(e.to_string())
+        })?;
+        blobs.push(unsafe_hotspots_blob);
 
         let community_payload = community_fut.await.map_err(|e| {
             error!(repo_id = %repo_id, error = %e, "Falha critica ao coletar metrica comunitaria");
             OrchestratorError::ExtractionError(e.to_string())
         })?;
-        let community_blob = serde_json::to_vec(&community_payload).map_err(|e| {
-            error!(repo_id = %repo_id, error = %e, "Falha ao serializar metrica comunitaria");
-            OrchestratorError::PersistenceError(format!("Falha ao serializar CommunityMeta: {}", e))
+        let community_blob = truncate_community_meta_json(&community_payload).map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha ao truncar blob_09_community_meta");
+            OrchestratorError::PersistenceError(format!("Falha ao truncar CommunityMeta: {}", e))
         })?;
         blobs.push(ArtifactBlob {
-            artifact_type: "CommunityMeta".to_string(),
+            artifact_type: "blob_09_community_meta".to_string(),
             payload_blob: community_blob,
         });
+
+        let canon_blob = SodaCanonExtractor::extract(repo_id, Arc::clone(&conn)).await.map_err(|e| {
+            error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blob_10_soda_canon_context");
+            OrchestratorError::ExtractionError(e.to_string())
+        })?;
+        blobs.push(canon_blob);
 
         // [N12] Persistência Atômica
         // PT-BLOB-1: Injeção individualizada no banco episódico.

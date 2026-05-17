@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::params;
 use thiserror::Error;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::error;
 use crate::harvester::sandbox::SandboxError;
 
@@ -24,30 +24,6 @@ impl SandboxExecutor for crate::harvester::sandbox::SandboxHandle {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-pub struct SymbolOutline {
-    pub name: String,
-    pub kind: String,
-    pub file_path: String,
-    pub start_line: u32,
-    pub end_line: u32,
-    pub signature: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-pub struct DependencyEdge {
-    pub source_file: String,
-    pub target: String,
-    pub edge_type: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-pub struct AstPayload {
-    pub symbols: Vec<SymbolOutline>,
-    pub dependency_edges: Vec<DependencyEdge>,
-    pub files_processed: u32,
-}
-
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum SidecarError {
     #[error("Sidecar binary not found: {binary}")]
@@ -66,13 +42,12 @@ pub enum SidecarError {
 pub struct JCodemunchInput<'a, E: SandboxExecutor> {
     pub executor: &'a E,
     pub timeout_secs: u64,
-    pub persist_artifact: Option<PersistArtifactConfig<'a>>,
+    pub persist_artifacts: Option<PersistArtifactConfig<'a>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PersistArtifactConfig<'a> {
     pub repo_id: &'a str,
-    pub artifact_type: &'a str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,12 +60,6 @@ fn stdout_is_blank(bytes: &[u8]) -> bool {
     bytes.iter().all(|byte| byte.is_ascii_whitespace())
 }
 
-impl AstPayload {
-    fn is_empty(&self) -> bool {
-        self.files_processed == 0 && self.symbols.is_empty() && self.dependency_edges.is_empty()
-    }
-}
-
 fn digest_json_is_empty(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Null => true,
@@ -101,32 +70,15 @@ fn digest_json_is_empty(value: &serde_json::Value) -> bool {
     }
 }
 
-fn payload_from_digest_json(
-    repo_path: &Path,
-    digest: serde_json::Value,
-) -> Result<AstPayload, SidecarError> {
-    if digest_json_is_empty(&digest) {
-        return Err(SidecarError::ExecutionFailed {
-            reason: "jcodemunch-mcp returned an empty digest payload".to_string(),
-        });
-    }
+const BLOB_08_HEALTH_REPORT_MAX_CHARS: usize = 4_000;
+const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = 6_500;
+const BLOB_05_ARCHITECTURE_MAP_MAX_CHARS: usize = 30_000;
 
-    let summary = serde_json::to_string(&digest).map_err(|e| SidecarError::ParseError {
-        reason: e.to_string(),
-    })?;
-
-    Ok(AstPayload {
-        symbols: vec![SymbolOutline {
-            name: "repo_digest".to_string(),
-            kind: "digest".to_string(),
-            file_path: repo_path.display().to_string(),
-            start_line: 1,
-            end_line: 1,
-            signature: Some(summary),
-        }],
-        dependency_edges: Vec::new(),
-        files_processed: 1,
-    })
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JCodemunchArtifacts {
+    pub repo_outline_blob: Vec<u8>,
+    pub health_report_blob: Vec<u8>,
+    pub architecture_map_blob: Vec<u8>,
 }
 
 fn code_index_path_for_repo(repo_path: &Path) -> String {
@@ -136,6 +88,260 @@ fn code_index_path_for_repo(repo_path: &Path) -> String {
         .join(".jcodemunch_index")
         .display()
         .to_string()
+}
+
+fn code_index_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, SidecarError> {
+    let storage_path = repo_path
+        .parent()
+        .unwrap_or(repo_path)
+        .join(".jcodemunch_index");
+    let owner = repo_path
+        .parent()
+        .and_then(|path| path.file_name())
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| SidecarError::ExecutionFailed {
+            reason: "Nao foi possivel resolver o owner do repositório para localizar o banco do jcodemunch".to_string(),
+        })?;
+    let repo = repo_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| SidecarError::ExecutionFailed {
+            reason: "Nao foi possivel resolver o nome do repositório para localizar o banco do jcodemunch".to_string(),
+        })?;
+    Ok(storage_path.join(format!("{}-{}.db", owner, repo)))
+}
+
+#[derive(Debug, Deserialize)]
+struct IndexedImport {
+    specifier: String,
+    #[serde(default)]
+    names: Vec<String>,
+}
+
+const VISUAL_ASSET_EXTENSIONS: &[&str] = &[".svg", ".css", ".scss", ".png", ".jpg", ".ico"];
+const VISUAL_ONLY_DIRS: &[&str] = &["icons", "assets", "styles", "fonts"];
+const NON_CORE_PATH_SEGMENTS: &[&str] = &[
+    "tests",
+    "test",
+    "examples",
+    "fixtures",
+    "test_support",
+    "e2e",
+    "scenario_tests",
+    "evals",
+    "documentation",
+    "ui",
+    "components",
+    "demo",
+    "samples",
+    "bench",
+    "benches",
+    "benchmark",
+    "benchmarks",
+    "playground",
+];
+const NON_CORE_FILE_PATTERNS: &[&str] = &["tests.rs", ".test.", ".spec.", "mock_"];
+const BACKEND_PRIORITY_PREFIXES: &[(&str, u8)] = &[
+    ("src/core/", 0),
+    ("src/backend/", 1),
+    ("lib/", 2),
+    ("api/", 3),
+    ("daemon/", 4),
+    ("crates/", 5),
+    ("services/", 6),
+];
+
+fn normalize_topology_key(value: &str) -> String {
+    value
+        .to_ascii_lowercase()
+        .replace('\\', "/")
+        .replace("::", "/")
+}
+
+fn has_visual_extension(value: &str) -> bool {
+    let normalized = normalize_topology_key(value);
+    VISUAL_ASSET_EXTENSIONS
+        .iter()
+        .any(|extension| normalized.ends_with(extension))
+}
+
+fn has_visual_only_dir(value: &str) -> bool {
+    let normalized = normalize_topology_key(value);
+    normalized
+        .split('/')
+        .any(|segment| VISUAL_ONLY_DIRS.contains(&segment))
+}
+
+fn should_skip_visual_topology(value: &str) -> bool {
+    has_visual_extension(value) || has_visual_only_dir(value)
+}
+
+fn should_skip_non_core_topology(value: &str) -> bool {
+    let normalized = normalize_topology_key(value);
+    normalized
+        .split('/')
+        .any(|segment| NON_CORE_PATH_SEGMENTS.contains(&segment))
+        || NON_CORE_FILE_PATTERNS
+        .iter()
+        .any(|pattern| normalized.contains(pattern))
+}
+
+fn should_skip_topology_entry(value: &str) -> bool {
+    should_skip_visual_topology(value) || should_skip_non_core_topology(value)
+}
+
+fn topology_priority_score(path: &str) -> u8 {
+    let normalized = normalize_topology_key(path);
+    for (prefix, score) in BACKEND_PRIORITY_PREFIXES {
+        if normalized.starts_with(prefix) {
+            return *score;
+        }
+    }
+
+    if normalized.starts_with("src/") {
+        return 10;
+    }
+
+    if normalized.starts_with("documentation/") || normalized.starts_with("docs/") {
+        return 95;
+    }
+
+    if normalized.split('/').any(|segment| segment == "pages") {
+        return 96;
+    }
+
+    if normalized.split('/').any(|segment| matches!(segment, "ui" | "components" | "frontend")) {
+        return 100;
+    }
+
+    20
+}
+
+fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError> {
+    let db_path = code_index_db_path_for_repo(repo_path)?;
+    let project_prefixes = collect_project_prefixes(repo_path)?;
+
+    let summary = tokio::task::block_in_place(|| {
+        let conn = rusqlite::Connection::open(&db_path).map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao abrir banco topologico do jcodemunch: {}", e),
+        })?;
+        let mut stmt = conn
+            .prepare("SELECT path, imports FROM files WHERE imports IS NOT NULL AND imports != '' ORDER BY path ASC")
+            .map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao preparar query topologica do jcodemunch: {}", e),
+            })?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao consultar topologia do jcodemunch: {}", e),
+            })?;
+
+        let mut modules = Vec::new();
+        for row in rows {
+            let (path, imports_json) = row.map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao iterar topologia do jcodemunch: {}", e),
+            })?;
+            if should_skip_topology_entry(&path) {
+                continue;
+            }
+            let imports: Vec<IndexedImport> = serde_json::from_str(&imports_json).map_err(|e| SidecarError::ParseError {
+                reason: e.to_string(),
+            })?;
+            let mut relevant = imports
+                .into_iter()
+                .filter(|import| is_project_specifier(&import.specifier, &project_prefixes))
+                .filter(|import| !should_skip_topology_entry(&import.specifier))
+                .map(|import| {
+                    if import.names.is_empty() {
+                        import.specifier
+                    } else {
+                        format!("{} ({})", import.specifier, import.names.join(", "))
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            relevant.sort_by(|a, b| {
+                topology_priority_score(a)
+                    .cmp(&topology_priority_score(b))
+                    .then_with(|| a.cmp(b))
+            });
+
+            if !relevant.is_empty() {
+                modules.push((path, relevant));
+            }
+        }
+
+        if modules.is_empty() {
+            return Err(SidecarError::ExecutionFailed {
+                reason: "jcodemunch index nao gerou relacoes topologicas internas para blob_05_architecture_map".to_string(),
+            });
+        }
+
+        modules.sort_by(|a, b| {
+            topology_priority_score(&a.0)
+                .cmp(&topology_priority_score(&b.0))
+                .then_with(|| b.1.len().cmp(&a.1.len()))
+                .then_with(|| a.0.cmp(&b.0))
+        });
+
+        let mut lines = vec!["# Architecture Map".to_string()];
+        for (path, imports) in modules {
+            lines.push(format!("- {} -> {}", path, imports.join(", ")));
+        }
+        Ok(lines.join("\n"))
+    })?;
+
+    let truncated = truncate_utf8(
+        &summary,
+        BLOB_05_ARCHITECTURE_MAP_MAX_CHARS,
+        BLOB_05_ARCHITECTURE_MAP_MAX_CHARS,
+    );
+    if truncated.trim().is_empty() {
+        return Err(SidecarError::ExecutionFailed {
+            reason: "blob_05_architecture_map ficou vazio apos a truncagem".to_string(),
+        });
+    }
+
+    Ok(truncated.into_bytes())
+}
+
+fn collect_project_prefixes(repo_path: &Path) -> Result<Vec<String>, SidecarError> {
+    let mut prefixes = vec![
+        "crate::".to_string(),
+        "super::".to_string(),
+        "self::".to_string(),
+        "./".to_string(),
+        "../".to_string(),
+        "~/".to_string(),
+        "@/".to_string(),
+    ];
+
+    let crates_dir = repo_path.join("crates");
+    if crates_dir.is_dir() {
+        for entry in std::fs::read_dir(&crates_dir).map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao ler diretório de crates para blob_05_architecture_map: {}", e),
+        })? {
+            let entry = entry.map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao iterar diretório de crates para blob_05_architecture_map: {}", e),
+            })?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.is_empty() {
+                prefixes.push(format!("{}::", name));
+                prefixes.push(format!("{}::", name.replace('-', "_")));
+            }
+        }
+    }
+
+    prefixes.sort();
+    prefixes.dedup();
+    Ok(prefixes)
+}
+
+fn is_project_specifier(specifier: &str, project_prefixes: &[String]) -> bool {
+    project_prefixes
+        .iter()
+        .any(|prefix| specifier.starts_with(prefix))
 }
 
 fn validate_index_response(bytes: &[u8]) -> Result<(), SidecarError> {
@@ -166,9 +372,13 @@ fn validate_index_response(bytes: &[u8]) -> Result<(), SidecarError> {
     }
 }
 
-async fn persist_artifact_blob(config: PersistArtifactConfig<'_>, payload_blob: Vec<u8>) -> Result<(), SidecarError> {
+async fn persist_artifact_blob(
+    config: PersistArtifactConfig<'_>,
+    artifact_type: &str,
+    payload_blob: Vec<u8>,
+) -> Result<(), SidecarError> {
     let repo_id = config.repo_id.to_string();
-    let artifact_type = config.artifact_type.to_string();
+    let artifact_type = artifact_type.to_string();
     tokio::task::spawn_blocking(move || {
         let db_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -188,7 +398,11 @@ async fn persist_artifact_blob(config: PersistArtifactConfig<'_>, payload_blob: 
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(repo_id, artifact_type) DO UPDATE SET
+                payload_blob = excluded.payload_blob,
+                timestamp_extracao = excluded.timestamp_extracao",
             params![repo_id, artifact_type, payload_blob, now],
         )
         .map_err(|e| SidecarError::ExecutionFailed {
@@ -201,6 +415,71 @@ async fn persist_artifact_blob(config: PersistArtifactConfig<'_>, payload_blob: 
     .map_err(|e| SidecarError::ExecutionFailed {
         reason: format!("Falha ao aguardar persistencia do artefato: {}", e),
     })?
+}
+
+fn truncate_chars(content: &str, max_chars: usize) -> String {
+    content.chars().take(max_chars).collect()
+}
+
+fn truncate_utf8(content: &str, max_chars: usize, max_bytes: usize) -> String {
+    let mut out = String::new();
+    for ch in content.chars().take(max_chars) {
+        let ch_len = ch.len_utf8();
+        if out.len() + ch_len > max_bytes {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn normalize_health_report(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
+    if stdout_is_blank(bytes) {
+        error!(binary = "jcodemunch-mcp", "Sidecar digest retornou stdout vazio");
+        return Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp digest returned empty stdout".to_string(),
+        });
+    }
+
+    let digest_json = serde_json::from_slice::<serde_json::Value>(bytes).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })?;
+    if digest_json_is_empty(&digest_json) {
+        return Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp digest returned an empty health payload".to_string(),
+        });
+    }
+
+    let normalized = serde_json::to_string(&digest_json).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })?;
+    let truncated = truncate_chars(&normalized, BLOB_08_HEALTH_REPORT_MAX_CHARS);
+    if truncated.trim().is_empty() {
+        return Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp digest returned an empty health payload".to_string(),
+        });
+    }
+
+    Ok(truncated.into_bytes())
+}
+
+fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
+    if stdout_is_blank(bytes) {
+        error!(binary = "jcodemunch-mcp", "Sidecar claude-md retornou stdout vazio");
+        return Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp claude-md returned empty stdout".to_string(),
+        });
+    }
+
+    let text = String::from_utf8_lossy(bytes);
+    let truncated = truncate_chars(&text, BLOB_04_REPO_OUTLINE_MAX_CHARS);
+    if truncated.trim().is_empty() {
+        return Err(SidecarError::ExecutionFailed {
+            reason: "jcodemunch-mcp claude-md returned an empty repo outline".to_string(),
+        });
+    }
+
+    Ok(truncated.into_bytes())
 }
 
 /// Executa um binário sidecar no sandbox e retorna os bytes brutos do stdout.
@@ -257,10 +536,10 @@ async fn execute_sidecar<E: SandboxExecutor>(
 pub struct JCodemunchSidecar;
 
 impl JCodemunchSidecar {
-    /// Extrai a AST e o grafo de dependências usando o jcodemunch no sandbox.
+    /// Extrai o health report e o repo outline usando o jcodemunch no sandbox.
     pub async fn extract<E: SandboxExecutor>(
         input: JCodemunchInput<'_, E>,
-    ) -> Result<AstPayload, SidecarError> {
+    ) -> Result<JCodemunchArtifacts, SidecarError> {
         let storage_path = code_index_path_for_repo(input.executor.repo_path());
         let index_args = vec!["index".to_string(), "--no-ai-summaries".to_string()];
         let index_arg_refs: Vec<&str> = index_args.iter().map(String::as_str).collect();
@@ -289,40 +568,47 @@ impl JCodemunchSidecar {
             SidecarExitPolicy::StrictZeroOnly,
         )
         .await?;
+        let health_report_blob = normalize_health_report(&bytes)?;
 
-        if stdout_is_blank(&bytes) {
-            error!(binary = "jcodemunch-mcp", "Sidecar AST retornou stdout vazio");
-            return Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch-mcp returned empty stdout".to_string(),
-            });
+        let claude_md_args = vec!["claude-md".to_string(), "--generate".to_string()];
+        let claude_md_arg_refs: Vec<&str> = claude_md_args.iter().map(String::as_str).collect();
+        let claude_md_bytes = execute_sidecar(
+            input.executor,
+            "jcodemunch-mcp",
+            &claude_md_arg_refs,
+            input.timeout_secs,
+            SidecarExitPolicy::StrictZeroOnly,
+        )
+        .await?;
+        let repo_outline_blob = normalize_repo_outline(&claude_md_bytes)?;
+        let architecture_map_blob = normalize_architecture_map(input.executor.repo_path())?;
+
+        if let Some(config) = input.persist_artifacts {
+            persist_artifact_blob(
+                config,
+                "blob_08_health_report",
+                health_report_blob.clone(),
+            )
+            .await?;
+            persist_artifact_blob(
+                config,
+                "blob_04_repo_outline",
+                repo_outline_blob.clone(),
+            )
+            .await?;
+            persist_artifact_blob(
+                config,
+                "blob_05_architecture_map",
+                architecture_map_blob.clone(),
+            )
+            .await?;
         }
 
-        if let Some(config) = input.persist_artifact {
-            persist_artifact_blob(config, bytes.clone()).await?;
-        }
-
-        let digest_json = serde_json::from_slice::<serde_json::Value>(&bytes).map_err(|e| SidecarError::ParseError {
-            reason: e.to_string(),
-        })?;
-        let payload = serde_json::from_value::<AstPayload>(digest_json.clone())
-            .or_else(|_| payload_from_digest_json(input.executor.repo_path(), digest_json))
-            .map_err(|e| match e {
-                SidecarError::ParseError { reason } => SidecarError::ParseError { reason },
-                other => other,
-            })?;
-
-        if payload.is_empty() {
-            error!(
-                binary = "jcodemunch-mcp",
-                files_processed = payload.files_processed,
-                "Sidecar AST retornou payload vazio"
-            );
-            return Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch-mcp returned an empty AST payload".to_string(),
-            });
-        }
-
-        Ok(payload)
+        Ok(JCodemunchArtifacts {
+            repo_outline_blob,
+            health_report_blob,
+            architecture_map_blob,
+        })
     }
 }
 
@@ -425,30 +711,76 @@ impl StaticAnalysisSidecar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use std::collections::VecDeque;
     use std::path::PathBuf;
+    use std::sync::Mutex;
+    use tempfile::TempDir;
 
     // Mock do SandboxExecutor que simula respostas customizadas para os testes.
     struct MockExecutor {
+        _temp_dir: TempDir,
         repo_path: PathBuf,
-        // Usamos Mutex por causa de interior mutability se precisarmos contar chamadas,
-        // mas aqui uma resposta estática ou configurável por teste basta.
-        response: Mutex<Result<Vec<u8>, SandboxError>>,
+        responses: Mutex<VecDeque<Result<Vec<u8>, SandboxError>>>,
     }
 
     impl MockExecutor {
-        fn new(response: Result<Vec<u8>, SandboxError>) -> Self {
+        fn new(responses: Vec<Result<Vec<u8>, SandboxError>>) -> Self {
+            let temp_dir = TempDir::new().unwrap();
+            let owner_dir = temp_dir.path().join("owner");
+            let repo_path = owner_dir.join("repo");
+            std::fs::create_dir_all(&repo_path).unwrap();
+
+            let index_dir = owner_dir.join(".jcodemunch_index");
+            std::fs::create_dir_all(&index_dir).unwrap();
+            let db_path = index_dir.join("owner-repo.db");
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            conn.execute(
+                "CREATE TABLE files (
+                    path TEXT PRIMARY KEY,
+                    hash TEXT,
+                    mtime_ns INTEGER,
+                    language TEXT,
+                    summary TEXT,
+                    blob_sha TEXT,
+                    imports TEXT,
+                    size_bytes INTEGER
+                )",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+                params![
+                    "src/main.rs",
+                    r#"[{"specifier":"crate::config","names":["AppConfig"]},{"specifier":"goose_cli::session","names":["run_session"]},{"specifier":"serde_json","names":["json"]}]"#
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+                params![
+                    "src/lib.rs",
+                    r#"[{"specifier":"super::utils","names":["normalize"]},{"specifier":"../shared/logger","names":["logger"]}]"#
+                ],
+            )
+            .unwrap();
+
             Self {
-                repo_path: PathBuf::from("/mock/ramdisk/repo"),
-                response: Mutex::new(response),
+                _temp_dir: temp_dir,
+                repo_path,
+                responses: Mutex::new(VecDeque::from(responses)),
             }
         }
     }
 
     impl SandboxExecutor for MockExecutor {
         async fn execute(&self, _command: &str, _args: &[&str], _timeout_secs: u64) -> Result<Vec<u8>, SandboxError> {
-            let guard = self.response.lock().unwrap();
-            guard.clone()
+            let mut guard = self.responses.lock().unwrap();
+            guard.pop_front().unwrap_or_else(|| {
+                Err(SandboxError::ProcessSpawnFailed {
+                    reason: "no mock response configured".to_string(),
+                })
+            })
         }
 
         fn repo_path(&self) -> &Path {
@@ -459,42 +791,245 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_success() {
-        let valid_json = r#"{
-            "symbols": [
-                {
-                    "name": "fn_test",
-                    "kind": "function",
-                    "file_path": "src/lib.rs",
-                    "start_line": 1,
-                    "end_line": 5,
-                    "signature": "fn fn_test()"
-                }
-            ],
-            "dependency_edges": [
-                {
-                    "source_file": "src/main.rs",
-                    "target": "src/lib.rs",
-                    "edge_type": "use"
-                }
-            ],
-            "files_processed": 2
-        }"#;
+        let index_json = r#"{"success": true}"#;
+        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
 
-        let executor = MockExecutor::new(Ok(valid_json.as_bytes().to_vec()));
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(digest_json.as_bytes().to_vec()),
+            Ok(claude_md.as_bytes().to_vec()),
+        ]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ter sucesso: {:?}", result);
         let payload = result.unwrap();
-        assert_eq!(payload.files_processed, 2);
-        assert_eq!(payload.symbols.len(), 1);
-        assert_eq!(payload.symbols[0].name, "fn_test");
-        assert_eq!(payload.dependency_edges.len(), 1);
-        assert_eq!(payload.dependency_edges[0].edge_type, "use");
+        assert_eq!(
+            String::from_utf8(payload.health_report_blob).unwrap(),
+            r#"{"hotspots":[{"complexity":12,"path":"src/main.rs"}]}"#
+        );
+        assert_eq!(
+            String::from_utf8(payload.repo_outline_blob).unwrap(),
+            claude_md
+        );
+        let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
+        assert!(architecture_map.contains("src/main.rs ->"));
+        assert!(architecture_map.contains("crate::config (AppConfig)"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_success_repo_outline_tolerates_invalid_utf8() {
+        let claude_md = b"# Repository Outline\n\xff\n- src/main.rs\n".to_vec();
+
+        let result = normalize_repo_outline(&claude_md);
+        assert!(result.is_ok(), "Normalização deveria tolerar repo outline com UTF-8 inválido: {:?}", result);
+        let repo_outline = String::from_utf8(result.unwrap()).unwrap();
+        assert!(repo_outline.contains("# Repository Outline"));
+        assert!(repo_outline.contains("src/main.rs"));
+    }
+
+    #[tokio::test]
+    async fn test_architecture_map_skips_visual_noise_and_prioritizes_backend() {
+        let index_json = r#"{"success": true}"#;
+        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
+
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(digest_json.as_bytes().to_vec()),
+            Ok(claude_md.as_bytes().to_vec()),
+        ]);
+
+        let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "icons/logo.svg",
+                r#"[{"specifier":"crate::theme","names":["Palette"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "src/backend/service.rs",
+                r#"[{"specifier":"crate::core::engine","names":["Engine"]},{"specifier":"./icons/logo.svg","names":["Logo"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "ui/panel.tsx",
+                r#"[{"specifier":"../src/backend/service","names":["renderPanel"]},{"specifier":"./styles/panel.css","names":["panel"]}]"#
+            ],
+        )
+        .unwrap();
+
+        let input = JCodemunchInput {
+            executor: &executor,
+            timeout_secs: 30,
+            persist_artifacts: None,
+        };
+        let payload = JCodemunchSidecar::extract(input).await.unwrap();
+        let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
+
+        assert!(!architecture_map.contains("icons/logo.svg"));
+        assert!(!architecture_map.contains("panel.css"));
+
+        let backend_pos = architecture_map.find("src/backend/service.rs ->").unwrap();
+        let ui_pos = architecture_map.find("ui/panel.tsx ->").unwrap();
+        assert!(backend_pos < ui_pos, "backend deve vir antes de ui: {}", architecture_map);
+    }
+
+    #[tokio::test]
+    async fn test_architecture_map_skips_tests_examples_and_fixtures() {
+        let index_json = r#"{"success": true}"#;
+        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
+
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(digest_json.as_bytes().to_vec()),
+            Ok(claude_md.as_bytes().to_vec()),
+        ]);
+
+        let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "crates/goose/tests/session_id_propagation_test.rs",
+                r#"[{"specifier":"goose::conversation::message::Message","names":["Message"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "examples/demo/main.rs",
+                r#"[{"specifier":"crate::app","names":["run"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "src/backend/service.rs",
+                r#"[{"specifier":"crate::core::engine","names":["Engine"]},{"specifier":"./fixtures/sample","names":["SAMPLE"]},{"specifier":"./test_support/helpers","names":["helper"]},{"specifier":"./e2e/flow","names":["flow"]}]"#
+            ],
+        )
+        .unwrap();
+
+        let input = JCodemunchInput {
+            executor: &executor,
+            timeout_secs: 30,
+            persist_artifacts: None,
+        };
+        let payload = JCodemunchSidecar::extract(input).await.unwrap();
+        let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
+
+        assert!(!architecture_map.contains("/tests/"));
+        assert!(!architecture_map.contains("tests.rs"));
+        assert!(!architecture_map.contains("/examples/"));
+        assert!(!architecture_map.contains("fixtures"));
+        assert!(!architecture_map.contains("test_support"));
+        assert!(!architecture_map.contains("e2e"));
+        assert!(architecture_map.contains("src/backend/service.rs -> crate::core::engine (Engine)"));
+    }
+
+    #[tokio::test]
+    async fn test_architecture_map_skips_scenarios_docs_ui_and_bench_noise() {
+        let index_json = r#"{"success": true}"#;
+        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
+
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(digest_json.as_bytes().to_vec()),
+            Ok(claude_md.as_bytes().to_vec()),
+        ]);
+
+        let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "crates/goose-cli/src/scenario_tests/message_generator.rs",
+                r#"[{"specifier":"crate::scenario_tests::scenario_runner","names":["MessageGenerator"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "documentation/src/pages/index.tsx",
+                r#"[{"specifier":"../components/GooseLogo","names":["GooseLogo"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "ui/desktop/src/App.tsx",
+                r#"[{"specifier":"./contexts/ChatContext","names":["ChatProvider"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "oidc-proxy/test/index.test.js",
+                r#"[{"specifier":"../src/index.js","names":["worker"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "evals/open-model-gym/suite/src/runner.ts",
+                r#"[{"specifier":"./types.js","names":["Scenario"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "crates/goose/benches/parser.rs",
+                r#"[{"specifier":"goose::parser","names":["parse"]}]"#
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
+            params![
+                "src/backend/engine.rs",
+                r#"[{"specifier":"crate::core::runtime","names":["Runtime"]}]"#
+            ],
+        )
+        .unwrap();
+
+        let input = JCodemunchInput {
+            executor: &executor,
+            timeout_secs: 30,
+            persist_artifacts: None,
+        };
+        let payload = JCodemunchSidecar::extract(input).await.unwrap();
+        let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
+
+        assert!(!architecture_map.contains("scenario_tests"));
+        assert!(!architecture_map.contains("documentation/"));
+        assert!(!architecture_map.contains("/ui/"));
+        assert!(!architecture_map.contains(".test.js"));
+        assert!(!architecture_map.contains("/evals/"));
+        assert!(!architecture_map.contains("/benches/"));
+        assert!(architecture_map.contains("src/backend/engine.rs -> crate::core::runtime (Runtime)"));
     }
 
     #[tokio::test]
@@ -503,11 +1038,11 @@ mod tests {
         let spawn_err = SandboxError::ProcessSpawnFailed {
             reason: "program not found (os error 2)".to_string(),
         };
-        let executor = MockExecutor::new(Err(spawn_err));
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -526,11 +1061,11 @@ mod tests {
             stderr: "fatal error".to_string(),
             stdout: Vec::new(),
         };
-        let executor = MockExecutor::new(Err(run_err));
+        let executor = MockExecutor::new(vec![Err(run_err)]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -544,11 +1079,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_timeout_propagation() {
-        let executor = MockExecutor::new(Err(SandboxError::Timeout));
+        let executor = MockExecutor::new(vec![Err(SandboxError::Timeout)]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 45,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -560,12 +1095,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_json() {
+        let index_json = r#"{"success": true}"#;
         let corrup_bytes = b"{invalid_json_here".to_vec();
-        let executor = MockExecutor::new(Ok(corrup_bytes));
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(corrup_bytes),
+        ]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -579,42 +1118,45 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_repo_payload_fails_closed() {
-        let empty_json = r#"{
-            "symbols": [],
-            "dependency_edges": [],
-            "files_processed": 0
-        }"#;
-
-        let executor = MockExecutor::new(Ok(empty_json.as_bytes().to_vec()));
+        let index_json = r#"{"success": true}"#;
+        let empty_json = r#"{}"#;
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(empty_json.as_bytes().to_vec()),
+        ]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
         assert_eq!(
             result,
             Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch-mcp returned an empty AST payload".to_string()
+                reason: "jcodemunch-mcp digest returned an empty health payload".to_string()
             })
         );
     }
 
     #[tokio::test]
     async fn test_empty_stdout_fails_closed() {
-        let executor = MockExecutor::new(Ok(Vec::new()));
+        let index_json = r#"{"success": true}"#;
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(Vec::new()),
+        ]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
         assert_eq!(
             result,
             Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch-mcp returned empty stdout".to_string()
+                reason: "jcodemunch-mcp digest returned empty stdout".to_string()
             })
         );
     }
@@ -626,11 +1168,11 @@ mod tests {
             stderr: "usage error".to_string(),
             stdout: Vec::new(),
         };
-        let executor = MockExecutor::new(Err(run_err));
+        let executor = MockExecutor::new(vec![Err(run_err)]);
         let input = JCodemunchInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifact: None,
+            persist_artifacts: None,
         };
 
         let result = JCodemunchSidecar::extract(input).await;
@@ -638,6 +1180,30 @@ mod tests {
             result,
             Err(SidecarError::ExecutionFailed {
                 reason: "exit code 1: usage error".to_string()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_claude_md_empty_stdout_fails_closed() {
+        let index_json = r#"{"success": true}"#;
+        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let executor = MockExecutor::new(vec![
+            Ok(index_json.as_bytes().to_vec()),
+            Ok(digest_json.as_bytes().to_vec()),
+            Ok(Vec::new()),
+        ]);
+        let input = JCodemunchInput {
+            executor: &executor,
+            timeout_secs: 30,
+            persist_artifacts: None,
+        };
+
+        let result = JCodemunchSidecar::extract(input).await;
+        assert_eq!(
+            result,
+            Err(SidecarError::ExecutionFailed {
+                reason: "jcodemunch-mcp claude-md returned empty stdout".to_string()
             })
         );
     }
@@ -665,7 +1231,7 @@ mod tests {
             "files_analyzed": 5
         }"#;
 
-        let executor = MockExecutor::new(Ok(valid_json.as_bytes().to_vec()));
+        let executor = MockExecutor::new(vec![Ok(valid_json.as_bytes().to_vec())]);
         let input = OxcInput {
             executor: &executor,
             timeout_secs: 30,
@@ -692,7 +1258,7 @@ mod tests {
         let spawn_err = SandboxError::ProcessSpawnFailed {
             reason: "program not found (os error 2)".to_string(),
         };
-        let executor = MockExecutor::new(Err(spawn_err));
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
         let input = OxcInput {
             executor: &executor,
             timeout_secs: 30,
@@ -714,7 +1280,7 @@ mod tests {
             stderr: "oxlint crashed".to_string(),
             stdout: Vec::new(),
         };
-        let executor = MockExecutor::new(Err(run_err));
+        let executor = MockExecutor::new(vec![Err(run_err)]);
         let input = OxcInput {
             executor: &executor,
             timeout_secs: 30,
@@ -731,7 +1297,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oxc_timeout_propagation() {
-        let executor = MockExecutor::new(Err(SandboxError::Timeout));
+        let executor = MockExecutor::new(vec![Err(SandboxError::Timeout)]);
         let input = OxcInput {
             executor: &executor,
             timeout_secs: 45,
@@ -747,7 +1313,7 @@ mod tests {
     #[tokio::test]
     async fn test_oxc_invalid_json() {
         let corrup_bytes = b"{invalid_json".to_vec();
-        let executor = MockExecutor::new(Ok(corrup_bytes));
+        let executor = MockExecutor::new(vec![Ok(corrup_bytes)]);
         let input = OxcInput {
             executor: &executor,
             timeout_secs: 30,
@@ -769,7 +1335,7 @@ mod tests {
             "files_analyzed": 0
         }"#;
 
-        let executor = MockExecutor::new(Ok(empty_json.as_bytes().to_vec()));
+        let executor = MockExecutor::new(vec![Ok(empty_json.as_bytes().to_vec())]);
         let input = OxcInput {
             executor: &executor,
             timeout_secs: 30,
@@ -805,7 +1371,7 @@ mod tests {
             stderr: "issues found".to_string(),
             stdout: valid_json.as_bytes().to_vec(),
         };
-        let executor = MockExecutor::new(Err(err_exit_1));
+        let executor = MockExecutor::new(vec![Err(err_exit_1)]);
         let input = StaticAnalysisInput {
             executor: &executor,
             timeout_secs: 30,
@@ -826,7 +1392,7 @@ mod tests {
             "linter_name": "ruff"
         }"#;
 
-        let executor = MockExecutor::new(Ok(empty_json.as_bytes().to_vec()));
+        let executor = MockExecutor::new(vec![Ok(empty_json.as_bytes().to_vec())]);
         let input = StaticAnalysisInput {
             executor: &executor,
             timeout_secs: 30,
@@ -846,7 +1412,7 @@ mod tests {
             stderr: "config error".to_string(),
             stdout: Vec::new(),
         };
-        let executor = MockExecutor::new(Err(run_err));
+        let executor = MockExecutor::new(vec![Err(run_err)]);
         let input = StaticAnalysisInput {
             executor: &executor,
             timeout_secs: 30,
