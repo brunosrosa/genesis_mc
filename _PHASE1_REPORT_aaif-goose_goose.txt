@@ -1,13 +1,13 @@
 repo_id=aaif-goose/goose
 artifact_type	payload_bytes
-blob_01_promessa_readme	2562
-blob_02_dependency_manifest	2206
-blob_03_test_intent	29864
-blob_03_ux_contracts	105646
+blob_01_promessa_readme	2564
+blob_02_dependency_manifest	2507
+blob_03_test_intent	82926
+blob_03_ux_contracts	149659
 blob_04_repo_outline	2460
-blob_05_architecture_map	27921
-blob_06_unsafe_hotspots	3300
-blob_07_ops_blueprint	25000
-blob_08_health_report	1704
-blob_09_community_meta	111
-blob_10_soda_canon_context	5894
+blob_05_architecture_map	28004
+blob_06_unsafe_hotspots	10448
+blob_07_ops_blueprint	73071
+blob_08_health_report	149851
+blob_09_community_meta	502
+blob_10_soda_canon_context	3189

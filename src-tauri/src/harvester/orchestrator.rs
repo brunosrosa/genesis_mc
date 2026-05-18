@@ -13,10 +13,10 @@ use super::community::{CommunityMetaFetcher, RateLimiter};
 use super::persist::{BlobNormalizer, ArtifactBlob};
 use super::extract::{
     truncate_community_meta_json, LocalStaticExtractor, ManifestInput, OpsInput, TestIntentInput,
-    TestIntentExtractor, UnsafeHotspotsExtractor, UxContractsExtractor,
+    TestIntentExtractor, UxContractsExtractor,
 };
 use super::guard::PurgeGuard;
-use super::sidecar::{JCodemunchInput, JCodemunchSidecar, PersistArtifactConfig};
+use super::sidecar::{JCodemunchInput, JCodemunchSidecar, PersistArtifactConfig, SemgrepInput, SemgrepSidecar};
 use super::canon::SodaCanonExtractor;
 
 #[derive(Error, Debug)]
@@ -130,10 +130,6 @@ impl HarvesterOrchestrator {
                 artifact_type: "blob_05_architecture_map".to_string(),
                 payload_blob: payload.architecture_map_blob,
             });
-            blobs.push(ArtifactBlob {
-                artifact_type: "blob_08_health_report".to_string(),
-                payload_blob: payload.health_report_blob,
-            });
         }
 
         let static_blobs = LocalStaticExtractor::extract_all(repo_path.as_ref()).await.map_err(|e| {
@@ -181,11 +177,28 @@ impl HarvesterOrchestrator {
         })?;
         blobs.push(ux_contracts_blob);
 
-        let unsafe_hotspots_blob = UnsafeHotspotsExtractor::extract_blob(&repo_path).await.map_err(|e| {
-            error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_06_unsafe_hotspots");
-            OrchestratorError::ExtractionError(e.to_string())
-        })?;
-        blobs.push(unsafe_hotspots_blob);
+        if tasks.contains(&ExtractionTask::RunStaticAnalysis) {
+            let sandbox_ref = sandbox_out.as_ref().ok_or_else(|| {
+                OrchestratorError::InfraError("SandboxHandle indisponivel para executar semgrep".to_string())
+            })?;
+            let payload = SemgrepSidecar::extract(SemgrepInput {
+                executor: sandbox_ref,
+                timeout_secs: 600,
+            })
+            .await
+            .map_err(|e| {
+                error!(repo_id = %repo_id, error = %e, "Falha ao extrair blobs 06/08 via semgrep");
+                OrchestratorError::ExtractionError(e.to_string())
+            })?;
+            blobs.push(ArtifactBlob {
+                artifact_type: "blob_06_unsafe_hotspots".to_string(),
+                payload_blob: payload.unsafe_hotspots_blob,
+            });
+            blobs.push(ArtifactBlob {
+                artifact_type: "blob_08_health_report".to_string(),
+                payload_blob: payload.health_report_blob,
+            });
+        }
 
         let community_payload = community_fut.await.map_err(|e| {
             error!(repo_id = %repo_id, error = %e, "Falha critica ao coletar metrica comunitaria");

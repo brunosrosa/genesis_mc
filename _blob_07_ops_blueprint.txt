@@ -1,0 +1,2116 @@
+### Dockerfile
+# syntax=docker/dockerfile:1.4
+# goose CLI and Server Docker Image
+# Multi-stage build for minimal final image size
+
+# Build stage
+FROM rust:1.82-bookworm AS builder
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    libdbus-1-dev \
+    libclang-dev \
+    protobuf-compiler \
+    libprotobuf-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /build
+
+# Copy source code
+COPY . .
+
+# Build release binaries with optimizations
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+ENV CARGO_PROFILE_RELEASE_LTO=true
+ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+ENV CARGO_PROFILE_RELEASE_OPT_LEVEL=z
+ENV CARGO_PROFILE_RELEASE_STRIP=true
+RUN cargo build --release --package goose-cli
+
+# Runtime stage - minimal Debian
+FROM debian:bookworm-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
+
+# Install only runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    libdbus-1-3 \
+    libgomp1 \
+    libxcb1 \
+    curl \
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /build/target/release/goose /usr/local/bin/goose
+
+# Create non-root user
+RUN useradd -m -u 1000 -s /bin/bash goose && \
+    mkdir -p /home/goose/.config/goose && \
+    chown -R goose:goose /home/goose
+
+# Set up environment
+ENV PATH="/usr/local/bin:${PATH}"
+ENV HOME="/home/goose"
+
+# Switch to non-root user
+USER goose
+WORKDIR /home/goose
+
+# Default to goose CLI
+ENTRYPOINT ["/usr/local/bin/goose"]
+CMD ["--help"]
+
+# Labels for metadata
+LABEL org.opencontainers.image.title="goose"
+LABEL org.opencontainers.image.description="goose CLI"
+LABEL org.opencontainers.image.vendor="AAIF"
+LABEL org.opencontainers.image.source="https://github.com/aaif-goose/goose"
+
+### .github/workflows/build-cli.yml
+# This is a **reuseable** workflow that builds the CLI for multiple platforms.
+# It doesn't get triggered on its own. It gets used in multiple workflows:
+#  - release.yml
+#  - canary.yml
+#
+# Platform Build Strategy:
+#  - Linux standard: Uses native Ubuntu 22.04 runners to keep glibc compatibility with Ubuntu 22.04 LTS
+#  - Linux Vulkan: Uses native Ubuntu 24.04 runners for newer Vulkan headers/tooling
+#  - macOS: Uses native macOS runners for each architecture
+#  - Windows: Uses Windows runner with native MSVC build
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: false
+        default: ""
+        type: string
+      ref:
+        type: string
+        required: false
+        default: ""
+
+name: "Reusable workflow to build CLI"
+
+jobs:
+  build-cli:
+    name: Build CLI
+    runs-on: ${{ matrix.build-on }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            architecture: x86_64
+            target-suffix: unknown-linux-gnu
+            build-on: ubuntu-22.04
+            variant: standard
+          - platform: linux
+            architecture: aarch64
+            target-suffix: unknown-linux-gnu
+            build-on: ubuntu-22.04-arm
+            variant: standard
+          - platform: linux
+            architecture: x86_64
+            target-suffix: unknown-linux-gnu
+            build-on: ubuntu-24.04
+            variant: vulkan
+          - platform: linux
+            architecture: aarch64
+            target-suffix: unknown-linux-gnu
+            build-on: ubuntu-24.04-arm
+            variant: vulkan
+          - platform: macos
+            architecture: x86_64
+            target-suffix: apple-darwin
+            build-on: macos-15-intel
+            variant: standard
+          - platform: macos
+            architecture: aarch64
+            target-suffix: apple-darwin
+            build-on: macos-latest
+            variant: standard
+          - platform: windows
+            architecture: x86_64
+            target-suffix: pc-windows-msvc
+            build-on: windows-latest
+            variant: standard
+          - platform: windows
+            architecture: x86_64
+            target-suffix: pc-windows-msvc
+            build-on: windows-latest
+            variant: cuda
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Update version in Cargo.toml
+        if: ${{ inputs.version != '' }}
+        shell: bash
+        run: |
+          sed -i.bak 's/^version = ".*"/version = "'${{ inputs.version }}'"/' Cargo.toml
+          rm -f Cargo.toml.bak
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libdbus-1-dev \
+            libxcb1-dev
+
+          if [ "${{ matrix.variant }}" = "vulkan" ]; then
+            sudo apt-get install -y \
+              libvulkan-dev \
+              libvulkan1 \
+              glslc
+          fi
+
+      - name: Cache Cargo artifacts (Linux/macOS)
+        if: matrix.platform != 'windows'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
+        with:
+          key: ${{ matrix.architecture }}-${{ matrix.target-suffix }}-${{ matrix.build-on }}-native-macos-deployment-target-12
+
+      - name: Cache Cargo artifacts (Windows)
+        if: matrix.platform == 'windows'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
+        with:
+          key: windows-msvc-cli-${{ matrix.variant }}
+
+      - name: Build CLI (Linux/macOS)
+        if: matrix.platform != 'windows'
+        env:
+          RUST_LOG: debug
+          RUST_BACKTRACE: 1
+        run: |
+          source ./bin/activate-hermit
+          export TARGET="${{ matrix.architecture }}-${{ matrix.target-suffix }}"
+          rustup target add "${TARGET}"
+          echo "Building for target: ${TARGET}"
+          echo "Rust toolchain info:"
+          rustup show
+
+          FEATURE_ARGS=()
+          if [ "${{ matrix.variant }}" = "vulkan" ]; then
+            FEATURE_ARGS=(--features vulkan)
+          fi
+          cargo build --release --target ${TARGET} -p goose-cli "${FEATURE_ARGS[@]}"
+
+      - name: Setup Rust (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          rustup show
+          rustup target add x86_64-pc-windows-msvc
+
+      - name: Install CUDA toolkit (Windows CUDA)
+        if: ${{ matrix.platform == 'windows' && matrix.variant == 'cuda' }}
+        uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: '12.9.1'
+          method: 'local'
+          log-file-suffix: 'build-cli-windows-cuda.txt'
+
+      - name: Set up MSVC developer environment (Windows CUDA)
+        if: ${{ matrix.platform == 'windows' && matrix.variant == 'cuda' }}
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: amd64
+
+      - name: Verify CUDA toolchain (Windows CUDA)
+        if: ${{ matrix.platform == 'windows' && matrix.variant == 'cuda' }}
+        shell: pwsh
+        env:
+          CUDA_COMPUTE_CAP: "80"
+        run: |
+          Write-Output "CUDA_PATH=$env:CUDA_PATH"
+          Write-Output "CUDA_COMPUTE_CAP=$env:CUDA_COMPUTE_CAP"
+          where.exe cl
+          where.exe nvcc
+          nvcc -V
+
+      - name: Build CLI (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        env:
+          CUDA_COMPUTE_CAP: ${{ matrix.variant == 'cuda' && '80' || '' }}
+        run: |
+          Write-Output "Building Windows CLI executable..."
+          if ("${{ matrix.variant }}" -eq "cuda") {
+            cargo build --release --target x86_64-pc-windows-msvc -p goose-cli --features cuda
+          } else {
+            cargo build --release --target x86_64-pc-windows-msvc -p goose-cli
+          }
+
+          if (-not (Test-Path "./target/x86_64-pc-windows-msvc/release/goose.exe")) {
+            Write-Error "Windows CLI binary not found."
+            Get-ChildItem ./target/x86_64-pc-windows-msvc/release/ -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          Write-Output "Windows CLI binary found."
+          Get-Item ./target/x86_64-pc-windows-msvc/release/goose.exe
+
+      - name: Package CLI (Linux/macOS)
+        if: matrix.platform != 'windows'
+        run: |
+          source ./bin/activate-hermit
+          export TARGET="${{ matrix.architecture }}-${{ matrix.target-suffix }}"
+          export VARIANT_SUFFIX=""
+          if [ "${{ matrix.variant }}" = "vulkan" ]; then
+            VARIANT_SUFFIX="-vulkan"
+          fi
+
+          # Create a directory for the package contents
+          mkdir -p "target/${TARGET}/release/goose-package"
+
+          # Copy the goose binary
+          cp "target/${TARGET}/release/goose" "target/${TARGET}/release/goose-package/"
+
+          cd "target/${TARGET}/release"
+          tar -cjf "goose-${TARGET}${VARIANT_SUFFIX}.tar.bz2" -C goose-package .
+          tar -czf "goose-${TARGET}${VARIANT_SUFFIX}.tar.gz" -C goose-package .
+          echo "ARTIFACT_BZ2=target/${TARGET}/release/goose-${TARGET}${VARIANT_SUFFIX}.tar.bz2" >> $GITHUB_ENV
+          echo "ARTIFACT_GZ=target/${TARGET}/release/goose-${TARGET}${VARIANT_SUFFIX}.tar.gz" >> $GITHUB_ENV
+
+      - name: Package CLI (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          export TARGET="${{ matrix.architecture }}-${{ matrix.target-suffix }}"
+          export VARIANT_SUFFIX=""
+          if [ "${{ matrix.variant }}" = "cuda" ]; then
+            VARIANT_SUFFIX="-cuda"
+          fi
+
+          mkdir -p "target/${TARGET}/release/goose-package"
+
+          cp "target/${TARGET}/release/goose.exe" "target/${TARGET}/release/goose-package/"
+
+          cd "target/${TARGET}/release"
+          7z a -tzip "goose-${TARGET}${VARIANT_SUFFIX}.zip" goose-package/
+          echo "ARTIFACT_ZIP=target/${TARGET}/release/goose-${TARGET}${VARIANT_SUFFIX}.zip" >> $GITHUB_ENV
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: goose-${{ matrix.architecture }}-${{ matrix.target-suffix }}${{ matrix.variant != 'standard' && format('-{0}', matrix.variant) || '' }}
+          path: |
+            ${{ env.ARTIFACT_BZ2 }}
+            ${{ env.ARTIFACT_GZ }}
+            ${{ env.ARTIFACT_ZIP }}
+
+### .github/workflows/build-notify.yml
+name: BuildNotify
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Release
+      - Canary
+    types: [completed]
+
+
+jobs:
+  notify:
+    if: >
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      (
+        github.event.workflow_run.name != 'CI' ||
+        github.event.workflow_run.head_branch == 'main' ||
+        github.event.workflow_run.event == 'merge_group'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_GOOSE_STATUS }}
+        run: |
+          curl -sS --fail-with-body -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "title": "❌ Build Failed",
+                "description": "**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}\n**Commit:** ${{ github.event.workflow_run.head_sha }}",
+                "url": "${{ github.event.workflow_run.html_url }}",
+                "color": 15158332
+              }]
+            }' \
+            "$DISCORD_WEBHOOK_URL"
+
+### .github/workflows/close-release-pr-on-tag.yaml
+name: Close release PR on tag push
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  close-release-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Extract version from tag
+      id: version
+      env:
+        TAG: ${{ github.ref_name }}
+      run: |
+        VERSION=${TAG#v}
+        BRANCH="release/${VERSION}"
+
+        echo "tag=${TAG}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+
+        echo "Tag: ${TAG}"
+        echo "Version: ${VERSION}"
+        echo "Expected branch: ${BRANCH}"
+
+    - name: Find and close matching PR
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BRANCH: ${{ steps.version.outputs.branch }}
+        TAG: ${{ steps.version.outputs.tag }}
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        PR_NUMBER=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+
+        if [ -z "$PR_NUMBER" ]; then
+          echo "ℹ️ No open PR found for branch: $BRANCH (may already be closed)"
+        else
+          echo "✅ Found PR #$PR_NUMBER for branch: $BRANCH"
+          gh pr close "$PR_NUMBER" --comment "Release $TAG has been tagged and pushed. Closing this PR (version bump was already merged to main)."
+          echo "✅ Closed PR #$PR_NUMBER"
+        fi
+
+    - name: Trigger patch release
+      env:
+        BRANCH: ${{ steps.version.outputs.branch }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh workflow run patch-release.yaml \
+          --field target_branch=$BRANCH
+
+### .github/workflows/create-release-branch.yaml
+name: Create Release Branch
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release-branch:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'version-bump/')
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      with:
+        ref: ${{ github.event.pull_request.merge_commit_sha }}
+        fetch-depth: 0
+
+    - uses: cashapp/activate-hermit@e49f5cb4dd64ff0b0b659d1d8df499595451155a # v1
+    - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b  # v7.2.0
+
+    - name: Extract version and base branch
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=$(just get-tag-version)
+        BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+        echo "version=$VERSION" >> $GITHUB_ENV
+        echo "base_branch=$BASE_BRANCH" >> $GITHUB_ENV
+        echo "Version: $VERSION"
+        echo "Base branch: $BASE_BRANCH"
+
+        PRIOR_TAG=$(just get-prior-version "$VERSION")
+        if [[ -z "$PRIOR_TAG" ]]; then
+          echo "No prior version (first release), using first commit"
+          PRIOR_TAG=$(git rev-list --max-parents=0 HEAD)
+        fi
+        echo "prior_ref=$PRIOR_TAG" >> $GITHUB_ENV
+        echo "Prior ref: $PRIOR_TAG"
+
+    - name: Create release branch
+      run: |
+        git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+
+        BRANCH_NAME="release/${{ env.version }}"
+        git switch -c "$BRANCH_NAME"
+
+        # Add an empty commit so GitHub can represent this as a PR
+        git commit --allow-empty --message "chore(release): open release branch for ${{ env.version }}"
+
+        git push origin "$BRANCH_NAME"
+
+        HEAD_REF=$(git rev-parse HEAD)
+        echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
+        echo "head_ref=$HEAD_REF" >> $GITHUB_ENV
+
+    - name: Generate release notes
+      uses: ./.github/actions/generate-release-pr-body
+      with:
+        version: ${{ env.version }}
+        head_ref: ${{ env.head_ref }}
+        prior_ref: ${{ env.prior_ref }}
+
+    - name: Create Release PR
+      run: |
+        PR_URL=$(gh pr create \
+          -B "${{ env.base_branch }}" \
+          -H "${{ env.branch_name }}" \
+          --title "chore(release): release version ${{ env.version }}" \
+          --body-file pr_body.txt)
+        echo "pr_url=$PR_URL" >> $GITHUB_ENV
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Post release checklist comment
+      run: |
+        sed 's/{{VERSION}}/${{ env.version }}/g' RELEASE_CHECKLIST.md > checklist_comment.md
+        gh pr comment "${{ env.pr_url }}" --body-file checklist_comment.md
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+### .github/workflows/deploy-docs-and-extensions.yml
+name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'documentation/**'
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout the branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+        with:
+          node-version: 20
+
+      - name: Cache Node.js modules (documentation)
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7  # v5.0.2
+        with:
+          path: ./documentation/node_modules
+          key: ${{ runner.os }}-documentation-${{ hashFiles('./documentation/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-documentation-
+
+      - name: Install dependencies and build docs
+        working-directory: ./documentation
+        env:
+          INKEEP_API_KEY: ${{ secrets.INKEEP_API_KEY }}
+          INKEEP_INTEGRATION_ID: ${{ secrets.INKEEP_INTEGRATION_ID }}
+          INKEEP_ORG_ID: ${{ secrets.INKEEP_ORG_ID }}
+        run: |
+          npm install
+          npm test
+          npm run build
+
+      - name: Verify docs map was generated
+        working-directory: ./documentation
+        run: ./scripts/verify-build.sh
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d  # v6.0.0
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
+        with:
+          path: documentation/build
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4.0.5
+
+### .github/workflows/goose-release-notes.yml
+# goose Release Notes Generator
+#
+# Automatically generates release notes using goose AI agent when a new release is published.
+# Updates the GitHub release with AI-generated categorized notes and posts to Discord.
+#
+# Uses workflow_run instead of release:published because GitHub doesn't trigger
+# workflows for events created by GITHUB_TOKEN (to prevent infinite loops).
+
+name: goose Release Notes Generator
+
+on:
+  # Trigger when Release workflow completes (works around GITHUB_TOKEN limitation)
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to generate notes for (e.g., v1.25.0)'
+        required: true
+        type: string
+
+env:
+  GOOSE_RECIPE: |
+    version: "1.0.0"
+    title: "Release Notes Generator"
+    description: "Generate release notes for ${RELEASE_TAG}"
+
+    extensions:
+      - type: builtin
+        name: developer
+
+    instructions: |
+      Generate release notes for the goose release.
+
+      ## Process
+      1. You are already in the goose repository. Do NOT clone or checkout anything.
+      2. Get the previous release tag by running: git describe --tags --abbrev=0 ${RELEASE_TAG}^
+      3. Get commits between tags: git log <previous_tag>..${RELEASE_TAG} --oneline --no-merges
+      4. Analyze the commits and categorize changes
+
+      ## Output Format
+      Categorize changes into these sections (skip empty sections):
+      - ✨ **Features** - New functionality
+      - 🐛 **Bug Fixes** - Bug fixes
+      - 🔧 **Improvements** - Enhancements to existing features
+      - 📚 **Documentation** - Documentation updates
+
+      Format each item as:
+      - Concise description [#XXXX](https://github.com/aaif-goose/goose/pull/XXXX)
+
+      Rules:
+      - Extract PR numbers from commit messages (look for (#XXXX) pattern)
+      - Remove redundant words like "Added", "Fixed", "Documented" - the category headers make these clear
+      - Keep descriptions user-friendly and concise
+      - Order: Features → Bug Fixes → Improvements → Documentation
+
+      ## Final Step
+      Write ONLY the release notes content to /tmp/release_notes.md (no extra commentary)
+
+    prompt: |
+      Generate release notes for ${RELEASE_TAG} in the goose repository.
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-notes-${{ github.event.workflow_run.head_branch || inputs.tag }}
+  cancel-in-progress: true
+
+jobs:
+  generate-release-notes:
+    name: Generate Release Notes
+    runs-on: ubuntu-latest
+    # For workflow_run: only run if Release succeeded and tag is not 'stable'
+    # For workflow_dispatch: only run if tag is not 'stable'
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.tag != 'stable') ||
+      (github.event_name == 'workflow_run' && 
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch != 'stable')
+
+    container:
+      image: ghcr.io/aaif-goose/goose:latest
+      options: --user root
+      env:
+        GOOSE_PROVIDER: ${{ vars.GOOSE_PROVIDER || 'anthropic' }}
+        GOOSE_MODEL: ${{ vars.GOOSE_MODEL || 'claude-opus-4-5' }}
+        ANTHROPIC_API_KEY: ${{ secrets.RELEASE_BOT_ANTHROPIC_KEY }}
+        HOME: /tmp/goose-home
+
+    outputs:
+      release_notes: ${{ steps.read-notes.outputs.notes }}
+      notes_length: ${{ steps.read-notes.outputs.length }}
+      release_tag: ${{ steps.get-tag.outputs.tag }}
+
+    steps:
+      - name: Get release tag
+        id: get-tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          WORKFLOW_RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "tag=$INPUT_TAG" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$WORKFLOW_RUN_BRANCH" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y gettext curl ripgrep git jq
+
+      - name: Run goose to generate release notes
+        env:
+          RELEASE_TAG: ${{ steps.get-tag.outputs.tag }}
+        run: |
+          mkdir -p $HOME/.local/share/goose/sessions
+          mkdir -p $HOME/.config/goose
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          # Checkout the release tag
+          git checkout "${RELEASE_TAG}"
+
+          # Create recipe from env var with variable substitution
+          echo "$GOOSE_RECIPE" | envsubst '$RELEASE_TAG' > /tmp/recipe.yaml
+
+          goose run --recipe /tmp/recipe.yaml
+
+      - name: Read release notes
+        id: read-notes
+        run: |
+          if [ -f /tmp/release_notes.md ]; then
+            # Use random delimiter to prevent injection
+            DELIMITER="EOF_$(openssl rand -hex 8)"
+            echo "notes<<$DELIMITER" >> $GITHUB_OUTPUT
+            cat /tmp/release_notes.md >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "$DELIMITER" >> $GITHUB_OUTPUT
+
+            LENGTH=$(wc -c < /tmp/release_notes.md)
+            echo "length=$LENGTH" >> $GITHUB_OUTPUT
+
+            echo "::notice::Release notes generated successfully (${LENGTH} chars)"
+          else
+            echo "::error::Release notes file not found at /tmp/release_notes.md"
+            echo "notes=Release notes generation failed." >> $GITHUB_OUTPUT
+            echo "length=0" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  update-github-release:
+    name: Update GitHub Release
+    runs-on: ubuntu-latest
+    needs: generate-release-notes
+    permissions:
+      contents: write
+
+    steps:
+      - name: Update release body
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
+        with:
+          tag: ${{ needs.generate-release-notes.outputs.release_tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: ${{ needs.generate-release-notes.outputs.release_notes }}
+          allowUpdates: true
+          omitNameDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
+
+  post-to-discord:
+    name: Post to Discord
+    runs-on: ubuntu-latest
+    needs: generate-release-notes
+
+    steps:
+      - name: Post release announcement
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_RELEASE_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_RELEASE_BOT_CHANNEL_ID }}
+          RELEASE_TAG: ${{ needs.generate-release-notes.outputs.release_tag }}
+          RELEASE_URL: https://github.com/aaif-goose/goose/releases/tag/${{ needs.generate-release-notes.outputs.release_tag }}
+          RELEASE_NOTES: ${{ needs.generate-release-notes.outputs.release_notes }}
+          NOTES_LENGTH: ${{ needs.generate-release-notes.outputs.notes_length }}
+        shell: bash
+        run: |
+          # Skip if Discord is not configured
+          if [ -z "$DISCORD_CHANNEL_ID" ] || [ -z "$DISCORD_BOT_TOKEN" ]; then
+            echo "::notice::Discord not configured, skipping"
+            exit 0
+          fi
+
+          # Discord message character limit is ~2000 for regular messages
+          SAFE_LIMIT=1800
+
+          # Function to send Discord message via bot API, returns message ID
+          send_discord() {
+            local content="$1"
+            local channel="$2"
+
+            content=$(echo "$content" | jq -Rs .)
+
+            response=$(curl -s -X POST "https://discord.com/api/v10/channels/${channel}/messages" \
+              -H "Authorization: Bot ${DISCORD_BOT_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"content\": $content, \"flags\": 4}")
+
+            # Debug: show response if there's an error
+            if echo "$response" | jq -e '.code' > /dev/null 2>&1; then
+              echo "::warning::Discord API error: $(echo "$response" | jq -c '.')" >&2
+            fi
+
+            echo "$response" | jq -r '.id // empty'
+          }
+
+          # Function to create a thread from a message
+          create_thread() {
+            local channel="$1"
+            local message_id="$2"
+            local thread_name="$3"
+
+            response=$(curl -s -X POST "https://discord.com/api/v10/channels/${channel}/messages/${message_id}/threads" \
+              -H "Authorization: Bot ${DISCORD_BOT_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\": \"${thread_name}\"}")
+
+            echo "$response" | jq -r '.id // empty'
+          }
+
+          # Build the announcement header
+          HEADER="## 🎉 goose ${RELEASE_TAG} is here!
+
+          📦 **Release:** ${RELEASE_URL}"
+
+          FOOTER="
+
+          @everyone
+          📝 *More in thread...*"
+          HEADER_LEN=${#HEADER}
+          FOOTER_LEN=${#FOOTER}
+          AVAILABLE=$((SAFE_LIMIT - HEADER_LEN - FOOTER_LEN - 10))
+
+          # Check if everything fits in one message (no thread needed)
+          FULL_MSG="${HEADER}
+
+          ${RELEASE_NOTES}"
+          if [ ${#FULL_MSG} -le "$SAFE_LIMIT" ]; then
+            send_discord "$FULL_MSG" "$DISCORD_CHANNEL_ID"
+            echo "::notice::Discord notification sent successfully"
+            exit 0
+          fi
+
+          # Need to split - use awk to fit complete lines in main vs thread
+          echo "$RELEASE_NOTES" > /tmp/release_notes_full.txt
+
+          awk -v avail="$AVAILABLE" '
+          BEGIN { main_len = 0; in_thread = 0 }
+          {
+            line_len = length($0) + 1  # +1 for newline
+            if (!in_thread && (main_len + line_len) <= avail) {
+              print > "/tmp/main_content.txt"
+              main_len += line_len
+            } else {
+              in_thread = 1
+              print > "/tmp/thread_content.txt"
+            }
+          }
+          ' /tmp/release_notes_full.txt
+
+          # Read the split content
+          MAIN_CONTENT=""
+          [ -f /tmp/main_content.txt ] && MAIN_CONTENT=$(cat /tmp/main_content.txt)
+          
+          THREAD_CONTENT=""
+          [ -f /tmp/thread_content.txt ] && THREAD_CONTENT=$(cat /tmp/thread_content.txt)
+
+          # Build and send main message
+          MAIN_MESSAGE="${HEADER}
+
+          ${MAIN_CONTENT}
+          ${FOOTER}"
+
+          MESSAGE_ID=$(send_discord "$MAIN_MESSAGE" "$DISCORD_CHANNEL_ID")
+
+          if [ -z "$MESSAGE_ID" ]; then
+            echo "::error::Failed to send Discord message"
+            exit 1
+          fi
+
+          echo "Created message $MESSAGE_ID, creating thread..."
+          sleep 1
+
+          # Create thread
+          THREAD_ID=$(create_thread "$DISCORD_CHANNEL_ID" "$MESSAGE_ID" "Release Notes ${RELEASE_TAG}")
+          if [ -z "$THREAD_ID" ]; then
+            echo "::warning::Failed to create thread"
+            THREAD_ID="$DISCORD_CHANNEL_ID"
+          fi
+          sleep 1
+
+          # Post thread content in chunks (by complete lines)
+          if [ -n "$THREAD_CONTENT" ]; then
+            # Split thread content into chunks using awk
+            awk -v limit="$SAFE_LIMIT" '
+            BEGIN { chunk = ""; chunk_len = 0; chunk_num = 0 }
+            {
+              line_len = length($0) + 1
+              if (chunk_len + line_len > limit && chunk_len > 0) {
+                # Save current chunk and start new one
+                print chunk > "/tmp/chunk_" chunk_num ".txt"
+                chunk_num++
+                chunk = $0 "\n"
+                chunk_len = line_len
+              } else {
+                chunk = chunk $0 "\n"
+                chunk_len += line_len
+              }
+            }
+            END {
+              if (chunk_len > 0) {
+                print chunk > "/tmp/chunk_" chunk_num ".txt"
+              }
+            }
+            ' /tmp/thread_content.txt
+
+            # Send each chunk
+            for chunk_file in /tmp/chunk_*.txt; do
+              [ -f "$chunk_file" ] || continue
+              CHUNK=$(cat "$chunk_file")
+              [ -n "$CHUNK" ] && send_discord "$CHUNK" "$THREAD_ID"
+              sleep 1
+              rm -f "$chunk_file"
+            done
+          fi
+
+          # Cleanup
+          rm -f /tmp/release_notes_full.txt /tmp/main_content.txt /tmp/thread_content.txt
+
+          echo "::notice::Discord notification sent successfully"
+
+### .github/workflows/minor-release.yaml
+name: Create Minor Release PR
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  schedule:
+    - cron: '0 0 * * 2'
+  workflow_dispatch:
+
+jobs:
+  release:
+    if: github.repository == 'aaif-goose/goose'
+    uses: ./.github/workflows/create-version-bump-pr.yaml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      TETRATE_API_KEY: ${{ secrets.TETRATE_API_KEY }}
+
+### .github/workflows/patch-release.yaml
+name: Create Patch Release
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Release branch for patch (e.g. release/1.25.0)'
+        required: true
+        type: string
+
+jobs:
+  create-patch-release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_BRANCH: ${{ inputs.target_branch }}
+
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      with:
+        ref: ${{ inputs.target_branch }}
+        fetch-depth: 0
+
+    - uses: cashapp/activate-hermit@e49f5cb4dd64ff0b0b659d1d8df499595451155a # v1
+    - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b  # v7.2.0
+
+    - name: install dependencies
+      run: |
+        sudo apt update -y
+        sudo apt install -y libdbus-1-dev gnome-keyring libxcb1-dev
+
+    - name: Compute version and create release branch
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        TETRATE_API_KEY: ${{ secrets.TETRATE_API_KEY }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=$(just get-next-patch-version)
+        echo "version=$VERSION" >> $GITHUB_ENV
+        echo "Version: $VERSION (patch on $TARGET_BRANCH)"
+
+        PRIOR_TAG=$(just get-prior-version "$VERSION")
+        if [[ -z "$PRIOR_TAG" ]]; then
+          echo "No prior version (first release), using first commit"
+          PRIOR_TAG=$(git rev-list --max-parents=0 HEAD)
+        fi
+        echo "prior_ref=$PRIOR_TAG" >> $GITHUB_ENV
+        echo "Prior ref: $PRIOR_TAG"
+
+        git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+
+        BRANCH_NAME="release/$VERSION"
+        git switch -c "$BRANCH_NAME"
+
+        just prepare-release $VERSION
+
+        git push origin "$BRANCH_NAME"
+
+        HEAD_REF=$(git rev-parse HEAD)
+        echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
+        echo "head_ref=$HEAD_REF" >> $GITHUB_ENV
+
+    - name: Generate release notes
+      uses: ./.github/actions/generate-release-pr-body
+      with:
+        version: ${{ env.version }}
+        head_ref: ${{ env.head_ref }}
+        prior_ref: ${{ env.prior_ref }}
+
+    - name: Create Release PR
+      run: |
+        PR_URL=$(gh pr create \
+          -B "$TARGET_BRANCH" \
+          -H "${{ env.branch_name }}" \
+          --title "chore(release): release version ${{ env.version }} (patch)" \
+          --body-file pr_body.txt)
+        echo "pr_url=$PR_URL" >> $GITHUB_ENV
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Post release checklist comment
+      run: |
+        sed 's/{{VERSION}}/${{ env.version }}/g' RELEASE_CHECKLIST.md > checklist_comment.md
+        gh pr comment "${{ env.pr_url }}" --body-file checklist_comment.md
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+### .github/workflows/pr-comment-build-cli.yml
+# This workflow is triggered by a comment on PR with the text ".build-cli"
+#
+# SECURITY: This workflow checks out and builds code from PRs. To prevent
+# malicious code execution (GHSA-4h72-4h3w-4587, GHSA-mqm8-hhf6-wvjq),
+# we verify the commenter has write access before proceeding.
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to comment on'
+        required: true
+        type: string
+
+# permissions needed for reacting to IssueOps commands on PRs
+permissions:
+  pull-requests: write
+  checks: read
+
+name: Build CLI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.event.issue && github.event.issue.number) || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  trigger-on-command:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request && contains(github.event.comment.body, '.build-cli'))
+    name: Trigger on ".build-cli" PR comment
+    runs-on: ubuntu-latest
+    outputs:
+      continue: ${{ steps.security_check.outputs.authorized }}
+      pr_number: ${{ steps.command.outputs.issue_number || github.event.inputs.pr_number }}
+      head_sha: ${{ steps.set_head_sha.outputs.head_sha || github.sha }}
+    steps:
+      # SECURITY: Verify commenter has write access BEFORE any checkout
+      # This prevents attackers from triggering builds on their own malicious PRs
+      - name: Verify commenter permissions
+        id: security_check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          script: |
+            // workflow_dispatch requires repo write access, so it's inherently safe
+            if (context.eventName === 'workflow_dispatch') {
+              core.setOutput('authorized', 'true');
+              console.log('✅ workflow_dispatch - authorized');
+              return;
+            }
+            
+            const commenter = context.payload.comment.user.login;
+            console.log(`Checking permissions for: ${commenter}`);
+            
+            try {
+              const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: commenter
+              });
+              
+              const allowed = ['admin', 'maintain', 'write'].includes(permission.permission);
+              console.log(`Permission level: ${permission.permission}, Authorized: ${allowed}`);
+              
+              if (!allowed) {
+                // Post a comment explaining the rejection
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.issue.number,
+                  body: `⚠️ @${commenter} Only repository collaborators with write access can trigger builds.`
+                });
+                core.setOutput('authorized', 'false');
+              } else {
+                core.setOutput('authorized', 'true');
+              }
+            } catch (error) {
+              console.log(`Permission check failed: ${error.message}`);
+              core.setOutput('authorized', 'false');
+            }
+
+      - name: Run command action
+        if: steps.security_check.outputs.authorized == 'true' && github.event_name == 'issue_comment'
+        uses: github/command@v2.0.3
+        id: command
+        with:
+          command: ".build-cli"
+          skip_reviews: true
+          reaction: "eyes"
+          allowed_contexts: pull_request
+
+      - name: Checkout code
+        if: steps.security_check.outputs.authorized == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        
+      - name: Get PR head SHA with gh
+        id: set_head_sha
+        if: steps.security_check.outputs.authorized == 'true'
+        run: |
+          echo "Get PR head SHA with gh"
+          HEAD_SHA=$(gh pr view "$ISSUE_NUMBER" --json headRefOid -q .headRefOid)
+          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD_SHA"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ steps.command.outputs.issue_number || github.event.inputs.pr_number }}
+
+  build-cli:
+    needs: [trigger-on-command]
+    if: ${{ needs.trigger-on-command.outputs.continue == 'true' }}
+    uses: ./.github/workflows/build-cli.yml
+    with:
+      ref: ${{ needs.trigger-on-command.outputs.head_sha }}
+
+  pr-comment-cli:
+    name: PR Comment with CLI builds
+    runs-on: ubuntu-latest
+    needs: [trigger-on-command, build-cli]
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: goose-*
+          path: cli-dist
+          merge-multiple: true
+
+      - name: Comment on PR with CLI download links
+        uses: peter-evans/create-or-update-comment@v5
+        with:
+          issue-number: ${{ needs.trigger-on-command.outputs.pr_number }}
+          body: |
+            ### CLI Builds
+
+            Download CLI builds for different platforms:
+            - [📦 Linux (x86_64, Ubuntu 22.04-compatible)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-x86_64-unknown-linux-gnu.zip)
+            - [📦 Linux (aarch64, Ubuntu 22.04-compatible)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-aarch64-unknown-linux-gnu.zip)
+            - [📦 Linux Vulkan (x86_64, Ubuntu 24.04+)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-x86_64-unknown-linux-gnu-vulkan.zip)
+            - [📦 Linux Vulkan (aarch64, Ubuntu 24.04+)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-aarch64-unknown-linux-gnu-vulkan.zip)
+            - [📦 macOS (x86_64)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-x86_64-apple-darwin.zip)
+            - [📦 macOS (aarch64)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-aarch64-apple-darwin.zip)
+            - [📦 Windows (x86_64)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-x86_64-pc-windows-msvc.zip)
+            - [📦 Windows CUDA (x86_64)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/goose-x86_64-pc-windows-msvc-cuda.zip)
+
+            These links are provided by nightly.link and will work even if you're not logged into GitHub.
+
+### .github/workflows/publish-ask-ai-bot.yml
+name: Publish Ask AI Bot Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "services/ask-ai-bot/**"
+      - "documentation/**"
+      - ".github/workflows/publish-ask-ai-bot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/ask-ai-bot
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # pin@v6.18.0
+        with:
+          context: .
+          file: services/ask-ai-bot/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+### .github/workflows/publish-docker.yml
+name: Publish Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'  # For pre-releases like v1.2.3-beta
+    paths-ignore:
+      - 'documentation/**'
+      - '*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write      # Required for Sigstore OIDC signing
+  attestations: write  # Required for SLSA build provenance attestations
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/goose
+          tags: |
+            # For main branch: latest, main, and sha
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+            # For tags: v1.2.3 -> 1.2.3, 1.2, 1, latest (if not pre-release)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # For pre-release tags: keep the full version
+            type=raw,value={{tag}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+      
+      - name: Build and push Docker image
+        id: docker-push
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # pin@v6.18.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Attest Docker image
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/goose
+          subject-digest: ${{ steps.docker-push.outputs.digest }}
+          push-to-registry: true
+
+### .github/workflows/publish-npm.yml
+name: Publish to npm
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write  # Required for npm trusted publishing (OIDC)
+
+jobs:
+  build-cli:
+    uses: ./.github/workflows/build-cli.yml
+
+  # Build npm packages (no environment needed)
+  build:
+    name: Build npm packages
+    runs-on: ubuntu-latest
+    needs: [build-cli]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.10.0'
+          registry-url: 'https://registry.npmjs.org'
+          always-auth: true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+        with:
+          version: 10.30.3
+
+      - name: Download freshly-built goose CLI binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: /tmp/cli-artifacts
+
+      - name: Place binaries into goose-binary packages
+        run: |
+          set -euo pipefail
+          echo "Available CLI artifacts:"
+          find /tmp/cli-artifacts -maxdepth 2 -type d | sort
+
+          # Map: npm platform name -> upstream artifact directory name (target triple)
+          declare -A PLATFORM_MAP=(
+            [darwin-arm64]=aarch64-apple-darwin
+            [darwin-x64]=x86_64-apple-darwin
+            [linux-arm64]=aarch64-unknown-linux-gnu
+            [linux-x64]=x86_64-unknown-linux-gnu
+            [win32-x64]=x86_64-pc-windows-msvc
+          )
+
+          for platform in "${!PLATFORM_MAP[@]}"; do
+            target="${PLATFORM_MAP[$platform]}"
+            artifact_dir="/tmp/cli-artifacts/goose-${target}"
+            pkg_dir="ui/goose-binary/goose-binary-${platform}/bin"
+            mkdir -p "${pkg_dir}"
+
+            if [[ "${platform}" == "win32-x64" ]]; then
+              archive="${artifact_dir}/goose-${target}.zip"
+              if [[ ! -f "${archive}" ]]; then
+                echo "::error::Missing Windows CLI artifact: ${archive}"
+                exit 1
+              fi
+              rm -rf /tmp/goose-extract
+              unzip -o "${archive}" -d /tmp/goose-extract
+              cp /tmp/goose-extract/goose-package/goose.exe "${pkg_dir}/goose.exe"
+            else
+              archive="${artifact_dir}/goose-${target}.tar.bz2"
+              if [[ ! -f "${archive}" ]]; then
+                echo "::error::Missing CLI artifact: ${archive}"
+                exit 1
+              fi
+              rm -rf /tmp/goose-extract
+              mkdir -p /tmp/goose-extract
+              tar -xjf "${archive}" -C /tmp/goose-extract
+              cp /tmp/goose-extract/goose "${pkg_dir}/goose"
+              chmod +x "${pkg_dir}/goose"
+            fi
+
+            echo "  ✅ ${platform} (${target})"
+          done
+
+      - name: List downloaded binaries (debug)
+        run: find ui/goose-binary -name 'goose*' -type f | sort
+
+      - name: Install dependencies
+        run: |
+          cd ui
+          pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: |
+          cd ui/sdk
+          pnpm run build:ts
+
+          cd ../text
+          pnpm run build
+
+      - name: Compatibility check (TUI client ↔ goose binary)
+        env:
+          GOOSE_BINARY: ${{ github.workspace }}/ui/goose-binary/goose-binary-linux-x64/bin/goose
+        run: |
+          cd ui/sdk
+          pnpm run check:compat
+
+      - name: Upload built packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-packages
+          path: ui/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Build summary
+        run: |
+          {
+            echo "## 📦 Build Summary"
+            echo ""
+            echo "### Source"
+            echo "Commit: \`${GITHUB_SHA}\`"
+            echo ""
+            echo "### Goose CLI Binaries"
+            echo "✅ Built from this commit for all platforms:"
+            for dir in ui/goose-binary/goose-binary-*/; do
+              platform=$(basename "$dir" | sed 's/goose-binary-//')
+              echo "  - $platform"
+            done
+            echo ""
+            echo "### npm Packages"
+            cd ui
+            for pkg in sdk text goose-binary/*/; do
+              if [ -f "$pkg/package.json" ]; then
+                name=$(jq -r '.name' "$pkg/package.json")
+                version=$(jq -r '.version' "$pkg/package.json")
+                echo "- $name@$version"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [build]
+    environment: npm-production-publishing
+    steps:
+      - name: Download built packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-packages
+          path: ui/
+
+      - name: Restore executable bits on goose binaries
+        run: find ui/goose-binary -name 'goose' -type f -exec chmod +x {} +
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.10.0'
+          registry-url: 'https://registry.npmjs.org'
+          always-auth: true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+        with:
+          version: 10.30.3
+
+      - name: Publish to npm
+        run: |
+          cd ui
+          # Publish each package individually so one failure doesn't abort the rest.
+          # Skips packages whose version is already published (409/403).
+          failed=0
+          for pkg in sdk goose-binary/*/ text; do
+            if [ -f "$pkg/package.json" ]; then
+              name=$(jq -r '.name' "$pkg/package.json")
+              version=$(jq -r '.version' "$pkg/package.json")
+              echo "Publishing $name@$version..."
+              if (cd "$pkg" && pnpm publish --access public --no-git-checks --provenance); then
+                echo "  ✅ $name@$version published"
+              else
+                # Check if it failed because the version already exists
+                if npm view "$name@$version" version > /dev/null 2>&1; then
+                  echo "  ⏭️  $name@$version already published, skipping"
+                else
+                  echo "  ❌ $name@$version failed to publish"
+                  failed=1
+                fi
+              fi
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo "::error::One or more packages failed to publish"
+            exit 1
+          fi
+
+      - name: Publish summary
+        if: always()
+        run: |
+          cd ui
+          {
+            echo "## 🚀 Published Packages"
+            echo ""
+            for pkg in sdk text goose-binary/*/; do
+              if [ -f "$pkg/package.json" ]; then
+                name=$(jq -r '.name' "$pkg/package.json")
+                version=$(jq -r '.version' "$pkg/package.json")
+                echo "- $name@$version"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+### .github/workflows/rebuild-skills-marketplace.yml
+name: Rebuild Skills Marketplace
+
+# This workflow rebuilds the documentation site to pull in new skills
+# from the Agent-Skills repository. It runs:
+# 1. Every hour on a schedule
+# 2. On manual trigger for testing
+
+on:
+  schedule:
+    # Run every hour at minute 15
+    - cron: '15 * * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual rebuild'
+        required: false
+        default: 'Manual trigger'
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  rebuild-docs:
+    runs-on: ubuntu-latest
+    if: github.repository == 'aaif-goose/goose'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Log trigger info
+        env:
+          TRIGGER: ${{ github.event_name }}
+          REASON: ${{ github.event.inputs.reason }}
+        run: |
+          echo "Triggered by: $TRIGGER"
+          echo "Time: $(date -u)"
+          if [ "$TRIGGER" == "workflow_dispatch" ]; then
+            echo "Reason: $REASON"
+          fi
+
+      - name: Checkout the branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+        with:
+          node-version: 20
+
+      - name: Cache Node.js modules (documentation)
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7  # v5.0.2
+        with:
+          path: ./documentation/node_modules
+          key: ${{ runner.os }}-documentation-${{ hashFiles('./documentation/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-documentation-
+
+      - name: Install dependencies and build docs
+        working-directory: ./documentation
+        env:
+          INKEEP_API_KEY: ${{ secrets.INKEEP_API_KEY }}
+          INKEEP_INTEGRATION_ID: ${{ secrets.INKEEP_INTEGRATION_ID }}
+          INKEEP_ORG_ID: ${{ secrets.INKEEP_ORG_ID }}
+        run: |
+          npm install
+          npm run build
+
+      - name: Verify docs map was generated
+        working-directory: ./documentation
+        run: ./scripts/verify-build.sh
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d  # v6.0.0
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4.0.0
+        with:
+          path: documentation/build
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4.0.5
+
+### .github/workflows/release-branches.yml
+name: Build goose release candidate
+
+on:
+  pull_request:
+
+jobs:
+  bundle-desktop:
+    if: startsWith(github.head_ref, 'release/')
+    uses: ./.github/workflows/bundle-desktop.yml
+    permissions:
+      id-token: write
+      contents: read
+
+  comment-on-pr:
+    needs: bundle-desktop
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment with download link
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9  # v5.0.0
+        with:
+          issue-number: ${{ github.event.number }}
+          body: |
+            ### macOS ARM64 Desktop App (Apple Silicon)
+
+            [📱 Download macOS Desktop App (arm64, unsigned)](https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/Goose-darwin-arm64.zip)
+
+            **Instructions:**
+            
+            The easiest way is to just run the following script:
+            
+            `./scripts/pre-release.sh`
+            
+            script which will download the latest release (or you can specify the release you need), does the
+            unzip, xattr to get it out of quarantine and signs it.
+            
+            If you need to do this manually:
+            
+               * Download the file
+               * Unzip
+               * run `xattr -r -d com.apple.quarantine '/path/to/Goose.app'`
+               * optionally run `codesign --force --deep --sign - --entitlements ui/desktop/entitlements.plist '/path/to/Goose.app'`
+               * start the app
+            
+            The signing step is only needed if you do something that uses mac entitlements like speech to text
+
+### .github/workflows/release-goose2.yml
+on:
+  push:
+    tags:
+      - "v2.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version string (e.g. 2.0.0-rc.1). Used when testing from a branch."
+        required: true
+        type: string
+      cli-run-id:
+        description: "Run ID of a build-cli workflow to pull goose binaries from (skips CLI build step)"
+        required: false
+        type: string
+        default: ""
+
+name: "Release Goose 2"
+
+permissions:
+  id-token: write      # Sigstore OIDC signing + Azure OIDC (Windows signing)
+  contents: write      # Creating releases + actions/checkout
+  actions: read        # Downloading artifacts across workflow runs
+  attestations: write  # SLSA build provenance attestations
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-version:
+    name: Prepare Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+    steps:
+      - name: Extract version
+        id: set-version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # Strip the leading "v" from the tag (e.g. v2.0.0 → 2.0.0)
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+  build-cli:
+    if: inputs.cli-run-id == ''
+    needs: [prepare-version]
+    uses: ./.github/workflows/build-cli.yml
+    with:
+      version: ${{ needs.prepare-version.outputs.version }}
+
+  bundle-goose2:
+    needs: [prepare-version, build-cli]
+    if: ${{ !cancelled() && needs.prepare-version.result == 'success' && (needs.build-cli.result == 'success' || needs.build-cli.result == 'skipped') }}
+    uses: ./.github/workflows/bundle-goose2.yml
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    with:
+      version: ${{ needs.prepare-version.outputs.version }}
+      signing: true
+      windows-signing: true
+      environment: signing
+      cli-run-id: ${{ inputs.cli-run-id != '' && inputs.cli-run-id || github.run_id }}
+    secrets: inherit
+
+  install-script:
+    name: Upload Install Script
+    runs-on: ubuntu-latest
+    if: inputs.cli-run-id == ''
+    needs: [build-cli]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: download_cli.sh
+          path: download_cli.sh
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [prepare-version, build-cli, install-script, bundle-goose2]
+    if: ${{ !cancelled() && needs.bundle-goose2.result == 'success' }}
+    permissions:
+      contents: write
+      id-token: write
+      actions: read
+      attestations: write
+    steps:
+      - name: Download CLI artifacts
+        if: needs.build-cli.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: goose-*
+          merge-multiple: true
+          path: release
+
+      - name: Download install script
+        if: needs.install-script.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: download_cli.sh
+          path: release
+
+      - name: Download macOS ARM64
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Goose2-darwin-arm64
+          path: release
+
+      - name: Download macOS Intel
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Goose2-darwin-x64
+          path: release
+
+      - name: Download Linux .deb
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Goose2-linux-x64-deb
+          path: release
+        continue-on-error: true
+
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Goose2-linux-x64-appimage
+          path: release
+        continue-on-error: true
+
+      - name: Download Linux RPM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Goose2-linux-x64-rpm
+          path: release
+        continue-on-error: true
+
+      - name: Download signed Windows NSIS installer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Goose2-windows-x64-nsis-signed
+          path: release
+
+      - name: Download signed Windows MSI installer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Goose2-windows-x64-msi-signed
+          path: release
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== All release artifacts ==="
+          find release -type f | sort
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: |
+            release/goose-*.tar.bz2
+            release/goose-*.tar.gz
+            release/goose-*.zip
+            release/**/*.dmg
+            release/*.exe
+            release/*.msi
+            release/*.deb
+            release/*.rpm
+            release/*.AppImage
+            release/download_cli.sh
+
+      # Create/update the versioned pre-release (e.g. v2.0.0)
+      - name: Release versioned
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: true
+          artifacts: |
+            release/goose-*.tar.bz2
+            release/goose-*.tar.gz
+            release/goose-*.zip
+            release/**/*.dmg
+            release/*.exe
+            release/*.msi
+            release/*.deb
+            release/*.rpm
+            release/*.AppImage
+            release/download_cli.sh
+          allowUpdates: true
+          omitBody: true
+
+### .github/workflows/release.yml
+# This workflow is main release, needs to be manually tagged & pushed.
+on:
+  push:
+    paths-ignore:
+      - "documentation/**"
+    tags:
+      - "v1.*"
+
+name: Release
+
+permissions:
+  id-token: write   # Required for Sigstore OIDC signing and AWS OIDC (Windows signing)
+  contents: write   # Required for creating releases and by actions/checkout
+  actions: read     # May be needed for some workflows
+  pull-requests: write  # Required for npm publish workflow
+  attestations: write  # Required for SLSA build provenance attestations
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------
+  # 1) Build CLI for multiple OS/Arch
+  # ------------------------------------
+  build-cli:
+    uses: ./.github/workflows/build-cli.yml
+
+  # ------------------------------------
+  # 2) Upload Install CLI Script
+  # ------------------------------------
+  install-script:
+    name: Upload Install Script
+    runs-on: ubuntu-latest
+    needs: [build-cli]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: download_cli.sh
+          path: download_cli.sh
+
+  # ------------------------------------------------------------
+  # 3) Bundle Desktop App (macOS)
+  # ------------------------------------------------------------
+  bundle-desktop:
+    uses: ./.github/workflows/bundle-desktop.yml
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      signing: true
+      environment: signing
+    secrets: inherit
+
+  # ------------------------------------------------------------
+  # 4) Bundle Desktop App (macOS)
+  # ------------------------------------------------------------
+  bundle-desktop-intel:
+    uses: ./.github/workflows/bundle-desktop-intel.yml
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      signing: true
+      environment: signing
+    secrets: inherit
+
+  # ------------------------------------------------------------
+  # 5) Bundle Desktop App (Linux)
+  # ------------------------------------------------------------
+  bundle-desktop-linux:
+    uses: ./.github/workflows/bundle-desktop-linux.yml
+
+#  # ------------------------------------------------------------
+#  # 6) Bundle Desktop App (Windows)
+#  # ------------------------------------------------------------
+  bundle-desktop-windows:
+    uses: ./.github/workflows/bundle-desktop-windows.yml
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    with:
+      signing: true
+    secrets: inherit
+
+  bundle-desktop-windows-cuda:
+    uses: ./.github/workflows/bundle-desktop-windows.yml
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    with:
+      signing: true
+      windows_variant: cuda
+    secrets: inherit
+
+  # ------------------------------------
+  # 7) Create/Update GitHub Release
+  # ------------------------------------
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [build-cli, install-script, bundle-desktop, bundle-desktop-intel, bundle-desktop-linux, bundle-desktop-windows, bundle-desktop-windows-cuda]
+    permissions:
+      contents: write
+      id-token: write      # Required for Sigstore OIDC signing
+      attestations: write  # Required for SLSA build provenance attestations
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          merge-multiple: true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-path: |
+            goose-*.tar.bz2
+            goose-*.tar.gz
+            goose-*.zip
+            Goose*.zip
+            *.deb
+            *.rpm
+            *.flatpak
+            download_cli.sh
+
+      # Create/update the versioned release
+      - name: Release versioned
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: |
+            goose-*.tar.bz2
+            goose-*.tar.gz
+            goose-*.zip
+            Goose*.zip
+            *.deb
+            *.rpm
+            *.flatpak
+            download_cli.sh
+          allowUpdates: true
+          omitBody: true
+          omitPrereleaseDuringUpdate: true
+
+      # Create/update the stable release
+      - name: Release stable
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
+        with:
+          tag: stable
+          name: Stable
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: |
+            goose-*.tar.bz2
+            goose-*.tar.gz
+            goose-*.zip
+            Goose*.zip
+            *.deb
+            *.rpm
+            *.flatpak
+            download_cli.sh
+          allowUpdates: true
+          omitBody: true
+          omitPrereleaseDuringUpdate: true
+
+### .github/workflows/update-release-pr.yaml
+name: Update Release Notes
+
+on:
+  pull_request:
+    types:
+      - synchronize
+    branches:
+      - main
+      - release/**
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  update-release-notes:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.pull_request.head.ref, 'release/') && github.event.pull_request.user.login == 'github-actions[bot]'
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      with:
+        fetch-depth: 0
+
+    - uses: cashapp/activate-hermit@e49f5cb4dd64ff0b0b659d1d8df499595451155a # v1
+    - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b  # v7.2.0
+
+    - name: Extract version from branch name
+      env:
+        REF_NAME: ${{ github.head_ref }}
+      run: |
+        BRANCH_NAME="$REF_NAME"
+        VERSION=$(echo "$BRANCH_NAME" | sed 's/release\///')
+        echo "version=$VERSION" >> $GITHUB_ENV
+        echo "Version: $VERSION"
+
+    - name: Get prior version
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        PRIOR_TAG=$(just get-prior-version "${{ env.version }}")
+        if [[ -z "$PRIOR_TAG" ]]; then
+          echo "No prior version (first release), using first commit"
+          PRIOR_TAG=$(git rev-list --max-parents=0 HEAD)
+        fi
+        echo "prior_ref=$PRIOR_TAG" >> $GITHUB_ENV
+        echo "Prior ref: $PRIOR_TAG"
+
+    - name: Generate release notes
+      uses: ./.github/actions/generate-release-pr-body
+      with:
+        version: ${{ env.version }}
+        head_ref: ${{ github.event.pull_request.head.sha }}
+        prior_ref: ${{ env.prior_ref }}
+
+    - name: Update Pull Request
+      env:
+        REF_NAME: ${{ github.head_ref }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        PR_NUMBER=$(gh pr list --head "$REF_NAME" --json number --jq '.[0].number')
+
+        if [[ -z "$PR_NUMBER" || "$PR_NUMBER" == "null" ]]; then
+          echo "No PR found for branch $REF_NAME"
+          exit 1
+        fi
+
+        gh pr edit "$PR_NUMBER" --body-file pr_body.txt

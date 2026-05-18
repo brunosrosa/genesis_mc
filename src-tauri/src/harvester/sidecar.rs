@@ -13,6 +13,7 @@ use thiserror::Error;
 use serde::Deserialize;
 use syn::visit::Visit as SynVisit;
 use tracing::error;
+use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::detect::{SingleStack, StackProfile};
 use crate::harvester::sandbox::SandboxError;
 
@@ -80,17 +81,35 @@ fn digest_json_is_empty(value: &serde_json::Value) -> bool {
     }
 }
 
-const BLOB_08_HEALTH_REPORT_MAX_CHARS: usize = 4_000;
-const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = 6_500;
-const BLOB_05_ARCHITECTURE_MAP_MAX_CHARS: usize = 30_000;
-const REPO_OUTLINE_MAX_ITEMS_PER_FILE: usize = 6;
-const ARCHITECTURE_MAP_MAX_IMPORTS_PER_FILE: usize = 6;
+fn stdout_contains_json_payload(bytes: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(bytes).is_ok()
+}
+
+const BLOB_06_UNSAFE_HOTSPOTS_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const BLOB_08_HEALTH_REPORT_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const BLOB_05_ARCHITECTURE_MAP_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const SEMGREP_SECURITY_RULE_FILE: &str = ".soda_semgrep_blob_06_security.yml";
+const SEMGREP_HEALTH_RULE_FILE: &str = ".soda_semgrep_blob_08_health.yml";
+const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../semgrep/blob_06_security.yml");
+const SEMGREP_HEALTH_RULE_SOURCE: &str = include_str!("../../semgrep/blob_08_health.yml");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JCodemunchArtifacts {
     pub repo_outline_blob: Vec<u8>,
     pub health_report_blob: Vec<u8>,
     pub architecture_map_blob: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemgrepArtifacts {
+    pub unsafe_hotspots_blob: Vec<u8>,
+    pub health_report_blob: Vec<u8>,
+}
+
+pub struct SemgrepInput<'a, E: SandboxExecutor> {
+    pub executor: &'a E,
+    pub timeout_secs: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,10 +154,47 @@ pub(crate) fn pack_scoped_text_blocks(blocks: &[ScopedTextBlock], max_chars: usi
     packed
 }
 
-fn cap_items_per_file(mut items: Vec<String>, max_items_per_file: usize) -> (Vec<String>, usize) {
-    let omitted_count = items.len().saturating_sub(max_items_per_file);
-    items.truncate(max_items_per_file);
-    (items, omitted_count)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SemgrepRuleSet {
+    Security,
+    Health,
+}
+
+impl SemgrepRuleSet {
+    fn artifact_title(self) -> &'static str {
+        match self {
+            Self::Security => "# Unsafe Hotspots",
+            Self::Health => "# Health Report",
+        }
+    }
+
+    fn rule_file_name(self) -> &'static str {
+        match self {
+            Self::Security => SEMGREP_SECURITY_RULE_FILE,
+            Self::Health => SEMGREP_HEALTH_RULE_FILE,
+        }
+    }
+
+    fn rule_source(self) -> &'static str {
+        match self {
+            Self::Security => SEMGREP_SECURITY_RULE_SOURCE,
+            Self::Health => SEMGREP_HEALTH_RULE_SOURCE,
+        }
+    }
+
+    fn default_message(self) -> &'static str {
+        match self {
+            Self::Security => "Sem hotspots estaticos relevantes do semgrep",
+            Self::Health => "Sem divida tecnica estatica relevante do semgrep",
+        }
+    }
+
+    fn max_chars(self) -> usize {
+        match self {
+            Self::Security => BLOB_06_UNSAFE_HOTSPOTS_MAX_CHARS,
+            Self::Health => BLOB_08_HEALTH_REPORT_MAX_CHARS,
+        }
+    }
 }
 
 fn code_index_path_for_repo(repo_path: &Path) -> String {
@@ -347,11 +403,10 @@ fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError>
 
         let mut blocks = Vec::new();
         for (path, imports) in modules {
-            let (items, omitted_count) = cap_items_per_file(imports, ARCHITECTURE_MAP_MAX_IMPORTS_PER_FILE);
             blocks.push(ScopedTextBlock {
                 file_path: path,
-                items,
-                omitted_count,
+                items: imports,
+                omitted_count: 0,
             });
         }
 
@@ -564,12 +619,10 @@ fn normalize_repo_outline_markdown(text: &str) -> String {
         let Some(file_path) = current_path.take() else {
             return;
         };
-        let items = std::mem::take(current_items);
-        let (items, omitted_count) = cap_items_per_file(items, REPO_OUTLINE_MAX_ITEMS_PER_FILE);
         blocks.push(ScopedTextBlock {
             file_path,
-            items,
-            omitted_count,
+            items: std::mem::take(current_items),
+            omitted_count: 0,
         });
     };
 
@@ -677,7 +730,9 @@ async fn execute_sidecar<E: SandboxExecutor>(
         // Exit code 1: linters sinalizam violações encontradas (sucesso de negócio).
         // Exit code 2+: erro real de execução (config inválida, crash).
         Err(SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout }) => {
-            if exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) {
+            if binary == "semgrep" && !stdout_is_blank(&stdout) && stdout_contains_json_payload(&stdout) {
+                Ok(stdout)
+            } else if exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) {
                 Ok(stdout)
             } else {
                 error!(
@@ -750,12 +805,6 @@ impl JCodemunchSidecar {
         let architecture_map_blob = normalize_architecture_map(input.executor.repo_path())?;
 
         if let Some(config) = input.persist_artifacts {
-            persist_artifact_blob(
-                config,
-                "blob_08_health_report",
-                health_report_blob.clone(),
-            )
-            .await?;
             persist_artifact_blob(
                 config,
                 "blob_04_repo_outline",
@@ -852,8 +901,6 @@ const UNIVERSAL_TEST_SKIP_SEGMENTS: [&str; 8] = [
 ];
 const UNIVERSAL_TEST_SKIP_SUBSTRINGS: [&str; 3] = ["integration_mocks", "mock_", "/docs/"];
 const STATIC_TEST_DISCOVERY_MAX_FILE_BYTES: u64 = 262_144;
-const TEST_DISCOVERY_MAX_ITEMS_PER_FILE: usize = 4;
-
 fn primary_stack(profile: &StackProfile) -> Option<SingleStack> {
     match profile {
         StackProfile::Rust => Some(SingleStack::Rust),
@@ -1192,7 +1239,6 @@ fn parse_python_test_entries(content: &str) -> Vec<String> {
 
 fn build_scoped_blocks_from_pairs(
     pairs: Vec<(String, String)>,
-    max_items_per_file: usize,
 ) -> Vec<ScopedTextBlock> {
     let mut grouped = BTreeMap::<String, Vec<String>>::new();
     let mut seen = BTreeMap::<String, BTreeSet<String>>::new();
@@ -1213,11 +1259,10 @@ fn build_scoped_blocks_from_pairs(
             if items.is_empty() {
                 return None;
             }
-            let (items, omitted_count) = cap_items_per_file(items, max_items_per_file);
             Some(ScopedTextBlock {
                 file_path,
                 items,
-                omitted_count,
+                omitted_count: 0,
             })
         })
         .collect()
@@ -1258,10 +1303,7 @@ fn discover_static_test_entries(
         }
     }
 
-    Ok(build_scoped_blocks_from_pairs(
-        entries,
-        TEST_DISCOVERY_MAX_ITEMS_PER_FILE,
-    ))
+    Ok(build_scoped_blocks_from_pairs(entries))
 }
 
 pub struct NativeTestDiscoverySidecar;
@@ -1324,6 +1366,239 @@ impl StaticAnalysisSidecar {
         .await?;
         serde_json::from_slice::<StaticAnalysisPayload>(&bytes).map_err(|e| SidecarError::ParseError {
             reason: e.to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SemgrepJsonPayload {
+    #[serde(default)]
+    results: Vec<SemgrepJsonResult>,
+    #[serde(default)]
+    paths: Option<SemgrepJsonPaths>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SemgrepJsonPaths {
+    #[serde(default)]
+    scanned: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SemgrepJsonResult {
+    check_id: String,
+    path: String,
+    start: SemgrepJsonPosition,
+    extra: SemgrepJsonExtra,
+}
+
+#[derive(Debug, Deserialize)]
+struct SemgrepJsonPosition {
+    line: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct SemgrepJsonExtra {
+    message: String,
+    #[serde(default)]
+    severity: Option<String>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SemgrepNormalizedPayload {
+    blocks: Vec<ScopedTextBlock>,
+    files_analyzed: usize,
+    findings_count: usize,
+}
+
+fn normalize_semgrep_path(repo_path: &Path, value: &str) -> String {
+    let candidate = Path::new(value);
+    let path = if candidate.is_absolute() {
+        candidate
+            .strip_prefix(repo_path)
+            .unwrap_or(candidate)
+            .to_path_buf()
+    } else {
+        candidate.to_path_buf()
+    };
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn semgrep_item_label(result: &SemgrepJsonResult) -> String {
+    let severity = result.extra.severity.as_deref().unwrap_or("INFO");
+    let category = result
+        .extra
+        .metadata
+        .as_ref()
+        .and_then(|value| value.get("category"))
+        .and_then(|value| value.as_str());
+    let message = result
+        .extra
+        .message
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    match category {
+        Some(category) => format!(
+            "[{}] {}:L{} {} - {}",
+            severity,
+            result.check_id,
+            result.start.line,
+            category,
+            message
+        ),
+        None => format!(
+            "[{}] {}:L{} {}",
+            severity,
+            result.check_id,
+            result.start.line,
+            message
+        ),
+    }
+}
+
+fn normalize_semgrep_payload(
+    repo_path: &Path,
+    bytes: &[u8],
+) -> Result<SemgrepNormalizedPayload, SidecarError> {
+    let payload = serde_json::from_slice::<SemgrepJsonPayload>(bytes).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })?;
+
+    let files_analyzed = payload
+        .paths
+        .as_ref()
+        .map(|paths| paths.scanned.len())
+        .unwrap_or(0);
+    let findings_count = payload.results.len();
+    let pairs = payload
+        .results
+        .into_iter()
+        .map(|result| {
+            (
+                normalize_semgrep_path(repo_path, &result.path),
+                semgrep_item_label(&result),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    Ok(SemgrepNormalizedPayload {
+        blocks: build_scoped_blocks_from_pairs(pairs),
+        files_analyzed,
+        findings_count,
+    })
+}
+
+fn render_semgrep_blob(rule_set: SemgrepRuleSet, payload: &SemgrepNormalizedPayload) -> Vec<u8> {
+    let mut text = format!(
+        "{}\nsummary: files_analyzed={} findings={}",
+        rule_set.artifact_title(),
+        payload.files_analyzed,
+        payload.findings_count
+    );
+
+    if payload.blocks.is_empty() {
+        text.push_str("\n\n");
+        text.push_str(rule_set.default_message());
+    } else {
+        let head_len = text.chars().count() + 2;
+        let packed = pack_scoped_text_blocks(
+            &payload.blocks,
+            rule_set.max_chars().saturating_sub(head_len),
+        );
+        if !packed.trim().is_empty() {
+            text.push_str("\n\n");
+            text.push_str(&packed);
+        }
+    }
+
+    truncate_utf8(&text, rule_set.max_chars(), rule_set.max_chars()).into_bytes()
+}
+
+async fn ensure_semgrep_rule_file(repo_path: &Path, rule_set: SemgrepRuleSet) -> Result<PathBuf, SidecarError> {
+    let path = repo_path.join(rule_set.rule_file_name());
+    tokio::fs::write(&path, rule_set.rule_source())
+        .await
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao materializar regra do semgrep '{}': {}", path.display(), e),
+        })?;
+    Ok(path)
+}
+
+async fn run_semgrep_scan<E: SandboxExecutor>(
+    executor: &E,
+    rule_set: SemgrepRuleSet,
+    timeout_secs: u64,
+) -> Result<Vec<u8>, SidecarError> {
+    let rule_path = ensure_semgrep_rule_file(executor.repo_path(), rule_set).await?;
+    let rule_arg = rule_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| SidecarError::ExecutionFailed {
+            reason: format!("Nome invalido para regra do semgrep '{}'", rule_path.display()),
+        })?;
+    let args = [
+        "scan",
+        "--config",
+        rule_arg,
+        "--json",
+        "--jobs",
+        "1",
+        "--disable-version-check",
+        "--metrics",
+        "off",
+        "--exclude",
+        rule_arg,
+        "--exclude",
+        SEMGREP_SECURITY_RULE_FILE,
+        "--exclude",
+        SEMGREP_HEALTH_RULE_FILE,
+        "--exclude",
+        "docs",
+        "--exclude",
+        "documentation",
+        "--exclude",
+        "examples",
+        "--exclude",
+        "mock",
+        "--exclude",
+        "mocks",
+        "--exclude",
+        "fixtures",
+        "--exclude",
+        "test_support",
+        "--exclude",
+        "e2e",
+        ".",
+    ];
+    execute_sidecar(
+        executor,
+        "semgrep",
+        &args,
+        timeout_secs,
+        SidecarExitPolicy::AllowFindingsExitOne,
+    )
+    .await
+}
+
+pub struct SemgrepSidecar;
+
+impl SemgrepSidecar {
+    pub async fn extract<E: SandboxExecutor>(
+        input: SemgrepInput<'_, E>,
+    ) -> Result<SemgrepArtifacts, SidecarError> {
+        let security_bytes = run_semgrep_scan(input.executor, SemgrepRuleSet::Security, input.timeout_secs).await?;
+        let security_payload = normalize_semgrep_payload(input.executor.repo_path(), &security_bytes)?;
+
+        let health_bytes = run_semgrep_scan(input.executor, SemgrepRuleSet::Health, input.timeout_secs).await?;
+        let health_payload = normalize_semgrep_payload(input.executor.repo_path(), &health_bytes)?;
+
+        Ok(SemgrepArtifacts {
+            unsafe_hotspots_blob: render_semgrep_blob(SemgrepRuleSet::Security, &security_payload),
+            health_report_blob: render_semgrep_blob(SemgrepRuleSet::Health, &health_payload),
         })
     }
 }
@@ -1392,6 +1667,10 @@ mod tests {
                 responses: Mutex::new(VecDeque::from(responses)),
                 calls: Mutex::new(Vec::new()),
             }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
         }
 
     }
@@ -2016,7 +2295,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_native_test_discovery_caps_items_per_file() {
+    async fn test_native_test_discovery_preserves_all_items_per_file() {
         let dir = TempDir::new().unwrap();
         std::fs::create_dir_all(dir.path().join("src")).unwrap();
         let mut content = String::new();
@@ -2034,8 +2313,9 @@ mod tests {
 
         assert_eq!(payload.blocks.len(), 1);
         assert_eq!(payload.blocks[0].file_path, "src/lib.rs");
-        assert_eq!(payload.blocks[0].items.len(), TEST_DISCOVERY_MAX_ITEMS_PER_FILE);
-        assert_eq!(payload.blocks[0].omitted_count, 4);
+        assert_eq!(payload.blocks[0].items.len(), 8);
+        assert_eq!(payload.blocks[0].omitted_count, 0);
+        assert!(payload.blocks[0].items.contains(&"fn test_case_7".to_string()));
     }
 
     #[tokio::test]
@@ -2110,5 +2390,108 @@ mod tests {
 
         let result = StaticAnalysisSidecar::extract(input, "ruff", &["check"]).await;
         assert!(matches!(result, Err(SidecarError::ExecutionFailed { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_semgrep_sidecar_extracts_security_and_health_without_panic() {
+        let security_json = r#"{
+            "results": [
+                {
+                    "check_id": "soda.rust.unsafe.block",
+                    "path": "src/main.rs",
+                    "start": { "line": 12 },
+                    "extra": {
+                        "message": "Rust unsafe block requer auditoria manual",
+                        "severity": "WARNING",
+                        "metadata": { "category": "memory-unsafety" }
+                    }
+                }
+            ],
+            "paths": { "scanned": ["src/main.rs", "src/lib.rs"] }
+        }"#;
+        let health_json = r#"{
+            "results": [
+                {
+                    "check_id": "soda.tech-debt.todo-fixme",
+                    "path": "src/lib.rs",
+                    "start": { "line": 48 },
+                    "extra": {
+                        "message": "Marcador de divida tecnica encontrado",
+                        "severity": "INFO"
+                    }
+                }
+            ],
+            "paths": { "scanned": ["src/main.rs", "src/lib.rs"] }
+        }"#;
+        let executor = MockExecutor::new(vec![
+            Ok(security_json.as_bytes().to_vec()),
+            Ok(health_json.as_bytes().to_vec()),
+        ]);
+
+        let payload = SemgrepSidecar::extract(SemgrepInput {
+            executor: &executor,
+            timeout_secs: 30,
+        })
+        .await
+        .unwrap();
+
+        let unsafe_blob = String::from_utf8(payload.unsafe_hotspots_blob).unwrap();
+        let health_blob = String::from_utf8(payload.health_report_blob).unwrap();
+
+        assert!(executor.calls().iter().all(|call| call.starts_with("semgrep scan")));
+        assert!(unsafe_blob.contains("# Unsafe Hotspots"));
+        assert!(unsafe_blob.contains("[src/main.rs]"));
+        assert!(unsafe_blob.contains("memory-unsafety"));
+        assert!(health_blob.contains("# Health Report"));
+        assert!(health_blob.contains("[src/lib.rs]"));
+        assert!(health_blob.contains("soda.tech-debt.todo-fixme"));
+    }
+
+    #[tokio::test]
+    async fn test_semgrep_sidecar_accepts_json_stdout_even_with_exit_code_2() {
+        let security_json = r#"{
+            "results": [
+                {
+                    "check_id": "soda.rust.unsafe.block",
+                    "path": "src/main.rs",
+                    "start": { "line": 7 },
+                    "extra": {
+                        "message": "Rust unsafe block requer auditoria manual",
+                        "severity": "WARNING"
+                    }
+                }
+            ],
+            "paths": { "scanned": ["src/main.rs"] }
+        }"#;
+        let health_json = r#"{
+            "results": [],
+            "paths": { "scanned": ["src/main.rs"] }
+        }"#;
+
+        let executor = MockExecutor::new(vec![
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 2,
+                stderr: String::new(),
+                stdout: security_json.as_bytes().to_vec(),
+            }),
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 2,
+                stderr: String::new(),
+                stdout: health_json.as_bytes().to_vec(),
+            }),
+        ]);
+
+        let payload = SemgrepSidecar::extract(SemgrepInput {
+            executor: &executor,
+            timeout_secs: 30,
+        })
+        .await
+        .unwrap();
+
+        let unsafe_blob = String::from_utf8(payload.unsafe_hotspots_blob).unwrap();
+        let health_blob = String::from_utf8(payload.health_report_blob).unwrap();
+
+        assert!(unsafe_blob.contains("[src/main.rs]"));
+        assert!(health_blob.contains("Sem divida tecnica estatica relevante do semgrep"));
     }
 }

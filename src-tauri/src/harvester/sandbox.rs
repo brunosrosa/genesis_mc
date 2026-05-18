@@ -1,12 +1,21 @@
 use std::env;
 use std::collections::BTreeMap;
+use std::mem::size_of;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use tokio::time::timeout;
 use super::git::RepoPath;
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
+    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SandboxPolicy {
@@ -49,6 +58,76 @@ pub struct SandboxHandle {
     policy: SandboxPolicy,
     is_mock: bool,
     active_pids: Arc<Mutex<HashSet<u32>>>,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+struct WindowsKillOnCloseJob {
+    handle: HANDLE,
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsKillOnCloseJob {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe {
+                CloseHandle(self.handle);
+            }
+            self.handle = std::ptr::null_mut();
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn attach_child_to_kill_on_close_job(
+    child: &tokio::process::Child,
+) -> Result<WindowsKillOnCloseJob, SandboxError> {
+    let process_handle = child.raw_handle().ok_or_else(|| SandboxError::ProcessSpawnFailed {
+        reason: "Nao foi possivel capturar raw handle do processo Windows".to_string(),
+    })? as HANDLE;
+
+    let job_handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+    if job_handle.is_null() {
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: "CreateJobObjectW falhou ao criar Job Object para o sidecar".to_string(),
+        });
+    }
+
+    let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    let info_len = u32::try_from(size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>())
+        .map_err(|_| SandboxError::ProcessSpawnFailed {
+            reason: "Overflow ao calcular tamanho do JOBOBJECT_EXTENDED_LIMIT_INFORMATION".to_string(),
+        })?;
+
+    let set_ok = unsafe {
+        SetInformationJobObject(
+            job_handle,
+            JobObjectExtendedLimitInformation,
+            &mut info as *mut _ as *mut _,
+            info_len,
+        )
+    };
+    if set_ok == 0 {
+        unsafe {
+            CloseHandle(job_handle);
+        }
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: "SetInformationJobObject falhou ao ativar KILL_ON_JOB_CLOSE".to_string(),
+        });
+    }
+
+    let assign_ok = unsafe { AssignProcessToJobObject(job_handle, process_handle) };
+    if assign_ok == 0 {
+        unsafe {
+            CloseHandle(job_handle);
+        }
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: "AssignProcessToJobObject falhou ao vincular o sidecar ao Job Object".to_string(),
+        });
+    }
+
+    Ok(WindowsKillOnCloseJob { handle: job_handle })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -260,6 +339,66 @@ fn resolve_local_python_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf
     None
 }
 
+fn build_semgrep_env(repo_path: &Path) -> BTreeMap<String, String> {
+    let sandbox_home = repo_path.join(".semgrep-sandbox");
+    let semgrep_dir = sandbox_home.join(".semgrep");
+
+    for dir in [&semgrep_dir] {
+        let _ = std::fs::create_dir_all(dir);
+    }
+
+    BTreeMap::from([
+        (
+            "SEMGREP_LOG_FILE".to_string(),
+            semgrep_dir.join("semgrep.log").display().to_string(),
+        ),
+        (
+            "SEMGREP_SETTINGS_FILE".to_string(),
+            semgrep_dir.join("settings.yml").display().to_string(),
+        ),
+    ])
+}
+
+fn persist_semgrep_diagnostics(
+    repo_path: &Path,
+    resolved: &ResolvedCommand,
+    stdout: &[u8],
+    stderr: &[u8],
+    exit_code: i32,
+) -> Option<PathBuf> {
+    let diagnostics_dir = repo_path.join(".semgrep-sandbox").join("diagnostics");
+    std::fs::create_dir_all(&diagnostics_dir).ok()?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let diagnostics_path = diagnostics_dir.join(format!("semgrep-{timestamp}.log"));
+
+    let mut report = String::new();
+    report.push_str(&format!("program={}\n", resolved.program.display()));
+    report.push_str(&format!("args={:?}\n", resolved.args));
+    report.push_str(&format!("exit_code={exit_code}\n"));
+    report.push_str(&format!("cwd={}\n", repo_path.display()));
+    report.push_str("[env]\n");
+    for (key, value) in &resolved.env {
+        report.push_str(&format!("{key}={value}\n"));
+    }
+    report.push_str("\n[stdout]\n");
+    report.push_str(&String::from_utf8_lossy(stdout));
+    report.push_str("\n\n[stderr]\n");
+    report.push_str(&String::from_utf8_lossy(stderr));
+
+    if let Some(log_path) = resolved.env.get("SEMGREP_LOG_FILE") {
+        if let Ok(log_content) = std::fs::read_to_string(log_path) {
+            report.push_str("\n\n[semgrep_log_file]\n");
+            report.push_str(&log_content);
+        }
+    }
+
+    std::fs::write(&diagnostics_path, report).ok()?;
+    Some(diagnostics_path)
+}
+
 fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<ResolvedCommand, SandboxError> {
     match command {
         "jcodemunch" | "jcodemunch-mcp" => {
@@ -325,11 +464,124 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
                 env: BTreeMap::new(),
             })
         }
+        "semgrep" | "gh" => {
+            let env = if command == "semgrep" {
+                build_semgrep_env(repo_path)
+            } else {
+                BTreeMap::new()
+            };
+            let program = resolve_from_path(command).unwrap_or_else(|| PathBuf::from(command));
+            Ok(ResolvedCommand {
+                program,
+                args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                env,
+            })
+        }
         _ => Ok(ResolvedCommand {
             program: PathBuf::from(command),
             args: args.iter().map(|arg| (*arg).to_string()).collect(),
             env: BTreeMap::new(),
         }),
+    }
+}
+
+pub(crate) async fn kill_process_tree_by_pid(pid: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let pid = pid.to_string();
+        let _ = tokio::task::spawn_blocking(move || {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        })
+        .await;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let pid = pid.to_string();
+        let _ = tokio::task::spawn_blocking(move || {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        })
+        .await;
+    }
+}
+
+fn command_requires_orphan_reap(command: &str) -> bool {
+    matches!(command, "jcodemunch" | "jcodemunch-mcp" | "semgrep")
+}
+
+async fn collect_output_task(task: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> {
+    match timeout(Duration::from_secs(10), task).await {
+        Ok(Ok(buffer)) => buffer,
+        _ => Vec::new(),
+    }
+}
+
+async fn reap_command_orphans(command: &str, repo_path: &Path) {
+    if !command_requires_orphan_reap(command) {
+        return;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let executable_names = match command {
+            "jcodemunch" | "jcodemunch-mcp" => vec!["uvx.exe", "uvx", "jcodemunch-mcp.exe", "jcodemunch-mcp"],
+            "semgrep" => vec!["semgrep.exe", "semgrep", "semgrep-core.exe", "semgrep-core"],
+            _ => Vec::new(),
+        };
+        if executable_names.is_empty() {
+            return;
+        }
+
+        let names_literal = executable_names
+            .into_iter()
+            .map(|name| format!("'{}'", name.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let repo_hint = format!("*{}*", repo_path.display()).replace('\'', "''");
+        let sandbox_hint = format!("*{}*", repo_path.join(".semgrep-sandbox").display()).replace('\'', "''");
+        let code_index_hint = format!("*{}*", resolve_code_index_path(repo_path).display()).replace('\'', "''");
+        let script = format!(
+            "$ErrorActionPreference = 'SilentlyContinue'; \
+             $names = @({names_literal}); \
+             Get-CimInstance Win32_Process | Where-Object {{ \
+                $names -contains $_.Name -and $_.CommandLine -and ( \
+                    $_.CommandLine -like '{repo_hint}' -or \
+                    $_.CommandLine -like '{sandbox_hint}' -or \
+                    $_.CommandLine -like '{code_index_hint}' \
+                ) \
+             }} | ForEach-Object {{ \
+                & taskkill.exe /T /F /PID $_.ProcessId 1>$null 2>$null; \
+             }}",
+            names_literal = names_literal,
+            repo_hint = repo_hint,
+            sandbox_hint = sandbox_hint,
+            code_index_hint = code_index_hint,
+        );
+
+        let _ = tokio::task::spawn_blocking(move || {
+            let _ = std::process::Command::new("powershell.exe")
+                .args([
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    &script,
+                ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        })
+        .await;
     }
 }
 
@@ -354,20 +606,27 @@ impl SandboxHandle {
     ) -> Result<Vec<u8>, SandboxError> {
         if self.is_mock {
             let resolved = resolve_command(command, args, &self.repo_path)?;
+            let requested_command = command.to_string();
 
             // 1. Spawning do comando no diretório do repo_path
-            let mut command = tokio::process::Command::new(&resolved.program);
-            command
+            let mut process = tokio::process::Command::new(&resolved.program);
+            process
                 .args(&resolved.args)
                 .current_dir(&self.repo_path)
                 .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped());
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true);
             if !resolved.env.is_empty() {
-                command.envs(&resolved.env);
+                process.envs(&resolved.env);
             }
-            let mut child = command
+            let mut child = process
                 .spawn()
                 .map_err(|e| SandboxError::ProcessSpawnFailed { reason: e.to_string() })?;
+
+            #[cfg(target_os = "windows")]
+            let job_guard = Some(attach_child_to_kill_on_close_job(&child)?);
+            #[cfg(not(target_os = "windows"))]
+            let job_guard: Option<()> = None;
 
             let pid = child.id().ok_or_else(|| {
                 SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar PID do processo".to_string() }
@@ -384,38 +643,48 @@ impl SandboxHandle {
                 SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
             })?;
 
-            // 2. D2 CORRIGIDO: Leitura de stdout/stderr CONCORRENTE com wait() via tokio::join!
-            //    Evita deadlock quando o processo filho gera saída maior que o buffer do pipe
-            //    do SO (~65KB no Windows). Se read_to_end rodar só após wait(), o filho
-            //    pode bloquear tentando escrever no pipe cheio, e wait() nunca retorna.
-            let mut stdout_buffer = Vec::new();
-            let mut stderr_buffer = Vec::new();
-
-            let run_fut = async {
+            let stdout_task = tokio::spawn(async move {
                 use tokio::io::AsyncReadExt;
-                let (status, stdout_res, stderr_res) = tokio::join!(
-                    child.wait(),
-                    stdout_stream.read_to_end(&mut stdout_buffer),
-                    stderr_stream.read_to_end(&mut stderr_buffer),
-                );
-                // Ignoramos erros de leitura dos streams — o status do processo é o que importa
-                let _ = stdout_res;
-                let _ = stderr_res;
-                status
-            };
+                let mut stdout_buffer = Vec::new();
+                let _ = stdout_stream.read_to_end(&mut stdout_buffer).await;
+                stdout_buffer
+            });
+            let stderr_task = tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut stderr_buffer = Vec::new();
+                let _ = stderr_stream.read_to_end(&mut stderr_buffer).await;
+                stderr_buffer
+            });
 
-            let wait_result = timeout(Duration::from_secs(timeout_secs), run_fut).await;
-
-            // Remove o PID ativo da guilhotina (D1: lock seguro contra poisoning)
-            self.lock_pids().remove(&pid);
+            let wait_result = timeout(Duration::from_secs(timeout_secs), child.wait()).await;
 
             match wait_result {
                 Ok(Ok(status)) => {
+                    drop(job_guard);
+                    reap_command_orphans(&requested_command, &self.repo_path).await;
+                    let stdout_buffer = collect_output_task(stdout_task).await;
+                    let stderr_buffer = collect_output_task(stderr_task).await;
+                    self.lock_pids().remove(&pid);
                     if status.success() {
                         Ok(stdout_buffer)
                     } else {
-                        let stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
+                        let mut stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
                         let exit_code = status.code().unwrap_or(-1);
+                        if requested_command == "semgrep" {
+                            if let Some(diagnostics_path) = persist_semgrep_diagnostics(
+                                &self.repo_path,
+                                &resolved,
+                                &stdout_buffer,
+                                &stderr_buffer,
+                                exit_code,
+                            ) {
+                                if stderr_msg.is_empty() {
+                                    stderr_msg = format!("diagnostics={}", diagnostics_path.display());
+                                } else {
+                                    stderr_msg.push_str(&format!("\ndiagnostics={}", diagnostics_path.display()));
+                                }
+                            }
+                        }
                         Err(SandboxError::ProcessNonZeroExit {
                             exit_code,
                             stderr: stderr_msg,
@@ -423,10 +692,20 @@ impl SandboxHandle {
                         })
                     }
                 }
-                Ok(Err(e)) => Err(SandboxError::ProcessSpawnFailed { reason: e.to_string() }),
+                Ok(Err(e)) => {
+                    drop(job_guard);
+                    stdout_task.abort();
+                    stderr_task.abort();
+                    self.lock_pids().remove(&pid);
+                    Err(SandboxError::ProcessSpawnFailed { reason: e.to_string() })
+                }
                 Err(_) => {
-                    // Timeout! Executa o kill incondicional e assíncrono
-                    let _ = child.kill().await;
+                    // Timeout! Extermina a arvore inteira do processo para evitar sidecars zumbis.
+                    drop(job_guard);
+                    kill_process_tree_by_pid(pid).await;
+                    reap_command_orphans(&requested_command, &self.repo_path).await;
+                    stdout_task.abort();
+                    stderr_task.abort();
                     // D3 CORRIGIDO: Remove o PID após o kill para evitar que o Drop
                     // mate um processo inocente que herdou o PID reciclado pelo SO.
                     self.lock_pids().remove(&pid);
@@ -466,7 +745,7 @@ impl Drop for SandboxHandle {
                     #[cfg(target_os = "windows")]
                     {
                         let _ = std::process::Command::new("taskkill")
-                            .args(["/F", "/PID", &pid.to_string()])
+                            .args(["/T", "/F", "/PID", &pid.to_string()])
                             .stdout(std::process::Stdio::null())
                             .stderr(std::process::Stdio::null())
                             .status();

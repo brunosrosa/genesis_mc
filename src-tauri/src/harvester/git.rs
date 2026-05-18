@@ -6,6 +6,7 @@ use url::Url;
 use sha2::{Digest, Sha256};
 use tokio::time::timeout;
 use super::ramdisk::RamdiskHandle;
+use super::sandbox::kill_process_tree_by_pid;
 use tracing::info;
 
 #[derive(Debug)]
@@ -46,18 +47,7 @@ pub enum CloneError {
 pub struct BloblessCloner;
 
 impl BloblessCloner {
-    fn workspace_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-    }
-
-    fn cache_root() -> PathBuf {
-        Self::workspace_root().join(".soda_cache").join("repo_cache")
-    }
-
-    fn repo_cache_destination(repo_url: &Url) -> PathBuf {
+    fn repo_workspace_destination(workspace: &RamdiskHandle, repo_url: &Url) -> PathBuf {
         let mut segments = repo_url
             .path_segments()
             .map(|parts| parts.collect::<Vec<_>>())
@@ -70,7 +60,7 @@ impl BloblessCloner {
         if segments.len() >= 2 {
             let repo = segments.pop().unwrap_or_else(|| "repo".to_string());
             let owner = segments.pop().unwrap_or_else(|| "owner".to_string());
-            return Self::cache_root().join(owner).join(repo);
+            return workspace.path().join("repos").join(owner).join(repo);
         }
 
         let mut hasher = Sha256::new();
@@ -78,7 +68,7 @@ impl BloblessCloner {
         let hash_result = hasher.finalize();
         let hex_string = format!("{:x}", hash_result);
         let truncated_hash = &hex_string[..12];
-        Self::cache_root().join(format!("repo_{}", truncated_hash))
+        workspace.path().join("repos").join(format!("repo_{}", truncated_hash))
     }
 
     async fn directory_has_files(path: &Path) -> Result<bool, CloneError> {
@@ -92,7 +82,7 @@ impl BloblessCloner {
 
     pub async fn clone(
         repo_url: &Url,
-        _ramdisk: &RamdiskHandle,
+        ramdisk: &RamdiskHandle,
     ) -> Result<RepoPath, CloneError> {
         // 1. Verificação preliminar e assíncrona se o Git está instalado
         match tokio::process::Command::new("git")
@@ -113,18 +103,18 @@ impl BloblessCloner {
             }
         }
 
-        // 2. Cache determinístico do repositório em disco local reutilizável.
-        let dest = Self::repo_cache_destination(repo_url);
+        // 2. Workspace efemero com hint de cache temporario nativo para esta execucao.
+        let dest = Self::repo_workspace_destination(ramdisk, repo_url);
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| CloneError::NetworkError {
-                reason: format!("Falha ao preparar diretório pai do cache do repositório: {}", e),
+                reason: format!("Falha ao preparar diretório pai do workspace do repositório: {}", e),
             })?;
         }
 
         if tokio::fs::try_exists(&dest).await.map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha ao verificar existência do cache do repositório: {}", e),
+            reason: format!("Falha ao verificar existência do workspace do repositório: {}", e),
         })? && Self::directory_has_files(&dest).await? {
-            info!(path = %dest.display(), url = %repo_url, "Cache local do repositório encontrado; pulando clone");
+            info!(path = %dest.display(), url = %repo_url, "Workspace efêmero do repositório já está preparado; pulando clone");
             return Ok(RepoPath(dest));
         }
 
@@ -139,6 +129,7 @@ impl BloblessCloner {
             .arg(&dest)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
             .spawn()
         {
             Ok(c) => c,
@@ -172,7 +163,11 @@ impl BloblessCloner {
 
         if wait_result.is_err() {
             // Timeout expirou! Matamos o processo de forma assíncrona
-            let _ = child.kill().await;
+            if let Some(pid) = child.id() {
+                kill_process_tree_by_pid(pid).await;
+            } else {
+                let _ = child.kill().await;
+            }
             // PT-3: Limpa o diretório parcial sem bloquear o Event Loop
             let _ = tokio::fs::remove_dir_all(&dest).await;
             return Err(CloneError::Timeout);
@@ -215,6 +210,17 @@ impl BloblessCloner {
                 });
             }
         }
+
+        #[cfg(target_os = "windows")]
+        ramdisk
+            .prime_temp_cache(&dest)
+            .await
+            .map_err(|e| CloneError::NetworkError {
+                reason: format!(
+                    "Falha ao aplicar as flags temporarias do Cache Manager no workspace: {}",
+                    e
+                ),
+            })?;
 
         Ok(RepoPath(dest))
     }
@@ -266,8 +272,8 @@ mod tests {
         
         let repo_path = BloblessCloner::clone(&repo_url, &ramdisk).await.unwrap();
         assert!(
-            repo_path.starts_with(BloblessCloner::cache_root()),
-            "O clone deve residir estritamente no cache persistente do host"
+            repo_path.starts_with(ramdisk.path()),
+            "O clone deve residir estritamente dentro do workspace efêmero"
         );
     }
 
@@ -279,9 +285,9 @@ mod tests {
         
         let _ = BloblessCloner::clone(&repo_url, &ramdisk).await;
         
-        let cache_root = BloblessCloner::cache_root();
-        if cache_root.exists() {
-            let entries = std::fs::read_dir(cache_root).unwrap().count();
+        let repo_root = ramdisk.path().join("repos");
+        if repo_root.exists() {
+            let entries = std::fs::read_dir(repo_root).unwrap().count();
             assert_eq!(entries, 0, "O cache não deve preservar diretórios parciais após falha");
         }
     }

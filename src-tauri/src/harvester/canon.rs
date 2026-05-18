@@ -1,37 +1,38 @@
-use std::env;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::Value;
 use thiserror::Error;
-use tokio::process::Command;
-use tokio::time::{timeout, Duration};
 use tracing::info;
 
 use super::persist::ArtifactBlob;
 
 const BLOB_10_TYPE: &str = "blob_10_soda_canon_context";
 pub const CANON_GLOBAL_REPO_ID: &str = "__SODA_CANON_GLOBAL__";
-const CANON_NOTEBOOK_TITLE: &str = "SODA Canon V3 - Base Cristalizada";
 const CANON_CACHE_MAX_AGE_SECS: i64 = 7 * 24 * 60 * 60;
-const CANON_QUERY_TIMEOUT_SECS: u64 = 180;
 const CANON_MAX_CHARS: usize = 8_000;
-const CANON_QUERY_PROMPT: &str = "Forneca o contexto canonico SODA aplicavel a Fase 1 do Harvester Genesis MC. Foque em extracao local-first, fail-fast, cache, truncagem, observabilidade, sidecars, persistencia SQLite e higiene de workspace. Responda em texto objetivo, sem markdown, com no maximo 8000 caracteres.";
+const CANON_SCHEMA_TAG: &str = "SODA_CANON_V6_ARCH_MACRO";
+const CANON_LOCAL_CONTEXT: &str = "SODA_CANON_V6_ARCH_MACRO
+Raio-X Macro do SODA / Genesis MC:
+
+O nucleo do sistema e soberania bare-metal. A regra estrutural e backend em Rust com Tokio, ownership explicito, fail-closed e zero panic em producao. O frontend existe como casca passiva em Svelte 5, renderizando estado sem tomar para si logica de negocio, orquestracao, memoria ou inferencia. Python, Node.js e sidecars externos nao definem o produto; quando aparecem, existem apenas como ferramentas efemeras de fabrica, confinadas e descartadas ao fim da tarefa.
+
+A RTX 2060m com 6 GB de VRAM nao representa o destino final do produto. Ela e o treino de gravidade, o piso minimo de validacao local para provar que a arquitetura elastica sobrevive sob restricao severa. O desenho correto precisa escalar sem mutacao filosofica: hoje valida em hardware modesto, amanha sobe para classes superiores mantendo o mesmo eixo Rust nativo, workers isolados e aceleracao progressiva em Burn e CubeCL quando a computacao vetorial entrar em cena.
+
+O contrato entre backend e interface rejeita serializacao volumosa e lixo transiente. O norte e IPC zero-copy ou zero-garbage, com buffers binarios, ownership claro e transporte previsivel, para que a UI nao seja sufocada por JSON massivo, GC desnecessario ou copias redundantes de memoria. A disciplina de throughput vale tanto para inferencia quanto para telemetria.
+
+Toda decisao de execucao e governada por FinOps local-first. O ParetoBandit escolhe a trilha de menor custo, menor latencia e risco controlado antes de escalar para qualquer recurso premium. A nuvem nao e fundamento ontologico: e apenas opcao subordinada. Se o ambiente nao honra as garantias mecanicas, o sistema falha fechado em vez de improvisar com dependencias caras ou opacas.
+
+A memoria cognitiva e uma triade local e soberana. SQLite ancora o estado transacional, a trilha auditavel e os fatos episodicos; LanceDB serve a recuperacao semantica vetorial; LadybugDB sustenta relacoes estruturais e causais. A triade existe para impedir memoria orfa, grounding fraco e dependencia de bancos externos que dissolvem o contexto critico do usuario.
+
+A experiencia do operador precisa ser neuro-inclusiva e anti-Flow-Debt. A interface privilegia navegacao espacial em Tiling 2D, telemetria ambiental e estabilidade de foco. O sistema rejeita caos de janelas, spinners ansiosos, reflow agressivo e qualquer ritual visual que sacrifique orientacao espacial em troca de ornamento. UX aqui e mecanismo cognitivo, nao decoracao.
+
+A avaliacao de qualquer ecossistema externo obedece a doutrina da Canibalizacao Cirurgica e do Pessimismo da Razao. Nenhuma arquitetura alienigena e absorvida integralmente se carregar lixo toxico (dependencias massivas, Node.js, Electron). O objetivo do SODA e amputar e extrair puramente a alma matematica, a heuristica invisivel e o padrao de UX, transmutando-os para o nosso motor em Rust/Svelte 5 ou confinando-os em sidecars efemeros. A estocasticidade da IA nunca deve ultrapassar o Cercadinho do Determinismo: qualquer alteracao estrutural ou exclusao deve ser retida na Agent Inbox para aprovacao humana (Human-in-the-Loop), garantindo protecao contra a Corrupcao Silenciosa de Dados.";
 
 #[derive(Error, Debug)]
 pub enum CanonError {
     #[error("Storage error: {0}")]
     Storage(String),
-    #[error("NotebookLM CLI failed: {0}")]
-    Cli(String),
-    #[error("NotebookLM authentication expired; run `nlm login` before rerunning the harvester")]
-    AuthenticationExpired,
-    #[error("Canonical notebook not found: {0}")]
-    NotebookNotFound(String),
-    #[error("Invalid NotebookLM JSON payload: {0}")]
-    Parse(String),
     #[error("Canonical context query returned empty content")]
     EmptyPayload,
 }
@@ -51,7 +52,7 @@ impl SodaCanonExtractor {
         conn: Arc<Mutex<Connection>>,
     ) -> Result<ArtifactBlob, CanonError> {
         if let Some(entry) = Self::load_cache(repo_id, Arc::clone(&conn)).await? {
-            if Self::is_fresh(entry.timestamp_extracao)? {
+            if Self::is_fresh(entry.timestamp_extracao)? && payload_matches_schema(&entry.payload_blob) {
                 if entry.repo_id == CANON_GLOBAL_REPO_ID {
                     Self::persist_blob(repo_id, entry.payload_blob.clone(), Arc::clone(&conn)).await?;
                 }
@@ -63,8 +64,7 @@ impl SodaCanonExtractor {
             }
         }
 
-        let notebook_id = Self::resolve_notebook_id().await?;
-        let payload_text = Self::query_canon_context(&notebook_id).await?;
+        let payload_text = render_canon_context();
         if payload_text.trim().is_empty() {
             return Err(CanonError::EmptyPayload);
         }
@@ -140,204 +140,8 @@ impl SodaCanonExtractor {
         .map_err(|e| CanonError::Storage(format!("Falha ao aguardar persistencia do blob_10: {}", e)))?
     }
 
-    async fn resolve_notebook_id() -> Result<String, CanonError> {
-        let stdout = Self::run_nlm(&["notebook", "list", "--json"]).await?;
-        let json: Value = serde_json::from_slice(&stdout)
-            .map_err(|e| CanonError::Parse(format!("Falha ao decodificar notebook list: {}", e)))?;
-
-        extract_notebook_entries(&json)
-            .into_iter()
-            .find(|entry| entry.title.eq_ignore_ascii_case(CANON_NOTEBOOK_TITLE))
-            .map(|entry| entry.id)
-            .ok_or_else(|| CanonError::NotebookNotFound(CANON_NOTEBOOK_TITLE.to_string()))
-    }
-
-    async fn query_canon_context(notebook_id: &str) -> Result<String, CanonError> {
-        let stdout = Self::run_nlm(&[
-            "query",
-            "notebook",
-            notebook_id,
-            CANON_QUERY_PROMPT,
-            "--json",
-            "--timeout",
-            "180",
-        ])
-        .await?;
-        let json: Value = serde_json::from_slice(&stdout)
-            .map_err(|e| CanonError::Parse(format!("Falha ao decodificar resposta do NotebookLM: {}", e)))?;
-        extract_query_answer(&json).ok_or_else(|| CanonError::Parse("Nao foi possivel localizar a resposta textual do NotebookLM".to_string()))
-    }
-
-    async fn run_nlm(args: &[&str]) -> Result<Vec<u8>, CanonError> {
-        let mut full_args = vec!["--from".to_string(), "notebooklm-mcp-cli".to_string(), "nlm".to_string()];
-        full_args.extend(args.iter().map(|arg| (*arg).to_string()));
-
-        let mut command = Command::new(resolve_uvx_path());
-        command.args(&full_args);
-        command.stdout(std::process::Stdio::piped());
-        command.stderr(std::process::Stdio::piped());
-
-        let child = command
-            .spawn()
-            .map_err(|e| CanonError::Cli(format!("Falha ao iniciar NotebookLM CLI: {}", e)))?;
-
-        let output = timeout(Duration::from_secs(CANON_QUERY_TIMEOUT_SECS), child.wait_with_output())
-            .await
-            .map_err(|_| CanonError::Cli(format!("NotebookLM CLI excedeu {}s", CANON_QUERY_TIMEOUT_SECS)))?
-            .map_err(|e| CanonError::Cli(format!("Falha ao aguardar NotebookLM CLI: {}", e)))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            let combined = [stderr.as_str(), stdout.as_str()]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join(" | ");
-            if combined.to_lowercase().contains("authentication expired") {
-                return Err(CanonError::AuthenticationExpired);
-            }
-            return Err(CanonError::Cli(combined));
-        }
-
-        if output.stdout.iter().all(|byte| byte.is_ascii_whitespace()) {
-            return Err(CanonError::EmptyPayload);
-        }
-
-        Ok(output.stdout)
-    }
-
     fn is_fresh(timestamp_extracao: i64) -> Result<bool, CanonError> {
         Ok(now_epoch_secs()? - timestamp_extracao <= CANON_CACHE_MAX_AGE_SECS)
-    }
-}
-
-#[derive(Debug, Clone)]
-struct NotebookEntry {
-    id: String,
-    title: String,
-}
-
-fn extract_notebook_entries(value: &Value) -> Vec<NotebookEntry> {
-    match value {
-        Value::Array(items) => items.iter().flat_map(extract_notebook_entries).collect(),
-        Value::Object(map) => {
-            if let (Some(id), Some(title)) = (
-                map.get("id").and_then(Value::as_str),
-                map.get("title")
-                    .and_then(Value::as_str)
-                    .or_else(|| map.get("name").and_then(Value::as_str)),
-            ) {
-                return vec![NotebookEntry {
-                    id: id.trim().to_string(),
-                    title: title.trim().to_string(),
-                }];
-            }
-
-            ["notebooks", "items", "results", "data"]
-                .into_iter()
-                .filter_map(|key| map.get(key))
-                .flat_map(extract_notebook_entries)
-                .collect()
-        }
-        _ => Vec::new(),
-    }
-}
-
-fn extract_query_answer(value: &Value) -> Option<String> {
-    match value {
-        Value::String(text) => {
-            let trimmed = text.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        }
-        Value::Array(items) => items.iter().find_map(extract_query_answer),
-        Value::Object(map) => {
-            for key in ["answer", "response", "text", "content", "result", "message"] {
-                if let Some(found) = map.get(key).and_then(extract_query_answer) {
-                    return Some(found);
-                }
-            }
-            map.values().find_map(extract_query_answer)
-        }
-        _ => None,
-    }
-}
-
-fn resolve_uvx_path() -> PathBuf {
-    if let Some(value) = env::var_os("SODA_UV_PATH") {
-        if let Some(candidate) = resolve_configured_path(&value.to_string_lossy()) {
-            if candidate.is_file() {
-                return candidate;
-            }
-        }
-    }
-
-    let executable_names = if cfg!(target_os = "windows") {
-        vec!["uvx.exe", "uvx.cmd", "uvx.bat", "uvx"]
-    } else {
-        vec!["uvx"]
-    };
-
-    if let Some(path_var) = env::var_os("PATH") {
-        for path_entry in env::split_paths(&path_var) {
-            for executable_name in &executable_names {
-                let candidate = path_entry.join(executable_name);
-                if candidate.is_file() {
-                    return candidate;
-                }
-            }
-        }
-    }
-
-    if cfg!(target_os = "windows") {
-        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-            let base = PathBuf::from(local_app_data);
-            for candidate in [
-                base.join("Microsoft")
-                    .join("WinGet")
-                    .join("Packages")
-                    .join("astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe")
-                    .join("uvx.exe"),
-                base.join("Programs").join("uv").join("uvx.exe"),
-            ] {
-                if candidate.is_file() {
-                    return candidate;
-                }
-            }
-        }
-
-        if let Some(app_data) = env::var_os("APPDATA") {
-            let candidate = PathBuf::from(app_data).join("uv").join("uvx.exe");
-            if candidate.is_file() {
-                return candidate;
-            }
-        }
-    }
-
-    PathBuf::from("uvx")
-}
-
-fn resolve_configured_path(raw: &str) -> Option<PathBuf> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let candidate = PathBuf::from(trimmed);
-    if candidate.is_absolute() {
-        Some(candidate)
-    } else {
-        let relative_candidate = candidate.clone();
-        Some(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .map(|path| path.join(&relative_candidate))
-                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(candidate)),
-        )
     }
 }
 
@@ -346,6 +150,16 @@ fn now_epoch_secs() -> Result<i64, CanonError> {
         .duration_since(UNIX_EPOCH)
         .map_err(|e| CanonError::Storage(format!("Falha ao calcular timestamp atual: {}", e)))?
         .as_secs() as i64)
+}
+
+fn render_canon_context() -> String {
+    truncate_chars(CANON_LOCAL_CONTEXT, CANON_MAX_CHARS)
+}
+
+fn payload_matches_schema(payload: &[u8]) -> bool {
+    std::str::from_utf8(payload)
+        .map(|text| text.contains(CANON_SCHEMA_TAG))
+        .unwrap_or(false)
 }
 
 fn truncate_chars(content: &str, max_chars: usize) -> String {

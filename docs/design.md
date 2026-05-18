@@ -38,8 +38,8 @@ Estas três leis são **inegociáveis** e devem ser injetadas em todos os PRDs d
 |---|---|
 | `git clone <url> ./temp/<repo>` no disco | Milhões de escritas aleatórias para 370+ repos → corrói TBW finito do NVMe |
 
-**Lei Dura:** Toda operação de `git clone` DEVE ocorrer em um **Ramdisk de 2GB**
-alocado dinamicamente pelo Daemon Rust (`imdisk` no Windows / `tmpfs` no Linux).
+**Lei Dura:** Toda operação de `git clone` DEVE ocorrer em um **workspace efêmero de 2GB**
+alocado dinamicamente pelo Daemon Rust (VHDX nativo dinâmico no Windows / `tmpfs` no Linux).
 O Ramdisk é desmontado atomicamente via `Drop trait` (RAII). Zero bytes tocam o NVMe.
 
 ### PT-2: PROIBIDO GERAR ARQUIVOS INTERMEDIÁRIOS NO HOST
@@ -96,7 +96,7 @@ graph TD
     classDef guard fill:#047857,stroke:#34d399,stroke-width:2px,color:#fff
 
     subgraph CAMADA_0 ["CAMADA 0: INFRAESTRUTURA EFÊMERA"]
-        N1["N1: RamdiskAllocator<br/>(imdisk / tmpfs)<br/>I: tamanho_mb: u32<br/>O: RamdiskHandle"]
+        N1["N1: RamdiskAllocator<br/>(VHDX nativo dinâmico / tmpfs)<br/>I: tamanho_mb: u32<br/>O: RamdiskHandle"]
         N2["N2: BloblessCloner<br/>(git clone --filter=blob:none)<br/>I: repo_url, RamdiskHandle<br/>O: RepoPath"]
         N3["N3: SandboxOrchestrator<br/>(WSB ou LPAC via rappct)<br/>I: RepoPath, SandboxPolicy<br/>O: SandboxHandle"]
 

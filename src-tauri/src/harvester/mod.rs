@@ -10,3 +10,5 @@ pub mod persist;
 pub mod guard;
 pub mod orchestrator;
 pub mod canon;
+
+pub(crate) const PHASE1_HEAVY_BLOB_MAX_CHARS: usize = 150_000;

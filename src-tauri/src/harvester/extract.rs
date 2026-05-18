@@ -5,15 +5,18 @@ use oxc::{
     parser::{ParseOptions, Parser},
     span::{GetSpan, SourceType, Span},
 };
+use regex::Regex;
 use tokio::fs;
 use thiserror::Error;
 use serde::{Deserialize, Serialize};
+use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use super::detect::StackProfile;
 use super::git::RepoPath;
 use super::persist::ArtifactBlob;
 use super::sidecar::{pack_scoped_text_blocks, NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// Tamanho máximo permitido para um arquivo de manifesto (1 MiB).
 const MAX_MANIFEST_SIZE: u64 = 1_048_576;
@@ -101,19 +104,17 @@ pub struct OpsBlueprintExtractor;
 pub struct LocalStaticExtractor;
 
 const README_MAX_CHARS: usize = 8_000;
-const MANIFEST_BLOB_MAX_CHARS: usize = 8_000;
-const OPS_BLOB_MAX_CHARS: usize = 25_000;
-const COMMUNITY_META_MAX_CHARS: usize = 1_000;
-const TEST_INTENT_BLOB_MAX_CHARS: usize = 30_000;
-const UNSAFE_HOTSPOTS_BLOB_MAX_CHARS: usize = 6_000;
-const UX_CONTRACTS_BLOB_MAX_CHARS: usize = 150_000;
+const MANIFEST_BLOB_MAX_CHARS: usize = 3_000;
+const OPS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const COMMUNITY_META_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const TEST_INTENT_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const UNSAFE_HOTSPOTS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const UX_CONTRACTS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
 const MAX_SCAN_FILE_BYTES: u64 = 262_144;
 const STATE_CALL_NAMES: [&str; 5] = ["useState", "createSignal", "writable", "useReducer", "$state"];
-const UX_MAX_TYPE_ENTRIES_PER_FILE: usize = 2;
-const UX_MAX_PROPS_ENTRIES_PER_FILE: usize = 1;
-const UX_MAX_STATE_ENTRIES_PER_FILE: usize = 3;
-const UX_MAX_OTHER_ENTRIES_PER_FILE: usize = 1;
-const UX_MAX_TOTAL_ENTRIES_PER_FILE: usize = 5;
+const README_MAX_ALLOWED_SECTIONS: usize = 3;
+const MANIFEST_MAX_DEPENDENCIES_PER_FILE: usize = 24;
+const MANIFEST_DEPENDENCY_CHUNK_SIZE: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CappedFileEntries {
@@ -250,59 +251,49 @@ fn truncate_chars(content: &str, max_chars: usize) -> String {
     content.chars().take(max_chars).collect()
 }
 
+fn html_anchor_image_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r#"(?is)<a\b[^>]*>\s*<img\b[^>]*>\s*</a>"#)
+            .expect("regex de anchor+img do README deve ser valida")
+    })
+}
+
+fn html_image_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r#"(?is)<img\b[^>]*>"#)
+            .expect("regex de imagem HTML do README deve ser valida")
+    })
+}
+
+fn markdown_badge_link_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r#"\[\!\[[^\]]*\]\([^)]+\)\]\([^)]+\)"#)
+            .expect("regex de badge markdown do README deve ser valida")
+    })
+}
+
+fn markdown_image_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r#"\!\[[^\]]*\]\([^)]+\)"#)
+            .expect("regex de imagem markdown do README deve ser valida")
+    })
+}
+
 fn strip_html_badge_links(content: &str) -> String {
-    let mut output = String::new();
-    let mut cursor = 0;
-
-    while let Some(start_rel) = content[cursor..].find("<a") {
-        let start = cursor + start_rel;
-        output.push_str(&content[cursor..start]);
-
-        let Some(end_rel) = content[start..].find("</a>") else {
-            output.push_str(&content[start..]);
-            return output;
-        };
-
-        let end = start + end_rel + "</a>".len();
-        let anchor = &content[start..end];
-        if anchor.to_ascii_lowercase().contains("<img") {
-            cursor = end;
-            continue;
-        }
-
-        output.push_str(anchor);
-        cursor = end;
-    }
-
-    output.push_str(&content[cursor..]);
-    output
+    let no_anchor_images = html_anchor_image_regex().replace_all(content, "");
+    html_image_regex().replace_all(&no_anchor_images, "").into_owned()
 }
 
 fn strip_markdown_badges(content: &str) -> String {
-    let mut output = String::new();
-    let mut cursor = 0;
+    markdown_badge_link_regex().replace_all(content, "").into_owned()
+}
 
-    while let Some(start_rel) = content[cursor..].find("[![") {
-        let start = cursor + start_rel;
-        output.push_str(&content[cursor..start]);
-
-        let Some(mid_rel) = content[start + 3..].find(")](") else {
-            output.push_str(&content[start..]);
-            return output;
-        };
-        let mid = start + 3 + mid_rel;
-        let outer_start = mid + 3;
-
-        let Some(end_rel) = content[outer_start..].find(')') else {
-            output.push_str(&content[start..]);
-            return output;
-        };
-
-        cursor = outer_start + end_rel + 1;
-    }
-
-    output.push_str(&content[cursor..]);
-    output
+fn strip_markdown_images(content: &str) -> String {
+    markdown_image_regex().replace_all(content, "").into_owned()
 }
 
 fn normalize_blank_lines(content: &str) -> String {
@@ -327,10 +318,110 @@ fn normalize_blank_lines(content: &str) -> String {
     lines.join("\n").trim().to_string()
 }
 
+fn markdown_heading_parts(line: &str) -> Option<(usize, &str)> {
+    let trimmed = line.trim();
+    let level = trimmed.chars().take_while(|ch| *ch == '#').count();
+    if level == 0 || level > 6 {
+        return None;
+    }
+
+    let title = trimmed.get(level..)?.trim();
+    if title.is_empty() {
+        None
+    } else {
+        Some((level, title))
+    }
+}
+
+fn should_drop_readme_section(title: &str) -> bool {
+    let normalized = title.to_ascii_lowercase();
+    let denied = [
+        "installation",
+        "install",
+        "getting started",
+        "setup",
+        "contributing",
+        "contribution",
+        "development",
+        "license",
+        "licence",
+        "security",
+        "release",
+        "deployment",
+        "docker",
+        "build",
+        "testing",
+        "test",
+    ];
+
+    denied.iter().any(|needle| normalized.contains(needle))
+}
+
+fn prune_readme_sections(content: &str) -> String {
+    let mut intro_lines = Vec::new();
+    let mut sections: Vec<(String, Vec<String>)> = Vec::new();
+    let mut current_heading: Option<String> = None;
+    let mut current_body: Vec<String> = Vec::new();
+
+    for raw_line in content.lines() {
+        let line = raw_line.trim_end().to_string();
+        let trimmed = line.trim();
+
+        if let Some((level, _)) = markdown_heading_parts(trimmed) {
+            if level == 1 && current_heading.is_none() && current_body.is_empty() {
+                intro_lines.push(line);
+                continue;
+            }
+
+            if let Some(heading) = current_heading.take() {
+                sections.push((heading, std::mem::take(&mut current_body)));
+            }
+            current_heading = Some(line);
+        } else if current_heading.is_some() {
+            current_body.push(line);
+        } else {
+            intro_lines.push(line);
+        }
+    }
+
+    if let Some(heading) = current_heading {
+        sections.push((heading, current_body));
+    }
+
+    let mut kept_chunks = Vec::new();
+    let intro = normalize_blank_lines(&intro_lines.join("\n"));
+    if !intro.is_empty() {
+        kept_chunks.push(intro);
+    }
+
+    for (heading, body_lines) in sections.into_iter().take(README_MAX_ALLOWED_SECTIONS + 8) {
+        let Some((_, title)) = markdown_heading_parts(heading.trim()) else {
+            continue;
+        };
+        if should_drop_readme_section(title) {
+            continue;
+        }
+
+        let body = normalize_blank_lines(&body_lines.join("\n"));
+        if body.is_empty() {
+            continue;
+        }
+
+        kept_chunks.push(format!("{}\n\n{}", heading.trim(), body));
+        if kept_chunks.len().saturating_sub(1) >= README_MAX_ALLOWED_SECTIONS {
+            break;
+        }
+    }
+
+    kept_chunks.join("\n\n")
+}
+
 fn sanitize_readme_blob(content: &str) -> String {
     let without_html_badges = strip_html_badge_links(content);
     let without_markdown_badges = strip_markdown_badges(&without_html_badges);
-    normalize_blank_lines(&without_markdown_badges)
+    let without_markdown_images = strip_markdown_images(&without_markdown_badges);
+    let pruned = prune_readme_sections(&without_markdown_images);
+    normalize_blank_lines(&pruned)
 }
 
 fn truncate_utf8(content: &str, max_chars: usize, max_bytes: usize) -> String {
@@ -633,7 +724,6 @@ fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> Capped
 }
 
 fn prioritize_ux_entries(entries: Vec<String>) -> CappedFileEntries {
-    let total_entries = entries.len();
     let mut types = Vec::new();
     let mut props = Vec::new();
     let mut states = Vec::new();
@@ -651,24 +741,15 @@ fn prioritize_ux_entries(entries: Vec<String>) -> CappedFileEntries {
         }
     }
 
-    types.truncate(UX_MAX_TYPE_ENTRIES_PER_FILE);
-    props.truncate(UX_MAX_PROPS_ENTRIES_PER_FILE);
-    states.truncate(UX_MAX_STATE_ENTRIES_PER_FILE);
-    other.truncate(UX_MAX_OTHER_ENTRIES_PER_FILE);
-
     let mut prioritized = Vec::new();
     prioritized.extend(types);
     prioritized.extend(props);
     prioritized.extend(states);
     prioritized.extend(other);
 
-    let omitted_from_categories = total_entries.saturating_sub(prioritized.len());
-    let omitted_from_total = prioritized.len().saturating_sub(UX_MAX_TOTAL_ENTRIES_PER_FILE);
-    prioritized.truncate(UX_MAX_TOTAL_ENTRIES_PER_FILE);
-
     CappedFileEntries {
         items: prioritized,
-        omitted_count: omitted_from_categories + omitted_from_total,
+        omitted_count: 0,
     }
 }
 
@@ -960,7 +1041,9 @@ impl OpsBlueprintExtractor {
 
                     if file_type.is_file() {
                         let file_name = entry.file_name().to_string_lossy().to_string();
-                        if file_name.ends_with(".yml") || file_name.ends_with(".yaml") {
+                        if (file_name.ends_with(".yml") || file_name.ends_with(".yaml"))
+                            && Self::is_whitelisted_workflow(&file_name)
+                        {
                             let path = entry.path();
                             let rel_path = format!(".github/workflows/{}", file_name);
                             if let Some(infra) = Self::read_infra_file(&path, &rel_path).await? {
@@ -984,6 +1067,15 @@ impl OpsBlueprintExtractor {
         } else {
             Ok(OpsPayload { infra_files })
         }
+    }
+
+    fn is_whitelisted_workflow(file_name: &str) -> bool {
+        let lower = file_name.to_ascii_lowercase();
+        let allowed = ["deploy", "release", "build", "publish", "docker", "infra"];
+        let denied = ["test", "lint", "check", "ci", "unit", "integration"];
+
+        allowed.iter().any(|needle| lower.contains(needle))
+            && !denied.iter().any(|needle| lower.contains(needle))
     }
 
     async fn read_infra_file(path: &std::path::Path, rel_path: &str) -> Result<Option<InfraFile>, ExtractionError> {
@@ -1019,119 +1111,196 @@ impl OpsBlueprintExtractor {
 
 impl ManifestExtractor {
     pub async fn extract_blob(input: ManifestInput<'_>) -> Result<ArtifactBlob, ExtractionError> {
-        let mut sections = Vec::new();
+        let root = input.repo_path.as_ref().to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            let files = collect_repo_files(&root)?;
+            let mut blocks = Vec::new();
 
-        for file_name in ["Cargo.toml", "package.json"] {
-            let path = input.repo_path.join(file_name);
-            let metadata = match fs::metadata(&path).await {
-                Ok(metadata) => metadata,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(e) => {
-                    return Err(ExtractionError::IoError {
-                        file: file_name.to_string(),
-                        reason: e.to_string(),
+            for path in files.into_iter().filter(|path| Self::is_manifest_blob_target(path)) {
+                let rel_path = relative_display(&root, &path);
+                let metadata = std::fs::metadata(&path).map_err(|e| ExtractionError::IoError {
+                    file: rel_path.clone(),
+                    reason: e.to_string(),
+                })?;
+
+                let size = metadata.len();
+                if size > MAX_MANIFEST_SIZE {
+                    return Err(ExtractionError::FileTooLarge {
+                        file: rel_path,
+                        size_bytes: size,
+                        limit_bytes: MAX_MANIFEST_SIZE,
                     });
                 }
-            };
 
-            let size = metadata.len();
-            if size > MAX_MANIFEST_SIZE {
-                return Err(ExtractionError::FileTooLarge {
-                    file: file_name.to_string(),
-                    size_bytes: size,
-                    limit_bytes: MAX_MANIFEST_SIZE,
+                let content = std::fs::read_to_string(&path).map_err(|e| ExtractionError::IoError {
+                    file: rel_path.clone(),
+                    reason: e.to_string(),
+                })?;
+
+                if content.trim().is_empty() {
+                    return Err(ExtractionError::EmptyArtifact {
+                        artifact_type: "blob_02_dependency_manifest".to_string(),
+                        file: rel_path,
+                    });
+                }
+
+                if let Some(block) = Self::extract_manifest_block(&rel_path, &content)? {
+                    blocks.push(block);
+                }
+            }
+
+            if blocks.is_empty() {
+                return Err(ExtractionError::RequiredArtifactMissing {
+                    artifact_type: "blob_02_dependency_manifest".to_string(),
+                    candidates: "Cargo.toml, package.json, go.mod".to_string(),
                 });
             }
 
-            let content = fs::read_to_string(&path).await.map_err(|e| ExtractionError::IoError {
-                file: file_name.to_string(),
-                reason: e.to_string(),
-            })?;
+            blocks.sort_by(|left, right| {
+                Self::manifest_blob_priority(&left.file_path)
+                    .cmp(&Self::manifest_blob_priority(&right.file_path))
+                    .then_with(|| left.file_path.cmp(&right.file_path))
+            });
 
-            if content.trim().is_empty() {
+            let packed = pack_scoped_text_blocks(&blocks, MANIFEST_BLOB_MAX_CHARS);
+            if packed.trim().is_empty() {
                 return Err(ExtractionError::EmptyArtifact {
                     artifact_type: "blob_02_dependency_manifest".to_string(),
-                    file: file_name.to_string(),
+                    file: "dependency_manifest_bundle".to_string(),
                 });
             }
 
-            if let Some(filtered) = Self::extract_manifest_blob_sections(file_name, &content)? {
-                sections.push(format!("### {}\n{}\n", file_name, filtered.trim()));
-            }
-        }
-
-        if sections.is_empty() {
-            return Err(ExtractionError::RequiredArtifactMissing {
-                artifact_type: "blob_02_dependency_manifest".to_string(),
-                candidates: "Cargo.toml, package.json".to_string(),
-            });
-        }
-
-        let packed = truncate_utf8(
-            &sections.join("\n"),
-            MANIFEST_BLOB_MAX_CHARS,
-            MANIFEST_BLOB_MAX_CHARS,
-        );
-        if packed.trim().is_empty() {
-            return Err(ExtractionError::EmptyArtifact {
-                artifact_type: "blob_02_dependency_manifest".to_string(),
-                file: "dependency_manifest_bundle".to_string(),
-            });
-        }
-
-        Ok(ArtifactBlob {
-            artifact_type: "blob_02_dependency_manifest".to_string(),
-            payload_blob: packed.into_bytes(),
+            Ok(blob_from_text("blob_02_dependency_manifest", packed))
         })
+        .await
+        .map_err(|e| ExtractionError::IoError {
+            file: "blob_02_dependency_manifest".to_string(),
+            reason: e.to_string(),
+        })?
     }
 
-    fn extract_manifest_blob_sections(file_name: &str, content: &str) -> Result<Option<String>, ExtractionError> {
-        match file_name {
-            "Cargo.toml" => Self::extract_cargo_blob_sections(content, file_name),
-            "package.json" => Self::extract_package_json_blob_sections(content, file_name),
-            _ => Ok(None),
+    fn is_manifest_blob_target(path: &Path) -> bool {
+        matches!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("Cargo.toml" | "package.json" | "go.mod")
+        )
+    }
+
+    fn manifest_blob_priority(path: &str) -> (u8, usize) {
+        let file_name = Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        let kind_score = match file_name {
+            "Cargo.toml" => 0,
+            "package.json" => 1,
+            "go.mod" => 2,
+            _ => 9,
+        };
+        (kind_score, path.matches('/').count())
+    }
+
+    fn extract_manifest_block(file_path: &str, content: &str) -> Result<Option<ScopedTextBlock>, ExtractionError> {
+        let file_name = Path::new(file_path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| ExtractionError::ParseError {
+                file: file_path.to_string(),
+                reason: "Nome do manifesto invalido".to_string(),
+            })?;
+
+        let names = match file_name {
+            "Cargo.toml" => Self::extract_cargo_dependency_names(content, file_path)?,
+            "package.json" => Self::extract_package_json_dependency_names(content, file_path)?,
+            "go.mod" => Self::extract_go_mod_dependency_names(content),
+            _ => Vec::new(),
+        };
+
+        if names.is_empty() {
+            return Ok(None);
         }
+
+        let total_names = names.len();
+        let mut limited_names = names;
+        limited_names.truncate(MANIFEST_MAX_DEPENDENCIES_PER_FILE);
+        let omitted_count = total_names.saturating_sub(limited_names.len());
+        let items = limited_names
+            .chunks(MANIFEST_DEPENDENCY_CHUNK_SIZE)
+            .map(|chunk| chunk.join(", "))
+            .collect::<Vec<_>>();
+
+        Ok(Some(ScopedTextBlock {
+            file_path: file_path.to_string(),
+            items,
+            omitted_count,
+        }))
     }
 
-    fn extract_cargo_blob_sections(content: &str, file: &str) -> Result<Option<String>, ExtractionError> {
+    fn extract_cargo_dependency_names(content: &str, file: &str) -> Result<Vec<String>, ExtractionError> {
         let document: toml::Value = toml::from_str(content).map_err(|e| ExtractionError::ParseError {
             file: file.to_string(),
             reason: e.to_string(),
         })?;
 
-        let mut sections = Vec::new();
-
-        if let Some(section) = Self::render_toml_section("dependencies", document.get("dependencies"), file)? {
-            sections.push(section);
-        }
-        if let Some(section) = Self::render_toml_section(
-            "workspace.dependencies",
+        let mut names = BTreeSet::new();
+        Self::collect_toml_dependency_table_names(document.get("dependencies"), file, "dependencies", &mut names)?;
+        Self::collect_toml_dependency_table_names(
             document.get("workspace").and_then(|workspace| workspace.get("dependencies")),
             file,
-        )? {
-            sections.push(section);
-        }
-        if let Some(section) = Self::render_toml_section("build-dependencies", document.get("build-dependencies"), file)? {
-            sections.push(section);
-        }
-        if let Some(section) = Self::render_toml_section("dev-dependencies", document.get("dev-dependencies"), file)? {
-            sections.push(section);
+            "workspace.dependencies",
+            &mut names,
+        )?;
+        Self::collect_toml_dependency_table_names(
+            document.get("build-dependencies"),
+            file,
+            "build-dependencies",
+            &mut names,
+        )?;
+        Self::collect_toml_dependency_table_names(
+            document.get("dev-dependencies"),
+            file,
+            "dev-dependencies",
+            &mut names,
+        )?;
+
+        if let Some(targets) = document.get("target") {
+            let Some(target_table) = targets.as_table() else {
+                return Err(ExtractionError::ParseError {
+                    file: file.to_string(),
+                    reason: "Secao [target] precisa ser uma tabela TOML valida".to_string(),
+                });
+            };
+
+            for (target_name, target_value) in target_table {
+                let Some(target_sections) = target_value.as_table() else {
+                    return Err(ExtractionError::ParseError {
+                        file: file.to_string(),
+                        reason: format!("Secao [target.{}] precisa ser uma tabela TOML valida", target_name),
+                    });
+                };
+
+                for section_name in ["dependencies", "build-dependencies", "dev-dependencies"] {
+                    Self::collect_toml_dependency_table_names(
+                        target_sections.get(section_name),
+                        file,
+                        &format!("target.{}.{}", target_name, section_name),
+                        &mut names,
+                    )?;
+                }
+            }
         }
 
-        if sections.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(sections.join("\n\n")))
-        }
+        Ok(names.into_iter().collect())
     }
 
-    fn render_toml_section(
-        section_name: &str,
+    fn collect_toml_dependency_table_names(
         value: Option<&toml::Value>,
         file: &str,
-    ) -> Result<Option<String>, ExtractionError> {
+        section_name: &str,
+        names: &mut BTreeSet<String>,
+    ) -> Result<(), ExtractionError> {
         let Some(value) = value else {
-            return Ok(None);
+            return Ok(());
         };
         let Some(table) = value.as_table() else {
             return Err(ExtractionError::ParseError {
@@ -1139,40 +1308,14 @@ impl ManifestExtractor {
                 reason: format!("Secao [{}] nao e uma tabela TOML valida", section_name),
             });
         };
-        if table.is_empty() {
-            return Ok(None);
-        }
 
-        let mut lines = vec![format!("[{}]", section_name)];
-        for (name, entry) in table {
-            lines.push(format!("{} = {}", name, Self::render_toml_value(entry)));
+        for name in table.keys() {
+            names.insert(name.to_string());
         }
-        Ok(Some(lines.join("\n")))
+        Ok(())
     }
 
-    fn render_toml_value(value: &toml::Value) -> String {
-        match value {
-            toml::Value::Array(items) => {
-                let rendered = items
-                    .iter()
-                    .map(Self::render_toml_value)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("[{}]", rendered)
-            }
-            toml::Value::Table(table) => {
-                let rendered = table
-                    .iter()
-                    .map(|(key, value)| format!("{} = {}", key, Self::render_toml_value(value)))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{{ {} }}", rendered)
-            }
-            _ => value.to_string(),
-        }
-    }
-
-    fn extract_package_json_blob_sections(content: &str, file: &str) -> Result<Option<String>, ExtractionError> {
+    fn extract_package_json_dependency_names(content: &str, file: &str) -> Result<Vec<String>, ExtractionError> {
         let document: serde_json::Value = serde_json::from_str(content).map_err(|e| ExtractionError::ParseError {
             file: file.to_string(),
             reason: e.to_string(),
@@ -1184,8 +1327,8 @@ impl ManifestExtractor {
             });
         };
 
-        let mut sections = Vec::new();
-        for key in ["dependencies", "devDependencies", "peerDependencies"] {
+        let mut names = BTreeSet::new();
+        for key in ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] {
             let Some(value) = root.get(key) else {
                 continue;
             };
@@ -1195,39 +1338,64 @@ impl ManifestExtractor {
                     reason: format!("Secao '{}' precisa ser um objeto JSON", key),
                 });
             };
-            if object.is_empty() {
-                continue;
+
+            for name in object.keys() {
+                names.insert(name.to_string());
             }
-            sections.push(Self::render_json_dependency_section(key, object));
         }
 
-        if sections.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(sections.join("\n\n")))
-        }
+        Ok(names.into_iter().collect())
     }
 
-    fn render_json_dependency_section(
-        key: &str,
-        object: &serde_json::Map<String, serde_json::Value>,
-    ) -> String {
-        let mut lines = vec![format!("\"{}\": {{", key)];
-        let total = object.len();
-        for (index, (name, value)) in object.iter().enumerate() {
-            let suffix = if index + 1 == total { "" } else { "," };
-            let rendered_name = match serde_json::to_string(name) {
-                Ok(text) => text,
-                Err(_) => format!("\"{}\"", name),
+    fn extract_go_mod_dependency_names(content: &str) -> Vec<String> {
+        let mut names = BTreeSet::new();
+        let mut in_require_block = false;
+
+        for raw_line in content.lines() {
+            let line_without_comment = raw_line.split("//").next().unwrap_or("");
+            let line = line_without_comment.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if in_require_block {
+                if line == ")" {
+                    in_require_block = false;
+                    continue;
+                }
+
+                if let Some(name) = line.split_whitespace().next() {
+                    names.insert(name.to_string());
+                }
+                continue;
+            }
+
+            let Some(rest) = line.strip_prefix("require") else {
+                continue;
             };
-            let rendered_value = match serde_json::to_string(value) {
-                Ok(text) => text,
-                Err(_) => "\"*\"".to_string(),
-            };
-            lines.push(format!("  {}: {}{}", rendered_name, rendered_value, suffix));
+            let rest = rest.trim();
+            if rest == "(" {
+                in_require_block = true;
+                continue;
+            }
+
+            if let Some(inline) = rest.strip_prefix('(') {
+                in_require_block = true;
+                let inline = inline.trim();
+                if !inline.is_empty() && inline != ")" {
+                    if let Some(name) = inline.split_whitespace().next() {
+                        names.insert(name.to_string());
+                    }
+                }
+                continue;
+            }
+
+            if let Some(name) = rest.split_whitespace().next() {
+                names.insert(name.to_string());
+            }
         }
-        lines.push("}".to_string());
-        lines.join("\n")
+
+        names.into_iter().collect()
     }
 
     pub async fn extract(input: ManifestInput<'_>) -> Result<ManifestPayload, ExtractionError> {
@@ -1280,6 +1448,7 @@ impl ManifestExtractor {
             let info_res = match file_name {
                 "Cargo.toml" => Self::parse_cargo_toml(&content, file_name, size),
                 "package.json" => Self::parse_package_json(&content, file_name, size),
+                "go.mod" => Ok(Self::parse_go_mod(&content, file_name, size)),
                 "requirements.txt" => Ok(Self::parse_requirements_txt(&content, file_name, size)),
                 "pyproject.toml" => Self::parse_pyproject_toml(&content, file_name, size),
                 _ => Ok(ManifestInfo {
@@ -1363,6 +1532,23 @@ impl ManifestExtractor {
                 .collect(),
             file_size_bytes: size,
         })
+    }
+
+    fn parse_go_mod(content: &str, file: &str, size: u64) -> ManifestInfo {
+        let dependencies = Self::extract_go_mod_dependency_names(content)
+            .into_iter()
+            .map(|name| DependencyEntry {
+                name,
+                version_spec: "*".to_string(),
+            })
+            .collect();
+
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies,
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
     }
 
     fn parse_requirements_txt(content: &str, file: &str, size: u64) -> ManifestInfo {
@@ -1493,10 +1679,8 @@ tempfile = "3"
 
         let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
 
-        assert_eq!(blobs.len(), 3);
+        assert_eq!(blobs.len(), 1);
         assert!(blobs.iter().any(|blob| blob.artifact_type == "blob_01_promessa_readme"));
-        assert!(blobs.iter().any(|blob| blob.artifact_type == "blob_02_dependency_manifest"));
-        assert!(blobs.iter().any(|blob| blob.artifact_type == "blob_07_ops_blueprint"));
     }
 
     #[tokio::test]
@@ -1538,6 +1722,42 @@ Backend orchestration engine.
     }
 
     #[tokio::test]
+    async fn test_local_static_extractor_prunes_infra_readme_sections() {
+        let dir = TempDir::new().unwrap();
+        let readme = r#"# Goose
+
+Goose is an orchestration engine for local-first coding.
+
+It accelerates repository harvesting with deterministic blobs.
+
+## Features
+
+- Fast AST extraction
+
+## Installation
+
+Run the bootstrap script and install many packages.
+
+## Contributing
+
+Please open a PR.
+"#;
+        fs::write(dir.path().join("README.md"), readme).await.unwrap();
+
+        let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
+        let readme_blob = blobs.iter()
+            .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
+            .expect("README blob deve existir");
+        let text = String::from_utf8_lossy(&readme_blob.payload_blob);
+
+        assert!(text.contains("Goose is an orchestration engine for local-first coding."));
+        assert!(text.contains("It accelerates repository harvesting with deterministic blobs."));
+        assert!(text.contains("## Features"));
+        assert!(!text.contains("## Installation"));
+        assert!(!text.contains("## Contributing"));
+    }
+
+    #[tokio::test]
     async fn test_manifest_blob_whitelists_dependency_sections_only() {
         let dir = TempDir::new().unwrap();
         let cargo_toml = r#"[package]
@@ -1569,31 +1789,36 @@ tempfile = "3"
     "zod": "^3.23.0"
   }
 }"#;
+        let go_mod = r#"module example.com/demo
+
+go 1.23.0
+
+require (
+    github.com/gin-gonic/gin v1.10.0
+    golang.org/x/sync v0.9.0 // indirect
+)
+"#;
 
         fs::write(dir.path().join("Cargo.toml"), cargo_toml).await.unwrap();
-        fs::write(dir.path().join("package.json"), package_json).await.unwrap();
+        fs::create_dir_all(dir.path().join("frontend")).await.unwrap();
+        fs::create_dir_all(dir.path().join("backend")).await.unwrap();
+        fs::write(dir.path().join("frontend/package.json"), package_json).await.unwrap();
+        fs::write(dir.path().join("backend/go.mod"), go_mod).await.unwrap();
 
         let repo_path = RepoPath(dir.path().to_path_buf());
         let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
-        assert!(text.contains("[dependencies]"));
-        assert!(text.contains("serde = \"1.0\""));
-        assert!(text.contains("[workspace.dependencies]"));
-        assert!(text.contains("tokio = { features = [\"full\"], version = \"1\" }") || text.contains("tokio = { version = \"1\", features = [\"full\"] }"));
-        assert!(text.contains("[build-dependencies]"));
-        assert!(text.contains("cc = \"1.1\""));
-        assert!(text.contains("[dev-dependencies]"));
-        assert!(text.contains("\"dependencies\": {"));
-        assert!(text.contains("\"react\": \"^18.2.0\""));
-        assert!(text.contains("\"devDependencies\": {"));
-        assert!(text.contains("\"typescript\": \"^5.4.0\""));
-        assert!(text.contains("\"peerDependencies\": {"));
-        assert!(text.contains("\"zod\": \"^3.23.0\""));
-
+        assert!(text.contains("[Cargo.toml]"));
+        assert!(text.contains("- cc, serde, tempfile, tokio"));
+        assert!(text.contains("[frontend/package.json]"));
+        assert!(text.contains("- react, typescript, zod"));
+        assert!(text.contains("[backend/go.mod]"));
+        assert!(text.contains("- github.com/gin-gonic/gin, golang.org/x/sync"));
         assert!(!text.contains("[package]"));
         assert!(!text.contains("\"name\": \"demo\""));
         assert!(!text.contains("\"version\": \"0.1.0\""));
+        assert!(!text.contains("v1.10.0"));
     }
 
     #[tokio::test]
@@ -1693,7 +1918,7 @@ tempfile = "3"
     }
 
     #[tokio::test]
-    async fn test_test_intent_caps_items_per_file_and_marks_omissions() {
+    async fn test_test_intent_preserves_all_items_per_file() {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("crates/app/tests")).await.unwrap();
         let mut content = String::new();
@@ -1715,8 +1940,8 @@ tempfile = "3"
 
         assert!(text.contains("[crates/app/tests/domain.rs]"));
         assert!(text.contains("- fn test_case_0"));
-        assert!(text.contains("- ... [4 itens omitidos]"));
-        assert!(!text.contains("- fn test_case_7"));
+        assert!(text.contains("- fn test_case_7"));
+        assert!(!text.contains("itens omitidos"));
     }
 
     #[tokio::test]
@@ -1797,7 +2022,7 @@ tempfile = "3"
     }
 
     #[tokio::test]
-    async fn test_ux_contracts_caps_items_per_file_and_marks_omissions() {
+    async fn test_ux_contracts_preserve_all_items_per_file() {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("ui/desktop/src/components")).await.unwrap();
         fs::write(
@@ -1812,8 +2037,11 @@ tempfile = "3"
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
         assert!(text.contains("[ui/desktop/src/components/ComplexPanel.tsx]"));
+        assert!(text.contains("- interface D"));
+        assert!(text.contains("- props: A"));
         assert!(text.contains("- state [a, setA] = useState()"));
-        assert!(text.contains("- ... ["));
+        assert!(text.contains("- state [e, setE] = useState()"));
+        assert!(!text.contains("itens omitidos"));
     }
 
     #[tokio::test]
@@ -1963,6 +2191,8 @@ tempfile = "3"
         
         fs::write(workflows_dir.join("ci.yml"), "name: CI").await.unwrap();
         fs::write(workflows_dir.join("deploy.yaml"), "name: Deploy").await.unwrap();
+        fs::write(workflows_dir.join("lint.yml"), "name: Lint").await.unwrap();
+        fs::write(workflows_dir.join("docker-release.yml"), "name: Docker Release").await.unwrap();
         
         // Criar subdiretório para provar que a recursão ignora
         let nested_dir = workflows_dir.join("nested");
@@ -1972,10 +2202,12 @@ tempfile = "3"
         let repo_path = RepoPath(dir.path().to_path_buf());
         let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await.unwrap();
         
-        // Dockerfile/Makefile não existem aqui, então só os 2 workflows da raiz da pasta
+        // Dockerfile/Makefile não existem aqui, então apenas workflows whitelisted entram.
         assert_eq!(result.infra_files.len(), 2);
-        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/ci.yml"));
         assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/deploy.yaml"));
+        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/docker-release.yml"));
+        assert!(!result.infra_files.iter().any(|f| f.path == ".github/workflows/ci.yml"));
+        assert!(!result.infra_files.iter().any(|f| f.path == ".github/workflows/lint.yml"));
         assert!(!result.infra_files.iter().any(|f| f.path.contains("ignored.yml")));
     }
 
