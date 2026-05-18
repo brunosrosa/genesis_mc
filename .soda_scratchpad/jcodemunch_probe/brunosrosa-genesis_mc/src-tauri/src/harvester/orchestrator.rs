@@ -49,7 +49,7 @@ impl HarvesterOrchestrator {
 
         // 1. [N1] Setup do Shadow Workspace (Fail-Fast)
         info!(repo_id = %repo_id, requested_mb = 256_u32, "N1: Alocando workspace efemero da Fase 1");
-        let mut workspace = RamdiskAllocator::allocate(256)
+        let workspace = RamdiskAllocator::allocate(256)
             .await
             .map_err(|e| OrchestratorError::InfraError(e.to_string()))?;
         info!(repo_id = %repo_id, workspace = %workspace.path().display(), "N1: Workspace efemero pronto");
@@ -57,7 +57,7 @@ impl HarvesterOrchestrator {
         let mut sandbox_handle: Option<SandboxHandle> = None;
         
         // 2. Execução do Pipeline com Garantia de Vida (PurgeGuard)
-        let result = Self::pipeline_core(repo_id, repo_url, &mut workspace, conn, &mut sandbox_handle).await;
+        let result = Self::pipeline_core(repo_id, repo_url, &workspace, conn, &mut sandbox_handle).await;
         info!(repo_id = %repo_id, is_ok = result.is_ok(), "N13: pipeline_core retornou; iniciando teardown");
 
         // 6. [N13] PurgeGuard (Lifeline Incondicional)
@@ -85,7 +85,7 @@ impl HarvesterOrchestrator {
     async fn pipeline_core(
         repo_id: &str,
         repo_url: &Url,
-        workspace: &mut RamdiskHandle,
+        workspace: &RamdiskHandle,
         conn: Arc<Mutex<Connection>>,
         sandbox_out: &mut Option<SandboxHandle>,
     ) -> Result<(), OrchestratorError> {

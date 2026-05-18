@@ -1,0 +1,36 @@
+rules:
+  - id: soda.rust.unsafe.block
+    languages: [rust]
+    severity: WARNING
+    message: "Rust unsafe block requer auditoria manual"
+    pattern: unsafe { ... }
+
+  - id: soda.javascript.dynamic-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Execucao dinamica via eval aumenta risco de injecao"
+    pattern: eval(...)
+
+  - id: soda.python.dynamic-eval
+    languages: [python]
+    severity: ERROR
+    message: "Execucao dinamica via eval aumenta risco de injecao"
+    pattern: eval(...)
+
+  - id: soda.python.dynamic-exec
+    languages: [python]
+    severity: ERROR
+    message: "Execucao dinamica via exec aumenta risco de injecao"
+    pattern: exec(...)
+
+  - id: soda.python.subprocess-shell
+    languages: [python]
+    severity: ERROR
+    message: "subprocess com shell=True aumenta superficie de command injection"
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+
+  - id: soda.generic.hardcoded-secret
+    languages: [generic]
+    severity: ERROR
+    message: "Possivel segredo hardcoded"
+    pattern-regex: '(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*["'']?[A-Za-z0-9_/\-+=]{12,}["'']?'

@@ -1,6 +1,4 @@
 pub mod ramdisk;
-#[cfg(target_os = "windows")]
-pub mod projfs;
 pub mod git;
 pub mod sandbox;
 pub mod detect;

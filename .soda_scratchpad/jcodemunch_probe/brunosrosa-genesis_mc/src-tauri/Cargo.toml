@@ -47,12 +47,5 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Threading",
 ] }
 
-[target.'cfg(windows)'.dependencies]
-windows-projfs = "0.1.7"
-zip = { version = "2.2.0", default-features = false, features = ["deflate"] }
-
-[patch.crates-io]
-crc32fast = { path = "vendor/crc32fast" }
-
 [dev-dependencies]
 mockito = "1.5"

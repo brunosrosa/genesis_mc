@@ -1,23 +1,15 @@
 use std::path::{Path, PathBuf};
 use sysinfo::System;
+use tempfile::{Builder, TempDir};
 use thiserror::Error;
 use tokio::time::{sleep, Duration};
 use tracing::{info, warn};
-#[cfg(not(target_os = "windows"))]
-use tempfile::{Builder, TempDir};
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::MetadataExt;
 #[cfg(target_os = "windows")]
-use std::time::{SystemTime, UNIX_EPOCH};
-#[cfg(target_os = "windows")]
 use windows_sys::Win32::Storage::FileSystem::{SetFileAttributesW, FILE_ATTRIBUTE_TEMPORARY};
-#[cfg(target_os = "windows")]
-use windows_projfs::ProjectedFileSystem;
-
-#[cfg(target_os = "windows")]
-use super::projfs::{mount_projected_repo, ProjectedRepoSnapshot};
 
 const RAMDISK_READY_RETRIES: u32 = 20;
 const RAMDISK_READY_DELAY_MS: u64 = 150;
@@ -38,19 +30,9 @@ pub enum RamdiskError {
     },
 }
 
-#[cfg(target_os = "windows")]
-struct MountedProjection {
-    root_path: PathBuf,
-    projection: ProjectedFileSystem,
-}
-
+#[derive(Debug)]
 struct RamdiskGuard {
-    #[cfg(not(target_os = "windows"))]
     temp_dir: Option<TempDir>,
-    #[cfg(target_os = "windows")]
-    projection_handles: Vec<MountedProjection>,
-    #[cfg(target_os = "windows")]
-    workspace_root: PathBuf,
 }
 
 #[derive(Debug)]
@@ -66,35 +48,14 @@ impl RamdiskHandle {
 
     pub async fn cleanup(mut self) -> Result<(), RamdiskError> {
         let mount_path = self.mount_path.clone();
-        #[cfg(target_os = "windows")]
-        {
-            let projected_roots = self._guard.release_projection_roots();
-            info!(
-                path = %mount_path.display(),
-                projected_roots = projected_roots.len(),
-                "RamdiskHandle: projeções ProjFS descartadas antes do cleanup"
-            );
-            sleep(Duration::from_millis(CLEANUP_DELAY_MS)).await;
-            for root in projected_roots {
-                info!(path = %root.display(), "RamdiskHandle: removendo virtualization root do ProjFS");
-                remove_dir_all_with_retries(root).await?;
-            }
-            remove_dir_all_with_retries(mount_path.clone()).await?;
+        if let Some(temp_dir) = self._guard.temp_dir.take() {
+            let persisted_path = temp_dir.keep();
+            info!(path = %mount_path.display(), "RamdiskHandle: iniciando cleanup explicito do workspace efemero");
+            remove_dir_all_with_retries(persisted_path.clone()).await?;
             info!(path = %mount_path.display(), "RamdiskHandle: cleanup explicito concluido");
-            Ok(())
         }
 
-        #[cfg(not(target_os = "windows"))]
-        {
-            if let Some(temp_dir) = self._guard.temp_dir.take() {
-                let persisted_path = temp_dir.keep();
-                info!(path = %mount_path.display(), "RamdiskHandle: iniciando cleanup explicito do workspace efemero");
-                remove_dir_all_with_retries(persisted_path.clone()).await?;
-                info!(path = %mount_path.display(), "RamdiskHandle: cleanup explicito concluido");
-            }
-
-            Ok(())
-        }
+        Ok(())
     }
 
     #[cfg(target_os = "windows")]
@@ -107,24 +68,6 @@ impl RamdiskHandle {
                 reason: format!("Falha ao aguardar marcacao temporaria da arvore: {}", e),
             })?
     }
-
-    #[cfg(target_os = "windows")]
-    pub fn mount_projected_repo(
-        &mut self,
-        repo_root: &Path,
-        snapshot: ProjectedRepoSnapshot,
-    ) -> Result<(usize, usize), RamdiskError> {
-        let mounted = mount_projected_repo(repo_root, snapshot).map_err(|reason| {
-            RamdiskError::AllocationFailed { reason }
-        })?;
-        let file_count = mounted.file_count;
-        let total_bytes = mounted.total_bytes;
-        self._guard.projection_handles.push(MountedProjection {
-            root_path: repo_root.to_path_buf(),
-            projection: mounted.projection,
-        });
-        Ok((file_count, total_bytes))
-    }
 }
 
 impl AsRef<Path> for RamdiskHandle {
@@ -134,95 +77,13 @@ impl AsRef<Path> for RamdiskHandle {
 }
 
 impl RamdiskGuard {
-    #[cfg(not(target_os = "windows"))]
     fn new(temp_dir: TempDir) -> Self {
         Self { temp_dir: Some(temp_dir) }
-    }
-
-    #[cfg(target_os = "windows")]
-    fn new(workspace_root: PathBuf) -> Self {
-        Self {
-            projection_handles: Vec::new(),
-            workspace_root,
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    fn release_projection_roots(&mut self) -> Vec<PathBuf> {
-        let projections = std::mem::take(&mut self.projection_handles);
-        projections
-            .into_iter()
-            .map(|projection| {
-                let MountedProjection {
-                    root_path,
-                    projection,
-                } = projection;
-                drop(projection);
-                root_path
-            })
-            .collect()
-    }
-}
-
-impl std::fmt::Debug for RamdiskGuard {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[cfg(target_os = "windows")]
-        {
-            return f
-                .debug_struct("RamdiskGuard")
-                .field("projection_handles_len", &self.projection_handles.len())
-                .field("workspace_root", &self.workspace_root)
-                .finish();
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            f.debug_struct("RamdiskGuard")
-                .field("temp_dir_present", &self.temp_dir.is_some())
-                .finish()
-        }
     }
 }
 
 impl Drop for RamdiskGuard {
     fn drop(&mut self) {
-        #[cfg(target_os = "windows")]
-        {
-            let dropped = self.projection_handles.len();
-            let workspace_root = self.workspace_root.clone();
-            let projected_roots = self.release_projection_roots();
-            info!(projections = dropped, "RamdiskGuard: projeções ProjFS descartadas via Drop");
-            for root in projected_roots {
-                match remove_dir_all_via_powershell(&root) {
-                    Ok(()) => {
-                        info!(path = %root.display(), "RamdiskGuard: virtualization root removida via Drop");
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => {
-                        warn!(
-                            path = %root.display(),
-                            error = %e,
-                            "RamdiskGuard: falha ao remover virtualization root via Drop"
-                        );
-                    }
-                }
-            }
-            match remove_dir_all_via_powershell(&workspace_root) {
-                Ok(()) => {
-                    info!(path = %workspace_root.display(), "RamdiskGuard: workspace ProjFS descartado via Drop");
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => {
-                    warn!(
-                        path = %workspace_root.display(),
-                        error = %e,
-                        "RamdiskGuard: falha ao remover workspace ProjFS via Drop"
-                    );
-                }
-            }
-        }
-
-        #[cfg(not(target_os = "windows"))]
         if let Some(temp_dir) = self.temp_dir.take() {
             let mount_path = temp_dir.path().to_path_buf();
             drop(temp_dir);
@@ -314,25 +175,6 @@ async fn wait_until_writable(path: &Path) -> Result<(), RamdiskError> {
     })
 }
 
-#[cfg(target_os = "windows")]
-fn remove_dir_all_via_powershell(path: &Path) -> std::io::Result<()> {
-    let escaped = path.to_string_lossy().replace('\'', "''");
-    let script = format!(
-        "$p='{escaped}'; if (Test-Path -LiteralPath $p) {{ Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop }}"
-    );
-    let status = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(std::io::Error::other(format!(
-            "PowerShell Remove-Item falhou para '{}'",
-            path.display()
-        )))
-    }
-}
-
 async fn remove_dir_all_with_retries(path: PathBuf) -> Result<(), RamdiskError> {
     tokio::task::spawn_blocking(move || {
         let mut last_error = None;
@@ -341,18 +183,7 @@ async fn remove_dir_all_with_retries(path: PathBuf) -> Result<(), RamdiskError> 
                 Ok(()) => return Ok(()),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
                 Err(e) => {
-                    #[cfg(target_os = "windows")]
-                    let error = if e.raw_os_error() == Some(369) {
-                        match remove_dir_all_via_powershell(&path) {
-                            Ok(()) => return Ok(()),
-                            Err(shell_err) => shell_err,
-                        }
-                    } else {
-                        e
-                    };
-                    #[cfg(not(target_os = "windows"))]
-                    let error = e;
-                    last_error = Some(error);
+                    last_error = Some(e);
                     std::thread::sleep(std::time::Duration::from_millis(CLEANUP_DELAY_MS));
                     warn!(
                         path = %path.display(),
@@ -384,42 +215,6 @@ async fn remove_dir_all_with_retries(path: PathBuf) -> Result<(), RamdiskError> 
 pub struct RamdiskAllocator;
 
 impl RamdiskAllocator {
-    #[cfg(target_os = "windows")]
-    fn allocate_projfs_workspace() -> Result<RamdiskHandle, RamdiskError> {
-        let project_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .ok_or_else(|| RamdiskError::AllocationFailed {
-                reason: "Não foi possível resolver a raiz do workspace para o ProjFS".to_string(),
-            })?;
-        let base_root = project_root
-            .join(".soda_scratchpad")
-            .join("projfs_workspaces");
-
-        std::fs::create_dir_all(&base_root).map_err(|e| RamdiskError::AllocationFailed {
-            reason: format!("Falha ao preparar diretório raiz do ProjFS '{}': {}", base_root.display(), e),
-        })?;
-
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let mount_path = base_root.join(format!(
-            "soda_projfs_workspace_{}_{}",
-            std::process::id(),
-            nonce
-        ));
-
-        std::fs::create_dir_all(&mount_path).map_err(|e| RamdiskError::AllocationFailed {
-            reason: format!("Falha ao criar workspace base do ProjFS '{}': {}", mount_path.display(), e),
-        })?;
-
-        Ok(RamdiskHandle {
-            _guard: RamdiskGuard::new(mount_path.clone()),
-            mount_path,
-        })
-    }
-
-    #[cfg(not(target_os = "windows"))]
     fn allocate_temp_workspace() -> Result<RamdiskHandle, RamdiskError> {
         let temp_dir = Builder::new()
             .prefix("soda_shadow_workspace_")
@@ -452,9 +247,6 @@ impl RamdiskAllocator {
             });
         }
 
-        #[cfg(target_os = "windows")]
-        let handle = Self::allocate_projfs_workspace()?;
-        #[cfg(not(target_os = "windows"))]
         let handle = Self::allocate_temp_workspace()?;
 
         wait_until_writable(handle.path()).await?;

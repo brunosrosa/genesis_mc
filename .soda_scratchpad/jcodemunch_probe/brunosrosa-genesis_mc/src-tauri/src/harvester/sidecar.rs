@@ -224,47 +224,7 @@ fn code_index_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, S
         .ok_or_else(|| SidecarError::ExecutionFailed {
             reason: "Nao foi possivel resolver o nome do repositório para localizar o banco do jcodemunch".to_string(),
         })?;
-    let canonical = storage_path.join(format!("{}-{}.db", owner, repo));
-    if canonical.is_file() {
-        return Ok(canonical);
-    }
-
-    let mut candidates = std::fs::read_dir(&storage_path)
-        .map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!(
-                "Falha ao listar diretório do índice do jcodemunch '{}': {}",
-                storage_path.display(),
-                e
-            ),
-        })?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("db"))
-        .collect::<Vec<_>>();
-
-    candidates.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-
-    let repo_lower = repo.to_ascii_lowercase();
-    if let Some(path) = candidates.iter().find(|path| {
-        path.file_stem()
-            .and_then(|stem| stem.to_str())
-            .map(|stem| stem.to_ascii_lowercase().contains(&repo_lower))
-            .unwrap_or(false)
-    }) {
-        return Ok(path.clone());
-    }
-
-    if let [single] = candidates.as_slice() {
-        return Ok(single.clone());
-    }
-
-    Err(SidecarError::ExecutionFailed {
-        reason: format!(
-            "Nao foi possivel localizar o banco SQLite do jcodemunch em '{}'; esperado='{}', candidatos={:?}",
-            storage_path.display(),
-            canonical.display(),
-            candidates
-        ),
-    })
+    Ok(storage_path.join(format!("{}-{}.db", owner, repo)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -376,11 +336,6 @@ fn topology_priority_score(path: &str) -> u8 {
 fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError> {
     let db_path = code_index_db_path_for_repo(repo_path)?;
     let project_prefixes = collect_project_prefixes(repo_path)?;
-    tracing::info!(
-        repo_path = %repo_path.display(),
-        db_path = %db_path.display(),
-        "jcodemunch: abrindo banco topologico para blob_05_architecture_map"
-    );
 
     let summary = tokio::task::block_in_place(|| {
         let conn = rusqlite::Connection::open(&db_path).map_err(|e| SidecarError::ExecutionFailed {
@@ -1605,30 +1560,8 @@ fn render_semgrep_blob(rule_set: SemgrepRuleSet, payload: &SemgrepNormalizedPayl
     truncate_utf8(&text, rule_set.max_chars(), rule_set.max_chars()).into_bytes()
 }
 
-fn semgrep_support_dir(repo_path: &Path) -> Result<PathBuf, SidecarError> {
-    let repo_name = repo_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| SidecarError::ExecutionFailed {
-            reason: format!("Nome inválido para repositório virtualizado '{}'", repo_path.display()),
-        })?;
-    Ok(
-        repo_path
-            .parent()
-            .unwrap_or(repo_path)
-            .join(".soda_semgrep")
-            .join(repo_name),
-    )
-}
-
 async fn ensure_semgrep_rule_file(repo_path: &Path, rule_set: SemgrepRuleSet) -> Result<PathBuf, SidecarError> {
-    let support_dir = semgrep_support_dir(repo_path)?;
-    tokio::fs::create_dir_all(&support_dir)
-        .await
-        .map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!("Falha ao preparar diretório auxiliar do semgrep '{}': {}", support_dir.display(), e),
-        })?;
-    let path = support_dir.join(rule_set.rule_file_name());
+    let path = repo_path.join(rule_set.rule_file_name());
     tokio::fs::write(&path, rule_set.rule_source())
         .await
         .map_err(|e| SidecarError::ExecutionFailed {
@@ -1649,11 +1582,16 @@ async fn run_semgrep_scan<E: SandboxExecutor>(
         rule_path = %rule_path.display(),
         "Semgrep: iniciando scan"
     );
-    let rule_arg = rule_path.to_string_lossy().to_string();
+    let rule_arg = rule_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| SidecarError::ExecutionFailed {
+            reason: format!("Nome invalido para regra do semgrep '{}'", rule_path.display()),
+        })?;
     let args = [
         "scan",
         "--config",
-        rule_arg.as_str(),
+        rule_arg,
         "--json",
         "--jobs",
         "1",
@@ -1661,7 +1599,7 @@ async fn run_semgrep_scan<E: SandboxExecutor>(
         "--metrics",
         "off",
         "--exclude",
-        rule_arg.as_str(),
+        rule_arg,
         "--exclude",
         SEMGREP_SECURITY_RULE_FILE,
         "--exclude",
@@ -1789,22 +1727,6 @@ mod tests {
             self.calls.lock().unwrap().clone()
         }
 
-    }
-
-    #[test]
-    fn test_code_index_db_path_accepts_local_repo_index_name() {
-        let temp_dir = TempDir::new().unwrap();
-        let owner_dir = temp_dir.path().join("aaif-goose");
-        let repo_path = owner_dir.join("goose");
-        let index_dir = owner_dir.join(".jcodemunch_index");
-        std::fs::create_dir_all(&repo_path).unwrap();
-        std::fs::create_dir_all(&index_dir).unwrap();
-
-        let expected = index_dir.join("local-goose-0a8be5b6.db");
-        std::fs::write(&expected, b"").unwrap();
-
-        let resolved = code_index_db_path_for_repo(&repo_path).unwrap();
-        assert_eq!(resolved, expected);
     }
 
     impl SandboxExecutor for MockExecutor {

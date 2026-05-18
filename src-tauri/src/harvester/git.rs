@@ -1,13 +1,26 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
+#[cfg(not(target_os = "windows"))]
 use std::time::Duration;
 use thiserror::Error;
 use url::Url;
 use sha2::{Digest, Sha256};
+#[cfg(not(target_os = "windows"))]
 use tokio::time::timeout;
 use super::ramdisk::RamdiskHandle;
+#[cfg(not(target_os = "windows"))]
 use super::sandbox::kill_process_tree_by_pid;
 use tracing::info;
+#[cfg(target_os = "windows")]
+use serde::Deserialize;
+#[cfg(target_os = "windows")]
+use std::io::Cursor;
+#[cfg(target_os = "windows")]
+use zip::ZipArchive;
+
+#[cfg(target_os = "windows")]
+use super::projfs::ProjectedRepoSnapshot;
 
 #[derive(Debug)]
 pub struct RepoPath(pub(crate) PathBuf);
@@ -46,6 +59,12 @@ pub enum CloneError {
 
 pub struct BloblessCloner;
 
+#[cfg(target_os = "windows")]
+#[derive(Debug, Deserialize)]
+struct GitHubRepoMetadata {
+    default_branch: String,
+}
+
 impl BloblessCloner {
     fn repo_workspace_destination(workspace: &RamdiskHandle, repo_url: &Url) -> PathBuf {
         let mut segments = repo_url
@@ -80,10 +99,166 @@ impl BloblessCloner {
         })?.is_some())
     }
 
+    #[cfg(not(target_os = "windows"))]
+    async fn detach_git_metadata(dest: &Path) -> Result<(), CloneError> {
+        let git_dir = dest.join(".git");
+        let metadata = match tokio::fs::symlink_metadata(&git_dir).await {
+            Ok(metadata) => metadata,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                return Err(CloneError::NetworkError {
+                    reason: format!("Falha ao inspecionar metadata git do clone: {}", e),
+                });
+            }
+        };
+
+        info!(path = %git_dir.display(), "Removendo metadata Git do workspace efemero antes dos sidecars");
+        if metadata.is_dir() {
+            tokio::fs::remove_dir_all(&git_dir).await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao remover diretório .git do workspace efêmero: {}", e),
+            })?;
+        } else {
+            tokio::fs::remove_file(&git_dir).await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao remover arquivo .git do workspace efêmero: {}", e),
+            })?;
+        }
+        info!(path = %git_dir.display(), "Metadata Git removida do workspace efemero");
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    fn github_owner_repo(repo_url: &Url) -> Result<(String, String), CloneError> {
+        if repo_url.host_str() != Some("github.com") {
+            return Err(CloneError::NetworkError {
+                reason: format!(
+                    "Modo ProjFS em memória exige repositório GitHub; host recebido='{}'",
+                    repo_url.host_str().unwrap_or("<none>")
+                ),
+            });
+        }
+
+        let mut segments = repo_url
+            .path_segments()
+            .map(|parts| parts.collect::<Vec<_>>())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|segment| !segment.is_empty())
+            .map(|segment| segment.trim_end_matches(".git").to_string())
+            .collect::<Vec<_>>();
+
+        if segments.len() < 2 {
+            return Err(CloneError::NetworkError {
+                reason: format!("URL do repositório GitHub inválida para ProjFS: {}", repo_url),
+            });
+        }
+
+        let repo = segments.pop().unwrap_or_else(|| "repo".to_string());
+        let owner = segments.pop().unwrap_or_else(|| "owner".to_string());
+        Ok((owner, repo))
+    }
+
+    #[cfg(target_os = "windows")]
+    async fn fetch_github_archive_bytes(repo_url: &Url) -> Result<Vec<u8>, CloneError> {
+        let (owner, repo) = Self::github_owner_repo(repo_url)?;
+        let client = reqwest::Client::builder()
+            .user_agent("genesis-mc-harvester-projfs/1.0")
+            .build()
+            .map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao criar cliente HTTP para ProjFS: {}", e),
+            })?;
+
+        let metadata_url = format!("https://api.github.com/repos/{owner}/{repo}");
+        info!(url = %metadata_url, "ProjFS: consultando metadados do repositório GitHub");
+        let metadata_response = client
+            .get(&metadata_url)
+            .send()
+            .await
+            .map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao consultar metadados do GitHub: {}", e),
+            })?;
+        if metadata_response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(CloneError::RepositoryNotFound {
+                url: repo_url.as_str().to_string(),
+            });
+        }
+        let metadata_response = metadata_response.error_for_status().map_err(|e| CloneError::NetworkError {
+            reason: format!("GitHub respondeu erro ao consultar metadados do repositório: {}", e),
+        })?;
+        let metadata = metadata_response
+            .json::<GitHubRepoMetadata>()
+            .await
+            .map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao decodificar metadados do GitHub: {}", e),
+            })?;
+
+        let archive_url = format!(
+            "https://api.github.com/repos/{owner}/{repo}/zipball/{}",
+            metadata.default_branch
+        );
+        info!(
+            url = %archive_url,
+            default_branch = %metadata.default_branch,
+            "ProjFS: baixando snapshot compactado do repositório"
+        );
+        let archive_response = client
+            .get(&archive_url)
+            .send()
+            .await
+            .map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao baixar snapshot compactado do GitHub: {}", e),
+            })?;
+        let archive_response = archive_response.error_for_status().map_err(|e| CloneError::NetworkError {
+            reason: format!("GitHub respondeu erro ao baixar snapshot compactado: {}", e),
+        })?;
+        let bytes = archive_response.bytes().await.map_err(|e| CloneError::NetworkError {
+            reason: format!("Falha ao ler bytes do snapshot GitHub: {}", e),
+        })?;
+        info!(archive_bytes = bytes.len(), "ProjFS: snapshot compactado recebido em memória");
+        Ok(bytes.to_vec())
+    }
+
+    #[cfg(target_os = "windows")]
+    fn build_projfs_snapshot(archive_bytes: Vec<u8>) -> Result<ProjectedRepoSnapshot, CloneError> {
+        let cursor = Cursor::new(archive_bytes);
+        let mut zip = ZipArchive::new(cursor).map_err(|e| CloneError::NetworkError {
+            reason: format!("Falha ao abrir arquivo ZIP do GitHub em memória: {}", e),
+        })?;
+
+        let mut files = Vec::new();
+        for index in 0..zip.len() {
+            let mut entry = zip.by_index(index).map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao ler entrada {index} do ZIP do GitHub: {}", e),
+            })?;
+            if entry.is_dir() {
+                continue;
+            }
+
+            let raw_name = entry.name().replace('\\', "/");
+            let mut parts = raw_name.split('/').filter(|part| !part.is_empty());
+            let _archive_root = parts.next();
+            let relative = parts.collect::<Vec<_>>();
+            if relative.is_empty() {
+                continue;
+            }
+
+            let relative_path = PathBuf::from(relative.join("/"));
+            let mut buffer = Vec::with_capacity(entry.size() as usize);
+            std::io::Read::read_to_end(&mut entry, &mut buffer).map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao descompactar '{}' do snapshot GitHub: {}", raw_name, e),
+            })?;
+            files.push((relative_path, buffer));
+        }
+
+        ProjectedRepoSnapshot::from_files(files).map_err(|reason| CloneError::NetworkError { reason })
+    }
+
     pub async fn clone(
         repo_url: &Url,
-        ramdisk: &RamdiskHandle,
+        ramdisk: &mut RamdiskHandle,
     ) -> Result<RepoPath, CloneError> {
+        #[cfg(not(target_os = "windows"))]
+        let clone_started = Instant::now();
+        #[cfg(not(target_os = "windows"))]
         // 1. Verificação preliminar e assíncrona se o Git está instalado
         match tokio::process::Command::new("git")
             .arg("--version")
@@ -105,6 +280,12 @@ impl BloblessCloner {
 
         // 2. Workspace efemero com hint de cache temporario nativo para esta execucao.
         let dest = Self::repo_workspace_destination(ramdisk, repo_url);
+        info!(
+            url = %repo_url,
+            workspace = %ramdisk.path().display(),
+            dest = %dest.display(),
+            "Preparando workspace efemero do clone"
+        );
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| CloneError::NetworkError {
                 reason: format!("Falha ao preparar diretório pai do workspace do repositório: {}", e),
@@ -118,111 +299,143 @@ impl BloblessCloner {
             return Ok(RepoPath(dest));
         }
 
-        // 3. Spawning do comando git clone de forma assíncrona com as flags otimizadas do SODA
-        let mut child = match tokio::process::Command::new("git")
-            .arg("clone")
-            .arg("--filter=blob:none")
-            .arg("--single-branch")
-            .arg("--no-tags")
-            .arg("--quiet")
-            .arg(repo_url.as_str())
-            .arg(&dest)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(CloneError::GitNotInstalled);
-            }
-            Err(e) => {
-                return Err(CloneError::NetworkError {
-                    reason: format!("Falha ao spawnar processo git clone: {}", e),
-                });
-            }
-        };
-
-        // Extrai o stream do stderr para leitura concorrente (evita mover child)
-        let mut stderr_stream = child.stderr.take().ok_or_else(|| {
-            CloneError::NetworkError {
-                reason: "Não foi possível capturar stderr do processo Git".to_string(),
-            }
-        })?;
-
-        // 4. Executar concorrentemente wait() e leitura de stderr com Timeout de 600s
-        let mut stderr_buffer = Vec::new();
-        let run_fut = async {
-            use tokio::io::AsyncReadExt;
-            let status = child.wait().await;
-            let _ = stderr_stream.read_to_end(&mut stderr_buffer).await;
-            status
-        };
-
-        let wait_result = timeout(Duration::from_secs(600), run_fut).await;
-
-        if wait_result.is_err() {
-            // Timeout expirou! Matamos o processo de forma assíncrona
-            if let Some(pid) = child.id() {
-                kill_process_tree_by_pid(pid).await;
-            } else {
-                let _ = child.kill().await;
-            }
-            // PT-3: Limpa o diretório parcial sem bloquear o Event Loop
-            let _ = tokio::fs::remove_dir_all(&dest).await;
-            return Err(CloneError::Timeout);
-        }
-
-        let status = match wait_result.unwrap() {
-            Ok(s) => s,
-            Err(e) => {
-                // PT-3: Limpeza assíncrona em caso de erro de I/O
-                let _ = tokio::fs::remove_dir_all(&dest).await;
-                return Err(CloneError::NetworkError {
-                    reason: format!("Erro de I/O ao aguardar término do processo git: {}", e),
-                });
-            }
-        };
-
-        // 5. Analisar o resultado do processo
-        if !status.success() {
-            let stderr = String::from_utf8_lossy(&stderr_buffer);
-            
-            // PT-3: Limpa o diretório de clone parcial sem bloquear o Event Loop
-            let _ = tokio::fs::remove_dir_all(&dest).await;
-
-            let stderr_lower = stderr.to_lowercase();
-            if stderr_lower.contains("repository") && stderr_lower.contains("not found") {
-                return Err(CloneError::RepositoryNotFound {
-                    url: repo_url.as_str().to_string(),
-                });
-            } else if stderr_lower.contains("no space left") || stderr_lower.contains("disk full") {
-                return Err(CloneError::RamdiskFull {
-                    path: dest.display().to_string(),
-                });
-            } else if stderr_lower.contains("could not resolve host") || stderr_lower.contains("connection refused") {
-                return Err(CloneError::NetworkError {
-                    reason: format!("Erro de rede/resolução de DNS: {}", stderr.trim()),
-                });
-            } else {
-                return Err(CloneError::NetworkError {
-                    reason: format!("Git falhou com código {:?}: {}", status.code(), stderr.trim()),
-                });
-            }
-        }
-
         #[cfg(target_os = "windows")]
-        ramdisk
-            .prime_temp_cache(&dest)
-            .await
-            .map_err(|e| CloneError::NetworkError {
-                reason: format!(
-                    "Falha ao aplicar as flags temporarias do Cache Manager no workspace: {}",
-                    e
-                ),
+        {
+            let archive_started = Instant::now();
+            let archive_bytes = Self::fetch_github_archive_bytes(repo_url).await?;
+            let snapshot = tokio::task::spawn_blocking(move || Self::build_projfs_snapshot(archive_bytes))
+                .await
+                .map_err(|e| CloneError::NetworkError {
+                    reason: format!("Falha ao aguardar montagem do snapshot ProjFS: {}", e),
+                })??;
+
+            let (projected_files, projected_bytes) = ramdisk
+                .mount_projected_repo(&dest, snapshot)
+                .map_err(|e| CloneError::NetworkError {
+                    reason: format!("Falha ao iniciar projeção ProjFS do repositório: {}", e),
+                })?;
+            info!(
+                url = %repo_url,
+                dest = %dest.display(),
+                projected_files,
+                projected_bytes,
+                elapsed_ms = archive_started.elapsed().as_millis(),
+                "Clone virtual via ProjFS concluido"
+            );
+            return Ok(RepoPath(dest));
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // 3. Spawning do comando git clone de forma assíncrona com as flags otimizadas do SODA
+            info!(url = %repo_url, dest = %dest.display(), "Iniciando git clone blobless");
+            let mut child = match tokio::process::Command::new("git")
+                .arg("clone")
+                .arg("--filter=blob:none")
+                .arg("--single-branch")
+                .arg("--no-tags")
+                .arg("--quiet")
+                .arg(repo_url.as_str())
+                .arg(&dest)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true)
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(CloneError::GitNotInstalled);
+                }
+                Err(e) => {
+                    return Err(CloneError::NetworkError {
+                        reason: format!("Falha ao spawnar processo git clone: {}", e),
+                    });
+                }
+            };
+
+            // Extrai o stream do stderr para leitura concorrente (evita mover child)
+            let mut stderr_stream = child.stderr.take().ok_or_else(|| {
+                CloneError::NetworkError {
+                    reason: "Não foi possível capturar stderr do processo Git".to_string(),
+                }
             })?;
 
-        Ok(RepoPath(dest))
+            // 4. Executar concorrentemente wait() e leitura de stderr com Timeout de 600s
+            let mut stderr_buffer = Vec::new();
+            let run_fut = async {
+                use tokio::io::AsyncReadExt;
+                let status = child.wait().await;
+                let _ = stderr_stream.read_to_end(&mut stderr_buffer).await;
+                status
+            };
+
+            let wait_result = timeout(Duration::from_secs(600), run_fut).await;
+
+            if wait_result.is_err() {
+                // Timeout expirou! Matamos o processo de forma assíncrona
+                if let Some(pid) = child.id() {
+                    kill_process_tree_by_pid(pid).await;
+                } else {
+                    let _ = child.kill().await;
+                }
+                // PT-3: Limpa o diretório parcial sem bloquear o Event Loop
+                let _ = tokio::fs::remove_dir_all(&dest).await;
+                return Err(CloneError::Timeout);
+            }
+
+            let status = match wait_result.unwrap() {
+                Ok(s) => s,
+                Err(e) => {
+                    // PT-3: Limpeza assíncrona em caso de erro de I/O
+                    let _ = tokio::fs::remove_dir_all(&dest).await;
+                    return Err(CloneError::NetworkError {
+                        reason: format!("Erro de I/O ao aguardar término do processo git: {}", e),
+                    });
+                }
+            };
+
+            // 5. Analisar o resultado do processo
+            if !status.success() {
+                let stderr = String::from_utf8_lossy(&stderr_buffer);
+
+                // PT-3: Limpa o diretório de clone parcial sem bloquear o Event Loop
+                let _ = tokio::fs::remove_dir_all(&dest).await;
+
+                let stderr_lower = stderr.to_lowercase();
+                if stderr_lower.contains("repository") && stderr_lower.contains("not found") {
+                    return Err(CloneError::RepositoryNotFound {
+                        url: repo_url.as_str().to_string(),
+                    });
+                } else if stderr_lower.contains("no space left") || stderr_lower.contains("disk full") {
+                    return Err(CloneError::RamdiskFull {
+                        path: dest.display().to_string(),
+                    });
+                } else if stderr_lower.contains("could not resolve host") || stderr_lower.contains("connection refused") {
+                    return Err(CloneError::NetworkError {
+                        reason: format!("Erro de rede/resolução de DNS: {}", stderr.trim()),
+                    });
+                } else {
+                    return Err(CloneError::NetworkError {
+                        reason: format!("Git falhou com código {:?}: {}", status.code(), stderr.trim()),
+                    });
+                }
+            }
+
+            Self::detach_git_metadata(&dest).await?;
+
+            info!(
+                url = %repo_url,
+                dest = %dest.display(),
+                elapsed_ms = clone_started.elapsed().as_millis(),
+                "Clone blobless concluido"
+            );
+            return Ok(RepoPath(dest));
+        }
+
+        #[allow(unreachable_code)]
+        Err(CloneError::NetworkError {
+            reason: "Caminho de clone inalcançável".to_string(),
+        })
     }
 }
 
@@ -241,22 +454,22 @@ mod tests {
     #[tokio::test]
     async fn test_clone_success() {
         let _guard = get_test_mutex().lock().await;
-        let ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
+        let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         // Repositório minúsculo e estável para teste rápido
         let repo_url = Url::parse("https://github.com/octocat/Spoon-Knife").unwrap();
         
-        let repo_path = BloblessCloner::clone(&repo_url, &ramdisk).await.unwrap();
+        let repo_path = BloblessCloner::clone(&repo_url, &mut ramdisk).await.unwrap();
         assert!(repo_path.exists());
-        assert!(repo_path.join(".git").exists());
+        assert!(!repo_path.join(".git").exists());
     }
 
     #[tokio::test]
     async fn test_clone_repo_not_found() {
         let _guard = get_test_mutex().lock().await;
-        let ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
+        let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         let repo_url = Url::parse("https://github.com/octocat/this-repo-should-not-exist-ever-soda").unwrap();
         
-        let err = BloblessCloner::clone(&repo_url, &ramdisk).await.unwrap_err();
+        let err = BloblessCloner::clone(&repo_url, &mut ramdisk).await.unwrap_err();
         assert!(
             matches!(err, CloneError::RepositoryNotFound { .. }),
             "Deveria falhar com RepositoryNotFound, mas retornou {:?}",
@@ -267,10 +480,10 @@ mod tests {
     #[tokio::test]
     async fn test_clone_stays_in_ramdisk() {
         let _guard = get_test_mutex().lock().await;
-        let ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
+        let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         let repo_url = Url::parse("https://github.com/octocat/Spoon-Knife").unwrap();
         
-        let repo_path = BloblessCloner::clone(&repo_url, &ramdisk).await.unwrap();
+        let repo_path = BloblessCloner::clone(&repo_url, &mut ramdisk).await.unwrap();
         assert!(
             repo_path.starts_with(ramdisk.path()),
             "O clone deve residir estritamente dentro do workspace efêmero"
@@ -280,10 +493,10 @@ mod tests {
     #[tokio::test]
     async fn test_cleanup_on_failure() {
         let _guard = get_test_mutex().lock().await;
-        let ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
+        let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         let repo_url = Url::parse("https://github.com/octocat/this-repo-should-not-exist-ever-soda").unwrap();
         
-        let _ = BloblessCloner::clone(&repo_url, &ramdisk).await;
+        let _ = BloblessCloner::clone(&repo_url, &mut ramdisk).await;
         
         let repo_root = ramdisk.path().join("repos");
         if repo_root.exists() {
@@ -292,6 +505,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "ProjFS em memória não usa o binário git no Windows")]
     #[tokio::test]
     async fn test_git_not_installed() {
         let _guard = get_test_mutex().lock().await;
@@ -299,10 +513,10 @@ mod tests {
         let old_path = std::env::var_os("PATH");
         std::env::set_var("PATH", ""); // Limpa o PATH para o git não ser encontrado
         
-        let ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
+        let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         let repo_url = Url::parse("https://github.com/octocat/Spoon-Knife").unwrap();
         
-        let err = BloblessCloner::clone(&repo_url, &ramdisk).await.unwrap_err();
+        let err = BloblessCloner::clone(&repo_url, &mut ramdisk).await.unwrap_err();
         
         // Restaura o PATH
         if let Some(path) = old_path {

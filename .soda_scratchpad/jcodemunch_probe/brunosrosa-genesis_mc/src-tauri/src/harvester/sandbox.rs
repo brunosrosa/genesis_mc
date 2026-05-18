@@ -340,20 +340,8 @@ fn resolve_local_python_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf
     None
 }
 
-fn semgrep_support_root(repo_path: &Path) -> PathBuf {
-    let repo_name = repo_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("repo");
-    repo_path
-        .parent()
-        .unwrap_or(repo_path)
-        .join(".soda_semgrep")
-        .join(repo_name)
-}
-
 fn build_semgrep_env(repo_path: &Path) -> BTreeMap<String, String> {
-    let sandbox_home = semgrep_support_root(repo_path).join("sandbox");
+    let sandbox_home = repo_path.join(".semgrep-sandbox");
     let semgrep_dir = sandbox_home.join(".semgrep");
 
     for dir in [&semgrep_dir] {
@@ -379,7 +367,7 @@ fn persist_semgrep_diagnostics(
     stderr: &[u8],
     exit_code: i32,
 ) -> Option<PathBuf> {
-    let diagnostics_dir = semgrep_support_root(repo_path).join("diagnostics");
+    let diagnostics_dir = repo_path.join(".semgrep-sandbox").join("diagnostics");
     std::fs::create_dir_all(&diagnostics_dir).ok()?;
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -618,7 +606,7 @@ async fn reap_command_orphans(command: &str, repo_path: &Path) {
             .collect::<Vec<_>>()
             .join(", ");
         let repo_hint = format!("*{}*", repo_path.display()).replace('\'', "''");
-        let sandbox_hint = format!("*{}*", semgrep_support_root(repo_path).join("sandbox").display()).replace('\'', "''");
+        let sandbox_hint = format!("*{}*", repo_path.join(".semgrep-sandbox").display()).replace('\'', "''");
         let code_index_hint = format!("*{}*", resolve_code_index_path(repo_path).display()).replace('\'', "''");
         let script = format!(
             "$ErrorActionPreference = 'SilentlyContinue'; \
@@ -717,10 +705,10 @@ impl SandboxHandle {
             self.lock_pids().insert(pid);
 
             // Captura os streams de stdout e stderr ANTES do wait
-            let stdout_stream = child.stdout.take().ok_or_else(|| {
+            let mut stdout_stream = child.stdout.take().ok_or_else(|| {
                 SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
             })?;
-            let stderr_stream = child.stderr.take().ok_or_else(|| {
+            let mut stderr_stream = child.stderr.take().ok_or_else(|| {
                 SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
             })?;
 
