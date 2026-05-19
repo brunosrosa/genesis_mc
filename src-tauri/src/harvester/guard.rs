@@ -39,9 +39,9 @@ mod tests {
     async fn test_purge_happy_path() {
         // Setup usando os modos Mock integrados das Handles reais
         let repo_path = RepoPath(PathBuf::from("mock_repo_purge"));
-        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite, true)
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite)
             .await
-            .expect("Falha ao criar sandbox mock");
+            .expect("Falha ao criar sandbox");
             
         let ramdisk = RamdiskAllocator::allocate(16).await.expect("Falha ao alocar ramdisk mock");
         let ramdisk_path = ramdisk.path().to_path_buf();

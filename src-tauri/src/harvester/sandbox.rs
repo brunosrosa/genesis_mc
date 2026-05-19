@@ -49,15 +49,13 @@ pub enum SandboxError {
     #[error("Execution timed out")]
     Timeout,
 
-    #[error("Platform not supported")]
-    UnsupportedPlatform,
 }
 
 #[derive(Debug)]
 pub struct SandboxHandle {
     repo_path: PathBuf,
     policy: SandboxPolicy,
-    is_mock: bool,
+    host_write_roots: Vec<PathBuf>,
     active_pids: Arc<Mutex<HashSet<u32>>>,
 }
 
@@ -350,6 +348,55 @@ fn semgrep_support_root(repo_path: &Path) -> PathBuf {
         .unwrap_or(repo_path)
         .join(".soda_semgrep")
         .join(repo_name)
+}
+
+fn normalize_path_key(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
+}
+
+fn path_is_within_root(candidate: &Path, root: &Path) -> bool {
+    let candidate_key = normalize_path_key(candidate);
+    let root_key = normalize_path_key(root);
+    candidate_key == root_key || candidate_key.starts_with(&(root_key + "/"))
+}
+
+fn extract_absolute_arg_paths(args: &[String]) -> Vec<PathBuf> {
+    args.iter()
+        .filter_map(|arg| {
+            let trimmed = arg.trim_matches('"');
+            let candidate = PathBuf::from(trimmed);
+            candidate.is_absolute().then_some(candidate)
+        })
+        .collect()
+}
+
+fn env_value_to_absolute_path(value: &str) -> Option<PathBuf> {
+    let trimmed = value.trim_matches('"');
+    let candidate = PathBuf::from(trimmed);
+    candidate.is_absolute().then_some(candidate)
+}
+
+fn build_host_write_roots(repo_path: &Path, policy: SandboxPolicy) -> Result<Vec<PathBuf>, SandboxError> {
+    let repo_parent = repo_path.parent().unwrap_or(repo_path);
+    let mut roots = match policy {
+        SandboxPolicy::ReadOnly => Vec::new(),
+        SandboxPolicy::ReadWrite => vec![
+            resolve_code_index_path(repo_path),
+            semgrep_support_root(repo_path),
+            repo_parent.join(".soda_sandbox"),
+        ],
+    };
+
+    roots.sort();
+    roots.dedup();
+
+    for root in &roots {
+        std::fs::create_dir_all(root).map_err(|e| SandboxError::PrivilegeError {
+            reason: format!("Falha ao preparar raiz de escrita permitida '{}': {}", root.display(), e),
+        })?;
+    }
+
+    Ok(roots)
 }
 
 fn build_semgrep_env(repo_path: &Path) -> BTreeMap<String, String> {
@@ -670,166 +717,189 @@ impl SandboxHandle {
         })
     }
 
+    fn enforce_host_path_policy(&self, resolved: &ResolvedCommand) -> Result<(), SandboxError> {
+        let repo_root = &self.repo_path;
+        let mut inspected_paths = extract_absolute_arg_paths(&resolved.args);
+        inspected_paths.extend(
+            resolved
+                .env
+                .values()
+                .filter_map(|value| env_value_to_absolute_path(value)),
+        );
+
+        for candidate in inspected_paths {
+            let allowed = path_is_within_root(&candidate, repo_root)
+                || self
+                    .host_write_roots
+                    .iter()
+                    .any(|root| path_is_within_root(&candidate, root));
+            if !allowed {
+                return Err(SandboxError::PolicyViolation {
+                    detail: format!(
+                        "Path absoluto fora da cerca do sandbox: '{}' (repo='{}')",
+                        candidate.display(),
+                        repo_root.display()
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn execute(
         &self,
         command: &str,
         args: &[&str],
         timeout_secs: u64,
     ) -> Result<Vec<u8>, SandboxError> {
-        if self.is_mock {
-            let resolved = resolve_command(command, args, &self.repo_path)?;
-            let requested_command = command.to_string();
-            info!(
-                command = %requested_command,
-                program = %resolved.program.display(),
-                args = ?resolved.args,
-                env = ?resolved.env,
-                repo_path = %self.repo_path.display(),
-                timeout_secs,
-                "Sandbox: iniciando processo efemero"
-            );
+        let resolved = resolve_command(command, args, &self.repo_path)?;
+        self.enforce_host_path_policy(&resolved)?;
+        let requested_command = command.to_string();
+        info!(
+            command = %requested_command,
+            program = %resolved.program.display(),
+            args = ?resolved.args,
+            env = ?resolved.env,
+            repo_path = %self.repo_path.display(),
+            policy = ?self.policy,
+            host_write_roots = ?self.host_write_roots,
+            timeout_secs,
+            "Sandbox: iniciando processo efemero"
+        );
 
-            // 1. Spawning do comando no diretório do repo_path
-            let mut process = tokio::process::Command::new(&resolved.program);
-            process
-                .args(&resolved.args)
-                .current_dir(&self.repo_path)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .kill_on_drop(true);
-            if !resolved.env.is_empty() {
-                process.envs(&resolved.env);
-            }
-            let mut child = process
-                .spawn()
-                .map_err(|e| SandboxError::ProcessSpawnFailed { reason: e.to_string() })?;
+        let mut process = tokio::process::Command::new(&resolved.program);
+        process
+            .args(&resolved.args)
+            .current_dir(&self.repo_path)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null())
+            .kill_on_drop(true);
+        if !resolved.env.is_empty() {
+            process.envs(&resolved.env);
+        }
+        let mut child = process
+            .spawn()
+            .map_err(|e| SandboxError::ProcessSpawnFailed { reason: e.to_string() })?;
 
-            #[cfg(target_os = "windows")]
-            let job_guard = Some(attach_child_to_kill_on_close_job(&child)?);
-            #[cfg(not(target_os = "windows"))]
-            let job_guard: Option<()> = None;
+        #[cfg(target_os = "windows")]
+        let job_guard = Some(attach_child_to_kill_on_close_job(&child)?);
+        #[cfg(not(target_os = "windows"))]
+        let job_guard: Option<()> = None;
 
-            let pid = child.id().ok_or_else(|| {
-                SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar PID do processo".to_string() }
-            })?;
+        let pid = child.id().ok_or_else(|| {
+            SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar PID do processo".to_string() }
+        })?;
 
-            // Registra o PID ativo na guilhotina (D1: lock seguro contra poisoning)
-            self.lock_pids().insert(pid);
+        self.lock_pids().insert(pid);
 
-            // Captura os streams de stdout e stderr ANTES do wait
-            let stdout_stream = child.stdout.take().ok_or_else(|| {
-                SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
-            })?;
-            let stderr_stream = child.stderr.take().ok_or_else(|| {
-                SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
-            })?;
+        let stdout_stream = child.stdout.take().ok_or_else(|| {
+            SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
+        })?;
+        let stderr_stream = child.stderr.take().ok_or_else(|| {
+            SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
+        })?;
 
-            let stdout_task = tokio::spawn(drain_pipe_with_telemetry(
-                stdout_stream,
-                requested_command.clone(),
-                self.repo_path.clone(),
-                pid,
-                "stdout",
-            ));
-            let stderr_task = tokio::spawn(drain_pipe_with_telemetry(
-                stderr_stream,
-                requested_command.clone(),
-                self.repo_path.clone(),
-                pid,
-                "stderr",
-            ));
+        let stdout_task = tokio::spawn(drain_pipe_with_telemetry(
+            stdout_stream,
+            requested_command.clone(),
+            self.repo_path.clone(),
+            pid,
+            "stdout",
+        ));
+        let stderr_task = tokio::spawn(drain_pipe_with_telemetry(
+            stderr_stream,
+            requested_command.clone(),
+            self.repo_path.clone(),
+            pid,
+            "stderr",
+        ));
 
-            let wait_result = timeout(Duration::from_secs(timeout_secs), child.wait()).await;
+        let wait_result = timeout(Duration::from_secs(timeout_secs), child.wait()).await;
 
-            match wait_result {
-                Ok(Ok(status)) => {
-                    drop(job_guard);
-                    reap_command_orphans(&requested_command, &self.repo_path).await;
-                    let stdout_buffer = collect_output_task(stdout_task).await;
-                    let stderr_buffer = collect_output_task(stderr_task).await;
-                    self.lock_pids().remove(&pid);
-                    info!(
-                        command = %requested_command,
-                        pid,
-                        exit_code = status.code().unwrap_or(-1),
-                        stdout_bytes = stdout_buffer.len(),
-                        stderr_bytes = stderr_buffer.len(),
-                        repo_path = %self.repo_path.display(),
-                        "Sandbox: processo efemero concluido"
-                    );
-                    if status.success() {
-                        Ok(stdout_buffer)
-                    } else {
-                        let mut stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
-                        let exit_code = status.code().unwrap_or(-1);
-                        if requested_command == "semgrep" {
-                            if let Some(diagnostics_path) = persist_semgrep_diagnostics(
-                                &self.repo_path,
-                                &resolved,
-                                &stdout_buffer,
-                                &stderr_buffer,
-                                exit_code,
-                            ) {
-                                if stderr_msg.is_empty() {
-                                    stderr_msg = format!("diagnostics={}", diagnostics_path.display());
-                                } else {
-                                    stderr_msg.push_str(&format!("\ndiagnostics={}", diagnostics_path.display()));
-                                }
+        match wait_result {
+            Ok(Ok(status)) => {
+                drop(job_guard);
+                reap_command_orphans(&requested_command, &self.repo_path).await;
+                let stdout_buffer = collect_output_task(stdout_task).await;
+                let stderr_buffer = collect_output_task(stderr_task).await;
+                self.lock_pids().remove(&pid);
+                info!(
+                    command = %requested_command,
+                    pid,
+                    exit_code = status.code().unwrap_or(-1),
+                    stdout_bytes = stdout_buffer.len(),
+                    stderr_bytes = stderr_buffer.len(),
+                    repo_path = %self.repo_path.display(),
+                    "Sandbox: processo efemero concluido"
+                );
+                if status.success() {
+                    Ok(stdout_buffer)
+                } else {
+                    let mut stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
+                    let exit_code = status.code().unwrap_or(-1);
+                    if requested_command == "semgrep" {
+                        if let Some(diagnostics_path) = persist_semgrep_diagnostics(
+                            &self.repo_path,
+                            &resolved,
+                            &stdout_buffer,
+                            &stderr_buffer,
+                            exit_code,
+                        ) {
+                            if stderr_msg.is_empty() {
+                                stderr_msg = format!("diagnostics={}", diagnostics_path.display());
+                            } else {
+                                stderr_msg.push_str(&format!("\ndiagnostics={}", diagnostics_path.display()));
                             }
                         }
-                        Err(SandboxError::ProcessNonZeroExit {
-                            exit_code,
-                            stderr: stderr_msg,
-                            stdout: stdout_buffer,
-                        })
                     }
-                }
-                Ok(Err(e)) => {
-                    drop(job_guard);
-                    stdout_task.abort();
-                    stderr_task.abort();
-                    self.lock_pids().remove(&pid);
-                    warn!(
-                        command = %requested_command,
-                        pid,
-                        repo_path = %self.repo_path.display(),
-                        error = %e,
-                        "Sandbox: erro ao aguardar termino do processo efemero"
-                    );
-                    Err(SandboxError::ProcessSpawnFailed { reason: e.to_string() })
-                }
-                Err(_) => {
-                    // Timeout! Extermina a arvore inteira do processo para evitar sidecars zumbis.
-                    warn!(
-                        command = %requested_command,
-                        pid,
-                        repo_path = %self.repo_path.display(),
-                        timeout_secs,
-                        "Sandbox: timeout atingido; aniquilando sidecar"
-                    );
-                    let _ = child.kill().await;
-                    drop(job_guard);
-                    kill_process_tree_by_pid(pid).await;
-                    reap_command_orphans(&requested_command, &self.repo_path).await;
-                    let stdout_buffer = collect_output_task(stdout_task).await;
-                    let stderr_buffer = collect_output_task(stderr_task).await;
-                    // D3 CORRIGIDO: Remove o PID após o kill para evitar que o Drop
-                    // mate um processo inocente que herdou o PID reciclado pelo SO.
-                    self.lock_pids().remove(&pid);
-                    warn!(
-                        command = %requested_command,
-                        pid,
-                        stdout_bytes = stdout_buffer.len(),
-                        stderr_bytes = stderr_buffer.len(),
-                        repo_path = %self.repo_path.display(),
-                        "Sandbox: sidecar aniquilado apos timeout"
-                    );
-                    Err(SandboxError::Timeout)
+                    Err(SandboxError::ProcessNonZeroExit {
+                        exit_code,
+                        stderr: stderr_msg,
+                        stdout: stdout_buffer,
+                    })
                 }
             }
-        } else {
-            // Em produção real sem mock, se LPAC ou Landlock não forem ativados nativamente, falha-se
-            Err(SandboxError::UnsupportedPlatform)
+            Ok(Err(e)) => {
+                drop(job_guard);
+                stdout_task.abort();
+                stderr_task.abort();
+                self.lock_pids().remove(&pid);
+                warn!(
+                    command = %requested_command,
+                    pid,
+                    repo_path = %self.repo_path.display(),
+                    error = %e,
+                    "Sandbox: erro ao aguardar termino do processo efemero"
+                );
+                Err(SandboxError::ProcessSpawnFailed { reason: e.to_string() })
+            }
+            Err(_) => {
+                warn!(
+                    command = %requested_command,
+                    pid,
+                    repo_path = %self.repo_path.display(),
+                    timeout_secs,
+                    "Sandbox: timeout atingido; aniquilando sidecar"
+                );
+                let _ = child.kill().await;
+                drop(job_guard);
+                kill_process_tree_by_pid(pid).await;
+                reap_command_orphans(&requested_command, &self.repo_path).await;
+                let stdout_buffer = collect_output_task(stdout_task).await;
+                let stderr_buffer = collect_output_task(stderr_task).await;
+                self.lock_pids().remove(&pid);
+                warn!(
+                    command = %requested_command,
+                    pid,
+                    stdout_bytes = stdout_buffer.len(),
+                    stderr_bytes = stderr_buffer.len(),
+                    repo_path = %self.repo_path.display(),
+                    "Sandbox: sidecar aniquilado apos timeout"
+                );
+                Err(SandboxError::Timeout)
+            }
         }
     }
 
@@ -885,20 +955,13 @@ impl SandboxOrchestrator {
     pub async fn create(
         repo_path: &RepoPath,
         policy: SandboxPolicy,
-        is_mock: bool,
     ) -> Result<SandboxHandle, SandboxError> {
-        if is_mock {
-            Ok(SandboxHandle {
-                repo_path: repo_path.as_ref().to_path_buf(),
-                policy,
-                is_mock: true,
-                active_pids: Arc::new(Mutex::new(HashSet::new())),
-            })
-        } else {
-            // Em ambiente real e de produção, caso o suporte nativo do SO para sandboxes
-            // não tenha sido inicializado via crate rappct/landlock, lançamos o erro adequado
-            Err(SandboxError::UnsupportedPlatform)
-        }
+        Ok(SandboxHandle {
+            repo_path: repo_path.as_ref().to_path_buf(),
+            policy,
+            host_write_roots: build_host_write_roots(repo_path.as_ref(), policy)?,
+            active_pids: Arc::new(Mutex::new(HashSet::new())),
+        })
     }
 }
 
@@ -922,9 +985,9 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let repo_path = RepoPath(temp_dir);
 
-        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly, true)
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly)
             .await
-            .expect("Deveria criar sandbox mock com sucesso");
+            .expect("Deveria criar sandbox com sucesso");
 
         assert_eq!(sandbox.policy(), SandboxPolicy::ReadOnly);
         assert_eq!(sandbox.repo_path(), repo_path.as_ref());
@@ -937,7 +1000,7 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let repo_path = RepoPath(temp_dir);
 
-        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly, true)
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly)
             .await
             .unwrap();
 
@@ -953,15 +1016,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_no_fallback_without_sandbox() {
+    async fn test_read_write_sandbox_creates_allowed_roots() {
         let _guard = get_test_mutex().await.lock().await;
-        
-        let temp_dir = std::env::temp_dir();
-        let repo_path = RepoPath(temp_dir);
 
-        // Se is_mock for falso e o suporte nativo do SO não estiver ativado, deve falhar
-        let res = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly, false).await;
-        assert_eq!(res.unwrap_err(), SandboxError::UnsupportedPlatform);
+        let temp_dir = TempDir::new().unwrap();
+        let repo_dir = temp_dir.path().join("owner").join("repo");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+        let repo_path = RepoPath(repo_dir.clone());
+
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite)
+            .await
+            .expect("sandbox read-write deve ser criado");
+
+        assert_eq!(sandbox.policy(), SandboxPolicy::ReadWrite);
+        assert!(repo_dir.parent().unwrap().join(".jcodemunch_index").exists());
+        assert!(repo_dir.parent().unwrap().join(".soda_semgrep").join("repo").exists());
     }
 
     #[test]

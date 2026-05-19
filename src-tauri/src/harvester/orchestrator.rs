@@ -98,7 +98,7 @@ impl HarvesterOrchestrator {
 
         // [N3] Sandbox Orchestrator
         info!(repo_id = %repo_id, repo_path = %repo_path.display(), "N3: Criando sandbox efemero");
-        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite, true)
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite)
             .await
             .map_err(|e| OrchestratorError::InfraError(e.to_string()))?;
         *sandbox_out = Some(sandbox);

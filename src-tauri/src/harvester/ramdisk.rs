@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 use sysinfo::System;
 use thiserror::Error;
-use tokio::time::{sleep, Duration};
+use tokio::time::sleep;
+use tokio::time::Duration;
 use tracing::{info, warn};
 #[cfg(not(target_os = "windows"))]
 use tempfile::{Builder, TempDir};
@@ -21,7 +23,9 @@ use super::projfs::{mount_projected_repo, ProjectedRepoSnapshot};
 
 const RAMDISK_READY_RETRIES: u32 = 20;
 const RAMDISK_READY_DELAY_MS: u64 = 150;
+#[cfg(not(target_os = "windows"))]
 const CLEANUP_RETRIES: u32 = 20;
+#[cfg(not(target_os = "windows"))]
 const CLEANUP_DELAY_MS: u64 = 250;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -51,6 +55,8 @@ struct RamdiskGuard {
     projection_handles: Vec<MountedProjection>,
     #[cfg(target_os = "windows")]
     workspace_root: PathBuf,
+    #[cfg(target_os = "windows")]
+    skip_drop_cleanup: bool,
 }
 
 #[derive(Debug)]
@@ -68,19 +74,33 @@ impl RamdiskHandle {
         let mount_path = self.mount_path.clone();
         #[cfg(target_os = "windows")]
         {
-            let projected_roots = self._guard.release_projection_roots();
+            let cleanup_started = Instant::now();
+            let projected_roots = self._guard.release_projections();
+            self._guard.skip_drop_cleanup = true;
             info!(
                 path = %mount_path.display(),
                 projected_roots = projected_roots.len(),
-                "RamdiskHandle: projeções ProjFS descartadas antes do cleanup"
+                "RamdiskHandle: iniciando teardown ProjFS"
             );
-            sleep(Duration::from_millis(CLEANUP_DELAY_MS)).await;
-            for root in projected_roots {
-                info!(path = %root.display(), "RamdiskHandle: removendo virtualization root do ProjFS");
-                remove_dir_all_with_retries(root).await?;
+
+            for projection in projected_roots {
+                let root = projection.root_path.clone();
+                let _ = spawn_detached_delete_process(&root);
+                drop(projection.projection);
+                info!(
+                    path = %root.display(),
+                    elapsed_ms = cleanup_started.elapsed().as_millis(),
+                    "RamdiskHandle: virtualization root delegada para delecao externa"
+                );
             }
-            remove_dir_all_with_retries(mount_path.clone()).await?;
-            info!(path = %mount_path.display(), "RamdiskHandle: cleanup explicito concluido");
+
+            let _ = spawn_detached_delete_process(&mount_path);
+            self._guard.workspace_root = mount_path.clone();
+            info!(
+                path = %mount_path.display(),
+                elapsed_ms = cleanup_started.elapsed().as_millis(),
+                "RamdiskHandle: cleanup explicito concluido com delecao externa não-bloqueante"
+            );
             Ok(())
         }
 
@@ -144,23 +164,13 @@ impl RamdiskGuard {
         Self {
             projection_handles: Vec::new(),
             workspace_root,
+            skip_drop_cleanup: false,
         }
     }
 
     #[cfg(target_os = "windows")]
-    fn release_projection_roots(&mut self) -> Vec<PathBuf> {
-        let projections = std::mem::take(&mut self.projection_handles);
-        projections
-            .into_iter()
-            .map(|projection| {
-                let MountedProjection {
-                    root_path,
-                    projection,
-                } = projection;
-                drop(projection);
-                root_path
-            })
-            .collect()
+    fn release_projections(&mut self) -> Vec<MountedProjection> {
+        std::mem::take(&mut self.projection_handles)
     }
 }
 
@@ -188,11 +198,17 @@ impl Drop for RamdiskGuard {
     fn drop(&mut self) {
         #[cfg(target_os = "windows")]
         {
+            if self.skip_drop_cleanup {
+                info!("RamdiskGuard: cleanup ja delegado externamente; Drop nao repetira a remocao");
+                return;
+            }
             let dropped = self.projection_handles.len();
             let workspace_root = self.workspace_root.clone();
-            let projected_roots = self.release_projection_roots();
+            let projected_roots = self.release_projections();
             info!(projections = dropped, "RamdiskGuard: projeções ProjFS descartadas via Drop");
-            for root in projected_roots {
+            for projection in projected_roots {
+                let root = projection.root_path;
+                drop(projection.projection);
                 match remove_dir_all_via_powershell(&root) {
                     Ok(()) => {
                         info!(path = %root.display(), "RamdiskGuard: virtualization root removida via Drop");
@@ -333,6 +349,45 @@ fn remove_dir_all_via_powershell(path: &Path) -> std::io::Result<()> {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn spawn_detached_delete_process(path: &Path) -> Result<(), RamdiskError> {
+    let escaped = path.to_string_lossy().replace('\'', "''");
+    let script = format!(
+        "$p='{escaped}'; \
+         for ($i = 0; $i -lt 240; $i++) {{ \
+            if (-not (Test-Path -LiteralPath $p)) {{ exit 0 }} \
+            try {{ \
+                Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop; \
+                if (-not (Test-Path -LiteralPath $p)) {{ exit 0 }} \
+            }} catch {{}} \
+            Start-Sleep -Milliseconds 500; \
+         }} \
+         exit 0"
+    );
+    std::process::Command::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| RamdiskError::AllocationFailed {
+            reason: format!(
+                "Falha ao iniciar delecao externa para '{}': {}",
+                path.display(),
+                e
+            ),
+        })
+}
+
+#[cfg(not(target_os = "windows"))]
 async fn remove_dir_all_with_retries(path: PathBuf) -> Result<(), RamdiskError> {
     tokio::task::spawn_blocking(move || {
         let mut last_error = None;

@@ -5429,3 +5429,1376 @@
 - state [consoleOpen, setConsoleOpen] = useState()
 - state [prevUrl, setPrevUrl] = useState()
 - state [inputValue, setInputValue] = useState()
+
+[ui/goose2/src/shared/ui/alert-dialog.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Trigger>
+- props {
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Portal>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Content>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"div">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Title>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Description>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Action>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>
+
+[ui/goose2/src/shared/ui/alert.tsx]
+- props {
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"div">
+
+[ui/goose2/src/shared/ui/aspect-ratio.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof AspectRatioPrimitive.Root>
+
+[ui/goose2/src/shared/ui/async-button.tsx]
+- type AsyncButtonState
+- interface AsyncButtonProps
+- props size: ButtonProps["size"]
+- props {
+  state,
+  idleLabel,
+  pendingLabel = "Loading...",
+  successLabel = "Done",
+  errorLabel,
+  pendingDelayMs = 250,
+  pendingVisual = "text",
+  preserveWidth = true,
+  disabled,
+  size,
+  className,
+  leftIcon,
+  rightIcon,
+  ...props
+}: AsyncButtonProps
+- state [displayState, setDisplayState] = useState()
+
+[ui/goose2/src/shared/ui/avatar.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AvatarPrimitive.Root>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AvatarPrimitive.Image>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof AvatarPrimitive.Fallback>
+
+[ui/goose2/src/shared/ui/badge.tsx]
+- props {
+  className,
+  variant,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & { asChild?: boolean }
+
+[ui/goose2/src/shared/ui/breadcrumb.tsx]
+- props { ...props }: React.ComponentProps<"nav">
+- props { className, ...props }: React.ComponentProps<"ol">
+- props { className, ...props }: React.ComponentProps<"li">
+- props {
+  asChild,
+  className,
+  ...props
+}: React.ComponentProps<"a"> & {
+  asChild?: boolean;
+}
+- props { className, ...props }: React.ComponentProps<"span">
+- props {
+  children,
+  className,
+  ...props
+}: React.ComponentProps<"li">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"span">
+
+[ui/goose2/src/shared/ui/button-group.tsx]
+- props {
+  className,
+  orientation,
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof buttonGroupVariants>
+- props {
+  className,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"div"> & {
+  asChild?: boolean;
+}
+- props {
+  className,
+  orientation = "vertical",
+  ...props
+}: React.ComponentProps<typeof Separator>
+
+[ui/goose2/src/shared/ui/button.tsx]
+- type ButtonIconProps
+- type ButtonProps
+- props icon: React.ReactElement<ButtonIconProps>
+- props size: VariantProps<typeof buttonVariants>["size"]
+- props {
+      className,
+      variant,
+      size,
+      asChild = false,
+      leftIcon,
+      rightIcon,
+      children,
+      ...props
+    }
+
+[ui/goose2/src/shared/ui/calendar.tsx]
+- props {
+  className,
+  classNames,
+  showOutsideDays = true,
+  ...props
+}: React.ComponentProps<typeof DayPicker>
+- props { orientation, ...props }
+
+[ui/goose2/src/shared/ui/card.tsx]
+- props { className, ...props }: React.ComponentProps<"div">
+
+[ui/goose2/src/shared/ui/carousel.tsx]
+- type CarouselProps
+- type CarouselContextProps
+- props {
+  orientation = "horizontal",
+  opts,
+  setApi,
+  plugins,
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & CarouselProps
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  variant = "outline",
+  ...props
+}: React.ComponentProps<typeof Button>
+- state [canScrollPrev, setCanScrollPrev] = useState()
+- state [canScrollNext, setCanScrollNext] = useState()
+
+[ui/goose2/src/shared/ui/chart.tsx]
+- type ChartContextProps
+- props {
+  id,
+  className,
+  children,
+  config,
+  ...props
+}: React.ComponentProps<"div"> & {
+  config: ChartConfig;
+  children: React.ComponentProps<
+    typeof RechartsPrimitive.ResponsiveContainer
+  >["children"];
+}
+- props {
+  active,
+  payload,
+  className,
+  indicator = "dot",
+  hideLabel = false,
+  hideIndicator = false,
+  label,
+  labelFormatter,
+  labelClassName,
+  formatter,
+  color,
+  nameKey,
+  labelKey,
+}: Partial<RechartsPrimitive.TooltipContentProps> &
+  React.ComponentProps<"div"> & {
+    hideLabel?: boolean;
+    hideIndicator?: boolean;
+    indicator?: "line" | "dot" | "dashed";
+    nameKey?: string;
+    labelKey?: string;
+  }
+- props {
+  className,
+  hideIcon = false,
+  payload,
+  verticalAlign = "bottom",
+  nameKey,
+}: React.ComponentProps<"div"> & {
+  payload?: RechartsPrimitive.LegendPayload[];
+  verticalAlign?: "top" | "bottom" | "middle";
+  hideIcon?: boolean;
+  nameKey?: string;
+}
+- state [dimensions, setDimensions] = useState()
+
+[ui/goose2/src/shared/ui/checkbox.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof CheckboxPrimitive.Root>
+
+[ui/goose2/src/shared/ui/collapsible.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof CollapsiblePrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleTrigger>
+- props {
+  ...props
+}: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent>
+
+[ui/goose2/src/shared/ui/command.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive>
+- props {
+  title = "Command Palette",
+  description = "Search for a command to run...",
+  children,
+  ...props
+}: React.ComponentProps<typeof Dialog> & {
+  title?: string;
+  description?: string;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Input>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.List>
+- props {
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Empty>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Group>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Separator>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Item>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"span">
+
+[ui/goose2/src/shared/ui/confirm-dialog.tsx]
+- interface ConfirmDialogProps
+- props {
+  open,
+  onOpenChange,
+  title,
+  description,
+  cancelLabel,
+  confirmLabel,
+  loadingLabel,
+  isLoading = false,
+  confirmVariant = "destructive",
+  contentClassName = "max-w-sm",
+  overlayClassName,
+  positionerClassName,
+  onConfirm,
+  onConfirmError,
+}: ConfirmDialogProps
+
+[ui/goose2/src/shared/ui/context-menu.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>
+- props {
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Group>
+- props {
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Portal>
+- props {
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Sub>
+- props {
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.RadioGroup>
+- props {
+  className,
+  inset,
+  children,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.SubTrigger> & {
+  inset?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Content>
+- props {
+  className,
+  inset,
+  variant = "default",
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Item> & {
+  inset?: boolean;
+  variant?: "default" | "destructive";
+}
+- props {
+  className,
+  children,
+  checked,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.CheckboxItem>
+- props {
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.RadioItem>
+- props {
+  className,
+  inset,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Label> & {
+  inset?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Separator>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"span">
+
+[ui/goose2/src/shared/ui/detail-field.tsx]
+- interface DetailFieldProps
+- props {
+  label,
+  children,
+  meta,
+  className,
+  headerClassName,
+  labelClassName,
+  contentClassName,
+  contentAs = "div",
+}: DetailFieldProps
+
+[ui/goose2/src/shared/ui/dialog.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Trigger>
+- props {
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Portal>
+- props {
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Close>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Overlay>
+- props {
+  className,
+  children,
+  overlayClassName,
+  positionerClassName,
+  showCloseButton = true,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  overlayClassName?: string;
+  positionerClassName?: string;
+  showCloseButton?: boolean;
+}
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Title>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Description>
+
+[ui/goose2/src/shared/ui/drawer.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Trigger>
+- props {
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Portal>
+- props {
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Close>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Overlay>
+- props {
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Content>
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Title>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.Description>
+
+[ui/goose2/src/shared/ui/dropdown-menu.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>
+- props {
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>
+- props {
+  className,
+  sideOffset = 4,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>
+- props {
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Group>
+- props {
+  className,
+  inset,
+  variant = "default",
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
+  inset?: boolean;
+  variant?: "default" | "destructive";
+}
+- props {
+  className,
+  children,
+  checked,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>
+- props {
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>
+- props {
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>
+- props {
+  className,
+  inset,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Label> & {
+  inset?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"span">
+- props {
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>
+- props {
+  className,
+  inset,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
+  inset?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>
+
+[ui/goose2/src/shared/ui/file-context-menu.tsx]
+- interface FileContextMenuProps
+- props { path, children }: FileContextMenuProps
+
+[ui/goose2/src/shared/ui/form.tsx]
+- props {
+  ...props
+}: ControllerProps<TFieldValues, TName>
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Root>
+- props { ...props }: React.ComponentProps<typeof Slot>
+- props { className, ...props }: React.ComponentProps<"p">
+
+[ui/goose2/src/shared/ui/GooseLogo.tsx]
+- interface GooseLogoProps
+- props {
+  className = "",
+  size = "default",
+  hover = true,
+}: GooseLogoProps
+
+[ui/goose2/src/shared/ui/hover-card.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof HoverCardPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof HoverCardPrimitive.Trigger>
+- props {
+  className,
+  align = "center",
+  sideOffset = 4,
+  ...props
+}: React.ComponentProps<typeof HoverCardPrimitive.Content>
+
+[ui/goose2/src/shared/ui/ImageLightbox.tsx]
+- interface ImageLightboxProps
+- props {
+  src,
+  alt = "Image preview",
+  open,
+  onOpenChange,
+}: ImageLightboxProps
+
+[ui/goose2/src/shared/ui/input-group.tsx]
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  align = "inline-start",
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>
+- props {
+  className,
+  type = "button",
+  variant = "ghost",
+  size = "xs",
+  ...props
+}: Omit<React.ComponentProps<typeof Button>, "size"> &
+  VariantProps<typeof inputGroupButtonVariants>
+- props { className, ...props }: React.ComponentProps<"span">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"input">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"textarea">
+
+[ui/goose2/src/shared/ui/input-otp.tsx]
+- props {
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<typeof OTPInput> & {
+  containerClassName?: string;
+}
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  index,
+  className,
+  ...props
+}: React.ComponentProps<"div"> & {
+  index: number;
+}
+- props { ...props }: React.ComponentProps<"div">
+
+[ui/goose2/src/shared/ui/input.tsx]
+- interface InputProps
+- props {
+  className,
+  type,
+  variant = "default",
+  inputRef,
+  ...props
+}: InputProps
+
+[ui/goose2/src/shared/ui/label.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Root>
+
+[ui/goose2/src/shared/ui/menubar.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Menu>
+- props {
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Group>
+- props {
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Portal>
+- props {
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.RadioGroup>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Trigger>
+- props {
+  className,
+  align = "start",
+  alignOffset = -4,
+  sideOffset = 8,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Content>
+- props {
+  className,
+  inset,
+  variant = "default",
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Item> & {
+  inset?: boolean;
+  variant?: "default" | "destructive";
+}
+- props {
+  className,
+  children,
+  checked,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.CheckboxItem>
+- props {
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.RadioItem>
+- props {
+  className,
+  inset,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Label> & {
+  inset?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Separator>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"span">
+- props {
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.Sub>
+- props {
+  className,
+  inset,
+  children,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.SubTrigger> & {
+  inset?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.SubContent>
+
+[ui/goose2/src/shared/ui/navigation-menu.tsx]
+- props {
+  className,
+  children,
+  viewport = true,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Root> & {
+  viewport?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.List>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Item>
+- props {
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Trigger>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Content>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Viewport>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Link>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Indicator>
+
+[ui/goose2/src/shared/ui/page-columns.tsx]
+- interface PageColumnsProps
+- props {
+  sidebar,
+  children,
+  className,
+  sidebarClassName,
+  contentClassName,
+  resizable = true,
+  defaultSidebarSize = 28,
+  minSidebarSize = 22,
+  maxSidebarSize = 38,
+  minContentSize = 48,
+}: PageColumnsProps
+
+[ui/goose2/src/shared/ui/page-shell.tsx]
+- interface ShellProps
+- interface PageHeaderProps
+- props {
+  children,
+  className,
+  contentClassName,
+  contentWidth = "default",
+}: ShellProps
+- props {
+  eyebrow,
+  title,
+  description,
+  actions,
+  titleElement = "h1",
+  variant = "default",
+  actionsPlacement = "end",
+  className,
+  eyebrowClassName,
+  titleClassName,
+  descriptionClassName,
+  actionsClassName,
+}: PageHeaderProps
+
+[ui/goose2/src/shared/ui/pagination.tsx]
+- type PaginationLinkProps
+- props { className, ...props }: React.ComponentProps<"nav">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"ul">
+- props { ...props }: React.ComponentProps<"li">
+- props {
+  className,
+  isActive,
+  ...props
+}: PaginationLinkProps
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof PaginationLink>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"span">
+
+[ui/goose2/src/shared/ui/popover.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Trigger>
+- props {
+  className,
+  align = "center",
+  sideOffset = 4,
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Content>
+- props {
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Anchor>
+
+[ui/goose2/src/shared/ui/progress.tsx]
+- props {
+  className,
+  value,
+  ...props
+}: React.ComponentProps<typeof ProgressPrimitive.Root>
+
+[ui/goose2/src/shared/ui/radio-group.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof RadioGroupPrimitive.Root>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof RadioGroupPrimitive.Item>
+
+[ui/goose2/src/shared/ui/resizable.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof ResizablePrimitive.Group>
+- props {
+  ...props
+}: React.ComponentProps<typeof ResizablePrimitive.Panel>
+- props {
+  withHandle,
+  variant = "default",
+  indicator = "grip",
+  className,
+  handleClassName,
+  ...props
+}: React.ComponentProps<typeof ResizablePrimitive.Separator> & {
+  withHandle?: boolean;
+  variant?: "default" | "subtle";
+  indicator?: "grip" | "arrows";
+  handleClassName?: string;
+}
+
+[ui/goose2/src/shared/ui/scroll-area.tsx]
+- props {
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>
+- props {
+  className,
+  orientation = "vertical",
+  ...props
+}: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>
+
+[ui/goose2/src/shared/ui/SearchBar.tsx]
+- interface SearchBarProps
+- props {
+  value,
+  onChange,
+  placeholder,
+  onKeyDown,
+  className,
+  size = "default",
+  inputRef,
+  "aria-label": ariaLabel,
+}: SearchBarProps
+
+[ui/goose2/src/shared/ui/select.tsx]
+- props {
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Group>
+- props {
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Value>
+- props {
+  className,
+  size = "default",
+  children,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
+  size?: "sm" | "default";
+}
+- props {
+  className,
+  children,
+  position = "popper",
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Content>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Label>
+- props {
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Item>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Separator>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollDownButton>
+
+[ui/goose2/src/shared/ui/separator.tsx]
+- props {
+  className,
+  orientation = "horizontal",
+  decorative = true,
+  ...props
+}: React.ComponentProps<typeof SeparatorPrimitive.Root>
+
+[ui/goose2/src/shared/ui/SessionActivityIndicator.tsx]
+- interface SessionActivityIndicatorProps
+- props {
+  isRunning = false,
+  hasUnread = false,
+  variant = "inline",
+  className,
+}: SessionActivityIndicatorProps
+
+[ui/goose2/src/shared/ui/SettingsPage.tsx]
+- interface SettingsPageProps
+- props {
+  title,
+  description,
+  actions,
+  controls,
+  children,
+  className,
+  contentClassName,
+}: SettingsPageProps
+
+[ui/goose2/src/shared/ui/sheet.tsx]
+- props { ...props }: React.ComponentProps<typeof SheetPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Trigger>
+- props {
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Close>
+- props {
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Portal>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Overlay>
+- props {
+  className,
+  children,
+  side = "right",
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Content> & {
+  side?: "top" | "right" | "bottom" | "left";
+}
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Title>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Description>
+
+[ui/goose2/src/shared/ui/sidebar.tsx]
+- type SidebarContextProps
+- props {
+  defaultOpen = true,
+  open: openProp,
+  onOpenChange: setOpenProp,
+  className,
+  style,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+- props {
+  side = "left",
+  variant = "sidebar",
+  collapsible = "offcanvas",
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  side?: "left" | "right";
+  variant?: "sidebar" | "floating" | "inset";
+  collapsible?: "offcanvas" | "icon" | "none";
+}
+- props {
+  className,
+  onClick,
+  ...props
+}: React.ComponentProps<typeof Button>
+- props { className, ...props }: React.ComponentProps<"button">
+- props { className, ...props }: React.ComponentProps<"main">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof Input>
+- props { className, ...props }: React.ComponentProps<"div">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof Separator>
+- props {
+  className,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"div"> & { asChild?: boolean }
+- props {
+  className,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"button"> & { asChild?: boolean }
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"div">
+- props { className, ...props }: React.ComponentProps<"ul">
+- props { className, ...props }: React.ComponentProps<"li">
+- props {
+  asChild = false,
+  isActive = false,
+  variant = "default",
+  size = "default",
+  tooltip,
+  className,
+  ...props
+}: React.ComponentProps<"button"> & {
+  asChild?: boolean;
+  isActive?: boolean;
+  tooltip?: string | React.ComponentProps<typeof TooltipContent>;
+} & VariantProps<typeof sidebarMenuButtonVariants>
+- props {
+  className,
+  asChild = false,
+  showOnHover = false,
+  ...props
+}: React.ComponentProps<"button"> & {
+  asChild?: boolean;
+  showOnHover?: boolean;
+}
+- props {
+  className,
+  showIcon = false,
+  ...props
+}: React.ComponentProps<"div"> & {
+  showIcon?: boolean;
+}
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"li">
+- props {
+  asChild = false,
+  size = "md",
+  isActive = false,
+  className,
+  ...props
+}: React.ComponentProps<"a"> & {
+  asChild?: boolean;
+  size?: "sm" | "md";
+  isActive?: boolean;
+}
+- state [openMobile, setOpenMobile] = useState()
+- state [_open, _setOpen] = useState()
+
+[ui/goose2/src/shared/ui/skeleton.tsx]
+- props { className, ...props }: React.ComponentProps<"div">
+
+[ui/goose2/src/shared/ui/slider.tsx]
+- props {
+  className,
+  defaultValue,
+  value,
+  min = 0,
+  max = 100,
+  ...props
+}: React.ComponentProps<typeof SliderPrimitive.Root>
+
+[ui/goose2/src/shared/ui/sonner.tsx]
+- props { ...props }: ToasterProps
+
+[ui/goose2/src/shared/ui/spinner.tsx]
+- props { className, ...props }: React.ComponentProps<"svg">
+
+[ui/goose2/src/shared/ui/split-button.tsx]
+- interface SplitButtonProps
+- props {
+  actions,
+  activeActionId,
+  onPrimaryClick,
+  onActionSelect,
+  disabled = false,
+  className,
+  menuTriggerLabel,
+  variant = "outline-flat",
+  size = "xs",
+}: SplitButtonProps<T>
+
+[ui/goose2/src/shared/ui/switch.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof SwitchPrimitive.Root>
+
+[ui/goose2/src/shared/ui/table.tsx]
+- props { className, ...props }: React.ComponentProps<"table">
+- props { className, ...props }: React.ComponentProps<"thead">
+- props { className, ...props }: React.ComponentProps<"tbody">
+- props { className, ...props }: React.ComponentProps<"tfoot">
+- props { className, ...props }: React.ComponentProps<"tr">
+- props { className, ...props }: React.ComponentProps<"th">
+- props { className, ...props }: React.ComponentProps<"td">
+- props {
+  className,
+  ...props
+}: React.ComponentProps<"caption">
+
+[ui/goose2/src/shared/ui/tabs.tsx]
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Root>
+- props {
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List> &
+  VariantProps<typeof tabsListVariants>
+- props {
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger> &
+  VariantProps<typeof tabsTriggerVariants>
+- props {
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Content>
+
+[ui/goose2/src/shared/ui/textarea.tsx]
+- props { className, ...props }: React.ComponentProps<"textarea">
+
+[ui/goose2/src/shared/ui/toggle-group.tsx]
+- props {
+  className,
+  variant,
+  size,
+  children,
+  ...props
+}: React.ComponentProps<typeof ToggleGroupPrimitive.Root> &
+  VariantProps<typeof toggleVariants>
+- props {
+  className,
+  children,
+  variant,
+  size,
+  ...props
+}: React.ComponentProps<typeof ToggleGroupPrimitive.Item> &
+  VariantProps<typeof toggleVariants>
+
+[ui/goose2/src/shared/ui/toggle.tsx]
+- props {
+  className,
+  variant,
+  size,
+  ...props
+}: React.ComponentProps<typeof TogglePrimitive.Root> &
+  VariantProps<typeof toggleVariants>
+
+[ui/goose2/src/shared/ui/tooltip.tsx]
+- props {
+  delayDuration = 0,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Provider>
+- props {
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Root>
+- props {
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Trigger>
+- props {
+  className,
+  sideOffset = 0,
+  children,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Content>
+
+[ui/text/src/components/ErrorScreen.tsx]
+- interface ErrorScreenProps
+- props { errorMsg, onRetry }: ErrorScreenProps
+
+[ui/text/src/components/Header.tsx]
+- interface HeaderProps
+- props {
+  width,
+  status,
+  loading,
+  spinIdx,
+  turnInfo,
+}: HeaderProps
+
+[ui/text/src/components/Rule.tsx]
+- interface RuleProps
+- props { width }: RuleProps
+
+[ui/text/src/components/Spinner.tsx]
+- interface SpinnerProps
+- props { idx }: SpinnerProps
+
+[ui/text/src/components/ToolCallExpanded.tsx]
+- interface Props
+- props {
+  info,
+  width,
+  height,
+  scrollOffset,
+  onScroll,
+  onClose,
+}: Props
+
+[ui/text/src/configure.tsx]
+- interface ConfigureProps
+- interface ModelSelectorProps
+- props {
+  provider,
+  height,
+  onSelect,
+  onBack,
+}: ModelSelectorProps
+- props {
+  client,
+  sessionId,
+  width,
+  height,
+  onComplete,
+  onCancel,
+  initialIntent,
+}: ConfigureProps
+- state [loading, setLoading] = useState()
+- state [models, setModels] = useState()
+- state [selectedIdx, setSelectedIdx] = useState()
+- state [searchQuery, setSearchQuery] = useState()
+- state [manualEntry, setManualEntry] = useState()
+- state [scrollOffset, setScrollOffset] = useState()
+- state [phase, setPhase] = useState()
+- state [providers, setProviders] = useState()
+- state [selectedProvider, setSelectedProvider] = useState()
+- state [errorMsg, setErrorMsg] = useState()
+- state [spinIdx, setSpinIdx] = useState()
+- state [fetchKey, setFetchKey] = useState()
+- state [pendingConfigValues, setPendingConfigValues] = useState()
+
+[ui/text/src/extensions.tsx]
+- state [phase, setPhase] = useState()
+- state [spinIdx, setSpinIdx] = useState()
+- state [errorMsg, setErrorMsg] = useState()
+- state [entries, setEntries] = useState()
+- state [warnings, setWarnings] = useState()
+- state [selectedIdx, setSelectedIdx] = useState()
+- state [addType, setAddType] = useState()
+- state [addValue, setAddValue] = useState()
+- state [addName, setAddName] = useState()
+- state [addDesc, setAddDesc] = useState()
+- state [inputKey, setInputKey] = useState()
+
+[ui/text/src/onboarding.tsx]
+- interface OnboardingProps
+- interface ProviderSelectorProps
+- interface ProviderConfiguratorProps
+- interface SuccessScreenProps
+- props { providers, height, onSelect, title, subtitle, onBack }: ProviderSelectorProps
+- props { provider, height, onComplete, onBack }: ProviderConfiguratorProps
+- props { provider, height }: SuccessScreenProps
+- props {
+  client,
+  width,
+  height,
+  onComplete,
+}: OnboardingProps
+- state [selectedIdx, setSelectedIdx] = useState()
+- state [searchQuery, setSearchQuery] = useState()
+- state [scrollRow, setScrollRow] = useState()
+- state [keyValues, setKeyValues] = useState()
+- state [activeKeyIdx, setActiveKeyIdx] = useState()
+- state [showMasked, setShowMasked] = useState()
+- state [inputKey, setInputKey] = useState()
+- state [phase, setPhase] = useState()
+- state [providers, setProviders] = useState()
+- state [selectedProvider, setSelectedProvider] = useState()
+- state [errorMsg, setErrorMsg] = useState()
+- state [spinIdx, setSpinIdx] = useState()
+- state [fetchKey, setFetchKey] = useState()
+
+[ui/text/src/tui.tsx]
+- state [termSize, setTermSize] = useState()
+- state [turns, setTurns] = useState()
+- state [input, setInput] = useState()
+- state [loading, setLoading] = useState()
+- state [status, setStatus] = useState()
+- state [spinIdx, setSpinIdx] = useState()
+- state [gooseFrame, setGooseFrame] = useState()
+- state [bannerVisible, setBannerVisible] = useState()
+- state [queuedMessages, setQueuedMessages] = useState()
+- state [viewTurnIdx, setViewTurnIdx] = useState()
+- state [selectedToolCallIdx, setSelectedToolCallIdx] = useState()
+- state [toolCallExpanded, setToolCallExpanded] = useState()
+- state [toolCallExpandedScroll, setToolCallExpandedScroll] = useState()
+- state [scrollOffset, setScrollOffset] = useState()
+- state [pastedFull, setPastedFull] = useState()
+- state [needsOnboarding, setNeedsOnboarding] = useState()
+- state [overlay, setOverlay] = useState()

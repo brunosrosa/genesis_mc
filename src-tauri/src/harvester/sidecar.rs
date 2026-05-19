@@ -267,6 +267,100 @@ fn code_index_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, S
     })
 }
 
+fn replace_host_prefix_variants(mut text: String, prefix: &str, replacement: &str) -> String {
+    if prefix.is_empty() {
+        return text;
+    }
+
+    let raw = prefix.to_string();
+    let slash = raw.replace('\\', "/");
+    let escaped = raw.replace('\\', "\\\\");
+    let escaped_slash = slash.replace('/', "\\/");
+    let mut variants = vec![
+        format!("{raw}\\"),
+        format!("{raw}/"),
+        raw,
+        format!("{slash}/"),
+        slash,
+        format!("{escaped}\\\\"),
+        escaped,
+        format!("{escaped_slash}\\/"),
+        escaped_slash,
+    ];
+    variants.sort();
+    variants.dedup();
+    variants.sort_by_key(|value| std::cmp::Reverse(value.len()));
+
+    for variant in variants {
+        text = text.replace(&variant, replacement);
+    }
+
+    text
+}
+
+fn sanitize_host_paths_in_text(repo_path: &Path, text: &str) -> String {
+    let mut sanitized = text.to_string();
+    let repo_prefix = repo_path.to_string_lossy().to_string();
+    sanitized = replace_host_prefix_variants(sanitized, &repo_prefix, "");
+
+    if let Ok(semgrep_root) = semgrep_support_dir(repo_path) {
+        sanitized = replace_host_prefix_variants(
+            sanitized,
+            &semgrep_root.to_string_lossy(),
+            ".soda_semgrep/",
+        );
+    }
+
+    sanitized = replace_host_prefix_variants(
+        sanitized,
+        &code_index_path_for_repo(repo_path),
+        ".jcodemunch_index/",
+    );
+
+    sanitized
+}
+
+fn sanitize_sidecar_output(repo_path: &Path, bytes: &[u8]) -> Vec<u8> {
+    sanitize_host_paths_in_text(repo_path, &String::from_utf8_lossy(bytes)).into_bytes()
+}
+
+fn sanitize_repo_relative_path(repo_path: &Path, value: &str) -> Option<String> {
+    let sanitized = sanitize_host_paths_in_text(repo_path, value);
+    let mut normalized = sanitized
+        .trim()
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_start_matches('/')
+        .to_string();
+    if let (Some(owner), Some(repo)) = (
+        repo_path.parent().and_then(|path| path.file_name()).and_then(|value| value.to_str()),
+        repo_path.file_name().and_then(|value| value.to_str()),
+    ) {
+        let repo_anchor = format!("repos/{owner}/{repo}/").to_ascii_lowercase();
+        let normalized_lower = normalized.to_ascii_lowercase();
+        if let Some(index) = normalized_lower.find(&repo_anchor) {
+            normalized = normalized[index + repo_anchor.len()..].to_string();
+        }
+    }
+    if normalized.is_empty() {
+        return None;
+    }
+
+    let lower = normalized.to_ascii_lowercase();
+    let host_drive = lower.as_bytes().get(1) == Some(&b':');
+    let internal = lower.starts_with(".soda_semgrep/")
+        || lower.starts_with(".jcodemunch_index/")
+        || lower.starts_with(".soda_scratchpad/")
+        || lower.starts_with("sandbox/")
+        || lower.starts_with("diagnostics/")
+        || lower.contains("projfs_workspaces");
+    if host_drive || internal {
+        return None;
+    }
+
+    Some(normalized)
+}
+
 #[derive(Debug, Deserialize)]
 struct IndexedImport {
     specifier: String,
@@ -382,7 +476,7 @@ fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError>
         "jcodemunch: abrindo banco topologico para blob_05_architecture_map"
     );
 
-    let summary = tokio::task::block_in_place(|| {
+    let summary = {
         let conn = rusqlite::Connection::open(&db_path).map_err(|e| SidecarError::ExecutionFailed {
             reason: format!("Falha ao abrir banco topologico do jcodemunch: {}", e),
         })?;
@@ -403,6 +497,9 @@ fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError>
             let (path, imports_json) = row.map_err(|e| SidecarError::ExecutionFailed {
                 reason: format!("Falha ao iterar topologia do jcodemunch: {}", e),
             })?;
+            let Some(path) = sanitize_repo_relative_path(repo_path, &path) else {
+                continue;
+            };
             if should_skip_topology_entry(&path) {
                 continue;
             }
@@ -411,13 +508,18 @@ fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError>
             })?;
             let mut relevant = imports
                 .into_iter()
-                .filter(|import| is_project_specifier(&import.specifier, &project_prefixes))
-                .filter(|import| !should_skip_topology_entry(&import.specifier))
-                .map(|import| {
+                .filter_map(|import| {
+                    let specifier = sanitize_host_paths_in_text(repo_path, &import.specifier);
+                    if !is_project_specifier(&specifier, &project_prefixes)
+                        || should_skip_topology_entry(&specifier)
+                    {
+                        return None;
+                    }
+
                     if import.names.is_empty() {
-                        import.specifier
+                        Some(specifier)
                     } else {
-                        format!("{} ({})", import.specifier, import.names.join(", "))
+                        Some(format!("{} ({})", specifier, import.names.join(", ")))
                     }
                 })
                 .collect::<Vec<_>>();
@@ -462,7 +564,7 @@ fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError>
             summary.push_str(&packed_blocks);
         }
         Ok(summary)
-    })?;
+    }?;
 
     let truncated = truncate_utf8(
         &summary,
@@ -764,13 +866,14 @@ async fn execute_sidecar<E: SandboxExecutor>(
     );
     match executor.execute(binary, args, timeout_secs).await {
         Ok(bytes) => {
+            let sanitized_bytes = sanitize_sidecar_output(executor.repo_path(), &bytes);
             tracing::info!(
                 binary = %binary,
-                stdout_bytes = bytes.len(),
+                stdout_bytes = sanitized_bytes.len(),
                 repo_path = %executor.repo_path().display(),
                 "Sidecar concluido"
             );
-            Ok(bytes)
+            Ok(sanitized_bytes)
         }
         Err(SandboxError::Timeout) => {
             Err(SidecarError::Timeout { timeout_secs })
@@ -790,19 +893,21 @@ async fn execute_sidecar<E: SandboxExecutor>(
         // Exit code 1: linters sinalizam violações encontradas (sucesso de negócio).
         // Exit code 2+: erro real de execução (config inválida, crash).
         Err(SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout }) => {
-            if binary == "semgrep" && !stdout_is_blank(&stdout) && stdout_contains_json_payload(&stdout) {
-                Ok(stdout)
+            let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
+            let sanitized_stderr = sanitize_host_paths_in_text(executor.repo_path(), &stderr);
+            if binary == "semgrep" && !stdout_is_blank(&sanitized_stdout) && stdout_contains_json_payload(&sanitized_stdout) {
+                Ok(sanitized_stdout)
             } else if exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) {
-                Ok(stdout)
+                Ok(sanitized_stdout)
             } else {
                 error!(
                     binary = %binary,
                     exit_code,
-                    stderr = %stderr,
+                    stderr = %sanitized_stderr,
                     "Sidecar terminou com exit code nao zero"
                 );
                 Err(SidecarError::ExecutionFailed {
-                    reason: format!("exit code {exit_code}: {stderr}"),
+                    reason: format!("exit code {exit_code}: {sanitized_stderr}"),
                 })
             }
         }
@@ -1500,21 +1605,25 @@ struct SemgrepNormalizedPayload {
     findings_count: usize,
 }
 
-fn normalize_semgrep_path(repo_path: &Path, value: &str) -> String {
-    let candidate = Path::new(value);
-    let path = if candidate.is_absolute() {
-        candidate
-            .strip_prefix(repo_path)
-            .unwrap_or(candidate)
-            .to_path_buf()
-    } else {
-        candidate.to_path_buf()
-    };
-    path.to_string_lossy().replace('\\', "/")
+fn normalize_semgrep_path(repo_path: &Path, value: &str) -> Option<String> {
+    sanitize_repo_relative_path(repo_path, value)
 }
 
-fn semgrep_item_label(result: &SemgrepJsonResult) -> String {
+fn normalize_semgrep_check_id(repo_path: &Path, value: &str) -> String {
+    let sanitized = sanitize_host_paths_in_text(repo_path, value)
+        .replace('\\', ".")
+        .replace('/', ".")
+        .trim_matches('.')
+        .to_string();
+    sanitized
+        .find("soda.")
+        .map(|index| sanitized[index..].to_string())
+        .unwrap_or(sanitized)
+}
+
+fn semgrep_item_label(repo_path: &Path, result: &SemgrepJsonResult) -> String {
     let severity = result.extra.severity.as_deref().unwrap_or("INFO");
+    let check_id = normalize_semgrep_check_id(repo_path, &result.check_id);
     let category = result
         .extra
         .metadata
@@ -1527,12 +1636,13 @@ fn semgrep_item_label(result: &SemgrepJsonResult) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
+    let message = sanitize_host_paths_in_text(repo_path, &message);
 
     match category {
         Some(category) => format!(
             "[{}] {}:L{} {} - {}",
             severity,
-            result.check_id,
+            check_id,
             result.start.line,
             category,
             message
@@ -1540,7 +1650,7 @@ fn semgrep_item_label(result: &SemgrepJsonResult) -> String {
         None => format!(
             "[{}] {}:L{} {}",
             severity,
-            result.check_id,
+            check_id,
             result.start.line,
             message
         ),
@@ -1564,11 +1674,13 @@ fn normalize_semgrep_payload(
     let pairs = payload
         .results
         .into_iter()
-        .map(|result| {
-            (
-                normalize_semgrep_path(repo_path, &result.path),
-                semgrep_item_label(&result),
-            )
+        .filter_map(|result| {
+            normalize_semgrep_path(repo_path, &result.path).map(|path| {
+                (
+                    path,
+                    semgrep_item_label(repo_path, &result),
+                )
+            })
         })
         .collect::<Vec<_>>();
 
@@ -1904,7 +2016,7 @@ mod tests {
         conn.execute(
             "INSERT INTO files (path, imports) VALUES (?1, ?2)",
             params![
-                "ui/panel.tsx",
+                "web/panel.tsx",
                 r#"[{"specifier":"../src/backend/service","names":["renderPanel"]},{"specifier":"./styles/panel.css","names":["panel"]}]"#
             ],
         )
@@ -1921,8 +2033,8 @@ mod tests {
         assert!(!architecture_map.contains("icons/logo.svg"));
         assert!(!architecture_map.contains("panel.css"));
 
-        let backend_pos = architecture_map.find("src/backend/service.rs ->").unwrap();
-        let ui_pos = architecture_map.find("ui/panel.tsx ->").unwrap();
+        let backend_pos = architecture_map.find("[src/backend/service.rs]").unwrap();
+        let ui_pos = architecture_map.find("[web/panel.tsx]").unwrap();
         assert!(backend_pos < ui_pos, "backend deve vir antes de ui: {}", architecture_map);
     }
 
@@ -1979,7 +2091,8 @@ mod tests {
         assert!(!architecture_map.contains("fixtures"));
         assert!(!architecture_map.contains("test_support"));
         assert!(!architecture_map.contains("e2e"));
-        assert!(architecture_map.contains("src/backend/service.rs -> crate::core::engine (Engine)"));
+        assert!(architecture_map.contains("[src/backend/service.rs]"));
+        assert!(architecture_map.contains("- crate::core::engine (Engine)"));
     }
 
     #[tokio::test]
@@ -2067,7 +2180,8 @@ mod tests {
         assert!(!architecture_map.contains(".test.js"));
         assert!(!architecture_map.contains("/evals/"));
         assert!(!architecture_map.contains("/benches/"));
-        assert!(architecture_map.contains("src/backend/engine.rs -> crate::core::runtime (Runtime)"));
+        assert!(architecture_map.contains("[src/backend/engine.rs]"));
+        assert!(architecture_map.contains("- crate::core::runtime (Runtime)"));
     }
 
     #[tokio::test]
@@ -2625,5 +2739,55 @@ mod tests {
 
         assert!(unsafe_blob.contains("[src/main.rs]"));
         assert!(health_blob.contains("Sem divida tecnica estatica relevante do semgrep"));
+    }
+
+    #[test]
+    fn test_sanitize_repo_relative_path_strips_windows_host_prefix() {
+        let repo_path = Path::new(r"C:\host\projfs\owner\repo");
+        let sanitized = sanitize_repo_relative_path(repo_path, r"C:\host\projfs\owner\repo\crates\goose\src\main.rs");
+        assert_eq!(sanitized.as_deref(), Some("crates/goose/src/main.rs"));
+    }
+
+    #[test]
+    fn test_sanitize_repo_relative_path_drops_semgrep_support_paths() {
+        let repo_path = Path::new(r"C:\host\projfs\owner\repo");
+        let support_path = r"C:\host\projfs\owner\.soda_semgrep\repo\sandbox\.semgrep\settings.yml";
+        assert_eq!(sanitize_repo_relative_path(repo_path, support_path), None);
+    }
+
+    #[test]
+    fn test_normalize_semgrep_payload_keeps_only_repo_relative_paths() {
+        let repo_path = Path::new(r"C:\host\projfs\owner\repo");
+        let payload = format!(
+            r#"{{
+                "results": [
+                    {{
+                        "check_id": "soda.rust.unsafe.block",
+                        "path": "{repo}\\src\\main.rs",
+                        "start": {{ "line": 12 }},
+                        "extra": {{
+                            "message": "unsafe em {repo}\\src\\main.rs",
+                            "severity": "WARNING"
+                        }}
+                    }},
+                    {{
+                        "check_id": "soda.support.noise",
+                        "path": "C:\\host\\projfs\\owner\\.soda_semgrep\\repo\\sandbox\\.semgrep\\settings.yml",
+                        "start": {{ "line": 1 }},
+                        "extra": {{
+                            "message": "noise",
+                            "severity": "INFO"
+                        }}
+                    }}
+                ],
+                "paths": {{ "scanned": ["{repo}\\src\\main.rs"] }}
+            }}"#,
+            repo = r"C:\\host\\projfs\\owner\\repo"
+        );
+
+        let normalized = normalize_semgrep_payload(repo_path, payload.as_bytes()).unwrap();
+        assert_eq!(normalized.blocks.len(), 1);
+        assert_eq!(normalized.blocks[0].file_path, "src/main.rs");
+        assert!(!normalized.blocks[0].items[0].contains("C:/host"));
     }
 }
