@@ -1048,9 +1048,19 @@ mod tests {
 
     #[test]
     fn test_resolve_configured_path_relative_to_workspace_root() {
-        let path = resolve_configured_path(r".soda_scratchpad\bin\uvx.exe")
+        let raw = if cfg!(target_os = "windows") {
+            r".soda_scratchpad\bin\uvx.exe"
+        } else {
+            ".soda_scratchpad/bin/uvx"
+        };
+        let path = resolve_configured_path(raw)
             .expect("path relativo deve ser resolvido");
-        assert!(path.ends_with(Path::new(".soda_scratchpad").join("bin").join("uvx.exe")));
+        let expected = if cfg!(target_os = "windows") {
+            Path::new(".soda_scratchpad").join("bin").join("uvx.exe")
+        } else {
+            Path::new(".soda_scratchpad").join("bin").join("uvx")
+        };
+        assert!(path.ends_with(expected));
     }
 
     #[test]

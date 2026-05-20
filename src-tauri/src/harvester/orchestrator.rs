@@ -312,6 +312,7 @@ mod tests {
     use rusqlite::Connection;
     use std::sync::{Arc, Mutex};
     use mockito::Server;
+    use mockito::Matcher;
 
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -329,27 +330,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_orchestrator_preemptive_abort() {
-        // Simula falha na alocação do Ramdisk (N1) pedindo 1 Petabyte
-        let repo_url = Url::parse("https://github.com/octocat/Spoon-Knife").unwrap();
         let conn = Arc::new(Mutex::new(setup_test_db()));
-        
-        // Sobrescrevemos a chamada real por uma lógica que falha (ou apenas confiamos no RamdiskAllocator)
-        // mas aqui queremos provar que o HarvesterOrchestrator repassa o erro e para.
-        
-        // Como não podemos injetar o tamanho facilmente sem mudar a API,
-        // este teste prova que se o Allocator falhar (o que ele fará se pedirmos muito),
-        // o erro é propagado.
-        
-        // Nota: Em um ambiente de TDD rigoroso, faríamos o orchestrator receber o tamanho ou o allocator.
-        // Mas o PRD-014 fixou 256MB. Vamos forçar erro via falta de git se necessário, ou mockar a URL.
-        
-        let result = HarvesterOrchestrator::run("test/repo", &repo_url, conn).await;
-        
-        // No CI/Ambiente de Teste, o git pode não estar instalado ou a URL ser inválida.
-        // O importante é que se houver erro, ele seja capturado.
-        if let Err(e) = result {
-             assert!(matches!(e, OrchestratorError::InfraError(_) | OrchestratorError::CloneError(_)));
-        }
+
+        let mut server = Server::new_async().await;
+        let _m = server
+            .mock("GET", "/octocat/repo/info/refs")
+            .match_query(Matcher::Any)
+            .with_status(404)
+            .with_body("Repository not found")
+            .create_async()
+            .await;
+        let repo_url = Url::parse(&format!("{}/octocat/repo", server.url())).unwrap();
+
+        let err = HarvesterOrchestrator::run("test/repo", &repo_url, conn)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, OrchestratorError::CloneError(_)));
     }
 
     #[tokio::test]

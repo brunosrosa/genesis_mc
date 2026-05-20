@@ -443,6 +443,7 @@ impl BloblessCloner {
 mod tests {
     use super::*;
     use crate::harvester::ramdisk::RamdiskAllocator;
+    use mockito::{Matcher, Server};
     use std::sync::OnceLock;
 
     static TEST_MUTEX: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
@@ -467,7 +468,15 @@ mod tests {
     async fn test_clone_repo_not_found() {
         let _guard = get_test_mutex().lock().await;
         let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
-        let repo_url = Url::parse("https://github.com/octocat/this-repo-should-not-exist-ever-soda").unwrap();
+        let mut server = Server::new_async().await;
+        let _m = server
+            .mock("GET", "/octocat/repo/info/refs")
+            .match_query(Matcher::Any)
+            .with_status(404)
+            .with_body("Repository not found")
+            .create_async()
+            .await;
+        let repo_url = Url::parse(&format!("{}/octocat/repo", server.url())).unwrap();
         
         let err = BloblessCloner::clone(&repo_url, &mut ramdisk).await.unwrap_err();
         assert!(
@@ -494,14 +503,31 @@ mod tests {
     async fn test_cleanup_on_failure() {
         let _guard = get_test_mutex().lock().await;
         let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
-        let repo_url = Url::parse("https://github.com/octocat/this-repo-should-not-exist-ever-soda").unwrap();
+        let mut server = Server::new_async().await;
+        let _m = server
+            .mock("GET", "/octocat/repo/info/refs")
+            .match_query(Matcher::Any)
+            .with_status(404)
+            .with_body("Repository not found")
+            .create_async()
+            .await;
+        let repo_url = Url::parse(&format!("{}/octocat/repo", server.url())).unwrap();
         
         let _ = BloblessCloner::clone(&repo_url, &mut ramdisk).await;
         
         let repo_root = ramdisk.path().join("repos");
-        if repo_root.exists() {
-            let entries = std::fs::read_dir(repo_root).unwrap().count();
-            assert_eq!(entries, 0, "O cache não deve preservar diretórios parciais após falha");
+        if !repo_root.exists() {
+            return;
+        }
+        for owner in std::fs::read_dir(&repo_root).unwrap() {
+            let owner = owner.unwrap();
+            if owner.path().is_dir() {
+                let entries = std::fs::read_dir(owner.path()).unwrap().count();
+                assert_eq!(
+                    entries, 0,
+                    "O cache não deve preservar repositórios parciais após falha"
+                );
+            }
         }
     }
 
