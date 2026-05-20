@@ -3,13 +3,11 @@ pub mod persist;
 pub mod finops;
 pub mod cognition;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn genesis_ping(payload: &str) -> String {
     format!("Genesis Core Online. Recebido: {}", payload)
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

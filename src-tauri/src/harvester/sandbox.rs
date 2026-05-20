@@ -403,9 +403,7 @@ fn build_semgrep_env(repo_path: &Path) -> BTreeMap<String, String> {
     let sandbox_home = semgrep_support_root(repo_path).join("sandbox");
     let semgrep_dir = sandbox_home.join(".semgrep");
 
-    for dir in [&semgrep_dir] {
-        let _ = std::fs::create_dir_all(dir);
-    }
+    let _ = std::fs::create_dir_all(&semgrep_dir);
 
     BTreeMap::from([
         (

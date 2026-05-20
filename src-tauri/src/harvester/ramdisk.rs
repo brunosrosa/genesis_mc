@@ -178,11 +178,10 @@ impl std::fmt::Debug for RamdiskGuard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         #[cfg(target_os = "windows")]
         {
-            return f
-                .debug_struct("RamdiskGuard")
+            f.debug_struct("RamdiskGuard")
                 .field("projection_handles_len", &self.projection_handles.len())
                 .field("workspace_root", &self.workspace_root)
-                .finish();
+                .finish()
         }
 
         #[cfg(not(target_os = "windows"))]

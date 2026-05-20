@@ -624,7 +624,7 @@ fn compact_state_entry(source: &str, declarator: &VariableDeclarator<'_>) -> Opt
         return None;
     };
     let callee_name = call.callee_name()?;
-    if !STATE_CALL_NAMES.iter().any(|expected| callee_name == *expected) {
+    if !STATE_CALL_NAMES.contains(&callee_name) {
         return None;
     }
 

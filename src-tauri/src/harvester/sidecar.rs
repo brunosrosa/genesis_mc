@@ -895,9 +895,9 @@ async fn execute_sidecar<E: SandboxExecutor>(
         Err(SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout }) => {
             let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
             let sanitized_stderr = sanitize_host_paths_in_text(executor.repo_path(), &stderr);
-            if binary == "semgrep" && !stdout_is_blank(&sanitized_stdout) && stdout_contains_json_payload(&sanitized_stdout) {
-                Ok(sanitized_stdout)
-            } else if exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) {
+            if (binary == "semgrep" && !stdout_is_blank(&sanitized_stdout) && stdout_contains_json_payload(&sanitized_stdout))
+                || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
+            {
                 Ok(sanitized_stdout)
             } else {
                 error!(
@@ -955,13 +955,13 @@ impl JCodemunchSidecar {
         .await?;
         validate_index_response(&index_bytes)?;
 
-        let digest_args = vec![
-            "digest".to_string(),
-            "--json".to_string(),
-            "--storage-path".to_string(),
-            storage_path,
+        let digest_args: Vec<&str> = vec![
+            "digest",
+            "--json",
+            "--storage-path",
+            &storage_path,
         ];
-        let digest_arg_refs: Vec<&str> = digest_args.iter().map(String::as_str).collect();
+        let digest_arg_refs: Vec<&str> = digest_args;
         let bytes = execute_sidecar(
             input.executor,
             "jcodemunch-mcp",
@@ -972,8 +972,8 @@ impl JCodemunchSidecar {
         .await?;
         let health_report_blob = normalize_health_report(&bytes)?;
 
-        let claude_md_args = vec!["claude-md".to_string(), "--generate".to_string()];
-        let claude_md_arg_refs: Vec<&str> = claude_md_args.iter().map(String::as_str).collect();
+        let claude_md_args: Vec<&str> = ["claude-md", "--generate"].to_vec();
+        let claude_md_arg_refs: Vec<&str> = claude_md_args;
         let claude_md_bytes = execute_sidecar(
             input.executor,
             "jcodemunch-mcp",
@@ -1120,9 +1120,14 @@ fn should_skip_discovered_test_entry(value: &str) -> bool {
     }
 
     normalized
-        .split(|ch| matches!(ch, '/' | ':' | '>' | ' '))
+        .split(is_semgrep_path_separator)
         .filter(|part| !part.is_empty())
         .any(|part| UNIVERSAL_TEST_SKIP_SEGMENTS.contains(&part))
+}
+
+#[allow(clippy::manual_pattern_char_comparison)]
+fn is_semgrep_path_separator(ch: char) -> bool {
+    matches!(ch, '/' | ':' | '>' | ' ')
 }
 
 fn is_known_test_file_path(value: &str) -> bool {
@@ -1414,9 +1419,7 @@ fn parse_python_test_entries(content: &str) -> Vec<String> {
     let mut entries = BTreeSet::new();
     for line in content.lines() {
         let trimmed = line.trim();
-        let signature = if trimmed.starts_with("async def test_") {
-            Some(trimmed.trim_end_matches(':'))
-        } else if trimmed.starts_with("def test_") {
+        let signature = if trimmed.starts_with("async def test_") || trimmed.starts_with("def test_") {
             Some(trimmed.trim_end_matches(':'))
         } else {
             None
@@ -1611,8 +1614,7 @@ fn normalize_semgrep_path(repo_path: &Path, value: &str) -> Option<String> {
 
 fn normalize_semgrep_check_id(repo_path: &Path, value: &str) -> String {
     let sanitized = sanitize_host_paths_in_text(repo_path, value)
-        .replace('\\', ".")
-        .replace('/', ".")
+        .replace(['\\', '/'], ".")
         .trim_matches('.')
         .to_string();
     sanitized
