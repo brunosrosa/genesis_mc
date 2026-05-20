@@ -33,7 +33,18 @@ pub enum FinOpsRouterError {
 const GREEN_THRESHOLD: usize = 16_000;
 const YELLOW_MAX: usize = 64_000;
 
-const QWEN_MODEL_PATH: &str = r"C:\Users\rosas\.lmstudio\models\lmstudio-community\Qwen3.5-4B-GGUF\Qwen3.5-4B-Q4_K_M.gguf";
+fn qwen_model_path() -> String {
+    std::env::var("SODA_QWEN_MODEL_PATH").unwrap_or_else(|_| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join(".soda_data")
+            .join("models")
+            .join("Qwen3.5-4B-Q4_K_M.gguf")
+            .to_string_lossy()
+            .to_string()
+    })
+}
 
 pub struct FinOpsRouter;
 
@@ -47,7 +58,12 @@ impl FinOpsRouter {
         let (zone, destination) = if token_count < GREEN_THRESHOLD {
             (RoutingZone::Green, RoutingDestination::PassThrough)
         } else if token_count <= YELLOW_MAX {
-            (RoutingZone::Yellow, RoutingDestination::LocalModel { path: QWEN_MODEL_PATH.to_string() })
+            (
+                RoutingZone::Yellow,
+                RoutingDestination::LocalModel {
+                    path: qwen_model_path(),
+                },
+            )
         } else {
             (RoutingZone::Red, RoutingDestination::CloudCascade)
         };
@@ -136,7 +152,9 @@ mod tests {
 
     #[test]
     fn smoke_test_real_blob_08_health_report() {
-        let blob_path = PathBuf::from(r"c:\Users\rosas\Dev_Projects\genesis_mc\src-tauri\semgrep\blob_08_health.yml");
+        let blob_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("semgrep")
+            .join("blob_08_health.yml");
 
         if !blob_path.exists() {
             eprintln!("SKIP: blob_08_health.yml not found at {:?}", blob_path);
@@ -205,7 +223,9 @@ mod tests {
 
                 let destination = match zone {
                     RoutingZone::Green => RoutingDestination::PassThrough,
-                    RoutingZone::Yellow => RoutingDestination::LocalModel { path: QWEN_MODEL_PATH.to_string() },
+                    RoutingZone::Yellow => RoutingDestination::LocalModel {
+                        path: qwen_model_path(),
+                    },
                     RoutingZone::Red => RoutingDestination::CloudCascade,
                 };
 

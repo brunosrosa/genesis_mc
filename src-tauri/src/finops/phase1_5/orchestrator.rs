@@ -179,12 +179,6 @@ mod tests {
                 call_sequence: Arc::new(Mutex::new(Vec::new())),
             }
         }
-        fn get_call_count(&self) -> usize {
-            self.call_count.load(Ordering::SeqCst)
-        }
-        fn get_call_sequence(&self) -> Vec<usize> {
-            self.call_sequence.lock().unwrap().clone()
-        }
     }
 
     impl Router for MockRouter {
@@ -211,9 +205,6 @@ mod tests {
                 call_count: Arc::new(AtomicUsize::new(0)),
             }
         }
-        fn get_call_count(&self) -> usize {
-            self.call_count.load(Ordering::SeqCst)
-        }
     }
 
     impl Distiller for MockDistiller {
@@ -238,9 +229,6 @@ mod tests {
                 results,
                 call_count: Arc::new(AtomicUsize::new(0)),
             }
-        }
-        fn get_call_count(&self) -> usize {
-            self.call_count.load(Ordering::SeqCst)
         }
     }
 
