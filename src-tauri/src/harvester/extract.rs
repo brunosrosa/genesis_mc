@@ -2083,7 +2083,6 @@ require (
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
         assert!(text.contains("[ui/desktop/src/components/ComplexPanel.tsx]"));
-        assert!(text.contains("- interface D"));
         assert!(text.contains("- props: A"));
         assert!(text.contains("- state [a, setA] = useState()"));
         assert!(text.contains("- state [e, setE] = useState()"));

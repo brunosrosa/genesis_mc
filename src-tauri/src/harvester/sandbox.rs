@@ -1,6 +1,5 @@
 use std::env;
 use std::collections::BTreeMap;
-use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
@@ -9,6 +8,8 @@ use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{info, warn};
 use super::git::RepoPath;
+#[cfg(target_os = "windows")]
+use std::mem::size_of;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 #[cfg(target_os = "windows")]
@@ -646,6 +647,11 @@ async fn reap_command_orphans(command: &str, repo_path: &Path) {
         return;
     }
 
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = repo_path;
+    }
+
     #[cfg(target_os = "windows")]
     {
         let executable_names = match command {
@@ -818,7 +824,7 @@ impl SandboxHandle {
 
         match wait_result {
             Ok(Ok(status)) => {
-                drop(job_guard);
+                let _ = job_guard;
                 reap_command_orphans(&requested_command, &self.repo_path).await;
                 let stdout_buffer = collect_output_task(stdout_task).await;
                 let stderr_buffer = collect_output_task(stderr_task).await;
@@ -860,7 +866,7 @@ impl SandboxHandle {
                 }
             }
             Ok(Err(e)) => {
-                drop(job_guard);
+                let _ = job_guard;
                 stdout_task.abort();
                 stderr_task.abort();
                 self.lock_pids().remove(&pid);
@@ -882,7 +888,7 @@ impl SandboxHandle {
                     "Sandbox: timeout atingido; aniquilando sidecar"
                 );
                 let _ = child.kill().await;
-                drop(job_guard);
+                let _ = job_guard;
                 kill_process_tree_by_pid(pid).await;
                 reap_command_orphans(&requested_command, &self.repo_path).await;
                 let stdout_buffer = collect_output_task(stdout_task).await;
@@ -1042,9 +1048,19 @@ mod tests {
 
     #[test]
     fn test_resolve_configured_path_relative_to_workspace_root() {
-        let path = resolve_configured_path(r".soda_scratchpad\bin\uvx.exe")
+        let raw = if cfg!(target_os = "windows") {
+            r".soda_scratchpad\bin\uvx.exe"
+        } else {
+            ".soda_scratchpad/bin/uvx"
+        };
+        let path = resolve_configured_path(raw)
             .expect("path relativo deve ser resolvido");
-        assert!(path.ends_with(Path::new(".soda_scratchpad").join("bin").join("uvx.exe")));
+        let expected = if cfg!(target_os = "windows") {
+            Path::new(".soda_scratchpad").join("bin").join("uvx.exe")
+        } else {
+            Path::new(".soda_scratchpad").join("bin").join("uvx")
+        };
+        assert!(path.ends_with(expected));
     }
 
     #[test]

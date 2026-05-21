@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 use sysinfo::System;
 use thiserror::Error;
 use tokio::time::sleep;
@@ -11,6 +10,8 @@ use tempfile::{Builder, TempDir};
 use std::os::windows::ffi::OsStrExt;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::MetadataExt;
+#[cfg(target_os = "windows")]
+use std::time::Instant;
 #[cfg(target_os = "windows")]
 use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "windows")]

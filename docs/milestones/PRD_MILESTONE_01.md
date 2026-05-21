@@ -1,8 +1,14 @@
 # PRD_MILESTONE_01: O Esqueleto Bare-Metal (Fundação SODA)
 
 **Versão:** 3.2 (Definitiva - Tactical Execution)
-**Status:** ATIVO E PRONTO PARA EXECUÇÃO
+**Status:** HIBERNADO (Produto Alvo)
 **Alvo da Leitura:** Agentes Codificadores (Antigravity IDE), Engenheiros Rust/Svelte 5.
+
+## 0. NOTA DE ESTADO ATUAL (PIVOTAGEM)
+
+Este documento descreve o **Produto Alvo** do Milestone 01 (casca bare-metal + DB + IPC) e permanece válido como especificação final.
+
+O estado atual do repositório prioriza a **Fase 1.5 do Motor de ETL Cognitivo** (modo “Fábrica”), e a execução da UI está pausada por decisão estratégica. Referência: **docs/SODA_CURRENT_STATE.md**.
 
 ## 1. OBJETIVO DO MILESTONE 01
 

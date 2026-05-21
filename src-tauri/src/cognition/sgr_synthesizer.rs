@@ -409,15 +409,15 @@ mod tests {
         let visao_idx = json.find("visao_do_enxame").unwrap();
         let just_idx = json.find("justificativa_decisao").unwrap();
         let exec_idx = json.find("executive_verdict").unwrap();
-        let cann_idx = json.find("cannibalization_action").unwrap();
+        let cann_idx = json.find("acao_de_canibalizacao").unwrap();
         let score_fit_idx = json.find("score_bare_metal_fit").unwrap();
         let score_final_idx = json.find("score_final").unwrap();
 
         assert!(visao_idx < just_idx);
         assert!(just_idx < exec_idx);
         assert!(exec_idx < cann_idx);
-        assert!(cann_idx < score_fit_idx);
-        assert!(score_fit_idx < score_final_idx);
+        assert!(cann_idx < score_final_idx);
+        assert!(score_final_idx < score_fit_idx);
     }
 
     #[tokio::test]

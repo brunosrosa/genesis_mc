@@ -5,10 +5,16 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+#[tauri::command]
+fn genesis_ping(payload: &str) -> String {
+    format!("Genesis Core Online. Recebido: {}", payload)
+}
+
 #[allow(clippy::zombie_processes)]
 fn main() {
-    // genesis_mc_lib::run()
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![genesis_ping])
         .setup(|_app| {
             // Inicializa o AgentGateway silenciosamente no background com o PATH turbinado
             Command::new("agentgateway.exe")
