@@ -95,11 +95,17 @@ mod tests {
     use super::*;
     use std::fs;
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{Mutex, OnceLock};
 
     static TEST_ID: AtomicU32 = AtomicU32::new(0);
+    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
     fn next_test_id() -> u32 {
         TEST_ID.fetch_add(1, Ordering::SeqCst)
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        ENV_MUTEX.get_or_init(|| Mutex::new(()))
     }
 
     fn create_temp_blob(content: &str) -> PathBuf {
@@ -116,6 +122,7 @@ mod tests {
 
     #[test]
     fn test_10k_tokens_returns_green_zone() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         let content = generate_tokens(10_000);
         let path = create_temp_blob(&content);
 
@@ -130,6 +137,7 @@ mod tests {
 
     #[test]
     fn test_30k_tokens_returns_yellow_zone_with_qwen() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         let content = generate_tokens(30_000);
         let path = create_temp_blob(&content);
 
@@ -149,6 +157,7 @@ mod tests {
 
     #[test]
     fn test_70k_tokens_returns_red_zone_with_cloud_cascade() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         let content = generate_tokens(70_000);
         let path = create_temp_blob(&content);
 
@@ -268,6 +277,7 @@ mod tests {
 
     #[test]
     fn test_30k_yellow_without_bypass_routes_to_local() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
 
         let content = generate_tokens(30_000);
@@ -288,6 +298,7 @@ mod tests {
 
     #[test]
     fn test_30k_yellow_with_bypass_true_routes_to_cloud() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
 
         let content = generate_tokens(30_000);
@@ -304,6 +315,7 @@ mod tests {
 
     #[test]
     fn test_30k_yellow_with_bypass_1_routes_to_cloud() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "1");
 
         let content = generate_tokens(30_000);
@@ -320,6 +332,7 @@ mod tests {
 
     #[test]
     fn test_70k_red_ignores_bypass() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
 
         let content = generate_tokens(70_000);
@@ -336,6 +349,7 @@ mod tests {
 
     #[test]
     fn test_10k_green_ignores_bypass() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
 
         let content = generate_tokens(10_000);
@@ -352,6 +366,7 @@ mod tests {
 
     #[test]
     fn test_bypass_case_insensitive_true() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
         std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "TRUE");
 
         let content = generate_tokens(30_000);
