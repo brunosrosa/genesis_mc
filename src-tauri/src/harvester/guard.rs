@@ -1,6 +1,5 @@
 use super::sandbox::SandboxHandle;
 use super::ramdisk::RamdiskHandle;
-use std::time::Duration;
 
 pub struct PurgeGuard;
 
@@ -19,16 +18,9 @@ impl PurgeGuard {
 
         // Explicitamente invocamos o drop para garantir a ordem (Sandbox antes do Ramdisk)
         // embora a ordem natural de descarte já garantisse a higiene.
-        let ramdisk_path = ramdisk.path().to_path_buf();
         drop(sandbox);
         tracing::info!("PurgeGuard: SandboxHandle descartado");
         ramdisk.cleanup().await.map_err(|e| e.to_string())?;
-        for _ in 0..20 {
-            if !ramdisk_path.exists() {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
         tracing::info!("PurgeGuard: RamdiskHandle descartado");
         
         Ok(())

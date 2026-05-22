@@ -128,8 +128,7 @@ impl BloblessCloner {
 
     #[cfg(target_os = "windows")]
     fn github_owner_repo(repo_url: &Url) -> Result<(String, String), CloneError> {
-        let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
-        if repo_url.host_str() != Some("github.com") && !allow_host_override {
+        if repo_url.host_str() != Some("github.com") {
             return Err(CloneError::NetworkError {
                 reason: format!(
                     "Modo ProjFS em memória exige repositório GitHub; host recebido='{}'",
@@ -161,8 +160,6 @@ impl BloblessCloner {
     #[cfg(target_os = "windows")]
     async fn fetch_github_archive_bytes(repo_url: &Url) -> Result<Vec<u8>, CloneError> {
         let (owner, repo) = Self::github_owner_repo(repo_url)?;
-        let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
-            .unwrap_or_else(|_| "https://api.github.com".to_string());
         let client = reqwest::Client::builder()
             .user_agent("genesis-mc-harvester-projfs/1.0")
             .build()
@@ -170,7 +167,7 @@ impl BloblessCloner {
                 reason: format!("Falha ao criar cliente HTTP para ProjFS: {}", e),
             })?;
 
-        let metadata_url = format!("{}/repos/{owner}/{repo}", github_api_base.trim_end_matches('/'));
+        let metadata_url = format!("https://api.github.com/repos/{owner}/{repo}");
         info!(url = %metadata_url, "ProjFS: consultando metadados do repositório GitHub");
         let metadata_response = client
             .get(&metadata_url)
@@ -195,8 +192,7 @@ impl BloblessCloner {
             })?;
 
         let archive_url = format!(
-            "{}/repos/{owner}/{repo}/zipball/{}",
-            github_api_base.trim_end_matches('/'),
+            "https://api.github.com/repos/{owner}/{repo}/zipball/{}",
             metadata.default_branch
         );
         info!(
@@ -447,7 +443,7 @@ impl BloblessCloner {
 mod tests {
     use super::*;
     use crate::harvester::ramdisk::RamdiskAllocator;
-    use mockito::Server;
+    use mockito::{Matcher, Server};
     use std::sync::OnceLock;
 
     static TEST_MUTEX: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
@@ -473,9 +469,9 @@ mod tests {
         let _guard = get_test_mutex().lock().await;
         let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         let mut server = Server::new_async().await;
-        std::env::set_var("SODA_GITHUB_API_BASE_URL", server.url());
         let _m = server
-            .mock("GET", "/repos/octocat/repo")
+            .mock("GET", "/octocat/repo/info/refs")
+            .match_query(Matcher::Any)
             .with_status(404)
             .with_body("Repository not found")
             .create_async()
@@ -483,7 +479,6 @@ mod tests {
         let repo_url = Url::parse(&format!("{}/octocat/repo", server.url())).unwrap();
         
         let err = BloblessCloner::clone(&repo_url, &mut ramdisk).await.unwrap_err();
-        std::env::remove_var("SODA_GITHUB_API_BASE_URL");
         assert!(
             matches!(err, CloneError::RepositoryNotFound { .. }),
             "Deveria falhar com RepositoryNotFound, mas retornou {:?}",
@@ -509,9 +504,9 @@ mod tests {
         let _guard = get_test_mutex().lock().await;
         let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         let mut server = Server::new_async().await;
-        std::env::set_var("SODA_GITHUB_API_BASE_URL", server.url());
         let _m = server
-            .mock("GET", "/repos/octocat/repo")
+            .mock("GET", "/octocat/repo/info/refs")
+            .match_query(Matcher::Any)
             .with_status(404)
             .with_body("Repository not found")
             .create_async()
@@ -519,7 +514,6 @@ mod tests {
         let repo_url = Url::parse(&format!("{}/octocat/repo", server.url())).unwrap();
         
         let _ = BloblessCloner::clone(&repo_url, &mut ramdisk).await;
-        std::env::remove_var("SODA_GITHUB_API_BASE_URL");
         
         let repo_root = ramdisk.path().join("repos");
         if !repo_root.exists() {
