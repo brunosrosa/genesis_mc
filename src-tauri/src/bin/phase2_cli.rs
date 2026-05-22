@@ -1,0 +1,230 @@
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+use genesis_mc_lib::cognition::phase2_swarm::{
+    ensure_phase2_schema, CognitiveSwarmDispatcher, HttpLensInvoker, SqliteDebateStore,
+};
+use rusqlite::{params, Connection};
+use tracing::info;
+
+fn workspace_root() -> io::Result<PathBuf> {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    Path::new(manifest_dir)
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| io::Error::other("Falha ao resolver raiz do projeto"))
+}
+
+fn now_epoch_secs() -> io::Result<i64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| io::Error::other(format!("Falha ao calcular timestamp atual: {}", e)))?
+        .as_secs() as i64)
+}
+
+fn sanitize_repo_id(repo_id: &str) -> String {
+    repo_id
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => ch,
+            _ => '_',
+        })
+        .collect()
+}
+
+fn parse_repo_id_from_args() -> String {
+    let mut args = std::env::args();
+    args.next();
+    let mut repo_id = String::from("aaif-goose/goose");
+    while let Some(arg) = args.next() {
+        if arg == "--repo" {
+            if let Some(value) = args.next() {
+                repo_id = value;
+            }
+        }
+    }
+    repo_id
+}
+
+fn ensure_phase2_cli_schema(conn: &Connection) -> io::Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS repositorios (
+            project_name TEXT PRIMARY KEY,
+            lote_id TEXT,
+            repo_url TEXT,
+            soda_universal_uuid TEXT,
+            status_processamento TEXT NOT NULL,
+            timestamp_fase_1 INTEGER,
+            timestamp_fase_3 INTEGER,
+            retry_count INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )
+    .map_err(|e| io::Error::other(format!("Falha ao criar/verificar tabela repositorios: {}", e)))?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pacotes_destilados (
+            package_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id TEXT NOT NULL,
+            package_name TEXT NOT NULL,
+            payload_package TEXT NOT NULL,
+            timestamp_empacotamento INTEGER NOT NULL,
+            UNIQUE(repo_id, package_name)
+        )",
+        [],
+    )
+    .map_err(|e| io::Error::other(format!("Falha ao criar/verificar tabela pacotes_destilados: {}", e)))?;
+
+    ensure_phase2_schema(conn).map_err(io::Error::other)?;
+    Ok(())
+}
+
+fn mark_repo_running_if_present(conn: &Connection, repo_id: &str) -> io::Result<()> {
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM repositorios WHERE project_name = ?1",
+            params![repo_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| io::Error::other(format!("Falha ao consultar repositorio {}: {}", repo_id, e)))?;
+
+    if exists == 0 {
+        conn.execute(
+            "INSERT INTO repositorios
+                (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, retry_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+            params![
+                repo_id,
+                "LOTE_02_PILOTO",
+                format!("https://github.com/{}", repo_id),
+                format!("UUID-{}", repo_id),
+                "FASE_2_RUNNING"
+            ],
+        )
+        .map_err(|e| io::Error::other(format!("Falha ao registrar repositorio {}: {}", repo_id, e)))?;
+    } else {
+        conn.execute(
+            "UPDATE repositorios
+             SET status_processamento = ?1
+             WHERE project_name = ?2",
+            params!["FASE_2_RUNNING", repo_id],
+        )
+        .map_err(|e| io::Error::other(format!("Falha ao marcar FASE_2_RUNNING: {}", e)))?;
+    }
+
+    Ok(())
+}
+
+fn fetch_debate_row(conn: &Connection, repo_id: &str) -> io::Result<(String, String, String, String)> {
+    conn.query_row(
+        "SELECT lens_a_json, lens_b_json, lens_c_json, phase_status
+         FROM debates_enxame
+         WHERE repo_id = ?1",
+        params![repo_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )
+    .map_err(|e| io::Error::other(format!("Falha ao buscar debate persistido de {}: {}", repo_id, e)))
+}
+
+fn write_phase2_report(
+    root_dir: &Path,
+    repo_id: &str,
+    elapsed_ms: u128,
+    lens_a_json: &str,
+    lens_b_json: &str,
+    lens_c_json: &str,
+    phase_status: &str,
+) -> io::Result<PathBuf> {
+    let report_path = root_dir.join(format!("_PHASE2_REPORT_{}.txt", sanitize_repo_id(repo_id)));
+    let mut report = String::new();
+    report.push_str(&format!("repo_id={}\n", repo_id));
+    report.push_str(&format!("elapsed_ms={}\n", elapsed_ms));
+    report.push_str(&format!("phase_status={}\n", phase_status));
+    report.push_str("persisted_in=debates_enxame\n");
+    report.push_str("\n== LENS A ==\n");
+    report.push_str(lens_a_json);
+    report.push_str("\n\n== LENS B ==\n");
+    report.push_str(lens_b_json);
+    report.push_str("\n\n== LENS C ==\n");
+    report.push_str(lens_c_json);
+    report.push_str("\n");
+
+    std::fs::write(&report_path, report).map_err(|e| {
+        io::Error::other(format!(
+            "Falha ao exportar relatório da Fase 2 em {}: {}",
+            report_path.display(),
+            e
+        ))
+    })?;
+
+    Ok(report_path)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    let level = match rust_log.to_ascii_lowercase().as_str() {
+        "trace" => tracing::Level::TRACE,
+        "debug" => tracing::Level::DEBUG,
+        "warn" => tracing::Level::WARN,
+        "error" => tracing::Level::ERROR,
+        _ => tracing::Level::INFO,
+    };
+    tracing_subscriber::fmt().with_max_level(level).init();
+
+    let started = Instant::now();
+    let repo_id = parse_repo_id_from_args();
+
+    let root_dir = workspace_root()?;
+    dotenvy::from_path(root_dir.join(".env")).ok();
+    let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    let conn = Connection::open(&db_path).map_err(|e| {
+        io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
+    })?;
+
+    ensure_phase2_cli_schema(&conn)?;
+    mark_repo_running_if_present(&conn, &repo_id)?;
+    info!(repo_id = %repo_id, "Fase 2: schema verificado e repositório preparado");
+
+    let store = SqliteDebateStore::new(Arc::new(Mutex::new(conn)));
+    let invoker = HttpLensInvoker::from_openrouter_env().map_err(io::Error::other)?;
+    let dispatcher = CognitiveSwarmDispatcher::new(store, invoker);
+
+    dispatcher
+        .dispatch_swarm(&repo_id)
+        .await
+        .map_err(|e| io::Error::other(format!("Falha ao executar enxame cognitivo: {}", e)))?;
+
+    let conn = Connection::open(&db_path).map_err(|e| {
+        io::Error::other(format!("Falha ao reabrir vault em {}: {}", db_path.display(), e))
+    })?;
+    let (lens_a_json, lens_b_json, lens_c_json, phase_status) = fetch_debate_row(&conn, &repo_id)?;
+
+    let report_path = write_phase2_report(
+        &root_dir,
+        &repo_id,
+        started.elapsed().as_millis(),
+        &lens_a_json,
+        &lens_b_json,
+        &lens_c_json,
+        &phase_status,
+    )?;
+
+    info!(
+        repo_id = %repo_id,
+        report = %report_path.display(),
+        elapsed_ms = started.elapsed().as_millis(),
+        now_epoch = now_epoch_secs()?,
+        "Fase 2 concluída com persistência atômica"
+    );
+
+    println!("PHASE_2_OK repo_id={} report={}", repo_id, report_path.display());
+    println!("--- LENS A ---\n{}", lens_a_json);
+    println!("--- LENS B ---\n{}", lens_b_json);
+    println!("--- LENS C ---\n{}", lens_c_json);
+    println!("Persistido em debates_enxame com status={}", phase_status);
+
+    Ok(())
+}
