@@ -52,6 +52,8 @@ pub enum Phase2Error {
     InvalidRepoId(String),
     #[error("Falha ao buscar payloads da Fase 1.5: {0}")]
     PayloadFetchError(String),
+    #[error("Falha de configuracao da Fase 2: {0}")]
+    ConfigError(String),
     #[error("Pacote ausente ou vazio: {0}")]
     EmptyPackage(String),
     #[error("Falha na lente {lens}: {message}")]
@@ -182,23 +184,23 @@ impl HttpLensInvoker {
             client: Client::new(),
             claude: HttpLensConfig {
                 base_url: std::env::var("PHASE2_CLAUDE_URL")
-                    .map_err(|_| Phase2Error::PayloadFetchError("PHASE2_CLAUDE_URL ausente".to_string()))?,
+                    .map_err(|_| Phase2Error::ConfigError("PHASE2_CLAUDE_URL ausente".to_string()))?,
                 api_key: std::env::var("PHASE2_CLAUDE_API_KEY")
-                    .map_err(|_| Phase2Error::PayloadFetchError("PHASE2_CLAUDE_API_KEY ausente".to_string()))?,
+                    .map_err(|_| Phase2Error::ConfigError("PHASE2_CLAUDE_API_KEY ausente".to_string()))?,
                 model: LensKind::ProductUx.model_name().to_string(),
             },
             deepseek: HttpLensConfig {
                 base_url: std::env::var("PHASE2_DEEPSEEK_URL")
-                    .map_err(|_| Phase2Error::PayloadFetchError("PHASE2_DEEPSEEK_URL ausente".to_string()))?,
+                    .map_err(|_| Phase2Error::ConfigError("PHASE2_DEEPSEEK_URL ausente".to_string()))?,
                 api_key: std::env::var("PHASE2_DEEPSEEK_API_KEY")
-                    .map_err(|_| Phase2Error::PayloadFetchError("PHASE2_DEEPSEEK_API_KEY ausente".to_string()))?,
+                    .map_err(|_| Phase2Error::ConfigError("PHASE2_DEEPSEEK_API_KEY ausente".to_string()))?,
                 model: LensKind::Architecture.model_name().to_string(),
             },
             glm: HttpLensConfig {
                 base_url: std::env::var("PHASE2_GLM_URL")
-                    .map_err(|_| Phase2Error::PayloadFetchError("PHASE2_GLM_URL ausente".to_string()))?,
+                    .map_err(|_| Phase2Error::ConfigError("PHASE2_GLM_URL ausente".to_string()))?,
                 api_key: std::env::var("PHASE2_GLM_API_KEY")
-                    .map_err(|_| Phase2Error::PayloadFetchError("PHASE2_GLM_API_KEY ausente".to_string()))?,
+                    .map_err(|_| Phase2Error::ConfigError("PHASE2_GLM_API_KEY ausente".to_string()))?,
                 model: LensKind::Operations.model_name().to_string(),
             },
         })
@@ -569,6 +571,41 @@ mod tests {
         )
         .expect("insert package C");
         Arc::new(Mutex::new(conn))
+    }
+
+    #[test]
+    fn test_from_env_missing_var_returns_config_error() {
+        let env_keys = [
+            "PHASE2_CLAUDE_URL",
+            "PHASE2_CLAUDE_API_KEY",
+            "PHASE2_DEEPSEEK_URL",
+            "PHASE2_DEEPSEEK_API_KEY",
+            "PHASE2_GLM_URL",
+            "PHASE2_GLM_API_KEY",
+        ];
+        let previous_values: Vec<(String, Option<String>)> = env_keys
+            .iter()
+            .map(|key| ((*key).to_string(), std::env::var(key).ok()))
+            .collect();
+
+        for key in &env_keys {
+            std::env::remove_var(key);
+        }
+
+        let result = HttpLensInvoker::from_env();
+
+        for (key, value) in previous_values {
+            if let Some(value) = value {
+                std::env::set_var(key, value);
+            } else {
+                std::env::remove_var(key);
+            }
+        }
+
+        assert!(matches!(
+            result,
+            Err(Phase2Error::ConfigError(message)) if message == "PHASE2_CLAUDE_URL ausente"
+        ));
     }
 
     #[tokio::test]
