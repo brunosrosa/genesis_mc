@@ -1,0 +1,19 @@
+repo_id=aaif-goose/goose
+== ESSENCES ==
+essence_name	routing_zone	token_count	destination	payload_bytes
+_essence_01_promessa_readme	Green	660	PassThrough	2543
+_essence_02_dependency_manifest	Green	801	PassThrough	2507
+_essence_03_test_intent	Yellow	20538	CloudCascade	5528
+_essence_04_repo_outline	Green	632	PassThrough	2452
+_essence_05_architecture_map	Green	7443	PassThrough	28658
+_essence_06_unsafe_hotspots	Green	2699	PassThrough	10592
+_essence_07_ops_blueprint	Yellow	18338	CloudCascade	9126
+_essence_08_health_report	Red	89921	CloudCascade	2200
+_essence_09_community_meta	Green	195	PassThrough	502
+_essence_10_soda_canon_context	Green	854	PassThrough	3189
+_essence_11_ux_contracts	Yellow	44300	CloudCascade	6430
+== PACKAGES ==
+package_name	payload_bytes
+A	17775
+B	34382
+C	28204
