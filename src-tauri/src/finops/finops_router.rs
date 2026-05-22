@@ -46,6 +46,13 @@ fn qwen_model_path() -> String {
     })
 }
 
+fn is_factory_cloud_only() -> bool {
+    match std::env::var("SODA_FACTORY_CLOUD_ONLY") {
+        Ok(val) => val.eq_ignore_ascii_case("true") || val == "1",
+        Err(_) => false,
+    }
+}
+
 pub struct FinOpsRouter;
 
 impl FinOpsRouter {
@@ -58,12 +65,16 @@ impl FinOpsRouter {
         let (zone, destination) = if token_count < GREEN_THRESHOLD {
             (RoutingZone::Green, RoutingDestination::PassThrough)
         } else if token_count <= YELLOW_MAX {
-            (
-                RoutingZone::Yellow,
-                RoutingDestination::LocalModel {
-                    path: qwen_model_path(),
-                },
-            )
+            if is_factory_cloud_only() {
+                (RoutingZone::Yellow, RoutingDestination::CloudCascade)
+            } else {
+                (
+                    RoutingZone::Yellow,
+                    RoutingDestination::LocalModel {
+                        path: qwen_model_path(),
+                    },
+                )
+            }
         } else {
             (RoutingZone::Red, RoutingDestination::CloudCascade)
         };
@@ -253,5 +264,103 @@ mod tests {
                 println!("==============================================\n");
             }
         }
+    }
+
+    #[test]
+    fn test_30k_yellow_without_bypass_routes_to_local() {
+        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
+
+        let content = generate_tokens(30_000);
+        let path = create_temp_blob(&content);
+
+        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
+
+        assert_eq!(decision.zone, RoutingZone::Yellow);
+        match decision.destination {
+            RoutingDestination::LocalModel { ref path } => {
+                assert!(path.contains("Qwen3.5-4B-Q4_K_M.gguf"));
+            }
+            _ => panic!("Expected LocalModel destination for Yellow zone without bypass"),
+        }
+
+        fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn test_30k_yellow_with_bypass_true_routes_to_cloud() {
+        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
+
+        let content = generate_tokens(30_000);
+        let path = create_temp_blob(&content);
+
+        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
+
+        assert_eq!(decision.zone, RoutingZone::Yellow);
+        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
+
+        fs::remove_file(path).ok();
+        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
+    }
+
+    #[test]
+    fn test_30k_yellow_with_bypass_1_routes_to_cloud() {
+        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "1");
+
+        let content = generate_tokens(30_000);
+        let path = create_temp_blob(&content);
+
+        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
+
+        assert_eq!(decision.zone, RoutingZone::Yellow);
+        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
+
+        fs::remove_file(path).ok();
+        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
+    }
+
+    #[test]
+    fn test_70k_red_ignores_bypass() {
+        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
+
+        let content = generate_tokens(70_000);
+        let path = create_temp_blob(&content);
+
+        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
+
+        assert_eq!(decision.zone, RoutingZone::Red);
+        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
+
+        fs::remove_file(path).ok();
+        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
+    }
+
+    #[test]
+    fn test_10k_green_ignores_bypass() {
+        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
+
+        let content = generate_tokens(10_000);
+        let path = create_temp_blob(&content);
+
+        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
+
+        assert_eq!(decision.zone, RoutingZone::Green);
+        assert_eq!(decision.destination, RoutingDestination::PassThrough);
+
+        fs::remove_file(path).ok();
+        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
+    }
+
+    #[test]
+    fn test_bypass_case_insensitive_true() {
+        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "TRUE");
+
+        let content = generate_tokens(30_000);
+        let path = create_temp_blob(&content);
+
+        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
+        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
+
+        fs::remove_file(path).ok();
+        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
     }
 }

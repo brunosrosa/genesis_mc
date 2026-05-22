@@ -1,34 +1,35 @@
-//! ab_test_silicon_shock.rs — Silicon Shock Laboratory (A/B Route Comparison)
-//!
-//! Route A: CloudCascade (OpenRouter)  → `_ab_test_cloud_essence.md`
-//! Route B: LocalDistiller + LmStudio → `_ab_test_local_essence.md`
-//!
-//! Pré-requisitos:
-//!   - LM Studio rodando em localhost:1234 com Qwen 3.5 4B (ou similar)
-//!   - OPENROUTER_API_KEY definida no ambiente (para Route A)
-//!
-//! Executar: OPENROUTER_API_KEY=<key> cargo run --example ab_test_silicon_shock
+// ab_test_silicon_shock.rs — Silicon Shock Laboratory (A/B Route Comparison)
+// Route A: FastCloudCascade (OpenRouter FAST_KEY) → `_ab_test_cloud_essence.md`
+// Route B: LocalDistiller + LmStudio → `_ab_test_local_essence.md`
+//
+// Pré-requisitos:
+//   - LM Studio rodando em localhost:1234 com Qwen 3.5 4B (ou similar)
+//   - .env com OPENROUTER_API_FAST_KEY (para Route A)
+//
+// Executar: cargo run --example ab_test_silicon_shock
 
-use genesis_mc_lib::finops::phase1_5::cloud_cascade::{CascadeError, CloudCascade};
+use genesis_mc_lib::finops::phase1_5::cloud_cascade::CascadeError;
 use genesis_mc_lib::finops::phase1_5::local_distiller::{DistillationError, InferenceEngine, LocalDistiller};
-use reqwest::blocking::Client;
+use reqwest::Client as HttpClient;
+use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-const LM_STUDIO_URL: &str = "http://localhost:1234/v1/chat/completions";
+const LM_STUDIO_URL: &str = "http://127.0.0.1:1234/api/v1/chat";
+const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 const DISTILL_SYSTEM_PROMPT: &str =
     "Resuma os fatos crus, extraia a alma matemática, \
     não emita opiniões, limite-se a ~3000 tokens.";
 
 struct LmStudioEngine {
-    client: Client,
+    client: BlockingClient,
     model_name: String,
 }
 
 impl LmStudioEngine {
     fn new(model_name: &str) -> Self {
         Self {
-            client: Client::new(),
+            client: BlockingClient::new(),
             model_name: model_name.to_string(),
         }
     }
@@ -36,56 +37,40 @@ impl LmStudioEngine {
 
 impl Default for LmStudioEngine {
     fn default() -> Self {
-        Self::new("qwen-3.5-4b")
+        Self::new("qwen3.5-4b")
     }
 }
 
 impl InferenceEngine for LmStudioEngine {
-    fn infer(&self, prompt: &str, max_tokens: usize) -> Result<String, DistillationError> {
+    fn infer(&self, prompt: &str, _max_tokens: usize) -> Result<String, DistillationError> {
         #[derive(Serialize)]
         struct ChatRequest {
             model: String,
-            messages: Vec<Message>,
-            max_tokens: usize,
-            stream: bool,
-        }
-
-        #[derive(Serialize)]
-        struct Message {
-            role: &'static str,
-            content: String,
+            input: String,
         }
 
         #[derive(Deserialize)]
         struct LmStudioResponse {
-            choices: Vec<Choice>,
+            output: Vec<OutputItem>,
         }
 
         #[derive(Deserialize)]
-        struct Choice {
-            message: ResponseMessage,
-        }
-
-        #[derive(Deserialize)]
-        struct ResponseMessage {
+        struct OutputItem {
+            #[serde(rename = "type")]
+            item_type: String,
             content: String,
         }
 
         let request_body = ChatRequest {
             model: self.model_name.clone(),
-            messages: vec![Message {
-                role: "user",
-                content: prompt.to_string(),
-            }],
-            max_tokens,
-            stream: false,
+            input: prompt.to_string(),
         };
 
         let response = self
             .client
             .post(LM_STUDIO_URL)
             .json(&request_body)
-            .timeout(std::time::Duration::from_secs(300))
+            .timeout(std::time::Duration::from_secs(600))
             .send()
             .map_err(|e| DistillationError::InferenceError(format!("LM Studio request failed: {e}")))?;
 
@@ -102,10 +87,11 @@ impl InferenceEngine for LmStudioEngine {
             .map_err(|e| DistillationError::InferenceError(format!("Failed to parse LM Studio response: {e}")))?;
 
         parsed
-            .choices
-            .first()
-            .map(|c| c.message.content.clone())
-            .ok_or_else(|| DistillationError::InferenceError("Empty response from LM Studio".to_string()))
+            .output
+            .iter()
+            .find(|item| item.item_type == "message")
+            .map(|item| item.content.clone())
+            .ok_or_else(|| DistillationError::InferenceError("No message in LM Studio response".to_string()))
     }
 
     fn is_loaded(&self) -> bool {
@@ -113,6 +99,95 @@ impl InferenceEngine for LmStudioEngine {
     }
 
     fn clear_cache(&mut self) {}
+}
+
+struct FastCloudCascade {
+    client: HttpClient,
+    api_key: String,
+    model: String,
+}
+
+impl FastCloudCascade {
+    fn new() -> Result<Self, CascadeError> {
+        let api_key = std::env::var("OPENROUTER_API_FAST_KEY")
+            .map_err(|_| CascadeError::NetworkError("OPENROUTER_API_FAST_KEY not set".to_string()))?;
+        Ok(Self {
+            client: HttpClient::new(),
+            api_key,
+            model: "deepseek/deepseek-chat".to_string(),
+        })
+    }
+
+    async fn cascade_distill(&self, payload: &str, system_prompt: &str) -> Result<String, CascadeError> {
+        #[derive(Serialize)]
+        struct RequestBody<'a> {
+            model: &'a str,
+            messages: Vec<Message<'a>>,
+            max_tokens: usize,
+        }
+
+        #[derive(Serialize)]
+        struct Message<'a> {
+            role: &'a str,
+            content: &'a str,
+        }
+
+        let body = RequestBody {
+            model: &self.model,
+            messages: vec![
+                Message { role: "system", content: system_prompt },
+                Message { role: "user", content: payload },
+            ],
+            max_tokens: 3000,
+        };
+
+        let response = self
+            .client
+            .post(OPENROUTER_API_URL)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("HTTP-Referer", "https://genesis_mc.local")
+            .header("X-Title", "SiliconShockLab")
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(120))
+            .send()
+            .await
+            .map_err(|e| CascadeError::NetworkError(format!("Request failed: {e}")))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
+            return Err(CascadeError::PaidFallbackFailed {
+                status: status.as_u16(),
+                message: body_text,
+            });
+        }
+
+        #[derive(Deserialize)]
+        struct OpenRouterResponse {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: ResponseMessage,
+        }
+
+        #[derive(Deserialize)]
+        struct ResponseMessage {
+            content: String,
+        }
+
+        let parsed: OpenRouterResponse = response
+            .json()
+            .await
+            .map_err(|e| CascadeError::NetworkError(format!("JSON parse error: {e}")))?;
+
+        parsed
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| CascadeError::InvalidInput)
+    }
 }
 
 fn generate_dense_payload() -> String {
@@ -205,17 +280,26 @@ fn save_essence(path: &str, content: &str) -> Result<(), Box<dyn std::error::Err
 }
 
 async fn run_route_a(payload: &str) -> Result<String, CascadeError> {
-    let cascade = CloudCascade::new()?;
+    let cascade = FastCloudCascade::new()?;
     cascade.cascade_distill(payload, DISTILL_SYSTEM_PROMPT).await
 }
 
-fn run_route_b(payload: &str) -> Result<String, DistillationError> {
-    let distiller: LocalDistiller<LmStudioEngine> = LocalDistiller::new("").map_err(|e| DistillationError::InferenceError(e.to_string()))?;
-    distiller.distill(payload, DISTILL_SYSTEM_PROMPT)
+async fn run_route_b(payload: &str) -> Result<String, DistillationError> {
+    let payload = payload.to_string();
+    let prompt = DISTILL_SYSTEM_PROMPT.to_string();
+    tokio::task::spawn_blocking(move || {
+        let distiller: LocalDistiller<LmStudioEngine> = LocalDistiller::new("")
+            .map_err(|e| DistillationError::InferenceError(e.to_string()))?;
+        distiller.distill(&payload, &prompt)
+    })
+    .await
+    .map_err(|e| DistillationError::InferenceError(format!("Task join error: {e}")))?
 }
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     println!("=== Silicon Shock Laboratory — Phase 1.5 A/B Route Validation ===");
     println!();
 
@@ -226,7 +310,7 @@ async fn main() {
 
     println!("[ROUTE B]  LocalDistiller + LmStudio (Qwen 3.5 4B @ localhost:1234)");
     let t0 = Instant::now();
-    match run_route_b(&payload) {
+    match run_route_b(&payload).await {
         Ok(essence) => {
             let elapsed = t0.elapsed();
             println!("[ROUTE B]  OK — {}ms — LmStudio respondeu", elapsed.as_millis());
@@ -247,7 +331,7 @@ async fn main() {
     }
     println!();
 
-    println!("[ROUTE A]  CloudCascade (OpenRouter — FREE tier)");
+    println!("[ROUTE A]  FastCloudCascade (OpenRouter — deepseek/deepseek-chat)");
     let t0 = Instant::now();
     match run_route_a(&payload).await {
         Ok(essence) => {
@@ -259,8 +343,8 @@ async fn main() {
                 println!("[ROUTE A]  Salvo → _ab_test_cloud_essence.md ({} chars)", essence.len());
             }
         }
-        Err(CascadeError::NetworkError(msg)) if msg.contains("OPENROUTER_API_KEY") => {
-            eprintln!("[ROUTE A]  PULADO — OPENROUTER_API_KEY não definida no ambiente");
+        Err(CascadeError::NetworkError(msg)) if msg.contains("OPENROUTER_API_FAST_KEY") => {
+            eprintln!("[ROUTE A]  PULADO — OPENROUTER_API_FAST_KEY não definida no .env");
         }
         Err(e) => {
             let elapsed = t0.elapsed();
