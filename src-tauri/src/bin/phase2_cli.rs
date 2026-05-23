@@ -117,39 +117,49 @@ fn mark_repo_running_if_present(conn: &Connection, repo_id: &str) -> io::Result<
     Ok(())
 }
 
-fn fetch_debate_row(conn: &Connection, repo_id: &str) -> io::Result<(String, String, String, String)> {
+fn fetch_debate_row(
+    conn: &Connection,
+    repo_id: &str,
+) -> io::Result<(String, String, String, String, String)> {
     conn.query_row(
-        "SELECT lens_a_json, lens_b_json, lens_c_json, phase_status
+        "SELECT lens_a_json, lens_b_json, lens_c_json, model_used, phase_status
          FROM debates_enxame
          WHERE repo_id = ?1",
         params![repo_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
     )
     .map_err(|e| io::Error::other(format!("Falha ao buscar debate persistido de {}: {}", repo_id, e)))
 }
 
-fn write_phase2_report(
-    root_dir: &Path,
-    repo_id: &str,
+struct Phase2Report<'a> {
+    repo_id: &'a str,
     elapsed_ms: u128,
-    lens_a_json: &str,
-    lens_b_json: &str,
-    lens_c_json: &str,
-    phase_status: &str,
-) -> io::Result<PathBuf> {
-    let report_path = root_dir.join(format!("_PHASE2_REPORT_{}.txt", sanitize_repo_id(repo_id)));
+    lens_a_json: &'a str,
+    lens_b_json: &'a str,
+    lens_c_json: &'a str,
+    model_used: &'a str,
+    phase_status: &'a str,
+}
+
+fn write_phase2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::Result<PathBuf> {
+    let report_path = root_dir.join(format!(
+        "_PHASE2_REPORT_{}_V6.txt",
+        sanitize_repo_id(report_data.repo_id)
+    ));
     let mut report = String::new();
-    report.push_str(&format!("repo_id={}\n", repo_id));
-    report.push_str(&format!("elapsed_ms={}\n", elapsed_ms));
-    report.push_str(&format!("phase_status={}\n", phase_status));
+    report.push_str(&format!("repo_id={}\n", report_data.repo_id));
+    report.push_str(&format!("elapsed_ms={}\n", report_data.elapsed_ms));
+    report.push_str(&format!("phase_status={}\n", report_data.phase_status));
     report.push_str("persisted_in=debates_enxame\n");
+    report.push_str(&format!("model_used={}\n", report_data.model_used));
+    report.push('\n');
     report.push_str("\n== LENS A ==\n");
-    report.push_str(lens_a_json);
+    report.push_str(report_data.lens_a_json);
     report.push_str("\n\n== LENS B ==\n");
-    report.push_str(lens_b_json);
+    report.push_str(report_data.lens_b_json);
     report.push_str("\n\n== LENS C ==\n");
-    report.push_str(lens_c_json);
-    report.push_str("\n");
+    report.push_str(report_data.lens_c_json);
+    report.push('\n');
 
     std::fs::write(&report_path, report).map_err(|e| {
         io::Error::other(format!(
@@ -200,16 +210,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::open(&db_path).map_err(|e| {
         io::Error::other(format!("Falha ao reabrir vault em {}: {}", db_path.display(), e))
     })?;
-    let (lens_a_json, lens_b_json, lens_c_json, phase_status) = fetch_debate_row(&conn, &repo_id)?;
+    let (lens_a_json, lens_b_json, lens_c_json, model_used, phase_status) =
+        fetch_debate_row(&conn, &repo_id)?;
 
     let report_path = write_phase2_report(
         &root_dir,
-        &repo_id,
-        started.elapsed().as_millis(),
-        &lens_a_json,
-        &lens_b_json,
-        &lens_c_json,
-        &phase_status,
+        &Phase2Report {
+            repo_id: &repo_id,
+            elapsed_ms: started.elapsed().as_millis(),
+            lens_a_json: &lens_a_json,
+            lens_b_json: &lens_b_json,
+            lens_c_json: &lens_c_json,
+            model_used: &model_used,
+            phase_status: &phase_status,
+        },
     )?;
 
     info!(
@@ -224,6 +238,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- LENS A ---\n{}", lens_a_json);
     println!("--- LENS B ---\n{}", lens_b_json);
     println!("--- LENS C ---\n{}", lens_c_json);
+    println!("--- MODEL USED ---\n{}", model_used);
     println!("Persistido em debates_enxame com status={}", phase_status);
 
     Ok(())

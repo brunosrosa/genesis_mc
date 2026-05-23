@@ -31,19 +31,19 @@ impl LensKind {
         }
     }
 
-    fn model_name(self) -> &'static str {
+    fn model_env_key(self) -> &'static str {
         match self {
-            Self::ProductUx => "claude-opus-4.7",
-            Self::Architecture => "deepseek-v4-pro",
-            Self::Operations => "glm-5.1",
+            Self::ProductUx => "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX",
+            Self::Architecture => "OPENROUTER_HEAVY_MODEL_LENS_ARQ",
+            Self::Operations => "OPENROUTER_HEAVY_MODEL_LENS_OPS",
         }
     }
 
     fn system_prompt(self) -> &'static str {
         match self {
-            Self::ProductUx => "Atue como LensA_ProductUX. Foque em neuro-inclusao, mitigacao de Flow-Debt e valor de produto. Responda estritamente em JSON com as chaves lens_id, repo_id, bullets, risk_level, recommendation. bullets deve conter de 3 a 5 itens curtos e factuais. Nenhuma prosa fora do JSON.",
-            Self::Architecture => "Atue como LensB_Architecture. Foque em alma matematica, extraibilidade O(1) e sobrevivencia bare-metal na RTX 2060m. Responda estritamente em JSON com as chaves lens_id, repo_id, bullets, risk_level, recommendation. bullets deve conter de 3 a 5 itens curtos e factuais. Nenhuma prosa fora do JSON.",
-            Self::Operations => "Atue como LensC_Operations. Audite lixo toxico, entropia temporal e risco FinOps. Responda estritamente em JSON com as chaves lens_id, repo_id, bullets, risk_level, recommendation. bullets deve conter de 3 a 5 itens curtos e factuais. Nenhuma prosa fora do JSON.",
+            Self::ProductUx => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensA_ProductUX. Analise a inovacao e o valor real de produto. Qual e o 'UAU moment', o 'refreshness' da UX ou o fluxo de trabalho genial que amplia as capacidades do usuario? Avalie estrategicamente como essa solucao se encaixa ou cria novos Canvas no SODA. Valide se essa entrega respeita nossas leis de neuro-inclusao (mitigacao de Flow-Debt, Zero Layout Shift). Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
+            Self::Architecture => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensB_Architecture. Isole a 'alma matematica' e o nucleo transplantavel. A logica e transmutavel e agnostica (recompilavel dinamicamente via CubeCL/Burn)? Avalie a viabilidade do codigo sobreviver ao nosso 'Treino de Gravidade' (limite da RTX 2060m) sem depender de interpretadores presos a arquitetura (Node.js/JVM). Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
+            Self::Operations => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como o Auditor Pessimista (FinOps e HardwareOps). Qual a real taxa de entropia? O sistema gera custos em nuvem ou Rate Limits perigosos? Liste o lixo toxico da stack original. O sistema 'fala' quando tem dor (observabilidade) e falha graciosamente? Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
         }
     }
 }
@@ -73,7 +73,29 @@ pub trait DebateStore: Send + Sync {
 }
 
 pub trait LensInvoker: Send + Sync {
-    fn invoke<'a>(&'a self, lens: LensKind, repo_id: &'a str, payload: &'a str) -> LensFuture<'a>;
+    fn invoke<'a>(
+        &'a self,
+        lens: LensKind,
+        repo_id: &'a str,
+        payload: &'a str,
+        model_override: Option<&'a str>,
+    ) -> LensFuture<'a>;
+
+    fn primary_model(&self, _lens: LensKind) -> Option<&str> {
+        None
+    }
+
+    fn ops2_model(&self) -> Option<&str> {
+        None
+    }
+
+    fn default_model(&self) -> Option<&str> {
+        None
+    }
+
+    fn last_resort_model(&self) -> Option<&str> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -82,6 +104,8 @@ pub struct LensDebatePayload {
     pub lens_id: String,
     #[serde(default)]
     pub repo_id: String,
+    #[serde(default)]
+    pub model_used: String,
     #[serde(default)]
     pub bullets: Vec<String>,
     #[serde(default)]
@@ -164,18 +188,57 @@ where
         repo_id: &str,
         payload: &str,
     ) -> Result<String, Phase2Error> {
-        let mut last_error = String::new();
+        let mut errors: Vec<String> = Vec::new();
+        let mut cascade: Vec<(&'static str, Option<&str>)> = Vec::new();
 
-        for _attempt in 1..=3 {
-            match self.invoker.invoke(lens, repo_id, payload).await {
-                Ok(result) => return Ok(result),
-                Err(err) => last_error = err,
+        let primary = self.invoker.primary_model(lens);
+        let ops2 = self.invoker.ops2_model();
+        let default = self.invoker.default_model();
+        let last_resort = self.invoker.last_resort_model();
+
+        cascade.push(("primario", primary));
+        if lens == LensKind::Operations {
+            cascade.push(("ops2", ops2));
+        }
+        cascade.push(("default", default));
+        cascade.push(("last_resort", last_resort));
+
+        for (stage, model_opt) in cascade {
+            let Some(model) = model_opt else { continue };
+
+            let max_attempts = if stage == "primario" { 3 } else { 1 };
+
+            for attempt in 1..=max_attempts {
+                match self
+                    .invoker
+                    .invoke(lens, repo_id, payload, Some(model))
+                    .await
+                {
+                    Ok(result) => return Ok(result),
+                    Err(err) => {
+                        let msg = format!("stage={}, attempt {} => {}", stage, attempt, truncate_for_log(&err, 1400));
+                        errors.push(msg.clone());
+                        tracing::warn!(
+                            lens_id = lens.lens_id(),
+                            repo_id = repo_id,
+                            model_used = model,
+                            stage = stage,
+                            attempt = attempt,
+                            error = %msg,
+                            "Falha no passo da cascata FinOps"
+                        );
+                    }
+                }
             }
+        }
+
+        if errors.is_empty() {
+            errors.push("Nenhum modelo configurado na cascata FinOps (todos valores None)".to_string());
         }
 
         Err(Phase2Error::LensExecutionError {
             lens: lens.lens_id().to_string(),
-            message: last_error,
+            message: errors.join(" | "),
         })
     }
 }
@@ -192,48 +255,31 @@ pub struct HttpLensInvoker {
     claude: HttpLensConfig,
     deepseek: HttpLensConfig,
     glm: HttpLensConfig,
+    ops2: HttpLensConfig,
+    default: HttpLensConfig,
+    last_resort: HttpLensConfig,
 }
 
 impl HttpLensInvoker {
     pub fn from_env() -> Result<Self, Phase2Error> {
-        Ok(Self {
-            client: Client::new(),
-            claude: HttpLensConfig {
-                base_url: std::env::var("PHASE2_CLAUDE_URL")
-                    .map_err(|_| Phase2Error::ConfigError("PHASE2_CLAUDE_URL ausente".to_string()))?,
-                api_key: std::env::var("PHASE2_CLAUDE_API_KEY")
-                    .map_err(|_| Phase2Error::ConfigError("PHASE2_CLAUDE_API_KEY ausente".to_string()))?,
-                model: LensKind::ProductUx.model_name().to_string(),
-            },
-            deepseek: HttpLensConfig {
-                base_url: std::env::var("PHASE2_DEEPSEEK_URL")
-                    .map_err(|_| Phase2Error::ConfigError("PHASE2_DEEPSEEK_URL ausente".to_string()))?,
-                api_key: std::env::var("PHASE2_DEEPSEEK_API_KEY")
-                    .map_err(|_| Phase2Error::ConfigError("PHASE2_DEEPSEEK_API_KEY ausente".to_string()))?,
-                model: LensKind::Architecture.model_name().to_string(),
-            },
-            glm: HttpLensConfig {
-                base_url: std::env::var("PHASE2_GLM_URL")
-                    .map_err(|_| Phase2Error::ConfigError("PHASE2_GLM_URL ausente".to_string()))?,
-                api_key: std::env::var("PHASE2_GLM_API_KEY")
-                    .map_err(|_| Phase2Error::ConfigError("PHASE2_GLM_API_KEY ausente".to_string()))?,
-                model: LensKind::Operations.model_name().to_string(),
-            },
-        })
+        Self::from_openrouter_env()
     }
 
     pub fn from_openrouter_env() -> Result<Self, Phase2Error> {
         let api_key = get_first_env(&[
+            "OPENROUTER_API_HEAVY_KEY",
             "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
         ])
         .ok_or_else(|| {
             Phase2Error::ConfigError(
-                "OPENROUTER_API_KEY/OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY ausente".to_string(),
+                "OPENROUTER_API_HEAVY_KEY/OPENROUTER_API_KEY/OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY ausente".to_string(),
             )
         })?;
-        let base_url = std::env::var("OPENROUTER_BASE_URL")
+        let base_url = std::env::var("OPENAI_BASE_URL")
+            .map(|base| format!("{}/chat/completions", base.trim_end_matches('/')))
+            .or_else(|_| std::env::var("OPENROUTER_BASE_URL"))
             .unwrap_or_else(|_| DEFAULT_OPENROUTER_URL.to_string());
 
         Ok(Self {
@@ -241,20 +287,50 @@ impl HttpLensInvoker {
             claude: HttpLensConfig {
                 base_url: base_url.clone(),
                 api_key: api_key.clone(),
-                model: std::env::var("PHASE2_LENS_A_MODEL")
-                    .unwrap_or_else(|_| "anthropic/claude-3.5-sonnet".to_string()),
+                model: std::env::var(LensKind::ProductUx.model_env_key()).map_err(|_| {
+                    Phase2Error::ConfigError(
+                        "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX ausente".to_string(),
+                    )
+                })?,
             },
             deepseek: HttpLensConfig {
                 base_url: base_url.clone(),
                 api_key: api_key.clone(),
-                model: std::env::var("PHASE2_LENS_B_MODEL")
-                    .unwrap_or_else(|_| "deepseek/deepseek-chat".to_string()),
+                model: std::env::var(LensKind::Architecture.model_env_key()).map_err(|_| {
+                    Phase2Error::ConfigError(
+                        "OPENROUTER_HEAVY_MODEL_LENS_ARQ ausente".to_string(),
+                    )
+                })?,
             },
             glm: HttpLensConfig {
+                base_url: base_url.clone(),
+                api_key: api_key.clone(),
+                model: std::env::var(LensKind::Operations.model_env_key()).map_err(|_| {
+                    Phase2Error::ConfigError(
+                        "OPENROUTER_HEAVY_MODEL_LENS_OPS ausente".to_string(),
+                    )
+                })?,
+            },
+            ops2: HttpLensConfig {
+                base_url: base_url.clone(),
+                api_key: api_key.clone(),
+                model: std::env::var("OPENROUTER_HEAVY_MODEL_LENS_OPS_2")
+                    .unwrap_or_else(|_| "google/gemini-2.5-flash".to_string()),
+            },
+            default: HttpLensConfig {
+                base_url: base_url.clone(),
+                api_key: api_key.clone(),
+                model: std::env::var("OPENROUTER_DEFAULT_MODEL")
+                    .unwrap_or_else(|_| "google/gemini-2.5-flash".to_string()),
+            },
+            last_resort: HttpLensConfig {
                 base_url,
                 api_key,
-                model: std::env::var("PHASE2_LENS_C_MODEL")
-                    .unwrap_or_else(|_| "google/gemini-2.5-flash".to_string()),
+                model: std::env::var("OPENROUTER_HEAVY_MODEL_LAST_RESORCE").map_err(|_| {
+                    Phase2Error::ConfigError(
+                        "OPENROUTER_HEAVY_MODEL_LAST_RESORCE ausente".to_string(),
+                    )
+                })?,
             },
         })
     }
@@ -266,6 +342,21 @@ impl HttpLensInvoker {
             claude,
             deepseek,
             glm,
+            ops2: HttpLensConfig {
+                base_url: DEFAULT_OPENROUTER_URL.to_string(),
+                api_key: "test".to_string(),
+                model: "google/gemini-2.5-flash".to_string(),
+            },
+            default: HttpLensConfig {
+                base_url: DEFAULT_OPENROUTER_URL.to_string(),
+                api_key: "test".to_string(),
+                model: "google/gemini-2.5-flash".to_string(),
+            },
+            last_resort: HttpLensConfig {
+                base_url: DEFAULT_OPENROUTER_URL.to_string(),
+                api_key: "test".to_string(),
+                model: "anthropic/claude-opus-4.7".to_string(),
+            },
         }
     }
 
@@ -279,11 +370,18 @@ impl HttpLensInvoker {
 }
 
 impl LensInvoker for HttpLensInvoker {
-    fn invoke<'a>(&'a self, lens: LensKind, repo_id: &'a str, payload: &'a str) -> LensFuture<'a> {
+    fn invoke<'a>(
+        &'a self,
+        lens: LensKind,
+        repo_id: &'a str,
+        payload: &'a str,
+        model_override: Option<&'a str>,
+    ) -> LensFuture<'a> {
         Box::pin(async move {
             let config = self.config_for(lens);
+            let model_used = model_override.unwrap_or(&config.model);
             let body = ChatCompletionsRequest {
-                model: config.model.clone(),
+                model: model_used.to_string(),
                 messages: vec![
                     ChatMessage {
                         role: "system".to_string(),
@@ -294,7 +392,7 @@ impl LensInvoker for HttpLensInvoker {
                         content: format!("repo_id={}\n{}", repo_id, payload),
                     },
                 ],
-                max_tokens: 700,
+                max_tokens: 8192,
                 temperature: 0.0,
                 response_format: ChatResponseFormat {
                     kind: "json_object".to_string(),
@@ -317,15 +415,30 @@ impl LensInvoker for HttpLensInvoker {
                 return Err(format!("HTTP {}: {}", status.as_u16(), body));
             }
 
-            let parsed: ChatCompletionsResponse = response.json().await.map_err(|e| e.to_string())?;
-            parsed
-                .choices
-                .first()
-                .and_then(|choice| choice.message.content.clone())
-                .filter(|content| !content.trim().is_empty())
-                .ok_or_else(|| format!("Resposta vazia da lente {}", lens.lens_id()))
-                .and_then(|content| normalize_lens_payload(lens, repo_id, &content))
+            let raw_response = response.text().await.map_err(|e| e.to_string())?;
+            extract_chat_message_content(&raw_response, lens).and_then(|content| {
+                if content.trim().is_empty() {
+                    return Err(format!("Resposta vazia da lente {}", lens.lens_id()));
+                }
+                normalize_lens_payload(lens, repo_id, model_used, &content)
+            })
         })
+    }
+
+    fn last_resort_model(&self) -> Option<&str> {
+        Some(self.last_resort.model.as_str())
+    }
+
+    fn ops2_model(&self) -> Option<&str> {
+        Some(self.ops2.model.as_str())
+    }
+
+    fn default_model(&self) -> Option<&str> {
+        Some(self.default.model.as_str())
+    }
+
+    fn primary_model(&self, lens: LensKind) -> Option<&str> {
+        Some(self.config_for(lens).model.as_str())
     }
 }
 
@@ -350,19 +463,36 @@ struct ChatResponseFormat {
     kind: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct ChatCompletionsResponse {
-    choices: Vec<ChatChoice>,
+fn extract_chat_message_content(raw_response: &str, lens: LensKind) -> Result<String, String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(raw_response).map_err(|e| format!("Resposta HTTP invalida da lente {}: {}", lens.lens_id(), e))?;
+
+    let content = parsed
+        .get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"));
+
+    Ok(content.map(flatten_chat_content).unwrap_or_default())
 }
 
-#[derive(Debug, Deserialize)]
-struct ChatChoice {
-    message: ChatResponseMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChatResponseMessage {
-    content: Option<String>,
+fn flatten_chat_content(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .map(flatten_chat_content)
+            .filter(|chunk| !chunk.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        serde_json::Value::Object(map) => ["text", "content", "value"]
+            .iter()
+            .find_map(|key| map.get(*key))
+            .map(flatten_chat_content)
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
 }
 
 pub struct SqliteDebateStore {
@@ -384,6 +514,7 @@ pub fn ensure_phase2_schema(conn: &Connection) -> Result<(), String> {
             lens_a_json TEXT NOT NULL,
             lens_b_json TEXT NOT NULL,
             lens_c_json TEXT NOT NULL,
+            model_used TEXT NOT NULL,
             phase_status TEXT NOT NULL
         )",
         [],
@@ -420,6 +551,13 @@ pub fn ensure_phase2_schema(conn: &Connection) -> Result<(), String> {
             [],
         )
         .map_err(|e| format!("Falha ao migrar coluna phase_status: {}", e))?;
+    }
+    if !column_names.iter().any(|col| col == "model_used") {
+        conn.execute(
+            "ALTER TABLE debates_enxame ADD COLUMN model_used TEXT NOT NULL DEFAULT '{}'",
+            [],
+        )
+        .map_err(|e| format!("Falha ao migrar coluna model_used: {}", e))?;
     }
 
     if column_names.iter().any(|col| col == "lente_a") {
@@ -505,7 +643,9 @@ fn describe_table(conn: &Connection, table_name: &str) -> Result<Vec<TableColumn
 fn default_value_for_column(column: &TableColumn) -> Value {
     match column.name.as_str() {
         "contexto_oraculo_soda" => Value::Text("blob_10_soda_canon_context".to_string()),
-        "lens_a_json" | "lens_b_json" | "lens_c_json" | "phase_status" => Value::Text(String::new()),
+        "lens_a_json" | "lens_b_json" | "lens_c_json" | "phase_status" | "model_used" => {
+            Value::Text(String::new())
+        }
         _ if column.declared_type.to_ascii_uppercase().contains("INT") => Value::Integer(0),
         _ if column.declared_type.to_ascii_uppercase().contains("REAL")
             || column.declared_type.to_ascii_uppercase().contains("FLOA")
@@ -542,15 +682,24 @@ impl DebateStore for SqliteDebateStore {
             .transaction()
             .map_err(|e| format!("Falha ao abrir transacao SQLite: {}", e))?;
 
+        let model_used_summary = build_model_used_summary(debate)?;
         let updated = tx
             .execute(
                 "UPDATE debates_enxame
                  SET lens_a_json = ?2,
                      lens_b_json = ?3,
                      lens_c_json = ?4,
-                     phase_status = ?5
+                     model_used = ?5,
+                     phase_status = ?6
                  WHERE repo_id = ?1",
-                params![repo_id, debate.lente_a, debate.lente_b, debate.lente_c, STATUS_OK],
+                params![
+                    repo_id,
+                    debate.lente_a,
+                    debate.lente_b,
+                    debate.lente_c,
+                    model_used_summary,
+                    STATUS_OK
+                ],
             )
             .map_err(|e| format!("Falha ao atualizar debates_enxame: {}", e))?;
 
@@ -565,6 +714,7 @@ impl DebateStore for SqliteDebateStore {
                     "lens_a_json" => Some(Value::Text(debate.lente_a.clone())),
                     "lens_b_json" => Some(Value::Text(debate.lente_b.clone())),
                     "lens_c_json" => Some(Value::Text(debate.lente_c.clone())),
+                    "model_used" => Some(Value::Text(model_used_summary.clone())),
                     "phase_status" => Some(Value::Text(STATUS_OK.to_string())),
                     _ if column.not_null && column.default_value.is_none() => {
                         Some(default_value_for_column(&column))
@@ -627,19 +777,32 @@ fn get_first_env(keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| std::env::var(key).ok().filter(|value| !value.trim().is_empty()))
 }
 
-fn normalize_lens_payload(lens: LensKind, repo_id: &str, raw: &str) -> Result<String, String> {
-    let candidate = extract_json_object(raw).unwrap_or_else(|| raw.trim().to_string());
+fn normalize_lens_payload(
+    lens: LensKind,
+    repo_id: &str,
+    model_used: &str,
+    raw: &str,
+) -> Result<String, String> {
+    let candidate = extract_first_json_object(raw).unwrap_or_else(|| raw.trim().to_string());
     let mut parsed: LensDebatePayload = match serde_json::from_str(&candidate) {
         Ok(parsed) => parsed,
         Err(json_err) => extract_bullets_fallback(raw)
             .map(|bullets| LensDebatePayload {
                 lens_id: lens.lens_id().to_string(),
                 repo_id: repo_id.to_string(),
+                model_used: model_used.to_string(),
                 bullets,
                 risk_level: "medium".to_string(),
                 recommendation: "manual-review".to_string(),
             })
-            .ok_or_else(|| format!("JSON invalido da lente {}: {}", lens.lens_id(), json_err))?,
+            .ok_or_else(|| {
+                format!(
+                    "JSON invalido da lente {}: {} | raw_snippet={}",
+                    lens.lens_id(),
+                    json_err,
+                    truncate_for_log(&candidate, 900)
+                )
+            })?,
     };
 
     if parsed.lens_id.trim().is_empty() {
@@ -648,6 +811,7 @@ fn normalize_lens_payload(lens: LensKind, repo_id: &str, raw: &str) -> Result<St
     if parsed.repo_id.trim().is_empty() {
         parsed.repo_id = repo_id.to_string();
     }
+    parsed.model_used = model_used.to_string();
 
     parsed.bullets = parsed
         .bullets
@@ -655,6 +819,12 @@ fn normalize_lens_payload(lens: LensKind, repo_id: &str, raw: &str) -> Result<St
         .map(|bullet| bullet.trim().to_string())
         .filter(|bullet| !bullet.is_empty())
         .collect();
+
+    if parsed.bullets.is_empty() {
+        if let Some(bullets) = extract_bullets_fallback(&parsed.recommendation) {
+            parsed.bullets = bullets;
+        }
+    }
 
     if parsed.bullets.len() < 3 || parsed.bullets.len() > 5 {
         return Err(format!(
@@ -664,22 +834,75 @@ fn normalize_lens_payload(lens: LensKind, repo_id: &str, raw: &str) -> Result<St
         ));
     }
 
-    if parsed.risk_level.trim().is_empty() {
-        parsed.risk_level = "medium".to_string();
-    }
-    if parsed.recommendation.trim().is_empty() {
-        parsed.recommendation = "refine".to_string();
-    }
+    parsed.risk_level = normalize_risk_level(&parsed.risk_level);
+    parsed.recommendation = normalize_recommendation(&parsed.recommendation);
 
     serde_json::to_string_pretty(&parsed)
         .map_err(|e| format!("Falha ao serializar JSON canonico da lente {}: {}", lens.lens_id(), e))
 }
 
-fn extract_json_object(raw: &str) -> Option<String> {
+fn extract_first_json_object(raw: &str) -> Option<String> {
+    let stripped = raw
+        .trim()
+        .strip_prefix("```json")
+        .map(str::trim)
+        .unwrap_or(raw)
+        .strip_prefix("```")
+        .map(str::trim)
+        .unwrap_or(raw)
+        .strip_suffix("```")
+        .map(str::trim)
+        .unwrap_or(raw);
+
+    let start = stripped.find('{')?;
+    let end = stripped.rfind('}')?;
+    Some(stripped[start..=end].to_string())
+}
+
+fn normalize_risk_level(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "baixo" | "low" => "Baixo".to_string(),
+        "medio" | "médio" | "medium" => "Medio".to_string(),
+        "alto" | "high" => "Alto".to_string(),
+        _ => "Medio".to_string(),
+    }
+}
+
+fn normalize_recommendation(raw: &str) -> String {
     let trimmed = raw.trim();
-    let start = trimmed.find('{')?;
-    let end = trimmed.rfind('}')?;
-    (end >= start).then(|| trimmed[start..=end].to_string())
+    if trimmed.is_empty() {
+        return "refine".to_string();
+    }
+    let first_line = trimmed.lines().next().unwrap_or(trimmed).trim();
+    let cutoff = first_line
+        .find(". ")
+        .map(|idx| idx + 1)
+        .unwrap_or(first_line.len());
+    truncate_for_log(&first_line[..cutoff], 180)
+}
+
+fn truncate_for_log(value: &str, max_len: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() <= max_len {
+        return trimmed.to_string();
+    }
+    trimmed.chars().take(max_len).collect::<String>()
+}
+
+fn build_model_used_summary(debate: &SwarmDebate) -> Result<String, String> {
+    let lens_a: LensDebatePayload = serde_json::from_str(&debate.lente_a)
+        .map_err(|e| format!("Falha ao ler model_used da lente A: {}", e))?;
+    let lens_b: LensDebatePayload = serde_json::from_str(&debate.lente_b)
+        .map_err(|e| format!("Falha ao ler model_used da lente B: {}", e))?;
+    let lens_c: LensDebatePayload = serde_json::from_str(&debate.lente_c)
+        .map_err(|e| format!("Falha ao ler model_used da lente C: {}", e))?;
+
+    serde_json::to_string_pretty(&serde_json::json!({
+        "lens_a": lens_a.model_used,
+        "lens_b": lens_b.model_used,
+        "lens_c": lens_c.model_used,
+    }))
+    .map_err(|e| format!("Falha ao serializar coluna model_used: {}", e))
 }
 
 fn extract_bullets_fallback(raw: &str) -> Option<Vec<String>> {
@@ -722,7 +945,6 @@ mod tests {
     #[derive(Clone)]
     struct RecordingLensInvoker {
         delays_ms: HashMap<LensKind, u64>,
-        results: HashMap<LensKind, Result<String, String>>,
         payloads: Arc<Mutex<Vec<(LensKind, String)>>>,
         attempts: Arc<Mutex<HashMap<LensKind, usize>>>,
     }
@@ -730,11 +952,10 @@ mod tests {
     impl RecordingLensInvoker {
         fn new(
             delays_ms: HashMap<LensKind, u64>,
-            results: HashMap<LensKind, Result<String, String>>,
+            _results: HashMap<LensKind, Result<String, String>>,
         ) -> Self {
             Self {
                 delays_ms,
-                results,
                 payloads: Arc::new(Mutex::new(Vec::new())),
                 attempts: Arc::new(Mutex::new(HashMap::new())),
             }
@@ -753,7 +974,13 @@ mod tests {
     }
 
     impl LensInvoker for RecordingLensInvoker {
-        fn invoke<'a>(&'a self, lens: LensKind, _repo_id: &'a str, payload: &'a str) -> LensFuture<'a> {
+        fn invoke<'a>(
+            &'a self,
+            lens: LensKind,
+            _repo_id: &'a str,
+            payload: &'a str,
+            model_override: Option<&'a str>,
+        ) -> LensFuture<'a> {
             Box::pin(async move {
                 self.payloads
                     .lock()
@@ -770,11 +997,24 @@ mod tests {
                     sleep(Duration::from_millis(*delay_ms)).await;
                 }
 
-                self.results
-                    .get(&lens)
-                    .cloned()
-                    .unwrap_or_else(|| Ok(default_json(lens)))
+                Ok(default_json(lens, model_override.unwrap_or("mock-model")))
             })
+        }
+
+        fn ops2_model(&self) -> Option<&str> {
+            Some("mock-ops2-model")
+        }
+
+        fn default_model(&self) -> Option<&str> {
+            Some("mock-default-model")
+        }
+
+        fn last_resort_model(&self) -> Option<&str> {
+            Some("mock-last-resort-model")
+        }
+
+        fn primary_model(&self, _lens: LensKind) -> Option<&str> {
+            Some("mock-primary-model")
         }
     }
 
@@ -819,10 +1059,11 @@ mod tests {
         }
     }
 
-    fn default_json(lens: LensKind) -> String {
+    fn default_json(lens: LensKind, model_used: &str) -> String {
         format!(
-            "{{\"lens_id\":\"{}\",\"repo_id\":\"repo\",\"bullets\":[\"ok-1\",\"ok-2\",\"ok-3\"],\"risk_level\":\"low\",\"recommendation\":\"keep\"}}",
-            lens.lens_id()
+            "{{\"lens_id\":\"{}\",\"repo_id\":\"repo\",\"model_used\":\"{}\",\"bullets\":[\"ok-1\",\"ok-2\",\"ok-3\"],\"risk_level\":\"low\",\"recommendation\":\"keep\"}}",
+            lens.lens_id(),
+            model_used
         )
     }
 
@@ -896,56 +1137,103 @@ mod tests {
 
         ensure_phase2_schema(&conn).expect("migrate schema");
 
-        let (a, b, c, status): (String, String, String, String) = conn
+        let (a, b, c, model_used, status): (String, String, String, String, String) = conn
             .query_row(
-                "SELECT lens_a_json, lens_b_json, lens_c_json, phase_status
+                "SELECT lens_a_json, lens_b_json, lens_c_json, model_used, phase_status
                  FROM debates_enxame
                  WHERE repo_id = ?1",
                 params!["repo/test"],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
             )
             .expect("query migrated row");
 
         assert_eq!(a, "{\"a\":1}");
         assert_eq!(b, "{\"b\":1}");
         assert_eq!(c, "{\"c\":1}");
+        assert_eq!(model_used, "{}");
         assert_eq!(status, "PENDING");
     }
 
     #[test]
     fn test_normalize_lens_payload_extracts_json_from_code_fence() {
-        let raw = "```json\n{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"bullets\":[\"a\",\"b\",\"c\"],\"risk_level\":\"low\",\"recommendation\":\"keep\"}\n```";
-        let normalized =
-            normalize_lens_payload(LensKind::ProductUx, "repo/test", raw).expect("normalized json");
+        let raw = "```json\n{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"model_used\":\"google/gemini-3.5-flash\",\"bullets\":[\"a\",\"b\",\"c\"],\"risk_level\":\"low\",\"recommendation\":\"keep\"}\n```";
+        let normalized = normalize_lens_payload(
+            LensKind::ProductUx,
+            "repo/test",
+            "google/gemini-3.5-flash",
+            raw,
+        )
+        .expect("normalized json");
         let parsed: LensDebatePayload = serde_json::from_str(&normalized).expect("parsed canonical json");
 
         assert_eq!(parsed.lens_id, "LensA_ProductUX");
         assert_eq!(parsed.repo_id, "repo/test");
+        assert_eq!(parsed.model_used, "google/gemini-3.5-flash");
         assert_eq!(parsed.bullets.len(), 3);
     }
 
     #[test]
     fn test_normalize_lens_payload_falls_back_to_plain_bullets() {
         let raw = "1. Primeiro achado\n2. Segundo achado\n3. Terceiro achado";
-        let normalized =
-            normalize_lens_payload(LensKind::ProductUx, "repo/test", raw).expect("normalized fallback");
+        let normalized = normalize_lens_payload(
+            LensKind::ProductUx,
+            "repo/test",
+            "google/gemini-3.5-flash",
+            raw,
+        )
+        .expect("normalized fallback");
         let parsed: LensDebatePayload = serde_json::from_str(&normalized).expect("parsed fallback json");
 
         assert_eq!(parsed.lens_id, "LensA_ProductUX");
         assert_eq!(parsed.repo_id, "repo/test");
+        assert_eq!(parsed.model_used, "google/gemini-3.5-flash");
         assert_eq!(parsed.bullets.len(), 3);
         assert_eq!(parsed.recommendation, "manual-review");
     }
 
     #[test]
+    fn test_normalize_lens_payload_strips_think_block_before_json() {
+        let raw = "<think>cadeia privada</think>\n{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"bullets\":[\"achado 1\",\"achado 2\",\"achado 3\"],\"risk_level\":\"alto\",\"recommendation\":\"seguir\"}\ntexto residual";
+        let normalized = normalize_lens_payload(
+            LensKind::ProductUx,
+            "repo/test",
+            "google/gemini-3.5-flash",
+            raw,
+        )
+        .expect("normalized think json");
+        let parsed: LensDebatePayload = serde_json::from_str(&normalized).expect("parsed think json");
+
+        assert_eq!(parsed.model_used, "google/gemini-3.5-flash");
+        assert_eq!(parsed.bullets.len(), 3);
+    }
+
+    #[test]
+    fn test_normalize_lens_payload_salvages_bullets_from_recommendation_when_empty() {
+        let raw = "{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"bullets\":[],\"risk_level\":\"Alto\",\"recommendation\":\"1. Ponto um\\n2. Ponto dois\\n3. Ponto tres\\nDecisao: rejeitar\"}";
+        let normalized = normalize_lens_payload(
+            LensKind::ProductUx,
+            "repo/test",
+            "google/gemini-3.5-flash",
+            raw,
+        )
+        .expect("salvage bullets");
+        let parsed: LensDebatePayload = serde_json::from_str(&normalized).expect("parsed salvage json");
+        assert_eq!(parsed.bullets.len(), 3);
+        assert_eq!(parsed.risk_level, "Alto");
+        assert!(!parsed.recommendation.is_empty());
+    }
+
+    #[test]
     fn test_from_env_missing_var_returns_config_error() {
         let env_keys = [
-            "PHASE2_CLAUDE_URL",
-            "PHASE2_CLAUDE_API_KEY",
-            "PHASE2_DEEPSEEK_URL",
-            "PHASE2_DEEPSEEK_API_KEY",
-            "PHASE2_GLM_URL",
-            "PHASE2_GLM_API_KEY",
+            "OPENROUTER_API_HEAVY_KEY",
+            "OPENROUTER_API_KEY",
+            "OPENROUTER_API_FAST_KEY",
+            "OPENROUTER_API_FREE_KEY",
+            "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX",
+            "OPENROUTER_HEAVY_MODEL_LENS_ARQ",
+            "OPENROUTER_HEAVY_MODEL_LENS_OPS",
+            "OPENROUTER_HEAVY_MODEL_LAST_RESORCE",
         ];
         let previous_values: Vec<(String, Option<String>)> = env_keys
             .iter()
@@ -968,16 +1256,21 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(Phase2Error::ConfigError(message)) if message == "PHASE2_CLAUDE_URL ausente"
+            Err(Phase2Error::ConfigError(_))
         ));
     }
 
     #[test]
     fn test_from_openrouter_env_missing_key_returns_config_error() {
         let env_keys = [
+            "OPENROUTER_API_HEAVY_KEY",
             "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
+            "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX",
+            "OPENROUTER_HEAVY_MODEL_LENS_ARQ",
+            "OPENROUTER_HEAVY_MODEL_LENS_OPS",
+            "OPENROUTER_HEAVY_MODEL_LAST_RESORCE",
         ];
         let previous_values: Vec<(String, Option<String>)> = env_keys
             .iter()
@@ -1011,9 +1304,18 @@ mod tests {
                 (LensKind::Operations, 150),
             ]),
             HashMap::from([
-                (LensKind::ProductUx, Ok(default_json(LensKind::ProductUx))),
-                (LensKind::Architecture, Ok(default_json(LensKind::Architecture))),
-                (LensKind::Operations, Ok(default_json(LensKind::Operations))),
+                (
+                    LensKind::ProductUx,
+                    Ok(default_json(LensKind::ProductUx, "google/gemini-3.5-flash")),
+                ),
+                (
+                    LensKind::Architecture,
+                    Ok(default_json(LensKind::Architecture, "deepseek/deepseek-v4-pro")),
+                ),
+                (
+                    LensKind::Operations,
+                    Ok(default_json(LensKind::Operations, "z-ai/glm-5.1")),
+                ),
             ]),
         );
         let dispatcher = CognitiveSwarmDispatcher::new(store, invoker);
@@ -1057,7 +1359,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_fail_fast_aborts_after_third_429_and_keeps_debate_table_empty() {
+    async fn test_fail_fast_aborts_after_third_429_and_last_resort_and_keeps_debate_table_empty() {
         let mut claude_server = Server::new_async().await;
         let mut deepseek_server = Server::new_async().await;
         let mut glm_server = Server::new_async().await;
@@ -1067,7 +1369,7 @@ mod tests {
             .match_body(Matcher::Regex("PACKAGE_A_ONLY".to_string()))
             .with_status(429)
             .with_body(r#"{"error":"rate limit"}"#)
-            .expect(3)
+            .expect(5)
             .create();
 
         let deepseek_mock = deepseek_server
@@ -1092,17 +1394,17 @@ mod tests {
             HttpLensConfig {
                 base_url: format!("{}/claude", claude_server.url()),
                 api_key: "test".to_string(),
-                model: "claude-opus-4.7".to_string(),
+                model: "google/gemini-3.5-flash".to_string(),
             },
             HttpLensConfig {
                 base_url: format!("{}/deepseek", deepseek_server.url()),
                 api_key: "test".to_string(),
-                model: "deepseek-v4-pro".to_string(),
+                model: "deepseek/deepseek-v4-pro".to_string(),
             },
             HttpLensConfig {
                 base_url: format!("{}/glm", glm_server.url()),
                 api_key: "test".to_string(),
-                model: "glm-5.1".to_string(),
+                model: "z-ai/glm-5.1".to_string(),
             },
         );
         let dispatcher = CognitiveSwarmDispatcher::new(store, invoker);
@@ -1114,9 +1416,14 @@ mod tests {
         glm_mock.assert();
 
         assert!(matches!(
-            result,
+            &result,
             Err(Phase2Error::LensExecutionError { ref lens, .. }) if lens == "LensA_ProductUX"
         ));
+        let error_message = match result {
+            Err(Phase2Error::LensExecutionError { message, .. }) => message,
+            other => panic!("resultado inesperado: {:?}", other),
+        };
+        assert!(error_message.contains("stage="));
 
         let conn = store_conn.lock().expect("sqlite lock poisoned");
         let debates_count: i64 = conn
@@ -1138,7 +1445,7 @@ mod tests {
         serde_json::json!({
             "choices": [{
                 "message": {
-                    "content": default_json(lens)
+                    "content": default_json(lens, "mock-model")
                 }
             }]
         })
