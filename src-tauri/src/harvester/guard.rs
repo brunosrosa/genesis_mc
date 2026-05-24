@@ -23,11 +23,17 @@ impl PurgeGuard {
         drop(sandbox);
         tracing::info!("PurgeGuard: SandboxHandle descartado");
         ramdisk.cleanup().await.map_err(|e| e.to_string())?;
-        for _ in 0..20 {
+        let retries = if cfg!(target_os = "windows") { 120 } else { 20 };
+        let delay = if cfg!(target_os = "windows") {
+            Duration::from_millis(50)
+        } else {
+            Duration::from_millis(25)
+        };
+        for _ in 0..retries {
             if !ramdisk_path.exists() {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(25)).await;
+            tokio::time::sleep(delay).await;
         }
         tracing::info!("PurgeGuard: RamdiskHandle descartado");
         

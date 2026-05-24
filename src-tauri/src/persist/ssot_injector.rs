@@ -1,8 +1,10 @@
-use crate::cognition::sgr_synthesizer::SgrPayload;
+use crate::cognition::phase3_4::{apply_phase4_block5, build_batch_update_payload, MasterSolutionsRow};
 use thiserror::Error;
 use serde_json::{json, Value};
 use rusqlite::Connection;
 use std::env;
+use std::future::Future;
+use std::pin::Pin;
 use url::Url;
 use tracing::info;
 
@@ -19,9 +21,103 @@ pub enum SsotError {
 pub struct SsotInjector;
 
 const SSOT_STATUS_CONCLUIDO: &str = "CONCLUIDO";
-const SSOT_EXPECTED_COLUMNS: usize = 83;
-const MASTER_SOLUTIONS_RANGE: &str = "A2:CE2";
+const SSOT_EXPECTED_COLUMNS: usize = 82;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
+
+pub type SheetsFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+
+pub trait SheetsClient: Send + Sync {
+    fn batch_update_cells<'a>(
+        &'a self,
+        spreadsheet_id: &'a str,
+        sheet: &'a str,
+        ranges: Value,
+    ) -> SheetsFuture<'a>;
+}
+
+pub struct McpGoogleSheetsClient;
+
+impl SheetsClient for McpGoogleSheetsClient {
+    fn batch_update_cells<'a>(
+        &'a self,
+        spreadsheet_id: &'a str,
+        sheet: &'a str,
+        ranges: Value,
+    ) -> SheetsFuture<'a> {
+        Box::pin(async move {
+            use std::process::Stdio;
+            use tokio::io::AsyncWriteExt;
+            use tokio::process::Command;
+
+            let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
+                .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
+
+            let init_req = json!({
+                "jsonrpc": "2.0",
+                "id": 0,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": { "name": "soda-injector", "version": "1.0.0" }
+                }
+            });
+            let initialized_notif = json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            });
+            let mcp_request = json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "batch_update_cells",
+                    "arguments": {
+                        "spreadsheet_id": spreadsheet_id,
+                        "sheet": sheet,
+                        "ranges": ranges
+                    }
+                }
+            });
+
+            let mut child = Command::new("mcp-google-sheets")
+                .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {}", e))?;
+
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(format!("{}\n", init_req).as_bytes()).await;
+                let _ = stdin
+                    .write_all(format!("{}\n", initialized_notif).as_bytes())
+                    .await;
+                let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
+            }
+
+            let output = child
+                .wait_with_output()
+                .await
+                .map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            let stderr_str = String::from_utf8_lossy(&output.stderr);
+
+            if stdout_str.contains("\"isError\":true") || stdout_str.contains("\"error\":") {
+                return Err(format!("MCP Retornou Erro: {}", stdout_str));
+            }
+
+            if !output.status.success() {
+                return Err(format!(
+                    "Falha no processo MCP. Exit {}. STDERR: {}",
+                    output.status, stderr_str
+                ));
+            }
+
+            Ok(())
+        })
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ValidatedSsotFields {
@@ -30,7 +126,6 @@ struct ValidatedSsotFields {
     repo_version: String,
     ultima_versao_online: String,
     lote_id: String,
-    status_processamento: String,
     data_ultima_analise: i64,
     analise_origem: String,
     declared_description: String,
@@ -41,16 +136,22 @@ struct ValidatedSsotFields {
 
 impl SsotInjector {
     /// Injeta os dados no SSOT (SQLite + Google Sheets Batch)
-    pub async fn inject_ssot(repo_id: &str, payload: SgrPayload) -> Result<(), SsotError> {
-        let validated = Self::validate_payload(repo_id, &payload, SSOT_STATUS_CONCLUIDO)?;
+    pub async fn inject_ssot(
+        repo_id: &str,
+        mut row: MasterSolutionsRow,
+        row_number_1based: u32,
+        now_epoch: i64,
+    ) -> Result<(), SsotError> {
+        let validated = Self::validate_payload(repo_id, &row)?;
 
         // 1. Selagem L2 (Execução Durável)
         // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
-        Self::update_local_status(repo_id, SSOT_STATUS_CONCLUIDO, &payload, &validated)
+        apply_phase4_block5(now_epoch, &mut row);
+        Self::update_local_status(repo_id, SSOT_STATUS_CONCLUIDO, &row, &validated)
             .map_err(SsotError::L2Failure)?;
 
         // 2. Manobra Anti-503: Desmembramento e Agregação na RAM
-        let batch_payload = Self::prepare_batch_payload(payload, validated)?;
+        let batch_payload = Self::prepare_batch_payload(row_number_1based, &row)?;
 
         // 3. Despacho Atômico (Simulado conforme Phase C)
         Self::dispatch_to_cloud(batch_payload).await?;
@@ -60,8 +161,7 @@ impl SsotInjector {
 
     fn validate_payload(
         repo_id: &str,
-        payload: &SgrPayload,
-        status_value: &str,
+        payload: &MasterSolutionsRow,
     ) -> Result<ValidatedSsotFields, SsotError> {
         let project_name = Self::require_non_empty("project_name", &payload.project_name)?;
         if project_name != repo_id {
@@ -84,9 +184,8 @@ impl SsotInjector {
 
         let repo_version = Self::require_non_empty("repo_version", &payload.repo_version)?;
         let ultima_versao_online =
-            Self::require_option_non_empty("ultima_versao_online", payload.ultima_versao_online.as_deref())?;
+            Self::require_non_empty("ultima_versao_online", &payload.ultima_versao_online)?;
         let lote_id = Self::require_non_empty("lote_id", &payload.lote_id)?;
-        let status_processamento = Self::require_non_empty("status_processamento", status_value)?;
         let data_ultima_analise = if payload.data_ultima_analise > 0 {
             payload.data_ultima_analise
         } else {
@@ -102,7 +201,7 @@ impl SsotInjector {
             &payload.proposta_original_resumo,
         )?;
         let stack_base = Self::require_non_empty("stack_base", &payload.stack_base)?;
-        let licenca = Self::require_option_non_empty("licenca", payload.licenca.as_deref())?;
+        let licenca = Self::require_non_empty("licenca", &payload.licenca)?;
 
         Ok(ValidatedSsotFields {
             project_name,
@@ -110,7 +209,6 @@ impl SsotInjector {
             repo_version,
             ultima_versao_online,
             lote_id,
-            status_processamento,
             data_ultima_analise,
             analise_origem,
             declared_description,
@@ -145,7 +243,7 @@ impl SsotInjector {
     fn update_local_status(
         repo_id: &str,
         status_value: &str,
-        payload: &SgrPayload,
+        payload: &MasterSolutionsRow,
         validated: &ValidatedSsotFields,
     ) -> Result<(), String> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -166,48 +264,48 @@ impl SsotInjector {
                 &validated.project_name,
                 &validated.repo_url,
                 &validated.repo_version,
-                payload.ultima_versao_online,
-                payload.lote_id,
+                &payload.ultima_versao_online,
+                &payload.lote_id,
                 payload.data_ultima_analise,
-                payload.analise_origem,
-                payload.declared_description,
-                payload.proposta_original_resumo,
-                payload.stack_base,
-                payload.licenca,
-                payload.lente_a_sentido_prod_ux,
-                payload.lente_b_estrutura_arq,
-                payload.lente_c_realidade_ops,
-                payload.visao_do_enxame,
-                payload.justificativa_decisao,
-                format!("{:?}", payload.executive_verdict),
-                payload.classificacao_terminal,
-                format!("{:?}", payload.acao_de_canibalizacao),
-                payload.categoria_arquitetural,
-                payload.horizonte_extracao,
-                payload.tipo_integracao,
-                payload.categoria_nuance_tecnica,
-                payload.integracao_papel_exato,
-                payload.ouro_a_extrair,
-                payload.deep_pattern,
-                payload.transplantable_core,
-                payload.logic_math_heuristic,
-                payload.real_structural_problem,
-                payload.must_components_prod_ux,
-                payload.must_components_arq,
-                payload.must_components_ops,
-                payload.detected_toxic_deps,
-                payload.do_not_absorb,
-                payload.where_ai_should_not_enter,
-                payload.bare_metal_fit,
-                payload.extractability_level,
-                payload.operability_level,
-                payload.entropy_risk,
-                payload.design_misuse_risk,
-                payload.intrinsic_ethics_risk,
-                payload.discipline_dependency,
-                payload.risco_principal,
-                payload.risco_linha_vermelha,
-                payload.observacoes,
+                &payload.analise_origem,
+                &payload.declared_description,
+                &payload.proposta_original_resumo,
+                &payload.stack_base,
+                &payload.licenca,
+                &payload.lente_a_sentido_prod_ux,
+                &payload.lente_b_estrutura_arq,
+                &payload.lente_c_realidade_ops,
+                &payload.visao_do_enxame,
+                &payload.justificativa_decisao,
+                &payload.executive_verdict,
+                &payload.classificacao_terminal,
+                &payload.acao_de_canibalizacao,
+                &payload.categoria_arquitetural,
+                &payload.horizonte_extracao,
+                &payload.tipo_integracao,
+                &payload.categoria_nuance_tecnica,
+                &payload.integracao_papel_exato,
+                &payload.ouro_a_extrair,
+                &payload.deep_pattern,
+                &payload.transplantable_core,
+                &payload.logic_math_heuristic,
+                &payload.real_structural_problem,
+                &payload.must_components_prod_ux,
+                &payload.must_components_arq,
+                &payload.must_components_ops,
+                &payload.detected_toxic_deps,
+                &payload.do_not_absorb,
+                &payload.where_ai_should_not_enter,
+                &payload.bare_metal_fit,
+                &payload.extractability_level,
+                &payload.operability_level,
+                &payload.entropy_risk,
+                &payload.design_misuse_risk,
+                &payload.intrinsic_ethics_risk,
+                &payload.discipline_dependency,
+                &payload.risco_principal,
+                &payload.risco_linha_vermelha,
+                &payload.observacoes,
                 payload.score_final,
                 payload.score_fit_geral_soda,
                 payload.score_philosophical_fit,
@@ -219,24 +317,24 @@ impl SsotInjector {
                 payload.score_model_logic_value,
                 payload.score_ethics_safety,
                 payload.score_intrinsic_risk,
-                payload.capability_nature_primary,
-                payload.architectural_topology,
-                payload.runtime_sovereignty_fit,
-                payload.local_first_fit,
-                payload.temporal_stability,
-                payload.adoptability_level,
-                payload.longitudinal_sustainability,
-                payload.abandonment_risk,
-                payload.maintenance_burden,
-                payload.onboarding_friction,
-                payload.observability_operational,
-                payload.recoverability_level,
-                payload.degradation_behavior,
-                payload.curation_burden,
-                payload.time_to_first_clear_value,
-                payload.imperfection_tolerance,
-                payload.evolution_cost,
-                payload.regulatory_risk,
+                &payload.capability_nature_primary,
+                &payload.architectural_topology,
+                &payload.runtime_sovereignty_fit,
+                &payload.local_first_fit,
+                &payload.temporal_stability,
+                &payload.adoptability_level,
+                &payload.longitudinal_sustainability,
+                &payload.abandonment_risk,
+                &payload.maintenance_burden,
+                &payload.onboarding_friction,
+                &payload.observability_operational,
+                &payload.recoverability_level,
+                &payload.degradation_behavior,
+                &payload.curation_burden,
+                &payload.time_to_first_clear_value,
+                &payload.imperfection_tolerance,
+                &payload.evolution_cost,
+                &payload.regulatory_risk,
                 payload.score_architectural_priority,
                 payload.score_human_product_priority,
                 payload.score_absorption_readiness,
@@ -258,275 +356,144 @@ impl SsotInjector {
     }
 
     fn prepare_batch_payload(
-        payload: SgrPayload,
-        validated: ValidatedSsotFields,
+        row_number_1based: u32,
+        payload: &MasterSolutionsRow,
     ) -> Result<Value, SsotError> {
-        let row = vec![
-            json!(validated.project_name),
-            json!(validated.repo_url),
-            json!(validated.repo_version),
-            json!(validated.ultima_versao_online),
-            json!(validated.lote_id),
-            json!(validated.status_processamento),
-            json!(validated.data_ultima_analise),
-            json!(validated.analise_origem),
-            json!(validated.declared_description),
-            json!(validated.proposta_original_resumo),
-            json!(validated.stack_base),
-            json!(validated.licenca),
-            json!(payload.lente_a_sentido_prod_ux),
-            json!(payload.lente_b_estrutura_arq),
-            json!(payload.lente_c_realidade_ops),
-            json!(payload.visao_do_enxame),
-            json!(payload.justificativa_decisao),
-            json!(format!("{:?}", payload.executive_verdict)),
-            json!(payload.classificacao_terminal),
-            json!(format!("{:?}", payload.acao_de_canibalizacao)),
-            json!(payload.categoria_arquitetural),
-            json!(payload.horizonte_extracao),
-            json!(payload.tipo_integracao),
-            json!(payload.categoria_nuance_tecnica),
-            json!(payload.integracao_papel_exato),
-            json!(payload.ouro_a_extrair),
-            json!(payload.deep_pattern),
-            json!(payload.transplantable_core),
-            json!(payload.logic_math_heuristic),
-            json!(payload.real_structural_problem),
-            json!(payload.must_components_prod_ux),
-            json!(payload.must_components_arq),
-            json!(payload.must_components_ops),
-            json!(payload.detected_toxic_deps),
-            json!(payload.do_not_absorb),
-            json!(payload.where_ai_should_not_enter),
-            json!(payload.bare_metal_fit),
-            json!(payload.extractability_level),
-            json!(payload.operability_level),
-            json!(payload.entropy_risk),
-            json!(payload.design_misuse_risk),
-            json!(payload.intrinsic_ethics_risk),
-            json!(payload.discipline_dependency),
-            json!(payload.risco_principal),
-            json!(payload.risco_linha_vermelha),
-            json!(payload.observacoes),
-            json!(payload.score_final),
-            json!(payload.score_fit_geral_soda),
-            json!(payload.score_philosophical_fit),
-            json!(payload.score_bare_metal_fit),
-            json!(payload.score_architectural_extractability),
-            json!(payload.score_operability),
-            json!(payload.score_creep_risk),
-            json!(payload.score_runtime_sovereignty),
-            json!(payload.score_model_logic_value),
-            json!(payload.score_ethics_safety),
-            json!(payload.score_intrinsic_risk),
-            json!(payload.capability_nature_primary),
-            json!(payload.architectural_topology),
-            json!(payload.runtime_sovereignty_fit),
-            json!(payload.local_first_fit),
-            json!(payload.temporal_stability),
-            json!(payload.adoptability_level),
-            json!(payload.longitudinal_sustainability),
-            json!(payload.abandonment_risk),
-            json!(payload.maintenance_burden),
-            json!(payload.onboarding_friction),
-            json!(payload.observability_operational),
-            json!(payload.recoverability_level),
-            json!(payload.degradation_behavior),
-            json!(payload.curation_burden),
-            json!(payload.time_to_first_clear_value),
-            json!(payload.imperfection_tolerance),
-            json!(payload.evolution_cost),
-            json!(payload.regulatory_risk),
-            json!(payload.score_architectural_priority),
-            json!(payload.score_human_product_priority),
-            json!(payload.score_absorption_readiness),
-            json!(payload.score_operational_priority),
-            json!(payload.score_sustainability_adjusted_fit),
-            json!(payload.valid_from),
-            json!(payload.valid_to),
-            json!(payload.embargo_status),
-        ];
-
-        if row.len() != SSOT_EXPECTED_COLUMNS {
-            return Err(SsotError::ValidationFailure(format!(
-                "Payload do Google Sheets desalinhado: esperado {} colunas, recebeu {}",
-                SSOT_EXPECTED_COLUMNS,
-                row.len()
-            )));
-        }
-        info!(columns = row.len(), "Payload do Google Sheets montado para batch_update_cells");
-
-        let batch_payload = vec![json!(row)];
+        let ranges = build_batch_update_payload(row_number_1based, payload);
         let mut map = serde_json::Map::new();
-        map.insert(MASTER_SOLUTIONS_RANGE.to_string(), json!(batch_payload));
+
+        for (range, rows) in ranges {
+            if rows.len() != 1 || rows[0].len() != SSOT_EXPECTED_COLUMNS {
+                return Err(SsotError::ValidationFailure(format!(
+                    "Payload do Google Sheets desalinhado: esperado 1x{}, recebeu {}x{}",
+                    SSOT_EXPECTED_COLUMNS,
+                    rows.len(),
+                    rows.get(0).map(|r| r.len()).unwrap_or(0)
+                )));
+            }
+            map.insert(range, json!(rows));
+        }
+
+        info!(columns = SSOT_EXPECTED_COLUMNS, "Payload do Google Sheets montado para batch_update_cells");
         Ok(Value::Object(map))
     }
 
-    async fn dispatch_to_cloud(payload: Value) -> Result<(), SsotError> {
-        use tokio::process::Command;
-        use std::process::Stdio;
-        use tokio::io::AsyncWriteExt;
+    pub async fn dispatch_master_solutions_row(
+        sheets: &dyn SheetsClient,
+        spreadsheet_id: &str,
+        row_number_1based: u32,
+        row: &MasterSolutionsRow,
+    ) -> Result<(), SsotError> {
+        let payload = Self::prepare_batch_payload(row_number_1based, row)?;
+        sheets
+            .batch_update_cells(spreadsheet_id, MASTER_SOLUTIONS_SHEET, payload)
+            .await
+            .map_err(SsotError::CloudFailure)
+    }
 
-        // Hotfix: Extração das variáveis reais do ecossistema SODA
-        let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-            .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_APPLICATION_CREDENTIALS".to_string()))?;
+    async fn dispatch_to_cloud(payload: Value) -> Result<(), SsotError> {
         let sheets_id = env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_SHEETS_ID".to_string()))?;
-
-        // Construindo a requisição JSON-RPC para o MCP local
-        let init_req = json!({
-            "jsonrpc": "2.0",
-            "id": 0,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": { "name": "soda-injector", "version": "1.0.0" }
-            }
-        });
-        let initialized_notif = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized"
-        });
-        let mcp_request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "batch_update_cells",
-                "arguments": {
-                    "spreadsheet_id": sheets_id,
-                    "sheet": MASTER_SOLUTIONS_SHEET,
-                    "ranges": payload
-                }
-            }
-        });
-
-        // Invocando o binário mcp-google-sheets localmente
-        let mut child = Command::new("mcp-google-sheets")
-            .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| SsotError::CloudFailure(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(format!("{}\n", init_req).as_bytes()).await;
-            let _ = stdin.write_all(format!("{}\n", initialized_notif).as_bytes()).await;
-            let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
-        }
-
-        let output = child.wait_with_output().await.map_err(|e| SsotError::CloudFailure(e.to_string()))?;
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
-        let stderr_str = String::from_utf8_lossy(&output.stderr);
-
-        // Validando se o MCP retornou um erro JSON-RPC ou se a STDERR gritou
-        if stdout_str.contains("\"isError\":true") || stdout_str.contains("\"error\":") {
-            return Err(SsotError::CloudFailure(format!("MCP Retornou Erro: {}", stdout_str)));
-        }
-        
-        if !output.status.success() {
-            return Err(SsotError::CloudFailure(format!("Falha no processo MCP. Exit {}. STDERR: {}", output.status, stderr_str)));
-        }
-
-        Ok(())
+        let client = McpGoogleSheetsClient;
+        client
+            .batch_update_cells(&sheets_id, MASTER_SOLUTIONS_SHEET, payload)
+            .await
+            .map_err(SsotError::CloudFailure)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cognition::sgr_synthesizer::{SgrPayload, TerminalClassification, CannibalizationAction};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    static DB_CALL_ORDER: AtomicUsize = AtomicUsize::new(0);
-    static CLOUD_CALL_ORDER: AtomicUsize = AtomicUsize::new(0);
-
-    fn mock_payload() -> SgrPayload {
-        SgrPayload {
-            visao_do_enxame: "V".to_string(),
-            justificativa_decisao: "J".to_string(),
-            executive_verdict: TerminalClassification::AprovadoParaProducao,
-            acao_de_canibalizacao: CannibalizationAction::Nenhuma,
-            score_bare_metal_fit: 90,
-            score_final: 95.0,
-            ..Default::default()
-        }
-    }
-
-    #[tokio::test]
-    async fn test_l2_durable_execution_order() {
-        // Reseta contadores
-        DB_CALL_ORDER.store(0, Ordering::SeqCst);
-        CLOUD_CALL_ORDER.store(0, Ordering::SeqCst);
-
-        // Ordem esperada: DB = 1, Cloud = 2
-        // Simulando a injeção
-        let mut payload = mock_payload();
-        payload.project_name = "test".to_string();
-        payload.repo_url = "https://github.com/test".to_string();
-        payload.repo_version = "v1.0.0".to_string();
-        payload.ultima_versao_online = Some("v1.0.1".to_string());
-        payload.lote_id = "LOTE_01".to_string();
-        payload.data_ultima_analise = 1_715_000_000;
-        payload.analise_origem = "SGR".to_string();
-        payload.declared_description = "Descricao".to_string();
-        payload.proposta_original_resumo = "Resumo".to_string();
-        payload.stack_base = "Rust".to_string();
-        payload.licenca = Some("MIT".to_string());
-
-        let validated = SsotInjector::validate_payload("test", &payload, SSOT_STATUS_CONCLUIDO).unwrap();
-        let _ = SsotInjector::update_local_status("test", SSOT_STATUS_CONCLUIDO, &payload, &validated);
-        DB_CALL_ORDER.store(1, Ordering::SeqCst);
-        
-        let _ = SsotInjector::dispatch_to_cloud(json!({})).await;
-        CLOUD_CALL_ORDER.store(2, Ordering::SeqCst);
-
-        assert_eq!(DB_CALL_ORDER.load(Ordering::SeqCst), 1);
-        assert_eq!(CLOUD_CALL_ORDER.load(Ordering::SeqCst), 2);
-    }
-
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
     #[test]
-    fn test_anti_503_batch_slicing() {
-        let mut payload = mock_payload();
-        payload.project_name = "owner/repo".to_string();
-        payload.repo_url = "https://github.com/owner/repo".to_string();
-        payload.repo_version = "v1.0.0".to_string();
-        payload.ultima_versao_online = Some("v1.0.1".to_string());
-        payload.lote_id = "LOTE_01".to_string();
-        payload.data_ultima_analise = 1_715_000_000;
-        payload.analise_origem = "SGR".to_string();
-        payload.declared_description = "Descricao".to_string();
-        payload.proposta_original_resumo = "Resumo".to_string();
-        payload.stack_base = "Rust".to_string();
-        payload.licenca = Some("MIT".to_string());
-        let validated = SsotInjector::validate_payload("owner/repo", &payload, SSOT_STATUS_CONCLUIDO).unwrap();
-        let batch = SsotInjector::prepare_batch_payload(payload, validated).unwrap();
-        let arr = batch[MASTER_SOLUTIONS_RANGE].as_array().unwrap();
+    fn test_prepare_batch_payload_is_82_columns_a_to_cd() {
+        let mut row = MasterSolutionsRow::default();
+        row.project_name = "owner/repo".to_string();
+        row.repo_url = "https://github.com/owner/repo".to_string();
+        row.repo_version = "v1.0.0".to_string();
+        row.ultima_versao_online = "v1.0.1".to_string();
+        row.lote_id = "LOTE_01".to_string();
+        row.data_ultima_analise = 1_715_000_000;
+        row.analise_origem = "SGR".to_string();
+        row.declared_description = "Descricao".to_string();
+        row.proposta_original_resumo = "Resumo".to_string();
+        row.stack_base = "Rust".to_string();
+        row.licenca = "MIT".to_string();
+
+        let validated = SsotInjector::validate_payload("owner/repo", &row).unwrap();
+        let batch = SsotInjector::prepare_batch_payload(2, &row).unwrap();
+        let range = "A2:CD2";
+        let arr = batch[range].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0].as_array().unwrap().len(), SSOT_EXPECTED_COLUMNS);
         assert_eq!(arr[0][0], json!("owner/repo"));
         assert_eq!(arr[0][1], json!("https://github.com/owner/repo"));
-        assert_eq!(arr[0][5], json!("CONCLUIDO"));
+        assert_eq!(validated.project_name, "owner/repo");
     }
 
     #[test]
     fn test_payload_validation_rejects_missing_required_fields() {
-        let result = SsotInjector::validate_payload("owner/repo", &mock_payload(), SSOT_STATUS_CONCLUIDO);
+        let row = MasterSolutionsRow::default();
+        let result = SsotInjector::validate_payload("owner/repo", &row);
         assert!(matches!(result, Err(SsotError::ValidationFailure(_))));
     }
 
-    #[tokio::test]
-    async fn test_sqlite_failure_aborts_network() {
-        // Se falhar o L2, o CloudFailure nunca deve ocorrer pois a função retorna antes
-        // Como estamos mockando, simulamos a lógica do inject_ssot
-        let res = inject_with_db_fail("repo_fail", mock_payload()).await;
-        assert!(matches!(res, Err(SsotError::L2Failure(_))));
+    struct MockSheetsClient {
+        calls: Arc<Mutex<Vec<(String, String, Value)>>>,
     }
 
-    async fn inject_with_db_fail(_id: &str, _p: SgrPayload) -> Result<(), SsotError> {
-        // Simulação da trava do inject_ssot
-        Err(SsotError::L2Failure("Locked".to_string()))
+    impl MockSheetsClient {
+        fn new() -> Self {
+            Self {
+                calls: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    impl SheetsClient for MockSheetsClient {
+        fn batch_update_cells<'a>(
+            &'a self,
+            spreadsheet_id: &'a str,
+            sheet: &'a str,
+            ranges: Value,
+        ) -> SheetsFuture<'a> {
+            Box::pin(async move {
+                self.calls.lock().await.push((
+                    spreadsheet_id.to_string(),
+                    sheet.to_string(),
+                    ranges,
+                ));
+                Ok(())
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn dispatch_uses_mock_sheets_client() {
+        let mut row = MasterSolutionsRow::default();
+        row.project_name = "owner/repo".to_string();
+        row.repo_url = "https://github.com/owner/repo".to_string();
+        row.repo_version = "v1.0.0".to_string();
+        row.ultima_versao_online = "v1.0.1".to_string();
+        row.lote_id = "LOTE_01".to_string();
+        row.data_ultima_analise = 1_715_000_000;
+        row.analise_origem = "SGR".to_string();
+        row.declared_description = "Descricao".to_string();
+        row.proposta_original_resumo = "Resumo".to_string();
+        row.stack_base = "Rust".to_string();
+        row.licenca = "MIT".to_string();
+
+        let sheets = MockSheetsClient::new();
+        SsotInjector::dispatch_master_solutions_row(&sheets, "SHEET_ID", 2, &row)
+            .await
+            .unwrap();
+
+        let calls = sheets.calls.lock().await;
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "SHEET_ID");
+        assert_eq!(calls[0].1, "MASTER_SOLUTIONS");
+        assert!(calls[0].2.get("A2:CD2").is_some());
     }
 }
