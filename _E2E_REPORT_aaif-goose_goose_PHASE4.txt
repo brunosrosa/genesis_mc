@@ -1,0 +1,9 @@
+repo_id=aaif-goose/goose
+row_number=2
+model_used=anthropic/claude-sonnet-4.6
+latency_total_ms=161037
+prompt_tokens=11613
+completion_tokens=7986
+total_tokens=19599
+total_cost_usd=0.153083
+sheets_write_confirmed=true

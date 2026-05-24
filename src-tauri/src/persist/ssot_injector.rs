@@ -455,6 +455,30 @@ impl SsotInjector {
                     rows.get(0).map(|r| r.len()).unwrap_or(0)
                 )));
             }
+            let last = rows[0].len() - 1;
+            let idx_valid_from = last - 2;
+            let idx_valid_to = last - 1;
+            let idx_embargo = last;
+            if rows[0][idx_valid_from].as_i64().is_none() {
+                return Err(SsotError::ValidationFailure(
+                    "valid_from invalido no payload do Sheets".to_string(),
+                ));
+            }
+            if rows[0][idx_embargo].as_i64().is_none() {
+                return Err(SsotError::ValidationFailure(
+                    "embargo_status invalido no payload do Sheets".to_string(),
+                ));
+            }
+            let valid_to_ok = rows[0][idx_valid_to].as_i64().is_some()
+                || rows[0][idx_valid_to]
+                    .as_str()
+                    .map(|s| s.trim().is_empty())
+                    .unwrap_or(false);
+            if !valid_to_ok {
+                return Err(SsotError::ValidationFailure(
+                    "valid_to invalido no payload do Sheets".to_string(),
+                ));
+            }
             map.insert(range, json!(rows));
         }
 
@@ -505,15 +529,22 @@ mod tests {
         row.proposta_original_resumo = "Resumo".to_string();
         row.stack_base = "Rust".to_string();
         row.licenca = "MIT".to_string();
+        row.valid_from = 1_700_000_000;
+        row.valid_to = None;
+        row.embargo_status = 0;
 
         let validated = SsotInjector::validate_payload("owner/repo", &row).unwrap();
         let batch = SsotInjector::prepare_batch_payload(2, &row).unwrap();
         let range = "A2:CD2";
         let arr = batch[range].as_array().unwrap();
         assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0].as_array().unwrap().len(), SSOT_EXPECTED_COLUMNS);
+        let row_arr = arr[0].as_array().unwrap();
+        assert_eq!(row_arr.len(), SSOT_EXPECTED_COLUMNS);
         assert_eq!(arr[0][0], json!("owner/repo"));
         assert_eq!(arr[0][1], json!("https://github.com/owner/repo"));
+        assert_eq!(row_arr[SSOT_EXPECTED_COLUMNS - 3], json!(1_700_000_000));
+        assert_eq!(row_arr[SSOT_EXPECTED_COLUMNS - 2], json!(""));
+        assert_eq!(row_arr[SSOT_EXPECTED_COLUMNS - 1], json!(0));
         assert_eq!(validated.project_name, "owner/repo");
     }
 

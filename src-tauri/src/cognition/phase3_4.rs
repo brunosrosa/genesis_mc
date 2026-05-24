@@ -213,9 +213,9 @@ impl MasterSolutionsRow {
         row.licenca = block0.licenca;
         row.stack_base = block0.stack_base;
         row.declared_description = block0.declared_description;
-        row.lente_a_sentido_prod_ux = block0.lente_a_sentido_prod_ux;
-        row.lente_b_estrutura_arq = block0.lente_b_estrutura_arq;
-        row.lente_c_realidade_ops = block0.lente_c_realidade_ops;
+        row.lente_a_sentido_prod_ux = normalize_lens_bullets(&block0.lente_a_sentido_prod_ux);
+        row.lente_b_estrutura_arq = normalize_lens_bullets(&block0.lente_b_estrutura_arq);
+        row.lente_c_realidade_ops = normalize_lens_bullets(&block0.lente_c_realidade_ops);
         row
     }
 
@@ -293,20 +293,190 @@ impl MasterSolutionsRow {
             serde_json::json!(&self.score_model_logic_value),
             serde_json::json!(&self.score_ethics_safety),
             serde_json::json!(&self.score_intrinsic_risk),
-            serde_json::json!(&self.score_final),
-            serde_json::json!(&self.score_fit_geral_soda),
-            serde_json::json!(&self.score_architectural_priority),
-            serde_json::json!(&self.score_human_product_priority),
-            serde_json::json!(&self.score_absorption_readiness),
-            serde_json::json!(&self.score_operational_priority),
-            serde_json::json!(&self.score_sustainability_adjusted_fit),
+            serde_json::json!(format_float_1(self.score_final)),
+            serde_json::json!(format_float_1(self.score_fit_geral_soda)),
+            serde_json::json!(format_float_1(self.score_architectural_priority)),
+            serde_json::json!(format_float_1(self.score_human_product_priority)),
+            serde_json::json!(format_float_1(self.score_absorption_readiness)),
+            serde_json::json!(format_float_1(self.score_operational_priority)),
+            serde_json::json!(format_float_1(self.score_sustainability_adjusted_fit)),
             serde_json::json!(&self.valid_from),
             match self.valid_to {
                 Some(value) => serde_json::json!(value),
-                None => serde_json::Value::Null,
+                None => serde_json::json!(""),
             },
             serde_json::json!(&self.embargo_status),
         ]
+    }
+}
+
+fn format_float_1(value: f64) -> String {
+    let raw = format!("{:.1}", value);
+    raw.replace(',', ".")
+}
+
+fn format_bullets(lines: &[String]) -> String {
+    let mut cleaned = Vec::new();
+    for item in lines {
+        let trimmed = item.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        cleaned.push(trimmed.to_string());
+    }
+    if cleaned.is_empty() {
+        return String::new();
+    }
+    format!("- {}", cleaned.join("\n- "))
+}
+
+fn normalize_lens_bullets(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(bullets) = extract_bullets_array(&val) {
+            return format_bullets(&bullets);
+        }
+        let mut leaves = Vec::new();
+        collect_leaf_strings(&val, &mut leaves);
+        return format_bullets(&leaves);
+    }
+
+    if let Some(snippet) = salvage_balanced_json(trimmed) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&snippet) {
+            if let Some(bullets) = extract_bullets_array(&val) {
+                return format_bullets(&bullets);
+            }
+            let mut leaves = Vec::new();
+            collect_leaf_strings(&val, &mut leaves);
+            let out = format_bullets(&leaves);
+            if !out.is_empty() {
+                return out;
+            }
+        }
+    }
+
+    scrub_json_syntax_to_text(trimmed)
+}
+
+fn normalize_pydantic_list_field(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with("- ") {
+        return trimmed.replace("\r\n", "\n");
+    }
+
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(arr) = val.as_array() {
+            let mut items = Vec::new();
+            for item in arr {
+                match item {
+                    serde_json::Value::String(s) => items.push(s.clone()),
+                    other => {
+                        let mut leaves = Vec::new();
+                        collect_leaf_strings(other, &mut leaves);
+                        items.extend(leaves);
+                    }
+                }
+            }
+            return format_bullets(&items);
+        }
+        let mut leaves = Vec::new();
+        collect_leaf_strings(&val, &mut leaves);
+        let out = format_bullets(&leaves);
+        if !out.is_empty() {
+            return out;
+        }
+    }
+
+    if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        let inner = &trimmed[1..trimmed.len().saturating_sub(1)];
+        let mut items = Vec::new();
+        for piece in inner.split(',') {
+            let token = piece.trim().trim_matches('"').trim_matches('\'').trim();
+            if token.is_empty() {
+                continue;
+            }
+            items.push(token.to_string());
+        }
+        let out = format_bullets(&items);
+        if !out.is_empty() {
+            return out;
+        }
+    }
+
+    scrub_json_syntax_to_text(trimmed)
+}
+
+fn extract_bullets_array(val: &serde_json::Value) -> Option<Vec<String>> {
+    let obj = val.as_object()?;
+    let bullets = obj.get("bullets")?.as_array()?;
+    let mut out = Vec::new();
+    for item in bullets {
+        let s = item.as_str()?.trim();
+        if s.is_empty() {
+            continue;
+        }
+        out.push(s.to_string());
+    }
+    Some(out)
+}
+
+fn collect_leaf_strings(val: &serde_json::Value, out: &mut Vec<String>) {
+    match val {
+        serde_json::Value::String(s) => {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                out.push(trimmed.to_string());
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                collect_leaf_strings(item, out);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (_, v) in map {
+                collect_leaf_strings(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn scrub_json_syntax_to_text(raw: &str) -> String {
+    let mut s = raw.replace("\r\n", "\n");
+    s = s.replace(['{', '}', '[', ']', '"'], "");
+    s = s.replace(", ", "\n");
+    s = s.replace(',', "\n");
+    s = s.replace(':', " ");
+    let mut lines = Vec::new();
+    for line in s.lines() {
+        let l = line.trim();
+        if l.is_empty() {
+            continue;
+        }
+        let lower = l.to_ascii_lowercase();
+        if lower.starts_with("lens_id")
+            || lower.starts_with("schema")
+            || lower.starts_with("version")
+            || lower.starts_with("lens")
+        {
+            continue;
+        }
+        lines.push(l.to_string());
+    }
+    if lines.is_empty() {
+        String::new()
+    } else if lines.len() == 1 {
+        lines[0].clone()
+    } else {
+        format!("- {}", lines.join("\n- "))
     }
 }
 
@@ -798,12 +968,12 @@ pub async fn run_phase3_sgr(
     row.real_structural_problem = block2.real_structural_problem;
     row.categoria_nuance_tecnica = block2.categoria_nuance_tecnica;
     row.integracao_papel_exato = block2.integracao_papel_exato;
-    row.must_components_prod_ux = block2.must_components_prod_ux;
-    row.must_components_arq = block2.must_components_arq;
-    row.must_components_ops = block2.must_components_ops;
-    row.detected_toxic_deps = block2.detected_toxic_deps;
-    row.do_not_absorb = block2.do_not_absorb;
-    row.where_ai_should_not_enter = block2.where_ai_should_not_enter;
+    row.must_components_prod_ux = normalize_pydantic_list_field(&block2.must_components_prod_ux);
+    row.must_components_arq = normalize_pydantic_list_field(&block2.must_components_arq);
+    row.must_components_ops = normalize_pydantic_list_field(&block2.must_components_ops);
+    row.detected_toxic_deps = normalize_pydantic_list_field(&block2.detected_toxic_deps);
+    row.do_not_absorb = normalize_pydantic_list_field(&block2.do_not_absorb);
+    row.where_ai_should_not_enter = normalize_pydantic_list_field(&block2.where_ai_should_not_enter);
     info!("Fase 3: Bloco 2 concluído");
 
     let block3: Block3Fields = run_block(client, cfg, 3, &block0, &row).await?;
@@ -1136,5 +1306,47 @@ mod tests {
         assert_eq!(row.valid_to, Some(1_000 + 180 * 24 * 60 * 60));
         assert!(row.score_final > 0.0);
         assert!(row.score_fit_geral_soda > 0.0);
+    }
+
+    #[test]
+    fn lens_json_is_reduced_to_bullets_only() {
+        let raw = r#"{"lens_id":"SODA_LENS_A","bullets":["um","dois"]}"#;
+        let out = normalize_lens_bullets(raw);
+        assert_eq!(out, "- um\n- dois");
+    }
+
+    #[test]
+    fn list_fields_are_humanized_from_json_array_string() {
+        let raw = r#"["a","b"]"#;
+        let out = normalize_pydantic_list_field(raw);
+        assert_eq!(out, "- a\n- b");
+    }
+
+    #[test]
+    fn sheet_row_exports_floats_as_dot_strings_and_valid_to_as_empty() {
+        let mut row = MasterSolutionsRow::default();
+        row.project_name = "owner/repo".to_string();
+        row.score_final = 1.2;
+        row.score_fit_geral_soda = 2.3;
+        row.score_architectural_priority = 3.4;
+        row.score_human_product_priority = 4.5;
+        row.score_absorption_readiness = 5.6;
+        row.score_operational_priority = 6.7;
+        row.score_sustainability_adjusted_fit = 7.8;
+        row.valid_from = 1_700_000_000;
+        row.valid_to = None;
+        row.embargo_status = 0;
+        let arr = row.to_sheet_row();
+        assert_eq!(arr.len(), 82);
+        assert_eq!(arr[72], serde_json::json!("1.2"));
+        assert_eq!(arr[73], serde_json::json!("2.3"));
+        assert_eq!(arr[74], serde_json::json!("3.4"));
+        assert_eq!(arr[75], serde_json::json!("4.5"));
+        assert_eq!(arr[76], serde_json::json!("5.6"));
+        assert_eq!(arr[77], serde_json::json!("6.7"));
+        assert_eq!(arr[78], serde_json::json!("7.8"));
+        assert_eq!(arr[79], serde_json::json!(1_700_000_000));
+        assert_eq!(arr[80], serde_json::json!(""));
+        assert_eq!(arr[81], serde_json::json!(0));
     }
 }
