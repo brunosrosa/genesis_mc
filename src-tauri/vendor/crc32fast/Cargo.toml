@@ -66,3 +66,6 @@ default-features = false
 
 [dev-dependencies.rand]
 version = "0.8"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_arm_crc32_intrinsics)'] }

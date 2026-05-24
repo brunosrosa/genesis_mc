@@ -230,16 +230,6 @@ impl SsotInjector {
         Ok(trimmed.to_string())
     }
 
-    fn require_option_non_empty(field: &str, value: Option<&str>) -> Result<String, SsotError> {
-        let value = value.ok_or_else(|| {
-            SsotError::ValidationFailure(format!(
-                "campo obrigatorio '{}' ausente ou nulo",
-                field
-            ))
-        })?;
-        Self::require_non_empty(field, value)
-    }
-
     fn update_local_status(
         repo_id: &str,
         status_value: &str,
@@ -252,7 +242,9 @@ impl SsotInjector {
         
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Falha ao conectar no SQLite: {}", e))?;
-            
+
+        Self::ensure_repo_heuristics_schema(&conn)?;
+
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
@@ -352,6 +344,98 @@ impl SsotInjector {
             rusqlite::params![status_value, repo_id],
         ).map_err(|e| format!("Falha ao executar UPDATE repositorios: {}", e))?;
         
+        Ok(())
+    }
+
+    fn ensure_repo_heuristics_schema(conn: &Connection) -> Result<(), String> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS repo_heuristics (
+                project_name TEXT PRIMARY KEY,
+                repo_url TEXT NOT NULL,
+                repo_version TEXT NOT NULL,
+                ultima_versao_online TEXT,
+                lote_id TEXT NOT NULL,
+                data_ultima_analise INTEGER NOT NULL,
+                analise_origem TEXT NOT NULL,
+                declared_description TEXT NOT NULL,
+                proposta_original_resumo TEXT NOT NULL,
+                stack_base TEXT NOT NULL,
+                licenca TEXT,
+                lente_a_sentido_prod_ux TEXT,
+                lente_b_estrutura_arq TEXT,
+                lente_c_realidade_ops TEXT,
+                visao_do_enxame TEXT NOT NULL,
+                justificativa_decisao TEXT NOT NULL,
+                executive_verdict TEXT NOT NULL,
+                classificacao_terminal TEXT NOT NULL,
+                acao_de_canibalizacao TEXT NOT NULL,
+                categoria_arquitetural TEXT NOT NULL,
+                horizonte_extracao TEXT NOT NULL,
+                tipo_integracao TEXT NOT NULL,
+                categoria_nuance_tecnica TEXT NOT NULL,
+                integracao_papel_exato TEXT NOT NULL,
+                ouro_a_extrair TEXT NOT NULL,
+                deep_pattern TEXT NOT NULL,
+                transplantable_core TEXT NOT NULL,
+                logic_math_heuristic TEXT NOT NULL,
+                real_structural_problem TEXT NOT NULL,
+                must_components_prod_ux TEXT NOT NULL,
+                must_components_arq TEXT NOT NULL,
+                must_components_ops TEXT NOT NULL,
+                detected_toxic_deps TEXT NOT NULL,
+                do_not_absorb TEXT NOT NULL,
+                where_ai_should_not_enter TEXT NOT NULL,
+                bare_metal_fit TEXT NOT NULL,
+                extractability_level TEXT NOT NULL,
+                operability_level TEXT NOT NULL,
+                entropy_risk TEXT NOT NULL,
+                design_misuse_risk TEXT NOT NULL,
+                intrinsic_ethics_risk TEXT NOT NULL,
+                discipline_dependency TEXT NOT NULL,
+                risco_principal TEXT NOT NULL,
+                risco_linha_vermelha TEXT NOT NULL,
+                observacoes TEXT NOT NULL,
+                score_final REAL NOT NULL,
+                score_fit_geral_soda REAL NOT NULL,
+                score_philosophical_fit INTEGER NOT NULL,
+                score_bare_metal_fit INTEGER NOT NULL,
+                score_architectural_extractability INTEGER NOT NULL,
+                score_operability INTEGER NOT NULL,
+                score_creep_risk INTEGER NOT NULL,
+                score_runtime_sovereignty INTEGER NOT NULL,
+                score_model_logic_value INTEGER NOT NULL,
+                score_ethics_safety INTEGER NOT NULL,
+                score_intrinsic_risk INTEGER NOT NULL,
+                capability_nature_primary TEXT NOT NULL,
+                architectural_topology TEXT NOT NULL,
+                runtime_sovereignty_fit TEXT NOT NULL,
+                local_first_fit TEXT NOT NULL,
+                temporal_stability TEXT NOT NULL,
+                adoptability_level TEXT NOT NULL,
+                longitudinal_sustainability TEXT NOT NULL,
+                abandonment_risk TEXT NOT NULL,
+                maintenance_burden TEXT NOT NULL,
+                onboarding_friction TEXT NOT NULL,
+                observability_operational TEXT NOT NULL,
+                recoverability_level TEXT NOT NULL,
+                degradation_behavior TEXT NOT NULL,
+                curation_burden TEXT NOT NULL,
+                time_to_first_clear_value TEXT NOT NULL,
+                imperfection_tolerance TEXT NOT NULL,
+                evolution_cost TEXT NOT NULL,
+                regulatory_risk TEXT NOT NULL,
+                score_architectural_priority REAL NOT NULL,
+                score_human_product_priority REAL NOT NULL,
+                score_absorption_readiness REAL NOT NULL,
+                score_operational_priority REAL NOT NULL,
+                score_sustainability_adjusted_fit REAL NOT NULL,
+                valid_from INTEGER NOT NULL,
+                valid_to INTEGER,
+                embargo_status INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| format!("Falha ao criar tabela repo_heuristics: {}", e))?;
         Ok(())
     }
 

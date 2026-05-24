@@ -4,6 +4,7 @@ use std::pin::Pin;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::{info, warn};
 
 pub const OFFICIAL_FORMATTER_MODEL: &str = "anthropic/claude-sonnet-4.6";
 
@@ -449,14 +450,149 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
     prompt.push_str(&format!("repo_url={}\n", block0.repo_url));
     prompt.push_str("OUTPUT: responda com um bloco Markdown ```json ... ``` contendo um objeto JSON.\n");
     prompt.push_str("O JSON deve conter: {\"fields\":{...},\"justifications\":{...}}.\n");
+    prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields/justifications. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
+    prompt.push_str("FIELDS_KEYS_EXATAS:\n");
+    prompt.push_str(fields_keys_for_block(block));
+    prompt.push('\n');
+    match block {
+        1 => {
+            prompt.push_str("LIMITS_BLOCK1: cada valor string em fields deve ter no máximo 600 caracteres.\n");
+        }
+        2 => {
+            prompt.push_str("LIMITS_BLOCK2: cada valor string em fields deve ter no máximo 400 caracteres. Use ';' para listas.\n");
+        }
+        3 => {
+            prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
+            prompt.push_str("CONVENTIONS_BLOCK3: para campos de nivel/custo/risco/burden/friction, prefira rótulos curtos (ex: LOW|MEDIUM|HIGH) em vez de texto longo.\n");
+        }
+        _ => {}
+    }
+    if block == 4 {
+        prompt.push_str("CONSTRAINTS_BLOCK4: todos os campos em fields são inteiros no intervalo [0,10].\n");
+    }
     if let Some(error) = last_error {
         prompt.push_str("\nPREVIOUS_SCHEMA_ERROR:\n");
         prompt.push_str(error);
         prompt.push('\n');
     }
     prompt.push_str("\nCONTEXT_ROW_PARTIAL_JSON:\n");
-    prompt.push_str(&serde_json::to_string(prior).unwrap_or_default());
+    prompt.push_str(&serde_json::to_string(&compact_context_for_block(block0, prior, block)).unwrap_or_default());
     prompt
+}
+
+fn fields_keys_for_block(block: u8) -> &'static str {
+    match block {
+        1 => r#"["proposta_original_resumo","visao_do_enxame","justificativa_decisao","executive_verdict","risco_principal","risco_linha_vermelha","observacoes"]"#,
+        2 => r#"["ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#,
+        3 => r#"["classificacao_terminal","acao_de_canibalizacao","categoria_arquitetural","horizonte_extracao","tipo_integracao","capability_nature_primary","architectural_topology","temporal_stability","bare_metal_fit","extractability_level","runtime_sovereignty_fit","local_first_fit","adoptability_level","longitudinal_sustainability","maintenance_burden","onboarding_friction","observability_operational","recoverability_level","degradation_behavior","curation_burden","evolution_cost","operability_level","abandonment_risk","time_to_first_clear_value","imperfection_tolerance","entropy_risk","design_misuse_risk","intrinsic_ethics_risk","discipline_dependency","regulatory_risk"]"#,
+        4 => r#"["score_philosophical_fit","score_bare_metal_fit","score_architectural_extractability","score_operability","score_creep_risk","score_runtime_sovereignty","score_model_logic_value","score_ethics_safety","score_intrinsic_risk"]"#,
+        _ => r#"[]"#,
+    }
+}
+
+fn compact_context_for_block(
+    block0: &Block0Context,
+    row: &MasterSolutionsRow,
+    block: u8,
+) -> serde_json::Value {
+    let mut ctx = serde_json::Map::new();
+    ctx.insert(
+        "project".to_string(),
+        serde_json::json!({
+            "project_name": &block0.project_name,
+            "repo_url": &block0.repo_url,
+            "repo_version": &block0.repo_version,
+            "ultima_versao_online": &block0.ultima_versao_online,
+            "lote_id": &block0.lote_id,
+            "data_ultima_analise": block0.data_ultima_analise,
+            "analise_origem": &block0.analise_origem,
+            "licenca": &block0.licenca,
+            "stack_base": &block0.stack_base,
+            "declared_description": &block0.declared_description
+        }),
+    );
+    ctx.insert(
+        "debates_enxame".to_string(),
+        serde_json::json!({
+            "lente_a_sentido_prod_ux": &row.lente_a_sentido_prod_ux,
+            "lente_b_estrutura_arq": &row.lente_b_estrutura_arq,
+            "lente_c_realidade_ops": &row.lente_c_realidade_ops
+        }),
+    );
+
+    if block >= 2 {
+        ctx.insert(
+            "block1".to_string(),
+            serde_json::json!({
+                "proposta_original_resumo": &row.proposta_original_resumo,
+                "visao_do_enxame": &row.visao_do_enxame,
+                "justificativa_decisao": &row.justificativa_decisao,
+                "executive_verdict": &row.executive_verdict,
+                "risco_principal": &row.risco_principal,
+                "risco_linha_vermelha": &row.risco_linha_vermelha,
+                "observacoes": &row.observacoes
+            }),
+        );
+    }
+    if block >= 3 {
+        ctx.insert(
+            "block2".to_string(),
+            serde_json::json!({
+                "ouro_a_extrair": &row.ouro_a_extrair,
+                "deep_pattern": &row.deep_pattern,
+                "transplantable_core": &row.transplantable_core,
+                "logic_math_heuristic": &row.logic_math_heuristic,
+                "real_structural_problem": &row.real_structural_problem,
+                "categoria_nuance_tecnica": &row.categoria_nuance_tecnica,
+                "integracao_papel_exato": &row.integracao_papel_exato,
+                "must_components_prod_ux": &row.must_components_prod_ux,
+                "must_components_arq": &row.must_components_arq,
+                "must_components_ops": &row.must_components_ops,
+                "detected_toxic_deps": &row.detected_toxic_deps,
+                "do_not_absorb": &row.do_not_absorb,
+                "where_ai_should_not_enter": &row.where_ai_should_not_enter
+            }),
+        );
+    }
+    if block >= 4 {
+        ctx.insert(
+            "block3".to_string(),
+            serde_json::json!({
+                "classificacao_terminal": &row.classificacao_terminal,
+                "acao_de_canibalizacao": &row.acao_de_canibalizacao,
+                "categoria_arquitetural": &row.categoria_arquitetural,
+                "horizonte_extracao": &row.horizonte_extracao,
+                "tipo_integracao": &row.tipo_integracao,
+                "capability_nature_primary": &row.capability_nature_primary,
+                "architectural_topology": &row.architectural_topology,
+                "temporal_stability": &row.temporal_stability,
+                "bare_metal_fit": &row.bare_metal_fit,
+                "extractability_level": &row.extractability_level,
+                "runtime_sovereignty_fit": &row.runtime_sovereignty_fit,
+                "local_first_fit": &row.local_first_fit,
+                "adoptability_level": &row.adoptability_level,
+                "longitudinal_sustainability": &row.longitudinal_sustainability,
+                "maintenance_burden": &row.maintenance_burden,
+                "onboarding_friction": &row.onboarding_friction,
+                "observability_operational": &row.observability_operational,
+                "recoverability_level": &row.recoverability_level,
+                "degradation_behavior": &row.degradation_behavior,
+                "curation_burden": &row.curation_burden,
+                "evolution_cost": &row.evolution_cost,
+                "operability_level": &row.operability_level,
+                "abandonment_risk": &row.abandonment_risk,
+                "time_to_first_clear_value": &row.time_to_first_clear_value,
+                "imperfection_tolerance": &row.imperfection_tolerance,
+                "entropy_risk": &row.entropy_risk,
+                "design_misuse_risk": &row.design_misuse_risk,
+                "intrinsic_ethics_risk": &row.intrinsic_ethics_risk,
+                "discipline_dependency": &row.discipline_dependency,
+                "regulatory_risk": &row.regulatory_risk
+            }),
+        );
+    }
+
+    serde_json::Value::Object(ctx)
 }
 
 async fn run_block<T: for<'de> Deserialize<'de> + Send>(
@@ -469,6 +605,11 @@ async fn run_block<T: for<'de> Deserialize<'de> + Send>(
     let mut last_error: Option<String> = None;
     let attempts = cfg.max_attempts_per_block.max(1);
     for attempt in 1..=attempts {
+        if attempt == 1 {
+            info!(block, attempts, "Fase 3: iniciando sub-chamada do bloco");
+        } else {
+            warn!(block, attempt, "Fase 3: retry do bloco (injetando erro anterior no prompt)");
+        }
         let prompt = build_prompt(block, block0, row, last_error.as_deref());
         let formatted = client
             .format(&cfg.model, &prompt)
@@ -478,6 +619,7 @@ async fn run_block<T: for<'de> Deserialize<'de> + Send>(
             Ok(json) => json,
             Err(err) => {
                 last_error = Some(err.to_string());
+                warn!(block, attempt, error = %err, "Fase 3: falha ao extrair code-fence ```json```");
                 if attempt == attempts {
                     return Err(Phase3Error::RetryExhausted {
                         block,
@@ -491,9 +633,13 @@ async fn run_block<T: for<'de> Deserialize<'de> + Send>(
 
         let parsed: Result<BlockResponse<T>, _> = serde_json::from_str(&json_text);
         match parsed {
-            Ok(envelope) => return Ok(envelope.fields),
+            Ok(envelope) => {
+                info!(block, attempt, "Fase 3: bloco concluído");
+                return Ok(envelope.fields);
+            }
             Err(e) => {
                 last_error = Some(e.to_string());
+                warn!(block, attempt, error = %e, "Fase 3: falha de schema/serde no JSON do bloco");
                 if attempt == attempts {
                     return Err(Phase3Error::RetryExhausted {
                         block,
@@ -512,11 +658,126 @@ async fn run_block<T: for<'de> Deserialize<'de> + Send>(
     })
 }
 
+async fn run_block4_validated(
+    client: &dyn FormatterClient,
+    cfg: &Phase3Config,
+    block0: &Block0Context,
+    row: &MasterSolutionsRow,
+) -> Result<Block4Fields, Phase3Error> {
+    let block: u8 = 4;
+    let mut last_error: Option<String> = None;
+    let attempts = cfg.max_attempts_per_block.max(1);
+
+    for attempt in 1..=attempts {
+        if attempt == 1 {
+            info!(block, attempts, "Fase 3: iniciando sub-chamada do bloco");
+        } else {
+            warn!(block, attempt, "Fase 3: retry do bloco (injetando erro anterior no prompt)");
+        }
+
+        let prompt = build_prompt(block, block0, row, last_error.as_deref());
+        let formatted = client
+            .format(&cfg.model, &prompt)
+            .await
+            .map_err(Phase3Error::Transport)?;
+        let json_text = match extract_json_fence(&formatted) {
+            Ok(json) => json,
+            Err(err) => {
+                last_error = Some(err.to_string());
+                warn!(
+                    block,
+                    attempt,
+                    error = %err,
+                    "Fase 3: falha ao extrair code-fence ```json```"
+                );
+                if attempt == attempts {
+                    return Err(Phase3Error::RetryExhausted {
+                        block,
+                        attempts,
+                        message: last_error.unwrap_or_else(|| "unknown".to_string()),
+                    });
+                }
+                continue;
+            }
+        };
+
+        let parsed: Result<BlockResponse<Block4Fields>, _> = serde_json::from_str(&json_text);
+        let envelope = match parsed {
+            Ok(envelope) => envelope,
+            Err(e) => {
+                last_error = Some(e.to_string());
+                warn!(
+                    block,
+                    attempt,
+                    error = %e,
+                    "Fase 3: falha de schema/serde no JSON do bloco"
+                );
+                if attempt == attempts {
+                    return Err(Phase3Error::RetryExhausted {
+                        block,
+                        attempts,
+                        message: last_error.unwrap_or_else(|| "unknown".to_string()),
+                    });
+                }
+                continue;
+            }
+        };
+
+        let fields = envelope.fields;
+        let validations = [
+            validate_score_0_10("score_philosophical_fit", fields.score_philosophical_fit, 4),
+            validate_score_0_10("score_bare_metal_fit", fields.score_bare_metal_fit, 4),
+            validate_score_0_10(
+                "score_architectural_extractability",
+                fields.score_architectural_extractability,
+                4,
+            ),
+            validate_score_0_10("score_operability", fields.score_operability, 4),
+            validate_score_0_10("score_creep_risk", fields.score_creep_risk, 4),
+            validate_score_0_10(
+                "score_runtime_sovereignty",
+                fields.score_runtime_sovereignty,
+                4,
+            ),
+            validate_score_0_10("score_model_logic_value", fields.score_model_logic_value, 4),
+            validate_score_0_10("score_ethics_safety", fields.score_ethics_safety, 4),
+            validate_score_0_10("score_intrinsic_risk", fields.score_intrinsic_risk, 4),
+        ];
+
+        if let Some(err) = validations.into_iter().find_map(|res| res.err()) {
+            last_error = Some(err.to_string());
+            warn!(block, attempt, error = %err, "Fase 3: falha de validação no Bloco 4");
+            if attempt == attempts {
+                return Err(Phase3Error::RetryExhausted {
+                    block,
+                    attempts,
+                    message: last_error.unwrap_or_else(|| "unknown".to_string()),
+                });
+            }
+            continue;
+        }
+
+        info!(block, attempt, "Fase 3: bloco concluído");
+        return Ok(fields);
+    }
+
+    Err(Phase3Error::RetryExhausted {
+        block,
+        attempts,
+        message: last_error.unwrap_or_else(|| "unknown".to_string()),
+    })
+}
+
 pub async fn run_phase3_sgr(
     client: &dyn FormatterClient,
     cfg: &Phase3Config,
     block0: Block0Context,
 ) -> Result<Phase3Output, Phase3Error> {
+    info!(
+        repo_id = %block0.project_name,
+        model = %cfg.model,
+        "Fase 3: iniciando SGR em cascata (Blocos 1..4)"
+    );
     let mut row = MasterSolutionsRow::from_block0(block0.clone());
 
     let block1: Block1Fields = run_block(client, cfg, 1, &block0, &row).await?;
@@ -527,6 +788,7 @@ pub async fn run_phase3_sgr(
     row.risco_principal = block1.risco_principal;
     row.risco_linha_vermelha = block1.risco_linha_vermelha;
     row.observacoes = block1.observacoes;
+    info!("Fase 3: Bloco 1 concluído");
 
     let block2: Block2Fields = run_block(client, cfg, 2, &block0, &row).await?;
     row.ouro_a_extrair = block2.ouro_a_extrair;
@@ -542,6 +804,7 @@ pub async fn run_phase3_sgr(
     row.detected_toxic_deps = block2.detected_toxic_deps;
     row.do_not_absorb = block2.do_not_absorb;
     row.where_ai_should_not_enter = block2.where_ai_should_not_enter;
+    info!("Fase 3: Bloco 2 concluído");
 
     let block3: Block3Fields = run_block(client, cfg, 3, &block0, &row).await?;
     row.classificacao_terminal = block3.classificacao_terminal;
@@ -574,25 +837,9 @@ pub async fn run_phase3_sgr(
     row.intrinsic_ethics_risk = block3.intrinsic_ethics_risk;
     row.discipline_dependency = block3.discipline_dependency;
     row.regulatory_risk = block3.regulatory_risk;
+    info!("Fase 3: Bloco 3 concluído");
 
-    let block4: Block4Fields = run_block(client, cfg, 4, &block0, &row).await?;
-    validate_score_0_10("score_philosophical_fit", block4.score_philosophical_fit, 4)?;
-    validate_score_0_10("score_bare_metal_fit", block4.score_bare_metal_fit, 4)?;
-    validate_score_0_10(
-        "score_architectural_extractability",
-        block4.score_architectural_extractability,
-        4,
-    )?;
-    validate_score_0_10("score_operability", block4.score_operability, 4)?;
-    validate_score_0_10("score_creep_risk", block4.score_creep_risk, 4)?;
-    validate_score_0_10(
-        "score_runtime_sovereignty",
-        block4.score_runtime_sovereignty,
-        4,
-    )?;
-    validate_score_0_10("score_model_logic_value", block4.score_model_logic_value, 4)?;
-    validate_score_0_10("score_ethics_safety", block4.score_ethics_safety, 4)?;
-    validate_score_0_10("score_intrinsic_risk", block4.score_intrinsic_risk, 4)?;
+    let block4: Block4Fields = run_block4_validated(client, cfg, &block0, &row).await?;
 
     row.score_philosophical_fit = block4.score_philosophical_fit;
     row.score_bare_metal_fit = block4.score_bare_metal_fit;
@@ -603,6 +850,7 @@ pub async fn run_phase3_sgr(
     row.score_model_logic_value = block4.score_model_logic_value;
     row.score_ethics_safety = block4.score_ethics_safety;
     row.score_intrinsic_risk = block4.score_intrinsic_risk;
+    info!("Fase 3: Bloco 4 concluído");
 
     Ok(Phase3Output {
         model_used: cfg.model.clone(),
@@ -619,10 +867,59 @@ pub fn extract_json_fence(text: &str) -> Result<String, Phase3Error> {
         .strip_prefix("\r\n")
         .or_else(|| after.strip_prefix('\n'))
         .unwrap_or(after);
-    let end = after
-        .find("```")
-        .ok_or_else(|| Phase3Error::JsonFenceParse("missing closing ``` fence".to_string()))?;
-    Ok(after[..end].trim().to_string())
+    if let Some(end) = after.find("```") {
+        return Ok(after[..end].trim().to_string());
+    }
+    if let Some(salvaged) = salvage_balanced_json(after).or_else(|| salvage_balanced_json(text)) {
+        return Ok(salvaged);
+    }
+    Err(Phase3Error::JsonFenceParse(
+        "missing closing ``` fence".to_string(),
+    ))
+}
+
+fn salvage_balanced_json(text: &str) -> Option<String> {
+    let (start_idx, open) = text
+        .char_indices()
+        .find_map(|(idx, ch)| match ch {
+            '{' => Some((idx, '{')),
+            '[' => Some((idx, '[')),
+            _ => None,
+        })?;
+    let close = if open == '{' { '}' } else { ']' };
+
+    let mut depth: i64 = 0;
+    let mut in_str = false;
+    let mut escape = false;
+
+    for (idx, ch) in text[start_idx..].char_indices() {
+        let abs = start_idx + idx;
+        if in_str {
+            if escape {
+                escape = false;
+                continue;
+            }
+            match ch {
+                '\\' => escape = true,
+                '"' => in_str = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => in_str = true,
+            c if c == open => depth += 1,
+            c if c == close => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(text[start_idx..=abs].trim().to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 pub fn sheet_range_for_row(row_number_1based: u32) -> String {
