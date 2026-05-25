@@ -696,27 +696,6 @@ fn format_float_1(value: f64) -> String {
     raw.replace(',', ".")
 }
 
-fn normalize_enum_token(raw: &str) -> String {
-    normalize_enum_value(raw)
-}
-
-fn normalize_enum_catalog(raw: &str, allowed: &[&str]) -> String {
-    let token = normalize_enum_value(raw);
-    if token.is_empty() {
-        return token;
-    }
-    for option in allowed {
-        if token == *option {
-            return (*option).to_string();
-        }
-        let prefix = format!("{}_", option);
-        if token.starts_with(&prefix) {
-            return (*option).to_string();
-        }
-    }
-    token
-}
-
 fn normalize_enum_value(raw: &str) -> String {
     let line = raw.lines().next().unwrap_or("").trim();
     if line.is_empty() {
@@ -1128,7 +1107,7 @@ struct Block3Fields {
 }
 
 impl Block3Fields {
-    fn sanitize(mut self) -> Self {
+    fn sanitize(self) -> Self {
         self
     }
 }
