@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use genesis_mc_lib::cognition::phase2_swarm::{
+use genesis_mc_lib::cognition::swarm::{
     ensure_phase2_schema, CognitiveSwarmDispatcher, HttpLensInvoker, SqliteDebateStore,
 };
 use rusqlite::{params, Connection};

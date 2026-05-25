@@ -9,8 +9,8 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
-const STATUS_OK: &str = "FASE_2_OK";
-const STATUS_ERR: &str = "ERRO_FASE_2";
+const STATUS_OK: &str = "F2_OK";
+const STATUS_ERR: &str = "ERRO_F2";
 const DEFAULT_OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 
 type LensFuture<'a> = Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;

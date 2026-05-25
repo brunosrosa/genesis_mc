@@ -1,4 +1,4 @@
-use crate::cognition::phase3_4::{apply_phase4_block5, build_batch_update_payload, MasterSolutionsRow};
+use crate::cognition::synthesizer::{apply_phase4_block5, build_batch_update_payload, MasterSolutionsRow};
 use thiserror::Error;
 use serde_json::{json, Value};
 use rusqlite::Connection;

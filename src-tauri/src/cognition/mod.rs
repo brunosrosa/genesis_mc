@@ -1,4 +1,4 @@
 pub mod swarm_dispatcher;
-pub mod phase2_swarm;
+pub mod swarm;
 pub mod sgr_synthesizer;
-pub mod phase3_4;
+pub mod synthesizer;

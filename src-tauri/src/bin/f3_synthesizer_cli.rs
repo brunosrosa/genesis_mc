@@ -2,7 +2,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use genesis_mc_lib::cognition::phase3_4::{run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, OFFICIAL_FORMATTER_MODEL};
+use genesis_mc_lib::cognition::synthesizer::{
+    run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, OFFICIAL_FORMATTER_MODEL,
+};
 use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
 use genesis_mc_lib::persist::ssot_injector::SsotInjector;
 use reqwest::Client;
@@ -55,7 +57,10 @@ async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
         tag_name: Option<String>,
     }
 
-    let client = Client::builder().user_agent("phase3-4-cli/1.0").build().ok()?;
+    let client = Client::builder()
+        .user_agent("f3-synthesizer-cli/1.0")
+        .build()
+        .ok()?;
     let resp = client.get(&endpoint).send().await.ok()?;
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         return None;
@@ -631,7 +636,7 @@ mod tests {
     }
 }
 
-impl genesis_mc_lib::cognition::phase3_4::FormatterClient for OpenRouterFormatterClient {
+impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterFormatterClient {
     fn format<'a>(
         &'a self,
         model: &'a str,
@@ -1010,9 +1015,9 @@ async fn main() -> io::Result<()> {
         full_report_file,
     } = parse_cli_args();
     if e2e_full {
-        info!(repo_id = %repo_id, "E2E FULL: iniciando Fases 1 → 4 (disparo completo)");
+        info!(repo_id = %repo_id, "E2E FULL: iniciando F0 → F4 (disparo completo)");
     } else {
-        info!(repo_id = %repo_id, "E2E: iniciando Fases 3 e 4 (munição real)");
+        info!(repo_id = %repo_id, "E2E: iniciando F3 → F4 (munição real)");
     }
 
     let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
@@ -1021,17 +1026,17 @@ async fn main() -> io::Result<()> {
     })?;
 
     let phase1_ms = if e2e_full {
-        run_phase_binary("harvester_cli", &repo_id).await?
+        run_phase_binary("f0_harvester_cli", &repo_id).await?
     } else {
         0
     };
     let phase1_5_ms = if e2e_full {
-        run_phase_binary("phase1_5_cli", &repo_id).await?
+        run_phase_binary("f1_distiller_cli", &repo_id).await?
     } else {
         0
     };
     let phase2_ms = if e2e_full {
-        run_phase_binary("phase2_cli", &repo_id).await?
+        run_phase_binary("f2_swarm_cli", &repo_id).await?
     } else {
         0
     };
