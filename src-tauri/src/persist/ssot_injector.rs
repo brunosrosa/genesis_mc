@@ -26,7 +26,7 @@ pub enum SsotError {
 pub struct SsotInjector;
 
 const SSOT_STATUS_CONCLUIDO: &str = "CONCLUIDO";
-const SSOT_EXPECTED_COLUMNS: usize = 82;
+const SSOT_EXPECTED_COLUMNS: usize = 84;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
 pub type SheetsFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
@@ -152,6 +152,8 @@ impl SsotInjector {
         // 1. Selagem L2 (Execução Durável)
         // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
         apply_phase4_block5(now_epoch, &mut row);
+        row.status_atualizacao = SSOT_STATUS_CONCLUIDO.to_string();
+        row.status_fase = "F4".to_string();
         Self::update_local_status(
             repo_id,
             SSOT_STATUS_CONCLUIDO,
@@ -162,7 +164,7 @@ impl SsotInjector {
         )
             .map_err(SsotError::L2Failure)?;
 
-        // 2. Roteamento Dinâmico no Sheets (coluna B = repo_url)
+        // 2. Roteamento Dinâmico no Sheets (coluna D = repo_url, coluna G = lote_id)
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
@@ -195,7 +197,7 @@ impl SsotInjector {
             json!({
                 "spreadsheet_id": spreadsheet_id,
                 "sheet": sheet,
-                "range": "B2:E",
+                "range": "D2:G",
                 "include_grid_data": false
             }),
         )
@@ -393,6 +395,10 @@ impl SsotInjector {
         repo_id: &str,
         payload: &MasterSolutionsRow,
     ) -> Result<ValidatedSsotFields, SsotError> {
+        let _status_atualizacao =
+            Self::require_non_empty("status_atualizacao", &payload.status_atualizacao)?;
+        let _status_fase = Self::require_non_empty("status_fase", &payload.status_fase)?;
+
         let project_name = Self::require_non_empty("project_name", &payload.project_name)?;
         if project_name != repo_id {
             return Err(SsotError::ValidationFailure(format!(
@@ -488,12 +494,14 @@ impl SsotInjector {
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
-                project_name, repo_url, repo_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status
+                project_name, status_atualizacao, status_fase, repo_url, repo_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84
             )",
             rusqlite::params![
                 &validated.project_name,
+                &payload.status_atualizacao,
+                &payload.status_fase,
                 &validated.repo_url,
                 &validated.repo_version,
                 &payload.ultima_versao_online,
@@ -510,11 +518,11 @@ impl SsotInjector {
                 &payload.visao_do_enxame,
                 &payload.justificativa_decisao,
                 &payload.executive_verdict,
-                &payload.classificacao_terminal,
-                &payload.acao_de_canibalizacao,
-                &payload.categoria_arquitetural,
-                &payload.horizonte_extracao,
-                &payload.tipo_integracao,
+                payload.classificacao_terminal.as_str(),
+                payload.acao_de_canibalizacao.as_str(),
+                payload.categoria_arquitetural.as_str(),
+                payload.horizonte_extracao.as_str(),
+                payload.tipo_integracao.as_str(),
                 &payload.categoria_nuance_tecnica,
                 &payload.integracao_papel_exato,
                 &payload.ouro_a_extrair,
@@ -528,13 +536,13 @@ impl SsotInjector {
                 &payload.detected_toxic_deps,
                 &payload.do_not_absorb,
                 &payload.where_ai_should_not_enter,
-                &payload.bare_metal_fit,
-                &payload.extractability_level,
-                &payload.operability_level,
-                &payload.entropy_risk,
-                &payload.design_misuse_risk,
-                &payload.intrinsic_ethics_risk,
-                &payload.discipline_dependency,
+                payload.bare_metal_fit.as_str(),
+                payload.extractability_level.as_str(),
+                payload.operability_level.as_str(),
+                payload.entropy_risk.as_str(),
+                payload.design_misuse_risk.as_str(),
+                payload.intrinsic_ethics_risk.as_str(),
+                payload.discipline_dependency.as_str(),
                 &payload.risco_principal,
                 &payload.risco_linha_vermelha,
                 &payload.observacoes,
@@ -549,24 +557,24 @@ impl SsotInjector {
                 payload.score_model_logic_value,
                 payload.score_ethics_safety,
                 payload.score_intrinsic_risk,
-                &payload.capability_nature_primary,
-                &payload.architectural_topology,
-                &payload.runtime_sovereignty_fit,
-                &payload.local_first_fit,
-                &payload.temporal_stability,
-                &payload.adoptability_level,
-                &payload.longitudinal_sustainability,
-                &payload.abandonment_risk,
-                &payload.maintenance_burden,
-                &payload.onboarding_friction,
-                &payload.observability_operational,
-                &payload.recoverability_level,
-                &payload.degradation_behavior,
-                &payload.curation_burden,
-                &payload.time_to_first_clear_value,
-                &payload.imperfection_tolerance,
-                &payload.evolution_cost,
-                &payload.regulatory_risk,
+                payload.capability_nature_primary.as_str(),
+                payload.architectural_topology.as_str(),
+                payload.runtime_sovereignty_fit.as_str(),
+                payload.local_first_fit.as_str(),
+                payload.temporal_stability.as_str(),
+                payload.adoptability_level.as_str(),
+                payload.longitudinal_sustainability.as_str(),
+                payload.abandonment_risk.as_str(),
+                payload.maintenance_burden.as_str(),
+                payload.onboarding_friction.as_str(),
+                payload.observability_operational.as_str(),
+                payload.recoverability_level.as_str(),
+                payload.degradation_behavior.as_str(),
+                payload.curation_burden.as_str(),
+                payload.time_to_first_clear_value.as_str(),
+                payload.imperfection_tolerance.as_str(),
+                payload.evolution_cost.as_str(),
+                payload.regulatory_risk.as_str(),
                 payload.score_architectural_priority,
                 payload.score_human_product_priority,
                 payload.score_absorption_readiness,
@@ -605,6 +613,8 @@ impl SsotInjector {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS repo_heuristics (
                 project_name TEXT PRIMARY KEY,
+                status_atualizacao TEXT NOT NULL,
+                status_fase TEXT NOT NULL,
                 repo_url TEXT NOT NULL,
                 repo_version TEXT NOT NULL,
                 ultima_versao_online TEXT,
@@ -690,6 +700,20 @@ impl SsotInjector {
             [],
         )
         .map_err(|e| format!("Falha ao criar tabela repo_heuristics: {}", e))?;
+
+        let alter_statements = [
+            "ALTER TABLE repo_heuristics ADD COLUMN status_atualizacao TEXT NOT NULL DEFAULT 'CONCLUIDO'",
+            "ALTER TABLE repo_heuristics ADD COLUMN status_fase TEXT NOT NULL DEFAULT 'F4'",
+        ];
+        for sql in alter_statements {
+            if let Err(e) = conn.execute(sql, []) {
+                let msg = e.to_string();
+                if msg.to_ascii_lowercase().contains("duplicate column name") {
+                    continue;
+                }
+                return Err(format!("Falha na migração de schema repo_heuristics: {}", msg));
+            }
+        }
         Ok(())
     }
 
@@ -792,8 +816,10 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     #[test]
-    fn test_prepare_batch_payload_is_82_columns_a_to_cd() {
+    fn test_prepare_batch_payload_is_84_columns_a_to_cf() {
         let mut row = MasterSolutionsRow::default();
+        row.status_atualizacao = "CONCLUIDO".to_string();
+        row.status_fase = "F4".to_string();
         row.project_name = "owner/repo".to_string();
         row.repo_url = "https://github.com/owner/repo".to_string();
         row.repo_version = "v1.0.0".to_string();
@@ -811,13 +837,13 @@ mod tests {
 
         let validated = SsotInjector::validate_payload("owner/repo", &row).unwrap();
         let batch = SsotInjector::prepare_batch_payload(2, &row).unwrap();
-        let range = "A2:CD2";
+        let range = "A2:CF2";
         let arr = batch[range].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         let row_arr = arr[0].as_array().unwrap();
         assert_eq!(row_arr.len(), SSOT_EXPECTED_COLUMNS);
-        assert_eq!(arr[0][0], json!("owner / repo"));
-        assert_eq!(arr[0][1], json!("https://github.com/owner/repo"));
+        assert_eq!(arr[0][2], json!("owner / repo"));
+        assert_eq!(arr[0][3], json!("https://github.com/owner/repo"));
         assert!(row_arr[SSOT_EXPECTED_COLUMNS - 3]
             .as_str()
             .map(|s| !s.trim().is_empty() && s.contains('-'))
@@ -867,6 +893,8 @@ mod tests {
     #[tokio::test]
     async fn dispatch_uses_mock_sheets_client() {
         let mut row = MasterSolutionsRow::default();
+        row.status_atualizacao = "CONCLUIDO".to_string();
+        row.status_fase = "F4".to_string();
         row.project_name = "owner/repo".to_string();
         row.repo_url = "https://github.com/owner/repo".to_string();
         row.repo_version = "v1.0.0".to_string();
@@ -891,6 +919,6 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "SHEET_ID");
         assert_eq!(calls[0].1, "MASTER_SOLUTIONS");
-        assert!(calls[0].2.get("A2:CD2").is_some());
+        assert!(calls[0].2.get("A2:CF2").is_some());
     }
 }

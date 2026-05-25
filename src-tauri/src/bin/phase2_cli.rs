@@ -167,12 +167,12 @@ fn extract_usage_totals_from_lens_json(lens_json: &str) -> (u64, u64, u64, f64) 
     (prompt_tokens, completion_tokens, total_tokens, total_cost_usd)
 }
 
-fn write_phase2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::Result<PathBuf> {
+fn write_f2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::Result<PathBuf> {
     let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
     std::fs::create_dir_all(&reports_dir)
         .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
     let report_path = reports_dir.join(format!(
-        "_PHASE2_REPORT_{}_V6.txt",
+        "_F2_REPORT_{}_V6.txt",
         sanitize_repo_id(report_data.repo_id)
     ));
     let mut report = String::new();
@@ -199,7 +199,7 @@ fn write_phase2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::R
 
     std::fs::write(&report_path, report).map_err(|e| {
         io::Error::other(format!(
-            "Falha ao exportar relatório da Fase 2 em {}: {}",
+            "Falha ao exportar relatório da F2 (Enxame Cognitivo) em {}: {}",
             report_path.display(),
             e
         ))
@@ -232,7 +232,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     ensure_phase2_cli_schema(&conn)?;
     mark_repo_running_if_present(&conn, &repo_id)?;
-    info!(repo_id = %repo_id, "Fase 2: schema verificado e repositório preparado");
+    info!(repo_id = %repo_id, "F2 (Enxame Cognitivo): schema verificado e repositório preparado");
 
     let store = SqliteDebateStore::new(Arc::new(Mutex::new(conn)));
     let invoker = HttpLensInvoker::from_openrouter_env().map_err(io::Error::other)?;
@@ -257,7 +257,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total_tokens = t_a.saturating_add(t_b).saturating_add(t_c);
     let total_cost_usd = cost_a + cost_b + cost_c;
 
-    let report_path = write_phase2_report(
+    let report_path = write_f2_report(
         &root_dir,
         &Phase2Report {
             repo_id: &repo_id,
@@ -279,10 +279,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         report = %report_path.display(),
         elapsed_ms = started.elapsed().as_millis(),
         now_epoch = now_epoch_secs()?,
-        "Fase 2 concluída com persistência atômica"
+        "F2 (Enxame Cognitivo) concluída com persistência atômica"
     );
 
-    println!("PHASE_2_OK repo_id={} report={}", repo_id, report_path.display());
+    println!("F2_OK repo_id={} report={}", repo_id, report_path.display());
     println!("--- LENS A ---\n{}", lens_a_json);
     println!("--- LENS B ---\n{}", lens_b_json);
     println!("--- LENS C ---\n{}", lens_c_json);

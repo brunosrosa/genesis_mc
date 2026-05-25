@@ -38,7 +38,7 @@ pub enum OrchestratorError {
 pub struct HarvesterOrchestrator;
 
 impl HarvesterOrchestrator {
-    /// Maestro do pipeline SODA ETL (Fase 1).
+    /// Maestro do pipeline SODA ETL (F0: Harvester/Zero-IA).
     /// Coordena o fluxo determinístico [N1] -> [N13].
     pub async fn run(
         repo_id: &str,
@@ -48,7 +48,7 @@ impl HarvesterOrchestrator {
         info!(url = %repo_url, repo_id = %repo_id, "Iniciando HarvesterOrchestrator (N14)");
 
         // 1. [N1] Setup do Shadow Workspace (Fail-Fast)
-        info!(repo_id = %repo_id, requested_mb = 256_u32, "N1: Alocando workspace efemero da Fase 1");
+        info!(repo_id = %repo_id, requested_mb = 256_u32, "N1: Alocando workspace efemero da F0");
         let mut workspace = RamdiskAllocator::allocate(256)
             .await
             .map_err(|e| OrchestratorError::InfraError(e.to_string()))?;

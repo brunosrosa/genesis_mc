@@ -297,6 +297,340 @@ impl OpenRouterFormatterClient {
     }
 }
 
+fn parse_block_from_prompt(prompt: &str) -> Option<u8> {
+    let first = prompt.lines().next()?.trim();
+    let value = first.strip_prefix("BLOCK=")?.trim();
+    value.parse::<u8>().ok()
+}
+
+fn response_format_for_block(block: u8) -> Value {
+    fn strict_object(properties: serde_json::Map<String, Value>, required: Vec<&'static str>) -> Value {
+        json!({
+            "type": "object",
+            "properties": Value::Object(properties),
+            "required": required,
+            "additionalProperties": false
+        })
+    }
+
+    fn string_schema(max_len: u32) -> Value {
+        json!({ "type": "string", "maxLength": max_len })
+    }
+
+    fn enum_schema(options: &[&str]) -> Value {
+        json!({ "type": "string", "enum": options })
+    }
+
+    fn int_0_10_schema() -> Value {
+        json!({ "type": "integer", "minimum": 0, "maximum": 10 })
+    }
+
+    fn envelope(fields_schema: Value, strict_fields: bool) -> Value {
+        let mut props = serde_json::Map::new();
+        props.insert("fields".to_string(), fields_schema);
+        props.insert(
+            "justifications".to_string(),
+            json!({
+                "type": "object",
+                "additionalProperties": { "type": "string", "maxLength": 1200 }
+            }),
+        );
+        let mut schema = strict_object(props, vec!["fields", "justifications"]);
+        if let Some(obj) = schema.as_object_mut() {
+            if strict_fields {
+                // no-op, kept for readability: fields_schema already has additionalProperties=false
+                let _ = obj;
+            }
+        }
+        schema
+    }
+
+    let fields_schema = match block {
+        1 => {
+            let mut props = serde_json::Map::new();
+            props.insert("proposta_original_resumo".to_string(), string_schema(600));
+            props.insert("declared_description_ptbr".to_string(), string_schema(600));
+            props.insert("visao_do_enxame".to_string(), string_schema(600));
+            props.insert("justificativa_decisao".to_string(), string_schema(600));
+            props.insert("executive_verdict".to_string(), string_schema(180));
+            props.insert("risco_principal".to_string(), string_schema(180));
+            props.insert("risco_linha_vermelha".to_string(), string_schema(180));
+            props.insert("observacoes".to_string(), string_schema(600));
+            strict_object(
+                props,
+                vec![
+                    "proposta_original_resumo",
+                    "declared_description_ptbr",
+                    "visao_do_enxame",
+                    "justificativa_decisao",
+                    "executive_verdict",
+                    "risco_principal",
+                    "risco_linha_vermelha",
+                    "observacoes",
+                ],
+            )
+        }
+        2 => {
+            let mut props = serde_json::Map::new();
+            props.insert("ouro_a_extrair".to_string(), string_schema(400));
+            props.insert("deep_pattern".to_string(), string_schema(400));
+            props.insert("transplantable_core".to_string(), string_schema(400));
+            props.insert("logic_math_heuristic".to_string(), string_schema(400));
+            props.insert("real_structural_problem".to_string(), string_schema(400));
+            props.insert("categoria_nuance_tecnica".to_string(), string_schema(240));
+            props.insert("integracao_papel_exato".to_string(), string_schema(240));
+            props.insert("must_components_prod_ux".to_string(), string_schema(800));
+            props.insert("must_components_arq".to_string(), string_schema(800));
+            props.insert("must_components_ops".to_string(), string_schema(800));
+            props.insert("detected_toxic_deps".to_string(), string_schema(800));
+            props.insert("do_not_absorb".to_string(), string_schema(800));
+            props.insert("where_ai_should_not_enter".to_string(), string_schema(800));
+            strict_object(
+                props,
+                vec![
+                    "ouro_a_extrair",
+                    "deep_pattern",
+                    "transplantable_core",
+                    "logic_math_heuristic",
+                    "real_structural_problem",
+                    "categoria_nuance_tecnica",
+                    "integracao_papel_exato",
+                    "must_components_prod_ux",
+                    "must_components_arq",
+                    "must_components_ops",
+                    "detected_toxic_deps",
+                    "do_not_absorb",
+                    "where_ai_should_not_enter",
+                ],
+            )
+        }
+        3 => {
+            let mut props = serde_json::Map::new();
+            props.insert(
+                "classificacao_terminal".to_string(),
+                enum_schema(&[
+                    "APROVADO_PARA_PRODUCAO",
+                    "APROVADO_COM_RESSALVAS",
+                    "REJEITADO_DESCARTE",
+                ]),
+            );
+            props.insert(
+                "acao_de_canibalizacao".to_string(),
+                enum_schema(&["NENHUMA", "ABSORVER_LOGICA", "EXTRAIR_SCRIPTS"]),
+            );
+            props.insert(
+                "categoria_arquitetural".to_string(),
+                enum_schema(&[
+                    "LIBRARY",
+                    "FRAMEWORK",
+                    "APPLICATION",
+                    "TOOLING",
+                    "INFRASTRUCTURE",
+                    "RUNTIME",
+                ]),
+            );
+            props.insert(
+                "horizonte_extracao".to_string(),
+                enum_schema(&["IMMEDIATE", "SHORT", "MEDIUM", "LONG", "VERY_LONG"]),
+            );
+            props.insert(
+                "tipo_integracao".to_string(),
+                enum_schema(&["INTEGRATE_AS_COMPONENT", "REIMPLEMENT_INTERNALLY", "REJECT"]),
+            );
+            props.insert(
+                "capability_nature_primary".to_string(),
+                enum_schema(&[
+                    "LIBRARY",
+                    "TOOLING",
+                    "SERVICE",
+                    "APPLICATION",
+                    "SYSTEM",
+                    "ALGORITHM",
+                    "DATA_STRUCTURE",
+                ]),
+            );
+            props.insert(
+                "architectural_topology".to_string(),
+                enum_schema(&[
+                    "MODULAR",
+                    "MONOLITH",
+                    "LAYERED",
+                    "MICROSERVICES",
+                    "EVENT_DRIVEN",
+                    "PIPELINE",
+                    "PLUGIN",
+                ]),
+            );
+            props.insert("temporal_stability".to_string(), enum_schema(&["STABLE", "EVOLVING"]));
+            props.insert("bare_metal_fit".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
+            props.insert("extractability_level".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
+            props.insert("runtime_sovereignty_fit".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
+            props.insert("local_first_fit".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
+            props.insert(
+                "adoptability_level".to_string(),
+                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+            );
+            props.insert(
+                "longitudinal_sustainability".to_string(),
+                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+            );
+            props.insert(
+                "maintenance_burden".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+            );
+            props.insert(
+                "onboarding_friction".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+            );
+            props.insert(
+                "observability_operational".to_string(),
+                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+            );
+            props.insert(
+                "recoverability_level".to_string(),
+                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+            );
+            props.insert(
+                "degradation_behavior".to_string(),
+                enum_schema(&["GRACEFUL", "ACCEPTABLE", "FRAGILE", "CATASTROPHIC"]),
+            );
+            props.insert(
+                "curation_burden".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+            );
+            props.insert(
+                "evolution_cost".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+            );
+            props.insert("operability_level".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
+            props.insert("abandonment_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            props.insert(
+                "time_to_first_clear_value".to_string(),
+                enum_schema(&["IMMEDIATE", "SHORT", "MEDIUM", "LONG", "VERY_LONG"]),
+            );
+            props.insert(
+                "imperfection_tolerance".to_string(),
+                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+            );
+            props.insert("entropy_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            props.insert("design_misuse_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            props.insert("intrinsic_ethics_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            props.insert(
+                "discipline_dependency".to_string(),
+                enum_schema(&["NENHUMA", "BAIXA", "MEDIA", "ALTA", "CRITICA"]),
+            );
+            props.insert("regulatory_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            strict_object(
+                props,
+                vec![
+                    "classificacao_terminal",
+                    "acao_de_canibalizacao",
+                    "categoria_arquitetural",
+                    "horizonte_extracao",
+                    "tipo_integracao",
+                    "capability_nature_primary",
+                    "architectural_topology",
+                    "temporal_stability",
+                    "bare_metal_fit",
+                    "extractability_level",
+                    "runtime_sovereignty_fit",
+                    "local_first_fit",
+                    "adoptability_level",
+                    "longitudinal_sustainability",
+                    "maintenance_burden",
+                    "onboarding_friction",
+                    "observability_operational",
+                    "recoverability_level",
+                    "degradation_behavior",
+                    "curation_burden",
+                    "evolution_cost",
+                    "operability_level",
+                    "abandonment_risk",
+                    "time_to_first_clear_value",
+                    "imperfection_tolerance",
+                    "entropy_risk",
+                    "design_misuse_risk",
+                    "intrinsic_ethics_risk",
+                    "discipline_dependency",
+                    "regulatory_risk",
+                ],
+            )
+        }
+        4 => {
+            let mut props = serde_json::Map::new();
+            props.insert("score_philosophical_fit".to_string(), int_0_10_schema());
+            props.insert("score_bare_metal_fit".to_string(), int_0_10_schema());
+            props.insert("score_architectural_extractability".to_string(), int_0_10_schema());
+            props.insert("score_operability".to_string(), int_0_10_schema());
+            props.insert("score_creep_risk".to_string(), int_0_10_schema());
+            props.insert("score_runtime_sovereignty".to_string(), int_0_10_schema());
+            props.insert("score_model_logic_value".to_string(), int_0_10_schema());
+            props.insert("score_ethics_safety".to_string(), int_0_10_schema());
+            props.insert("score_intrinsic_risk".to_string(), int_0_10_schema());
+            strict_object(
+                props,
+                vec![
+                    "score_philosophical_fit",
+                    "score_bare_metal_fit",
+                    "score_architectural_extractability",
+                    "score_operability",
+                    "score_creep_risk",
+                    "score_runtime_sovereignty",
+                    "score_model_logic_value",
+                    "score_ethics_safety",
+                    "score_intrinsic_risk",
+                ],
+            )
+        }
+        _ => {
+            let mut props = serde_json::Map::new();
+            props.insert("note".to_string(), string_schema(200));
+            strict_object(props, vec!["note"])
+        }
+    };
+
+    let schema = envelope(fields_schema, true);
+    json!({
+        "type": "json_schema",
+        "json_schema": {
+            "name": format!("soda_f3_block_{block}"),
+            "strict": true,
+            "schema": schema
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn schema_for_block3_has_enums_and_is_strict() {
+        let rf = response_format_for_block(3);
+        assert_eq!(rf.get("type").and_then(|v| v.as_str()), Some("json_schema"));
+        let schema = rf
+            .get("json_schema")
+            .and_then(|v| v.get("schema"))
+            .and_then(|v| v.as_object())
+            .unwrap();
+        assert_eq!(
+            schema
+                .get("additionalProperties")
+                .and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        let fields = schema
+            .get("properties")
+            .and_then(|v| v.get("fields"))
+            .and_then(|v| v.get("properties"))
+            .and_then(|v| v.as_object())
+            .unwrap();
+        let ct = fields.get("classificacao_terminal").unwrap();
+        let opts = ct.get("enum").and_then(|v| v.as_array()).unwrap();
+        assert!(opts.iter().any(|v| v.as_str() == Some("APROVADO_PARA_PRODUCAO")));
+    }
+}
+
 impl genesis_mc_lib::cognition::phase3_4::FormatterClient for OpenRouterFormatterClient {
     fn format<'a>(
         &'a self,
@@ -304,12 +638,13 @@ impl genesis_mc_lib::cognition::phase3_4::FormatterClient for OpenRouterFormatte
         prompt: &'a str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async move {
+            let block = parse_block_from_prompt(prompt).unwrap_or(0);
             let body = json!({
                 "model": model,
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Responda somente com um bloco Markdown ```json ... ``` contendo JSON válido. Sem texto fora do code-fence."
+                        "content": "Responda SOMENTE com JSON válido (sem markdown, sem texto extra)."
                     },
                     {
                         "role": "user",
@@ -317,7 +652,8 @@ impl genesis_mc_lib::cognition::phase3_4::FormatterClient for OpenRouterFormatte
                     }
                 ],
                 "temperature": 0.0,
-                "max_tokens": 4096
+                "max_tokens": 4096,
+                "response_format": response_format_for_block(block)
             });
 
             let response = self
@@ -353,7 +689,7 @@ fn fetch_debates(conn: &Connection, repo_id: &str) -> io::Result<(String, String
         params![repo_id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )
-    .map_err(|e| io::Error::other(format!("Debates da Fase 2 ausentes em debates_enxame para {}: {}", repo_id, e)))
+    .map_err(|e| io::Error::other(format!("Debates da F2 (Enxame Cognitivo) ausentes em debates_enxame para {}: {}", repo_id, e)))
 }
 
 fn fetch_repo_core(conn: &Connection, repo_id: &str) -> io::Result<(String, String)> {
@@ -552,7 +888,7 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
     let expected_pretty = expected_repo_id.replace("/", " / ");
-    let range = format!("A{}:A{}", row_number_1based, row_number_1based);
+    let range = format!("C{}:C{}", row_number_1based, row_number_1based);
     let result = call_mcp(
         "get_sheet_data",
         json!({
@@ -571,10 +907,10 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
     Ok(cell == expected_repo_id || cell == expected_pretty)
 }
 
-fn inspect_row_width_a_to_cd(row_number_1based: u32) -> io::Result<usize> {
+fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    let range = format!("A{}:CD{}", row_number_1based, row_number_1based);
+    let range = format!("A{}:CF{}", row_number_1based, row_number_1based);
     let result = call_mcp(
         "get_sheet_data",
         json!({
@@ -702,7 +1038,7 @@ async fn main() -> io::Result<()> {
 
     let phase2_cost_usd = if e2e_full {
         let report_path = reports_dir(&root_dir)?.join(format!(
-            "_PHASE2_REPORT_{}_V6.txt",
+            "_F2_REPORT_{}_V6.txt",
             sanitize_repo_id(&repo_id)
         ));
         parse_report_f64(&report_path, "total_cost_usd")?
@@ -779,13 +1115,15 @@ async fn main() -> io::Result<()> {
     }
     info!(repo_version = %repo_version, "E2E: repo_version resolvido");
     let block0 = Block0Context {
+        status_atualizacao: "EM_PROCESSAMENTO".to_string(),
+        status_fase: "F3".to_string(),
         project_name: repo_id.clone(),
         repo_url,
         repo_version,
         ultima_versao_online,
         lote_id: lote_id.clone(),
         data_ultima_analise: now,
-        analise_origem: "SODA_E2E_PHASE3_4".to_string(),
+        analise_origem: "SODA_E2E_F3".to_string(),
         licenca,
         stack_base,
         declared_description,
@@ -818,12 +1156,12 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    info!("E2E: Fase 3 concluída. Iniciando Fase 4 (carga atômica Sheets)");
+    info!("E2E: F3 concluída. Iniciando F4 (carga atômica Sheets)");
     let block3_justifications = phase3_out.block3_justifications;
     let row = phase3_out.row;
     let row_number = SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
         .await
-        .map_err(|e| io::Error::other(format!("Falha na Fase 4 (SSOT Injector): {}", e)))?;
+        .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?;
 
     let confirmed = confirm_sheet_write(row_number, &repo_id)?;
     if !confirmed {
@@ -832,8 +1170,8 @@ async fn main() -> io::Result<()> {
         ));
     }
 
-    let width_a_to_cd = inspect_row_width_a_to_cd(row_number)?;
-    info!(width_a_to_cd, "E2E: inspeção pós-write (A:CD) para largura do row");
+    let width_a_to_cf = inspect_row_width_a_to_cf(row_number)?;
+    info!(width_a_to_cf, "E2E: inspeção pós-write (A:CF) para largura do row");
 
     let usage = formatter.usage_totals();
     let elapsed_phase3_4_ms = started_phase3_4.elapsed().as_millis();
@@ -852,7 +1190,7 @@ async fn main() -> io::Result<()> {
     let e2e_full_total_ms =
         phase1_ms + phase1_5_ms + phase2_ms + (elapsed_phase3_4_ms as u128);
     let report = format!(
-        "repo_id={}\nrow_number={}\nmodel_used={}\nlatency_phase3_4_ms={}\nlatency_total_ms={}\nprompt_tokens={}\ncompletion_tokens={}\ntotal_tokens={}\ntotal_cost_usd={:.6}\nsheets_write_confirmed={}\nrow_width_a_to_cd={}\n",
+        "repo_id={}\nrow_number={}\nmodel_used={}\nlatency_f3_f4_ms={}\nlatency_total_ms={}\nprompt_tokens={}\ncompletion_tokens={}\ntotal_tokens={}\ntotal_cost_usd={:.6}\nsheets_write_confirmed={}\nrow_width_a_to_cf={}\n",
         repo_id,
         row_number,
         formatter_model,
@@ -863,7 +1201,7 @@ async fn main() -> io::Result<()> {
         usage.total_tokens,
         if e2e_full { e2e_full_total_cost_usd } else { usage.total_cost_usd },
         confirmed,
-        width_a_to_cd
+        width_a_to_cf
     );
     std::fs::write(&report_path, report).map_err(|e| {
         io::Error::other(format!(
@@ -881,7 +1219,7 @@ async fn main() -> io::Result<()> {
         });
         let full_report_path = reports_dir(&root_dir)?.join(full_report_name);
         let full_report = format!(
-            "repo_id={}\nrow_number={}\nmodel_used={}\nlote_id={}\nlatency_phase1_ms={}\nlatency_phase1_5_ms={}\nlatency_phase2_ms={}\nlatency_phase3_4_ms={}\nlatency_total_ms={}\ncost_phase2_usd={:.6}\ncost_phase3_4_usd={:.6}\ncost_total_usd={:.6}\n",
+            "repo_id={}\nrow_number={}\nmodel_used={}\nlote_id={}\nlatency_f0_ms={}\nlatency_f1_ms={}\nlatency_f2_ms={}\nlatency_f3_f4_ms={}\nlatency_total_ms={}\ncost_f2_usd={:.6}\ncost_f3_f4_usd={:.6}\ncost_total_usd={:.6}\n",
             repo_id,
             row_number,
             cfg.model,

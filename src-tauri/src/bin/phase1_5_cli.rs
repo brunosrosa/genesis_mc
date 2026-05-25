@@ -265,11 +265,11 @@ fn count_persisted_packages(conn: &Connection, repo_id: &str) -> io::Result<i64>
     .map_err(|e| io::Error::other(format!("Falha ao contar pacotes persistidos: {}", e)))
 }
 
-fn write_phase1_5_report(root_dir: &Path, conn: &Connection, repo_id: &str) -> io::Result<PathBuf> {
+fn write_f1_report(root_dir: &Path, conn: &Connection, repo_id: &str) -> io::Result<PathBuf> {
     let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
     std::fs::create_dir_all(&reports_dir)
         .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
-    let report_path = reports_dir.join(format!("_PHASE1_5_REPORT_{}.txt", sanitize_repo_id(repo_id)));
+    let report_path = reports_dir.join(format!("_F1_REPORT_{}.txt", sanitize_repo_id(repo_id)));
 
     let mut report = String::new();
     report.push_str(&format!("repo_id={}\n", repo_id));
@@ -349,7 +349,7 @@ fn write_phase1_5_report(root_dir: &Path, conn: &Connection, repo_id: &str) -> i
 
     std::fs::write(&report_path, report).map_err(|e| {
         io::Error::other(format!(
-            "Falha ao exportar relatório local da Fase 1.5 em {}: {}",
+            "Falha ao exportar relatório local da F1 em {}: {}",
             report_path.display(),
             e
         ))
@@ -388,7 +388,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ensure_phase1_5_schema(&conn)?;
 
     let blobs = fetch_required_blobs(&conn, &repo_id)?;
-    info!(repo_id = %repo_id, blobs = blobs.len(), "Fase 1.5: blobs carregados do vault");
+    info!(repo_id = %repo_id, blobs = blobs.len(), "F1 (Destilador FinOps): blobs carregados do vault");
 
     if std::env::var("OPENROUTER_API_KEY").is_err() {
         if let Ok(val) = std::env::var("OPENROUTER_API_FAST_KEY") {
@@ -473,7 +473,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let essences_count = count_persisted_essences(&conn, &repo_id)?;
     let packages_count = count_persisted_packages(&conn, &repo_id)?;
-    let report_path = write_phase1_5_report(&root_dir, &conn, &repo_id)?;
+    let report_path = write_f1_report(&root_dir, &conn, &repo_id)?;
 
     let bypass = std::env::var("SODA_FACTORY_CLOUD_ONLY").unwrap_or_default();
     let bypass_active = bypass.eq_ignore_ascii_case("true") || bypass == "1";
@@ -489,7 +489,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         essences_count = essences_count,
         packages_count = packages_count,
         report = %report_path.display(),
-        "Fase 1.5 concluida"
+        "F1 (Destilador FinOps) concluída"
     );
 
     if packages_count < 3 {

@@ -104,7 +104,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
     Ok(())
 }
 
-fn write_phase1_report(
+fn write_f0_report(
     root_dir: &Path,
     conn_arc: &Arc<Mutex<Connection>>,
     repo_id: &str,
@@ -112,10 +112,10 @@ fn write_phase1_report(
     let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
     std::fs::create_dir_all(&reports_dir)
         .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
-    let report_path = reports_dir.join(format!("_PHASE1_REPORT_{}.txt", sanitize_repo_id(repo_id)));
+    let report_path = reports_dir.join(format!("_F0_REPORT_{}.txt", sanitize_repo_id(repo_id)));
     let rows = {
         let conn = conn_arc.lock().map_err(|e| {
-            io::Error::other(format!("Falha ao adquirir lock do banco para relatório da Fase 1: {}", e))
+            io::Error::other(format!("Falha ao adquirir lock do banco para relatório da F0: {}", e))
         })?;
         let mut stmt = conn
             .prepare(
@@ -124,22 +124,22 @@ fn write_phase1_report(
                  WHERE repo_id = ?1
                  ORDER BY artifact_type ASC",
             )
-            .map_err(|e| io::Error::other(format!("Falha ao preparar query do relatório da Fase 1: {}", e)))?;
+            .map_err(|e| io::Error::other(format!("Falha ao preparar query do relatório da F0: {}", e)))?;
         let iter = stmt
             .query_map([repo_id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })
-            .map_err(|e| io::Error::other(format!("Falha ao executar query do relatório da Fase 1: {}", e)))?;
+            .map_err(|e| io::Error::other(format!("Falha ao executar query do relatório da F0: {}", e)))?;
 
         let mut rows = Vec::new();
         for row in iter {
-            rows.push(row.map_err(|e| io::Error::other(format!("Falha ao ler linha do relatório da Fase 1: {}", e)))?);
+            rows.push(row.map_err(|e| io::Error::other(format!("Falha ao ler linha do relatório da F0: {}", e)))?);
         }
         rows
     };
 
     if rows.is_empty() {
-        return Err(io::Error::other("A Fase 1 terminou sem blobs persistidos para o relatório"));
+        return Err(io::Error::other("A F0 terminou sem blobs persistidos para o relatório"));
     }
 
     let mut report = String::new();
@@ -151,7 +151,7 @@ fn write_phase1_report(
 
     std::fs::write(&report_path, report).map_err(|e| {
         io::Error::other(format!(
-            "Falha ao exportar relatório local da Fase 1 em {}: {}",
+            "Falha ao exportar relatório local da F0 em {}: {}",
             report_path.display(),
             e
         ))
@@ -187,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tracing_subscriber::fmt().with_max_level(level).init();
 
-    info!("SODA Fase 1: Iniciando extração isolada");
+    info!("SODA F0 (Harvester/Zero-IA): iniciando extração isolada");
     let started = Instant::now();
 
     let root_dir = workspace_root()?;
@@ -225,44 +225,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     )?;
 
-    info!(repo_id = %repo_id, "Registro base inserido/verificado. Iniciando orquestração da Fase 1");
+    info!(repo_id = %repo_id, "Registro base inserido/verificado. Iniciando orquestração da F0");
 
     let conn_arc = Arc::new(Mutex::new(conn));
 
     match HarvesterOrchestrator::run(&repo_id, &repo_url, Arc::clone(&conn_arc)).await {
         Ok(_) => {
-            info!(repo_id = %repo_id, "CLI: HarvesterOrchestrator retornou OK; atualizando status para FASE_1_OK");
+            info!(repo_id = %repo_id, "CLI: HarvesterOrchestrator retornou OK; atualizando status para F0_OK");
             {
                 let conn_lock = conn_arc.lock().map_err(|e| {
-                    io::Error::other(format!("Falha ao adquirir lock do banco após Fase 1: {}", e))
+                    io::Error::other(format!("Falha ao adquirir lock do banco após F0: {}", e))
                 })?;
                 conn_lock.execute(
                     "UPDATE repositorios
                      SET status_processamento = ?1,
                          timestamp_fase_1 = ?2
                      WHERE project_name = ?3",
-                    params!["FASE_1_OK", now_epoch_secs()?, &repo_id],
+                    params!["F0_OK", now_epoch_secs()?, &repo_id],
                 )?;
             }
 
-            info!(repo_id = %repo_id, "CLI: Status FASE_1_OK persistido; exportando relatorio local");
-            let report_path = write_phase1_report(&root_dir, &conn_arc, &repo_id)?;
+            info!(repo_id = %repo_id, "CLI: Status F0_OK persistido; exportando relatório local");
+            let report_path = write_f0_report(&root_dir, &conn_arc, &repo_id)?;
             info!(
                 repo_id = %repo_id,
                 report = %report_path.display(),
                 elapsed_ms = started.elapsed().as_millis(),
-                "Fase 1 concluída; relatório local exportado"
+                "F0 concluída; relatório local exportado"
             );
             return Ok(());
         }
         Err(e) => {
-            error!(repo_id = %repo_id, error = %e, "Falha crítica na Fase 1");
+            error!(repo_id = %repo_id, error = %e, "Falha crítica na F0");
             let conn_lock = conn_arc.lock().map_err(|lock_err| {
-                io::Error::other(format!("Falha ao adquirir lock do banco no erro da Fase 1: {}", lock_err))
+                io::Error::other(format!("Falha ao adquirir lock do banco no erro da F0: {}", lock_err))
             })?;
             conn_lock.execute(
                 "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
-                params!["ERRO_FASE_1", &repo_id],
+                params!["ERRO_F0", &repo_id],
             )?;
             return Err(e.into());
         }

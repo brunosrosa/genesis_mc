@@ -52,9 +52,9 @@ impl LensKind {
 pub enum Phase2Error {
     #[error("Repositorio invalido: {0}")]
     InvalidRepoId(String),
-    #[error("Falha ao buscar payloads da Fase 1.5: {0}")]
+    #[error("Falha ao buscar payloads da F1 (Destilador FinOps): {0}")]
     PayloadFetchError(String),
-    #[error("Falha de configuracao da Fase 2: {0}")]
+    #[error("Falha de configuracao da F2 (Enxame Cognitivo): {0}")]
     ConfigError(String),
     #[error("Pacote ausente ou vazio: {0}")]
     EmptyPackage(String),
@@ -62,7 +62,7 @@ pub enum Phase2Error {
     LensExecutionError { lens: String, message: String },
     #[error("Falha ao persistir debates: {0}")]
     PersistError(String),
-    #[error("Repositorio marcado como erro na Fase 2: {0}")]
+    #[error("Repositorio marcado como erro na F2 (Enxame Cognitivo): {0}")]
     Phase2Aborted(String),
 }
 

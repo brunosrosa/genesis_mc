@@ -7,10 +7,340 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
 
-pub const OFFICIAL_FORMATTER_MODEL: &str = "anthropic/claude-sonnet-4.6";
+pub const OFFICIAL_FORMATTER_MODEL: &str = "deepseek/deepseek-v4-pro";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TerminalClassification {
+    #[default]
+    #[serde(rename = "APROVADO_PARA_PRODUCAO")]
+    AprovadoParaProducao,
+    #[serde(rename = "APROVADO_COM_RESSALVAS")]
+    AprovadoComRessalvas,
+    #[serde(rename = "REJEITADO_DESCARTE")]
+    RejeitadoDescarte,
+    #[serde(rename = "UNKNOWN")]
+    Unknown,
+}
+
+impl TerminalClassification {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::AprovadoParaProducao => "APROVADO_PARA_PRODUCAO",
+            Self::AprovadoComRessalvas => "APROVADO_COM_RESSALVAS",
+            Self::RejeitadoDescarte => "REJEITADO_DESCARTE",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CannibalizationAction {
+    #[default]
+    #[serde(rename = "NENHUMA")]
+    Nenhuma,
+    #[serde(rename = "ABSORVER_LOGICA")]
+    AbsorverLogica,
+    #[serde(rename = "EXTRAIR_SCRIPTS")]
+    ExtrairScripts,
+    #[serde(rename = "UNKNOWN")]
+    Unknown,
+}
+
+impl CannibalizationAction {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Nenhuma => "NENHUMA",
+            Self::AbsorverLogica => "ABSORVER_LOGICA",
+            Self::ExtrairScripts => "EXTRAIR_SCRIPTS",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ArchitecturalCategory {
+    #[default]
+    Library,
+    Framework,
+    Application,
+    Tooling,
+    Infrastructure,
+    Runtime,
+    Unknown,
+}
+
+impl ArchitecturalCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Library => "LIBRARY",
+            Self::Framework => "FRAMEWORK",
+            Self::Application => "APPLICATION",
+            Self::Tooling => "TOOLING",
+            Self::Infrastructure => "INFRASTRUCTURE",
+            Self::Runtime => "RUNTIME",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum IntegrationType {
+    #[default]
+    IntegrateAsComponent,
+    ReimplementInternally,
+    Reject,
+    Unknown,
+}
+
+impl IntegrationType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::IntegrateAsComponent => "INTEGRATE_AS_COMPONENT",
+            Self::ReimplementInternally => "REIMPLEMENT_INTERNALLY",
+            Self::Reject => "REJECT",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CapabilityNaturePrimary {
+    #[default]
+    Library,
+    Tooling,
+    Service,
+    Application,
+    System,
+    Algorithm,
+    DataStructure,
+    Unknown,
+}
+
+impl CapabilityNaturePrimary {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Library => "LIBRARY",
+            Self::Tooling => "TOOLING",
+            Self::Service => "SERVICE",
+            Self::Application => "APPLICATION",
+            Self::System => "SYSTEM",
+            Self::Algorithm => "ALGORITHM",
+            Self::DataStructure => "DATA_STRUCTURE",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ArchitecturalTopology {
+    #[default]
+    Modular,
+    Monolith,
+    Layered,
+    Microservices,
+    EventDriven,
+    Pipeline,
+    Plugin,
+    Unknown,
+}
+
+impl ArchitecturalTopology {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Modular => "MODULAR",
+            Self::Monolith => "MONOLITH",
+            Self::Layered => "LAYERED",
+            Self::Microservices => "MICROSERVICES",
+            Self::EventDriven => "EVENT_DRIVEN",
+            Self::Pipeline => "PIPELINE",
+            Self::Plugin => "PLUGIN",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TemporalStability {
+    #[default]
+    Stable,
+    Evolving,
+}
+
+impl TemporalStability {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Stable => "STABLE",
+            Self::Evolving => "EVOLVING",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FitLevel4 {
+    #[default]
+    Low,
+    Medium,
+    High,
+    Excellent,
+}
+
+impl FitLevel4 {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Low => "LOW",
+            Self::Medium => "MEDIUM",
+            Self::High => "HIGH",
+            Self::Excellent => "EXCELLENT",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RiskLevel4 {
+    #[default]
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl RiskLevel4 {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Low => "LOW",
+            Self::Medium => "MEDIUM",
+            Self::High => "HIGH",
+            Self::Critical => "CRITICAL",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum DisciplineDependency {
+    #[default]
+    #[serde(rename = "NENHUMA")]
+    Nenhuma,
+    #[serde(rename = "BAIXA")]
+    Baixa,
+    #[serde(rename = "MEDIA")]
+    Media,
+    #[serde(rename = "ALTA")]
+    Alta,
+    #[serde(rename = "CRITICA")]
+    Critica,
+}
+
+impl DisciplineDependency {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Nenhuma => "NENHUMA",
+            Self::Baixa => "BAIXA",
+            Self::Media => "MEDIA",
+            Self::Alta => "ALTA",
+            Self::Critica => "CRITICA",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DegradationBehavior {
+    #[default]
+    Graceful,
+    Acceptable,
+    Fragile,
+    Catastrophic,
+}
+
+impl DegradationBehavior {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Graceful => "GRACEFUL",
+            Self::Acceptable => "ACCEPTABLE",
+            Self::Fragile => "FRAGILE",
+            Self::Catastrophic => "CATASTROPHIC",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Scale5 {
+    #[default]
+    VeryLow,
+    Low,
+    Medium,
+    High,
+    Excellent,
+}
+
+impl Scale5 {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::VeryLow => "VERY_LOW",
+            Self::Low => "LOW",
+            Self::Medium => "MEDIUM",
+            Self::High => "HIGH",
+            Self::Excellent => "EXCELLENT",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum BurdenLevel {
+    #[default]
+    Low,
+    Medium,
+    High,
+    VeryHigh,
+}
+
+impl BurdenLevel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Low => "LOW",
+            Self::Medium => "MEDIUM",
+            Self::High => "HIGH",
+            Self::VeryHigh => "VERY_HIGH",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TimeHorizon {
+    #[default]
+    Immediate,
+    Short,
+    Medium,
+    Long,
+    VeryLong,
+}
+
+impl TimeHorizon {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Immediate => "IMMEDIATE",
+            Self::Short => "SHORT",
+            Self::Medium => "MEDIUM",
+            Self::Long => "LONG",
+            Self::VeryLong => "VERY_LONG",
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Block0Context {
+    pub status_atualizacao: String,
+    pub status_fase: String,
     pub project_name: String,
     pub repo_url: String,
     pub repo_version: String,
@@ -28,6 +358,8 @@ pub struct Block0Context {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MasterSolutionsRow {
+    pub status_atualizacao: String,
+    pub status_fase: String,
     pub project_name: String,
     pub repo_url: String,
     pub repo_version: String,
@@ -62,36 +394,36 @@ pub struct MasterSolutionsRow {
     pub detected_toxic_deps: String,
     pub do_not_absorb: String,
     pub where_ai_should_not_enter: String,
-    pub classificacao_terminal: String,
-    pub acao_de_canibalizacao: String,
-    pub categoria_arquitetural: String,
-    pub horizonte_extracao: String,
-    pub tipo_integracao: String,
-    pub capability_nature_primary: String,
-    pub architectural_topology: String,
-    pub temporal_stability: String,
-    pub bare_metal_fit: String,
-    pub extractability_level: String,
-    pub runtime_sovereignty_fit: String,
-    pub local_first_fit: String,
-    pub adoptability_level: String,
-    pub longitudinal_sustainability: String,
-    pub maintenance_burden: String,
-    pub onboarding_friction: String,
-    pub observability_operational: String,
-    pub recoverability_level: String,
-    pub degradation_behavior: String,
-    pub curation_burden: String,
-    pub evolution_cost: String,
-    pub operability_level: String,
-    pub abandonment_risk: String,
-    pub time_to_first_clear_value: String,
-    pub imperfection_tolerance: String,
-    pub entropy_risk: String,
-    pub design_misuse_risk: String,
-    pub intrinsic_ethics_risk: String,
-    pub discipline_dependency: String,
-    pub regulatory_risk: String,
+    pub classificacao_terminal: TerminalClassification,
+    pub acao_de_canibalizacao: CannibalizationAction,
+    pub categoria_arquitetural: ArchitecturalCategory,
+    pub horizonte_extracao: TimeHorizon,
+    pub tipo_integracao: IntegrationType,
+    pub capability_nature_primary: CapabilityNaturePrimary,
+    pub architectural_topology: ArchitecturalTopology,
+    pub temporal_stability: TemporalStability,
+    pub bare_metal_fit: FitLevel4,
+    pub extractability_level: FitLevel4,
+    pub runtime_sovereignty_fit: FitLevel4,
+    pub local_first_fit: FitLevel4,
+    pub adoptability_level: Scale5,
+    pub longitudinal_sustainability: Scale5,
+    pub maintenance_burden: BurdenLevel,
+    pub onboarding_friction: BurdenLevel,
+    pub observability_operational: Scale5,
+    pub recoverability_level: Scale5,
+    pub degradation_behavior: DegradationBehavior,
+    pub curation_burden: BurdenLevel,
+    pub evolution_cost: BurdenLevel,
+    pub operability_level: FitLevel4,
+    pub abandonment_risk: RiskLevel4,
+    pub time_to_first_clear_value: TimeHorizon,
+    pub imperfection_tolerance: Scale5,
+    pub entropy_risk: RiskLevel4,
+    pub design_misuse_risk: RiskLevel4,
+    pub intrinsic_ethics_risk: RiskLevel4,
+    pub discipline_dependency: DisciplineDependency,
+    pub regulatory_risk: RiskLevel4,
     pub score_philosophical_fit: i64,
     pub score_bare_metal_fit: i64,
     pub score_architectural_extractability: i64,
@@ -116,6 +448,8 @@ pub struct MasterSolutionsRow {
 impl Default for MasterSolutionsRow {
     fn default() -> Self {
         Self {
+            status_atualizacao: String::new(),
+            status_fase: String::new(),
             project_name: String::new(),
             repo_url: String::new(),
             repo_version: String::new(),
@@ -150,36 +484,36 @@ impl Default for MasterSolutionsRow {
             detected_toxic_deps: String::new(),
             do_not_absorb: String::new(),
             where_ai_should_not_enter: String::new(),
-            classificacao_terminal: String::new(),
-            acao_de_canibalizacao: String::new(),
-            categoria_arquitetural: String::new(),
-            horizonte_extracao: String::new(),
-            tipo_integracao: String::new(),
-            capability_nature_primary: String::new(),
-            architectural_topology: String::new(),
-            temporal_stability: String::new(),
-            bare_metal_fit: String::new(),
-            extractability_level: String::new(),
-            runtime_sovereignty_fit: String::new(),
-            local_first_fit: String::new(),
-            adoptability_level: String::new(),
-            longitudinal_sustainability: String::new(),
-            maintenance_burden: String::new(),
-            onboarding_friction: String::new(),
-            observability_operational: String::new(),
-            recoverability_level: String::new(),
-            degradation_behavior: String::new(),
-            curation_burden: String::new(),
-            evolution_cost: String::new(),
-            operability_level: String::new(),
-            abandonment_risk: String::new(),
-            time_to_first_clear_value: String::new(),
-            imperfection_tolerance: String::new(),
-            entropy_risk: String::new(),
-            design_misuse_risk: String::new(),
-            intrinsic_ethics_risk: String::new(),
-            discipline_dependency: String::new(),
-            regulatory_risk: String::new(),
+            classificacao_terminal: TerminalClassification::default(),
+            acao_de_canibalizacao: CannibalizationAction::default(),
+            categoria_arquitetural: ArchitecturalCategory::default(),
+            horizonte_extracao: TimeHorizon::default(),
+            tipo_integracao: IntegrationType::default(),
+            capability_nature_primary: CapabilityNaturePrimary::default(),
+            architectural_topology: ArchitecturalTopology::default(),
+            temporal_stability: TemporalStability::default(),
+            bare_metal_fit: FitLevel4::default(),
+            extractability_level: FitLevel4::default(),
+            runtime_sovereignty_fit: FitLevel4::default(),
+            local_first_fit: FitLevel4::default(),
+            adoptability_level: Scale5::default(),
+            longitudinal_sustainability: Scale5::default(),
+            maintenance_burden: BurdenLevel::default(),
+            onboarding_friction: BurdenLevel::default(),
+            observability_operational: Scale5::default(),
+            recoverability_level: Scale5::default(),
+            degradation_behavior: DegradationBehavior::default(),
+            curation_burden: BurdenLevel::default(),
+            evolution_cost: BurdenLevel::default(),
+            operability_level: FitLevel4::default(),
+            abandonment_risk: RiskLevel4::default(),
+            time_to_first_clear_value: TimeHorizon::default(),
+            imperfection_tolerance: Scale5::default(),
+            entropy_risk: RiskLevel4::default(),
+            design_misuse_risk: RiskLevel4::default(),
+            intrinsic_ethics_risk: RiskLevel4::default(),
+            discipline_dependency: DisciplineDependency::default(),
+            regulatory_risk: RiskLevel4::default(),
             score_philosophical_fit: 0,
             score_bare_metal_fit: 0,
             score_architectural_extractability: 0,
@@ -206,6 +540,8 @@ impl Default for MasterSolutionsRow {
 impl MasterSolutionsRow {
     pub fn from_block0(block0: Block0Context) -> Self {
         let mut row = Self::default();
+        row.status_atualizacao = block0.status_atualizacao;
+        row.status_fase = block0.status_fase;
         row.project_name = block0.project_name;
         row.repo_url = block0.repo_url;
         row.repo_version = block0.repo_version;
@@ -230,36 +566,36 @@ impl MasterSolutionsRow {
             self.declared_description_ptbr.clone()
         };
 
-        let classificacao_terminal = to_human_readable(&self.classificacao_terminal);
-        let acao_de_canibalizacao = to_human_readable(&self.acao_de_canibalizacao);
-        let categoria_arquitetural = to_human_readable(&self.categoria_arquitetural);
-        let horizonte_extracao = to_human_readable(&self.horizonte_extracao);
-        let tipo_integracao = to_human_readable(&self.tipo_integracao);
-        let capability_nature_primary = to_human_readable(&self.capability_nature_primary);
-        let architectural_topology = to_human_readable(&self.architectural_topology);
-        let temporal_stability = to_human_readable(&self.temporal_stability);
-        let bare_metal_fit = to_human_readable(&self.bare_metal_fit);
-        let extractability_level = to_human_readable(&self.extractability_level);
-        let runtime_sovereignty_fit = to_human_readable(&self.runtime_sovereignty_fit);
-        let local_first_fit = to_human_readable(&self.local_first_fit);
-        let adoptability_level = to_human_readable(&self.adoptability_level);
-        let longitudinal_sustainability = to_human_readable(&self.longitudinal_sustainability);
-        let maintenance_burden = to_human_readable(&self.maintenance_burden);
-        let onboarding_friction = to_human_readable(&self.onboarding_friction);
-        let observability_operational = to_human_readable(&self.observability_operational);
-        let recoverability_level = to_human_readable(&self.recoverability_level);
-        let degradation_behavior = to_human_readable(&self.degradation_behavior);
-        let curation_burden = to_human_readable(&self.curation_burden);
-        let evolution_cost = to_human_readable(&self.evolution_cost);
-        let operability_level = to_human_readable(&self.operability_level);
-        let abandonment_risk = to_human_readable(&self.abandonment_risk);
-        let time_to_first_clear_value = to_human_readable(&self.time_to_first_clear_value);
-        let imperfection_tolerance = to_human_readable(&self.imperfection_tolerance);
-        let entropy_risk = to_human_readable(&self.entropy_risk);
-        let design_misuse_risk = to_human_readable(&self.design_misuse_risk);
-        let intrinsic_ethics_risk = to_human_readable(&self.intrinsic_ethics_risk);
-        let discipline_dependency = to_human_readable(&self.discipline_dependency);
-        let regulatory_risk = to_human_readable(&self.regulatory_risk);
+        let classificacao_terminal = to_human_readable(self.classificacao_terminal.as_str());
+        let acao_de_canibalizacao = to_human_readable(self.acao_de_canibalizacao.as_str());
+        let categoria_arquitetural = to_human_readable(self.categoria_arquitetural.as_str());
+        let horizonte_extracao = to_human_readable(self.horizonte_extracao.as_str());
+        let tipo_integracao = to_human_readable(self.tipo_integracao.as_str());
+        let capability_nature_primary = to_human_readable(self.capability_nature_primary.as_str());
+        let architectural_topology = to_human_readable(self.architectural_topology.as_str());
+        let temporal_stability = to_human_readable(self.temporal_stability.as_str());
+        let bare_metal_fit = to_human_readable(self.bare_metal_fit.as_str());
+        let extractability_level = to_human_readable(self.extractability_level.as_str());
+        let runtime_sovereignty_fit = to_human_readable(self.runtime_sovereignty_fit.as_str());
+        let local_first_fit = to_human_readable(self.local_first_fit.as_str());
+        let adoptability_level = to_human_readable(self.adoptability_level.as_str());
+        let longitudinal_sustainability = to_human_readable(self.longitudinal_sustainability.as_str());
+        let maintenance_burden = to_human_readable(self.maintenance_burden.as_str());
+        let onboarding_friction = to_human_readable(self.onboarding_friction.as_str());
+        let observability_operational = to_human_readable(self.observability_operational.as_str());
+        let recoverability_level = to_human_readable(self.recoverability_level.as_str());
+        let degradation_behavior = to_human_readable(self.degradation_behavior.as_str());
+        let curation_burden = to_human_readable(self.curation_burden.as_str());
+        let evolution_cost = to_human_readable(self.evolution_cost.as_str());
+        let operability_level = to_human_readable(self.operability_level.as_str());
+        let abandonment_risk = to_human_readable(self.abandonment_risk.as_str());
+        let time_to_first_clear_value = to_human_readable(self.time_to_first_clear_value.as_str());
+        let imperfection_tolerance = to_human_readable(self.imperfection_tolerance.as_str());
+        let entropy_risk = to_human_readable(self.entropy_risk.as_str());
+        let design_misuse_risk = to_human_readable(self.design_misuse_risk.as_str());
+        let intrinsic_ethics_risk = to_human_readable(self.intrinsic_ethics_risk.as_str());
+        let discipline_dependency = to_human_readable(self.discipline_dependency.as_str());
+        let regulatory_risk = to_human_readable(self.regulatory_risk.as_str());
 
         let data_ultima_analise = format_epoch_utc(self.data_ultima_analise);
         let valid_from = format_epoch_utc(self.valid_from);
@@ -267,6 +603,8 @@ impl MasterSolutionsRow {
         let embargo_status = embargo_label(self.embargo_status).to_string();
 
         Vec::from([
+            serde_json::json!(&self.status_atualizacao),
+            serde_json::json!(&self.status_fase),
             serde_json::json!(pretty_project_name),
             serde_json::json!(&self.repo_url),
             serde_json::json!(&self.repo_version),
@@ -757,146 +1095,40 @@ struct Block2Fields {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block3Fields {
-    classificacao_terminal: String,
-    acao_de_canibalizacao: String,
-    categoria_arquitetural: String,
-    horizonte_extracao: String,
-    tipo_integracao: String,
-    capability_nature_primary: String,
-    architectural_topology: String,
-    temporal_stability: String,
-    bare_metal_fit: String,
-    extractability_level: String,
-    runtime_sovereignty_fit: String,
-    local_first_fit: String,
-    adoptability_level: String,
-    longitudinal_sustainability: String,
-    maintenance_burden: String,
-    onboarding_friction: String,
-    observability_operational: String,
-    recoverability_level: String,
-    degradation_behavior: String,
-    curation_burden: String,
-    evolution_cost: String,
-    operability_level: String,
-    abandonment_risk: String,
-    time_to_first_clear_value: String,
-    imperfection_tolerance: String,
-    entropy_risk: String,
-    design_misuse_risk: String,
-    intrinsic_ethics_risk: String,
-    discipline_dependency: String,
-    regulatory_risk: String,
+    classificacao_terminal: TerminalClassification,
+    acao_de_canibalizacao: CannibalizationAction,
+    categoria_arquitetural: ArchitecturalCategory,
+    horizonte_extracao: TimeHorizon,
+    tipo_integracao: IntegrationType,
+    capability_nature_primary: CapabilityNaturePrimary,
+    architectural_topology: ArchitecturalTopology,
+    temporal_stability: TemporalStability,
+    bare_metal_fit: FitLevel4,
+    extractability_level: FitLevel4,
+    runtime_sovereignty_fit: FitLevel4,
+    local_first_fit: FitLevel4,
+    adoptability_level: Scale5,
+    longitudinal_sustainability: Scale5,
+    maintenance_burden: BurdenLevel,
+    onboarding_friction: BurdenLevel,
+    observability_operational: Scale5,
+    recoverability_level: Scale5,
+    degradation_behavior: DegradationBehavior,
+    curation_burden: BurdenLevel,
+    evolution_cost: BurdenLevel,
+    operability_level: FitLevel4,
+    abandonment_risk: RiskLevel4,
+    time_to_first_clear_value: TimeHorizon,
+    imperfection_tolerance: Scale5,
+    entropy_risk: RiskLevel4,
+    design_misuse_risk: RiskLevel4,
+    intrinsic_ethics_risk: RiskLevel4,
+    discipline_dependency: DisciplineDependency,
+    regulatory_risk: RiskLevel4,
 }
 
 impl Block3Fields {
     fn sanitize(mut self) -> Self {
-        self.classificacao_terminal = normalize_enum_token(&self.classificacao_terminal);
-        self.acao_de_canibalizacao = normalize_enum_token(&self.acao_de_canibalizacao);
-        self.categoria_arquitetural = normalize_enum_token(&self.categoria_arquitetural);
-        self.horizonte_extracao = normalize_enum_token(&self.horizonte_extracao);
-        self.tipo_integracao = normalize_enum_token(&self.tipo_integracao);
-        self.capability_nature_primary = normalize_enum_token(&self.capability_nature_primary);
-        self.architectural_topology = normalize_enum_token(&self.architectural_topology);
-
-        self.temporal_stability = normalize_enum_catalog(
-            &self.temporal_stability,
-            &["STABLE", "EVOLVING"],
-        );
-        self.bare_metal_fit = normalize_enum_catalog(
-            &self.bare_metal_fit,
-            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.extractability_level = normalize_enum_catalog(
-            &self.extractability_level,
-            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.runtime_sovereignty_fit = normalize_enum_catalog(
-            &self.runtime_sovereignty_fit,
-            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.local_first_fit = normalize_enum_catalog(
-            &self.local_first_fit,
-            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-
-        self.adoptability_level = normalize_enum_catalog(
-            &self.adoptability_level,
-            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.longitudinal_sustainability = normalize_enum_catalog(
-            &self.longitudinal_sustainability,
-            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.observability_operational = normalize_enum_catalog(
-            &self.observability_operational,
-            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.recoverability_level = normalize_enum_catalog(
-            &self.recoverability_level,
-            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.operability_level = normalize_enum_catalog(
-            &self.operability_level,
-            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-        self.imperfection_tolerance = normalize_enum_catalog(
-            &self.imperfection_tolerance,
-            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
-        );
-
-        self.maintenance_burden = normalize_enum_catalog(
-            &self.maintenance_burden,
-            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
-        );
-        self.onboarding_friction = normalize_enum_catalog(
-            &self.onboarding_friction,
-            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
-        );
-        self.curation_burden = normalize_enum_catalog(
-            &self.curation_burden,
-            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
-        );
-        self.evolution_cost = normalize_enum_catalog(
-            &self.evolution_cost,
-            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
-        );
-
-        self.degradation_behavior = normalize_enum_catalog(
-            &self.degradation_behavior,
-            &["GRACEFUL", "ACCEPTABLE", "FRAGILE", "CATASTROPHIC"],
-        );
-        self.abandonment_risk = normalize_enum_catalog(
-            &self.abandonment_risk,
-            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-        );
-        self.entropy_risk = normalize_enum_catalog(
-            &self.entropy_risk,
-            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-        );
-        self.design_misuse_risk = normalize_enum_catalog(
-            &self.design_misuse_risk,
-            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-        );
-        self.intrinsic_ethics_risk = normalize_enum_catalog(
-            &self.intrinsic_ethics_risk,
-            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-        );
-        self.regulatory_risk = normalize_enum_catalog(
-            &self.regulatory_risk,
-            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-        );
-
-        self.discipline_dependency = normalize_enum_catalog(
-            &self.discipline_dependency,
-            &["NENHUMA", "BAIXA", "MEDIA", "ALTA", "CRITICA"],
-        );
-
-        self.time_to_first_clear_value = normalize_enum_catalog(
-            &self.time_to_first_clear_value,
-            &["IMMEDIATE", "SHORT", "MEDIUM", "LONG", "VERY_LONG"],
-        );
-
         self
     }
 }
@@ -1134,9 +1366,9 @@ async fn run_block_envelope<T: for<'de> Deserialize<'de> + Send>(
     let attempts = cfg.max_attempts_per_block.max(1);
     for attempt in 1..=attempts {
         if attempt == 1 {
-            info!(block, attempts, "Fase 3: iniciando sub-chamada do bloco");
+            info!(block, attempts, "F3 (Sintetizador SGR): iniciando sub-chamada do bloco");
         } else {
-            warn!(block, attempt, "Fase 3: retry do bloco (injetando erro anterior no prompt)");
+            warn!(block, attempt, "F3 (Sintetizador SGR): retry do bloco (injetando erro anterior no prompt)");
         }
         let prompt = build_prompt(block, block0, row, last_error.as_deref());
         let formatted = client
@@ -1147,7 +1379,7 @@ async fn run_block_envelope<T: for<'de> Deserialize<'de> + Send>(
             Ok(json) => json,
             Err(err) => {
                 last_error = Some(err.to_string());
-                warn!(block, attempt, error = %err, "Fase 3: falha ao extrair code-fence ```json```");
+                warn!(block, attempt, error = %err, "F3 (Sintetizador SGR): falha ao extrair JSON (code-fence ou bruto)");
                 if attempt == attempts {
                     return Err(Phase3Error::RetryExhausted {
                         block,
@@ -1162,12 +1394,12 @@ async fn run_block_envelope<T: for<'de> Deserialize<'de> + Send>(
         let parsed: Result<BlockResponse<T>, _> = serde_json::from_str(&json_text);
         match parsed {
             Ok(envelope) => {
-                info!(block, attempt, "Fase 3: bloco concluído");
+                info!(block, attempt, "F3 (Sintetizador SGR): bloco concluído");
                 return Ok(envelope);
             }
             Err(e) => {
                 last_error = Some(e.to_string());
-                warn!(block, attempt, error = %e, "Fase 3: falha de schema/serde no JSON do bloco");
+                warn!(block, attempt, error = %e, "F3 (Sintetizador SGR): falha de schema/serde no JSON do bloco");
                 if attempt == attempts {
                     return Err(Phase3Error::RetryExhausted {
                         block,
@@ -1198,9 +1430,9 @@ async fn run_block4_validated(
 
     for attempt in 1..=attempts {
         if attempt == 1 {
-            info!(block, attempts, "Fase 3: iniciando sub-chamada do bloco");
+            info!(block, attempts, "F3 (Sintetizador SGR): iniciando sub-chamada do bloco");
         } else {
-            warn!(block, attempt, "Fase 3: retry do bloco (injetando erro anterior no prompt)");
+            warn!(block, attempt, "F3 (Sintetizador SGR): retry do bloco (injetando erro anterior no prompt)");
         }
 
         let prompt = build_prompt(block, block0, row, last_error.as_deref());
@@ -1216,7 +1448,7 @@ async fn run_block4_validated(
                     block,
                     attempt,
                     error = %err,
-                    "Fase 3: falha ao extrair code-fence ```json```"
+                    "F3 (Sintetizador SGR): falha ao extrair JSON (code-fence ou bruto)"
                 );
                 if attempt == attempts {
                     return Err(Phase3Error::RetryExhausted {
@@ -1238,7 +1470,7 @@ async fn run_block4_validated(
                     block,
                     attempt,
                     error = %e,
-                    "Fase 3: falha de schema/serde no JSON do bloco"
+                    "F3 (Sintetizador SGR): falha de schema/serde no JSON do bloco"
                 );
                 if attempt == attempts {
                     return Err(Phase3Error::RetryExhausted {
@@ -1274,7 +1506,7 @@ async fn run_block4_validated(
 
         if let Some(err) = validations.into_iter().find_map(|res| res.err()) {
             last_error = Some(err.to_string());
-            warn!(block, attempt, error = %err, "Fase 3: falha de validação no Bloco 4");
+            warn!(block, attempt, error = %err, "F3 (Sintetizador SGR): falha de validação no Bloco 4");
             if attempt == attempts {
                 return Err(Phase3Error::RetryExhausted {
                     block,
@@ -1285,7 +1517,7 @@ async fn run_block4_validated(
             continue;
         }
 
-        info!(block, attempt, "Fase 3: bloco concluído");
+        info!(block, attempt, "F3 (Sintetizador SGR): bloco concluído");
         return Ok(fields);
     }
 
@@ -1304,7 +1536,7 @@ pub async fn run_phase3_sgr(
     info!(
         repo_id = %block0.project_name,
         model = %cfg.model,
-        "Fase 3: iniciando SGR em cascata (Blocos 1..4)"
+        "F3 (Sintetizador SGR): iniciando SGR em cascata (Blocos 1..4)"
     );
     let mut row = MasterSolutionsRow::from_block0(block0.clone());
 
@@ -1317,7 +1549,7 @@ pub async fn run_phase3_sgr(
     row.risco_principal = block1.risco_principal;
     row.risco_linha_vermelha = block1.risco_linha_vermelha;
     row.observacoes = block1.observacoes;
-    info!("Fase 3: Bloco 1 concluído");
+    info!("F3 (Sintetizador SGR): Bloco 1 concluído");
 
     let block2: Block2Fields = run_block(client, cfg, 2, &block0, &row).await?;
     row.ouro_a_extrair = block2.ouro_a_extrair;
@@ -1333,7 +1565,7 @@ pub async fn run_phase3_sgr(
     row.detected_toxic_deps = normalize_pydantic_list_field(&block2.detected_toxic_deps);
     row.do_not_absorb = normalize_pydantic_list_field(&block2.do_not_absorb);
     row.where_ai_should_not_enter = normalize_pydantic_list_field(&block2.where_ai_should_not_enter);
-    info!("Fase 3: Bloco 2 concluído");
+    info!("F3 (Sintetizador SGR): Bloco 2 concluído");
 
     let block3_env = run_block_envelope::<Block3Fields>(client, cfg, 3, &block0, &row).await?;
     let block3_justifications = block3_env.justifications;
@@ -1368,7 +1600,7 @@ pub async fn run_phase3_sgr(
     row.intrinsic_ethics_risk = block3.intrinsic_ethics_risk;
     row.discipline_dependency = block3.discipline_dependency;
     row.regulatory_risk = block3.regulatory_risk;
-    info!("Fase 3: Bloco 3 concluído");
+    info!("F3 (Sintetizador SGR): Bloco 3 concluído");
 
     let block4: Block4Fields = run_block4_validated(client, cfg, &block0, &row).await?;
 
@@ -1381,7 +1613,7 @@ pub async fn run_phase3_sgr(
     row.score_model_logic_value = block4.score_model_logic_value;
     row.score_ethics_safety = block4.score_ethics_safety;
     row.score_intrinsic_risk = block4.score_intrinsic_risk;
-    info!("Fase 3: Bloco 4 concluído");
+    info!("F3 (Sintetizador SGR): Bloco 4 concluído");
 
     Ok(Phase3Output {
         model_used: cfg.model.clone(),
@@ -1391,9 +1623,12 @@ pub async fn run_phase3_sgr(
 }
 
 pub fn extract_json_fence(text: &str) -> Result<String, Phase3Error> {
-    let start = text
-        .find("```json")
-        .ok_or_else(|| Phase3Error::JsonFenceParse("missing ```json fence".to_string()))?;
+    let Some(start) = text.find("```json") else {
+        if let Some(salvaged) = salvage_balanced_json(text) {
+            return Ok(salvaged);
+        }
+        return Err(Phase3Error::JsonFenceParse("missing ```json fence".to_string()));
+    };
     let after = &text[start + "```json".len()..];
     let after = after
         .strip_prefix("\r\n")
@@ -1455,7 +1690,7 @@ fn salvage_balanced_json(text: &str) -> Option<String> {
 }
 
 pub fn sheet_range_for_row(row_number_1based: u32) -> String {
-    format!("A{}:CD{}", row_number_1based, row_number_1based)
+    format!("A{}:CF{}", row_number_1based, row_number_1based)
 }
 
 pub fn build_batch_update_payload(
@@ -1527,7 +1762,7 @@ pub fn apply_phase4_block5(now_epoch: i64, row: &mut MasterSolutionsRow) {
     row.score_sustainability_adjusted_fit = round_1(clamp_0_10(sustainability_adjusted_fit));
 
     row.valid_from = now_epoch;
-    let stable = row.temporal_stability.trim().eq_ignore_ascii_case("STABLE");
+    let stable = matches!(row.temporal_stability, TemporalStability::Stable);
     row.valid_to = if stable {
         None
     } else {
@@ -1590,6 +1825,8 @@ mod tests {
 
     fn block0() -> Block0Context {
         Block0Context {
+            status_atualizacao: "PENDENTE".to_string(),
+            status_fase: "F3".to_string(),
             project_name: "owner/repo".to_string(),
             repo_url: "https://github.com/owner/repo".to_string(),
             repo_version: "v1.0.0".to_string(),
@@ -1613,6 +1850,13 @@ mod tests {
         assert_eq!(extracted, "{\"ok\":true}");
     }
 
+    #[test]
+    fn extracts_raw_json_when_no_code_fence_is_present() {
+        let text = "{\"ok\":true}";
+        let extracted = extract_json_fence(text).unwrap();
+        assert_eq!(extracted, "{\"ok\":true}");
+    }
+
     #[tokio::test]
     async fn retries_up_to_three_injecting_error() {
         let responses = vec![
@@ -1620,7 +1864,7 @@ mod tests {
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"x\"}, \"justifications\": {}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"r\",\"declared_description_ptbr\":\"Descricao\",\"visao_do_enxame\":\"v\",\"justificativa_decisao\":\"j\",\"executive_verdict\":\"t\",\"risco_principal\":\"rp\",\"risco_linha_vermelha\":\"rlv\",\"observacoes\":\"o\"}, \"justifications\": {\"proposta_original_resumo\":\"k\"}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"ouro_a_extrair\": \"1\",\"deep_pattern\":\"2\",\"transplantable_core\":\"3\",\"logic_math_heuristic\":\"4\",\"real_structural_problem\":\"5\",\"categoria_nuance_tecnica\":\"6\",\"integracao_papel_exato\":\"7\",\"must_components_prod_ux\":\"8\",\"must_components_arq\":\"9\",\"must_components_ops\":\"10\",\"detected_toxic_deps\":\"11\",\"do_not_absorb\":\"12\",\"where_ai_should_not_enter\":\"13\"}, \"justifications\": {\"ouro_a_extrair\":\"k\"}}\n```".to_string()),
-            Ok("```json\n{\"fields\": {\"classificacao_terminal\": \"ct\",\"acao_de_canibalizacao\":\"ac\",\"categoria_arquitetural\":\"ca\",\"horizonte_extracao\":\"he\",\"tipo_integracao\":\"ti\",\"capability_nature_primary\":\"cnp\",\"architectural_topology\":\"at\",\"temporal_stability\":\"ts\",\"bare_metal_fit\":\"bm\",\"extractability_level\":\"el\",\"runtime_sovereignty_fit\":\"rs\",\"local_first_fit\":\"lf\",\"adoptability_level\":\"ad\",\"longitudinal_sustainability\":\"ls\",\"maintenance_burden\":\"mb\",\"onboarding_friction\":\"of\",\"observability_operational\":\"oo\",\"recoverability_level\":\"rl\",\"degradation_behavior\":\"db\",\"curation_burden\":\"cb\",\"evolution_cost\":\"ec\",\"operability_level\":\"op\",\"abandonment_risk\":\"ar\",\"time_to_first_clear_value\":\"tt\",\"imperfection_tolerance\":\"it\",\"entropy_risk\":\"er\",\"design_misuse_risk\":\"dm\",\"intrinsic_ethics_risk\":\"ie\",\"discipline_dependency\":\"dd\",\"regulatory_risk\":\"rr\"}, \"justifications\": {\"classificacao_terminal\":\"k\"}}\n```".to_string()),
+            Ok("```json\n{\"fields\": {\"classificacao_terminal\": \"APROVADO_PARA_PRODUCAO\",\"acao_de_canibalizacao\":\"NENHUMA\",\"categoria_arquitetural\":\"LIBRARY\",\"horizonte_extracao\":\"SHORT\",\"tipo_integracao\":\"INTEGRATE_AS_COMPONENT\",\"capability_nature_primary\":\"LIBRARY\",\"architectural_topology\":\"MODULAR\",\"temporal_stability\":\"STABLE\",\"bare_metal_fit\":\"HIGH\",\"extractability_level\":\"HIGH\",\"runtime_sovereignty_fit\":\"HIGH\",\"local_first_fit\":\"HIGH\",\"adoptability_level\":\"HIGH\",\"longitudinal_sustainability\":\"HIGH\",\"maintenance_burden\":\"LOW\",\"onboarding_friction\":\"LOW\",\"observability_operational\":\"HIGH\",\"recoverability_level\":\"HIGH\",\"degradation_behavior\":\"GRACEFUL\",\"curation_burden\":\"LOW\",\"evolution_cost\":\"LOW\",\"operability_level\":\"HIGH\",\"abandonment_risk\":\"LOW\",\"time_to_first_clear_value\":\"SHORT\",\"imperfection_tolerance\":\"HIGH\",\"entropy_risk\":\"LOW\",\"design_misuse_risk\":\"LOW\",\"intrinsic_ethics_risk\":\"LOW\",\"discipline_dependency\":\"NENHUMA\",\"regulatory_risk\":\"LOW\"}, \"justifications\": {\"classificacao_terminal\":\"k\"}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"score_philosophical_fit\": 1,\"score_bare_metal_fit\":2,\"score_architectural_extractability\":3,\"score_operability\":4,\"score_creep_risk\":5,\"score_runtime_sovereignty\":6,\"score_model_logic_value\":7,\"score_ethics_safety\":8,\"score_intrinsic_risk\":9}, \"justifications\": {\"score_philosophical_fit\":\"k\"}}\n```".to_string()),
         ];
         let client = MockFormatterClient::new(responses);
@@ -1638,20 +1882,20 @@ mod tests {
     }
 
     #[test]
-    fn batch_payload_maps_a_to_cd_and_82_columns() {
+    fn batch_payload_maps_a_to_cf_and_84_columns() {
         let row = MasterSolutionsRow::from_block0(block0());
         let payload = build_batch_update_payload(2, &row);
         let range = sheet_range_for_row(2);
         let rows = payload.get(&range).unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].len(), 82);
-        assert_eq!(rows[0][0], serde_json::json!("owner / repo"));
+        assert_eq!(rows[0].len(), 84);
+        assert_eq!(rows[0][2], serde_json::json!("owner / repo"));
     }
 
     #[test]
     fn phase4_populates_block5_locally() {
         let mut row = MasterSolutionsRow::from_block0(block0());
-        row.temporal_stability = "EVOLVING".to_string();
+        row.temporal_stability = TemporalStability::Evolving;
         row.score_philosophical_fit = 8;
         row.score_bare_metal_fit = 9;
         row.score_architectural_extractability = 10;
@@ -1687,6 +1931,8 @@ mod tests {
     #[test]
     fn sheet_row_exports_floats_as_dot_strings_and_valid_to_as_empty() {
         let mut row = MasterSolutionsRow::default();
+        row.status_atualizacao = "CONCLUIDO".to_string();
+        row.status_fase = "F4".to_string();
         row.project_name = "owner/repo".to_string();
         row.score_final = 1.2;
         row.score_fit_geral_soda = 2.3;
@@ -1699,16 +1945,16 @@ mod tests {
         row.valid_to = None;
         row.embargo_status = 0;
         let arr = row.to_sheet_row();
-        assert_eq!(arr.len(), 82);
-        assert_eq!(arr[72], serde_json::json!("1.2"));
-        assert_eq!(arr[73], serde_json::json!("2.3"));
-        assert_eq!(arr[74], serde_json::json!("3.4"));
-        assert_eq!(arr[75], serde_json::json!("4.5"));
-        assert_eq!(arr[76], serde_json::json!("5.6"));
-        assert_eq!(arr[77], serde_json::json!("6.7"));
-        assert_eq!(arr[78], serde_json::json!("7.8"));
-        assert_eq!(arr[79], serde_json::json!(format_epoch_utc(1_700_000_000)));
-        assert_eq!(arr[80], serde_json::json!(""));
-        assert_eq!(arr[81], serde_json::json!("LIVRE"));
+        assert_eq!(arr.len(), 84);
+        assert_eq!(arr[74], serde_json::json!("1.2"));
+        assert_eq!(arr[75], serde_json::json!("2.3"));
+        assert_eq!(arr[76], serde_json::json!("3.4"));
+        assert_eq!(arr[77], serde_json::json!("4.5"));
+        assert_eq!(arr[78], serde_json::json!("5.6"));
+        assert_eq!(arr[79], serde_json::json!("6.7"));
+        assert_eq!(arr[80], serde_json::json!("7.8"));
+        assert_eq!(arr[81], serde_json::json!(format_epoch_utc(1_700_000_000)));
+        assert_eq!(arr[82], serde_json::json!(""));
+        assert_eq!(arr[83], serde_json::json!("LIVRE"));
     }
 }
