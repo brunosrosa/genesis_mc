@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
@@ -37,6 +38,7 @@ pub struct MasterSolutionsRow {
     pub licenca: String,
     pub stack_base: String,
     pub declared_description: String,
+    pub declared_description_ptbr: String,
     pub lente_a_sentido_prod_ux: String,
     pub lente_b_estrutura_arq: String,
     pub lente_c_realidade_ops: String,
@@ -124,6 +126,7 @@ impl Default for MasterSolutionsRow {
             licenca: String::new(),
             stack_base: String::new(),
             declared_description: String::new(),
+            declared_description_ptbr: String::new(),
             lente_a_sentido_prod_ux: String::new(),
             lente_b_estrutura_arq: String::new(),
             lente_c_realidade_ops: String::new(),
@@ -220,17 +223,60 @@ impl MasterSolutionsRow {
     }
 
     pub fn to_sheet_row(&self) -> Vec<serde_json::Value> {
-        vec![
-            serde_json::json!(&self.project_name),
+        let pretty_project_name = self.project_name.replace("/", " / ");
+        let declared_description = if self.declared_description_ptbr.trim().is_empty() {
+            self.declared_description.clone()
+        } else {
+            self.declared_description_ptbr.clone()
+        };
+
+        let classificacao_terminal = to_human_readable(&self.classificacao_terminal);
+        let acao_de_canibalizacao = to_human_readable(&self.acao_de_canibalizacao);
+        let categoria_arquitetural = to_human_readable(&self.categoria_arquitetural);
+        let horizonte_extracao = to_human_readable(&self.horizonte_extracao);
+        let tipo_integracao = to_human_readable(&self.tipo_integracao);
+        let capability_nature_primary = to_human_readable(&self.capability_nature_primary);
+        let architectural_topology = to_human_readable(&self.architectural_topology);
+        let temporal_stability = to_human_readable(&self.temporal_stability);
+        let bare_metal_fit = to_human_readable(&self.bare_metal_fit);
+        let extractability_level = to_human_readable(&self.extractability_level);
+        let runtime_sovereignty_fit = to_human_readable(&self.runtime_sovereignty_fit);
+        let local_first_fit = to_human_readable(&self.local_first_fit);
+        let adoptability_level = to_human_readable(&self.adoptability_level);
+        let longitudinal_sustainability = to_human_readable(&self.longitudinal_sustainability);
+        let maintenance_burden = to_human_readable(&self.maintenance_burden);
+        let onboarding_friction = to_human_readable(&self.onboarding_friction);
+        let observability_operational = to_human_readable(&self.observability_operational);
+        let recoverability_level = to_human_readable(&self.recoverability_level);
+        let degradation_behavior = to_human_readable(&self.degradation_behavior);
+        let curation_burden = to_human_readable(&self.curation_burden);
+        let evolution_cost = to_human_readable(&self.evolution_cost);
+        let operability_level = to_human_readable(&self.operability_level);
+        let abandonment_risk = to_human_readable(&self.abandonment_risk);
+        let time_to_first_clear_value = to_human_readable(&self.time_to_first_clear_value);
+        let imperfection_tolerance = to_human_readable(&self.imperfection_tolerance);
+        let entropy_risk = to_human_readable(&self.entropy_risk);
+        let design_misuse_risk = to_human_readable(&self.design_misuse_risk);
+        let intrinsic_ethics_risk = to_human_readable(&self.intrinsic_ethics_risk);
+        let discipline_dependency = to_human_readable(&self.discipline_dependency);
+        let regulatory_risk = to_human_readable(&self.regulatory_risk);
+
+        let data_ultima_analise = format_epoch_utc(self.data_ultima_analise);
+        let valid_from = format_epoch_utc(self.valid_from);
+        let valid_to = self.valid_to.map(format_epoch_utc).unwrap_or_default();
+        let embargo_status = embargo_label(self.embargo_status).to_string();
+
+        Vec::from([
+            serde_json::json!(pretty_project_name),
             serde_json::json!(&self.repo_url),
             serde_json::json!(&self.repo_version),
             serde_json::json!(&self.ultima_versao_online),
             serde_json::json!(&self.lote_id),
-            serde_json::json!(&self.data_ultima_analise),
+            serde_json::json!(data_ultima_analise),
             serde_json::json!(&self.analise_origem),
             serde_json::json!(&self.licenca),
             serde_json::json!(&self.stack_base),
-            serde_json::json!(&self.declared_description),
+            serde_json::json!(declared_description),
             serde_json::json!(&self.lente_a_sentido_prod_ux),
             serde_json::json!(&self.lente_b_estrutura_arq),
             serde_json::json!(&self.lente_c_realidade_ops),
@@ -254,36 +300,36 @@ impl MasterSolutionsRow {
             serde_json::json!(&self.detected_toxic_deps),
             serde_json::json!(&self.do_not_absorb),
             serde_json::json!(&self.where_ai_should_not_enter),
-            serde_json::json!(&self.classificacao_terminal),
-            serde_json::json!(&self.acao_de_canibalizacao),
-            serde_json::json!(&self.categoria_arquitetural),
-            serde_json::json!(&self.horizonte_extracao),
-            serde_json::json!(&self.tipo_integracao),
-            serde_json::json!(&self.capability_nature_primary),
-            serde_json::json!(&self.architectural_topology),
-            serde_json::json!(&self.temporal_stability),
-            serde_json::json!(&self.bare_metal_fit),
-            serde_json::json!(&self.extractability_level),
-            serde_json::json!(&self.runtime_sovereignty_fit),
-            serde_json::json!(&self.local_first_fit),
-            serde_json::json!(&self.adoptability_level),
-            serde_json::json!(&self.longitudinal_sustainability),
-            serde_json::json!(&self.maintenance_burden),
-            serde_json::json!(&self.onboarding_friction),
-            serde_json::json!(&self.observability_operational),
-            serde_json::json!(&self.recoverability_level),
-            serde_json::json!(&self.degradation_behavior),
-            serde_json::json!(&self.curation_burden),
-            serde_json::json!(&self.evolution_cost),
-            serde_json::json!(&self.operability_level),
-            serde_json::json!(&self.abandonment_risk),
-            serde_json::json!(&self.time_to_first_clear_value),
-            serde_json::json!(&self.imperfection_tolerance),
-            serde_json::json!(&self.entropy_risk),
-            serde_json::json!(&self.design_misuse_risk),
-            serde_json::json!(&self.intrinsic_ethics_risk),
-            serde_json::json!(&self.discipline_dependency),
-            serde_json::json!(&self.regulatory_risk),
+            serde_json::json!(classificacao_terminal),
+            serde_json::json!(acao_de_canibalizacao),
+            serde_json::json!(categoria_arquitetural),
+            serde_json::json!(horizonte_extracao),
+            serde_json::json!(tipo_integracao),
+            serde_json::json!(capability_nature_primary),
+            serde_json::json!(architectural_topology),
+            serde_json::json!(temporal_stability),
+            serde_json::json!(bare_metal_fit),
+            serde_json::json!(extractability_level),
+            serde_json::json!(runtime_sovereignty_fit),
+            serde_json::json!(local_first_fit),
+            serde_json::json!(adoptability_level),
+            serde_json::json!(longitudinal_sustainability),
+            serde_json::json!(maintenance_burden),
+            serde_json::json!(onboarding_friction),
+            serde_json::json!(observability_operational),
+            serde_json::json!(recoverability_level),
+            serde_json::json!(degradation_behavior),
+            serde_json::json!(curation_burden),
+            serde_json::json!(evolution_cost),
+            serde_json::json!(operability_level),
+            serde_json::json!(abandonment_risk),
+            serde_json::json!(time_to_first_clear_value),
+            serde_json::json!(imperfection_tolerance),
+            serde_json::json!(entropy_risk),
+            serde_json::json!(design_misuse_risk),
+            serde_json::json!(intrinsic_ethics_risk),
+            serde_json::json!(discipline_dependency),
+            serde_json::json!(regulatory_risk),
             serde_json::json!(&self.score_philosophical_fit),
             serde_json::json!(&self.score_bare_metal_fit),
             serde_json::json!(&self.score_architectural_extractability),
@@ -300,19 +346,172 @@ impl MasterSolutionsRow {
             serde_json::json!(format_float_1(self.score_absorption_readiness)),
             serde_json::json!(format_float_1(self.score_operational_priority)),
             serde_json::json!(format_float_1(self.score_sustainability_adjusted_fit)),
-            serde_json::json!(&self.valid_from),
-            match self.valid_to {
-                Some(value) => serde_json::json!(value),
-                None => serde_json::json!(""),
-            },
-            serde_json::json!(&self.embargo_status),
-        ]
+            serde_json::json!(valid_from),
+            serde_json::json!(valid_to),
+            serde_json::json!(embargo_status),
+        ])
     }
 }
 
 fn format_float_1(value: f64) -> String {
     let raw = format!("{:.1}", value);
     raw.replace(',', ".")
+}
+
+fn normalize_enum_token(raw: &str) -> String {
+    normalize_enum_value(raw)
+}
+
+fn normalize_enum_catalog(raw: &str, allowed: &[&str]) -> String {
+    let token = normalize_enum_value(raw);
+    if token.is_empty() {
+        return token;
+    }
+    for option in allowed {
+        if token == *option {
+            return (*option).to_string();
+        }
+        let prefix = format!("{}_", option);
+        if token.starts_with(&prefix) {
+            return (*option).to_string();
+        }
+    }
+    token
+}
+
+fn normalize_enum_value(raw: &str) -> String {
+    let line = raw.lines().next().unwrap_or("").trim();
+    if line.is_empty() {
+        return String::new();
+    }
+    let mut out = String::with_capacity(line.len());
+    for ch in line.chars() {
+        let ch = match ch {
+            '"' | '\'' | '`' => continue,
+            '-' | '—' | '–' => '_',
+            c if c.is_ascii_alphanumeric() || c == '_' => c,
+            c if c.is_whitespace() => '_',
+            _ => '_',
+        };
+        out.push(ch);
+    }
+    let mut compact = String::with_capacity(out.len());
+    let mut last_underscore = false;
+    for ch in out.chars() {
+        if ch == '_' {
+            if last_underscore {
+                continue;
+            }
+            last_underscore = true;
+            compact.push('_');
+            continue;
+        }
+        last_underscore = false;
+        compact.push(ch);
+    }
+    compact.trim_matches('_').to_ascii_uppercase()
+}
+
+fn to_human_readable(enum_str: &str) -> String {
+    let token = normalize_enum_value(enum_str);
+    if token.is_empty() {
+        return String::new();
+    }
+    match token.as_str() {
+        "LOW" => "Baixo".to_string(),
+        "MEDIUM" => "Médio".to_string(),
+        "HIGH" => "Alto".to_string(),
+        "EXCELLENT" => "Excelente".to_string(),
+        "VERY_LOW" => "Muito Baixo".to_string(),
+        "VERY_HIGH" => "Muito Alto".to_string(),
+        "CRITICAL" => "Crítico".to_string(),
+        "NENHUMA" => "Nenhuma".to_string(),
+        "BAIXA" => "Baixa".to_string(),
+        "MEDIA" => "Média".to_string(),
+        "ALTA" => "Alta".to_string(),
+        "CRITICA" => "Crítica".to_string(),
+        "STABLE" => "Estável".to_string(),
+        "EVOLVING" => "Evolutivo".to_string(),
+        "GRACEFUL" => "Suave".to_string(),
+        "ACCEPTABLE" => "Aceitável".to_string(),
+        "FRAGILE" => "Frágil".to_string(),
+        "CATASTROPHIC" => "Catastrófico".to_string(),
+        "IMMEDIATE" => "Imediato".to_string(),
+        "SHORT" => "Curto".to_string(),
+        "LONG" => "Longo".to_string(),
+        "VERY_LONG" => "Muito Longo".to_string(),
+        "INTEGRATE_AS_COMPONENT" => "Integração como Componente".to_string(),
+        "REIMPLEMENT_INTERNALLY" => "Reimplementação Interna".to_string(),
+        "REJECT" => "Rejeitar".to_string(),
+        _ => humanize_token_title(&token),
+    }
+}
+
+fn humanize_token_title(token: &str) -> String {
+    let parts = token
+        .split('_')
+        .filter(|p| !p.trim().is_empty())
+        .collect::<Vec<_>>();
+    if parts.is_empty() {
+        return String::new();
+    }
+    let mut out = Vec::new();
+    for part in parts {
+        out.push(humanize_word(part));
+    }
+    out.join(" ")
+}
+
+fn humanize_word(word: &str) -> String {
+    let mapped = match word {
+        "CANIBALIZACAO" => "Canibalização",
+        "CIRURGICA" => "Cirúrgica",
+        "INTEGRACAO" => "Integração",
+        "COMPONENTE" => "Componente",
+        "EFEMERO" => "Efêmero",
+        "ORQUESTRACAO" => "Orquestração",
+        "MEMORIA" => "Memória",
+        "ARQUITETURA" => "Arquitetura",
+        "OPERACAO" => "Operação",
+        "SOBERANIA" => "Soberania",
+        "LOGICA" => "Lógica",
+        "REIMPLEMENTACAO" => "Reimplementação",
+        "NATIVA" => "Nativa",
+        "CRATE" => "Crate",
+        "RISCO" => "Risco",
+        "HUMANO" => "Humano",
+        "PRODUTO" => "Produto",
+        "CURTO" => "Curto",
+        "LONGO" => "Longo",
+        _ => "",
+    };
+    if !mapped.is_empty() {
+        return mapped.to_string();
+    }
+
+    let lower = word.to_ascii_lowercase();
+    let mut chars = lower.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    let mut s = String::new();
+    s.push(first.to_ascii_uppercase());
+    s.extend(chars);
+    s
+}
+
+fn format_epoch_utc(epoch: i64) -> String {
+    if epoch <= 0 {
+        return String::new();
+    }
+    let Some(dt) = DateTime::<Utc>::from_timestamp(epoch, 0) else {
+        return String::new();
+    };
+    dt.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+fn embargo_label(value: i64) -> &'static str {
+    if value == 1 { "EMBARGADO" } else { "LIVRE" }
 }
 
 fn format_bullets(lines: &[String]) -> String {
@@ -498,6 +697,7 @@ pub trait FormatterClient: Send + Sync {
 pub struct Phase3Output {
     pub model_used: String,
     pub row: MasterSolutionsRow,
+    pub block3_justifications: HashMap<String, String>,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -527,6 +727,7 @@ struct BlockResponse<T> {
 #[serde(deny_unknown_fields)]
 struct Block1Fields {
     proposta_original_resumo: String,
+    declared_description_ptbr: String,
     visao_do_enxame: String,
     justificativa_decisao: String,
     executive_verdict: String,
@@ -588,6 +789,118 @@ struct Block3Fields {
     regulatory_risk: String,
 }
 
+impl Block3Fields {
+    fn sanitize(mut self) -> Self {
+        self.classificacao_terminal = normalize_enum_token(&self.classificacao_terminal);
+        self.acao_de_canibalizacao = normalize_enum_token(&self.acao_de_canibalizacao);
+        self.categoria_arquitetural = normalize_enum_token(&self.categoria_arquitetural);
+        self.horizonte_extracao = normalize_enum_token(&self.horizonte_extracao);
+        self.tipo_integracao = normalize_enum_token(&self.tipo_integracao);
+        self.capability_nature_primary = normalize_enum_token(&self.capability_nature_primary);
+        self.architectural_topology = normalize_enum_token(&self.architectural_topology);
+
+        self.temporal_stability = normalize_enum_catalog(
+            &self.temporal_stability,
+            &["STABLE", "EVOLVING"],
+        );
+        self.bare_metal_fit = normalize_enum_catalog(
+            &self.bare_metal_fit,
+            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.extractability_level = normalize_enum_catalog(
+            &self.extractability_level,
+            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.runtime_sovereignty_fit = normalize_enum_catalog(
+            &self.runtime_sovereignty_fit,
+            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.local_first_fit = normalize_enum_catalog(
+            &self.local_first_fit,
+            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+
+        self.adoptability_level = normalize_enum_catalog(
+            &self.adoptability_level,
+            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.longitudinal_sustainability = normalize_enum_catalog(
+            &self.longitudinal_sustainability,
+            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.observability_operational = normalize_enum_catalog(
+            &self.observability_operational,
+            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.recoverability_level = normalize_enum_catalog(
+            &self.recoverability_level,
+            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.operability_level = normalize_enum_catalog(
+            &self.operability_level,
+            &["LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+        self.imperfection_tolerance = normalize_enum_catalog(
+            &self.imperfection_tolerance,
+            &["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"],
+        );
+
+        self.maintenance_burden = normalize_enum_catalog(
+            &self.maintenance_burden,
+            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
+        );
+        self.onboarding_friction = normalize_enum_catalog(
+            &self.onboarding_friction,
+            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
+        );
+        self.curation_burden = normalize_enum_catalog(
+            &self.curation_burden,
+            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
+        );
+        self.evolution_cost = normalize_enum_catalog(
+            &self.evolution_cost,
+            &["LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
+        );
+
+        self.degradation_behavior = normalize_enum_catalog(
+            &self.degradation_behavior,
+            &["GRACEFUL", "ACCEPTABLE", "FRAGILE", "CATASTROPHIC"],
+        );
+        self.abandonment_risk = normalize_enum_catalog(
+            &self.abandonment_risk,
+            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        );
+        self.entropy_risk = normalize_enum_catalog(
+            &self.entropy_risk,
+            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        );
+        self.design_misuse_risk = normalize_enum_catalog(
+            &self.design_misuse_risk,
+            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        );
+        self.intrinsic_ethics_risk = normalize_enum_catalog(
+            &self.intrinsic_ethics_risk,
+            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        );
+        self.regulatory_risk = normalize_enum_catalog(
+            &self.regulatory_risk,
+            &["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        );
+
+        self.discipline_dependency = normalize_enum_catalog(
+            &self.discipline_dependency,
+            &["NENHUMA", "BAIXA", "MEDIA", "ALTA", "CRITICA"],
+        );
+
+        self.time_to_first_clear_value = normalize_enum_catalog(
+            &self.time_to_first_clear_value,
+            &["IMMEDIATE", "SHORT", "MEDIUM", "LONG", "VERY_LONG"],
+        );
+
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block4Fields {
@@ -627,13 +940,16 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
     match block {
         1 => {
             prompt.push_str("LIMITS_BLOCK1: cada valor string em fields deve ter no máximo 600 caracteres.\n");
+            prompt.push_str("TRANSLATE_BLOCK1: gere declared_description_ptbr como tradução fiel para PT-BR de project.declared_description. Comece com letra maiúscula. Não adicione comentários sobre tradução.\n");
         }
         2 => {
-            prompt.push_str("LIMITS_BLOCK2: cada valor string em fields deve ter no máximo 400 caracteres. Use ';' para listas.\n");
+            prompt.push_str("LIMITS_BLOCK2: cada valor string em fields deve ter no máximo 400 caracteres. Para listas, escreva em bullets (ex: \"- item\\n- item\").\n");
         }
         3 => {
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
-            prompt.push_str("CONVENTIONS_BLOCK3: para campos de nivel/custo/risco/burden/friction, prefira rótulos curtos (ex: LOW|MEDIUM|HIGH) em vez de texto longo.\n");
+            prompt.push_str("MODO_ROBOTICO_ENUMS_BLOCK3: para TODOS os campos ENUM do Bloco 3, fields deve conter APENAS o valor do catálogo (1 token). Qualquer explicação deve ir EXCLUSIVAMENTE em justifications[mesma_chave].\n");
+            prompt.push_str("PROIBIDO: hífens, ':' , parênteses, frases, ou duas opções no mesmo campo.\n");
+            prompt.push_str(enum_catalog_block3());
         }
         _ => {}
     }
@@ -652,12 +968,44 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
 
 fn fields_keys_for_block(block: u8) -> &'static str {
     match block {
-        1 => r#"["proposta_original_resumo","visao_do_enxame","justificativa_decisao","executive_verdict","risco_principal","risco_linha_vermelha","observacoes"]"#,
+        1 => r#"["proposta_original_resumo","declared_description_ptbr","visao_do_enxame","justificativa_decisao","executive_verdict","risco_principal","risco_linha_vermelha","observacoes"]"#,
         2 => r#"["ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#,
         3 => r#"["classificacao_terminal","acao_de_canibalizacao","categoria_arquitetural","horizonte_extracao","tipo_integracao","capability_nature_primary","architectural_topology","temporal_stability","bare_metal_fit","extractability_level","runtime_sovereignty_fit","local_first_fit","adoptability_level","longitudinal_sustainability","maintenance_burden","onboarding_friction","observability_operational","recoverability_level","degradation_behavior","curation_burden","evolution_cost","operability_level","abandonment_risk","time_to_first_clear_value","imperfection_tolerance","entropy_risk","design_misuse_risk","intrinsic_ethics_risk","discipline_dependency","regulatory_risk"]"#,
         4 => r#"["score_philosophical_fit","score_bare_metal_fit","score_architectural_extractability","score_operability","score_creep_risk","score_runtime_sovereignty","score_model_logic_value","score_ethics_safety","score_intrinsic_risk"]"#,
         _ => r#"[]"#,
     }
+}
+
+fn enum_catalog_block3() -> &'static str {
+    "CATALOGO_ENUMS_BLOCK3:\n\
+temporal_stability: STABLE|EVOLVING\n\
+bare_metal_fit: LOW|MEDIUM|HIGH|EXCELLENT\n\
+extractability_level: LOW|MEDIUM|HIGH|EXCELLENT\n\
+operability_level: LOW|MEDIUM|HIGH|EXCELLENT\n\
+runtime_sovereignty_fit: LOW|MEDIUM|HIGH|EXCELLENT\n\
+local_first_fit: LOW|MEDIUM|HIGH|EXCELLENT\n\
+\n\
+entropy_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
+design_misuse_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
+intrinsic_ethics_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
+regulatory_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
+abandonment_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
+\n\
+discipline_dependency: NENHUMA|BAIXA|MEDIA|ALTA|CRITICA\n\
+degradation_behavior: GRACEFUL|ACCEPTABLE|FRAGILE|CATASTROPHIC\n\
+\n\
+adoptability_level: VERY_LOW|LOW|MEDIUM|HIGH|EXCELLENT\n\
+longitudinal_sustainability: VERY_LOW|LOW|MEDIUM|HIGH|EXCELLENT\n\
+observability_operational: VERY_LOW|LOW|MEDIUM|HIGH|EXCELLENT\n\
+recoverability_level: VERY_LOW|LOW|MEDIUM|HIGH|EXCELLENT\n\
+imperfection_tolerance: VERY_LOW|LOW|MEDIUM|HIGH|EXCELLENT\n\
+\n\
+maintenance_burden: LOW|MEDIUM|HIGH|VERY_HIGH\n\
+onboarding_friction: LOW|MEDIUM|HIGH|VERY_HIGH\n\
+curation_burden: LOW|MEDIUM|HIGH|VERY_HIGH\n\
+evolution_cost: LOW|MEDIUM|HIGH|VERY_HIGH\n\
+\n\
+time_to_first_clear_value: IMMEDIATE|SHORT|MEDIUM|LONG|VERY_LONG\n\n"
 }
 
 fn compact_context_for_block(
@@ -772,6 +1120,16 @@ async fn run_block<T: for<'de> Deserialize<'de> + Send>(
     block0: &Block0Context,
     row: &MasterSolutionsRow,
 ) -> Result<T, Phase3Error> {
+    Ok(run_block_envelope::<T>(client, cfg, block, block0, row).await?.fields)
+}
+
+async fn run_block_envelope<T: for<'de> Deserialize<'de> + Send>(
+    client: &dyn FormatterClient,
+    cfg: &Phase3Config,
+    block: u8,
+    block0: &Block0Context,
+    row: &MasterSolutionsRow,
+) -> Result<BlockResponse<T>, Phase3Error> {
     let mut last_error: Option<String> = None;
     let attempts = cfg.max_attempts_per_block.max(1);
     for attempt in 1..=attempts {
@@ -805,7 +1163,7 @@ async fn run_block<T: for<'de> Deserialize<'de> + Send>(
         match parsed {
             Ok(envelope) => {
                 info!(block, attempt, "Fase 3: bloco concluído");
-                return Ok(envelope.fields);
+                return Ok(envelope);
             }
             Err(e) => {
                 last_error = Some(e.to_string());
@@ -952,6 +1310,7 @@ pub async fn run_phase3_sgr(
 
     let block1: Block1Fields = run_block(client, cfg, 1, &block0, &row).await?;
     row.proposta_original_resumo = block1.proposta_original_resumo;
+    row.declared_description_ptbr = block1.declared_description_ptbr;
     row.visao_do_enxame = block1.visao_do_enxame;
     row.justificativa_decisao = block1.justificativa_decisao;
     row.executive_verdict = block1.executive_verdict;
@@ -976,7 +1335,9 @@ pub async fn run_phase3_sgr(
     row.where_ai_should_not_enter = normalize_pydantic_list_field(&block2.where_ai_should_not_enter);
     info!("Fase 3: Bloco 2 concluído");
 
-    let block3: Block3Fields = run_block(client, cfg, 3, &block0, &row).await?;
+    let block3_env = run_block_envelope::<Block3Fields>(client, cfg, 3, &block0, &row).await?;
+    let block3_justifications = block3_env.justifications;
+    let block3 = block3_env.fields.sanitize();
     row.classificacao_terminal = block3.classificacao_terminal;
     row.acao_de_canibalizacao = block3.acao_de_canibalizacao;
     row.categoria_arquitetural = block3.categoria_arquitetural;
@@ -1025,6 +1386,7 @@ pub async fn run_phase3_sgr(
     Ok(Phase3Output {
         model_used: cfg.model.clone(),
         row,
+        block3_justifications,
     })
 }
 
@@ -1256,7 +1618,7 @@ mod tests {
         let responses = vec![
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"x\"}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"x\"}, \"justifications\": {}}\n```".to_string()),
-            Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"r\",\"visao_do_enxame\":\"v\",\"justificativa_decisao\":\"j\",\"executive_verdict\":\"t\",\"risco_principal\":\"rp\",\"risco_linha_vermelha\":\"rlv\",\"observacoes\":\"o\"}, \"justifications\": {\"proposta_original_resumo\":\"k\"}}\n```".to_string()),
+            Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"r\",\"declared_description_ptbr\":\"Descricao\",\"visao_do_enxame\":\"v\",\"justificativa_decisao\":\"j\",\"executive_verdict\":\"t\",\"risco_principal\":\"rp\",\"risco_linha_vermelha\":\"rlv\",\"observacoes\":\"o\"}, \"justifications\": {\"proposta_original_resumo\":\"k\"}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"ouro_a_extrair\": \"1\",\"deep_pattern\":\"2\",\"transplantable_core\":\"3\",\"logic_math_heuristic\":\"4\",\"real_structural_problem\":\"5\",\"categoria_nuance_tecnica\":\"6\",\"integracao_papel_exato\":\"7\",\"must_components_prod_ux\":\"8\",\"must_components_arq\":\"9\",\"must_components_ops\":\"10\",\"detected_toxic_deps\":\"11\",\"do_not_absorb\":\"12\",\"where_ai_should_not_enter\":\"13\"}, \"justifications\": {\"ouro_a_extrair\":\"k\"}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"classificacao_terminal\": \"ct\",\"acao_de_canibalizacao\":\"ac\",\"categoria_arquitetural\":\"ca\",\"horizonte_extracao\":\"he\",\"tipo_integracao\":\"ti\",\"capability_nature_primary\":\"cnp\",\"architectural_topology\":\"at\",\"temporal_stability\":\"ts\",\"bare_metal_fit\":\"bm\",\"extractability_level\":\"el\",\"runtime_sovereignty_fit\":\"rs\",\"local_first_fit\":\"lf\",\"adoptability_level\":\"ad\",\"longitudinal_sustainability\":\"ls\",\"maintenance_burden\":\"mb\",\"onboarding_friction\":\"of\",\"observability_operational\":\"oo\",\"recoverability_level\":\"rl\",\"degradation_behavior\":\"db\",\"curation_burden\":\"cb\",\"evolution_cost\":\"ec\",\"operability_level\":\"op\",\"abandonment_risk\":\"ar\",\"time_to_first_clear_value\":\"tt\",\"imperfection_tolerance\":\"it\",\"entropy_risk\":\"er\",\"design_misuse_risk\":\"dm\",\"intrinsic_ethics_risk\":\"ie\",\"discipline_dependency\":\"dd\",\"regulatory_risk\":\"rr\"}, \"justifications\": {\"classificacao_terminal\":\"k\"}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"score_philosophical_fit\": 1,\"score_bare_metal_fit\":2,\"score_architectural_extractability\":3,\"score_operability\":4,\"score_creep_risk\":5,\"score_runtime_sovereignty\":6,\"score_model_logic_value\":7,\"score_ethics_safety\":8,\"score_intrinsic_risk\":9}, \"justifications\": {\"score_philosophical_fit\":\"k\"}}\n```".to_string()),
@@ -1283,7 +1645,7 @@ mod tests {
         let rows = payload.get(&range).unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].len(), 82);
-        assert_eq!(rows[0][0], serde_json::json!("owner/repo"));
+        assert_eq!(rows[0][0], serde_json::json!("owner / repo"));
     }
 
     #[test]
@@ -1345,8 +1707,8 @@ mod tests {
         assert_eq!(arr[76], serde_json::json!("5.6"));
         assert_eq!(arr[77], serde_json::json!("6.7"));
         assert_eq!(arr[78], serde_json::json!("7.8"));
-        assert_eq!(arr[79], serde_json::json!(1_700_000_000));
+        assert_eq!(arr[79], serde_json::json!(format_epoch_utc(1_700_000_000)));
         assert_eq!(arr[80], serde_json::json!(""));
-        assert_eq!(arr[81], serde_json::json!(0));
+        assert_eq!(arr[81], serde_json::json!("LIVRE"));
     }
 }

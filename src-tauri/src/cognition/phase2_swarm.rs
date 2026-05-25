@@ -416,12 +416,20 @@ impl LensInvoker for HttpLensInvoker {
             }
 
             let raw_response = response.text().await.map_err(|e| e.to_string())?;
-            extract_chat_message_content(&raw_response, lens).and_then(|content| {
-                if content.trim().is_empty() {
-                    return Err(format!("Resposta vazia da lente {}", lens.lens_id()));
-                }
-                normalize_lens_payload(lens, repo_id, model_used, &content)
-            })
+            let parsed: serde_json::Value = serde_json::from_str(&raw_response).map_err(|e| {
+                format!(
+                    "Resposta HTTP invalida da lente {}: {}",
+                    lens.lens_id(),
+                    e
+                )
+            })?;
+            let usage = extract_openrouter_usage(&parsed);
+            let content = extract_chat_message_content_from_parsed(&parsed);
+            if content.trim().is_empty() {
+                return Err(format!("Resposta vazia da lente {}", lens.lens_id()));
+            }
+            let normalized = normalize_lens_payload(lens, repo_id, model_used, &content)?;
+            Ok(inject_usage_into_lens_payload(&normalized, usage))
         })
     }
 
@@ -463,18 +471,70 @@ struct ChatResponseFormat {
     kind: String,
 }
 
-fn extract_chat_message_content(raw_response: &str, lens: LensKind) -> Result<String, String> {
-    let parsed: serde_json::Value =
-        serde_json::from_str(raw_response).map_err(|e| format!("Resposta HTTP invalida da lente {}: {}", lens.lens_id(), e))?;
+#[derive(Debug, Default, Clone, Copy)]
+struct OpenRouterUsage {
+    prompt_tokens: u64,
+    completion_tokens: u64,
+    total_tokens: u64,
+    total_cost_usd: f64,
+}
 
+fn extract_openrouter_usage(parsed: &serde_json::Value) -> OpenRouterUsage {
+    let usage = &parsed["usage"];
+    let prompt_tokens = usage
+        .get("prompt_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let completion_tokens = usage
+        .get("completion_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let total_tokens = usage
+        .get("total_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(prompt_tokens.saturating_add(completion_tokens));
+    let total_cost_usd = usage
+        .get("total_cost")
+        .or_else(|| usage.get("cost"))
+        .or_else(|| usage.get("estimated_cost"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    OpenRouterUsage {
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        total_cost_usd,
+    }
+}
+
+fn extract_chat_message_content_from_parsed(parsed: &serde_json::Value) -> String {
     let content = parsed
         .get("choices")
         .and_then(|choices| choices.as_array())
         .and_then(|choices| choices.first())
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"));
+    content.map(flatten_chat_content).unwrap_or_default()
+}
 
-    Ok(content.map(flatten_chat_content).unwrap_or_default())
+fn inject_usage_into_lens_payload(json_payload: &str, usage: OpenRouterUsage) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(json_payload) else {
+        return json_payload.to_string();
+    };
+    let Some(obj) = value.as_object_mut() else {
+        return json_payload.to_string();
+    };
+    obj.insert("prompt_tokens".to_string(), serde_json::json!(usage.prompt_tokens));
+    obj.insert(
+        "completion_tokens".to_string(),
+        serde_json::json!(usage.completion_tokens),
+    );
+    obj.insert("total_tokens".to_string(), serde_json::json!(usage.total_tokens));
+    obj.insert(
+        "total_cost_usd".to_string(),
+        serde_json::json!(usage.total_cost_usd),
+    );
+    serde_json::to_string_pretty(&value).unwrap_or_else(|_| json_payload.to_string())
 }
 
 fn flatten_chat_content(value: &serde_json::Value) -> String {

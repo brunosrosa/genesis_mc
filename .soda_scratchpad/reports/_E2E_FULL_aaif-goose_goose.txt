@@ -1,0 +1,10 @@
+repo_id=aaif-goose/goose
+row_number=2
+latency_phase1_ms=253150
+latency_phase1_5_ms=99088
+latency_phase2_ms=59461
+latency_phase3_4_ms=136690
+latency_total_ms=548389
+cost_phase2_usd=0.015336
+cost_phase3_4_usd=0.129848
+cost_total_usd=0.145184

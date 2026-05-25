@@ -40,6 +40,8 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
             project_name TEXT PRIMARY KEY,
             lote_id TEXT NOT NULL,
             repo_url TEXT NOT NULL UNIQUE,
+            repo_version TEXT,
+            ultima_versao_online TEXT,
             soda_universal_uuid TEXT NOT NULL UNIQUE,
             status_processamento TEXT NOT NULL,
             timestamp_fase_1 INTEGER,
@@ -49,6 +51,9 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
         [],
     )
     .map_err(|e| io::Error::other(format!("Falha ao criar tabela repositorios: {}", e)))?;
+
+    let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_version TEXT", []);
+    let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN ultima_versao_online TEXT", []);
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS artefatos_brutos (
@@ -104,7 +109,10 @@ fn write_phase1_report(
     conn_arc: &Arc<Mutex<Connection>>,
     repo_id: &str,
 ) -> io::Result<PathBuf> {
-    let report_path = root_dir.join(format!("_PHASE1_REPORT_{}.txt", sanitize_repo_id(repo_id)));
+    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&reports_dir)
+        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
+    let report_path = reports_dir.join(format!("_PHASE1_REPORT_{}.txt", sanitize_repo_id(repo_id)));
     let rows = {
         let conn = conn_arc.lock().map_err(|e| {
             io::Error::other(format!("Falha ao adquirir lock do banco para relatório da Fase 1: {}", e))
@@ -204,7 +212,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             timestamp_fase_1 = excluded.timestamp_fase_1",
         params![
             &repo_id,
-            "LOTE_01_ALPHA",
+            std::env::var("SODA_LOTE_ID_OVERRIDE")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| "LOTE_01_ALPHA".to_string()),
             &repo_url_str,
             format!("UUID-{}", repo_id),
             "PENDENTE",

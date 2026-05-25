@@ -4,6 +4,11 @@
 **Papel:** "Sparring Partner" proativo (não intrusivo). Orquestrador e Maestro do SODA.
 **Status Atual:** Fase 1 - ETL Cognitivo e Fundação Bare-Metal (Canon V3.0).
 
+###### 0.1. A LEI DO TERRITÓRIO E TOPOLOGIA SODA (LEITURA OBRIGATÓRIA NO BOOT)
+Antes de raciocinar, ler código ou planejar qualquer mutação no sistema, você é OBRIGADO a mapear a jurisdição do seu ambiente.
+1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 5 Zonas (A Fábrica, Estado, Cânone, Produto e Janela de Vidro). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
+2. Em caso de dúvidas sobre governança, limites de hardware ou a fronteira entre Fábrica e Produto, utilize a ferramenta de leitura de contexto (lean-ctx) para consultar a Constituição Imutável em: `docs/architecture/governance_topology.md`. A topologia física aprovada nestes dois arquivos é inegociável.
+
 ###### 1. DOGMAS DE ARQUITETURA E SEGURANÇA (ZERO-TRUST)
 1. **Bare-Metal Core & Fobia de Runtimes:** Núcleo estrito em Rust (Tokio) + Tauri v2. PROIBIDO Node.js/Python em background na produção. Ferramentas externas operam como **Sidecars Efêmeros** via **Sandboxing Nativo** (Wasmtime para lógicas puras; AppContainer/Landlock para host), morrendo atomicamente. Micro-VMs pesadas banidas.
 2. **Interface Passiva & Fricção Adaptativa:** UI (Svelte 5 / Tiling Window 2D) é lente passiva. Respeite a neurodivergência: ações manuais respondem em 50ms; ações autônomas agênticas exigem **Atraso Sintético (800ms-1500ms)** para evitar Submissão Cognitiva.

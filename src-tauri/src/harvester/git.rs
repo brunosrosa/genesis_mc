@@ -159,7 +159,9 @@ impl BloblessCloner {
     }
 
     #[cfg(target_os = "windows")]
-    async fn fetch_github_archive_bytes(repo_url: &Url) -> Result<Vec<u8>, CloneError> {
+    async fn fetch_github_archive_bytes(
+        repo_url: &Url,
+    ) -> Result<(Vec<u8>, String, String), CloneError> {
         let (owner, repo) = Self::github_owner_repo(repo_url)?;
         let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
             .unwrap_or_else(|_| "https://api.github.com".to_string());
@@ -194,6 +196,63 @@ impl BloblessCloner {
                 reason: format!("Falha ao decodificar metadados do GitHub: {}", e),
             })?;
 
+        #[derive(Deserialize)]
+        struct GithubRelease {
+            tag_name: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct GithubCommit {
+            sha: String,
+        }
+
+        let release_url = format!(
+            "{}/repos/{owner}/{repo}/releases/latest",
+            github_api_base.trim_end_matches('/')
+        );
+        info!(url = %release_url, "ProjFS: consultando release mais recente do repositório");
+        let release_tag = match client.get(&release_url).send().await {
+            Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => None,
+            Ok(resp) if resp.status().is_success() => match resp.json::<GithubRelease>().await {
+                Ok(release) => release.tag_name.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+                Err(_) => None,
+            },
+            _ => None,
+        };
+
+        let commits_url = format!(
+            "{}/repos/{owner}/{repo}/commits?sha={}&per_page=1",
+            github_api_base.trim_end_matches('/'),
+            metadata.default_branch
+        );
+        info!(url = %commits_url, "ProjFS: consultando SHA do commit HEAD");
+        let commits_resp = client
+            .get(&commits_url)
+            .send()
+            .await
+            .map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao consultar commits do GitHub: {}", e),
+            })?;
+        let commits_resp = commits_resp.error_for_status().map_err(|e| CloneError::NetworkError {
+            reason: format!("GitHub respondeu erro ao consultar commits: {}", e),
+        })?;
+        let commits = commits_resp
+            .json::<Vec<GithubCommit>>()
+            .await
+            .map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao decodificar commits do GitHub: {}", e),
+            })?;
+        let head_sha = commits
+            .first()
+            .map(|c| c.sha.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| CloneError::NetworkError {
+                reason: "GitHub retornou lista de commits vazia; impossível extrair SHA".to_string(),
+            })?;
+        let short_sha = head_sha.chars().take(7).collect::<String>();
+        let repo_version = release_tag.clone().unwrap_or_else(|| short_sha.clone());
+        let ultima_versao_online = release_tag.unwrap_or(short_sha);
+
         let archive_url = format!(
             "{}/repos/{owner}/{repo}/zipball/{}",
             github_api_base.trim_end_matches('/'),
@@ -218,7 +277,7 @@ impl BloblessCloner {
             reason: format!("Falha ao ler bytes do snapshot GitHub: {}", e),
         })?;
         info!(archive_bytes = bytes.len(), "ProjFS: snapshot compactado recebido em memória");
-        Ok(bytes.to_vec())
+        Ok((bytes.to_vec(), repo_version, ultima_versao_online))
     }
 
     #[cfg(target_os = "windows")]
@@ -306,7 +365,8 @@ impl BloblessCloner {
         #[cfg(target_os = "windows")]
         {
             let archive_started = Instant::now();
-            let archive_bytes = Self::fetch_github_archive_bytes(repo_url).await?;
+            let (archive_bytes, repo_version, ultima_versao_online) =
+                Self::fetch_github_archive_bytes(repo_url).await?;
             let snapshot = tokio::task::spawn_blocking(move || Self::build_projfs_snapshot(archive_bytes))
                 .await
                 .map_err(|e| CloneError::NetworkError {
@@ -317,6 +377,19 @@ impl BloblessCloner {
                 .mount_projected_repo(&dest, snapshot)
                 .map_err(|e| CloneError::NetworkError {
                     reason: format!("Falha ao iniciar projeção ProjFS do repositório: {}", e),
+                })?;
+            tokio::fs::write(dest.join(".soda_repo_version"), repo_version)
+                .await
+                .map_err(|e| CloneError::NetworkError {
+                    reason: format!("Falha ao persistir repo_version no workspace ProjFS: {}", e),
+                })?;
+            tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online)
+                .await
+                .map_err(|e| CloneError::NetworkError {
+                    reason: format!(
+                        "Falha ao persistir ultima_versao_online no workspace ProjFS: {}",
+                        e
+                    ),
                 })?;
             info!(
                 url = %repo_url,
@@ -424,6 +497,75 @@ impl BloblessCloner {
                     });
                 }
             }
+
+            #[derive(Deserialize)]
+            struct GithubRelease {
+                tag_name: Option<String>,
+            }
+
+            let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+            let should_try_github_api = repo_url.host_str() == Some("github.com") || allow_host_override;
+            let mut release_tag: Option<String> = None;
+            if should_try_github_api {
+                let mut segments = repo_url
+                    .path_segments()
+                    .map(|parts| parts.collect::<Vec<_>>())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|segment| !segment.is_empty())
+                    .map(|segment| segment.trim_end_matches(".git").to_string())
+                    .collect::<Vec<_>>();
+                if segments.len() >= 2 {
+                    let repo = segments.pop().unwrap_or_else(|| "repo".to_string());
+                    let owner = segments.pop().unwrap_or_else(|| "owner".to_string());
+                    let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
+                        .unwrap_or_else(|_| "https://api.github.com".to_string());
+                    if let Ok(client) = reqwest::Client::builder()
+                        .user_agent("genesis-mc-harvester-git/1.0")
+                        .build()
+                    {
+                        let release_url = format!(
+                            "{}/repos/{owner}/{repo}/releases/latest",
+                            github_api_base.trim_end_matches('/')
+                        );
+                        if let Ok(resp) = client.get(&release_url).send().await {
+                            if resp.status() == reqwest::StatusCode::NOT_FOUND {
+                                release_tag = None;
+                            } else if resp.status().is_success() {
+                                if let Ok(release) = resp.json::<GithubRelease>().await {
+                                    release_tag = release
+                                        .tag_name
+                                        .map(|s| s.trim().to_string())
+                                        .filter(|s| !s.is_empty());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let short_sha = match tokio::process::Command::new("git")
+                .arg("-C")
+                .arg(&dest)
+                .arg("rev-parse")
+                .arg("--short")
+                .arg("HEAD")
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if value.is_empty() { None } else { Some(value) }
+                }
+                _ => None,
+            }
+            .unwrap_or_else(|| "UNKNOWN".to_string());
+
+            let repo_version = release_tag.clone().unwrap_or_else(|| short_sha.clone());
+            let ultima_versao_online = release_tag.unwrap_or(short_sha);
+
+            let _ = tokio::fs::write(dest.join(".soda_repo_version"), repo_version).await;
+            let _ = tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online).await;
 
             Self::detach_git_metadata(&dest).await?;
 

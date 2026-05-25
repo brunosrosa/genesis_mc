@@ -3,11 +3,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use genesis_mc_lib::cognition::phase3_4::{run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, OFFICIAL_FORMATTER_MODEL};
+use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
 use genesis_mc_lib::persist::ssot_injector::SsotInjector;
 use reqwest::Client;
 use rusqlite::{params, Connection};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{error, info};
+use url::Url;
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -24,6 +27,49 @@ fn now_epoch_secs() -> io::Result<i64> {
         .as_secs() as i64)
 }
 
+async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
+    let url = Url::parse(repo_url).ok()?;
+    let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+    if url.host_str() != Some("github.com") && !allow_host_override {
+        return None;
+    }
+    let mut segments = url
+        .path_segments()
+        .map(|parts| parts.collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| segment.trim_end_matches(".git").to_string())
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return None;
+    }
+    let repo = segments.pop()?;
+    let owner = segments.pop()?;
+
+    let base = std::env::var("SODA_GITHUB_API_BASE_URL").unwrap_or_else(|_| "https://api.github.com".to_string());
+    let endpoint = format!("{}/repos/{owner}/{repo}/releases/latest", base.trim_end_matches('/'));
+
+    #[derive(Deserialize)]
+    struct GithubRelease {
+        tag_name: Option<String>,
+    }
+
+    let client = Client::builder().user_agent("phase3-4-cli/1.0").build().ok()?;
+    let resp = client.get(&endpoint).send().await.ok()?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return None;
+    }
+    if !resp.status().is_success() {
+        return None;
+    }
+    let release = resp.json::<GithubRelease>().await.ok()?;
+    release
+        .tag_name
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 fn sanitize_repo_id(repo_id: &str) -> String {
     repo_id
         .chars()
@@ -34,18 +80,44 @@ fn sanitize_repo_id(repo_id: &str) -> String {
         .collect()
 }
 
-fn parse_repo_id_from_args() -> String {
+#[derive(Debug, Clone)]
+struct CliArgs {
+    repo_id: String,
+    e2e_full: bool,
+    full_report_file: Option<String>,
+}
+
+fn parse_cli_args() -> CliArgs {
     let mut args = std::env::args();
     args.next();
     let mut repo_id = String::from("aaif-goose/goose");
+    let mut e2e_full = false;
+    let mut full_report_file: Option<String> = None;
     while let Some(arg) = args.next() {
         if arg == "--repo" {
             if let Some(value) = args.next() {
                 repo_id = value;
             }
+            continue;
+        }
+        if arg == "--e2e-full" {
+            e2e_full = true;
+            continue;
+        }
+        if arg == "--full-report-file" {
+            if let Some(value) = args.next() {
+                let trimmed = value.trim().to_string();
+                if !trimmed.is_empty() {
+                    full_report_file = Some(trimmed);
+                }
+            }
         }
     }
-    repo_id
+    CliArgs {
+        repo_id,
+        e2e_full,
+        full_report_file,
+    }
 }
 
 fn get_first_env(keys: &[&str]) -> Option<String> {
@@ -106,22 +178,100 @@ impl OpenRouterFormatterClient {
         }
     }
 
-    fn extract_openrouter_content(json: &Value) -> Option<String> {
-        let content = &json["choices"][0]["message"]["content"];
-        if let Some(text) = content.as_str() {
-            return Some(text.to_string());
+        fn extract_openrouter_content(json: &Value) -> Option<String> {
+        fn flatten(value: &Value) -> Option<String> {
+            match value {
+                Value::String(text) => {
+                    let t = text.trim();
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(t.to_string())
+                    }
+                }
+                Value::Array(parts) => {
+                    let mut out = Vec::new();
+                    for part in parts {
+                        if let Some(text) = flatten(part) {
+                            out.push(text);
+                            continue;
+                        }
+                        if let Some(obj) = part.as_object() {
+                            if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
+                                let t = text.trim();
+                                if !t.is_empty() {
+                                    out.push(t.to_string());
+                                    continue;
+                                }
+                            }
+                            if let Some(text) = obj.get("content").and_then(|v| v.as_str()) {
+                                let t = text.trim();
+                                if !t.is_empty() {
+                                    out.push(t.to_string());
+                                    continue;
+                                }
+                            }
+                            if let Some(text) = obj
+                                .get("text")
+                                .and_then(|v| v.get("value"))
+                                .and_then(|v| v.as_str())
+                            {
+                                let t = text.trim();
+                                if !t.is_empty() {
+                                    out.push(t.to_string());
+                                    continue;
+                                }
+                            }
+                            if let Some(text) = obj
+                                .get("content")
+                                .and_then(|v| v.get("value"))
+                                .and_then(|v| v.as_str())
+                            {
+                                let t = text.trim();
+                                if !t.is_empty() {
+                                    out.push(t.to_string());
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    let joined = out.join("\n");
+                    if joined.trim().is_empty() {
+                        None
+                    } else {
+                        Some(joined)
+                    }
+                }
+                Value::Object(obj) => {
+                    if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
+                        let t = text.trim();
+                        if !t.is_empty() {
+                            return Some(t.to_string());
+                        }
+                    }
+                    if let Some(text) = obj.get("content").and_then(|v| v.as_str()) {
+                        let t = text.trim();
+                        if !t.is_empty() {
+                            return Some(t.to_string());
+                        }
+                    }
+                    None
+                }
+                _ => None,
+            }
         }
-        let parts = content.as_array()?;
-        let joined = parts
-            .iter()
-            .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
-            .collect::<Vec<_>>()
-            .join("\n");
-        if joined.trim().is_empty() {
-            None
-        } else {
-            Some(joined)
+
+        let choices = json.get("choices")?.as_array()?;
+        let first = choices.first()?;
+        if let Some(message) = first.get("message") {
+            if let Some(content) = message.get("content") {
+                if let Some(text) = flatten(content) {
+                    return Some(text);
+                }
+            }
         }
+
+        first.get("text").and_then(|v| flatten(v))
     }
 
     fn harvest_usage(&self, json: &Value) {
@@ -216,6 +366,36 @@ fn fetch_repo_core(conn: &Connection, repo_id: &str) -> io::Result<(String, Stri
         |row| Ok((row.get(0)?, row.get(1)?)),
     )
     .map_err(|e| io::Error::other(format!("Metadados base ausentes em repositorios para {}: {}", repo_id, e)))
+}
+
+fn try_fetch_repositorios_release_info(
+    conn: &Connection,
+    repo_id: &str,
+) -> (Option<String>, Option<String>) {
+    let mut stmt = match conn.prepare(
+        "SELECT repo_version, ultima_versao_online
+         FROM repositorios
+         WHERE project_name = ?1
+         LIMIT 1",
+    ) {
+        Ok(stmt) => stmt,
+        Err(_) => return (None, None),
+    };
+    let row: (Option<String>, Option<String>) = match stmt.query_row(params![repo_id], |row| {
+        Ok((row.get(0)?, row.get(1)?))
+    }) {
+        Ok(value) => value,
+        Err(_) => return (None, None),
+    };
+    let repo_version = row
+        .0
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let ultima_versao_online = row
+        .1
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    (repo_version, ultima_versao_online)
 }
 
 fn try_fetch_repo_heuristics_seed(conn: &Connection, repo_id: &str) -> Option<(String, String, String, String, String)> {
@@ -368,54 +548,10 @@ fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
     None
 }
 
-fn resolve_master_solutions_row_number(repo_id: &str) -> io::Result<u32> {
-    let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
-        .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    let range = "A2:A5000";
-    let result = call_mcp(
-        "get_sheet_data",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": "MASTER_SOLUTIONS",
-            "range": range,
-            "include_grid_data": false
-        }),
-    )?;
-
-    let values = extract_values_2d(&result)
-        .ok_or_else(|| io::Error::other("Formato inesperado do retorno get_sheet_data"))?;
-
-    for (idx, row) in values.iter().enumerate() {
-        let cell = row.get(0).map(|s| s.trim()).unwrap_or("");
-        if cell.eq_ignore_ascii_case(repo_id) {
-            return Ok((idx as u32) + 2);
-        }
-    }
-
-    for (idx, row) in values.iter().enumerate() {
-        let cell = row.get(0).map(|s| s.trim()).unwrap_or("");
-        if cell.is_empty() {
-            return Ok((idx as u32) + 2);
-        }
-    }
-
-    info!("MASTER_SOLUTIONS sem espaço no range A2:A5000; adicionando 1 linha");
-    let add_rows_res = call_mcp(
-        "add_rows",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": "MASTER_SOLUTIONS",
-            "count": 1
-        }),
-    )?;
-    let _ = add_rows_res;
-
-    Ok(5001)
-}
-
 fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Result<bool> {
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+    let expected_pretty = expected_repo_id.replace("/", " / ");
     let range = format!("A{}:A{}", row_number_1based, row_number_1based);
     let result = call_mcp(
         "get_sheet_data",
@@ -432,7 +568,88 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
         .and_then(|r| r.get(0))
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
-    Ok(cell == expected_repo_id)
+    Ok(cell == expected_repo_id || cell == expected_pretty)
+}
+
+fn inspect_row_width_a_to_cd(row_number_1based: u32) -> io::Result<usize> {
+    let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+        .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+    let range = format!("A{}:CD{}", row_number_1based, row_number_1based);
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": range,
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d(&result).unwrap_or_default();
+    Ok(values.get(0).map(|r| r.len()).unwrap_or(0))
+}
+
+fn reports_dir(root_dir: &Path) -> io::Result<PathBuf> {
+    let dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
+    Ok(dir)
+}
+
+async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> {
+    use std::process::Stdio;
+
+    let started = Instant::now();
+    let mut exe_path = std::env::current_exe()?;
+    let bin_name = if cfg!(target_os = "windows") {
+        if binary_stem.to_ascii_lowercase().ends_with(".exe") {
+            binary_stem.to_string()
+        } else {
+            format!("{binary_stem}.exe")
+        }
+    } else {
+        binary_stem.to_string()
+    };
+    exe_path.set_file_name(bin_name);
+
+    let status = tokio::process::Command::new(exe_path)
+        .args(["--repo", repo_id])
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha ao executar fase '{binary_stem}': {e}")))?;
+
+    if !status.success() {
+        return Err(io::Error::other(format!(
+            "Fase '{binary_stem}' retornou exit code != 0: {status}"
+        )));
+    }
+
+    Ok(started.elapsed().as_millis())
+}
+
+fn parse_report_f64(report_path: &Path, key: &str) -> io::Result<f64> {
+    let content = std::fs::read_to_string(report_path).map_err(|e| {
+        io::Error::other(format!(
+            "Falha ao ler relatório {}: {}",
+            report_path.display(),
+            e
+        ))
+    })?;
+    for line in content.lines().take(80) {
+        let Some((k, v)) = line.split_once('=') else { continue };
+        if k.trim() == key {
+            return v.trim().parse::<f64>().map_err(|e| {
+                io::Error::other(format!("Falha ao parsear {}='{}': {}", key, v.trim(), e))
+            });
+        }
+    }
+    Err(io::Error::other(format!(
+        "Chave '{}' ausente no relatório {}",
+        key,
+        report_path.display()
+    )))
 }
 
 #[tokio::main]
@@ -447,17 +664,51 @@ async fn main() -> io::Result<()> {
     };
     tracing_subscriber::fmt().with_max_level(level).init();
 
-    let started = Instant::now();
+    let started_total = Instant::now();
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
 
-    let repo_id = parse_repo_id_from_args();
-    info!(repo_id = %repo_id, "E2E: iniciando Fases 3 e 4 (munição real)");
+    let CliArgs {
+        repo_id,
+        e2e_full,
+        full_report_file,
+    } = parse_cli_args();
+    if e2e_full {
+        info!(repo_id = %repo_id, "E2E FULL: iniciando Fases 1 → 4 (disparo completo)");
+    } else {
+        info!(repo_id = %repo_id, "E2E: iniciando Fases 3 e 4 (munição real)");
+    }
 
     let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
     let conn = Connection::open(&db_path).map_err(|e| {
         io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
     })?;
+
+    let phase1_ms = if e2e_full {
+        run_phase_binary("harvester_cli", &repo_id).await?
+    } else {
+        0
+    };
+    let phase1_5_ms = if e2e_full {
+        run_phase_binary("phase1_5_cli", &repo_id).await?
+    } else {
+        0
+    };
+    let phase2_ms = if e2e_full {
+        run_phase_binary("phase2_cli", &repo_id).await?
+    } else {
+        0
+    };
+
+    let phase2_cost_usd = if e2e_full {
+        let report_path = reports_dir(&root_dir)?.join(format!(
+            "_PHASE2_REPORT_{}_V6.txt",
+            sanitize_repo_id(&repo_id)
+        ));
+        parse_report_f64(&report_path, "total_cost_usd")?
+    } else {
+        0.0
+    };
 
     let (lens_a, lens_b, lens_c) = fetch_debates(&conn, &repo_id)?;
     let (lote_id, repo_url) = fetch_repo_core(&conn, &repo_id).unwrap_or_else(|_| {
@@ -466,9 +717,14 @@ async fn main() -> io::Result<()> {
             format!("https://github.com/{}", repo_id),
         )
     });
+    let lote_id = std::env::var("SODA_LOTE_ID_OVERRIDE")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or(lote_id);
 
     let seed = try_fetch_repo_heuristics_seed(&conn, &repo_id);
-    let (repo_version, ultima_versao_online, licenca, stack_base, declared_description) = seed.unwrap_or_else(|| {
+    let (seed_repo_version, ultima_versao_online, licenca, stack_base, declared_description) = seed.unwrap_or_else(|| {
         (
             "UNKNOWN".to_string(),
             "UNKNOWN".to_string(),
@@ -479,12 +735,55 @@ async fn main() -> io::Result<()> {
     });
 
     let now = now_epoch_secs()?;
+    let (repo_version_from_repositorios, ultima_versao_online_from_repositorios) =
+        try_fetch_repositorios_release_info(&conn, &repo_id);
+    let mut repo_version = repo_version_from_repositorios
+        .or_else(|| {
+            let trimmed = seed_repo_version.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        })
+        .unwrap_or_else(|| "UNKNOWN".to_string());
+    let repo_version_lower = repo_version.to_ascii_lowercase();
+    let mut ultima_versao_online = ultima_versao_online_from_repositorios
+        .or_else(|| {
+            let trimmed = ultima_versao_online.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        })
+        .unwrap_or_else(|| "UNKNOWN".to_string());
+
+    if repo_version_lower == "main"
+        || repo_version_lower == "master"
+        || repo_version_lower == "unknown"
+        || ultima_versao_online.to_ascii_lowercase() == "unknown"
+    {
+        if let Some(tag) = try_fetch_github_latest_release_tag(&repo_url).await {
+            repo_version = tag.clone();
+            ultima_versao_online = tag;
+        } else if let Ok(url) = Url::parse(&repo_url) {
+            let limiter = RateLimiter;
+            if let Ok(meta) = CommunityMetaFetcher::fetch(&url, &limiter).await {
+                if let Some(sha) = meta.last_commit_sha {
+                    let short = sha.chars().take(7).collect::<String>();
+                    if !short.is_empty() {
+                        repo_version = short.clone();
+                        ultima_versao_online = short;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(tag) = try_fetch_github_latest_release_tag(&repo_url).await {
+        repo_version = tag.clone();
+        ultima_versao_online = tag;
+    }
+    info!(repo_version = %repo_version, "E2E: repo_version resolvido");
     let block0 = Block0Context {
         project_name: repo_id.clone(),
         repo_url,
         repo_version,
         ultima_versao_online,
-        lote_id,
+        lote_id: lote_id.clone(),
         data_ultima_analise: now,
         analise_origem: "SODA_E2E_PHASE3_4".to_string(),
         licenca,
@@ -496,14 +795,17 @@ async fn main() -> io::Result<()> {
     };
 
     let formatter = OpenRouterFormatterClient::from_env().map_err(io::Error::other)?;
+    let formatter_model = std::env::var("OPENROUTER_FORMATTER_MODEL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| OFFICIAL_FORMATTER_MODEL.to_string());
     let cfg = Phase3Config {
-        model: OFFICIAL_FORMATTER_MODEL.to_string(),
+        model: formatter_model.clone(),
         max_attempts_per_block: 3,
     };
 
-    let row_number = resolve_master_solutions_row_number(&repo_id)?;
-    info!(row_number, "E2E: row_number resolvido na MASTER_SOLUTIONS");
-
+    let started_phase3_4 = Instant::now();
     let phase3_out = match run_phase3_sgr(&formatter, &cfg, block0).await {
         Ok(out) => out,
         Err(Phase3Error::RetryExhausted { block, attempts, message }) => {
@@ -517,7 +819,9 @@ async fn main() -> io::Result<()> {
     };
 
     info!("E2E: Fase 3 concluída. Iniciando Fase 4 (carga atômica Sheets)");
-    SsotInjector::inject_ssot(&repo_id, phase3_out.row, row_number, now)
+    let block3_justifications = phase3_out.block3_justifications;
+    let row = phase3_out.row;
+    let row_number = SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
         .await
         .map_err(|e| io::Error::other(format!("Falha na Fase 4 (SSOT Injector): {}", e)))?;
 
@@ -528,10 +832,13 @@ async fn main() -> io::Result<()> {
         ));
     }
 
+    let width_a_to_cd = inspect_row_width_a_to_cd(row_number)?;
+    info!(width_a_to_cd, "E2E: inspeção pós-write (A:CD) para largura do row");
+
     let usage = formatter.usage_totals();
-    let elapsed_ms = started.elapsed().as_millis();
+    let elapsed_phase3_4_ms = started_phase3_4.elapsed().as_millis();
     info!(
-        elapsed_ms,
+        elapsed_ms = elapsed_phase3_4_ms,
         prompt_tokens = usage.prompt_tokens,
         completion_tokens = usage.completion_tokens,
         total_tokens = usage.total_tokens,
@@ -540,18 +847,23 @@ async fn main() -> io::Result<()> {
     );
 
     let report_name = format!("_E2E_REPORT_{}_PHASE4.txt", sanitize_repo_id(&repo_id));
-    let report_path = root_dir.join(report_name);
+    let report_path = reports_dir(&root_dir)?.join(report_name);
+    let e2e_full_total_cost_usd = phase2_cost_usd + usage.total_cost_usd;
+    let e2e_full_total_ms =
+        phase1_ms + phase1_5_ms + phase2_ms + (elapsed_phase3_4_ms as u128);
     let report = format!(
-        "repo_id={}\nrow_number={}\nmodel_used={}\nlatency_total_ms={}\nprompt_tokens={}\ncompletion_tokens={}\ntotal_tokens={}\ntotal_cost_usd={:.6}\nsheets_write_confirmed={}\n",
+        "repo_id={}\nrow_number={}\nmodel_used={}\nlatency_phase3_4_ms={}\nlatency_total_ms={}\nprompt_tokens={}\ncompletion_tokens={}\ntotal_tokens={}\ntotal_cost_usd={:.6}\nsheets_write_confirmed={}\nrow_width_a_to_cd={}\n",
         repo_id,
         row_number,
-        OFFICIAL_FORMATTER_MODEL,
-        elapsed_ms,
+        formatter_model,
+        elapsed_phase3_4_ms,
+        if e2e_full { e2e_full_total_ms } else { elapsed_phase3_4_ms as u128 },
         usage.prompt_tokens,
         usage.completion_tokens,
         usage.total_tokens,
-        usage.total_cost_usd,
-        confirmed
+        if e2e_full { e2e_full_total_cost_usd } else { usage.total_cost_usd },
+        confirmed,
+        width_a_to_cd
     );
     std::fs::write(&report_path, report).map_err(|e| {
         io::Error::other(format!(
@@ -562,5 +874,41 @@ async fn main() -> io::Result<()> {
     })?;
 
     info!(report = %report_path.display(), "E2E: relatório gravado");
+
+    if e2e_full {
+        let full_report_name = full_report_file.unwrap_or_else(|| {
+            format!("_E2E_FULL_{}.txt", sanitize_repo_id(&repo_id))
+        });
+        let full_report_path = reports_dir(&root_dir)?.join(full_report_name);
+        let full_report = format!(
+            "repo_id={}\nrow_number={}\nmodel_used={}\nlote_id={}\nlatency_phase1_ms={}\nlatency_phase1_5_ms={}\nlatency_phase2_ms={}\nlatency_phase3_4_ms={}\nlatency_total_ms={}\ncost_phase2_usd={:.6}\ncost_phase3_4_usd={:.6}\ncost_total_usd={:.6}\n",
+            repo_id,
+            row_number,
+            cfg.model,
+            lote_id,
+            phase1_ms,
+            phase1_5_ms,
+            phase2_ms,
+            elapsed_phase3_4_ms,
+            e2e_full_total_ms,
+            phase2_cost_usd,
+            usage.total_cost_usd,
+            e2e_full_total_cost_usd
+        );
+        std::fs::write(&full_report_path, full_report).map_err(|e| {
+            io::Error::other(format!(
+                "Falha ao gravar relatório E2E FULL em {}: {}",
+                full_report_path.display(),
+                e
+            ))
+        })?;
+        info!(
+            report = %full_report_path.display(),
+            latency_total_ms = e2e_full_total_ms,
+            cost_total_usd = e2e_full_total_cost_usd,
+            elapsed_total_wall_ms = started_total.elapsed().as_millis(),
+            "E2E FULL: relatório final gravado"
+        );
+    }
     Ok(())
 }

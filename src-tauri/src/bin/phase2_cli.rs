@@ -54,6 +54,8 @@ fn ensure_phase2_cli_schema(conn: &Connection) -> io::Result<()> {
             project_name TEXT PRIMARY KEY,
             lote_id TEXT,
             repo_url TEXT,
+            repo_version TEXT,
+            ultima_versao_online TEXT,
             soda_universal_uuid TEXT,
             status_processamento TEXT NOT NULL,
             timestamp_fase_1 INTEGER,
@@ -63,6 +65,9 @@ fn ensure_phase2_cli_schema(conn: &Connection) -> io::Result<()> {
         [],
     )
     .map_err(|e| io::Error::other(format!("Falha ao criar/verificar tabela repositorios: {}", e)))?;
+
+    let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_version TEXT", []);
+    let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN ultima_versao_online TEXT", []);
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS pacotes_destilados (
@@ -139,10 +144,34 @@ struct Phase2Report<'a> {
     lens_c_json: &'a str,
     model_used: &'a str,
     phase_status: &'a str,
+    prompt_tokens: u64,
+    completion_tokens: u64,
+    total_tokens: u64,
+    total_cost_usd: f64,
+}
+
+fn extract_usage_totals_from_lens_json(lens_json: &str) -> (u64, u64, u64, f64) {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(lens_json) else {
+        return (0, 0, 0, 0.0);
+    };
+    let prompt_tokens = value.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let completion_tokens = value
+        .get("completion_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let total_tokens = value.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let total_cost_usd = value
+        .get("total_cost_usd")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    (prompt_tokens, completion_tokens, total_tokens, total_cost_usd)
 }
 
 fn write_phase2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::Result<PathBuf> {
-    let report_path = root_dir.join(format!(
+    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&reports_dir)
+        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
+    let report_path = reports_dir.join(format!(
         "_PHASE2_REPORT_{}_V6.txt",
         sanitize_repo_id(report_data.repo_id)
     ));
@@ -152,6 +181,13 @@ fn write_phase2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::R
     report.push_str(&format!("phase_status={}\n", report_data.phase_status));
     report.push_str("persisted_in=debates_enxame\n");
     report.push_str(&format!("model_used={}\n", report_data.model_used));
+    report.push_str(&format!("prompt_tokens={}\n", report_data.prompt_tokens));
+    report.push_str(&format!(
+        "completion_tokens={}\n",
+        report_data.completion_tokens
+    ));
+    report.push_str(&format!("total_tokens={}\n", report_data.total_tokens));
+    report.push_str(&format!("total_cost_usd={:.6}\n", report_data.total_cost_usd));
     report.push('\n');
     report.push_str("\n== LENS A ==\n");
     report.push_str(report_data.lens_a_json);
@@ -213,6 +249,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (lens_a_json, lens_b_json, lens_c_json, model_used, phase_status) =
         fetch_debate_row(&conn, &repo_id)?;
 
+    let (p_a, c_a, t_a, cost_a) = extract_usage_totals_from_lens_json(&lens_a_json);
+    let (p_b, c_b, t_b, cost_b) = extract_usage_totals_from_lens_json(&lens_b_json);
+    let (p_c, c_c, t_c, cost_c) = extract_usage_totals_from_lens_json(&lens_c_json);
+    let prompt_tokens = p_a.saturating_add(p_b).saturating_add(p_c);
+    let completion_tokens = c_a.saturating_add(c_b).saturating_add(c_c);
+    let total_tokens = t_a.saturating_add(t_b).saturating_add(t_c);
+    let total_cost_usd = cost_a + cost_b + cost_c;
+
     let report_path = write_phase2_report(
         &root_dir,
         &Phase2Report {
@@ -223,6 +267,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             lens_c_json: &lens_c_json,
             model_used: &model_used,
             phase_status: &phase_status,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            total_cost_usd,
         },
     )?;
 

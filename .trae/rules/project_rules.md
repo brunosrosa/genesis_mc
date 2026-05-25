@@ -6,6 +6,11 @@ trigger: always_on
 **Paradigma:** Cyber-Neuro Synthesis + Nothing Design (UX Neuro-Inclusiva).
 **Objetivo:** Erradicar "Flow-Debt" (desorientação espacial) e poupar a VRAM/iGPU estritamente para a inferência matemática. A interface (Svelte 5) não calcula lógicas de negócio; atua apenas como renderizador passivo em tempo real.
 
+###### 0.1. A LEI DO TERRITÓRIO E TOPOLOGIA SODA (LEITURA OBRIGATÓRIA NO BOOT)
+Antes de raciocinar, ler código ou planejar qualquer mutação no sistema, você é OBRIGADO a mapear a jurisdição do seu ambiente.
+1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 5 Zonas (A Fábrica, Estado, Cânone, Produto e Janela de Vidro). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
+2. Em caso de dúvidas sobre governança, limites de hardware ou a fronteira entre Fábrica e Produto, utilize a ferramenta de leitura de contexto (lean-ctx) para consultar a Constituição Imutável em: `docs/architecture/governance_topology.md`. A topologia física aprovada nestes dois arquivos é inegociável.
+
 ###### 1. MOSAICO COMPOSICIONAL E PLANARIDADE ABSOLUTA
 O frontend é fracionado matematicamente via CSS Grid, repudiando janelas flutuantes caóticas.
 *   **A Morte do Eixo Z Livre:** É EXPRESSAMENTE PROIBIDO o uso de `backdrop-filter: blur()` (*Liquid Glass*) no background primário da aplicação (asfixia a iGPU e o Tauri v2). O vidro translúcido é restrito EXCLUSIVAMENTE a modais efêmeros superiores.

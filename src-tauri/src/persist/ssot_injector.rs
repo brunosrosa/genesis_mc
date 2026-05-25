@@ -2,6 +2,7 @@ use crate::cognition::phase3_4::{apply_phase4_block5, build_batch_update_payload
 use thiserror::Error;
 use serde_json::{json, Value};
 use rusqlite::Connection;
+use std::collections::HashMap;
 use std::env;
 use std::future::Future;
 use std::pin::Pin;
@@ -16,6 +17,10 @@ pub enum SsotError {
     L2Failure(String),
     #[error("Falha no despacho para a nuvem (Sheets): {0}")]
     CloudFailure(String),
+    #[error("Config ausente: {0}")]
+    ConfigMissing(&'static str),
+    #[error("Falha de rede/MCP: {0}")]
+    NetworkFailure(String),
 }
 
 pub struct SsotInjector;
@@ -139,24 +144,249 @@ impl SsotInjector {
     pub async fn inject_ssot(
         repo_id: &str,
         mut row: MasterSolutionsRow,
-        row_number_1based: u32,
+        block3_justifications: HashMap<String, String>,
         now_epoch: i64,
-    ) -> Result<(), SsotError> {
+    ) -> Result<u32, SsotError> {
         let validated = Self::validate_payload(repo_id, &row)?;
 
         // 1. Selagem L2 (Execução Durável)
         // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
         apply_phase4_block5(now_epoch, &mut row);
-        Self::update_local_status(repo_id, SSOT_STATUS_CONCLUIDO, &row, &validated)
+        Self::update_local_status(
+            repo_id,
+            SSOT_STATUS_CONCLUIDO,
+            &row,
+            &validated,
+            &block3_justifications,
+            now_epoch,
+        )
             .map_err(SsotError::L2Failure)?;
 
-        // 2. Manobra Anti-503: Desmembramento e Agregação na RAM
+        // 2. Roteamento Dinâmico no Sheets (coluna B = repo_url)
+        let spreadsheet_id =
+            env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
+        let sheet = "MASTER_SOLUTIONS";
+        let row_number_1based =
+            Self::resolve_row_number_by_repo_url_and_lote_id(
+                &spreadsheet_id,
+                sheet,
+                &validated.repo_url,
+                &validated.lote_id,
+            )
+            .await?;
+
+        // 3. Manobra Anti-503: Desmembramento e Agregação na RAM
         let batch_payload = Self::prepare_batch_payload(row_number_1based, &row)?;
 
-        // 3. Despacho Atômico (Simulado conforme Phase C)
+        // 4. Despacho Atômico (Simulado conforme Phase C)
         Self::dispatch_to_cloud(batch_payload).await?;
 
-        Ok(())
+        Ok(row_number_1based)
+    }
+
+    async fn resolve_row_number_by_repo_url_and_lote_id(
+        spreadsheet_id: &str,
+        sheet: &str,
+        repo_url: &str,
+        lote_id: &str,
+    ) -> Result<u32, SsotError> {
+        let result = Self::call_mcp_google_sheets_tool(
+            "get_sheet_data",
+            json!({
+                "spreadsheet_id": spreadsheet_id,
+                "sheet": sheet,
+                "range": "B2:E",
+                "include_grid_data": false
+            }),
+        )
+        .await?;
+
+        let values = Self::extract_values_2d(&result).unwrap_or_default();
+        let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
+        let lote_needle = lote_id.trim();
+
+        for (idx, row) in values.iter().enumerate() {
+            let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+            let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
+            let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
+            if !repo_hay.is_empty()
+                && repo_hay == needle
+                && !lote_cell.is_empty()
+                && lote_cell == lote_needle
+            {
+                return Ok((idx as u32) + 2);
+            }
+        }
+
+        for (idx, row) in values.iter().enumerate() {
+            let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+            let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
+            if repo_cell.is_empty() && lote_cell.is_empty() {
+                return Ok((idx as u32) + 2);
+            }
+        }
+
+        let _ = Self::call_mcp_google_sheets_tool(
+            "add_rows",
+            json!({
+                "spreadsheet_id": spreadsheet_id,
+                "sheet": sheet,
+                "count": 1
+            }),
+        )
+        .await?;
+
+        Ok((values.len() as u32) + 2)
+    }
+
+    async fn call_mcp_google_sheets_tool(
+        tool_name: &str,
+        arguments: Value,
+    ) -> Result<Value, SsotError> {
+        use std::process::Stdio;
+        use tokio::io::AsyncWriteExt;
+        use tokio::process::Command;
+
+        let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
+            .map_err(|_| SsotError::ConfigMissing("GOOGLE_APPLICATION_CREDENTIALS"))?;
+
+        let init_req = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "clientInfo": { "name": "genesis-mc", "version": "1.0" },
+                "capabilities": {}
+            }
+        });
+        let initialized_notif = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        });
+        let mcp_request = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": { "name": tool_name, "arguments": arguments }
+        });
+
+        let mut child = Command::new("mcp-google-sheets")
+            .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(format!("{}\n", init_req).as_bytes())
+                .await
+                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever init no MCP: {}", e)))?;
+            stdin
+                .write_all(format!("{}\n", initialized_notif).as_bytes())
+                .await
+                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever initialized no MCP: {}", e)))?;
+            stdin
+                .write_all(format!("{}\n", mcp_request).as_bytes())
+                .await
+                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever tools/call no MCP: {}", e)))?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .await
+            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao aguardar processo MCP: {}", e)))?;
+        if !output.status.success() {
+            return Err(SsotError::NetworkFailure(format!(
+                "Falha no processo MCP. Exit {}. STDERR: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        Self::parse_mcp_tool_stdout(&stdout_str, 2).map_err(SsotError::NetworkFailure)
+    }
+
+    fn parse_mcp_tool_stdout(stdout: &str, expected_id: i64) -> Result<Value, String> {
+        for line in stdout.lines() {
+            let Ok(value) = serde_json::from_str::<Value>(line) else {
+                continue;
+            };
+            let id = value.get("id").and_then(|v| v.as_i64());
+            if id != Some(expected_id) {
+                continue;
+            }
+            if let Some(err) = value.get("error") {
+                return Err(format!("MCP error: {}", err));
+            }
+            let Some(result) = value.get("result") else {
+                return Err("MCP missing result".to_string());
+            };
+            if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+                let mut combined = String::new();
+                for part in content {
+                    if part.get("type").and_then(|t| t.as_str()) != Some("text") {
+                        continue;
+                    }
+                    let text = part.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                    if !text.trim().is_empty() {
+                        if !combined.is_empty() {
+                            combined.push('\n');
+                        }
+                        combined.push_str(text);
+                    }
+                }
+                if !combined.trim().is_empty() {
+                    if let Ok(json_val) = serde_json::from_str::<Value>(&combined) {
+                        return Ok(json_val);
+                    }
+                    return Ok(json!({ "text": combined }));
+                }
+            }
+            return Ok(result.clone());
+        }
+        Err("MCP tool response not found in stdout".to_string())
+    }
+
+    fn extract_values_2d(value: &Value) -> Option<Vec<Vec<String>>> {
+        if let Some(values) = value.get("values").and_then(|v| v.as_array()) {
+            return Some(Self::parse_values_array(values));
+        }
+        if let Some(vrs) = value.get("valueRanges").and_then(|v| v.as_array()) {
+            if let Some(first) = vrs.first() {
+                if let Some(values) = first.get("values").and_then(|v| v.as_array()) {
+                    return Some(Self::parse_values_array(values));
+                }
+            }
+        }
+        if let Some(result) = value.get("result") {
+            return Self::extract_values_2d(result);
+        }
+        if let Some(text) = value.get("text").and_then(|v| v.as_str()) {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                return Self::extract_values_2d(&parsed);
+            }
+        }
+        None
+    }
+
+    fn parse_values_array(values: &[Value]) -> Vec<Vec<String>> {
+        values
+            .iter()
+            .map(|row| {
+                row.as_array()
+                    .map(|r| {
+                        r.iter()
+                            .map(|cell| cell.as_str().unwrap_or("").to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>()
     }
 
     fn validate_payload(
@@ -183,6 +413,13 @@ impl SsotInjector {
         }
 
         let repo_version = Self::require_non_empty("repo_version", &payload.repo_version)?;
+        let repo_version_lower = repo_version.to_ascii_lowercase();
+        if repo_version_lower == "main" || repo_version_lower == "master" {
+            return Err(SsotError::ValidationFailure(format!(
+                "repo_version invalido (branch): '{}'",
+                repo_version
+            )));
+        }
         let ultima_versao_online =
             Self::require_non_empty("ultima_versao_online", &payload.ultima_versao_online)?;
         let lote_id = Self::require_non_empty("lote_id", &payload.lote_id)?;
@@ -235,6 +472,8 @@ impl SsotInjector {
         status_value: &str,
         payload: &MasterSolutionsRow,
         validated: &ValidatedSsotFields,
+        block3_justifications: &HashMap<String, String>,
+        now_epoch: i64,
     ) -> Result<(), String> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let root_dir = std::path::Path::new(manifest_dir).parent().unwrap_or_else(|| std::path::Path::new("."));
@@ -244,6 +483,7 @@ impl SsotInjector {
             .map_err(|e| format!("Falha ao conectar no SQLite: {}", e))?;
 
         Self::ensure_repo_heuristics_schema(&conn)?;
+        Self::ensure_repo_heuristics_justifications_schema(&conn)?;
 
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
@@ -337,6 +577,20 @@ impl SsotInjector {
                 payload.embargo_status,
             ],
         ).map_err(|e| format!("Falha ao executar INSERT repo_heuristics: {}", e))?;
+
+        if !block3_justifications.is_empty() {
+            let json_text =
+                serde_json::to_string(block3_justifications).unwrap_or_else(|_| "{}".to_string());
+            conn.execute(
+                "INSERT INTO repo_heuristics_justifications (project_name, block, justifications_json, created_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(project_name, block) DO UPDATE SET
+                    justifications_json = excluded.justifications_json,
+                    created_at = excluded.created_at",
+                rusqlite::params![repo_id, 3_i64, json_text, now_epoch],
+            )
+            .map_err(|e| format!("Falha ao persistir justifications do Bloco 3 em SQLite: {}", e))?;
+        }
 
         // Atualizando o status em repositorios
         let _ = conn.execute(
@@ -439,6 +693,21 @@ impl SsotInjector {
         Ok(())
     }
 
+    fn ensure_repo_heuristics_justifications_schema(conn: &Connection) -> Result<(), String> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS repo_heuristics_justifications (
+                project_name TEXT NOT NULL,
+                block INTEGER NOT NULL,
+                justifications_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (project_name, block)
+            )",
+            [],
+        )
+        .map_err(|e| format!("Falha ao criar tabela repo_heuristics_justifications: {}", e))?;
+        Ok(())
+    }
+
     fn prepare_batch_payload(
         row_number_1based: u32,
         payload: &MasterSolutionsRow,
@@ -459,21 +728,28 @@ impl SsotInjector {
             let idx_valid_from = last - 2;
             let idx_valid_to = last - 1;
             let idx_embargo = last;
-            if rows[0][idx_valid_from].as_i64().is_none() {
+            let valid_from_ok = rows[0][idx_valid_from]
+                .as_str()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            if !valid_from_ok {
                 return Err(SsotError::ValidationFailure(
                     "valid_from invalido no payload do Sheets".to_string(),
                 ));
             }
-            if rows[0][idx_embargo].as_i64().is_none() {
+            let embargo_ok = rows[0][idx_embargo]
+                .as_str()
+                .map(|s| s == "LIVRE" || s == "EMBARGADO")
+                .unwrap_or(false);
+            if !embargo_ok {
                 return Err(SsotError::ValidationFailure(
                     "embargo_status invalido no payload do Sheets".to_string(),
                 ));
             }
-            let valid_to_ok = rows[0][idx_valid_to].as_i64().is_some()
-                || rows[0][idx_valid_to]
-                    .as_str()
-                    .map(|s| s.trim().is_empty())
-                    .unwrap_or(false);
+            let valid_to_ok = rows[0][idx_valid_to]
+                .as_str()
+                .map(|s| s.trim().is_empty() || s.contains('-'))
+                .unwrap_or(false);
             if !valid_to_ok {
                 return Err(SsotError::ValidationFailure(
                     "valid_to invalido no payload do Sheets".to_string(),
@@ -540,11 +816,14 @@ mod tests {
         assert_eq!(arr.len(), 1);
         let row_arr = arr[0].as_array().unwrap();
         assert_eq!(row_arr.len(), SSOT_EXPECTED_COLUMNS);
-        assert_eq!(arr[0][0], json!("owner/repo"));
+        assert_eq!(arr[0][0], json!("owner / repo"));
         assert_eq!(arr[0][1], json!("https://github.com/owner/repo"));
-        assert_eq!(row_arr[SSOT_EXPECTED_COLUMNS - 3], json!(1_700_000_000));
+        assert!(row_arr[SSOT_EXPECTED_COLUMNS - 3]
+            .as_str()
+            .map(|s| !s.trim().is_empty() && s.contains('-'))
+            .unwrap_or(false));
         assert_eq!(row_arr[SSOT_EXPECTED_COLUMNS - 2], json!(""));
-        assert_eq!(row_arr[SSOT_EXPECTED_COLUMNS - 1], json!(0));
+        assert_eq!(row_arr[SSOT_EXPECTED_COLUMNS - 1], json!("LIVRE"));
         assert_eq!(validated.project_name, "owner/repo");
     }
 
@@ -599,6 +878,9 @@ mod tests {
         row.proposta_original_resumo = "Resumo".to_string();
         row.stack_base = "Rust".to_string();
         row.licenca = "MIT".to_string();
+        row.valid_from = 1_700_000_000;
+        row.valid_to = None;
+        row.embargo_status = 0;
 
         let sheets = MockSheetsClient::new();
         SsotInjector::dispatch_master_solutions_row(&sheets, "SHEET_ID", 2, &row)

@@ -96,6 +96,54 @@ impl HarvesterOrchestrator {
             .map_err(|e| OrchestratorError::CloneError(e.to_string()))?;
         info!(repo_id = %repo_id, repo_path = %repo_path.display(), "N2: Clone blobless concluido");
 
+        let repo_version = tokio::fs::read_to_string(repo_path.join(".soda_repo_version"))
+            .await
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let ultima_versao_online = tokio::fs::read_to_string(repo_path.join(".soda_ultima_versao_online"))
+            .await
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        if repo_version.is_some() || ultima_versao_online.is_some() {
+            let conn_lock = conn.lock().map_err(|e| {
+                OrchestratorError::PersistenceError(format!(
+                    "Falha ao adquirir lock do banco para persistir repo_version: {}",
+                    e
+                ))
+            })?;
+            Self::ensure_repositorios_repo_version_column(&conn_lock)?;
+            Self::ensure_repositorios_ultima_versao_online_column(&conn_lock)?;
+            if let Some(repo_version) = repo_version {
+                conn_lock
+                    .execute(
+                        "UPDATE repositorios SET repo_version = ?1 WHERE project_name = ?2",
+                        rusqlite::params![repo_version, repo_id],
+                    )
+                    .map_err(|e| {
+                        OrchestratorError::PersistenceError(format!(
+                            "Falha ao persistir repo_version em repositorios: {}",
+                            e
+                        ))
+                    })?;
+            }
+            if let Some(ultima_versao_online) = ultima_versao_online {
+                conn_lock
+                    .execute(
+                        "UPDATE repositorios SET ultima_versao_online = ?1 WHERE project_name = ?2",
+                        rusqlite::params![ultima_versao_online, repo_id],
+                    )
+                    .map_err(|e| {
+                        OrchestratorError::PersistenceError(format!(
+                            "Falha ao persistir ultima_versao_online em repositorios: {}",
+                            e
+                        ))
+                    })?;
+            }
+        }
+
         // [N3] Sandbox Orchestrator
         info!(repo_id = %repo_id, repo_path = %repo_path.display(), "N3: Criando sandbox efemero");
         let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite)
@@ -294,6 +342,40 @@ impl HarvesterOrchestrator {
         info!(repo_id = %repo_id, "N12: Persistencia do pacote RAW concluida");
 
         Ok(())
+    }
+
+    fn ensure_repositorios_repo_version_column(conn: &Connection) -> Result<(), OrchestratorError> {
+        match conn.execute("ALTER TABLE repositorios ADD COLUMN repo_version TEXT", []) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.to_ascii_lowercase().contains("duplicate column") {
+                    Ok(())
+                } else {
+                    Err(OrchestratorError::PersistenceError(format!(
+                        "Falha ao garantir coluna repositorios.repo_version: {}",
+                        msg
+                    )))
+                }
+            }
+        }
+    }
+
+    fn ensure_repositorios_ultima_versao_online_column(conn: &Connection) -> Result<(), OrchestratorError> {
+        match conn.execute("ALTER TABLE repositorios ADD COLUMN ultima_versao_online TEXT", []) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.to_ascii_lowercase().contains("duplicate column") {
+                    Ok(())
+                } else {
+                    Err(OrchestratorError::PersistenceError(format!(
+                        "Falha ao garantir coluna repositorios.ultima_versao_online: {}",
+                        msg
+                    )))
+                }
+            }
+        }
     }
 }
 

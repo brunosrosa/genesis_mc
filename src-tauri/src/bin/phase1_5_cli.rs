@@ -266,7 +266,10 @@ fn count_persisted_packages(conn: &Connection, repo_id: &str) -> io::Result<i64>
 }
 
 fn write_phase1_5_report(root_dir: &Path, conn: &Connection, repo_id: &str) -> io::Result<PathBuf> {
-    let report_path = root_dir.join(format!("_PHASE1_5_REPORT_{}.txt", sanitize_repo_id(repo_id)));
+    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&reports_dir)
+        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
+    let report_path = reports_dir.join(format!("_PHASE1_5_REPORT_{}.txt", sanitize_repo_id(repo_id)));
 
     let mut report = String::new();
     report.push_str(&format!("repo_id={}\n", repo_id));

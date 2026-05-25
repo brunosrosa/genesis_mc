@@ -28,88 +28,88 @@ repositorios,timestamp_fase_1,INTEGER,-,-,Hora exata em que o Harvester terminou
 repositorios,timestamp_fase_3,INTEGER,-,-,Hora exata (ISO-8601) da conclusão bem-sucedida do Funil Pydantic (Decodificação Restrita) gerado pelo Local Worker. Vital para medir a latência total E³.
 repositorios,retry_count,INTEGER,NOT NULL,-,"Padrão 0. O Daemon incrementa a cada falha. Atingindo o Kill-Switch de 3 tentativas, o status do repositório é travado definitivamente em 'SHORT-CIRCUIT' para evitar loops infinitos de processamento."
 ,,,,,
-repo_heuristics,project_name,TEXT,NOT NULL,"PRIMARY KEY, FOREIGN KEY (repositorios)","Formato ""Owner/Repo"". Chave primária absoluta da tabela e elo de integridade com as tabelas de estado (Fase 1 e 2)."
-repo_heuristics,repo_url,TEXT,NOT NULL,UNIQUE,"URL canônica de origem. Trava UNIQUE garante que o script faça UPSERT (atualização) se a URL já existir, evitando duplicatas."
-repo_heuristics,repo_version,TEXT,NOT NULL,-,Hash curto do commit ou Tag de release (ex: v2.4.1). Ancara a imutabilidade temporal da análise.
-repo_heuristics,ultima_versao_online,TEXT,-,-,Tag ou hash curto do último commit disponível na nuvem (Fase -1). Usado para o cálculo mecânico de Drift de atualização.
-repo_heuristics,lote_id,TEXT,NOT NULL,-,Identificador do batch de ingestão (ex: LOTE_015_Infra).
-repo_heuristics,data_ultima_analise,INTEGER,NOT NULL,-,Timestamp em formato estrito ISO-8601 (YYYY-MM-DDTHH:MM:SSZ).
-repo_heuristics,analise_origem,TEXT,NOT NULL,-,"Assinatura do motor responsável pela inserção (ex: ""SODA ETL V3 Auto"")."
-repo_heuristics,declared_description,TEXT,NOT NULL,-,"A promessa de marketing original extraída do README, traduzida para PT-BR."
-repo_heuristics,proposta_original_resumo,TEXT,NOT NULL,-,Síntese técnica desidratada e neutra do que a ferramenta realmente faz (gerada pelo formatador na Fase 3).
-repo_heuristics,stack_base,TEXT,NOT NULL,-,Array serializado em string com linguagens/frameworks originais. Vital para o Arquiteto auditar lixo tóxico (Node/Electron).
-repo_heuristics,licenca,TEXT,-,-,"Código SPDX (ex: MIT, AGPL-3.0) fornecido pela API. Fundamental para a blindagem legal do SODA contra copyleft."
-repo_heuristics,lente_a_sentido_prod_ux,TEXT,-,-,Salva a redação final da Visão de Produto/UX gerada na Fase 2. Pode ser NULL em caso de falha isolada desta API (Resiliência do Enxame).
-repo_heuristics,lente_b_estrutura_arq,TEXT,-,-,Salva a redação final da Visão de Arquitetura/Bare-Metal. Pode ser NULL em caso de falha isolada desta API.
-repo_heuristics,lente_c_realidade_ops,TEXT,-,-,Salva a redação final da Visão de Operação/FinOps. Pode ser NULL em caso de falha isolada desta API.
-repo_heuristics,visao_do_enxame,TEXT,NOT NULL,-,Síntese dialética entre as Lentes processada e unificada na Fase 3.
-repo_heuristics,justificativa_decisao,TEXT,NOT NULL,-,Defesa lógico-matemática da decisão. Validada via Pydantic e salva como TEXT.
-repo_heuristics,executive_verdict,TEXT,NOT NULL,-,Veredito final do Arquiteto (Tese -> Antítese -> Síntese). A trava Pydantic do script força truncagem estrita em 400 caracteres.
-repo_heuristics,classificacao_terminal,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic (ex: 'INTEGRATE_AS_COMPONENT', 'REJECT'). Salvo como string de TEXTO."
-repo_heuristics,acao_de_canibalizacao,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic definindo o alvo da extração física (ex: 'Data Model', 'UX Pattern')."
-repo_heuristics,categoria_arquitetural,TEXT,NOT NULL,-,"Enum estrito mapeando o grande domínio Épico do SODA (ex: 'Memória', 'Orquestração')."
-repo_heuristics,horizonte_extracao,TEXT,NOT NULL,-,"Enum cronológico indicando a posição no roadmap de desenvolvimento (ex: 'IMEDIATO', 'CURTO_PRAZO')."
-repo_heuristics,tipo_integracao,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic (ex: 'Sidecar Efêmero', 'Crate Nativa'). Define a topologia de injeção física no SO."
-repo_heuristics,categoria_nuance_tecnica,TEXT,NOT NULL,-,"A especialidade hiper-técnica da solução (ex: 'Motor de busca híbrido BM25', 'Parser AST O(1)')."
-repo_heuristics,integracao_papel_exato,TEXT,NOT NULL,-,A missão tática e cirúrgica do componente após ser absorvido pelo SODA.
-repo_heuristics,ouro_a_extrair,TEXT,NOT NULL,-,"A sacada genial de produto/UX, heurística intangível que justifica a canibalização."
-repo_heuristics,deep_pattern,TEXT,NOT NULL,-,Padrão lógico estrutural subjacente abstrato (ex: 'Regulação contínua de recursos').
-repo_heuristics,transplantable_core,TEXT,NOT NULL,-,O 'órgão mecânico' exato a ser amputado e levado para casa (ex: 'Máquina de estados FSM').
-repo_heuristics,logic_math_heuristic,TEXT,NOT NULL,-,"A alma matemática pura: algoritmos, tensores e heurísticas em O(1), ignorando a stack original."
-repo_heuristics,real_structural_problem,TEXT,NOT NULL,-,A dor raiz verdadeira e estrutural que a ferramenta original resolve no fundo.
-repo_heuristics,must_components_prod_ux,TEXT,NOT NULL,-,Array serializado em string (JSON-like). Lista estrita de workflows de Produto e UX a clonar.
-repo_heuristics,must_components_arq,TEXT,NOT NULL,-,Array serializado em string (JSON-like). Lista estrita de pipelines zero-copy e abstrações O(1) a reescrever em Rust.
-repo_heuristics,must_components_ops,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). Defesas Ops, táticas de rollback atômico, Sandboxing e proteções FinOps/Rate Limits obrigatórias a copiar."
-repo_heuristics,detected_toxic_deps,TEXT,NOT NULL,-,"Array serializado em string (JSON). Campo onde o Pydantic relaxa a validação para isolar intencionalmente rastros de 'react', 'node_modules' e 'electron' encontrados na base."
-repo_heuristics,do_not_absorb,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). O Lixo Tóxico absoluto a ser expurgado (ex: Servidores Node.js, UIs em React, Docker pesado, Telemetria)."
-repo_heuristics,where_ai_should_not_enter,TEXT,NOT NULL,-,O 'Cercadinho do Determinismo'. Inicia OBRIGATORIAMENTE com 'PROIBIDO...'. Demarca as zonas de RCE e corrupção de banco onde a IA não tem permissão de atuar.
-repo_heuristics,bare_metal_fit,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, EXCELLENT). Nota física cravada avaliando a Soberania em Runtime e o Agnosticismo da solução. Avalia se a arquitetura é transmutável para operar em qualquer silício futuro, usando a RTX 2060m e CPU AVX2 estritamente como 'Treino de Gravidade' (piso de validação)."
-repo_heuristics,extractability_level,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, EXCELLENT). Avalia matematicamente a facilidade de amputar o núcleo vital em O(1) sem arrastar o monólito original."
-repo_heuristics,operability_level,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, EXCELLENT). Avalia a resiliência contínua, logs claros e se a ferramenta opera de forma 'fire-and-forget' sem DevOps babá."
-repo_heuristics,entropy_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Nível de risco de exfiltração de dados (telemetria obscura), lock-in de provedor de nuvem ou quebra de conformidade."
-repo_heuristics,design_misuse_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Avalia se a UX/UI original induz o humano à auto-sabotagem cognitiva, viés de automação ou fadiga de alertas."
-repo_heuristics,intrinsic_ethics_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Mede o risco arquitetural de injeção de prompt, vulnerabilidades estruturais ou invasão de privacidade nativa do código."
-repo_heuristics,discipline_dependency,TEXT,NOT NULL,-,"Enum estrito (Nenhuma, Baixa, Média, Alta, Crítica). Trava de neuro-inclusão: avalia se a solução colapsa sob uso imperfeito de humanos com TDAH (esquecimentos)."
-repo_heuristics,risco_principal,TEXT,NOT NULL,-,"1 frase cortante e letal expondo a maior fragilidade técnica, vulnerabilidade ou gargalo termodinâmico do projeto."
-repo_heuristics,risco_linha_vermelha,TEXT,NOT NULL,-,"Restrição imperativa iniciando com ""NUNCA FAZER..."". A barreira arquitetural dogmática que não podemos cruzar ao absorver este código."
-repo_heuristics,observacoes,TEXT,NOT NULL,-,"Notas curtas de anomalias descobertas, como chaves fixas (hardcoded) ou variáveis ocultas encontradas durante a varredura AST do Harvester."
-repo_heuristics,score_final,REAL,NOT NULL,-,Nota Média Flutuante (ex: 8.5). Calculada mecanicamente pelo Rust (arredondada para 1 casa decimal) baseada nas notas inteiras.
-repo_heuristics,score_fit_geral_soda,REAL,NOT NULL,-,"Nota Flutuante Ponderada (ex: 7.2). Calculada no Rust aplicando a nova fórmula V3: prioriza Lógica (30%) e Extraibilidade (15%), balanceadas com Soberania, Bare-Metal, Operabilidade, e penalidades de Creep/Risco Intrínseco."
-repo_heuristics,score_philosophical_fit,INTEGER,NOT NULL,-,Nota pura em Integer (0-10). 10 = Local-First / Zero-Trust absoluto.
-repo_heuristics,score_bare_metal_fit,INTEGER,NOT NULL,-,"Nota pura em Integer (0-10). Avalia se a lógica matemática é agnóstica e pode ser recompilada dinamicamente para extrair o máximo de qualquer hardware (Metal, Vulkan, NPU). Pune letalmente monólitos acoplados permanentemente a interpretadores pesados (Node/JVM)."
-repo_heuristics,score_architectural_extractability,INTEGER,NOT NULL,-,Nota pura em Integer (0-10). 10 = Núcleo de lógica em O(1) isolado perfeitamente sem acoplamento.
-repo_heuristics,score_operability,INTEGER,NOT NULL,-,"Nota pura em Integer (0-10). 10 = Fire-and-forget, sem precisar de DevOps contínuo para manter no ar."
-repo_heuristics,score_creep_risk,INTEGER,NOT NULL,-,Nota pura em Integer (0-10) INVERTIDA. 10 = Bomba-relógio de Feature Creep inchada; 0 = Funcionalidade atômica contida.
-repo_heuristics,score_runtime_sovereignty,INTEGER,NOT NULL,-,Nota 0-10. Avalia a independência absoluta do código em tempo de execução.
-repo_heuristics,score_model_logic_value,INTEGER,NOT NULL,-,"Nota 0-10. O valor puro da lógica matemática/heurística, ignorando a UI."
-repo_heuristics,score_ethics_safety,INTEGER,NOT NULL,-,Nota 0-10. Nível de segurança e sanidade moral/regulatório do código.
-repo_heuristics,score_intrinsic_risk,INTEGER,NOT NULL,-,Nota 0-10. O perigo arquitetural embutido na própria natureza da solução.
-repo_heuristics,capability_nature_primary,TEXT,NOT NULL,-,"Enum estrito mapeando o papel funcional da capacidade (ex: Memory, Execution)."
-repo_heuristics,architectural_topology,TEXT,NOT NULL,-,"Enum estrito da topologia física do projeto (ex: Monolith, Event-driven)."
-repo_heuristics,runtime_sovereignty_fit,TEXT,NOT NULL,-,Avaliação de soberania em tempo de execução sem chamadas externas a APIs de terceiros.
-repo_heuristics,local_first_fit,TEXT,NOT NULL,-,Avaliação de aderência ao modelo de armazenamento puramente local/offline.
-repo_heuristics,temporal_stability,TEXT,NOT NULL,-,Enum restrito (STABLE ou EVOLVING). Vital para o RAG Temporal (Epic 8) não sofrer viés de recência. Repositórios maduros e bases lógicas ganham STABLE.
-repo_heuristics,adoptability_level,TEXT,NOT NULL,-,Enum (Very Low a Excellent). Quão bem a solução entra na vida do usuário/agente sem atrito inicial.
-repo_heuristics,longitudinal_sustainability,TEXT,NOT NULL,-,Enum (Very Low a Excellent). Quão bem a solução se sustenta ao longo dos meses sem apodrecer.
-repo_heuristics,abandonment_risk,TEXT,NOT NULL,-,Enum (Low a Critical). Probabilidade de ser abandonada por exigir fricção e disciplina humana excessiva.
-repo_heuristics,maintenance_burden,TEXT,NOT NULL,-,Enum (Low a Very High). A carga de trabalho contínua para manter a solução em pé.
-repo_heuristics,onboarding_friction,TEXT,NOT NULL,-,Enum (Low a Very High). Quão difícil é inicializar e começar a extrair valor.
-repo_heuristics,observability_operational,TEXT,NOT NULL,-,Enum (Very Low a Excellent). Facilidade de perceber que um erro silencioso está ocorrendo.
-repo_heuristics,recoverability_level,TEXT,NOT NULL,-,Enum (Very Low a Excellent). Rapidez para recuperar o estado após um crash ou falha.
-repo_heuristics,degradation_behavior,TEXT,NOT NULL,-,"Enum (Graceful, Acceptable, Fragile, Catastrophic). Como o sistema se comporta quando falta recurso."
-repo_heuristics,curation_burden,TEXT,NOT NULL,-,Enum (Low a Very High). Quanta curadoria manual humana o sistema exige para não virar lixo.
-repo_heuristics,time_to_first_clear_value,TEXT,NOT NULL,-,Enum (Immediate a Very Long). Latência até o humano perceber a utilidade do módulo.
-repo_heuristics,imperfection_tolerance,TEXT,NOT NULL,-,Enum (Very Low a Excellent). Sobrevivência do sistema a inputs errados do usuário (neuro-inclusão).
-repo_heuristics,evolution_cost,TEXT,NOT NULL,-,Enum (Low a Very High). Custo computacional ou humano de manter a arquitetura atualizada.
-repo_heuristics,regulatory_risk,TEXT,NOT NULL,-,"Enum (Low a Critical). Risco legal/regulatório embutido (ex: finanças, biometria)."
-repo_heuristics,score_architectural_priority,REAL,NOT NULL,-,"Cálculo nativo Rust. Pondera lógica, capability e infra, indicando urgência de dissecção técnica."
-repo_heuristics,score_human_product_priority,REAL,NOT NULL,-,Cálculo nativo Rust. Pondera o valor de UX e impacto nos Canvas para o usuário final.
-repo_heuristics,score_absorption_readiness,REAL,NOT NULL,-,Cálculo nativo Rust. Indica quão madura e segura está a solução para ser imediatamente amputada.
-repo_heuristics,score_operational_priority,REAL,NOT NULL,-,"Cálculo nativo Rust. Combina operabilidade, adoção e resiliência vs fricção."
-repo_heuristics,score_sustainability_adjusted_fit,REAL,NOT NULL,-,Cálculo nativo Rust. O Fit Geral penalizado ativamente pelo risco de abandono e entropia a longo prazo.
-repo_heuristics,valid_from,INTEGER,NOT NULL,-,Int64 (Epoch temporal). Timestamp de quando a análise se tornou válida. Exigido para o índice escalar B-Tree no LanceDB atuar antes da busca vetorial.
-repo_heuristics,valid_to,INTEGER,-,-,"Int64 (Epoch) ou NULL. Data formal de caducidade se o projeto for marcado como EVOLVING. Se for nulo, a informação permanece corrente."
-repo_heuristics,embargo_status,INTEGER,NOT NULL,-,Booleano (1/0). O motor de Rebalanceamento Estrutural marca como 1 (TRUE) se detectar repetição não-natural de notas altas. Interrompe a ida para as Views de Ação até a IA local forçar o preenchimento de defeitos (SGR). Padrão é 0.
+repo_heuristics,project_name,TEXT,NOT NULL,PRIMARY KEY,"Chave canônica ""Owner/Repo"". Elo de integridade usado por todo o pipeline."
+repo_heuristics,repo_url,TEXT,NOT NULL,-,URL canônica do repositório. Usada para auditoria e para casar com a SSOT.
+repo_heuristics,repo_version,TEXT,NOT NULL,-,Tag de release ou SHA curto efetivamente usado na análise.
+repo_heuristics,ultima_versao_online,TEXT,-,-,Última versão observável na nuvem (tag/sha) quando disponível.
+repo_heuristics,lote_id,TEXT,NOT NULL,-,Identificador do lote/bateria de execução persistido no vault.
+repo_heuristics,data_ultima_analise,INTEGER,NOT NULL,-,Epoch (segundos) de quando a linha foi gerada.
+repo_heuristics,analise_origem,TEXT,NOT NULL,-,Assinatura do motor/fluxo que gerou a linha.
+repo_heuristics,licenca,TEXT,-,-,Licença SPDX quando detectada (pode ser vazia/NULL).
+repo_heuristics,stack_base,TEXT,NOT NULL,-,Stack detectada para auditoria (texto/bullets).
+repo_heuristics,declared_description,TEXT,NOT NULL,-,Descrição declarada (o pipeline injeta PT-BR quando disponível).
+repo_heuristics,lente_a_sentido_prod_ux,TEXT,-,-,Lente A normalizada (bullets) quando disponível.
+repo_heuristics,lente_b_estrutura_arq,TEXT,-,-,Lente B normalizada (bullets) quando disponível.
+repo_heuristics,lente_c_realidade_ops,TEXT,-,-,Lente C normalizada (bullets) quando disponível.
+repo_heuristics,proposta_original_resumo,TEXT,NOT NULL,-,Resumo técnico neutro (Bloco 1).
+repo_heuristics,visao_do_enxame,TEXT,NOT NULL,-,Síntese dialética das 3 lentes (Bloco 2).
+repo_heuristics,justificativa_decisao,TEXT,NOT NULL,-,Justificativa da decisão (Bloco 2).
+repo_heuristics,executive_verdict,TEXT,NOT NULL,-,Veredito executivo (Bloco 2).
+repo_heuristics,risco_principal,TEXT,NOT NULL,-,Risco principal (frase curta).
+repo_heuristics,risco_linha_vermelha,TEXT,NOT NULL,-,Restrição de linha vermelha (imperativo).
+repo_heuristics,observacoes,TEXT,NOT NULL,-,Observações/ressalvas (texto curto).
+repo_heuristics,ouro_a_extrair,TEXT,NOT NULL,-,Ouro a extrair (Bloco 3).
+repo_heuristics,deep_pattern,TEXT,NOT NULL,-,Padrão profundo (Bloco 3).
+repo_heuristics,transplantable_core,TEXT,NOT NULL,-,Núcleo transplantável (Bloco 3).
+repo_heuristics,logic_math_heuristic,TEXT,NOT NULL,-,Heurística lógico-matemática (Bloco 3).
+repo_heuristics,real_structural_problem,TEXT,NOT NULL,-,Problema estrutural real (Bloco 3).
+repo_heuristics,categoria_nuance_tecnica,TEXT,NOT NULL,-,Categoria/nuance técnica (Bloco 3).
+repo_heuristics,integracao_papel_exato,TEXT,NOT NULL,-,Papel exato da integração (Bloco 3).
+repo_heuristics,must_components_prod_ux,TEXT,NOT NULL,-,Lista (bullets) de componentes de Produto/UX.
+repo_heuristics,must_components_arq,TEXT,NOT NULL,-,Lista (bullets) de componentes de Arquitetura.
+repo_heuristics,must_components_ops,TEXT,NOT NULL,-,Lista (bullets) de componentes de Operações.
+repo_heuristics,detected_toxic_deps,TEXT,NOT NULL,-,Lista (bullets) de dependências tóxicas detectadas.
+repo_heuristics,do_not_absorb,TEXT,NOT NULL,-,Lista (bullets) do que não absorver.
+repo_heuristics,where_ai_should_not_enter,TEXT,NOT NULL,-,Restrições imperativas (zona proibida para IA).
+repo_heuristics,classificacao_terminal,TEXT,NOT NULL,-,Enum terminal normalizado (persistido em token estável).
+repo_heuristics,acao_de_canibalizacao,TEXT,NOT NULL,-,Enum normalizado da ação de canibalização (persistido em token estável).
+repo_heuristics,categoria_arquitetural,TEXT,NOT NULL,-,Enum normalizado da categoria arquitetural (persistido em token estável).
+repo_heuristics,horizonte_extracao,TEXT,NOT NULL,-,Enum normalizado do horizonte de extração (persistido em token estável).
+repo_heuristics,tipo_integracao,TEXT,NOT NULL,-,Enum normalizado do tipo de integração (persistido em token estável).
+repo_heuristics,capability_nature_primary,TEXT,NOT NULL,-,Enum normalizado da natureza primária da capacidade.
+repo_heuristics,architectural_topology,TEXT,NOT NULL,-,Enum normalizado da topologia arquitetural.
+repo_heuristics,temporal_stability,TEXT,NOT NULL,-,Enum normalizado de estabilidade temporal (STABLE/EVOLVING).
+repo_heuristics,bare_metal_fit,TEXT,NOT NULL,-,Enum normalizado de aderência bare-metal.
+repo_heuristics,extractability_level,TEXT,NOT NULL,-,Enum normalizado do nível de extraibilidade.
+repo_heuristics,runtime_sovereignty_fit,TEXT,NOT NULL,-,Enum normalizado da soberania de runtime.
+repo_heuristics,local_first_fit,TEXT,NOT NULL,-,Enum normalizado do fit local-first.
+repo_heuristics,adoptability_level,TEXT,NOT NULL,-,Enum normalizado de adotabilidade.
+repo_heuristics,longitudinal_sustainability,TEXT,NOT NULL,-,Enum normalizado de sustentabilidade longitudinal.
+repo_heuristics,maintenance_burden,TEXT,NOT NULL,-,Enum normalizado do fardo de manutenção.
+repo_heuristics,onboarding_friction,TEXT,NOT NULL,-,Enum normalizado da fricção de onboarding.
+repo_heuristics,observability_operational,TEXT,NOT NULL,-,Enum normalizado de observabilidade operacional.
+repo_heuristics,recoverability_level,TEXT,NOT NULL,-,Enum normalizado de recuperabilidade.
+repo_heuristics,degradation_behavior,TEXT,NOT NULL,-,Enum normalizado do comportamento sob degradação.
+repo_heuristics,curation_burden,TEXT,NOT NULL,-,Enum normalizado do fardo de curadoria.
+repo_heuristics,evolution_cost,TEXT,NOT NULL,-,Enum normalizado do custo de evolução.
+repo_heuristics,operability_level,TEXT,NOT NULL,-,Enum normalizado de operabilidade.
+repo_heuristics,abandonment_risk,TEXT,NOT NULL,-,Enum normalizado do risco de abandono.
+repo_heuristics,time_to_first_clear_value,TEXT,NOT NULL,-,Enum normalizado do tempo para primeiro valor claro.
+repo_heuristics,imperfection_tolerance,TEXT,NOT NULL,-,Enum normalizado de tolerância a imperfeição.
+repo_heuristics,entropy_risk,TEXT,NOT NULL,-,Enum normalizado do risco de entropia.
+repo_heuristics,design_misuse_risk,TEXT,NOT NULL,-,Enum normalizado do risco de mau uso.
+repo_heuristics,intrinsic_ethics_risk,TEXT,NOT NULL,-,Enum normalizado do risco ético intrínseco.
+repo_heuristics,discipline_dependency,TEXT,NOT NULL,-,Enum normalizado de dependência de disciplina.
+repo_heuristics,regulatory_risk,TEXT,NOT NULL,-,Enum normalizado do risco regulatório.
+repo_heuristics,score_philosophical_fit,INTEGER,NOT NULL,-,Score inteiro 0–10 (persistido como inteiro).
+repo_heuristics,score_bare_metal_fit,INTEGER,NOT NULL,-,Score inteiro 0–10 (persistido como inteiro).
+repo_heuristics,score_architectural_extractability,INTEGER,NOT NULL,-,Score inteiro 0–10 (persistido como inteiro).
+repo_heuristics,score_operability,INTEGER,NOT NULL,-,Score inteiro 0–10 (persistido como inteiro).
+repo_heuristics,score_creep_risk,INTEGER,NOT NULL,-,Score inteiro 0–10 (quanto maior, pior).
+repo_heuristics,score_runtime_sovereignty,INTEGER,NOT NULL,-,Score inteiro 0–10 (persistido como inteiro).
+repo_heuristics,score_model_logic_value,INTEGER,NOT NULL,-,Score inteiro 0–10 (persistido como inteiro).
+repo_heuristics,score_ethics_safety,INTEGER,NOT NULL,-,Score inteiro 0–10 (persistido como inteiro).
+repo_heuristics,score_intrinsic_risk,INTEGER,NOT NULL,-,Score inteiro 0–10 (quanto maior, pior).
+repo_heuristics,score_final,REAL,NOT NULL,-,Score final (0.0–10.0) persistido como REAL.
+repo_heuristics,score_fit_geral_soda,REAL,NOT NULL,-,Score fit geral (0.0–10.0) persistido como REAL.
+repo_heuristics,score_architectural_priority,REAL,NOT NULL,-,Score derivado (REAL).
+repo_heuristics,score_human_product_priority,REAL,NOT NULL,-,Score derivado (REAL).
+repo_heuristics,score_absorption_readiness,REAL,NOT NULL,-,Score derivado (REAL).
+repo_heuristics,score_operational_priority,REAL,NOT NULL,-,Score derivado (REAL).
+repo_heuristics,score_sustainability_adjusted_fit,REAL,NOT NULL,-,Score derivado (REAL).
+repo_heuristics,valid_from,INTEGER,NOT NULL,-,Epoch (segundos) de validade inicial.
+repo_heuristics,valid_to,INTEGER,-,-,Epoch (segundos) de validade final (ou NULL).
+repo_heuristics,embargo_status,INTEGER,NOT NULL,-,Flag (0/1) de embargo.
 ,,,,,
 artefatos_brutos,artifact_id,INTEGER,NOT NULL,PRIMARY KEY (AUTOINCREMENT),Identificador sequencial único do bloco extraído.
 artefatos_brutos,repo_id,TEXT,NOT NULL,FOREIGN KEY (repositorios.project_name),Elo de integridade conectando os artefatos mecânicos ao repositório exato.

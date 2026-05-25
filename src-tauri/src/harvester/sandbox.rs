@@ -378,13 +378,12 @@ fn env_value_to_absolute_path(value: &str) -> Option<PathBuf> {
 }
 
 fn build_host_write_roots(repo_path: &Path, policy: SandboxPolicy) -> Result<Vec<PathBuf>, SandboxError> {
-    let repo_parent = repo_path.parent().unwrap_or(repo_path);
     let mut roots = match policy {
         SandboxPolicy::ReadOnly => Vec::new(),
         SandboxPolicy::ReadWrite => vec![
             resolve_code_index_path(repo_path),
             semgrep_support_root(repo_path),
-            repo_parent.join(".soda_sandbox"),
+            workspace_root().join(".soda_sandbox"),
         ],
     };
 
