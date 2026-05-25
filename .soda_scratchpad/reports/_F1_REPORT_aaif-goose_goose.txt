@@ -8,7 +8,7 @@ _essence_04_repo_outline	Green	632	PassThrough	2452
 _essence_05_architecture_map	Green	7548	PassThrough	29094
 _essence_06_unsafe_hotspots	Green	2698	PassThrough	10590
 _essence_07_ops_blueprint	Yellow	16860	LocalModel:C:\Users\rosas\Dev_Projects\genesis_mc\.soda_data\models\Qwen3.5-4B-Q4_K_M.gguf	13259
-_essence_08_health_report	Red	86412	CloudCascade	6515
+_essence_08_health_report	Red	86412	CloudCascade	4760
 _essence_09_community_meta	Green	193	PassThrough	502
 _essence_10_soda_canon_context	Green	854	PassThrough	3189
 _essence_11_ux_contracts	Yellow	16823	LocalModel:C:\Users\rosas\Dev_Projects\genesis_mc\.soda_data\models\Qwen3.5-4B-Q4_K_M.gguf	26010
@@ -16,4 +16,4 @@ _essence_11_ux_contracts	Yellow	16823	LocalModel:C:\Users\rosas\Dev_Projects\gen
 package_name	payload_bytes
 A	64760
 B	34818
-C	36887
+C	35132
