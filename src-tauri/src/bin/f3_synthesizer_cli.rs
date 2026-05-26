@@ -792,6 +792,8 @@ fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
 
     let mut child = Command::new("mcp-google-sheets")
         .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
+        .env("UV_NO_PROGRESS", "1")
+        .env("UV_QUIET", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -887,6 +889,88 @@ fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
     }
 
     None
+}
+
+fn resolve_row_number_by_repo_url_and_lote_id(
+    spreadsheet_id: &str,
+    repo_url: &str,
+    lote_id: &str,
+) -> io::Result<u32> {
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": "D2:G",
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d(&result).unwrap_or_default();
+    let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
+    let lote_needle = lote_id.trim();
+
+    for (idx, row) in values.iter().enumerate() {
+        let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+        let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
+        let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
+        if !repo_hay.is_empty()
+            && repo_hay == needle
+            && !lote_cell.is_empty()
+            && lote_cell == lote_needle
+        {
+            return Ok((idx as u32) + 2);
+        }
+    }
+
+    for (idx, row) in values.iter().enumerate() {
+        let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+        let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
+        if repo_cell.is_empty() && lote_cell.is_empty() {
+            return Ok((idx as u32) + 2);
+        }
+    }
+
+    Ok(((values.len() as u32) + 2).max(2))
+}
+
+fn read_status_atualizacao_e_fase(
+    spreadsheet_id: &str,
+    row_number_1based: u32,
+) -> io::Result<(String, String)> {
+    let range = format!("A{row_number_1based}:B{row_number_1based}");
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": range,
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d(&result).unwrap_or_default();
+    let row = values.get(0).cloned().unwrap_or_default();
+    let status_atualizacao = row.get(0).map(|s| s.trim().to_string()).unwrap_or_default();
+    let status_fase = row.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
+    Ok((status_atualizacao, status_fase))
+}
+
+fn update_status_fase_only(
+    spreadsheet_id: &str,
+    row_number_1based: u32,
+    status_fase: &str,
+) -> io::Result<()> {
+    let range = format!("B{row_number_1based}:B{row_number_1based}");
+    let _ = call_mcp(
+        "batch_update_cells",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "ranges": {
+                range: [[status_fase]]
+            }
+        }),
+    )?;
+    Ok(())
 }
 
 fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Result<bool> {
@@ -1025,6 +1109,41 @@ async fn main() -> io::Result<()> {
         io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
     })?;
 
+    let (lote_id, repo_url) = fetch_repo_core(&conn, &repo_id).unwrap_or_else(|_| {
+        (
+            "LOTE_E2E".to_string(),
+            format!("https://github.com/{}", repo_id),
+        )
+    });
+    let lote_id = std::env::var("SODA_LOTE_ID_OVERRIDE")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or(lote_id);
+
+    if e2e_full {
+        if let Ok(spreadsheet_id) = std::env::var("GOOGLE_SHEETS_ID") {
+            let row_number =
+                resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
+            let (status_atualizacao, _status_fase) =
+                read_status_atualizacao_e_fase(&spreadsheet_id, row_number)?;
+            if status_atualizacao == "PENDENTE_FASE_0" {
+                info!(
+                    row_number,
+                    "Orquestrador: gatilho HITL detectado (PENDENTE_FASE_0). Executando apenas F0"
+                );
+                let phase0_ms = run_phase_binary("f0_harvester_cli", &repo_id).await?;
+                update_status_fase_only(&spreadsheet_id, row_number, "FASE_0_OK")?;
+                info!(
+                    phase0_ms,
+                    row_number,
+                    "Orquestrador: F0 concluída; status_fase atualizado; encerrando sem LLM"
+                );
+                return Ok(());
+            }
+        }
+    }
+
     let phase1_ms = if e2e_full {
         run_phase_binary("f0_harvester_cli", &repo_id).await?
     } else {
@@ -1052,17 +1171,6 @@ async fn main() -> io::Result<()> {
     };
 
     let (lens_a, lens_b, lens_c) = fetch_debates(&conn, &repo_id)?;
-    let (lote_id, repo_url) = fetch_repo_core(&conn, &repo_id).unwrap_or_else(|_| {
-        (
-            "LOTE_E2E".to_string(),
-            format!("https://github.com/{}", repo_id),
-        )
-    });
-    let lote_id = std::env::var("SODA_LOTE_ID_OVERRIDE")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(lote_id);
 
     let seed = try_fetch_repo_heuristics_seed(&conn, &repo_id);
     let (seed_repo_version, ultima_versao_online, licenca, stack_base, declared_description) = seed.unwrap_or_else(|| {

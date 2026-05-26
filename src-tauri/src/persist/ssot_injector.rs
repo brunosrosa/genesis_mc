@@ -26,6 +26,7 @@ pub enum SsotError {
 pub struct SsotInjector;
 
 const SSOT_STATUS_CONCLUIDO: &str = "CONCLUIDO";
+const SSOT_STATUS_PRONTO_PARA_FASE_5: &str = "PRONTO_PARA_FASE_5";
 const SSOT_EXPECTED_COLUMNS: usize = 84;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
@@ -87,6 +88,8 @@ impl SheetsClient for McpGoogleSheetsClient {
 
             let mut child = Command::new("mcp-google-sheets")
                 .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
+                .env("UV_NO_PROGRESS", "1")
+                .env("UV_QUIET", "1")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -140,6 +143,13 @@ struct ValidatedSsotFields {
 }
 
 impl SsotInjector {
+    fn status_atualizacao_after_phase4(row: &MasterSolutionsRow) -> &'static str {
+        if row.tipo_integracao.as_str() == "INTEGRATE_AS_COMPONENT" {
+            SSOT_STATUS_PRONTO_PARA_FASE_5
+        } else {
+            SSOT_STATUS_CONCLUIDO
+        }
+    }
     /// Injeta os dados no SSOT (SQLite + Google Sheets Batch)
     pub async fn inject_ssot(
         repo_id: &str,
@@ -152,11 +162,11 @@ impl SsotInjector {
         // 1. Selagem L2 (Execução Durável)
         // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
         apply_phase4_block5(now_epoch, &mut row);
-        row.status_atualizacao = SSOT_STATUS_CONCLUIDO.to_string();
+        row.status_atualizacao = Self::status_atualizacao_after_phase4(&row).to_string();
         row.status_fase = "F4".to_string();
         Self::update_local_status(
             repo_id,
-            SSOT_STATUS_CONCLUIDO,
+            row.status_atualizacao.as_str(),
             &row,
             &validated,
             &block3_justifications,
@@ -207,16 +217,29 @@ impl SsotInjector {
         let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
         let lote_needle = lote_id.trim();
 
+        if let Some(found) = Self::resolve_row_number_from_values(&values, &needle, lote_needle) {
+            return Ok(found);
+        }
+
+        let row_number = (values.len() as u32) + 2;
+        Ok(row_number.max(2))
+    }
+
+    fn resolve_row_number_from_values(
+        values: &[Vec<String>],
+        repo_url_needle: &str,
+        lote_id_needle: &str,
+    ) -> Option<u32> {
         for (idx, row) in values.iter().enumerate() {
             let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
             let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
             let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
             if !repo_hay.is_empty()
-                && repo_hay == needle
+                && repo_hay == repo_url_needle
                 && !lote_cell.is_empty()
-                && lote_cell == lote_needle
+                && lote_cell == lote_id_needle
             {
-                return Ok((idx as u32) + 2);
+                return Some((idx as u32) + 2);
             }
         }
 
@@ -224,21 +247,11 @@ impl SsotInjector {
             let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
             let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
             if repo_cell.is_empty() && lote_cell.is_empty() {
-                return Ok((idx as u32) + 2);
+                return Some((idx as u32) + 2);
             }
         }
 
-        let _ = Self::call_mcp_google_sheets_tool(
-            "add_rows",
-            json!({
-                "spreadsheet_id": spreadsheet_id,
-                "sheet": sheet,
-                "count": 1
-            }),
-        )
-        .await?;
-
-        Ok((values.len() as u32) + 2)
+        None
     }
 
     async fn call_mcp_google_sheets_tool(
@@ -701,19 +714,44 @@ impl SsotInjector {
         )
         .map_err(|e| format!("Falha ao criar tabela repo_heuristics: {}", e))?;
 
-        let alter_statements = [
-            "ALTER TABLE repo_heuristics ADD COLUMN status_atualizacao TEXT NOT NULL DEFAULT 'CONCLUIDO'",
-            "ALTER TABLE repo_heuristics ADD COLUMN status_fase TEXT NOT NULL DEFAULT 'F4'",
-        ];
-        for sql in alter_statements {
-            if let Err(e) = conn.execute(sql, []) {
-                let msg = e.to_string();
-                if msg.to_ascii_lowercase().contains("duplicate column name") {
-                    continue;
-                }
-                return Err(format!("Falha na migração de schema repo_heuristics: {}", msg));
+        let mut stmt = conn
+            .prepare("PRAGMA table_info('repo_heuristics')")
+            .map_err(|e| format!("Falha ao preparar PRAGMA table_info(repo_heuristics): {e}"))?;
+        let mut rows = stmt
+            .query([])
+            .map_err(|e| format!("Falha ao executar PRAGMA table_info(repo_heuristics): {e}"))?;
+
+        let mut has_status_atualizacao = false;
+        let mut has_status_fase = false;
+        while let Some(row) = rows
+            .next()
+            .map_err(|e| format!("Falha ao iterar PRAGMA table_info(repo_heuristics): {e}"))?
+        {
+            let name: String = row
+                .get(1)
+                .map_err(|e| format!("Falha ao ler coluna name do PRAGMA table_info: {e}"))?;
+            match name.as_str() {
+                "status_atualizacao" => has_status_atualizacao = true,
+                "status_fase" => has_status_fase = true,
+                _ => {}
             }
         }
+
+        if !has_status_atualizacao {
+            conn.execute(
+                "ALTER TABLE repo_heuristics ADD COLUMN status_atualizacao TEXT NOT NULL DEFAULT 'CONCLUIDO'",
+                [],
+            )
+            .map_err(|e| format!("Falha ao adicionar coluna status_atualizacao: {e}"))?;
+        }
+        if !has_status_fase {
+            conn.execute(
+                "ALTER TABLE repo_heuristics ADD COLUMN status_fase TEXT NOT NULL DEFAULT 'F4'",
+                [],
+            )
+            .map_err(|e| format!("Falha ao adicionar coluna status_fase: {e}"))?;
+        }
+
         Ok(())
     }
 
@@ -815,6 +853,50 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use tokio::sync::Mutex;
+
+    #[test]
+    fn resolve_row_number_never_returns_row_1() {
+        let values = vec![vec![
+            "https://github.com/acme/widget".to_string(),
+            "".to_string(),
+            "".to_string(),
+            "LOTE_01".to_string(),
+        ]];
+        let needle = "https://github.com/acme/widget".to_string();
+        let row = SsotInjector::resolve_row_number_from_values(&values, &needle, "LOTE_01")
+            .unwrap();
+        assert!(row >= 2);
+        assert_eq!(row, 2);
+    }
+
+    #[test]
+    fn resolve_row_number_uses_first_empty_row_and_stays_below_header() {
+        let values = vec![
+            vec![
+                "https://github.com/acme/a".to_string(),
+                "".to_string(),
+                "".to_string(),
+                "LOTE_A".to_string(),
+            ],
+            vec!["".to_string(), "".to_string(), "".to_string(), "".to_string()],
+        ];
+        let needle = "https://github.com/acme/unknown".to_string();
+        let row = SsotInjector::resolve_row_number_from_values(&values, &needle, "LOTE_X").unwrap();
+        assert_eq!(row, 3);
+        assert!(row >= 2);
+    }
+
+    #[test]
+    fn status_after_phase4_is_pronto_para_fase_5_when_integrate_as_component() {
+        let mut row = MasterSolutionsRow::default();
+        row.status_atualizacao = "PENDENTE_IA".to_string();
+        row.status_fase = "F3".to_string();
+        row.tipo_integracao = crate::cognition::synthesizer::IntegrationType::IntegrateAsComponent;
+        assert_eq!(
+            SsotInjector::status_atualizacao_after_phase4(&row),
+            "PRONTO_PARA_FASE_5"
+        );
+    }
     #[test]
     fn test_prepare_batch_payload_is_84_columns_a_to_cf() {
         let mut row = MasterSolutionsRow::default();

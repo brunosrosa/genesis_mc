@@ -600,6 +600,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_clone_success() {
+        if std::env::var("SODA_RUN_GITHUB_NETWORK_TESTS")
+            .ok()
+            .as_deref()
+            != Some("1")
+        {
+            return;
+        }
         let _guard = get_test_mutex().lock().await;
         let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         // Repositório minúsculo e estável para teste rápido
@@ -635,6 +642,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_clone_stays_in_ramdisk() {
+        if std::env::var("SODA_RUN_GITHUB_NETWORK_TESTS")
+            .ok()
+            .as_deref()
+            != Some("1")
+        {
+            return;
+        }
         let _guard = get_test_mutex().lock().await;
         let mut ramdisk = RamdiskAllocator::allocate(64).await.unwrap();
         let repo_url = Url::parse("https://github.com/octocat/Spoon-Knife").unwrap();

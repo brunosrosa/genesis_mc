@@ -472,6 +472,8 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
             resolved_args.extend(args.iter().map(|arg| (*arg).to_string()));
 
             let mut resolved_env = BTreeMap::new();
+            resolved_env.insert("UV_NO_PROGRESS".to_string(), "1".to_string());
+            resolved_env.insert("UV_QUIET".to_string(), "1".to_string());
             resolved_env.insert(
                 "CODE_INDEX_PATH".to_string(),
                 resolve_code_index_path(repo_path).display().to_string(),

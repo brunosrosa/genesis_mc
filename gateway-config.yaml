@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://agentgateway.dev/schema/config
 config: {}
 binds:
-  - port: 3000
+  - port: 3001
     listeners:
       - protocol: HTTP
         routes:
@@ -63,45 +63,116 @@ binds:
                   targets:
                     - name: jcodemunch
                       stdio:
-                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['jcodemunch-mcp']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args:
+                          [
+                            '--timeout-ms',
+                            '30000',
+                            '--',
+                            'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe',
+                            'jcodemunch-mcp',
+                          ]
+                        env:
+                          UV_NO_PROGRESS: '1'
+                          UV_QUIET: '1'
                     - name: time_server
                       stdio:
-                        cmd: 'mcp-server-time.exe'
-                        args: []
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args: ['--timeout-ms', '30000', '--', 'mcp-server-time.exe']
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: duckduckgo_search
                       stdio:
-                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['duckduckgo-mcp-server']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args:
+                          [
+                            '--timeout-ms',
+                            '30000',
+                            '--',
+                            'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe',
+                            'duckduckgo-mcp-server',
+                          ]
+                        env:
+                          UV_NO_PROGRESS: '1'
+                          UV_QUIET: '1'
                     - name: github_mcp
                       stdio:
-                        cmd: 'npx.cmd'
-                        args: ['-y', '@modelcontextprotocol/server-github']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args:
+                          [
+                            '--timeout-ms',
+                            '30000',
+                            '--',
+                            'npx.cmd',
+                            '-y',
+                            '@modelcontextprotocol/server-github',
+                          ]
                         env:
                           GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PAT}'
                     - name: notebooklm
                       stdio:
-                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['--from', 'notebooklm-mcp-cli', 'notebooklm-mcp']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args:
+                          [
+                            '--timeout-ms',
+                            '30000',
+                            '--',
+                            'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe',
+                            '--from',
+                            'notebooklm-mcp-cli',
+                            'notebooklm-mcp',
+                          ]
+                        env:
+                          UV_NO_PROGRESS: '1'
+                          UV_QUIET: '1'
                     - name: sqlite
                       stdio:
-                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['mcp-server-sqlite', '--db-path', 'C:/Users/rosas/Dev_Projects/genesis_mc/.soda_data/soda_state.db']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args:
+                          [
+                            '--timeout-ms',
+                            '30000',
+                            '--',
+                            'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe',
+                            'mcp-server-sqlite',
+                            '--db-path',
+                            'C:/Users/rosas/Dev_Projects/genesis_mc/.soda_data/soda_state.db',
+                          ]
+                        env:
+                          UV_NO_PROGRESS: '1'
+                          UV_QUIET: '1'
                     - name: docs_scraper
                       stdio:
-                        cmd: 'npx.cmd'
-                        args: ['-y', 'mcp-docs-scraper']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args: ['--timeout-ms', '30000', '--', 'npx.cmd', '-y', 'mcp-docs-scraper']
                     - name: webcrawl-mcp
                       stdio:
-                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['webcrawl-mcp']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args:
+                          [
+                            '--timeout-ms',
+                            '30000',
+                            '--',
+                            'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe',
+                            'webcrawl-mcp',
+                          ]
+                        env:
+                          UV_NO_PROGRESS: '1'
+                          UV_QUIET: '1'
                     - name: mcp-google-sheets
                       stdio:
-                        cmd: 'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe'
-                        args: ['mcp-google-sheets']
+                        cmd: 'C:/Users/rosas/Dev_Projects/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args:
+                          [
+                            '--timeout-ms',
+                            '150000',
+                            '--',
+                            'C:/Users/rosas/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uvx.exe',
+                            'mcp-google-sheets',
+                          ]
                         env:
+                          UV_NO_PROGRESS: '1'
+                          UV_QUIET: '1'
                           GOOGLE_APPLICATION_CREDENTIALS: '${GOOGLE_APPLICATION_CREDENTIALS}'
                     - name: docfork
                       mcp:

@@ -10,7 +10,7 @@ Write-Host "=======================================================" -Foreground
 
 # 1. EXPURGO DE ZUMBIS (A Cura do libuv e portas presas)
 Write-Host "`n[1/5] Expurgando processos órfãos (node, uvx, python, agentgateway)..." -ForegroundColor Yellow
-$zombies = @("node", "uvx", "python", "agentgateway")
+$zombies = @("node", "uvx", "python", "agentgateway", "agentgateway_tcp_proxy", "genesis_mc")
 foreach ($z in $zombies) {
     Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
 }
@@ -68,5 +68,7 @@ Write-Host "`n[5/5] Preparando Ignição e Aquecimento de Sockets..." -Foregroun
 Write-Host "ATENÇÃO: Após o servidor subir, AGUARDE 5 SEGUNDOS antes de conectar o Antigravity IDE!" -ForegroundColor Red
 Start-Sleep -Seconds 3
 
-Write-Host "`n[🚀] Iniciando AgentGateway na porta 3000..." -ForegroundColor Cyan
-agentgateway.exe -f gateway-config.yaml
+Write-Host "`n[🚀] Iniciando Supervisor (genesis_mc) + Proxy (3000) + Gateway (3001)..." -ForegroundColor Cyan
+Push-Location "src-tauri"
+cargo run --quiet --features tauri-app --bin genesis_mc
+Pop-Location
