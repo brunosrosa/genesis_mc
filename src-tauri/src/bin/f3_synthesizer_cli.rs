@@ -866,6 +866,103 @@ fn try_fetch_repo_heuristics_seed(conn: &Connection, repo_id: &str) -> Option<(S
     .ok()
 }
 
+fn is_unknown_like(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    lower == "unknown" || lower == "desconhecido" || lower == "n/a"
+}
+
+fn fetch_raw_artifact_text(conn: &Connection, repo_id: &str, artifact_type: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT CAST(payload_blob AS TEXT)
+         FROM artefatos_brutos
+         WHERE repo_id = ?1 AND artifact_type = ?2
+         ORDER BY artifact_id DESC
+         LIMIT 1",
+        params![repo_id, artifact_type],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty())
+}
+
+fn derive_stack_base_from_manifest_blob(text: &str) -> Option<String> {
+    for line in text.lines().take(20) {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("stack_base:") else {
+            continue;
+        };
+        let val = rest.trim();
+        if val.is_empty() {
+            return None;
+        }
+        if is_unknown_like(val) {
+            return None;
+        }
+        return Some(val.to_string());
+    }
+    None
+}
+
+fn derive_license_from_community_meta_json(text: &str) -> Option<String> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return None;
+    };
+    value
+        .get("licenca")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && !is_unknown_like(s))
+}
+
+fn derive_license_from_readme(text: &str) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("mit license") || (lower.contains("license") && lower.contains("mit")) {
+        return Some("MIT".to_string());
+    }
+    if lower.contains("apache license") || lower.contains("apache-2.0") {
+        return Some("Apache-2.0".to_string());
+    }
+    if lower.contains("gnu general public license") || lower.contains("gpl") {
+        return Some("GPL".to_string());
+    }
+    None
+}
+
+fn derive_declared_description_from_readme(text: &str) -> Option<String> {
+    let mut fallback_heading: Option<String> = None;
+    for line in text.lines().take(120) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.starts_with("<") {
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            if fallback_heading.is_none() {
+                let heading = trimmed.trim_start_matches('#').trim();
+                if !heading.is_empty() {
+                    fallback_heading = Some(heading.to_string());
+                }
+            }
+            continue;
+        }
+        let cleaned = trimmed.replace("**", "").replace('`', "");
+        let candidate = cleaned.trim();
+        if candidate.is_empty() {
+            continue;
+        }
+        let shortened = candidate.chars().take(280).collect::<String>();
+        return Some(shortened);
+    }
+    fallback_heading
+}
+
 fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
     use std::process::{Command, Stdio};
 
@@ -1242,7 +1339,7 @@ async fn main() -> io::Result<()> {
     };
 
     let seed = try_fetch_repo_heuristics_seed(&conn, &repo_id);
-    let (seed_repo_version, ultima_versao_online, licenca, stack_base, declared_description) = seed.unwrap_or_else(|| {
+    let (seed_repo_version, seed_ultima_versao_online, seed_licenca, seed_stack_base, seed_declared_description) = seed.unwrap_or_else(|| {
         (
             "UNKNOWN".to_string(),
             "UNKNOWN".to_string(),
@@ -1264,7 +1361,7 @@ async fn main() -> io::Result<()> {
     let repo_version_lower = repo_version.to_ascii_lowercase();
     let mut ultima_versao_online = ultima_versao_online_from_repositorios
         .or_else(|| {
-            let trimmed = ultima_versao_online.trim().to_string();
+            let trimmed = seed_ultima_versao_online.trim().to_string();
             if trimmed.is_empty() { None } else { Some(trimmed) }
         })
         .unwrap_or_else(|| "UNKNOWN".to_string());
@@ -1296,6 +1393,49 @@ async fn main() -> io::Result<()> {
         ultima_versao_online = tag;
     }
     info!(repo_version = %repo_version, "E2E: repo_version resolvido");
+
+    let mut licenca = seed_licenca.trim().to_string();
+    let mut stack_base = seed_stack_base.trim().to_string();
+    let mut declared_description = seed_declared_description.trim().to_string();
+
+    if is_unknown_like(&stack_base) {
+        if let Some(text) = fetch_raw_artifact_text(&conn, &repo_id, "blob_02_dependency_manifest") {
+            if let Some(derived) = derive_stack_base_from_manifest_blob(&text) {
+                stack_base = derived;
+            }
+        }
+    }
+
+    if is_unknown_like(&licenca) {
+        if let Some(text) = fetch_raw_artifact_text(&conn, &repo_id, "blob_09_community_meta") {
+            if let Some(derived) = derive_license_from_community_meta_json(&text) {
+                licenca = derived;
+            }
+        }
+        if is_unknown_like(&licenca) {
+            if let Some(text) = fetch_raw_artifact_text(&conn, &repo_id, "blob_01_promessa_readme") {
+                if let Some(derived) = derive_license_from_readme(&text) {
+                    licenca = derived;
+                }
+            }
+        }
+    }
+
+    if is_unknown_like(&declared_description) {
+        if let Some(text) = fetch_raw_artifact_text(&conn, &repo_id, "blob_01_promessa_readme") {
+            if let Some(derived) = derive_declared_description_from_readme(&text) {
+                declared_description = derived;
+            }
+        }
+    }
+
+    info!(
+        repo_id = %repo_id,
+        licenca = %licenca,
+        stack_base = %stack_base,
+        declared_description = %declared_description,
+        "E2E: sementes do Bloco 0 resolvidas a partir do vault/blobs"
+    );
     let block0 = Block0Context {
         status_atualizacao: "EM_PROCESSAMENTO".to_string(),
         status_fase: "F3".to_string(),
