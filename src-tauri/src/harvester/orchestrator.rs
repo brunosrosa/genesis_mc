@@ -3,7 +3,7 @@ use std::time::Instant;
 use url::Url;
 use rusqlite::Connection;
 use thiserror::Error;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 
 use super::ramdisk::{RamdiskAllocator, RamdiskHandle};
 use super::git::{BloblessCloner};
@@ -261,12 +261,19 @@ impl HarvesterOrchestrator {
         log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
 
         info!(repo_id = %repo_id, "N11: Extraindo blob_11_ux_contracts");
-        let ux_contracts_blob = UxContractsExtractor::extract_blob(&repo_path)
-            .await
-            .map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_11_ux_contracts");
-                OrchestratorError::ExtractionError(e.to_string())
-            })?;
+        let ux_contracts_blob = if tasks.contains(&ExtractionTask::RunOxc) {
+            UxContractsExtractor::extract_blob(&repo_path)
+                .await
+                .map_err(|e| {
+                    error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_11_ux_contracts");
+                    OrchestratorError::ExtractionError(e.to_string())
+                })?
+        } else {
+            ArtifactBlob {
+                artifact_type: "blob_11_ux_contracts".to_string(),
+                payload_blob: b"# UX Contracts\n\npackage.json ausente; etapa oxc/UX foi pulada.\n".to_vec(),
+            }
+        };
         blobs.push(ux_contracts_blob);
         log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
 
@@ -305,10 +312,13 @@ impl HarvesterOrchestrator {
         }
 
         info!(repo_id = %repo_id, "N10: Finalizando coleta de metadados comunitarios");
-        let community_payload = community_fut.await.map_err(|e| {
-            error!(repo_id = %repo_id, error = %e, "Falha critica ao coletar metrica comunitaria");
-            OrchestratorError::ExtractionError(e.to_string())
-        })?;
+        let community_payload = match community_fut.await {
+            Ok(payload) => payload,
+            Err(e) => {
+                warn!(repo_id = %repo_id, error = %e, "Falha ao coletar metrica comunitaria; seguindo com fail-soft");
+                super::community::CommunityMetaPayload::empty()
+            }
+        };
         let community_blob = truncate_community_meta_json(&community_payload).map_err(|e| {
             error!(repo_id = %repo_id, error = %e, "Falha ao truncar blob_09_community_meta");
             OrchestratorError::PersistenceError(format!("Falha ao truncar CommunityMeta: {}", e))

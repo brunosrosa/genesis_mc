@@ -179,11 +179,10 @@ impl SsotInjector {
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
         let row_number_1based =
-            Self::resolve_row_number_by_repo_url_and_lote_id(
+            Self::resolve_row_number_by_repo_url(
                 &spreadsheet_id,
                 sheet,
                 &validated.repo_url,
-                &validated.lote_id,
             )
             .await?;
 
@@ -196,18 +195,17 @@ impl SsotInjector {
         Ok(row_number_1based)
     }
 
-    async fn resolve_row_number_by_repo_url_and_lote_id(
+    async fn resolve_row_number_by_repo_url(
         spreadsheet_id: &str,
         sheet: &str,
         repo_url: &str,
-        lote_id: &str,
     ) -> Result<u32, SsotError> {
         let result = Self::call_mcp_google_sheets_tool(
             "get_sheet_data",
             json!({
                 "spreadsheet_id": spreadsheet_id,
                 "sheet": sheet,
-                "range": "D2:G",
+                "range": "D2:D",
                 "include_grid_data": false
             }),
         )
@@ -215,42 +213,27 @@ impl SsotInjector {
 
         let values = Self::extract_values_2d(&result).unwrap_or_default();
         let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
-        let lote_needle = lote_id.trim();
-
-        if let Some(found) = Self::resolve_row_number_from_values(&values, &needle, lote_needle) {
+        if let Some(found) = Self::resolve_row_number_from_repo_url_column(&values, &needle) {
             return Ok(found);
         }
 
-        let row_number = (values.len() as u32) + 2;
-        Ok(row_number.max(2))
+        Err(SsotError::CloudFailure(format!(
+            "Linha SSOT não encontrada para repo_url='{}'. Append é proibido; abortando.",
+            repo_url
+        )))
     }
 
-    fn resolve_row_number_from_values(
+    fn resolve_row_number_from_repo_url_column(
         values: &[Vec<String>],
         repo_url_needle: &str,
-        lote_id_needle: &str,
     ) -> Option<u32> {
         for (idx, row) in values.iter().enumerate() {
             let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
-            let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
             let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
-            if !repo_hay.is_empty()
-                && repo_hay == repo_url_needle
-                && !lote_cell.is_empty()
-                && lote_cell == lote_id_needle
-            {
+            if !repo_hay.is_empty() && repo_hay == repo_url_needle {
                 return Some((idx as u32) + 2);
             }
         }
-
-        for (idx, row) in values.iter().enumerate() {
-            let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
-            let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
-            if repo_cell.is_empty() && lote_cell.is_empty() {
-                return Some((idx as u32) + 2);
-            }
-        }
-
         None
     }
 
@@ -856,34 +839,22 @@ mod tests {
 
     #[test]
     fn resolve_row_number_never_returns_row_1() {
-        let values = vec![vec![
-            "https://github.com/acme/widget".to_string(),
-            "".to_string(),
-            "".to_string(),
-            "LOTE_01".to_string(),
-        ]];
+        let values = vec![vec!["https://github.com/acme/widget".to_string()]];
         let needle = "https://github.com/acme/widget".to_string();
-        let row = SsotInjector::resolve_row_number_from_values(&values, &needle, "LOTE_01")
-            .unwrap();
+        let row =
+            SsotInjector::resolve_row_number_from_repo_url_column(&values, &needle).unwrap();
         assert!(row >= 2);
         assert_eq!(row, 2);
     }
 
     #[test]
-    fn resolve_row_number_uses_first_empty_row_and_stays_below_header() {
+    fn resolve_row_number_returns_none_when_repo_url_not_found() {
         let values = vec![
-            vec![
-                "https://github.com/acme/a".to_string(),
-                "".to_string(),
-                "".to_string(),
-                "LOTE_A".to_string(),
-            ],
-            vec!["".to_string(), "".to_string(), "".to_string(), "".to_string()],
+            vec!["https://github.com/acme/a".to_string()],
+            vec!["".to_string()],
         ];
         let needle = "https://github.com/acme/unknown".to_string();
-        let row = SsotInjector::resolve_row_number_from_values(&values, &needle, "LOTE_X").unwrap();
-        assert_eq!(row, 3);
-        assert!(row >= 2);
+        assert!(SsotInjector::resolve_row_number_from_repo_url_column(&values, &needle).is_none());
     }
 
     #[test]

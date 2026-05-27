@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
@@ -824,7 +824,8 @@ fn format_epoch_utc(epoch: i64) -> String {
     let Some(dt) = DateTime::<Utc>::from_timestamp(epoch, 0) else {
         return String::new();
     };
-    dt.format("%Y-%m-%d %H:%M:%S").to_string()
+    dt.with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
+        .to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
 fn embargo_label(value: i64) -> &'static str {

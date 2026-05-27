@@ -87,7 +87,9 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
 /// Fallback mínimo de 3 tarefas genéricas para perfis sem stack conhecida.
 fn unknown_fallback() -> Vec<ExtractionTask> {
     vec![
+        ExtractionTask::RunJCodemunch,
         ExtractionTask::ExtractManifests,
+        ExtractionTask::RunStaticAnalysis,
         ExtractionTask::FetchCommunityMeta,
         ExtractionTask::ExtractOpsBlueprint,
     ]
@@ -289,7 +291,9 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
+                ExtractionTask::RunJCodemunch,
                 ExtractionTask::ExtractManifests,
+                ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
                 ExtractionTask::ExtractOpsBlueprint,
             ]

@@ -14,9 +14,10 @@ use super::detect::StackProfile;
 use super::git::RepoPath;
 use super::persist::ArtifactBlob;
 use super::sidecar::{pack_scoped_text_blocks, NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use tracing::{info, warn};
 
 /// Tamanho máximo permitido para um arquivo de manifesto (1 MiB).
 const MAX_MANIFEST_SIZE: u64 = 1_048_576;
@@ -195,7 +196,7 @@ impl LocalStaticExtractor {
 
         blobs.push(Self::extract_blob(
             repo_path,
-            &["README.md", "readme.md", "README.txt"],
+            &["README.md", "README.txt"],
             "blob_01_promessa_readme",
             README_MAX_CHARS,
         )
@@ -210,14 +211,58 @@ impl LocalStaticExtractor {
         artifact_type: &str,
         max_chars: usize,
     ) -> Result<ArtifactBlob, ExtractionError> {
+        let mut case_insensitive = HashMap::<String, PathBuf>::new();
+        let mut entries = fs::read_dir(repo_path)
+            .await
+            .map_err(|e| ExtractionError::IoError {
+                file: repo_path.display().to_string(),
+                reason: e.to_string(),
+            })?;
+        while let Some(entry) = entries.next_entry().await.map_err(|e| ExtractionError::IoError {
+            file: repo_path.display().to_string(),
+            reason: e.to_string(),
+        })? {
+            let file_type = entry.file_type().await.map_err(|e| ExtractionError::IoError {
+                file: repo_path.display().to_string(),
+                reason: e.to_string(),
+            })?;
+            if !file_type.is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            case_insensitive.insert(name.to_ascii_lowercase(), entry.path());
+        }
+
         for candidate in candidates {
-            let path = repo_path.join(candidate);
+            let preferred = repo_path.join(candidate);
+            let metadata = fs::metadata(&preferred).await.ok();
+            let path = if metadata.as_ref().is_some_and(|m| m.is_file()) {
+                preferred
+            } else if let Some(found) = case_insensitive.get(&candidate.to_ascii_lowercase()) {
+                found.clone()
+            } else {
+                warn!(
+                    artifact_type,
+                    candidate,
+                    repo_root = %repo_path.display(),
+                    "Arquivo candidato nao encontrado para artefato"
+                );
+                continue;
+            };
+
+            info!(
+                artifact_type,
+                candidate,
+                abs_path = %path.display(),
+                "Tentando ler arquivo para artefato"
+            );
+
             match fs::read_to_string(&path).await {
                 Ok(content) => {
                     if content.trim().is_empty() {
                         return Err(ExtractionError::EmptyArtifact {
                             artifact_type: artifact_type.to_string(),
-                            file: candidate.to_string(),
+                            file: path.display().to_string(),
                         });
                     }
                     let sanitized = if artifact_type == "blob_01_promessa_readme" {
@@ -231,10 +276,26 @@ impl LocalStaticExtractor {
                         payload_blob: truncated.into_bytes(),
                     });
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    warn!(
+                        artifact_type,
+                        candidate,
+                        abs_path = %path.display(),
+                        error = %e,
+                        "Falha ao ler arquivo (not found)"
+                    );
+                    continue;
+                }
                 Err(e) => {
+                    warn!(
+                        artifact_type,
+                        candidate,
+                        abs_path = %path.display(),
+                        error = %e,
+                        "Falha ao ler arquivo"
+                    );
                     return Err(ExtractionError::IoError {
-                        file: candidate.to_string(),
+                        file: path.display().to_string(),
                         reason: e.to_string(),
                     });
                 }
@@ -1161,9 +1222,18 @@ impl ManifestExtractor {
         tokio::task::spawn_blocking(move || {
             let files = collect_repo_files(&root)?;
             let mut blocks = Vec::new();
+            let mut manifest_files_seen = BTreeSet::<String>::new();
 
             for path in files.into_iter().filter(|path| Self::is_manifest_blob_target(path)) {
                 let rel_path = relative_display(&root, &path);
+                let file_name = Path::new(&rel_path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default()
+                    .to_string();
+                if !file_name.is_empty() {
+                    manifest_files_seen.insert(file_name);
+                }
                 let metadata = std::fs::metadata(&path).map_err(|e| ExtractionError::IoError {
                     file: rel_path.clone(),
                     reason: e.to_string(),
@@ -1178,9 +1248,24 @@ impl ManifestExtractor {
                     });
                 }
 
-                let content = std::fs::read_to_string(&path).map_err(|e| ExtractionError::IoError {
-                    file: rel_path.clone(),
-                    reason: e.to_string(),
+                info!(
+                    artifact_type = "blob_02_dependency_manifest",
+                    manifest = %rel_path,
+                    abs_path = %path.display(),
+                    "Tentando ler manifesto"
+                );
+                let content = std::fs::read_to_string(&path).map_err(|e| {
+                    warn!(
+                        artifact_type = "blob_02_dependency_manifest",
+                        manifest = %rel_path,
+                        abs_path = %path.display(),
+                        error = %e,
+                        "Falha ao ler manifesto"
+                    );
+                    ExtractionError::IoError {
+                        file: rel_path.clone(),
+                        reason: e.to_string(),
+                    }
                 })?;
 
                 if content.trim().is_empty() {
@@ -1195,12 +1280,7 @@ impl ManifestExtractor {
                 }
             }
 
-            if blocks.is_empty() {
-                return Err(ExtractionError::RequiredArtifactMissing {
-                    artifact_type: "blob_02_dependency_manifest".to_string(),
-                    candidates: "Cargo.toml, package.json, go.mod".to_string(),
-                });
-            }
+            let stack_base = Self::stack_base_from_manifest_files(&manifest_files_seen);
 
             blocks.sort_by(|left, right| {
                 Self::manifest_blob_priority(&left.file_path)
@@ -1208,15 +1288,20 @@ impl ManifestExtractor {
                     .then_with(|| left.file_path.cmp(&right.file_path))
             });
 
-            let packed = pack_scoped_text_blocks(&blocks, MANIFEST_BLOB_MAX_CHARS);
-            if packed.trim().is_empty() {
-                return Err(ExtractionError::EmptyArtifact {
-                    artifact_type: "blob_02_dependency_manifest".to_string(),
-                    file: "dependency_manifest_bundle".to_string(),
-                });
+            let header = format!("stack_base: {}\n\n", stack_base);
+            let packed = if blocks.is_empty() {
+                "Nenhum manifesto detectado (Cargo.toml, package.json, pyproject.toml, requirements.txt, go.mod)."
+                    .to_string()
+            } else {
+                pack_scoped_text_blocks(&blocks, MANIFEST_BLOB_MAX_CHARS)
+            };
+            let mut final_text = format!("{}{}", header, packed);
+            final_text = truncate_chars(&final_text, MANIFEST_BLOB_MAX_CHARS);
+            if final_text.trim().is_empty() {
+                final_text = header;
             }
 
-            Ok(blob_from_text("blob_02_dependency_manifest", packed))
+            Ok(blob_from_text("blob_02_dependency_manifest", final_text))
         })
         .await
         .map_err(|e| ExtractionError::IoError {
@@ -1228,7 +1313,7 @@ impl ManifestExtractor {
     fn is_manifest_blob_target(path: &Path) -> bool {
         matches!(
             path.file_name().and_then(|name| name.to_str()),
-            Some("Cargo.toml" | "package.json" | "go.mod")
+            Some("Cargo.toml" | "package.json" | "go.mod" | "pyproject.toml" | "requirements.txt")
         )
     }
 
@@ -1240,7 +1325,8 @@ impl ManifestExtractor {
         let kind_score = match file_name {
             "Cargo.toml" => 0,
             "package.json" => 1,
-            "go.mod" => 2,
+            "pyproject.toml" | "requirements.txt" => 2,
+            "go.mod" => 3,
             _ => 9,
         };
         (kind_score, path.matches('/').count())
@@ -1259,6 +1345,8 @@ impl ManifestExtractor {
             "Cargo.toml" => Self::extract_cargo_dependency_names(content, file_path)?,
             "package.json" => Self::extract_package_json_dependency_names(content, file_path)?,
             "go.mod" => Self::extract_go_mod_dependency_names(content),
+            "requirements.txt" => Self::extract_requirements_dependency_names(content),
+            "pyproject.toml" => Self::extract_pyproject_dependency_names(content, file_path)?,
             _ => Vec::new(),
         };
 
@@ -1444,6 +1532,34 @@ impl ManifestExtractor {
         names.into_iter().collect()
     }
 
+    fn extract_requirements_dependency_names(content: &str) -> Vec<String> {
+        let info = Self::parse_requirements_txt(content, "requirements.txt", content.len() as u64);
+        info.dependencies.into_iter().map(|dep| dep.name).collect()
+    }
+
+    fn extract_pyproject_dependency_names(content: &str, file: &str) -> Result<Vec<String>, ExtractionError> {
+        let info = Self::parse_pyproject_toml(content, file, content.len() as u64)?;
+        Ok(info.dependencies.into_iter().map(|dep| dep.name).collect())
+    }
+
+    fn stack_base_from_manifest_files(files: &BTreeSet<String>) -> String {
+        let has_cargo = files.iter().any(|name| name == "Cargo.toml");
+        let has_package = files.iter().any(|name| name == "package.json");
+        let has_go = files.iter().any(|name| name == "go.mod");
+        let has_python = files.iter().any(|name| name == "pyproject.toml" || name == "requirements.txt");
+
+        let mut stacks = Vec::new();
+        if has_python { stacks.push("Python"); }
+        if has_package { stacks.push("TypeScript"); }
+        if has_go { stacks.push("Go"); }
+        if has_cargo { stacks.push("Rust"); }
+        if stacks.is_empty() {
+            "UNKNOWN".to_string()
+        } else {
+            stacks.join(", ")
+        }
+    }
+
     pub async fn extract(input: ManifestInput<'_>) -> Result<ManifestPayload, ExtractionError> {
         let targets = [
             "Cargo.toml",
@@ -1479,9 +1595,24 @@ impl ManifestExtractor {
                 });
             }
 
-            let content = fs::read_to_string(&path).await.map_err(|e| ExtractionError::IoError {
-                file: file_name.to_string(),
-                reason: e.to_string(),
+            info!(
+                artifact_type = "manifest",
+                file = file_name,
+                abs_path = %path.display(),
+                "Tentando ler manifesto base"
+            );
+            let content = fs::read_to_string(&path).await.map_err(|e| {
+                warn!(
+                    artifact_type = "manifest",
+                    file = file_name,
+                    abs_path = %path.display(),
+                    error = %e,
+                    "Falha ao ler manifesto base"
+                );
+                ExtractionError::IoError {
+                    file: file_name.to_string(),
+                    reason: e.to_string(),
+                }
             })?;
 
             if content.trim().is_empty() {

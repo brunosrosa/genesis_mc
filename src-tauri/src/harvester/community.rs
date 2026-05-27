@@ -8,6 +8,7 @@ use std::time::Duration;
 pub struct CommunityMetaPayload {
     pub open_issues_count: u32,
     pub open_prs_count: u32,
+    pub licenca: String,
     pub last_commit_sha: Option<String>,
     pub last_commit_date: Option<DateTime<Utc>>,
     pub recent_prs: Vec<CommunityPrMeta>,
@@ -22,7 +23,10 @@ pub struct CommunityPrMeta {
 
 impl CommunityMetaPayload {
     pub fn empty() -> Self {
-        Self::default()
+        Self {
+            licenca: "UNKNOWN".to_string(),
+            ..Self::default()
+        }
     }
 }
 
@@ -109,6 +113,14 @@ impl CommunityMetaFetcher {
         #[derive(Deserialize)]
         struct GithubRepo {
             default_branch: String,
+            #[serde(default)]
+            license: Option<GithubLicense>,
+        }
+
+        #[derive(Deserialize)]
+        struct GithubLicense {
+            spdx_id: Option<String>,
+            name: Option<String>,
         }
 
         #[derive(Deserialize)]
@@ -142,6 +154,24 @@ impl CommunityMetaFetcher {
         }
 
         let repo = Self::fetch_json::<GithubRepo>(&client, limiter, &api_url).await?;
+        let licenca = repo
+            .license
+            .as_ref()
+            .and_then(|license| {
+                license
+                    .spdx_id
+                    .as_ref()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty() && s.to_ascii_uppercase() != "NOASSERTION")
+                    .or_else(|| {
+                        license
+                            .name
+                            .as_ref()
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                    })
+            })
+            .unwrap_or_else(|| "UNKNOWN".to_string());
         let issues_url = format!(
             "{}/search/issues?q=repo:{}+is:issue+is:open&per_page=1",
             api_base.unwrap_or("https://api.github.com"),
@@ -173,6 +203,7 @@ impl CommunityMetaFetcher {
         Ok(CommunityMetaPayload {
             open_issues_count: open_issues.total_count,
             open_prs_count: open_prs.total_count,
+            licenca,
             last_commit_sha: last_commit.as_ref().map(|commit| commit.sha.clone()),
             last_commit_date: last_commit.map(|commit| commit.commit.author.date),
             recent_prs: recent_prs

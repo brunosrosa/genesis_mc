@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::cognition::swarm::{
     ensure_phase2_schema, CognitiveSwarmDispatcher, HttpLensInvoker, SqliteDebateStore,
 };
@@ -32,6 +33,28 @@ fn sanitize_repo_id(repo_id: &str) -> String {
             _ => '_',
         })
         .collect()
+}
+
+fn now_brt_rfc3339() -> String {
+    Utc::now()
+        .with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
+        .to_rfc3339()
+}
+
+fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {
+    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&reports_dir)
+        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
+
+    let trimmed = repo_id.trim();
+    let mut parts = trimmed.split('/').map(|s| s.trim()).filter(|s| !s.is_empty());
+    let owner = parts.next().unwrap_or(trimmed);
+    let repo = parts.next().unwrap_or(trimmed);
+    Ok(reports_dir.join(format!(
+        "_ETL_REPORT_{}_{}.txt",
+        sanitize_repo_id(owner),
+        sanitize_repo_id(repo)
+    )))
 }
 
 fn parse_repo_id_from_args() -> String {
@@ -168,14 +191,9 @@ fn extract_usage_totals_from_lens_json(lens_json: &str) -> (u64, u64, u64, f64) 
 }
 
 fn write_f2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::Result<PathBuf> {
-    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
-    std::fs::create_dir_all(&reports_dir)
-        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
-    let report_path = reports_dir.join(format!(
-        "_F2_REPORT_{}_V6.txt",
-        sanitize_repo_id(report_data.repo_id)
-    ));
+    let report_path = etl_report_path(root_dir, report_data.repo_id)?;
     let mut report = String::new();
+    report.push_str(&format!("\n\n=== FASE 2: ENXAME @ {} ===\n\n", now_brt_rfc3339()));
     report.push_str(&format!("repo_id={}\n", report_data.repo_id));
     report.push_str(&format!("elapsed_ms={}\n", report_data.elapsed_ms));
     report.push_str(&format!("phase_status={}\n", report_data.phase_status));
@@ -197,13 +215,14 @@ fn write_f2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::Resul
     report.push_str(report_data.lens_c_json);
     report.push('\n');
 
-    std::fs::write(&report_path, report).map_err(|e| {
-        io::Error::other(format!(
-            "Falha ao exportar relatório da F2 (Enxame Cognitivo) em {}: {}",
-            report_path.display(),
-            e
-        ))
-    })?;
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&report_path)
+        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
+    file.write_all(report.as_bytes())
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
 
     Ok(report_path)
 }

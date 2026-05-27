@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use rusqlite::{params, Connection};
@@ -32,6 +33,28 @@ fn sanitize_repo_id(repo_id: &str) -> String {
             _ => '_',
         })
         .collect()
+}
+
+fn now_brt_rfc3339() -> String {
+    Utc::now()
+        .with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
+        .to_rfc3339()
+}
+
+fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {
+    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&reports_dir)
+        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
+
+    let trimmed = repo_id.trim();
+    let mut parts = trimmed.split('/').map(|s| s.trim()).filter(|s| !s.is_empty());
+    let owner = parts.next().unwrap_or(trimmed);
+    let repo = parts.next().unwrap_or(trimmed);
+    Ok(reports_dir.join(format!(
+        "_ETL_REPORT_{}_{}.txt",
+        sanitize_repo_id(owner),
+        sanitize_repo_id(repo)
+    )))
 }
 
 fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
@@ -109,10 +132,7 @@ fn write_f0_report(
     conn_arc: &Arc<Mutex<Connection>>,
     repo_id: &str,
 ) -> io::Result<PathBuf> {
-    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
-    std::fs::create_dir_all(&reports_dir)
-        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
-    let report_path = reports_dir.join(format!("_F0_REPORT_{}.txt", sanitize_repo_id(repo_id)));
+    let report_path = etl_report_path(root_dir, repo_id)?;
     let rows = {
         let conn = conn_arc.lock().map_err(|e| {
             io::Error::other(format!("Falha ao adquirir lock do banco para relatório da F0: {}", e))
@@ -143,19 +163,21 @@ fn write_f0_report(
     }
 
     let mut report = String::new();
+    report.push_str(&format!("\n\n=== FASE 0: HARVESTER @ {} ===\n\n", now_brt_rfc3339()));
     report.push_str(&format!("repo_id={}\n", repo_id));
     report.push_str("artifact_type\tpayload_bytes\n");
     for (artifact_type, payload_len) in rows {
         report.push_str(&format!("{}\t{}\n", artifact_type, payload_len));
     }
 
-    std::fs::write(&report_path, report).map_err(|e| {
-        io::Error::other(format!(
-            "Falha ao exportar relatório local da F0 em {}: {}",
-            report_path.display(),
-            e
-        ))
-    })?;
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&report_path)
+        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
+    file.write_all(report.as_bytes())
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
 
     Ok(report_path)
 }

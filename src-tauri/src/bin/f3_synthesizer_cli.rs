@@ -2,6 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::cognition::synthesizer::{
     run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, OFFICIAL_FORMATTER_MODEL,
 };
@@ -85,11 +86,39 @@ fn sanitize_repo_id(repo_id: &str) -> String {
         .collect()
 }
 
+fn now_brt_rfc3339() -> String {
+    Utc::now()
+        .with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
+        .to_rfc3339()
+}
+
+fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {
+    let dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
+
+    let trimmed = repo_id.trim();
+    let mut parts = trimmed.split('/').map(|s| s.trim()).filter(|s| !s.is_empty());
+    let owner = parts.next().unwrap_or(trimmed);
+    let repo = parts.next().unwrap_or(trimmed);
+    Ok(dir.join(format!(
+        "_ETL_REPORT_{}_{}.txt",
+        sanitize_repo_id(owner),
+        sanitize_repo_id(repo)
+    )))
+}
+
+fn extract_total_cost_usd_from_lens_json(lens_json: &str) -> f64 {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(lens_json) else {
+        return 0.0;
+    };
+    value.get("total_cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0)
+}
+
 #[derive(Debug, Clone)]
 struct CliArgs {
     repo_id: String,
     e2e_full: bool,
-    full_report_file: Option<String>,
 }
 
 fn parse_cli_args() -> CliArgs {
@@ -97,7 +126,6 @@ fn parse_cli_args() -> CliArgs {
     args.next();
     let mut repo_id = String::from("aaif-goose/goose");
     let mut e2e_full = false;
-    let mut full_report_file: Option<String> = None;
     while let Some(arg) = args.next() {
         if arg == "--repo" {
             if let Some(value) = args.next() {
@@ -109,19 +137,10 @@ fn parse_cli_args() -> CliArgs {
             e2e_full = true;
             continue;
         }
-        if arg == "--full-report-file" {
-            if let Some(value) = args.next() {
-                let trimmed = value.trim().to_string();
-                if !trimmed.is_empty() {
-                    full_report_file = Some(trimmed);
-                }
-            }
-        }
     }
     CliArgs {
         repo_id,
         e2e_full,
-        full_report_file,
     }
 }
 
@@ -605,6 +624,85 @@ fn response_format_for_block(block: u8) -> Value {
     })
 }
 
+fn example_output_for_block(block: u8) -> Value {
+    let fields = match block {
+        1 => json!({
+            "proposta_original_resumo": "",
+            "declared_description_ptbr": "",
+            "visao_do_enxame": "",
+            "justificativa_decisao": "",
+            "executive_verdict": "",
+            "risco_principal": "",
+            "risco_linha_vermelha": "",
+            "observacoes": ""
+        }),
+        2 => json!({
+            "ouro_a_extrair": "",
+            "deep_pattern": "",
+            "transplantable_core": "",
+            "logic_math_heuristic": "",
+            "real_structural_problem": "",
+            "categoria_nuance_tecnica": "",
+            "integracao_papel_exato": "",
+            "must_components_prod_ux": "",
+            "must_components_arq": "",
+            "must_components_ops": "",
+            "detected_toxic_deps": "",
+            "do_not_absorb": "",
+            "where_ai_should_not_enter": ""
+        }),
+        3 => json!({
+            "classificacao_terminal": "APROVADO_COM_RESSALVAS",
+            "acao_de_canibalizacao": "NENHUMA",
+            "categoria_arquitetural": "TOOLING",
+            "horizonte_extracao": "SHORT",
+            "tipo_integracao": "INTEGRATE_AS_COMPONENT",
+            "capability_nature_primary": "TOOLING",
+            "architectural_topology": "MODULAR",
+            "temporal_stability": "EVOLVING",
+            "bare_metal_fit": "MEDIUM",
+            "extractability_level": "MEDIUM",
+            "runtime_sovereignty_fit": "MEDIUM",
+            "local_first_fit": "MEDIUM",
+            "adoptability_level": "MEDIUM",
+            "longitudinal_sustainability": "MEDIUM",
+            "maintenance_burden": "MEDIUM",
+            "onboarding_friction": "MEDIUM",
+            "observability_operational": "MEDIUM",
+            "recoverability_level": "MEDIUM",
+            "degradation_behavior": "ACCEPTABLE",
+            "curation_burden": "MEDIUM",
+            "evolution_cost": "MEDIUM",
+            "operability_level": "MEDIUM",
+            "abandonment_risk": "MEDIUM",
+            "time_to_first_clear_value": "SHORT",
+            "imperfection_tolerance": "MEDIUM",
+            "entropy_risk": "MEDIUM",
+            "design_misuse_risk": "MEDIUM",
+            "intrinsic_ethics_risk": "MEDIUM",
+            "discipline_dependency": "MEDIA",
+            "regulatory_risk": "MEDIUM"
+        }),
+        4 => json!({
+            "score_philosophical_fit": 0,
+            "score_bare_metal_fit": 0,
+            "score_architectural_extractability": 0,
+            "score_operability": 0,
+            "score_creep_risk": 0,
+            "score_runtime_sovereignty": 0,
+            "score_model_logic_value": 0,
+            "score_ethics_safety": 0,
+            "score_intrinsic_risk": 0
+        }),
+        _ => json!({ "note": "" }),
+    };
+
+    json!({
+        "fields": fields,
+        "justifications": {}
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -644,6 +742,13 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async move {
             let block = parse_block_from_prompt(prompt).unwrap_or(0);
+            let example = example_output_for_block(block);
+            let mut user_prompt = prompt.to_string();
+            user_prompt.push_str("\n\nExample Output (JSON)\n");
+            user_prompt.push_str(
+                &serde_json::to_string_pretty(&example)
+                    .unwrap_or_else(|_| r#"{"fields":{},"justifications":{}}"#.to_string()),
+            );
             let body = json!({
                 "model": model,
                 "messages": [
@@ -653,11 +758,12 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                     },
                     {
                         "role": "user",
-                        "content": prompt
+                        "content": user_prompt
                     }
                 ],
                 "temperature": 0.0,
-                "max_tokens": 4096,
+                "max_tokens": 16000,
+                "reasoning_effort": "xhigh",
                 "response_format": response_format_for_block(block)
             });
 
@@ -1013,13 +1119,6 @@ fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
     Ok(values.get(0).map(|r| r.len()).unwrap_or(0))
 }
 
-fn reports_dir(root_dir: &Path) -> io::Result<PathBuf> {
-    let dir = root_dir.join(".soda_scratchpad").join("reports");
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
-    Ok(dir)
-}
-
 async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> {
     use std::process::Stdio;
 
@@ -1054,29 +1153,6 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
     Ok(started.elapsed().as_millis())
 }
 
-fn parse_report_f64(report_path: &Path, key: &str) -> io::Result<f64> {
-    let content = std::fs::read_to_string(report_path).map_err(|e| {
-        io::Error::other(format!(
-            "Falha ao ler relatório {}: {}",
-            report_path.display(),
-            e
-        ))
-    })?;
-    for line in content.lines().take(80) {
-        let Some((k, v)) = line.split_once('=') else { continue };
-        if k.trim() == key {
-            return v.trim().parse::<f64>().map_err(|e| {
-                io::Error::other(format!("Falha ao parsear {}='{}': {}", key, v.trim(), e))
-            });
-        }
-    }
-    Err(io::Error::other(format!(
-        "Chave '{}' ausente no relatório {}",
-        key,
-        report_path.display()
-    )))
-}
-
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
@@ -1093,11 +1169,7 @@ async fn main() -> io::Result<()> {
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
 
-    let CliArgs {
-        repo_id,
-        e2e_full,
-        full_report_file,
-    } = parse_cli_args();
+    let CliArgs { repo_id, e2e_full, .. } = parse_cli_args();
     if e2e_full {
         info!(repo_id = %repo_id, "E2E FULL: iniciando F0 → F4 (disparo completo)");
     } else {
@@ -1160,17 +1232,14 @@ async fn main() -> io::Result<()> {
         0
     };
 
+    let (lens_a, lens_b, lens_c) = fetch_debates(&conn, &repo_id)?;
     let phase2_cost_usd = if e2e_full {
-        let report_path = reports_dir(&root_dir)?.join(format!(
-            "_F2_REPORT_{}_V6.txt",
-            sanitize_repo_id(&repo_id)
-        ));
-        parse_report_f64(&report_path, "total_cost_usd")?
+        extract_total_cost_usd_from_lens_json(&lens_a)
+            + extract_total_cost_usd_from_lens_json(&lens_b)
+            + extract_total_cost_usd_from_lens_json(&lens_c)
     } else {
         0.0
     };
-
-    let (lens_a, lens_b, lens_c) = fetch_debates(&conn, &repo_id)?;
 
     let seed = try_fetch_repo_heuristics_seed(&conn, &repo_id);
     let (seed_repo_version, ultima_versao_online, licenca, stack_base, declared_description) = seed.unwrap_or_else(|| {
@@ -1297,69 +1366,48 @@ async fn main() -> io::Result<()> {
         "E2E: concluído com confirmação de escrita no Sheets"
     );
 
-    let report_name = format!("_E2E_REPORT_{}_PHASE4.txt", sanitize_repo_id(&repo_id));
-    let report_path = reports_dir(&root_dir)?.join(report_name);
     let e2e_full_total_cost_usd = phase2_cost_usd + usage.total_cost_usd;
     let e2e_full_total_ms =
         phase1_ms + phase1_5_ms + phase2_ms + (elapsed_phase3_4_ms as u128);
-    let report = format!(
-        "repo_id={}\nrow_number={}\nmodel_used={}\nlatency_f3_f4_ms={}\nlatency_total_ms={}\nprompt_tokens={}\ncompletion_tokens={}\ntotal_tokens={}\ntotal_cost_usd={:.6}\nsheets_write_confirmed={}\nrow_width_a_to_cf={}\n",
-        repo_id,
-        row_number,
-        formatter_model,
-        elapsed_phase3_4_ms,
-        if e2e_full { e2e_full_total_ms } else { elapsed_phase3_4_ms as u128 },
-        usage.prompt_tokens,
-        usage.completion_tokens,
-        usage.total_tokens,
-        if e2e_full { e2e_full_total_cost_usd } else { usage.total_cost_usd },
-        confirmed,
-        width_a_to_cf
-    );
-    std::fs::write(&report_path, report).map_err(|e| {
-        io::Error::other(format!(
-            "Falha ao gravar relatório E2E em {}: {}",
-            report_path.display(),
-            e
-        ))
-    })?;
+    let report_path = etl_report_path(&root_dir, &repo_id)?;
+    let mut report = String::new();
+    report.push_str(&format!(
+        "\n\n=== FASE 3-4: SGR + SSOT @ {} ===\n\n",
+        now_brt_rfc3339()
+    ));
+    report.push_str(&format!("repo_id={}\n", repo_id));
+    report.push_str(&format!("row_number={}\n", row_number));
+    report.push_str(&format!("model_used={}\n", formatter_model));
+    report.push_str(&format!("lote_id={}\n", lote_id));
+    report.push_str(&format!("latency_f3_f4_ms={}\n", elapsed_phase3_4_ms));
+    report.push_str(&format!(
+        "latency_total_ms={}\n",
+        if e2e_full { e2e_full_total_ms } else { elapsed_phase3_4_ms as u128 }
+    ));
+    report.push_str(&format!("prompt_tokens={}\n", usage.prompt_tokens));
+    report.push_str(&format!("completion_tokens={}\n", usage.completion_tokens));
+    report.push_str(&format!("total_tokens={}\n", usage.total_tokens));
+    report.push_str(&format!(
+        "total_cost_usd={:.6}\n",
+        if e2e_full { e2e_full_total_cost_usd } else { usage.total_cost_usd }
+    ));
+    report.push_str(&format!("cost_f2_usd={:.6}\n", phase2_cost_usd));
+    report.push_str(&format!("cost_f3_f4_usd={:.6}\n", usage.total_cost_usd));
+    report.push_str(&format!("sheets_write_confirmed={}\n", confirmed));
+    report.push_str(&format!("row_width_a_to_cf={}\n", width_a_to_cf));
+    report.push_str(&format!(
+        "elapsed_total_wall_ms={}\n",
+        started_total.elapsed().as_millis()
+    ));
 
-    info!(report = %report_path.display(), "E2E: relatório gravado");
-
-    if e2e_full {
-        let full_report_name = full_report_file.unwrap_or_else(|| {
-            format!("_E2E_FULL_{}.txt", sanitize_repo_id(&repo_id))
-        });
-        let full_report_path = reports_dir(&root_dir)?.join(full_report_name);
-        let full_report = format!(
-            "repo_id={}\nrow_number={}\nmodel_used={}\nlote_id={}\nlatency_f0_ms={}\nlatency_f1_ms={}\nlatency_f2_ms={}\nlatency_f3_f4_ms={}\nlatency_total_ms={}\ncost_f2_usd={:.6}\ncost_f3_f4_usd={:.6}\ncost_total_usd={:.6}\n",
-            repo_id,
-            row_number,
-            cfg.model,
-            lote_id,
-            phase1_ms,
-            phase1_5_ms,
-            phase2_ms,
-            elapsed_phase3_4_ms,
-            e2e_full_total_ms,
-            phase2_cost_usd,
-            usage.total_cost_usd,
-            e2e_full_total_cost_usd
-        );
-        std::fs::write(&full_report_path, full_report).map_err(|e| {
-            io::Error::other(format!(
-                "Falha ao gravar relatório E2E FULL em {}: {}",
-                full_report_path.display(),
-                e
-            ))
-        })?;
-        info!(
-            report = %full_report_path.display(),
-            latency_total_ms = e2e_full_total_ms,
-            cost_total_usd = e2e_full_total_cost_usd,
-            elapsed_total_wall_ms = started_total.elapsed().as_millis(),
-            "E2E FULL: relatório final gravado"
-        );
-    }
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&report_path)
+        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
+    file.write_all(report.as_bytes())
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
+    info!(report = %report_path.display(), "E2E: relatório ETL anexado");
     Ok(())
 }
