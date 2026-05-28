@@ -356,7 +356,7 @@ fn response_format_for_block(block: u8) -> Value {
             "justifications".to_string(),
             json!({
                 "type": "object",
-                "additionalProperties": { "type": "string", "maxLength": 1200 }
+                "additionalProperties": { "type": "string", "maxLength": 3000 }
             }),
         );
         let mut schema = strict_object(props, vec!["fields", "justifications"]);
@@ -372,14 +372,14 @@ fn response_format_for_block(block: u8) -> Value {
     let fields_schema = match block {
         1 => {
             let mut props = serde_json::Map::new();
-            props.insert("proposta_original_resumo".to_string(), string_schema(600));
-            props.insert("declared_description_ptbr".to_string(), string_schema(600));
-            props.insert("visao_do_enxame".to_string(), string_schema(600));
-            props.insert("justificativa_decisao".to_string(), string_schema(600));
-            props.insert("executive_verdict".to_string(), string_schema(180));
-            props.insert("risco_principal".to_string(), string_schema(180));
-            props.insert("risco_linha_vermelha".to_string(), string_schema(180));
-            props.insert("observacoes".to_string(), string_schema(600));
+            props.insert("proposta_original_resumo".to_string(), string_schema(3000));
+            props.insert("declared_description_ptbr".to_string(), string_schema(3000));
+            props.insert("visao_do_enxame".to_string(), string_schema(3000));
+            props.insert("justificativa_decisao".to_string(), string_schema(3000));
+            props.insert("executive_verdict".to_string(), string_schema(3000));
+            props.insert("risco_principal".to_string(), string_schema(3000));
+            props.insert("risco_linha_vermelha".to_string(), string_schema(3000));
+            props.insert("observacoes".to_string(), string_schema(3000));
             strict_object(
                 props,
                 vec![
@@ -396,19 +396,19 @@ fn response_format_for_block(block: u8) -> Value {
         }
         2 => {
             let mut props = serde_json::Map::new();
-            props.insert("ouro_a_extrair".to_string(), string_schema(400));
-            props.insert("deep_pattern".to_string(), string_schema(400));
-            props.insert("transplantable_core".to_string(), string_schema(400));
-            props.insert("logic_math_heuristic".to_string(), string_schema(400));
-            props.insert("real_structural_problem".to_string(), string_schema(400));
-            props.insert("categoria_nuance_tecnica".to_string(), string_schema(240));
-            props.insert("integracao_papel_exato".to_string(), string_schema(240));
-            props.insert("must_components_prod_ux".to_string(), string_schema(800));
-            props.insert("must_components_arq".to_string(), string_schema(800));
-            props.insert("must_components_ops".to_string(), string_schema(800));
-            props.insert("detected_toxic_deps".to_string(), string_schema(800));
-            props.insert("do_not_absorb".to_string(), string_schema(800));
-            props.insert("where_ai_should_not_enter".to_string(), string_schema(800));
+            props.insert("ouro_a_extrair".to_string(), string_schema(3000));
+            props.insert("deep_pattern".to_string(), string_schema(3000));
+            props.insert("transplantable_core".to_string(), string_schema(3000));
+            props.insert("logic_math_heuristic".to_string(), string_schema(3000));
+            props.insert("real_structural_problem".to_string(), string_schema(3000));
+            props.insert("categoria_nuance_tecnica".to_string(), string_schema(1200));
+            props.insert("integracao_papel_exato".to_string(), string_schema(1200));
+            props.insert("must_components_prod_ux".to_string(), string_schema(3000));
+            props.insert("must_components_arq".to_string(), string_schema(3000));
+            props.insert("must_components_ops".to_string(), string_schema(3000));
+            props.insert("detected_toxic_deps".to_string(), string_schema(3000));
+            props.insert("do_not_absorb".to_string(), string_schema(3000));
+            props.insert("where_ai_should_not_enter".to_string(), string_schema(3000));
             strict_object(
                 props,
                 vec![
@@ -957,8 +957,28 @@ fn derive_declared_description_from_readme(text: &str) -> Option<String> {
         if candidate.is_empty() {
             continue;
         }
-        let shortened = candidate.chars().take(280).collect::<String>();
-        return Some(shortened);
+        let max_chars = 2000_usize;
+        let mut prefix = candidate.chars().take(max_chars).collect::<String>();
+        if candidate.chars().count() > max_chars {
+            while !prefix.is_empty() {
+                let last = prefix.chars().last().unwrap_or(' ');
+                if last.is_whitespace()
+                    || last == '.'
+                    || last == ','
+                    || last == ';'
+                    || last == ':'
+                    || last == ')'
+                    || last == ']'
+                {
+                    break;
+                }
+                prefix.pop();
+            }
+            prefix = prefix.trim_end().to_string();
+        }
+        if !prefix.is_empty() {
+            return Some(prefix);
+        }
     }
     fallback_heading
 }

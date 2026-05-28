@@ -37,16 +37,16 @@ repo_heuristics,ultima_versao_online,TEXT,-,-,Tag ou hash curto do último commi
 repo_heuristics,lote_id,TEXT,NOT NULL,-,Identificador do batch de ingestão (ex: LOTE_015_Infra).
 repo_heuristics,data_ultima_analise,INTEGER,NOT NULL,-,Timestamp em formato estrito ISO-8601 (YYYY-MM-DDTHH:MM:SSZ).
 repo_heuristics,analise_origem,TEXT,NOT NULL,-,"Assinatura do motor responsável pela inserção (ex: ""SODA ETL V3 Auto"")."
-repo_heuristics,declared_description,TEXT,NOT NULL,-,"A promessa de marketing original extraída do README, traduzida para PT-BR."
-repo_heuristics,proposta_original_resumo,TEXT,NOT NULL,-,Síntese técnica desidratada e neutra do que a ferramenta realmente faz (gerada pelo formatador na Fase 3).
+repo_heuristics,declared_description,TEXT,NOT NULL,-,"A promessa de marketing original extraída do README, traduzida para PT-BR. Limite elástico: ~2000 caracteres."
+repo_heuristics,proposta_original_resumo,TEXT,NOT NULL,-,"Síntese técnica desidratada e neutra do que a ferramenta realmente faz (gerada pelo formatador na Fase 3). Limite elástico: ~3000 caracteres."
 repo_heuristics,stack_base,TEXT,NOT NULL,-,Array serializado em string com linguagens/frameworks originais. Vital para o Arquiteto auditar lixo tóxico (Node/Electron).
 repo_heuristics,licenca,TEXT,-,-,"Código SPDX (ex: MIT, AGPL-3.0) fornecido pela API. Fundamental para a blindagem legal do SODA contra copyleft."
 repo_heuristics,lente_a_sentido_prod_ux,TEXT,-,-,Salva a redação final da Visão de Produto/UX gerada na Fase 2. Pode ser NULL em caso de falha isolada desta API (Resiliência do Enxame).
 repo_heuristics,lente_b_estrutura_arq,TEXT,-,-,Salva a redação final da Visão de Arquitetura/Bare-Metal. Pode ser NULL em caso de falha isolada desta API.
 repo_heuristics,lente_c_realidade_ops,TEXT,-,-,Salva a redação final da Visão de Operação/FinOps. Pode ser NULL em caso de falha isolada desta API.
-repo_heuristics,visao_do_enxame,TEXT,NOT NULL,-,Síntese dialética entre as Lentes processada e unificada na Fase 3.
-repo_heuristics,justificativa_decisao,TEXT,NOT NULL,-,Defesa lógico-matemática da decisão. Validada via Pydantic e salva como TEXT.
-repo_heuristics,executive_verdict,TEXT,NOT NULL,-,Veredito final do Arquiteto (Tese -> Antítese -> Síntese). A trava Pydantic do script força truncagem estrita em 400 caracteres.
+repo_heuristics,visao_do_enxame,TEXT,NOT NULL,-,"Síntese dialética entre as Lentes processada e unificada na Fase 3. Limite elástico: ~3000 caracteres."
+repo_heuristics,justificativa_decisao,TEXT,NOT NULL,-,"Defesa lógico-matemática da decisão. Validada via JSON Schema estrito e salva como TEXT. Limite elástico: ~3000 caracteres."
+repo_heuristics,executive_verdict,TEXT,NOT NULL,-,"Veredito final do Arquiteto (Tese -> Antítese -> Síntese). Validado via JSON Schema estrito. Limite elástico: ~3000 caracteres."
 repo_heuristics,classificacao_terminal,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic (ex: 'INTEGRATE_AS_COMPONENT', 'REJECT'). Salvo como string de TEXTO."
 repo_heuristics,acao_de_canibalizacao,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic definindo o alvo da extração física (ex: 'Data Model', 'UX Pattern')."
 repo_heuristics,categoria_arquitetural,TEXT,NOT NULL,-,"Enum estrito mapeando o grande domínio Épico do SODA (ex: 'Memória', 'Orquestração')."
@@ -54,17 +54,17 @@ repo_heuristics,horizonte_extracao,TEXT,NOT NULL,-,"Enum cronológico indicando 
 repo_heuristics,tipo_integracao,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic (ex: 'Sidecar Efêmero', 'Crate Nativa'). Define a topologia de injeção física no SO."
 repo_heuristics,categoria_nuance_tecnica,TEXT,NOT NULL,-,"A especialidade hiper-técnica da solução (ex: 'Motor de busca híbrido BM25', 'Parser AST O(1)')."
 repo_heuristics,integracao_papel_exato,TEXT,NOT NULL,-,A missão tática e cirúrgica do componente após ser absorvido pelo SODA.
-repo_heuristics,ouro_a_extrair,TEXT,NOT NULL,-,"A sacada genial de produto/UX, heurística intangível que justifica a canibalização."
-repo_heuristics,deep_pattern,TEXT,NOT NULL,-,Padrão lógico estrutural subjacente abstrato (ex: 'Regulação contínua de recursos').
-repo_heuristics,transplantable_core,TEXT,NOT NULL,-,O 'órgão mecânico' exato a ser amputado e levado para casa (ex: 'Máquina de estados FSM').
-repo_heuristics,logic_math_heuristic,TEXT,NOT NULL,-,"A alma matemática pura: algoritmos, tensores e heurísticas em O(1), ignorando a stack original."
-repo_heuristics,real_structural_problem,TEXT,NOT NULL,-,A dor raiz verdadeira e estrutural que a ferramenta original resolve no fundo.
-repo_heuristics,must_components_prod_ux,TEXT,NOT NULL,-,Array serializado em string (JSON-like). Lista estrita de workflows de Produto e UX a clonar.
-repo_heuristics,must_components_arq,TEXT,NOT NULL,-,Array serializado em string (JSON-like). Lista estrita de pipelines zero-copy e abstrações O(1) a reescrever em Rust.
-repo_heuristics,must_components_ops,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). Defesas Ops, táticas de rollback atômico, Sandboxing e proteções FinOps/Rate Limits obrigatórias a copiar."
-repo_heuristics,detected_toxic_deps,TEXT,NOT NULL,-,"Array serializado em string (JSON). Campo onde o Pydantic relaxa a validação para isolar intencionalmente rastros de 'react', 'node_modules' e 'electron' encontrados na base."
-repo_heuristics,do_not_absorb,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). O Lixo Tóxico absoluto a ser expurgado (ex: Servidores Node.js, UIs em React, Docker pesado, Telemetria)."
-repo_heuristics,where_ai_should_not_enter,TEXT,NOT NULL,-,O 'Cercadinho do Determinismo'. Inicia OBRIGATORIAMENTE com 'PROIBIDO...'. Demarca as zonas de RCE e corrupção de banco onde a IA não tem permissão de atuar.
+repo_heuristics,ouro_a_extrair,TEXT,NOT NULL,-,"A sacada genial de produto/UX, heurística intangível que justifica a canibalização. Limite elástico: ~3000 caracteres."
+repo_heuristics,deep_pattern,TEXT,NOT NULL,-,"Padrão lógico estrutural subjacente abstrato (ex: 'Regulação contínua de recursos'). Limite elástico: ~3000 caracteres."
+repo_heuristics,transplantable_core,TEXT,NOT NULL,-,"O 'órgão mecânico' exato a ser amputado e levado para casa (ex: 'Máquina de estados FSM'). Limite elástico: ~3000 caracteres."
+repo_heuristics,logic_math_heuristic,TEXT,NOT NULL,-,"A alma matemática pura: algoritmos, tensores e heurísticas em O(1), ignorando a stack original. Limite elástico: ~3000 caracteres."
+repo_heuristics,real_structural_problem,TEXT,NOT NULL,-,"A dor raiz verdadeira e estrutural que a ferramenta original resolve no fundo. Limite elástico: ~3000 caracteres."
+repo_heuristics,must_components_prod_ux,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). Lista estrita de workflows de Produto e UX a clonar. Limite elástico: ~3000 caracteres."
+repo_heuristics,must_components_arq,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). Lista estrita de pipelines zero-copy e abstrações O(1) a reescrever em Rust. Limite elástico: ~3000 caracteres."
+repo_heuristics,must_components_ops,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). Defesas Ops, táticas de rollback atômico, Sandboxing e proteções FinOps/Rate Limits obrigatórias a copiar. Limite elástico: ~3000 caracteres."
+repo_heuristics,detected_toxic_deps,TEXT,NOT NULL,-,"Array serializado em string (JSON). Campo onde o validador relaxa a validação para isolar intencionalmente rastros de 'react', 'node_modules' e 'electron' encontrados na base. Limite elástico: ~3000 caracteres."
+repo_heuristics,do_not_absorb,TEXT,NOT NULL,-,"Array serializado em string (JSON-like). O Lixo Tóxico absoluto a ser expurgado (ex: Servidores Node.js, UIs em React, Docker pesado, Telemetria). Limite elástico: ~3000 caracteres."
+repo_heuristics,where_ai_should_not_enter,TEXT,NOT NULL,-,"O 'Cercadinho do Determinismo'. Inicia OBRIGATORIAMENTE com 'PROIBIDO...'. Demarca as zonas de RCE e corrupção de banco onde a IA não tem permissão de atuar. Limite elástico: ~3000 caracteres."
 repo_heuristics,bare_metal_fit,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, EXCELLENT). Nota física cravada avaliando a Soberania em Runtime e o Agnosticismo da solução. Avalia se a arquitetura é transmutável para operar em qualquer silício futuro, usando a RTX 2060m e CPU AVX2 estritamente como 'Treino de Gravidade' (piso de validação)."
 repo_heuristics,extractability_level,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, EXCELLENT). Avalia matematicamente a facilidade de amputar o núcleo vital em O(1) sem arrastar o monólito original."
 repo_heuristics,operability_level,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, EXCELLENT). Avalia a resiliência contínua, logs claros e se a ferramenta opera de forma 'fire-and-forget' sem DevOps babá."
@@ -72,9 +72,9 @@ repo_heuristics,entropy_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, C
 repo_heuristics,design_misuse_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Avalia se a UX/UI original induz o humano à auto-sabotagem cognitiva, viés de automação ou fadiga de alertas."
 repo_heuristics,intrinsic_ethics_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Mede o risco arquitetural de injeção de prompt, vulnerabilidades estruturais ou invasão de privacidade nativa do código."
 repo_heuristics,discipline_dependency,TEXT,NOT NULL,-,"Enum estrito (Nenhuma, Baixa, Média, Alta, Crítica). Trava de neuro-inclusão: avalia se a solução colapsa sob uso imperfeito de humanos com TDAH (esquecimentos)."
-repo_heuristics,risco_principal,TEXT,NOT NULL,-,"1 frase cortante e letal expondo a maior fragilidade técnica, vulnerabilidade ou gargalo termodinâmico do projeto."
-repo_heuristics,risco_linha_vermelha,TEXT,NOT NULL,-,"Restrição imperativa iniciando com ""NUNCA FAZER..."". A barreira arquitetural dogmática que não podemos cruzar ao absorver este código."
-repo_heuristics,observacoes,TEXT,NOT NULL,-,"Notas curtas de anomalias descobertas, como chaves fixas (hardcoded) ou variáveis ocultas encontradas durante a varredura AST do Harvester."
+repo_heuristics,risco_principal,TEXT,NOT NULL,-,"Idealmente 1 frase cortante expondo a maior fragilidade técnica, vulnerabilidade ou gargalo termodinâmico do projeto. Limite elástico: ~3000 caracteres."
+repo_heuristics,risco_linha_vermelha,TEXT,NOT NULL,-,"Restrição imperativa iniciando com ""NUNCA FAZER..."". A barreira arquitetural dogmática que não podemos cruzar ao absorver este código. Limite elástico: ~3000 caracteres."
+repo_heuristics,observacoes,TEXT,NOT NULL,-,"Notas/ressalvas de anomalias descobertas (ex: chaves hardcoded, variáveis ocultas) durante a varredura AST do Harvester. Limite elástico: ~3000 caracteres."
 repo_heuristics,score_final,REAL,NOT NULL,-,Nota Média Flutuante (ex: 8.5). Calculada mecanicamente pelo Rust (arredondada para 1 casa decimal) baseada nas notas inteiras.
 repo_heuristics,score_fit_geral_soda,REAL,NOT NULL,-,"Nota Flutuante Ponderada (ex: 7.2). Calculada no Rust aplicando a nova fórmula V3: prioriza Lógica (30%) e Extraibilidade (15%), balanceadas com Soberania, Bare-Metal, Operabilidade, e penalidades de Creep/Risco Intrínseco."
 repo_heuristics,score_philosophical_fit,INTEGER,NOT NULL,-,Nota pura em Integer (0-10). 10 = Local-First / Zero-Trust absoluto.
