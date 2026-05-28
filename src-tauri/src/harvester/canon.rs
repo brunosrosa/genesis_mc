@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fs, path::PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use thiserror::Error;
@@ -11,8 +12,8 @@ const BLOB_10_TYPE: &str = "blob_10_soda_canon_context";
 pub const CANON_GLOBAL_REPO_ID: &str = "__SODA_CANON_GLOBAL__";
 const CANON_CACHE_MAX_AGE_SECS: i64 = 7 * 24 * 60 * 60;
 const CANON_MAX_CHARS: usize = 8_000;
-const CANON_SCHEMA_TAG: &str = "SODA_CANON_V6_ARCH_MACRO";
-const CANON_LOCAL_CONTEXT: &str = "SODA_CANON_V6_ARCH_MACRO
+const CANON_SCHEMA_TAG: &str = "SODA_CANON_V5_ADRS_ALL";
+const CANON_LOCAL_CONTEXT: &str = "SODA_CANON_V5_ADRS_ALL
 Raio-X Macro do SODA / Genesis MC:
 
 O nucleo do sistema e soberania bare-metal. A regra estrutural e backend em Rust com Tokio, ownership explicito, fail-closed e zero panic em producao. O frontend existe como casca passiva em Svelte 5, renderizando estado sem tomar para si logica de negocio, orquestracao, memoria ou inferencia. Python, Node.js e sidecars externos nao definem o produto; quando aparecem, existem apenas como ferramentas efemeras de fabrica, confinadas e descartadas ao fim da tarefa.
@@ -64,7 +65,9 @@ impl SodaCanonExtractor {
             }
         }
 
-        let payload_text = render_canon_context();
+        let payload_text = tokio::task::spawn_blocking(render_canon_context)
+            .await
+            .map_err(|e| CanonError::Storage(format!("Falha ao aguardar renderizacao do canon: {}", e)))??;
         if payload_text.trim().is_empty() {
             return Err(CanonError::EmptyPayload);
         }
@@ -152,8 +155,20 @@ fn now_epoch_secs() -> Result<i64, CanonError> {
         .as_secs() as i64)
 }
 
-fn render_canon_context() -> String {
-    truncate_chars(CANON_LOCAL_CONTEXT, CANON_MAX_CHARS)
+fn render_canon_context() -> Result<String, CanonError> {
+    let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(PathBuf::from)
+        .ok_or_else(|| CanonError::Storage("Falha ao resolver raiz do projeto".to_string()))?;
+
+    let adrs_all_path = root_dir.join(".archive").join("_ADRs_ALL.md");
+    let source = match fs::read_to_string(&adrs_all_path) {
+        Ok(text) => text,
+        Err(_) => CANON_LOCAL_CONTEXT.to_string(),
+    };
+
+    let payload = format!("{CANON_SCHEMA_TAG}\n\n{}", source.trim());
+    Ok(truncate_chars(&payload, CANON_MAX_CHARS))
 }
 
 fn payload_matches_schema(payload: &[u8]) -> bool {
