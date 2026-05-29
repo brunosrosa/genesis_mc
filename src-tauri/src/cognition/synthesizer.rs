@@ -58,27 +58,74 @@ impl CannibalizationAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ArchitecturalCategory {
     #[default]
-    Library,
-    Framework,
-    Application,
-    Tooling,
-    Infrastructure,
-    Runtime,
+    #[serde(rename = "")]
+    Unspecified,
+    #[serde(rename = "CanvasUI")]
+    CanvasUi,
+    #[serde(rename = "UILibrary")]
+    UiLibrary,
+    #[serde(rename = "Memoria_RAG")]
+    MemoriaRag,
+    #[serde(rename = "Roteamento_FinOps")]
+    RoteamentoFinOps,
+    #[serde(rename = "Orquestracao_Agentes")]
+    OrquestracaoAgentes,
+    #[serde(rename = "Model_Serving")]
+    ModelServing,
+    #[serde(rename = "Knowledge_Extraction")]
+    KnowledgeExtraction,
+    #[serde(rename = "Seguranca_Sandbox")]
+    SegurancaSandbox,
+    #[serde(rename = "Infraestrutura_Core")]
+    InfraestruturaCore,
+    #[serde(rename = "Tooling_Dev")]
+    ToolingDev,
+    #[serde(other)]
     Unknown,
 }
 
 impl ArchitecturalCategory {
+    pub fn parse_strict(raw: &str) -> Result<Self, String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Ok(Self::Unspecified);
+        }
+        let out = match trimmed {
+            "CanvasUI" => Self::CanvasUi,
+            "UILibrary" => Self::UiLibrary,
+            "Memoria_RAG" => Self::MemoriaRag,
+            "Roteamento_FinOps" => Self::RoteamentoFinOps,
+            "Orquestracao_Agentes" => Self::OrquestracaoAgentes,
+            "Model_Serving" => Self::ModelServing,
+            "Knowledge_Extraction" => Self::KnowledgeExtraction,
+            "Seguranca_Sandbox" => Self::SegurancaSandbox,
+            "Infraestrutura_Core" => Self::InfraestruturaCore,
+            "Tooling_Dev" => Self::ToolingDev,
+            _ => {
+                return Err(format!(
+                    "categoria_arquitetural invalida: '{}'. Valores permitidos: CanvasUI, UILibrary, Memoria_RAG, Roteamento_FinOps, Orquestracao_Agentes, Model_Serving, Knowledge_Extraction, Seguranca_Sandbox, Infraestrutura_Core, Tooling_Dev",
+                    trimmed
+                ));
+            }
+        };
+        Ok(out)
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Library => "LIBRARY",
-            Self::Framework => "FRAMEWORK",
-            Self::Application => "APPLICATION",
-            Self::Tooling => "TOOLING",
-            Self::Infrastructure => "INFRASTRUCTURE",
-            Self::Runtime => "RUNTIME",
+            Self::Unspecified => "",
+            Self::CanvasUi => "CanvasUI",
+            Self::UiLibrary => "UILibrary",
+            Self::MemoriaRag => "Memoria_RAG",
+            Self::RoteamentoFinOps => "Roteamento_FinOps",
+            Self::OrquestracaoAgentes => "Orquestracao_Agentes",
+            Self::ModelServing => "Model_Serving",
+            Self::KnowledgeExtraction => "Knowledge_Extraction",
+            Self::SegurancaSandbox => "Seguranca_Sandbox",
+            Self::InfraestruturaCore => "Infraestrutura_Core",
+            Self::ToolingDev => "Tooling_Dev",
             Self::Unknown => "UNKNOWN",
         }
     }
@@ -539,23 +586,24 @@ impl Default for MasterSolutionsRow {
 
 impl MasterSolutionsRow {
     pub fn from_block0(block0: Block0Context) -> Self {
-        let mut row = Self::default();
-        row.status_atualizacao = block0.status_atualizacao;
-        row.status_fase = block0.status_fase;
-        row.project_name = block0.project_name;
-        row.repo_url = block0.repo_url;
-        row.repo_version = block0.repo_version;
-        row.ultima_versao_online = block0.ultima_versao_online;
-        row.lote_id = block0.lote_id;
-        row.data_ultima_analise = block0.data_ultima_analise;
-        row.analise_origem = block0.analise_origem;
-        row.licenca = block0.licenca;
-        row.stack_base = block0.stack_base;
-        row.declared_description = block0.declared_description;
-        row.lente_a_sentido_prod_ux = normalize_lens_bullets(&block0.lente_a_sentido_prod_ux);
-        row.lente_b_estrutura_arq = normalize_lens_bullets(&block0.lente_b_estrutura_arq);
-        row.lente_c_realidade_ops = normalize_lens_bullets(&block0.lente_c_realidade_ops);
-        row
+        Self {
+            status_atualizacao: block0.status_atualizacao,
+            status_fase: block0.status_fase,
+            project_name: block0.project_name,
+            repo_url: block0.repo_url,
+            repo_version: block0.repo_version,
+            ultima_versao_online: block0.ultima_versao_online,
+            lote_id: block0.lote_id,
+            data_ultima_analise: block0.data_ultima_analise,
+            analise_origem: block0.analise_origem,
+            licenca: block0.licenca,
+            stack_base: block0.stack_base,
+            declared_description: block0.declared_description,
+            lente_a_sentido_prod_ux: normalize_lens_bullets(&block0.lente_a_sentido_prod_ux),
+            lente_b_estrutura_arq: normalize_lens_bullets(&block0.lente_b_estrutura_arq),
+            lente_c_realidade_ops: normalize_lens_bullets(&block0.lente_c_realidade_ops),
+            ..Self::default()
+        }
     }
 
     pub fn to_sheet_row(&self) -> Vec<serde_json::Value> {
@@ -1683,13 +1731,7 @@ pub fn build_batch_update_payload(
 }
 
 fn clamp_0_10(value: f64) -> f64 {
-    if value < 0.0 {
-        0.0
-    } else if value > 10.0 {
-        10.0
-    } else {
-        value
-    }
+    value.clamp(0.0, 10.0)
 }
 
 fn round_1(value: f64) -> f64 {

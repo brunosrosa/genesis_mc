@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,6 +14,12 @@ use tracing::{info, warn};
 use url::Url;
 use tokio::time::Instant;
 use tokio::io::AsyncBufReadExt;
+
+type SheetsDataFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
+type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+type GithubTagFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send + 'a>>;
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -27,21 +35,21 @@ trait SheetsClient: Send + Sync {
         spreadsheet_id: &'a str,
         sheet: &'a str,
         range: String,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
+    ) -> SheetsDataFuture<'a>;
 
     fn batch_update_cells<'a>(
         &'a self,
         spreadsheet_id: &'a str,
         sheet: &'a str,
         ranges: HashMap<String, Vec<Vec<String>>>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>>;
+    ) -> SheetsUpdateFuture<'a>;
 }
 
 trait GithubClient: Send + Sync {
     fn latest_release_tag<'a>(
         &'a self,
         repo_url: &'a str,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>, String>> + Send + 'a>>;
+    ) -> GithubTagFuture<'a>;
 }
 
 fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
@@ -549,8 +557,7 @@ fn has_drift(repo_version: &str, github_latest: &str) -> bool {
 fn normalize_header_cell(raw: &str) -> String {
     raw.trim()
         .to_ascii_lowercase()
-        .replace(' ', "_")
-        .replace('-', "_")
+        .replace([' ', '-'], "_")
 }
 
 fn col_idx_to_a1(col_idx0: usize) -> String {
@@ -629,13 +636,13 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
             .sheets
             .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string())
             .await?;
-        let header_row = header.get(0).cloned().unwrap_or_default();
+        let header_row = header.first().cloned().unwrap_or_default();
 
         let values = self
             .sheets
             .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A2:CF".to_string())
             .await?;
-        let sample_row = values.get(0);
+        let sample_row = values.first();
         let cols = resolve_column_map(&header_row, sample_row)?;
 
         let mut drifted = 0usize;
@@ -1021,7 +1028,7 @@ mod tests {
             "aaif-goose / goose".to_string(),
             "https://github.com/aaif-goose/goose".to_string(),
             "v1.2.2".to_string(),
-            "v1.2.2".to_string(),
+            "".to_string(),
             "LOTE_X".to_string(),
         ]];
         let sheets = Arc::new(MockSheets::new(header, data));
