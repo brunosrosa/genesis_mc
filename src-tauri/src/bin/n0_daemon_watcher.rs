@@ -192,7 +192,13 @@ impl SheetsClient for SheetsMcpClient {
 }
 
 fn extract_values_2d(value: &Value) -> Option<Vec<Vec<String>>> {
-    let values = value.get("values")?.as_array()?;
+    let values = if let Some(arr) = value.get("values").and_then(|v| v.as_array()) {
+        arr
+    } else {
+        let ranges = value.get("valueRanges")?.as_array()?;
+        let first = ranges.first()?;
+        first.get("values")?.as_array()?
+    };
     let mut out = Vec::new();
     for row in values {
         let row_arr = row.as_array()?;
@@ -602,6 +608,7 @@ async fn main() -> io::Result<()> {
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+    let run_once = std::env::args().any(|arg| arg == "--once" || arg == "--dry-run");
 
     let watcher = DaemonWatcher {
         sheets: Arc::new(SheetsMcpClient),
@@ -623,6 +630,23 @@ async fn main() -> io::Result<()> {
             max_attempts_per_line: 3,
         },
     };
+
+    if run_once {
+        let tel = watcher.run_once(&spreadsheet_id).await;
+        info!(
+            linhas_inspecionadas = tel.linhas_inspecionadas,
+            n1 = tel.roteadas_n1,
+            n2 = tel.roteadas_n2,
+            n3 = tel.roteadas_n3,
+            n4 = tel.roteadas_n4,
+            n5 = tel.roteadas_n5,
+            short_circuit = tel.roteadas_short_circuit,
+            erros_sheets = tel.erros_sheets,
+            erros_dispatch = tel.erros_dispatch,
+            "N0: dry-run concluído (1 rodada)"
+        );
+        return Ok(());
+    }
 
     watcher.run_daemon(&spreadsheet_id).await;
     Ok(())
