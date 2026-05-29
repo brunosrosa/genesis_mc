@@ -43,7 +43,6 @@ async fn main() -> io::Result<()> {
 
     loop {
         let (mut downstream, _) = listener.accept().await?;
-        let upstream = upstream;
         tokio::spawn(async move {
             set_nodelay(&downstream);
             let Ok(mut up) = TcpStream::connect(upstream).await else {

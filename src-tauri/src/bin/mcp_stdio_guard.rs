@@ -49,7 +49,7 @@ fn parse_cli_args() -> Result<GuardConfig, String> {
     }
 
     let cmd = cmd.ok_or_else(|| "Missing command after --".to_string())?;
-    let timeout_ms = timeout_ms.min(HARD_LIMIT_TIMEOUT_MS).max(1);
+    let timeout_ms = timeout_ms.clamp(1, HARD_LIMIT_TIMEOUT_MS);
 
     Ok(GuardConfig {
         timeout: Duration::from_millis(timeout_ms),
@@ -341,4 +341,3 @@ mod tests {
         let _ = tokio::time::timeout(Duration::from_secs(2), run).await.unwrap();
     }
 }
-

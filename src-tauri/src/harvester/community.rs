@@ -162,7 +162,7 @@ impl CommunityMetaFetcher {
                     .spdx_id
                     .as_ref()
                     .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty() && s.to_ascii_uppercase() != "NOASSERTION")
+                    .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("NOASSERTION"))
                     .or_else(|| {
                         license
                             .name

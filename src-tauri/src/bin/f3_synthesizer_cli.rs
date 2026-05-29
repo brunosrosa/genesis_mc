@@ -295,7 +295,7 @@ impl OpenRouterFormatterClient {
             }
         }
 
-        first.get("text").and_then(|v| flatten(v))
+        first.get("text").and_then(flatten)
     }
 
     fn harvest_usage(&self, json: &Value) {
@@ -1133,7 +1133,7 @@ fn resolve_row_number_by_repo_url_and_lote_id(
     let lote_needle = lote_id.trim();
 
     for (idx, row) in values.iter().enumerate() {
-        let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+        let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
         let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
         let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
         if !repo_hay.is_empty()
@@ -1146,7 +1146,7 @@ fn resolve_row_number_by_repo_url_and_lote_id(
     }
 
     for (idx, row) in values.iter().enumerate() {
-        let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+        let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
         let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
         if repo_cell.is_empty() && lote_cell.is_empty() {
             return Ok((idx as u32) + 2);
@@ -1171,8 +1171,8 @@ fn read_status_atualizacao_e_fase(
         }),
     )?;
     let values = extract_values_2d(&result).unwrap_or_default();
-    let row = values.get(0).cloned().unwrap_or_default();
-    let status_atualizacao = row.get(0).map(|s| s.trim().to_string()).unwrap_or_default();
+    let row = values.first().cloned().unwrap_or_default();
+    let status_atualizacao = row.first().map(|s| s.trim().to_string()).unwrap_or_default();
     let status_fase = row.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
     Ok((status_atualizacao, status_fase))
 }
@@ -1212,8 +1212,8 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
     )?;
     let values = extract_values_2d(&result).unwrap_or_default();
     let cell = values
-        .get(0)
-        .and_then(|r| r.get(0))
+        .first()
+        .and_then(|r| r.first())
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
     Ok(cell == expected_repo_id || cell == expected_pretty)
@@ -1233,7 +1233,7 @@ fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
         }),
     )?;
     let values = extract_values_2d(&result).unwrap_or_default();
-    Ok(values.get(0).map(|r| r.len()).unwrap_or(0))
+    Ok(values.first().map(|r| r.len()).unwrap_or(0))
 }
 
 async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> {
@@ -1389,7 +1389,7 @@ async fn main() -> io::Result<()> {
     if repo_version_lower == "main"
         || repo_version_lower == "master"
         || repo_version_lower == "unknown"
-        || ultima_versao_online.to_ascii_lowercase() == "unknown"
+        || ultima_versao_online.eq_ignore_ascii_case("unknown")
     {
         if let Some(tag) = try_fetch_github_latest_release_tag(&repo_url).await {
             repo_version = tag.clone();
@@ -1527,8 +1527,7 @@ async fn main() -> io::Result<()> {
     );
 
     let e2e_full_total_cost_usd = phase2_cost_usd + usage.total_cost_usd;
-    let e2e_full_total_ms =
-        phase1_ms + phase1_5_ms + phase2_ms + (elapsed_phase3_4_ms as u128);
+    let e2e_full_total_ms = phase1_ms + phase1_5_ms + phase2_ms + elapsed_phase3_4_ms;
     let report_path = etl_report_path(&root_dir, &repo_id)?;
     let mut report = String::new();
     report.push_str(&format!(
@@ -1542,7 +1541,7 @@ async fn main() -> io::Result<()> {
     report.push_str(&format!("latency_f3_f4_ms={}\n", elapsed_phase3_4_ms));
     report.push_str(&format!(
         "latency_total_ms={}\n",
-        if e2e_full { e2e_full_total_ms } else { elapsed_phase3_4_ms as u128 }
+        if e2e_full { e2e_full_total_ms } else { elapsed_phase3_4_ms }
     ));
     report.push_str(&format!("prompt_tokens={}\n", usage.prompt_tokens));
     report.push_str(&format!("completion_tokens={}\n", usage.completion_tokens));

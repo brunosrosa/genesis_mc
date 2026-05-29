@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("DB: {}", db_path.display());
     println!("repo_id: {}", repo_id);
     println!("chars: {}", char_count);
-    println!("bytes: {}", payload.as_bytes().len());
+    println!("bytes: {}", payload.len());
 
     println!("\n--- FIRST 10 LINES ---");
     for line in payload.lines().take(10) {
@@ -139,4 +139,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

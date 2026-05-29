@@ -31,3 +31,7 @@ dist-ssr
 .soda_data/
 .archive/
 .soda_cache/
+.soda_sandbox/
+.soda_scratchpad/
+.jcodemunch_index/
+.soda_semgrep/

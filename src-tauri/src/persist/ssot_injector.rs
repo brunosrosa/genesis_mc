@@ -25,8 +25,6 @@ pub enum SsotError {
 
 pub struct SsotInjector;
 
-const SSOT_STATUS_CONCLUIDO: &str = "CONCLUIDO";
-const SSOT_STATUS_PRONTO_PARA_FASE_5: &str = "PRONTO_PARA_FASE_5";
 const SSOT_EXPECTED_COLUMNS: usize = 84;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
@@ -143,11 +141,15 @@ struct ValidatedSsotFields {
 }
 
 impl SsotInjector {
-    fn status_atualizacao_after_phase4(row: &MasterSolutionsRow) -> &'static str {
-        if row.tipo_integracao.as_str() == "INTEGRATE_AS_COMPONENT" {
-            SSOT_STATUS_PRONTO_PARA_FASE_5
+    fn should_short_circuit(status_atualizacao: &str) -> bool {
+        status_atualizacao.trim().starts_with("REJEITADO_")
+    }
+
+    fn status_fase_to_persist<'a>(status_atualizacao: &str, status_fase: &'a str) -> &'a str {
+        if Self::should_short_circuit(status_atualizacao) {
+            "SHORT-CIRCUIT"
         } else {
-            SSOT_STATUS_CONCLUIDO
+            status_fase
         }
     }
     /// Injeta os dados no SSOT (SQLite + Google Sheets Batch)
@@ -162,8 +164,7 @@ impl SsotInjector {
         // 1. Selagem L2 (Execução Durável)
         // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
         apply_phase4_block5(now_epoch, &mut row);
-        row.status_atualizacao = Self::status_atualizacao_after_phase4(&row).to_string();
-        row.status_fase = "F4".to_string();
+        row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
         Self::update_local_status(
             repo_id,
             row.status_atualizacao.as_str(),
@@ -228,7 +229,7 @@ impl SsotInjector {
         repo_url_needle: &str,
     ) -> Option<u32> {
         for (idx, row) in values.iter().enumerate() {
-            let repo_cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+            let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
             let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
             if !repo_hay.is_empty() && repo_hay == repo_url_needle {
                 return Some((idx as u32) + 2);
@@ -391,9 +392,15 @@ impl SsotInjector {
         repo_id: &str,
         payload: &MasterSolutionsRow,
     ) -> Result<ValidatedSsotFields, SsotError> {
-        let _status_atualizacao =
-            Self::require_non_empty("status_atualizacao", &payload.status_atualizacao)?;
-        let _status_fase = Self::require_non_empty("status_fase", &payload.status_fase)?;
+        if payload.categoria_arquitetural == crate::cognition::synthesizer::ArchitecturalCategory::Unknown {
+            return Err(SsotError::ValidationFailure(
+                "categoria_arquitetural invalida (fora do catálogo de 10 ENUMs)".to_string(),
+            ));
+        }
+        let _ = crate::cognition::synthesizer::ArchitecturalCategory::parse_strict(
+            payload.categoria_arquitetural.as_str(),
+        )
+        .map_err(SsotError::ValidationFailure)?;
 
         let project_name = Self::require_non_empty("project_name", &payload.project_name)?;
         if project_name != repo_id {
@@ -487,6 +494,10 @@ impl SsotInjector {
         Self::ensure_repo_heuristics_schema(&conn)?;
         Self::ensure_repo_heuristics_justifications_schema(&conn)?;
 
+        let status_fase_to_persist =
+            Self::status_fase_to_persist(&payload.status_atualizacao, &payload.status_fase)
+                .to_string();
+
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
@@ -497,7 +508,7 @@ impl SsotInjector {
             rusqlite::params![
                 &validated.project_name,
                 &payload.status_atualizacao,
-                &payload.status_fase,
+                &status_fase_to_persist,
                 &validated.repo_url,
                 &validated.repo_version,
                 &payload.ultima_versao_online,
@@ -722,14 +733,14 @@ impl SsotInjector {
 
         if !has_status_atualizacao {
             conn.execute(
-                "ALTER TABLE repo_heuristics ADD COLUMN status_atualizacao TEXT NOT NULL DEFAULT 'CONCLUIDO'",
+                "ALTER TABLE repo_heuristics ADD COLUMN status_atualizacao TEXT NOT NULL DEFAULT ''",
                 [],
             )
             .map_err(|e| format!("Falha ao adicionar coluna status_atualizacao: {e}"))?;
         }
         if !has_status_fase {
             conn.execute(
-                "ALTER TABLE repo_heuristics ADD COLUMN status_fase TEXT NOT NULL DEFAULT 'F4'",
+                "ALTER TABLE repo_heuristics ADD COLUMN status_fase TEXT NOT NULL DEFAULT ''",
                 [],
             )
             .map_err(|e| format!("Falha ao adicionar coluna status_fase: {e}"))?;
@@ -766,7 +777,7 @@ impl SsotInjector {
                     "Payload do Google Sheets desalinhado: esperado 1x{}, recebeu {}x{}",
                     SSOT_EXPECTED_COLUMNS,
                     rows.len(),
-                    rows.get(0).map(|r| r.len()).unwrap_or(0)
+                    rows.first().map(|r| r.len()).unwrap_or(0)
                 )));
             }
             let last = rows[0].len() - 1;
@@ -858,17 +869,6 @@ mod tests {
     }
 
     #[test]
-    fn status_after_phase4_is_pronto_para_fase_5_when_integrate_as_component() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "PENDENTE_IA".to_string();
-        row.status_fase = "F3".to_string();
-        row.tipo_integracao = crate::cognition::synthesizer::IntegrationType::IntegrateAsComponent;
-        assert_eq!(
-            SsotInjector::status_atualizacao_after_phase4(&row),
-            "PRONTO_PARA_FASE_5"
-        );
-    }
-    #[test]
     fn test_prepare_batch_payload_is_84_columns_a_to_cf() {
         let mut row = MasterSolutionsRow::default();
         row.status_atualizacao = "CONCLUIDO".to_string();
@@ -911,6 +911,40 @@ mod tests {
         let row = MasterSolutionsRow::default();
         let result = SsotInjector::validate_payload("owner/repo", &row);
         assert!(matches!(result, Err(SsotError::ValidationFailure(_))));
+    }
+
+    #[test]
+    fn categoria_arquitetural_rejects_value_outside_10_enums_fail_closed() {
+        let mut row = MasterSolutionsRow::default();
+        row.status_atualizacao = "INICIAR_TRIAGEM".to_string();
+        row.status_fase = "FASE_-0.5_BATEDOR_OK".to_string();
+        row.project_name = "owner/repo".to_string();
+        row.repo_url = "https://github.com/owner/repo".to_string();
+        row.repo_version = "v1.0.0".to_string();
+        row.ultima_versao_online = "v1.0.1".to_string();
+        row.lote_id = "LOTE_01".to_string();
+        row.data_ultima_analise = 1_715_000_000;
+        row.analise_origem = "SGR".to_string();
+        row.declared_description = "Descricao".to_string();
+        row.proposta_original_resumo = "Resumo".to_string();
+        row.stack_base = "Rust".to_string();
+        row.licenca = "MIT".to_string();
+        row.valid_from = 1_700_000_000;
+        row.valid_to = None;
+        row.embargo_status = 0;
+        row.categoria_arquitetural = crate::cognition::synthesizer::ArchitecturalCategory::Unknown;
+
+        let out = SsotInjector::validate_payload("owner/repo", &row);
+        assert!(matches!(out, Err(SsotError::ValidationFailure(_))));
+    }
+
+    #[test]
+    fn rejected_lixo_toxico_triggers_systemic_short_circuit_status_fase() {
+        let out = SsotInjector::status_fase_to_persist(
+            "REJEITADO_LIXO_TOXICO",
+            "FASE_0_HARVESTER_OK",
+        );
+        assert_eq!(out, "SHORT-CIRCUIT");
     }
 
     struct MockSheetsClient {

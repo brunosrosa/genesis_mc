@@ -38,8 +38,7 @@ fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
 fn normalize_header_cell(raw: &str) -> String {
     raw.trim()
         .to_ascii_lowercase()
-        .replace(' ', "_")
-        .replace('-', "_")
+        .replace([' ', '-'], "_")
 }
 
 fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
@@ -196,7 +195,7 @@ fn main() -> io::Result<()> {
     )?;
     let header_row = extract_values_2d(&header)
         .unwrap_or_default()
-        .get(0)
+        .first()
         .cloned()
         .unwrap_or_default();
     let cols = resolve_column_map(&header_row)?;

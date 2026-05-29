@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::time::Duration;
 
 use reqwest::Client;
@@ -28,8 +30,7 @@ fn workspace_root() -> io::Result<PathBuf> {
 fn normalize_header_cell(raw: &str) -> String {
     raw.trim()
         .to_ascii_lowercase()
-        .replace(' ', "_")
-        .replace('-', "_")
+        .replace([' ', '-'], "_")
 }
 
 fn col_idx_to_a1(col_idx0: usize) -> String {
@@ -73,23 +74,24 @@ trait SheetsClient: Send + Sync {
         spreadsheet_id: &'a str,
         sheet: &'a str,
         range: String,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
+    ) -> SheetsDataFuture<'a>;
 
     fn batch_update_cells<'a>(
         &'a self,
         spreadsheet_id: &'a str,
         sheet: &'a str,
         ranges: HashMap<String, Vec<Vec<String>>>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>>;
+    ) -> SheetsUpdateFuture<'a>;
 }
 
+type SheetsDataFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
+type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+type LlmComponentsFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<(DeepComponentsEnvelope, f64), String>> + Send + 'a>>;
+
 trait LlmClient: Send + Sync {
-    fn run_components<'a>(
-        &'a self,
-        prompt: &'a str,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<(DeepComponentsEnvelope, f64), String>> + Send + 'a>,
-    >;
+    fn run_components<'a>(&'a self, prompt: &'a str) -> LlmComponentsFuture<'a>;
 }
 
 struct SheetsMcpClient;
@@ -580,7 +582,7 @@ impl OpenRouterClient {
                 }
             }
         }
-        first.get("text").and_then(|v| flatten(v))
+        first.get("text").and_then(flatten)
     }
 
     fn harvest_cost_usd(json: &Value) -> f64 {
@@ -719,7 +721,7 @@ fn update_parent_status_local(conn: &Connection, project_name: &str) -> Result<(
 
 fn compute_first_empty_row_1based(col_a_values: &[Vec<String>]) -> u32 {
     for (idx, row) in col_a_values.iter().enumerate() {
-        let cell = row.get(0).map(|s| s.trim()).unwrap_or("");
+        let cell = row.first().map(|s| s.trim()).unwrap_or("");
         if cell.is_empty() {
             return (idx as u32) + 2;
         }
@@ -774,15 +776,19 @@ fn fetch_seed_from_repo_heuristics(conn: &Connection, project_name: &str) -> Str
     }
 }
 
+struct ProcessCtx<'a> {
+    spreadsheet_id: &'a str,
+    cols: &'a MasterColumns,
+    dry_run: bool,
+    now_epoch: i64,
+}
+
 async fn process_parent_row<S: SheetsClient, L: LlmClient>(
     sheets: &S,
     llm: &L,
     conn: &mut Connection,
-    spreadsheet_id: &str,
-    cols: &MasterColumns,
+    ctx: &ProcessCtx<'_>,
     parent: &ParentRow,
-    dry_run: bool,
-    now_epoch: i64,
 ) -> Result<(), String> {
     let seed = fetch_seed_from_repo_heuristics(conn, &parent.project_name);
     let mut prompt = build_prompt(parent, &seed);
@@ -836,11 +842,11 @@ async fn process_parent_row<S: SheetsClient, L: LlmClient>(
         c.lote_id = parent.lote_id.clone();
         c.model_used = model_used.clone();
         c.cost_usd = per_cost;
-        c.created_at_epoch = now_epoch;
+        c.created_at_epoch = ctx.now_epoch;
         normalized.push(c);
     }
 
-    if dry_run {
+    if ctx.dry_run {
         info!(
             project_name = %parent.project_name,
             components = normalized.len(),
@@ -860,7 +866,7 @@ async fn process_parent_row<S: SheetsClient, L: LlmClient>(
         .map_err(|e| format!("Falha ao commit transação: {e}"))?;
 
     let col_a_values = sheets
-        .get_sheet_data(spreadsheet_id, DEEP_COMPONENTS_SHEET, "A2:A".to_string())
+        .get_sheet_data(ctx.spreadsheet_id, DEEP_COMPONENTS_SHEET, "A2:A".to_string())
         .await?;
     let start_row = compute_first_empty_row_1based(&col_a_values);
     let col_count = normalized[0].to_sheet_row().len();
@@ -874,11 +880,11 @@ async fn process_parent_row<S: SheetsClient, L: LlmClient>(
     let mut ranges = HashMap::new();
     ranges.insert(range, values_2d);
     sheets
-        .batch_update_cells(spreadsheet_id, DEEP_COMPONENTS_SHEET, ranges)
+        .batch_update_cells(ctx.spreadsheet_id, DEEP_COMPONENTS_SHEET, ranges)
         .await?;
 
-    let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
-    let fase_col = col_idx_to_a1(cols.status_fase_idx);
+    let status_col = col_idx_to_a1(ctx.cols.status_atualizacao_idx);
+    let fase_col = col_idx_to_a1(ctx.cols.status_fase_idx);
     let mut master_ranges = HashMap::new();
     master_ranges.insert(
         format!(
@@ -895,7 +901,7 @@ async fn process_parent_row<S: SheetsClient, L: LlmClient>(
         vec![vec!["F5".to_string()]],
     );
     sheets
-        .batch_update_cells(spreadsheet_id, MASTER_SOLUTIONS_SHEET, master_ranges)
+        .batch_update_cells(ctx.spreadsheet_id, MASTER_SOLUTIONS_SHEET, master_ranges)
         .await?;
 
     info!(
@@ -958,7 +964,7 @@ async fn main() -> io::Result<()> {
         .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A1:CF1".to_string())
         .await
         .map_err(io::Error::other)?;
-    let header_row = header.get(0).cloned().unwrap_or_default();
+    let header_row = header.first().cloned().unwrap_or_default();
     let cols = resolve_master_columns(&header_row).map_err(io::Error::other)?;
 
     let values = sheets
@@ -982,19 +988,14 @@ async fn main() -> io::Result<()> {
 
     let llm = OpenRouterClient::new().map_err(io::Error::other)?;
     let now_epoch = chrono::Utc::now().timestamp();
+    let ctx = ProcessCtx {
+        spreadsheet_id: &spreadsheet_id,
+        cols: &cols,
+        dry_run,
+        now_epoch,
+    };
     for parent in pending {
-        if let Err(e) = process_parent_row(
-            &sheets,
-            &llm,
-            &mut conn,
-            &spreadsheet_id,
-            &cols,
-            &parent,
-            dry_run,
-            now_epoch,
-        )
-        .await
-        {
+        if let Err(e) = process_parent_row(&sheets, &llm, &mut conn, &ctx, &parent).await {
             warn!(project_name = %parent.project_name, error = %e, "F5: falha ao processar repo");
             continue;
         }
@@ -1343,18 +1344,16 @@ mod tests {
             lote_id: "LOTE".to_string(),
         };
 
-        process_parent_row(
-            &sheets,
-            &llm,
-            &mut conn,
-            "SHEET_ID",
-            &cols,
-            &parent,
-            false,
-            999,
-        )
-        .await
-        .unwrap();
+        let ctx = ProcessCtx {
+            spreadsheet_id: "SHEET_ID",
+            cols: &cols,
+            dry_run: false,
+            now_epoch: 999,
+        };
+
+        process_parent_row(&sheets, &llm, &mut conn, &ctx, &parent)
+            .await
+            .unwrap();
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM deep_components", [], |r| r.get(0))
