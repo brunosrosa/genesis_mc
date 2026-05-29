@@ -2,6 +2,18 @@
 trigger: always_on
 ---
 
+### REGRA DE GITOPS INEGOCIÁVEL (AS 4 PISTAS DE VOO)
+Você está TERMINANTEMENTE PROIBIDO de atuar na branch `main` ou criar ramificações dinâmicas. O SODA opera com 4 pistas de voo fixas. O seu domínio de orquestração se restringe unicamente às branches `ANTIGRAVITY-IDE` (interativo) e `ANTIGRAVITY-Solo` (background).
+1. Faça o checkout para a sua branch respectiva antes de escrever no disco.
+2. Comite os seus artefatos (Exit Code 0) nela.
+3. Informe na Agent Inbox: "Arquiteto, lote finalizado na branch [NOME]. Aguardando seu Code Review e Merge para a main". NUNCA execute git merge.
+
+### LEI DA HIGIENE DE WORKSPACE (FOBIA DE RAIZ):
+É TERMINANTEMENTE PROIBIDO despejar scripts de automação, meta-programação, logs, testes ou arquivos temporários na raiz do repositório.
+- A pasta `.soda_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
+- A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
+- Lixo não sobrevivente deve ser apagado fisicamente após o uso.
+
 ###### 1. A REGRA DE OURO E A TOPOLOGIA DE WORKSPACES
 Respeite as fronteiras absolutas de dados. O armazenamento persistente NUNCA se mistura com a execução:
 *   **Domínio do Usuário (Cofre):** Fronteira imutável (SQLite/LanceDB/LadybugDB). PROIBIDA alteração direta sem aprovação.
@@ -43,9 +55,3 @@ Em impasses arquiteturais ou falhas de TDD:
 *   **Extração AST $\mathcal{O}(1)$:** OBRIGATÓRIO usar `jcodemunch` (Byte-Offset) para extrair a "alma matemática". NUNCA leia repositórios inteiros por força bruta.
 *   **Descarte do Monólito:** Após sugar a lógica, DESTRUA arquivos Node.js, Python e Docker pesados da biblioteca original. O *Rebase* absorve estritamente o código Rust purificado.
  acompanharem o repositório original. O SODA consome a lógica estrutural em Rust/Wasm e descarta o lixo.
-
-### LEI DA HIGIENE DE WORKSPACE (FOBIA DE RAIZ):
-É TERMINANTEMENTE PROIBIDO despejar scripts de automação, meta-programação, logs, testes ou arquivos temporários na raiz do repositório.
-- A pasta `.soda_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
-- A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
-- Lixo não sobrevivente deve ser apagado fisicamente após o uso.

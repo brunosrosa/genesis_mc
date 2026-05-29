@@ -42,10 +42,6 @@ Nós deletados do DOM (Tombstones) NUNCA devem sumir instantaneamente causando s
 *   **Tipografia Híbrida:** *Space Grotesk* (Autoridade/Títulos), *Inter* (Leitura limpa), e *JetBrains Mono / Doto* (Dados/Logs com alinhamento inquebrável).
 *   **Unidades:** Uso OBRIGATÓRIO de `ch` (horizontal) e `rem` (vertical).
 
----
-trigger: always_on
----
-
 ###### 1. A REGRA DE OURO E A TOPOLOGIA DE WORKSPACES
 Respeite as fronteiras absolutas de dados. O armazenamento persistente NUNCA se mistura com a execução:
 *   **Domínio do Usuário (Cofre):** Fronteira imutável (SQLite/LanceDB/LadybugDB). PROIBIDA alteração direta sem aprovação.
@@ -94,10 +90,6 @@ Em impasses arquiteturais ou falhas de TDD:
 - A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
 - Lixo não sobrevivente deve ser apagado fisicamente após o uso.
 
----
-trigger: always_on
----
-
 ###### CONSTITUIÇÃO COGNITIVA SODA
 **Objetivo:** Erradicar a "Cegueira Temporal" e o "Context Rot" sem estourar os 6GB de VRAM da RTX 2060m. O SODA não usa bancos de dados tradicionais em nuvem; ele opera uma arquitetura neuro-simulada estritamente local e soberana.
 
@@ -131,10 +123,6 @@ O lixo semântico não é apagado abruptamente por temporizadores (TTL); ele sof
 *   **O Paradigma NextPlaid para Código:** Códigos-fonte e funções NUNCA devem ser esmagados em vetores monolíticos. O SODA os fatia obrigatoriamente em vetores menores baseados na Árvore de Sintaxe Abstrata (AST), garantindo que lógicas úteis não desapareçam na busca densa.
 *   **Dinâmica de Langevin (PGD):** Durante a ociosidade da madrugada, o *Chyros Daemon* aplica o *Poincaré Gradient Descent*. Arquivos `EVOLVING` ociosos sofrem deriva hiperbólica em direção às bordas matemáticas do disco até serem arquivados ou esquecidos.
 *   **Índice de Phronesis:** Contradições lógicas gravadas na memória não são lidas por IA generativa, mas encontradas via *Cohomologia de Feixes Celulares* $\mathcal{O}(N \log N)$. Se for detectado um conflito matemático ($H^1 \neq 0$), um paradoxo é sinalizado para auditoria humana no Canvas.
-
----
-trigger: always_on
----
 
 ###### 1. A REGRA DE OURO DA STACK: FÁBRICA VS. PRODUTO (DUALIDADE SISTÊMICA)
 Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do código que será entregue ao usuário.
@@ -174,3 +162,10 @@ A infraestrutura repudia o *overengineering* de hipervisores pesados e máquinas
 *   **O Padrão Orchestrator-Worker:** Modelos Premium em nuvem (Claude Opus 4.7, GPT-5.4) são estritamente restritos a atuar como "Cloud Brain", lendo intenções e gerando Grafos Acíclicos Dirigidos (DAGs). O "Trabalho Braçal" resultante é despachado compulsoriamente para o Local Worker (RTX 2060m - Custo Zero) ou para Batch APIs asiáticas (DeepSeek V4, Gemini Flash).
 *   **Circuit Breakers (Disjuntores FinOps):** Se o limite diário de tokens ou o custo da assinatura ameaçar estourar, o Gateway atua como um disjuntor de rede, cortando a nuvem e empurrando toda a carga para a inferência local obrigatória.
 
+### REGRA DE GITOPS INEGOCIÁVEL (AS 4 PISTAS DE VOO)
+Você atua sob o SODA Canon V5. Você está TERMINANTEMENTE PROIBIDO de orquestrar a branch `main` e não tem permissão para usar `git checkout -b` para inventar ramificações.
+* Se você estiver operando no modo Chat/Builder, a sua "casinha" (branch) obrigatória é `TRAE-IDE`.
+* Se você estiver operando no modo Autônomo (Solo), a sua "casinha" (branch) obrigatória é `TRAE-Solo`.
+1. Mude para a sua branch correspondente IMEDIATAMENTE antes de codificar.
+2. Faça os seus commits atômicos (TDD) dentro da sua branch.
+3. Ao terminar (Exit Code 0), NÃO FAÇA MERGE. Avise o Arquiteto Humano para que ELE faça o Code Review e o Merge na `main`.
