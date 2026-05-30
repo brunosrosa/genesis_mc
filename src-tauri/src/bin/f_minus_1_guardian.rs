@@ -3,7 +3,7 @@ use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,6 +20,14 @@ type SheetsDataFuture<'a> =
 type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 type GithubTagFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send + 'a>>;
+
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -556,7 +564,7 @@ fn has_drift(repo_analised_version: &str, github_latest: &str) -> bool {
 
 fn try_extract_project_name_from_repo_url(repo_url: &str) -> Option<String> {
     let url = Url::parse(repo_url).ok()?;
-    if url.host_str()?.to_ascii_lowercase() != "github.com" {
+    if !url.host_str()?.eq_ignore_ascii_case("github.com") {
         return None;
     }
     let mut parts = url.path().trim_matches('/').split('/');
@@ -702,6 +710,9 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
 
         let mut drifted = 0usize;
         let mut updated = 0usize;
+        let processed = Arc::new(AtomicUsize::new(0));
+        let drifted_atomic = Arc::new(AtomicUsize::new(0));
+        let updated_atomic = Arc::new(AtomicUsize::new(0));
 
         #[derive(Clone)]
         struct RowCtx {
@@ -765,8 +776,29 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
         let max_updates_per_batch: usize = 50;
         let total_to_write = rows.len();
         let mut written_so_far = 0usize;
+        let ghost_processed = Arc::clone(&processed);
+        let ghost_drifted = Arc::clone(&drifted_atomic);
+        let ghost_updated = Arc::clone(&updated_atomic);
+        let ghost_started = Instant::now();
+        let ghost_handle = tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(30));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tick.tick().await;
+                info!(
+                    done = ghost_processed.load(Ordering::Relaxed),
+                    total = total_to_write,
+                    drifted = ghost_drifted.load(Ordering::Relaxed),
+                    updated = ghost_updated.load(Ordering::Relaxed),
+                    elapsed_s = ghost_started.elapsed().as_secs(),
+                    "Ghost Telemetry: Guardião processando"
+                );
+            }
+        });
+        let _ghost = AbortOnDrop(ghost_handle);
 
         for ctx in rows {
+            processed.fetch_add(1, Ordering::Relaxed);
             if let Some(project_name_col) = project_name_col.as_deref() {
                 if ctx.project_name.trim().is_empty() {
                     if let Some(extracted) = try_extract_project_name_from_repo_url(&ctx.repo_url) {
@@ -820,6 +852,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                     );
                 }
                 drifted += 1;
+                drifted_atomic.store(drifted, Ordering::Relaxed);
             }
 
             if should_write_latest {
@@ -845,6 +878,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                     .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", batch)
                     .await?;
                 updated += pending_updates;
+                updated_atomic.store(updated, Ordering::Relaxed);
                 pending_updates = 0;
             }
         }
@@ -862,6 +896,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                 .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", batch)
                 .await?;
             updated += pending_updates;
+            updated_atomic.store(updated, Ordering::Relaxed);
         }
 
 

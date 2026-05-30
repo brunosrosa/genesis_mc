@@ -1,6 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::cognition::synthesizer::{
@@ -14,6 +14,32 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{error, info};
 use url::Url;
+
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn spawn_ghost_telemetry(repo_id: String, message: String) -> AbortOnDrop {
+    let started = Instant::now();
+    let handle = tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(30));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tick.tick().await;
+            info!(
+                repo_id = %repo_id,
+                elapsed_s = started.elapsed().as_secs(),
+                message = %message,
+                "Ghost Telemetry"
+            );
+        }
+    });
+    AbortOnDrop(handle)
+}
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -1264,6 +1290,10 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
     };
     exe_path.set_file_name(bin_name);
 
+    let _ghost = spawn_ghost_telemetry(
+        repo_id.to_string(),
+        format!("Executando subfase '{binary_stem}'"),
+    );
     let status = tokio::process::Command::new(exe_path)
         .args(["--repo", repo_id])
         .stdin(Stdio::null())
@@ -1520,6 +1550,7 @@ async fn main() -> io::Result<()> {
     };
 
     let started_phase3_4 = Instant::now();
+    let _ghost_f3 = spawn_ghost_telemetry(repo_id.clone(), "F3 (SGR) em processamento".to_string());
     let phase3_out = match run_phase3_sgr(&formatter, &cfg, block0).await {
         Ok(out) => out,
         Err(Phase3Error::RetryExhausted { block, attempts, message }) => {
@@ -1531,13 +1562,16 @@ async fn main() -> io::Result<()> {
             return Err(io::Error::other(format!("Falha SGR: {}", e)));
         }
     };
+    drop(_ghost_f3);
 
     info!("E2E: F3 concluída. Iniciando F4 (carga atômica Sheets)");
     let block3_justifications = phase3_out.block3_justifications;
     let row = phase3_out.row;
+    let _ghost_f4 = spawn_ghost_telemetry(repo_id.clone(), "F4 (SSOT Sheets) em processamento".to_string());
     let row_number = SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
         .await
         .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?;
+    drop(_ghost_f4);
 
     let confirmed = confirm_sheet_write(row_number, &repo_id)?;
     if !confirmed {

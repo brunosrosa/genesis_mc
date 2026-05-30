@@ -3,7 +3,6 @@
 # ==============================================================================
 
 param(
-    [ValidateSet('0','1','2','3','4','5','X','x')]
     [string]$Choice = "",
     [switch]$DryRun,
     [switch]$Yes,
@@ -22,7 +21,23 @@ if (Test-Path $envPath) {
     Get-Content $envPath | ForEach-Object {
         if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)\s*$') {
             $name = $matches[1].Trim()
-            $value = $matches[2].Trim()
+            $valueRaw = $matches[2].Trim()
+            $value = $valueRaw
+            if ($value.StartsWith('"') -or $value.StartsWith("'")) {
+                $quote = $value.Substring(0, 1)
+                $end = $value.IndexOf($quote, 1)
+                if ($end -gt 0) {
+                    $value = $value.Substring(1, $end - 1)
+                } else {
+                    $value = $value.Trim($quote)
+                }
+            } else {
+                $hash = $value.IndexOf('#')
+                if ($hash -ge 0) {
+                    $value = $value.Substring(0, $hash)
+                }
+                $value = $value.Trim()
+            }
             $value = $value.Trim('"', "'", ' ')
             if ($name) {
                 Set-Item -Path ("Env:{0}" -f $name) -Value $value
@@ -48,8 +63,8 @@ Write-Host " [0] 👁️  N0 - Daemon Watcher" -ForegroundColor White
 Write-Host "        (Acorda o Olheiro Assíncrono para varrer a planilha 24/7)"
 Write-Host " [1] 🛡️  N1 - Guardião (Fase -1)" -ForegroundColor White
 Write-Host "        (Puxa nomes oficiais e versões do GitHub a custo zero)"
-Write-Host " [2] 🧱  Refresh Blob10 (Canon Context)" -ForegroundColor White
-Write-Host "        (Regera o blob_10_soda_canon_context no SQLite Vault)"
+Write-Host " [2] 🛰️  N2 - Batedor FinOps (Fase -0.5)" -ForegroundColor White
+Write-Host "        (README truncado + JSON Mode barato + triagem estruturada)"
 Write-Host " [3] 🧠  N3 - ETL Cognitivo Pesado (Fases 3 a 4)" -ForegroundColor White
 Write-Host "        (Sintetizador Pydantic + Escrita Fase 4 no Sheets)"
 Write-Host " [4] 🚜  N3 - Harvester Local (Fase 0)" -ForegroundColor White
@@ -89,9 +104,10 @@ switch ($choice) {
         $phaseName = "Fase -1 (GUARDIÃO)"
     }
     '2' {
-        $bin = "refresh_blob10_cli"
+        $bin = "f_minus_0_5_batedor_cli"
         $binArgs = @()
-        $phaseName = "Refresh Blob10 (Canon Context)"
+        if ($isDryRun) { $binArgs = @("--dry-run") }
+        $phaseName = "Fase -0.5 (BATEDOR FINOPS)"
     }
     '3' {
         $bin = "f3_synthesizer_cli"

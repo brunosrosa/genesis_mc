@@ -31,6 +31,8 @@ pub struct SsotInjector;
 const SSOT_EXPECTED_COLUMNS: usize = 84;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
+pub type SheetsDataFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
 pub type SheetsFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,7 +49,7 @@ pub trait SheetsClient: Send + Sync {
         spreadsheet_id: &'a str,
         sheet: &'a str,
         range: String,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
+    ) -> SheetsDataFuture<'a>;
 
     fn batch_update_cells<'a>(
         &'a self,
@@ -65,7 +67,7 @@ impl SheetsClient for McpGoogleSheetsClient {
         spreadsheet_id: &'a str,
         sheet: &'a str,
         range: String,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>> {
+    ) -> SheetsDataFuture<'a> {
         Box::pin(async move {
             use std::process::Stdio;
             use tokio::io::AsyncWriteExt;
