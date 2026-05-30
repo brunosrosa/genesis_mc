@@ -588,8 +588,8 @@ fn col_idx_to_a1(col_idx0: usize) -> String {
 #[derive(Debug, Clone)]
 struct ColumnMap {
     status_atualizacao_idx: usize,
-    status_fase_idx: usize,
-    project_name_idx: usize,
+    status_fase_idx: Option<usize>,
+    project_name_idx: Option<usize>,
     repo_url_idx: usize,
     repo_analised_version_idx: Option<usize>,
     ultima_versao_online_idx: usize,
@@ -624,12 +624,6 @@ fn resolve_column_map(header_row: &[String]) -> Result<ColumnMap, String> {
     let Some(status_atualizacao_idx) = status_atualizacao_idx else {
         return Err("Cabeçalho não contém 'status_atualizacao'".to_string());
     };
-    let Some(status_fase_idx) = status_fase_idx else {
-        return Err("Cabeçalho não contém 'status_fase'".to_string());
-    };
-    let Some(project_name_idx) = project_name_idx else {
-        return Err("Cabeçalho não contém 'project_name'".to_string());
-    };
     let Some(repo_url_idx) = repo_url_idx else {
         return Err("Cabeçalho não contém 'repo_url'".to_string());
     };
@@ -645,6 +639,30 @@ fn resolve_column_map(header_row: &[String]) -> Result<ColumnMap, String> {
         repo_analised_version_idx,
         ultima_versao_online_idx,
     })
+}
+
+fn should_skip_by_status_atualizacao(status_atualizacao: &str) -> bool {
+    let s = status_atualizacao.trim();
+    if s.is_empty() {
+        return false;
+    }
+    s.eq_ignore_ascii_case("INICIAR_TRIAGEM")
+        || s.eq_ignore_ascii_case("EM_PROCESSAMENTO")
+        || s.to_ascii_uppercase().starts_with("PENDENTE_")
+}
+
+fn try_build_repo_url_from_project_name(project_name: &str) -> Option<String> {
+    let raw = project_name.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let mut parts = raw.split('/');
+    let owner = parts.next()?.trim();
+    let repo = parts.next()?.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some(format!("https://github.com/{owner}/{repo}"))
 }
 
 struct Guardian<S: SheetsClient, G: GithubClient> {
@@ -663,11 +681,12 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
         let cols = resolve_column_map(&header_row)?;
         let mut required = vec![
             cols.status_atualizacao_idx,
-            cols.status_fase_idx,
-            cols.project_name_idx,
             cols.repo_url_idx,
             cols.ultima_versao_online_idx,
         ];
+        if let Some(idx) = cols.project_name_idx {
+            required.push(idx);
+        }
         if let Some(idx) = cols.repo_analised_version_idx {
             required.push(idx);
         }
@@ -699,17 +718,22 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                 .get(cols.status_atualizacao_idx)
                 .map(|s| s.trim())
                 .unwrap_or("");
-            if !status_atualizacao.is_empty() {
+            if should_skip_by_status_atualizacao(status_atualizacao) {
                 continue;
             }
-            let repo_url = row.get(cols.repo_url_idx).map(|s| s.trim()).unwrap_or("");
-            if repo_url.is_empty() {
-                continue;
-            }
-            let project_name = row
-                .get(cols.project_name_idx)
+            let project_name = cols
+                .project_name_idx
+                .and_then(|i| row.get(i))
                 .map(|s| s.trim())
                 .unwrap_or("");
+            let repo_url = row.get(cols.repo_url_idx).map(|s| s.trim()).unwrap_or("");
+            let repo_url = if !repo_url.is_empty() {
+                repo_url.to_string()
+            } else if let Some(built) = try_build_repo_url_from_project_name(project_name) {
+                built
+            } else {
+                continue;
+            };
             let ultima_versao_online = row
                 .get(cols.ultima_versao_online_idx)
                 .map(|s| s.trim())
@@ -722,7 +746,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                 .to_string();
             rows.push(RowCtx {
                 row_number_1based: (idx as u32) + 2,
-                repo_url: repo_url.to_string(),
+                repo_url,
                 repo_analised_version,
                 project_name: project_name.to_string(),
                 ultima_versao_online: ultima_versao_online.to_string(),
@@ -732,8 +756,8 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
         let inspected = values.len();
 
         let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
-        let status_fase_col = col_idx_to_a1(cols.status_fase_idx);
-        let project_name_col = col_idx_to_a1(cols.project_name_idx);
+        let status_fase_col = cols.status_fase_idx.map(col_idx_to_a1);
+        let project_name_col = cols.project_name_idx.map(col_idx_to_a1);
         let ultima_col = col_idx_to_a1(cols.ultima_versao_online_idx);
 
         let mut pending_ranges: HashMap<String, Vec<Vec<String>>> = HashMap::new();
@@ -743,59 +767,69 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
         let mut written_so_far = 0usize;
 
         for ctx in rows {
-            if ctx.project_name.trim().is_empty() {
-                if let Some(extracted) = try_extract_project_name_from_repo_url(&ctx.repo_url) {
-                    pending_ranges.insert(
-                        format!(
-                            "{project_name_col}{}:{project_name_col}{}",
-                            ctx.row_number_1based, ctx.row_number_1based
-                        ),
-                        vec![vec![extracted]],
-                    );
+            if let Some(project_name_col) = project_name_col.as_deref() {
+                if ctx.project_name.trim().is_empty() {
+                    if let Some(extracted) = try_extract_project_name_from_repo_url(&ctx.repo_url) {
+                        pending_ranges.insert(
+                            format!(
+                                "{project_name_col}{}:{project_name_col}{}",
+                                ctx.row_number_1based, ctx.row_number_1based
+                            ),
+                            vec![vec![extracted]],
+                        );
+                    }
                 }
             }
 
-            pending_ranges.insert(
-                format!(
+            let latest = match self.github.latest_release_tag(&ctx.repo_url).await {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(
+                        repo_url = %ctx.repo_url,
+                        error = %e,
+                        "Guardião: falha ao consultar GitHub; pulando linha"
+                    );
+                    continue;
+                }
+            };
+            let Some(latest) = latest else { continue };
+            let latest = latest.trim().to_string();
+            let should_write_latest = ctx.ultima_versao_online.trim() != latest;
+            let should_trigger_triage = has_drift(&ctx.repo_analised_version, &latest);
+
+            if !should_write_latest && !should_trigger_triage {
+                continue;
+            }
+
+            pending_updates += 1;
+            if should_trigger_triage {
+                    pending_ranges.insert(
+                        format!(
                     "{status_col}{}:{status_col}{}",
                     ctx.row_number_1based, ctx.row_number_1based
                 ),
                 vec![vec!["INICIAR_TRIAGEM".to_string()]],
-            );
-            pending_ranges.insert(
-                format!(
-                    "{status_fase_col}{}:{status_fase_col}{}",
-                    ctx.row_number_1based, ctx.row_number_1based
-                ),
-                vec![vec!["FASE_-1_GUARDIAO_OK".to_string()]],
-            );
-            pending_updates += 1;
-
-            if ctx.ultima_versao_online.trim().is_empty()
-                || ctx.repo_analised_version.trim().is_empty()
-            {
-                let latest = match self.github.latest_release_tag(&ctx.repo_url).await {
-                    Ok(v) => v,
-                    Err(e) => {
-                        warn!(
-                            repo_url = %ctx.repo_url,
-                            error = %e,
-                            "Guardião: falha ao consultar GitHub; pulando linha"
-                        );
-                        continue;
-                    }
-                };
-                let Some(latest) = latest else { continue };
-                if has_drift(&ctx.repo_analised_version, &latest) {
-                    drifted += 1;
+                );
+                if let Some(status_fase_col) = status_fase_col.as_deref() {
                     pending_ranges.insert(
                         format!(
-                            "{ultima_col}{}:{ultima_col}{}",
+                            "{status_fase_col}{}:{status_fase_col}{}",
                             ctx.row_number_1based, ctx.row_number_1based
                         ),
-                        vec![vec![latest.trim().to_string()]],
+                        vec![vec!["FASE_-1_GUARDIAO_OK".to_string()]],
                     );
                 }
+                drifted += 1;
+            }
+
+            if should_write_latest {
+                pending_ranges.insert(
+                    format!(
+                        "{ultima_col}{}:{ultima_col}{}",
+                        ctx.row_number_1based, ctx.row_number_1based
+                    ),
+                    vec![vec![latest]],
+                );
             }
 
             if pending_updates >= max_updates_per_batch {
@@ -1141,6 +1175,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn guardian_does_not_skip_rows_with_non_pending_status_atualizacao() {
+        let header = vec![vec![
+            "status_atualizacao".to_string(),
+            "status_fase".to_string(),
+            "project_name".to_string(),
+            "repo_url".to_string(),
+            "repo_analised_version".to_string(),
+            "ultima_versao_online".to_string(),
+            "lote_id".to_string(),
+        ]];
+        let data = vec![vec![
+            "OK".to_string(),
+            "".to_string(),
+            "aaif-goose/goose".to_string(),
+            "https://github.com/aaif-goose/goose".to_string(),
+            "v1.2.2".to_string(),
+            "v1.2.2".to_string(),
+            "LOTE_X".to_string(),
+        ]];
+        let sheets = Arc::new(MockSheets::new(header, data));
+        let github = MockGithub {
+            tag: Some("v1.2.3".to_string()),
+            calls: std::sync::atomic::AtomicU64::new(0),
+        };
+        let guardian = Guardian {
+            sheets,
+            github: Arc::new(github),
+        };
+        guardian.run_once("SHEET").await.unwrap();
+        let updates = guardian.sheets.updates.lock().await;
+        assert_eq!(updates.len(), 1);
+        let ranges = &updates[0];
+        assert!(ranges.get("A2:A2").is_some());
+        assert!(ranges.get("B2:B2").is_some());
+        assert!(ranges.get("F2:F2").is_some());
+    }
+
+    #[tokio::test]
+    async fn guardian_tolerates_missing_status_fase_and_project_name_columns() {
+        let header = vec![vec![
+            "repo_url".to_string(),
+            "status_atualizacao".to_string(),
+            "ultima_versao_online".to_string(),
+        ]];
+        let data = vec![vec![
+            "https://github.com/acme/widget".to_string(),
+            "".to_string(),
+            "".to_string(),
+        ]];
+        let sheets = Arc::new(MockSheets::new(header, data));
+        let github = MockGithub {
+            tag: Some("v2.0.0".to_string()),
+            calls: std::sync::atomic::AtomicU64::new(0),
+        };
+        let guardian = Guardian {
+            sheets,
+            github: Arc::new(github),
+        };
+        guardian.run_once("SHEET").await.unwrap();
+        let updates = guardian.sheets.updates.lock().await;
+        assert_eq!(updates.len(), 1);
+        let ranges = &updates[0];
+        assert_eq!(
+            ranges.get("B2:B2").unwrap(),
+            &vec![vec!["INICIAR_TRIAGEM".to_string()]]
+        );
+        assert_eq!(
+            ranges.get("C2:C2").unwrap(),
+            &vec![vec!["v2.0.0".to_string()]]
+        );
+        assert_eq!(ranges.len(), 2);
+    }
+
+    #[tokio::test]
     async fn guardian_treats_empty_repo_analised_version_as_drift_but_preserves_pending_rows_legacy_header(
     ) {
         let header = vec![vec![
@@ -1262,10 +1370,10 @@ mod tests {
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
-        assert_eq!(updates[0].len(), 42);
+        assert_eq!(updates[0].len(), 63);
         assert_eq!(
             github.calls.load(std::sync::atomic::Ordering::Relaxed),
-            0
+            21
         );
     }
 
