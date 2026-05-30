@@ -119,6 +119,7 @@ fn extract_total_cost_usd_from_lens_json(lens_json: &str) -> f64 {
 struct CliArgs {
     repo_id: String,
     e2e_full: bool,
+    skip_harvester: bool,
 }
 
 fn parse_cli_args() -> CliArgs {
@@ -126,6 +127,7 @@ fn parse_cli_args() -> CliArgs {
     args.next();
     let mut repo_id = String::from("aaif-goose/goose");
     let mut e2e_full = false;
+    let mut skip_harvester = false;
     while let Some(arg) = args.next() {
         if arg == "--repo" {
             if let Some(value) = args.next() {
@@ -137,10 +139,15 @@ fn parse_cli_args() -> CliArgs {
             e2e_full = true;
             continue;
         }
+        if arg == "--skip-harvester" {
+            skip_harvester = true;
+            continue;
+        }
     }
     CliArgs {
         repo_id,
         e2e_full,
+        skip_harvester,
     }
 }
 
@@ -820,7 +827,7 @@ fn try_fetch_repositorios_release_info(
     repo_id: &str,
 ) -> (Option<String>, Option<String>) {
     let mut stmt = match conn.prepare(
-        "SELECT repo_version, ultima_versao_online
+        "SELECT COALESCE(NULLIF(repo_analised_version, ''), NULLIF(repo_version, '')) AS repo_analised_version, ultima_versao_online
          FROM repositorios
          WHERE project_name = ?1
          LIMIT 1",
@@ -834,7 +841,7 @@ fn try_fetch_repositorios_release_info(
         Ok(value) => value,
         Err(_) => return (None, None),
     };
-    let repo_version = row
+    let repo_analised_version = row
         .0
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
@@ -842,7 +849,7 @@ fn try_fetch_repositorios_release_info(
         .1
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    (repo_version, ultima_versao_online)
+    (repo_analised_version, ultima_versao_online)
 }
 
 fn try_fetch_repo_heuristics_seed(
@@ -851,7 +858,7 @@ fn try_fetch_repo_heuristics_seed(
 ) -> Option<(String, String, String, String, String, String, String)> {
     let mut stmt = conn
         .prepare(
-            "SELECT repo_version, ultima_versao_online, licenca, stack_base, declared_description, proposta_original_resumo, categoria_arquitetural
+            "SELECT COALESCE(NULLIF(repo_analised_version, ''), NULLIF(repo_version, '')) AS repo_analised_version, ultima_versao_online, licenca, stack_base, declared_description, proposta_original_resumo, categoria_arquitetural
              FROM repo_heuristics
              WHERE project_name = ?1
              LIMIT 1",
@@ -1291,7 +1298,11 @@ async fn main() -> io::Result<()> {
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
 
-    let CliArgs { repo_id, e2e_full, .. } = parse_cli_args();
+    let CliArgs {
+        repo_id,
+        e2e_full,
+        skip_harvester,
+    } = parse_cli_args();
     if e2e_full {
         info!(repo_id = %repo_id, "E2E FULL: iniciando F0 → F4 (disparo completo)");
     } else {
@@ -1315,7 +1326,7 @@ async fn main() -> io::Result<()> {
         .filter(|v| !v.is_empty())
         .unwrap_or(lote_id);
 
-    if e2e_full {
+    if e2e_full && !skip_harvester {
         if let Ok(spreadsheet_id) = std::env::var("GOOGLE_SHEETS_ID") {
             let row_number =
                 resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
@@ -1338,7 +1349,7 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    let phase1_ms = if e2e_full {
+    let phase1_ms = if e2e_full && !skip_harvester {
         run_phase_binary("f0_harvester_cli", &repo_id).await?
     } else {
         0
@@ -1365,7 +1376,7 @@ async fn main() -> io::Result<()> {
 
     let seed = try_fetch_repo_heuristics_seed(&conn, &repo_id);
     let (
-        seed_repo_version,
+        seed_repo_analised_version,
         seed_ultima_versao_online,
         seed_licenca,
         seed_stack_base,
@@ -1385,15 +1396,24 @@ async fn main() -> io::Result<()> {
     });
 
     let now = now_epoch_secs()?;
-    let (repo_version_from_repositorios, ultima_versao_online_from_repositorios) =
+    let (repo_analised_version_from_repositorios, ultima_versao_online_from_repositorios) =
         try_fetch_repositorios_release_info(&conn, &repo_id);
-    let mut repo_version = repo_version_from_repositorios
+    let repo_analised_version = repo_analised_version_from_repositorios
         .or_else(|| {
-            let trimmed = seed_repo_version.trim().to_string();
+            let trimmed = seed_repo_analised_version.trim().to_string();
             if trimmed.is_empty() { None } else { Some(trimmed) }
         })
-        .unwrap_or_else(|| "UNKNOWN".to_string());
-    let repo_version_lower = repo_version.to_ascii_lowercase();
+        .unwrap_or_default();
+    let repo_analised_version_lower = repo_analised_version.to_ascii_lowercase();
+    if repo_analised_version.trim().is_empty()
+        || repo_analised_version_lower == "main"
+        || repo_analised_version_lower == "master"
+        || is_unknown_like(&repo_analised_version)
+    {
+        return Err(io::Error::other(
+            "repo_analised_version ausente/invalidado. Rode a Fase 0 (Harvester) ou preencha a coluna no SSOT antes de rodar F3/F4.",
+        ));
+    }
     let mut ultima_versao_online = ultima_versao_online_from_repositorios
         .or_else(|| {
             let trimmed = seed_ultima_versao_online.trim().to_string();
@@ -1401,13 +1421,8 @@ async fn main() -> io::Result<()> {
         })
         .unwrap_or_else(|| "UNKNOWN".to_string());
 
-    if repo_version_lower == "main"
-        || repo_version_lower == "master"
-        || repo_version_lower == "unknown"
-        || ultima_versao_online.eq_ignore_ascii_case("unknown")
-    {
+    if ultima_versao_online.eq_ignore_ascii_case("unknown") || is_unknown_like(&ultima_versao_online) {
         if let Some(tag) = try_fetch_github_latest_release_tag(&repo_url).await {
-            repo_version = tag.clone();
             ultima_versao_online = tag;
         } else if let Ok(url) = Url::parse(&repo_url) {
             let limiter = RateLimiter;
@@ -1415,19 +1430,17 @@ async fn main() -> io::Result<()> {
                 if let Some(sha) = meta.last_commit_sha {
                     let short = sha.chars().take(7).collect::<String>();
                     if !short.is_empty() {
-                        repo_version = short.clone();
                         ultima_versao_online = short;
                     }
                 }
             }
         }
     }
-
-    if let Some(tag) = try_fetch_github_latest_release_tag(&repo_url).await {
-        repo_version = tag.clone();
-        ultima_versao_online = tag;
-    }
-    info!(repo_version = %repo_version, "E2E: repo_version resolvido");
+    info!(
+        repo_analised_version = %repo_analised_version,
+        ultima_versao_online = %ultima_versao_online,
+        "E2E: Bloco 0 (versões) resolvido"
+    );
 
     let mut licenca = seed_licenca.trim().to_string();
     let mut stack_base = seed_stack_base.trim().to_string();
@@ -1476,7 +1489,7 @@ async fn main() -> io::Result<()> {
         status_fase: "F3".to_string(),
         project_name: repo_id.clone(),
         repo_url,
-        repo_version,
+        repo_analised_version,
         ultima_versao_online,
         lote_id: lote_id.clone(),
         data_ultima_analise: now,

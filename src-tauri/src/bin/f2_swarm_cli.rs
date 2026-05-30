@@ -77,6 +77,7 @@ fn ensure_phase2_cli_schema(conn: &Connection) -> io::Result<()> {
             project_name TEXT PRIMARY KEY,
             lote_id TEXT,
             repo_url TEXT,
+            repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
             soda_universal_uuid TEXT,
@@ -89,6 +90,7 @@ fn ensure_phase2_cli_schema(conn: &Connection) -> io::Result<()> {
     )
     .map_err(|e| io::Error::other(format!("Falha ao criar/verificar tabela repositorios: {}", e)))?;
 
+    let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_analised_version TEXT", []);
     let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_version TEXT", []);
     let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN ultima_versao_online TEXT", []);
 

@@ -32,8 +32,8 @@ pub struct SgrPayload {
     pub project_name: String,
     #[serde(default)]
     pub repo_url: String,
-    #[serde(default)]
-    pub repo_version: String,
+    #[serde(default, rename = "repo_analised_version", alias = "repo_version")]
+    pub repo_analised_version: String,
     #[serde(default)]
     pub ultima_versao_online: Option<String>,
     #[serde(default)]
