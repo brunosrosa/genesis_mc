@@ -654,9 +654,15 @@ fn should_skip_by_status_atualizacao(status_atualizacao: &str) -> bool {
     if s.is_empty() {
         return false;
     }
-    s.eq_ignore_ascii_case("INICIAR_TRIAGEM")
-        || s.eq_ignore_ascii_case("EM_PROCESSAMENTO")
-        || s.to_ascii_uppercase().starts_with("PENDENTE_")
+    let up = s.to_ascii_uppercase();
+    up == "INICIAR_TRIAGEM"
+        || up == "TRIAGEM_CONCLUIDA"
+        || up.starts_with("APROVADO_")
+        || up.starts_with("REJEITADO_")
+        || up == "DESATUALIZADA"
+        || up == "EM_PROCESSAMENTO"
+        || up.starts_with("PENDENTE_")
+        || up == "NOVO_LINK_OK"
 }
 
 fn try_build_repo_url_from_project_name(project_name: &str) -> Option<String> {
@@ -718,6 +724,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
         struct RowCtx {
             row_number_1based: u32,
             repo_url: String,
+            status_atualizacao: String,
             repo_analised_version: String,
             project_name: String,
             ultima_versao_online: String,
@@ -758,6 +765,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
             rows.push(RowCtx {
                 row_number_1based: (idx as u32) + 2,
                 repo_url,
+                status_atualizacao: status_atualizacao.to_string(),
                 repo_analised_version,
                 project_name: project_name.to_string(),
                 ultima_versao_online: ultima_versao_online.to_string(),
@@ -826,21 +834,41 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
             };
             let Some(latest) = latest else { continue };
             let latest = latest.trim().to_string();
-            let should_write_latest = ctx.ultima_versao_online.trim() != latest;
-            let should_trigger_triage = has_drift(&ctx.repo_analised_version, &latest);
+            let is_new_link = ctx.status_atualizacao.trim().is_empty();
+            let drift = !ctx.repo_analised_version.trim().is_empty()
+                && has_drift(&ctx.repo_analised_version, &latest);
+            let should_write_latest = (is_new_link || drift) && ctx.ultima_versao_online.trim() != latest;
 
-            if !should_write_latest && !should_trigger_triage {
+            if !is_new_link && !drift && !should_write_latest {
                 continue;
             }
 
             pending_updates += 1;
-            if should_trigger_triage {
+
+            if is_new_link {
+                pending_ranges.insert(
+                    format!(
+                        "{status_col}{}:{status_col}{}",
+                        ctx.row_number_1based, ctx.row_number_1based
+                    ),
+                    vec![vec!["INICIAR_TRIAGEM".to_string()]],
+                );
+                if let Some(status_fase_col) = status_fase_col.as_deref() {
                     pending_ranges.insert(
                         format!(
-                    "{status_col}{}:{status_col}{}",
-                    ctx.row_number_1based, ctx.row_number_1based
-                ),
-                vec![vec!["INICIAR_TRIAGEM".to_string()]],
+                            "{status_fase_col}{}:{status_fase_col}{}",
+                            ctx.row_number_1based, ctx.row_number_1based
+                        ),
+                        vec![vec!["FASE_-1_GUARDIAO_OK".to_string()]],
+                    );
+                }
+            } else if drift {
+                pending_ranges.insert(
+                    format!(
+                        "{status_col}{}:{status_col}{}",
+                        ctx.row_number_1based, ctx.row_number_1based
+                    ),
+                    vec![vec!["DESATUALIZADA".to_string()]],
                 );
                 if let Some(status_fase_col) = status_fase_col.as_deref() {
                     pending_ranges.insert(

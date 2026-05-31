@@ -56,6 +56,75 @@ fn now_epoch_secs() -> io::Result<i64> {
         .as_secs() as i64)
 }
 
+fn normalize_header_cell(raw: &str) -> String {
+    raw.trim().to_ascii_lowercase().replace([' ', '-'], "_")
+}
+
+fn col_idx_to_a1(col_idx0: usize) -> String {
+    let mut n = col_idx0 + 1;
+    let mut out = String::new();
+    while n > 0 {
+        let rem = (n - 1) % 26;
+        out.insert(0, (b'A' + rem as u8) as char);
+        n = (n - 1) / 26;
+    }
+    out
+}
+
+fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usize> {
+    let mut stmt = conn
+        .prepare("SELECT COUNT(DISTINCT artifact_type) FROM artefatos_brutos WHERE repo_id = ?1")
+        .map_err(|e| io::Error::other(format!("Falha ao preparar query blobs: {}", e)))?;
+    let count: i64 = stmt
+        .query_row([repo_id], |row| row.get(0))
+        .map_err(|e| io::Error::other(format!("Falha ao consultar blobs: {}", e)))?;
+    Ok(count.max(0) as usize)
+}
+
+fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": "A1:CF1",
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d(&result).unwrap_or_default();
+    Ok(values.first().cloned().unwrap_or_default())
+}
+
+fn find_col_idx(header_row: &[String], needle: &str) -> Option<usize> {
+    let n = normalize_header_cell(needle);
+    for (idx, raw) in header_row.iter().enumerate() {
+        if normalize_header_cell(raw) == n {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+fn read_cell_at(spreadsheet_id: &str, row_number_1based: u32, col_idx0: usize) -> io::Result<String> {
+    let col = col_idx_to_a1(col_idx0);
+    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": range,
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d(&result).unwrap_or_default();
+    Ok(values
+        .first()
+        .and_then(|r| r.first())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default())
+}
+
 async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
     let url = Url::parse(repo_url).ok()?;
     let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
@@ -1356,6 +1425,54 @@ async fn main() -> io::Result<()> {
         .filter(|v| !v.is_empty())
         .unwrap_or(lote_id);
 
+    let mut n4_skip_columns: Vec<&'static str> = Vec::new();
+    let mut n4_sheet_proposta: Option<String> = None;
+    let mut n4_sheet_categoria: Option<String> = None;
+    if e2e_full && skip_harvester {
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+        let row_number =
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
+        let (status_atualizacao, _status_fase) = read_status_atualizacao_e_fase(&spreadsheet_id, row_number)?;
+        if status_atualizacao.trim() != "APROVADO_PARA_ENXAME" {
+            info!(
+                repo_id = %repo_id,
+                row_number,
+                status_atualizacao = %status_atualizacao,
+                expected = "APROVADO_PARA_ENXAME",
+                "N4: skip (fora do gatilho rígido)"
+            );
+            return Ok(());
+        }
+
+        let blobs = count_raw_blobs_distinct(&conn, &repo_id)?;
+        if blobs < 11 {
+            info!(
+                repo_id = %repo_id,
+                blobs,
+                expected = 11,
+                "N4: skip (idempotência: blobs RAW ausentes no SQLite)"
+            );
+            return Ok(());
+        }
+
+        let header_row = read_master_header(&spreadsheet_id)?;
+        if let Some(idx) = find_col_idx(&header_row, "proposta_original_resumo") {
+            let v = read_cell_at(&spreadsheet_id, row_number, idx)?;
+            if !v.trim().is_empty() {
+                n4_sheet_proposta = Some(v);
+                n4_skip_columns.push("proposta_original_resumo");
+            }
+        }
+        if let Some(idx) = find_col_idx(&header_row, "categoria_arquitetural") {
+            let v = read_cell_at(&spreadsheet_id, row_number, idx)?;
+            if !v.trim().is_empty() {
+                n4_sheet_categoria = Some(v);
+                n4_skip_columns.push("categoria_arquitetural");
+            }
+        }
+    }
+
     if e2e_full && !skip_harvester {
         if let Ok(spreadsheet_id) = std::env::var("GOOGLE_SHEETS_ID") {
             let row_number =
@@ -1411,8 +1528,8 @@ async fn main() -> io::Result<()> {
         seed_licenca,
         seed_stack_base,
         seed_declared_description,
-        seed_proposta_original_resumo,
-        seed_categoria_arquitetural,
+        mut seed_proposta_original_resumo,
+        mut seed_categoria_arquitetural,
     ) = seed.unwrap_or_else(|| {
         (
             "UNKNOWN".to_string(),
@@ -1424,6 +1541,12 @@ async fn main() -> io::Result<()> {
             "".to_string(),
         )
     });
+    if let Some(v) = n4_sheet_proposta.as_deref() {
+        seed_proposta_original_resumo = v.trim().to_string();
+    }
+    if let Some(v) = n4_sheet_categoria.as_deref() {
+        seed_categoria_arquitetural = v.trim().to_string();
+    }
 
     let now = now_epoch_secs()?;
     let (repo_analised_version_from_repositorios, ultima_versao_online_from_repositorios) =
@@ -1566,11 +1689,26 @@ async fn main() -> io::Result<()> {
 
     info!("E2E: F3 concluída. Iniciando F4 (carga atômica Sheets)");
     let block3_justifications = phase3_out.block3_justifications;
-    let row = phase3_out.row;
+    let mut row = phase3_out.row;
     let _ghost_f4 = spawn_ghost_telemetry(repo_id.clone(), "F4 (SSOT Sheets) em processamento".to_string());
-    let row_number = SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
-        .await
-        .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?;
+    if let Some(v) = n4_sheet_proposta.as_deref() {
+        row.proposta_original_resumo = v.trim().to_string();
+    }
+    if let Some(v) = n4_sheet_categoria.as_deref() {
+        row.categoria_arquitetural =
+            genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::parse_strict(v)
+                .unwrap_or(row.categoria_arquitetural);
+    }
+
+    let row_number = if n4_skip_columns.is_empty() {
+        SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
+            .await
+            .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?
+    } else {
+        SsotInjector::inject_ssot_with_skip_columns(&repo_id, row, block3_justifications, now, &n4_skip_columns)
+            .await
+            .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?
+    };
     drop(_ghost_f4);
 
     let confirmed = confirm_sheet_write(row_number, &repo_id)?;

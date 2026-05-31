@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{info, warn};
@@ -19,6 +18,57 @@ const FASE_OK: &str = "FASE_-0.5_BATEDOR_OK";
 
 const README_CHAR_LIMIT: usize = 3_000;
 const MAX_UPDATES_PER_BATCH: usize = 50;
+const MAX_RESUMO_CHARS: usize = 800;
+
+const ALLOWED_CATEGORIA_ARQUITETURAL: [&str; 47] = [
+        "AI_Research - Foundation_Model",
+        "CanvasUI - Core_Pattern",
+        "CanvasUI - Domain_App",
+        "CanvasUI - Ops_Dashboard",
+        "CanvasUI - Terminal_Workspace",
+        "Comms_Social - Platform_Client",
+        "Domain_App - Self_Hosted",
+        "Infraestrutura_Core - Concurrency_OS",
+        "Infraestrutura_Core - Data_Pipeline",
+        "Infraestrutura_Core - Data_Serialization",
+        "Infraestrutura_Core - Hardware_Ops",
+        "Knowledge_Extraction - Doc_Parsing",
+        "Knowledge_Extraction - Generic",
+        "Knowledge_Extraction - Multimedia_Parsing",
+        "Knowledge_Extraction - Semantic_Mining",
+        "Knowledge_Extraction - Web_Scraping",
+        "Memoria_RAG - Graph_Store",
+        "Memoria_RAG - Relational_Episodic",
+        "Memoria_RAG - Vector_Store",
+        "Model_Serving - Edge_Deployment",
+        "Model_Serving - Inference_Engine",
+        "Model_Serving - Resource_Scheduler",
+        "Model_Serving - Training_FineTuning",
+        "Orquestracao_Agentes - Dev_Framework",
+        "Orquestracao_Agentes - OS_Runtime",
+        "Orquestracao_Agentes - Simulation_Environment",
+        "Orquestracao_Agentes - Skill_Library",
+        "Orquestracao_Agentes - Specialized_Worker",
+        "Orquestracao_Agentes - Workflow_DAG",
+        "Roteamento_FinOps - API_Gateway",
+        "Roteamento_FinOps - Cost_Analytics",
+        "Roteamento_FinOps - Network_Tunnel",
+        "Roteamento_FinOps - Prompt_Caching",
+        "Seguranca_Sandbox - Auth_Crypto",
+        "Seguranca_Sandbox - MicroVM_Container",
+        "Seguranca_Sandbox - Privacy_Governance",
+        "Seguranca_Sandbox - Runtime_Isolation",
+        "Tooling_Dev - CLI_Utilities",
+        "Tooling_Dev - Knowledge_Curation",
+        "Tooling_Dev - MCP_Bridging",
+        "Tooling_Dev - Observability_Eval",
+        "Tooling_Dev - Prompt_Knowledge",
+        "UILibrary - Animation_Graphics",
+        "UILibrary - Component_System",
+        "UILibrary - Generative_UI",
+        "UILibrary - Terminal_TUI",
+        "Outros - Uncategorized",
+];
 
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
 
@@ -393,18 +443,29 @@ struct PendingRow {
     repo_url: String,
 }
 
-fn find_gatilho_rows(values: &[Vec<String>], cols: &Columns) -> Vec<PendingRow> {
+#[derive(Debug, Clone, Copy)]
+struct GatilhoScan {
+    pending: usize,
+    skipped_non_trigger: usize,
+    skipped_missing_repo_url: usize,
+}
+
+fn find_gatilho_rows(values: &[Vec<String>], cols: &Columns) -> (Vec<PendingRow>, GatilhoScan) {
     let mut out = Vec::new();
+    let mut skipped_non_trigger = 0usize;
+    let mut skipped_missing_repo_url = 0usize;
     for (idx, row) in values.iter().enumerate() {
         let status_atualizacao = row
             .get(cols.status_atualizacao_idx)
             .map(|s| s.trim())
             .unwrap_or("");
         if !status_atualizacao.eq_ignore_ascii_case(STATUS_GATILHO) {
+            skipped_non_trigger += 1;
             continue;
         }
         let repo_url = row.get(cols.repo_url_idx).map(|s| s.trim()).unwrap_or("");
         if repo_url.is_empty() {
+            skipped_missing_repo_url += 1;
             continue;
         }
         out.push(PendingRow {
@@ -412,7 +473,15 @@ fn find_gatilho_rows(values: &[Vec<String>], cols: &Columns) -> Vec<PendingRow> 
             repo_url: repo_url.to_string(),
         });
     }
-    out
+    let pending = out.len();
+    (
+        out,
+        GatilhoScan {
+            pending,
+            skipped_non_trigger,
+            skipped_missing_repo_url,
+        },
+    )
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -434,24 +503,13 @@ fn response_format_for_batedor() -> Value {
     let mut props = serde_json::Map::new();
     props.insert(
         "proposta_original_resumo".to_string(),
-        json!({ "type": "string", "minLength": 10, "maxLength": 240 }),
+        json!({ "type": "string", "minLength": 10, "maxLength": MAX_RESUMO_CHARS }),
     );
     props.insert(
         "categoria_arquitetural".to_string(),
         json!({
             "type": "string",
-            "enum": [
-                "CanvasUI",
-                "UILibrary",
-                "Memoria_RAG",
-                "Roteamento_FinOps",
-                "Orquestracao_Agentes",
-                "Model_Serving",
-                "Knowledge_Extraction",
-                "Seguranca_Sandbox",
-                "Infraestrutura_Core",
-                "Tooling_Dev"
-            ]
+            "enum": ALLOWED_CATEGORIA_ARQUITETURAL.iter().copied().collect::<Vec<&str>>()
         }),
     );
 
@@ -608,9 +666,18 @@ fn validate_batedor_out(out: &BatedorOut) -> Result<(), String> {
     if resumo.is_empty() {
         return Err("proposta_original_resumo vazio".to_string());
     }
-    let cat = ArchitecturalCategory::parse_strict(out.categoria_arquitetural.as_str())?;
-    if matches!(cat, ArchitecturalCategory::Unspecified | ArchitecturalCategory::Unknown) {
-        return Err("categoria_arquitetural inválida (vazia/UNKNOWN)".to_string());
+    if resumo.chars().count() > MAX_RESUMO_CHARS {
+        return Err(format!(
+            "proposta_original_resumo excede limite de {} chars",
+            MAX_RESUMO_CHARS
+        ));
+    }
+    let cat = out.categoria_arquitetural.trim();
+    if cat.is_empty() {
+        return Err("categoria_arquitetural inválida (vazia)".to_string());
+    }
+    if !ALLOWED_CATEGORIA_ARQUITETURAL.iter().any(|v| v == &cat) {
+        return Err("categoria_arquitetural inválida (fora do ENUM)".to_string());
     }
     Ok(())
 }
@@ -650,14 +717,18 @@ async fn fetch_readme_truncated(repo_url: &str) -> Result<String, String> {
 }
 
 fn build_prompt(readme_trunc: &str) -> String {
-    let allowed = "CanvasUI, UILibrary, Memoria_RAG, Roteamento_FinOps, Orquestracao_Agentes, Model_Serving, Knowledge_Extraction, Seguranca_Sandbox, Infraestrutura_Core, Tooling_Dev";
+    let allowed = ALLOWED_CATEGORIA_ARQUITETURAL
+        .iter()
+        .copied()
+        .collect::<Vec<&str>>()
+        .join(", ");
     let mut out = String::new();
     out.push_str("Tarefa: Resuma o repositório em 1 frase técnica, neutra e desidratada e classifique-o.\n");
     out.push_str("Responda SOMENTE com JSON válido, seguindo o schema fornecido.\n");
     out.push_str("Regras:\n");
-    out.push_str("- proposta_original_resumo: 1 frase técnica, neutra, desidratada.\n");
+    out.push_str("- proposta_original_resumo: 1 frase técnica, neutra, desidratada (até 800 chars).\n");
     out.push_str("- categoria_arquitetural: escolha EXATA dentre: ");
-    out.push_str(allowed);
+    out.push_str(&allowed);
     out.push_str(".\n");
     out.push_str("\n\nREADME (primeiros 3000 chars):\n");
     out.push_str(readme_trunc);
@@ -748,8 +819,15 @@ async fn main() -> io::Result<()> {
         .await
         .map_err(io::Error::other)?;
 
-    let pending = find_gatilho_rows(&values, &cols);
-    info!(count = pending.len(), "Batedor: candidatos com INICIAR_TRIAGEM");
+    let (pending, scan) = find_gatilho_rows(&values, &cols);
+    info!(
+        total_rows = values.len(),
+        pending = scan.pending,
+        skipped_non_trigger = scan.skipped_non_trigger,
+        skipped_missing_repo_url = scan.skipped_missing_repo_url,
+        gatilho = STATUS_GATILHO,
+        "Batedor: scan de gatilho concluído"
+    );
     if pending.is_empty() {
         return Ok(());
     }
@@ -883,11 +961,11 @@ mod tests {
 
     #[test]
     fn json_validation_requires_fields_and_types() {
-        let ok = r#"{"proposta_original_resumo":"Ferramenta CLI para triagem.","categoria_arquitetural":"Tooling_Dev"}"#;
+        let ok = r#"{"proposta_original_resumo":"Ferramenta CLI para triagem.","categoria_arquitetural":"Tooling_Dev - CLI_Utilities"}"#;
         let parsed: BatedorOut = serde_json::from_str(ok).unwrap();
         assert!(validate_batedor_out(&parsed).is_ok());
 
-        let missing = r#"{"categoria_arquitetural":"Tooling_Dev"}"#;
+        let missing = r#"{"categoria_arquitetural":"Tooling_Dev - CLI_Utilities"}"#;
         assert!(serde_json::from_str::<BatedorOut>(missing).is_err());
     }
 

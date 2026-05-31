@@ -59,18 +59,20 @@ if (-not (Test-Path $cargoManifest)) {
 # 2. O MENU DE MÁQUINA DE ESTADOS (DAG V5)
 Write-Host "`nSELECIONE A ENGRENAGEM DE EXECUÇÃO:" -ForegroundColor Yellow
 Write-Host "----------------------------------------------------------------" -ForegroundColor Cyan
-Write-Host " [0] 👁️  N0 - Daemon Watcher" -ForegroundColor White
-Write-Host "        (Acorda o Olheiro Assíncrono para varrer a planilha 24/7)"
+Write-Host " [0] 👁️  N0 - Daemon Watcher (Cron Job)" -ForegroundColor White
+Write-Host "             (Acorda o Olheiro Assíncrono para verificar novos links)"
 Write-Host " [1] 🛡️  N1 - Guardião (Fase -1)" -ForegroundColor White
-Write-Host "        (Puxa nomes oficiais e versões do GitHub a custo zero)"
-Write-Host " [2] 🛰️  N2 - Batedor FinOps (Fase -0.5)" -ForegroundColor White
-Write-Host "        (README truncado + JSON Mode barato + triagem estruturada)"
-Write-Host " [3] 🧠  N3 - ETL Cognitivo Pesado (Fases 3 a 4)" -ForegroundColor White
-Write-Host "        (Sintetizador Pydantic + Escrita Fase 4 no Sheets)"
-Write-Host " [4] 🚜  N3 - Harvester Local (Fase 0)" -ForegroundColor White
-Write-Host "        (Extração local O(1) para o SQLite Vault)"
-Write-Host " [5] 🧠  N4 - Motor Cloud Cognitivo (Fases 1 a 4)" -ForegroundColor White
-Write-Host "        (Destilador + Enxame + Sintetizador + Injeção no Sheets)"
+Write-Host "             (Puxa nomes oficiais e versões do GitHub via Idempotência) (Custo Zero)"
+Write-Host " [2] 🛰️  N2 - Batedor FinOps (Fase -0.5) (IA Flash)" -ForegroundColor White
+Write-Host "             (Busca README truncado + JSON Mode barato + Triagem Estruturada)"
+Write-Host " [3] 🚜  N3 - Harvester Local (Fase 0)" -ForegroundColor White
+Write-Host "             (Extração local O(1) para o SQLite Vault do RAW (Blobs)) (Custo Zero)"
+Write-Host " [4] 🧠  N4 - Motor Cloud Cognitivo (Fases 1, 2, 3 e 4) (IA Heavy)" -ForegroundColor White
+Write-Host "             (Destilador de Essências + Enxame IAs + Sintetizador + Injeção no GSheets)"
+Write-Host " [5] 🤹🏻‍♀️  N5 - Revisão ETL Cognitivo Pesado (Fases 3 e 4) (IA Heavy)" -ForegroundColor White
+Write-Host "             (Sintetizador com Pydantic + Escrita (Injeção) no GSheets)"
+Write-Host " [6] 🔬  N6 - Motor de Decomposição (Fase 5 - DEEP COMPONENTS) (ESQUELETO)" -ForegroundColor White
+Write-Host "             (Fatia ferramentas CORE em subcomponentes na aba Deep - ESQUELETO)"
 Write-Host " [X] 🛑  Abortar Ignição" -ForegroundColor Red
 Write-Host "----------------------------------------------------------------" -ForegroundColor Cyan
 
@@ -110,19 +112,23 @@ switch ($choice) {
         $phaseName = "Fase -0.5 (BATEDOR FINOPS)"
     }
     '3' {
-        $bin = "f3_synthesizer_cli"
-        $binArgs = @("--repo", $RepoId)
-        $phaseName = "Fases 3 a 4 (ETL COGNITIVO PESADO)"
-    }
-    '4' {
         $bin = "f0_harvester_cli"
         $binArgs = @("--repo", $RepoId)
         $phaseName = "Fase 0 (HARVESTER LOCAL)"
     }
-    '5' {
+    '4' {
         $bin = "f3_synthesizer_cli"
         $binArgs = @("--repo", $RepoId, "--e2e-full", "--skip-harvester")
         $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO)"
+    }
+    '5' {
+        $bin = "f3_synthesizer_cli"
+        $binArgs = @("--repo", $RepoId)
+        $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO)"
+    }
+    '6' {
+        Write-Host "`n🔬 N6 (Fase 5) ainda é ESQUELETO. Nenhuma ação foi executada." -ForegroundColor Yellow
+        exit
     }
     'X' {
         Write-Host "`n🛑 Ignição abortada. O motor permanece em repouso." -ForegroundColor Yellow

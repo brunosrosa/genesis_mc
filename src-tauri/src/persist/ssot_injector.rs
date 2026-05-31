@@ -362,6 +362,47 @@ impl SsotInjector {
         Ok(row_number_1based)
     }
 
+    pub async fn inject_ssot_with_skip_columns(
+        repo_id: &str,
+        mut row: MasterSolutionsRow,
+        block3_justifications: HashMap<String, String>,
+        now_epoch: i64,
+        skip_columns: &[&'static str],
+    ) -> Result<u32, SsotError> {
+        let validated = Self::validate_payload(repo_id, &row)?;
+
+        apply_phase4_block5(now_epoch, &mut row);
+        row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
+        Self::update_local_status(
+            repo_id,
+            row.status_atualizacao.as_str(),
+            &row,
+            &validated,
+            &block3_justifications,
+            now_epoch,
+        )
+        .map_err(SsotError::L2Failure)?;
+
+        let spreadsheet_id =
+            env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
+        let sheet = "MASTER_SOLUTIONS";
+        let row_number_1based =
+            Self::resolve_row_number_by_repo_url(&spreadsheet_id, sheet, &validated.repo_url).await?;
+
+        let client = McpGoogleSheetsClient;
+        let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let batch_payload = Self::prepare_batch_payload_dynamic_with_skip(
+            row_number_1based,
+            &header_row,
+            &row,
+            skip_columns,
+        )?;
+
+        Self::dispatch_to_cloud(batch_payload).await?;
+
+        Ok(row_number_1based)
+    }
+
     async fn resolve_row_number_by_repo_url(
         spreadsheet_id: &str,
         sheet: &str,
@@ -1040,6 +1081,15 @@ impl SsotInjector {
         header_row: &[String],
         payload: &MasterSolutionsRow,
     ) -> Result<Value, SsotError> {
+        Self::prepare_batch_payload_dynamic_with_skip(row_number_1based, header_row, payload, &[])
+    }
+
+    fn prepare_batch_payload_dynamic_with_skip(
+        row_number_1based: u32,
+        header_row: &[String],
+        payload: &MasterSolutionsRow,
+        skip_columns: &[&'static str],
+    ) -> Result<Value, SsotError> {
         let row_values = payload.to_sheet_row();
         if row_values.len() != SSOT_EXPECTED_COLUMNS {
             return Err(SsotError::ValidationFailure(format!(
@@ -1061,6 +1111,10 @@ impl SsotInjector {
         let mut canonical_set: HashSet<&'static str> =
             MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().copied().collect();
         canonical_set.insert("repo_version");
+        let mut skip_set: HashSet<&'static str> = HashSet::new();
+        for s in skip_columns {
+            skip_set.insert(*s);
+        }
         let mut map = serde_json::Map::new();
         for (idx, raw) in header_row.iter().enumerate() {
             let key = Self::normalize_header_cell(raw);
@@ -1068,6 +1122,9 @@ impl SsotInjector {
                 continue;
             }
             if !canonical_set.contains(key.as_str()) {
+                continue;
+            }
+            if skip_set.contains(key.as_str()) {
                 continue;
             }
             let Some(value) = by_name.get(key.as_str()) else { continue };
