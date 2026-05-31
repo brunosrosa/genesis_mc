@@ -6,6 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
+use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use tokio::io::AsyncBufReadExt;
@@ -203,21 +204,6 @@ fn parse_repo_id_from_args() -> String {
     repo_id
 }
 
-fn normalize_header_cell(raw: &str) -> String {
-    raw.trim().to_ascii_lowercase().replace([' ', '-'], "_")
-}
-
-fn col_idx_to_a1(col_idx0: usize) -> String {
-    let mut n = col_idx0 + 1;
-    let mut out = String::new();
-    while n > 0 {
-        let rem = (n - 1) % 26;
-        out.insert(0, (b'A' + rem as u8) as char);
-        n = (n - 1) / 26;
-    }
-    out
-}
-
 fn normalize_repo_url_for_match(raw: &str) -> String {
     raw.trim()
         .trim_matches('`')
@@ -225,46 +211,6 @@ fn normalize_repo_url_for_match(raw: &str) -> String {
         .trim_end_matches('/')
         .trim_end_matches(".git")
         .to_string()
-}
-
-fn extract_values_2d_strict(value: &Value) -> Result<Vec<Vec<String>>, String> {
-    if let Some(err) = value.get("error") {
-        let code = err.get("code").and_then(|v| v.as_i64());
-        let message = err.get("message").and_then(|v| v.as_str());
-        return Err(match (code, message) {
-            (Some(c), Some(m)) => format!("Google Sheets API error: code={c} message={m}"),
-            (Some(c), None) => format!("Google Sheets API error: code={c}"),
-            (None, Some(m)) => format!("Google Sheets API error: message={m}"),
-            _ => format!("Google Sheets API error: {err}"),
-        });
-    }
-
-    let values = if let Some(arr) = value.get("values").and_then(|v| v.as_array()) {
-        arr
-    } else {
-        let vr = value
-            .get("valueRanges")
-            .and_then(|v| v.as_array())
-            .and_then(|a| a.first())
-            .ok_or_else(|| "Sheets payload inválido: sem 'values' ou 'valueRanges'".to_string())?;
-        vr.get("values")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| "Sheets payload inválido: 'valueRanges[0].values' ausente".to_string())?
-    };
-
-    let mut out = Vec::new();
-    for row in values {
-        let row_arr = row
-            .as_array()
-            .ok_or_else(|| "Sheets payload inválido: linha não é array".to_string())?;
-        out.push(
-            row_arr
-                .iter()
-                .map(|v| v.as_str().unwrap_or("").to_string())
-                .collect(),
-        );
-    }
-    Ok(out)
 }
 
 async fn poll_for_jsonrpc_response_from_reader<R>(
@@ -358,31 +304,36 @@ async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
         .spawn()
         .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {e}"))?;
 
-    let mut stdin = child.stdin.take().ok_or_else(|| "stdin indisponível".to_string())?;
-    stdin
-        .write_all(format!("{init_req}\n").as_bytes())
-        .await
-        .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
-    stdin
-        .write_all(format!("{initialized_notif}\n").as_bytes())
-        .await
-        .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
-    stdin
-        .write_all(format!("{mcp_request}\n").as_bytes())
-        .await
-        .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
-    drop(stdin);
+    let msg_res: Result<Value, String> = async {
+        let mut stdin = child.stdin.take().ok_or_else(|| "stdin indisponível".to_string())?;
+        stdin
+            .write_all(format!("{init_req}\n").as_bytes())
+            .await
+            .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
+        stdin
+            .write_all(format!("{initialized_notif}\n").as_bytes())
+            .await
+            .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
+        stdin
+            .write_all(format!("{mcp_request}\n").as_bytes())
+            .await
+            .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
+        drop(stdin);
 
-    let stdout = child.stdout.take().ok_or_else(|| "stdout indisponível".to_string())?;
-    let msg = poll_for_jsonrpc_response_from_reader(
-        tokio::io::BufReader::new(stdout),
-        std::time::Duration::from_secs(20),
-        1,
-    )
-    .await?;
+        let stdout = child.stdout.take().ok_or_else(|| "stdout indisponível".to_string())?;
+        poll_for_jsonrpc_response_from_reader(
+            tokio::io::BufReader::new(stdout),
+            std::time::Duration::from_secs(20),
+            1,
+        )
+        .await
+    }
+    .await;
 
     let _ = child.kill().await;
     let _ = child.wait().await;
+
+    let msg = msg_res?;
 
     if msg.get("error").is_some() {
         return Err(format!("MCP retornou erro: {msg}"));

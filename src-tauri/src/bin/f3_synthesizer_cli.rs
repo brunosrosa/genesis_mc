@@ -8,6 +8,7 @@ use genesis_mc_lib::cognition::synthesizer::{
 };
 use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
 use genesis_mc_lib::persist::ssot_injector::SsotInjector;
+use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, find_col_idx};
 use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::Deserialize;
@@ -56,21 +57,6 @@ fn now_epoch_secs() -> io::Result<i64> {
         .as_secs() as i64)
 }
 
-fn normalize_header_cell(raw: &str) -> String {
-    raw.trim().to_ascii_lowercase().replace([' ', '-'], "_")
-}
-
-fn col_idx_to_a1(col_idx0: usize) -> String {
-    let mut n = col_idx0 + 1;
-    let mut out = String::new();
-    while n > 0 {
-        let rem = (n - 1) % 26;
-        out.insert(0, (b'A' + rem as u8) as char);
-        n = (n - 1) / 26;
-    }
-    out
-}
-
 fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usize> {
     let mut stmt = conn
         .prepare("SELECT COUNT(DISTINCT artifact_type) FROM artefatos_brutos WHERE repo_id = ?1")
@@ -91,18 +77,8 @@ fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
             "include_grid_data": false
         }),
     )?;
-    let values = extract_values_2d(&result).unwrap_or_default();
+    let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
     Ok(values.first().cloned().unwrap_or_default())
-}
-
-fn find_col_idx(header_row: &[String], needle: &str) -> Option<usize> {
-    let n = normalize_header_cell(needle);
-    for (idx, raw) in header_row.iter().enumerate() {
-        if normalize_header_cell(raw) == n {
-            return Some(idx);
-        }
-    }
-    None
 }
 
 fn read_cell_at(spreadsheet_id: &str, row_number_1based: u32, col_idx0: usize) -> io::Result<String> {
@@ -117,7 +93,7 @@ fn read_cell_at(spreadsheet_id: &str, row_number_1based: u32, col_idx0: usize) -
             "include_grid_data": false
         }),
     )?;
-    let values = extract_values_2d(&result).unwrap_or_default();
+    let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
     Ok(values
         .first()
         .and_then(|r| r.first())
