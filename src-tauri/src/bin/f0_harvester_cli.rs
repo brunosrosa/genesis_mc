@@ -6,9 +6,15 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
+use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
 use rusqlite::{params, Connection};
+use serde_json::{json, Value};
+use tokio::io::AsyncBufReadExt;
 use tracing::{error, info};
 use url::Url;
+
+const STATUS_GATE_HARVESTER: &str = "APROVADO_PARA_HARVESTER";
+const STATUS_FASE_F0_OK: &str = "FASE_0_HARVESTER_OK";
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -63,6 +69,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
             project_name TEXT PRIMARY KEY,
             lote_id TEXT NOT NULL,
             repo_url TEXT NOT NULL UNIQUE,
+            repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
             soda_universal_uuid TEXT NOT NULL UNIQUE,
@@ -75,6 +82,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
     )
     .map_err(|e| io::Error::other(format!("Falha ao criar tabela repositorios: {}", e)))?;
 
+    let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_analised_version TEXT", []);
     let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_version TEXT", []);
     let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN ultima_versao_online TEXT", []);
 
@@ -196,6 +204,269 @@ fn parse_repo_id_from_args() -> String {
     repo_id
 }
 
+fn normalize_repo_url_for_match(raw: &str) -> String {
+    raw.trim()
+        .trim_matches('`')
+        .trim()
+        .trim_end_matches('/')
+        .trim_end_matches(".git")
+        .to_string()
+}
+
+async fn poll_for_jsonrpc_response_from_reader<R>(
+    reader: R,
+    timeout: std::time::Duration,
+    expected_id: i64,
+) -> Result<Value, String>
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    let started = Instant::now();
+    let mut lines = reader.lines();
+    loop {
+        if started.elapsed() > timeout {
+            return Err(format!(
+                "Timeout: O servidor MCP (Sheets) não emitiu o payload após {} segundos.",
+                timeout.as_secs()
+            ));
+        }
+        match tokio::time::timeout(std::time::Duration::from_millis(200), lines.next_line()).await {
+            Ok(Ok(Some(line))) => {
+                if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                    let id_matches = match value.get("id") {
+                        Some(Value::Number(n)) => n.as_i64() == Some(expected_id),
+                        Some(Value::String(s)) => s.parse::<i64>().ok() == Some(expected_id),
+                        _ => false,
+                    };
+                    if id_matches {
+                        return Ok(value);
+                    }
+                }
+            }
+            Ok(Ok(None)) => tokio::time::sleep(std::time::Duration::from_millis(200)).await,
+            Ok(Err(e)) => return Err(format!("Falha ao ler stdout do MCP: {e}")),
+            Err(_) => {}
+        }
+    }
+}
+
+fn normalize_mcp_tool_result(result: Value) -> Value {
+    let content = match result.get("content").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return result,
+    };
+    for item in content {
+        if let Some(json_val) = item.get("json") {
+            return json_val.clone();
+        }
+        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                return parsed;
+            }
+        }
+    }
+    result
+}
+
+async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+    use tokio::process::Command;
+
+    let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
+        .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
+
+    let init_req = json!({
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "f0-harvester-cli", "version": "1.0.0" }
+        }
+    });
+    let initialized_notif = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
+    let mcp_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": { "name": tool_name, "arguments": arguments }
+    });
+
+    let mut child = Command::new("mcp-google-sheets")
+        .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
+        .env("UV_NO_PROGRESS", "1")
+        .env("UV_QUIET", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {e}"))?;
+
+    let msg_res: Result<Value, String> = async {
+        let mut stdin = child.stdin.take().ok_or_else(|| "stdin indisponível".to_string())?;
+        stdin
+            .write_all(format!("{init_req}\n").as_bytes())
+            .await
+            .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
+        stdin
+            .write_all(format!("{initialized_notif}\n").as_bytes())
+            .await
+            .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
+        stdin
+            .write_all(format!("{mcp_request}\n").as_bytes())
+            .await
+            .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
+        drop(stdin);
+
+        let stdout = child.stdout.take().ok_or_else(|| "stdout indisponível".to_string())?;
+        poll_for_jsonrpc_response_from_reader(
+            tokio::io::BufReader::new(stdout),
+            std::time::Duration::from_secs(20),
+            1,
+        )
+        .await
+    }
+    .await;
+
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+
+    let msg = msg_res?;
+
+    if msg.get("error").is_some() {
+        return Err(format!("MCP retornou erro: {msg}"));
+    }
+    if let Some(result) = msg.get("result") {
+        return Ok(normalize_mcp_tool_result(result.clone()));
+    }
+    Err("Resposta MCP inválida (sem campo result)".to_string())
+}
+
+async fn get_sheet_data(spreadsheet_id: &str, sheet: &str, range: String) -> Result<Vec<Vec<String>>, String> {
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": sheet,
+            "range": range,
+            "include_grid_data": false
+        }),
+    )
+    .await?;
+    extract_values_2d_strict(&result)
+}
+
+#[derive(Clone, Copy)]
+struct MasterCols {
+    repo_url_idx: usize,
+    status_atualizacao_idx: usize,
+    status_fase_idx: usize,
+}
+
+fn resolve_master_cols(header_row: &[String]) -> Result<MasterCols, String> {
+    let mut map = std::collections::HashMap::new();
+    for (idx, cell) in header_row.iter().enumerate() {
+        let k = normalize_header_cell(cell);
+        if !k.is_empty() {
+            map.insert(k, idx);
+        }
+    }
+    let repo_url_idx = *map
+        .get("repo_url")
+        .ok_or_else(|| "Header missing repo_url".to_string())?;
+    let status_atualizacao_idx = *map
+        .get("status_atualizacao")
+        .ok_or_else(|| "Header missing status_atualizacao".to_string())?;
+    let status_fase_idx = *map
+        .get("status_fase")
+        .ok_or_else(|| "Header missing status_fase".to_string())?;
+    Ok(MasterCols {
+        repo_url_idx,
+        status_atualizacao_idx,
+        status_fase_idx,
+    })
+}
+
+async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<(u32, MasterCols, usize), String> {
+    let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string()).await?;
+    let header_row = header.first().cloned().unwrap_or_default();
+    if header_row.is_empty() {
+        return Err("Header vazio em MASTER_SOLUTIONS!A1:CF1".to_string());
+    }
+    let cols = resolve_master_cols(&header_row)?;
+
+    let required = [cols.repo_url_idx, cols.status_atualizacao_idx, cols.status_fase_idx];
+    let min_idx = *required.iter().min().unwrap_or(&0);
+    let max_idx = *required.iter().max().unwrap_or(&0);
+    let start_col = col_idx_to_a1(min_idx);
+    let end_col = col_idx_to_a1(max_idx);
+    let range = format!("{start_col}2:{end_col}");
+    let values = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", range).await?;
+
+    let expected = normalize_repo_url_for_match(&format!("https://github.com/{repo_id}"));
+    for (i, row) in values.iter().enumerate() {
+        let get = |abs_idx: usize| -> String {
+            let rel = abs_idx.saturating_sub(min_idx);
+            row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+        };
+        let repo_url = normalize_repo_url_for_match(&get(cols.repo_url_idx));
+        if repo_url.is_empty() {
+            continue;
+        }
+        if repo_url == expected {
+            let status = get(cols.status_atualizacao_idx);
+            return Ok(((i as u32) + 2, cols, min_idx))
+                .and_then(|x| {
+                    let _ = status;
+                    Ok(x)
+                });
+        }
+    }
+    Err(format!(
+        "Harvester gate falhou: repo_url não encontrado no Sheets (expected={})",
+        expected
+    ))
+}
+
+async fn read_status_atualizacao_at_row(
+    spreadsheet_id: &str,
+    row_number_1based: u32,
+    cols: MasterCols,
+) -> Result<String, String> {
+    let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
+    let range = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
+    let values = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", range).await?;
+    Ok(values
+        .first()
+        .and_then(|r| r.first())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default())
+}
+
+async fn update_status_fase_only(
+    spreadsheet_id: &str,
+    row_number_1based: u32,
+    cols: MasterCols,
+    status_fase: &str,
+) -> Result<(), String> {
+    let col = col_idx_to_a1(cols.status_fase_idx);
+    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+    let _ = call_mcp(
+        "batch_update_cells",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "ranges": {
+                range: [[status_fase]]
+            }
+        }),
+    )
+    .await?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
@@ -221,6 +492,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ensure_phase1_schema(&conn)?;
 
     let repo_id = parse_repo_id_from_args();
+    let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+        .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+    let (row_number, cols, _min_idx) =
+        gate_harvester_by_sheet(&spreadsheet_id, &repo_id).await.map_err(io::Error::other)?;
+    let status_atualizacao =
+        read_status_atualizacao_at_row(&spreadsheet_id, row_number, cols).await.map_err(io::Error::other)?;
+    if status_atualizacao.trim() != STATUS_GATE_HARVESTER {
+        info!(
+            repo_id = %repo_id,
+            row_number,
+            status_atualizacao = %status_atualizacao,
+            expected = STATUS_GATE_HARVESTER,
+            "F0: skip (fora do gatilho rígido)"
+        );
+        return Ok(());
+    }
+    info!(
+        repo_id = %repo_id,
+        row_number,
+        "F0: gatilho rígido validado (APROVADO_PARA_HARVESTER)"
+    );
     let repo_url_str = format!("https://github.com/{}", repo_id);
     let repo_url = Url::parse(&repo_url_str)?;
     let now = now_epoch_secs()?;
@@ -269,6 +561,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             info!(repo_id = %repo_id, "CLI: Status F0_OK persistido; exportando relatório local");
             let report_path = write_f0_report(&root_dir, &conn_arc, &repo_id)?;
+            update_status_fase_only(&spreadsheet_id, row_number, cols, STATUS_FASE_F0_OK)
+                .await
+                .map_err(io::Error::other)?;
             info!(
                 repo_id = %repo_id,
                 report = %report_path.display(),

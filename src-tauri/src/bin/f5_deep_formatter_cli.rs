@@ -298,7 +298,12 @@ fn resolve_master_columns(header_row: &[String]) -> Result<MasterColumns, String
             "status_fase" => status_fase_idx = Some(idx),
             "project_name" => project_name_idx = Some(idx),
             "repo_url" => repo_url_idx = Some(idx),
-            "repo_version" => repo_version_idx = Some(idx),
+            "repo_analised_version" => repo_version_idx = Some(idx),
+            "repo_version" => {
+                if repo_version_idx.is_none() {
+                    repo_version_idx = Some(idx)
+                }
+            }
             "lote_id" => lote_id_idx = Some(idx),
             _ => {}
         }
@@ -320,7 +325,7 @@ struct ParentRow {
     row_number_1based: u32,
     project_name: String,
     repo_url: String,
-    repo_version: String,
+    repo_analised_version: String,
     lote_id: String,
 }
 
@@ -352,7 +357,7 @@ fn find_pending_phase5_rows(
         if project_name.is_empty() || repo_url.is_empty() || lote_id.is_empty() {
             continue;
         }
-        let repo_version = cols
+        let repo_analised_version = cols
             .repo_version_idx
             .and_then(|i| row.get(i))
             .map(|s| s.trim().to_string())
@@ -361,7 +366,7 @@ fn find_pending_phase5_rows(
             row_number_1based: (idx as u32) + 2,
             project_name,
             repo_url,
-            repo_version,
+            repo_analised_version,
             lote_id,
         });
     }
@@ -731,9 +736,9 @@ fn compute_first_empty_row_1based(col_a_values: &[Vec<String>]) -> u32 {
 
 fn build_prompt(parent: &ParentRow, seed: &str) -> String {
     format!(
-        "SODA_PHASE=5\nrepo_url={}\nrepo_version={}\nlote_id={}\n\nContexto_SGR_Minimo:\n{}\n\nTarefa: gere componentes COMP_0001..COMP_9999. Saída deve ser JSON estrito no shape do schema.\n",
+        "SODA_PHASE=5\nrepo_url={}\nrepo_analised_version={}\nlote_id={}\n\nContexto_SGR_Minimo:\n{}\n\nTarefa: gere componentes COMP_0001..COMP_9999. Saída deve ser JSON estrito no shape do schema.\n",
         parent.repo_url,
-        parent.repo_version,
+        parent.repo_analised_version,
         parent.lote_id,
         seed
     )
@@ -1340,7 +1345,7 @@ mod tests {
             row_number_1based: 42,
             project_name: "proj".to_string(),
             repo_url: "https://github.com/acme/proj".to_string(),
-            repo_version: "v1".to_string(),
+            repo_analised_version: "v1".to_string(),
             lote_id: "LOTE".to_string(),
         };
 

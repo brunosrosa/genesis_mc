@@ -1,6 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::cognition::synthesizer::{
@@ -8,12 +8,39 @@ use genesis_mc_lib::cognition::synthesizer::{
 };
 use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
 use genesis_mc_lib::persist::ssot_injector::SsotInjector;
+use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, find_col_idx};
 use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{error, info};
 use url::Url;
+
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn spawn_ghost_telemetry(repo_id: String, message: String) -> AbortOnDrop {
+    let started = Instant::now();
+    let handle = tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(30));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tick.tick().await;
+            info!(
+                repo_id = %repo_id,
+                elapsed_s = started.elapsed().as_secs(),
+                message = %message,
+                "Ghost Telemetry"
+            );
+        }
+    });
+    AbortOnDrop(handle)
+}
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -28,6 +55,50 @@ fn now_epoch_secs() -> io::Result<i64> {
         .duration_since(UNIX_EPOCH)
         .map_err(|e| io::Error::other(format!("Falha ao calcular timestamp atual: {}", e)))?
         .as_secs() as i64)
+}
+
+fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usize> {
+    let mut stmt = conn
+        .prepare("SELECT COUNT(DISTINCT artifact_type) FROM artefatos_brutos WHERE repo_id = ?1")
+        .map_err(|e| io::Error::other(format!("Falha ao preparar query blobs: {}", e)))?;
+    let count: i64 = stmt
+        .query_row([repo_id], |row| row.get(0))
+        .map_err(|e| io::Error::other(format!("Falha ao consultar blobs: {}", e)))?;
+    Ok(count.max(0) as usize)
+}
+
+fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": "A1:CF1",
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
+    Ok(values.first().cloned().unwrap_or_default())
+}
+
+fn read_cell_at(spreadsheet_id: &str, row_number_1based: u32, col_idx0: usize) -> io::Result<String> {
+    let col = col_idx_to_a1(col_idx0);
+    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": range,
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
+    Ok(values
+        .first()
+        .and_then(|r| r.first())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default())
 }
 
 async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
@@ -119,6 +190,7 @@ fn extract_total_cost_usd_from_lens_json(lens_json: &str) -> f64 {
 struct CliArgs {
     repo_id: String,
     e2e_full: bool,
+    skip_harvester: bool,
 }
 
 fn parse_cli_args() -> CliArgs {
@@ -126,6 +198,7 @@ fn parse_cli_args() -> CliArgs {
     args.next();
     let mut repo_id = String::from("aaif-goose/goose");
     let mut e2e_full = false;
+    let mut skip_harvester = false;
     while let Some(arg) = args.next() {
         if arg == "--repo" {
             if let Some(value) = args.next() {
@@ -137,10 +210,15 @@ fn parse_cli_args() -> CliArgs {
             e2e_full = true;
             continue;
         }
+        if arg == "--skip-harvester" {
+            skip_harvester = true;
+            continue;
+        }
     }
     CliArgs {
         repo_id,
         e2e_full,
+        skip_harvester,
     }
 }
 
@@ -820,7 +898,7 @@ fn try_fetch_repositorios_release_info(
     repo_id: &str,
 ) -> (Option<String>, Option<String>) {
     let mut stmt = match conn.prepare(
-        "SELECT repo_version, ultima_versao_online
+        "SELECT COALESCE(NULLIF(repo_analised_version, ''), NULLIF(repo_version, '')) AS repo_analised_version, ultima_versao_online
          FROM repositorios
          WHERE project_name = ?1
          LIMIT 1",
@@ -834,7 +912,7 @@ fn try_fetch_repositorios_release_info(
         Ok(value) => value,
         Err(_) => return (None, None),
     };
-    let repo_version = row
+    let repo_analised_version = row
         .0
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
@@ -842,7 +920,7 @@ fn try_fetch_repositorios_release_info(
         .1
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    (repo_version, ultima_versao_online)
+    (repo_analised_version, ultima_versao_online)
 }
 
 fn try_fetch_repo_heuristics_seed(
@@ -851,7 +929,7 @@ fn try_fetch_repo_heuristics_seed(
 ) -> Option<(String, String, String, String, String, String, String)> {
     let mut stmt = conn
         .prepare(
-            "SELECT repo_version, ultima_versao_online, licenca, stack_base, declared_description, proposta_original_resumo, categoria_arquitetural
+            "SELECT COALESCE(NULLIF(repo_analised_version, ''), NULLIF(repo_version, '')) AS repo_analised_version, ultima_versao_online, licenca, stack_base, declared_description, proposta_original_resumo, categoria_arquitetural
              FROM repo_heuristics
              WHERE project_name = ?1
              LIMIT 1",
@@ -1257,6 +1335,10 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
     };
     exe_path.set_file_name(bin_name);
 
+    let _ghost = spawn_ghost_telemetry(
+        repo_id.to_string(),
+        format!("Executando subfase '{binary_stem}'"),
+    );
     let status = tokio::process::Command::new(exe_path)
         .args(["--repo", repo_id])
         .stdin(Stdio::null())
@@ -1291,7 +1373,11 @@ async fn main() -> io::Result<()> {
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
 
-    let CliArgs { repo_id, e2e_full, .. } = parse_cli_args();
+    let CliArgs {
+        repo_id,
+        e2e_full,
+        skip_harvester,
+    } = parse_cli_args();
     if e2e_full {
         info!(repo_id = %repo_id, "E2E FULL: iniciando F0 → F4 (disparo completo)");
     } else {
@@ -1315,7 +1401,55 @@ async fn main() -> io::Result<()> {
         .filter(|v| !v.is_empty())
         .unwrap_or(lote_id);
 
-    if e2e_full {
+    let mut n4_skip_columns: Vec<&'static str> = Vec::new();
+    let mut n4_sheet_proposta: Option<String> = None;
+    let mut n4_sheet_categoria: Option<String> = None;
+    if e2e_full && skip_harvester {
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+        let row_number =
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
+        let (status_atualizacao, _status_fase) = read_status_atualizacao_e_fase(&spreadsheet_id, row_number)?;
+        if status_atualizacao.trim() != "APROVADO_PARA_ENXAME" {
+            info!(
+                repo_id = %repo_id,
+                row_number,
+                status_atualizacao = %status_atualizacao,
+                expected = "APROVADO_PARA_ENXAME",
+                "N4: skip (fora do gatilho rígido)"
+            );
+            return Ok(());
+        }
+
+        let blobs = count_raw_blobs_distinct(&conn, &repo_id)?;
+        if blobs < 11 {
+            info!(
+                repo_id = %repo_id,
+                blobs,
+                expected = 11,
+                "N4: skip (idempotência: blobs RAW ausentes no SQLite)"
+            );
+            return Ok(());
+        }
+
+        let header_row = read_master_header(&spreadsheet_id)?;
+        if let Some(idx) = find_col_idx(&header_row, "proposta_original_resumo") {
+            let v = read_cell_at(&spreadsheet_id, row_number, idx)?;
+            if !v.trim().is_empty() {
+                n4_sheet_proposta = Some(v);
+                n4_skip_columns.push("proposta_original_resumo");
+            }
+        }
+        if let Some(idx) = find_col_idx(&header_row, "categoria_arquitetural") {
+            let v = read_cell_at(&spreadsheet_id, row_number, idx)?;
+            if !v.trim().is_empty() {
+                n4_sheet_categoria = Some(v);
+                n4_skip_columns.push("categoria_arquitetural");
+            }
+        }
+    }
+
+    if e2e_full && !skip_harvester {
         if let Ok(spreadsheet_id) = std::env::var("GOOGLE_SHEETS_ID") {
             let row_number =
                 resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
@@ -1338,7 +1472,7 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    let phase1_ms = if e2e_full {
+    let phase1_ms = if e2e_full && !skip_harvester {
         run_phase_binary("f0_harvester_cli", &repo_id).await?
     } else {
         0
@@ -1365,13 +1499,13 @@ async fn main() -> io::Result<()> {
 
     let seed = try_fetch_repo_heuristics_seed(&conn, &repo_id);
     let (
-        seed_repo_version,
+        seed_repo_analised_version,
         seed_ultima_versao_online,
         seed_licenca,
         seed_stack_base,
         seed_declared_description,
-        seed_proposta_original_resumo,
-        seed_categoria_arquitetural,
+        mut seed_proposta_original_resumo,
+        mut seed_categoria_arquitetural,
     ) = seed.unwrap_or_else(|| {
         (
             "UNKNOWN".to_string(),
@@ -1383,17 +1517,32 @@ async fn main() -> io::Result<()> {
             "".to_string(),
         )
     });
+    if let Some(v) = n4_sheet_proposta.as_deref() {
+        seed_proposta_original_resumo = v.trim().to_string();
+    }
+    if let Some(v) = n4_sheet_categoria.as_deref() {
+        seed_categoria_arquitetural = v.trim().to_string();
+    }
 
     let now = now_epoch_secs()?;
-    let (repo_version_from_repositorios, ultima_versao_online_from_repositorios) =
+    let (repo_analised_version_from_repositorios, ultima_versao_online_from_repositorios) =
         try_fetch_repositorios_release_info(&conn, &repo_id);
-    let mut repo_version = repo_version_from_repositorios
+    let repo_analised_version = repo_analised_version_from_repositorios
         .or_else(|| {
-            let trimmed = seed_repo_version.trim().to_string();
+            let trimmed = seed_repo_analised_version.trim().to_string();
             if trimmed.is_empty() { None } else { Some(trimmed) }
         })
-        .unwrap_or_else(|| "UNKNOWN".to_string());
-    let repo_version_lower = repo_version.to_ascii_lowercase();
+        .unwrap_or_default();
+    let repo_analised_version_lower = repo_analised_version.to_ascii_lowercase();
+    if repo_analised_version.trim().is_empty()
+        || repo_analised_version_lower == "main"
+        || repo_analised_version_lower == "master"
+        || is_unknown_like(&repo_analised_version)
+    {
+        return Err(io::Error::other(
+            "repo_analised_version ausente/invalidado. Rode a Fase 0 (Harvester) ou preencha a coluna no SSOT antes de rodar F3/F4.",
+        ));
+    }
     let mut ultima_versao_online = ultima_versao_online_from_repositorios
         .or_else(|| {
             let trimmed = seed_ultima_versao_online.trim().to_string();
@@ -1401,13 +1550,8 @@ async fn main() -> io::Result<()> {
         })
         .unwrap_or_else(|| "UNKNOWN".to_string());
 
-    if repo_version_lower == "main"
-        || repo_version_lower == "master"
-        || repo_version_lower == "unknown"
-        || ultima_versao_online.eq_ignore_ascii_case("unknown")
-    {
+    if ultima_versao_online.eq_ignore_ascii_case("unknown") || is_unknown_like(&ultima_versao_online) {
         if let Some(tag) = try_fetch_github_latest_release_tag(&repo_url).await {
-            repo_version = tag.clone();
             ultima_versao_online = tag;
         } else if let Ok(url) = Url::parse(&repo_url) {
             let limiter = RateLimiter;
@@ -1415,19 +1559,17 @@ async fn main() -> io::Result<()> {
                 if let Some(sha) = meta.last_commit_sha {
                     let short = sha.chars().take(7).collect::<String>();
                     if !short.is_empty() {
-                        repo_version = short.clone();
                         ultima_versao_online = short;
                     }
                 }
             }
         }
     }
-
-    if let Some(tag) = try_fetch_github_latest_release_tag(&repo_url).await {
-        repo_version = tag.clone();
-        ultima_versao_online = tag;
-    }
-    info!(repo_version = %repo_version, "E2E: repo_version resolvido");
+    info!(
+        repo_analised_version = %repo_analised_version,
+        ultima_versao_online = %ultima_versao_online,
+        "E2E: Bloco 0 (versões) resolvido"
+    );
 
     let mut licenca = seed_licenca.trim().to_string();
     let mut stack_base = seed_stack_base.trim().to_string();
@@ -1476,7 +1618,7 @@ async fn main() -> io::Result<()> {
         status_fase: "F3".to_string(),
         project_name: repo_id.clone(),
         repo_url,
-        repo_version,
+        repo_analised_version,
         ultima_versao_online,
         lote_id: lote_id.clone(),
         data_ultima_analise: now,
@@ -1507,6 +1649,7 @@ async fn main() -> io::Result<()> {
     };
 
     let started_phase3_4 = Instant::now();
+    let _ghost_f3 = spawn_ghost_telemetry(repo_id.clone(), "F3 (SGR) em processamento".to_string());
     let phase3_out = match run_phase3_sgr(&formatter, &cfg, block0).await {
         Ok(out) => out,
         Err(Phase3Error::RetryExhausted { block, attempts, message }) => {
@@ -1518,13 +1661,31 @@ async fn main() -> io::Result<()> {
             return Err(io::Error::other(format!("Falha SGR: {}", e)));
         }
     };
+    drop(_ghost_f3);
 
     info!("E2E: F3 concluída. Iniciando F4 (carga atômica Sheets)");
     let block3_justifications = phase3_out.block3_justifications;
-    let row = phase3_out.row;
-    let row_number = SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
-        .await
-        .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?;
+    let mut row = phase3_out.row;
+    let _ghost_f4 = spawn_ghost_telemetry(repo_id.clone(), "F4 (SSOT Sheets) em processamento".to_string());
+    if let Some(v) = n4_sheet_proposta.as_deref() {
+        row.proposta_original_resumo = v.trim().to_string();
+    }
+    if let Some(v) = n4_sheet_categoria.as_deref() {
+        row.categoria_arquitetural =
+            genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::parse_strict(v)
+                .unwrap_or(row.categoria_arquitetural);
+    }
+
+    let row_number = if n4_skip_columns.is_empty() {
+        SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
+            .await
+            .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?
+    } else {
+        SsotInjector::inject_ssot_with_skip_columns(&repo_id, row, block3_justifications, now, &n4_skip_columns)
+            .await
+            .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?
+    };
+    drop(_ghost_f4);
 
     let confirmed = confirm_sheet_write(row_number, &repo_id)?;
     if !confirmed {

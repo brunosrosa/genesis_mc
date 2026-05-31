@@ -20,6 +20,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
             project_name TEXT PRIMARY KEY,
             lote_id TEXT NOT NULL,
             repo_url TEXT NOT NULL UNIQUE,
+            repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
             soda_universal_uuid TEXT NOT NULL UNIQUE,
@@ -32,6 +33,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
     )
     .map_err(|e| io::Error::other(format!("Falha ao criar tabela repositorios: {}", e)))?;
 
+    let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_analised_version TEXT", []);
     let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN repo_version TEXT", []);
     let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN ultima_versao_online TEXT", []);
 

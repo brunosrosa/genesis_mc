@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,9 +13,12 @@ use tracing::{error, info, warn};
 
 use rand::rngs::OsRng;
 use rand::RngCore;
+use rusqlite::Connection;
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
+type SheetsUpdateFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 
 trait SheetsClient: Send + Sync {
     fn get_sheet_data<'a>(
@@ -23,6 +27,13 @@ trait SheetsClient: Send + Sync {
         sheet: &'a str,
         range: String,
     ) -> SheetsDataFuture<'a>;
+
+    fn batch_update_cells<'a>(
+        &'a self,
+        spreadsheet_id: &'a str,
+        sheet: &'a str,
+        ranges: serde_json::Value,
+    ) -> SheetsUpdateFuture<'a>;
 }
 
 struct SheetsMcpClient;
@@ -168,6 +179,61 @@ impl SheetsMcpClient {
     }
 }
 
+fn workspace_root() -> io::Result<PathBuf> {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    Path::new(manifest_dir)
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| io::Error::other("Falha ao resolver raiz do projeto"))
+}
+
+fn try_extract_project_name_from_repo_url(repo_url: &str) -> Option<String> {
+    let s = repo_url.trim();
+    let s = s.trim_end_matches('/').trim_end_matches(".git");
+    let marker = "github.com/";
+    let idx = s.to_ascii_lowercase().find(marker)?;
+    let rest = &s[(idx + marker.len())..];
+    let mut parts = rest.split('/').map(|p| p.trim()).filter(|p| !p.is_empty());
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    Some(format!("{owner}/{repo}"))
+}
+
+fn short_circuit_cleanup_sqlite(project_name: &str) -> Result<usize, String> {
+    let root = workspace_root().map_err(|e| e.to_string())?;
+    let db_path = root.join(".soda_data").join("soda_heuristic_vault.db");
+    let conn =
+        Connection::open(&db_path).map_err(|e| format!("Falha ao abrir vault {}: {e}", db_path.display()))?;
+    match conn.execute("DELETE FROM artefatos_brutos WHERE repo_id = ?1", [project_name]) {
+        Ok(n) => Ok(n),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.to_ascii_lowercase().contains("no such table") {
+                return Ok(0);
+            }
+            Err(format!(
+                "Falha ao deletar artefatos_brutos para repo_id='{project_name}': {msg}"
+            ))
+        }
+    }
+}
+
+async fn short_circuit_mark_sheet<S: SheetsClient>(
+    sheets: &S,
+    spreadsheet_id: &str,
+    status_fase_idx: usize,
+    row_number_1based: u32,
+) -> Result<(), String> {
+    let col = col_idx_to_a1(status_fase_idx);
+    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+    let mut ranges = serde_json::Map::new();
+    ranges.insert(range, json!([[ "SHORT-CIRCUIT" ]]));
+    sheets
+        .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", Value::Object(ranges))
+        .await
+        .map_err(|e| format!("Falha ao atualizar status_fase=SHORT-CIRCUIT no Sheets: {e}"))
+}
+
 impl SheetsClient for SheetsMcpClient {
     fn get_sheet_data<'a>(
         &'a self,
@@ -186,22 +252,61 @@ impl SheetsClient for SheetsMcpClient {
                 }),
             )
             .await?;
-            Ok(extract_values_2d(&result).unwrap_or_default())
+            extract_values_2d_strict(&result)
+        })
+    }
+
+    fn batch_update_cells<'a>(
+        &'a self,
+        spreadsheet_id: &'a str,
+        sheet: &'a str,
+        ranges: serde_json::Value,
+    ) -> SheetsUpdateFuture<'a> {
+        Box::pin(async move {
+            let _ = Self::call_mcp(
+                "batch_update_cells",
+                json!({
+                    "spreadsheet_id": spreadsheet_id,
+                    "sheet": sheet,
+                    "ranges": ranges
+                }),
+            )
+            .await?;
+            Ok(())
         })
     }
 }
 
-fn extract_values_2d(value: &Value) -> Option<Vec<Vec<String>>> {
+fn extract_values_2d_strict(value: &Value) -> Result<Vec<Vec<String>>, String> {
+    if let Some(err) = value.get("error") {
+        let code = err.get("code").and_then(|v| v.as_i64());
+        let message = err.get("message").and_then(|v| v.as_str());
+        return Err(match (code, message) {
+            (Some(c), Some(m)) => format!("Google Sheets API error: code={c} message={m}"),
+            (Some(c), None) => format!("Google Sheets API error: code={c}"),
+            (None, Some(m)) => format!("Google Sheets API error: message={m}"),
+            _ => format!("Google Sheets API error: {err}"),
+        });
+    }
+
     let values = if let Some(arr) = value.get("values").and_then(|v| v.as_array()) {
         arr
     } else {
-        let ranges = value.get("valueRanges")?.as_array()?;
-        let first = ranges.first()?;
-        first.get("values")?.as_array()?
+        let vr = value
+            .get("valueRanges")
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.first())
+            .ok_or_else(|| "Sheets payload inválido: sem 'values' ou 'valueRanges'".to_string())?;
+        vr.get("values")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| "Sheets payload inválido: 'valueRanges[0].values' ausente".to_string())?
     };
+
     let mut out = Vec::new();
     for row in values {
-        let row_arr = row.as_array()?;
+        let row_arr = row
+            .as_array()
+            .ok_or_else(|| "Sheets payload inválido: linha não é array".to_string())?;
         out.push(
             row_arr
                 .iter()
@@ -209,7 +314,7 @@ fn extract_values_2d(value: &Value) -> Option<Vec<Vec<String>>> {
                 .collect(),
         );
     }
-    Some(out)
+    Ok(out)
 }
 
 #[derive(Clone, Copy)]
@@ -379,6 +484,11 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
             }
         };
         let header_row = header.first().cloned().unwrap_or_default();
+        if header_row.is_empty() {
+            tel.erros_sheets += 1;
+            error!("N0: header vazio em MASTER_SOLUTIONS!A1:CF1 (falha de leitura ou payload inesperado)");
+            return tel;
+        }
         let cols = match resolve_column_map(&header_row) {
             Ok(v) => v,
             Err(e) => {
@@ -432,6 +542,60 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
                 RouteDecision::Skip => {}
             }
             if route == RouteDecision::Skip {
+                continue;
+            }
+            if route == RouteDecision::ShortCircuit {
+                let project_name = if !ctx.project_name.trim().is_empty() {
+                    ctx.project_name.trim().to_string()
+                } else if let Some(extracted) = try_extract_project_name_from_repo_url(&ctx.repo_url) {
+                    extracted
+                } else {
+                    tel.erros_dispatch += 1;
+                    error!(
+                        row_number_1based = ctx.row_number_1based,
+                        repo_url = %ctx.repo_url,
+                        "N0: SHORT-CIRCUIT falhou (sem project_name e repo_url não parseável)"
+                    );
+                    continue;
+                };
+
+                match short_circuit_cleanup_sqlite(&project_name) {
+                    Ok(deleted) => {
+                        info!(
+                            row_number_1based = ctx.row_number_1based,
+                            project_name = %project_name,
+                            deleted,
+                            "N0: SHORT-CIRCUIT cleanup concluído (artefatos_brutos)"
+                        );
+                    }
+                    Err(e) => {
+                        tel.erros_dispatch += 1;
+                        error!(
+                            row_number_1based = ctx.row_number_1based,
+                            project_name = %project_name,
+                            error = %e,
+                            "N0: SHORT-CIRCUIT cleanup falhou"
+                        );
+                        continue;
+                    }
+                }
+
+                if let Err(e) = short_circuit_mark_sheet(
+                    self.sheets.as_ref(),
+                    spreadsheet_id,
+                    cols.status_fase_idx,
+                    ctx.row_number_1based,
+                )
+                .await
+                {
+                    tel.erros_sheets += 1;
+                    error!(
+                        row_number_1based = ctx.row_number_1based,
+                        project_name = %project_name,
+                        error = %e,
+                        "N0: SHORT-CIRCUIT falhou ao marcar status_fase no Sheets"
+                    );
+                }
                 continue;
             }
 
@@ -716,6 +880,15 @@ mod tests {
                     Ok(self.values.clone())
                 }
             })
+        }
+
+        fn batch_update_cells<'a>(
+            &'a self,
+            _spreadsheet_id: &'a str,
+            _sheet: &'a str,
+            _ranges: Value,
+        ) -> SheetsUpdateFuture<'a> {
+            Box::pin(async move { Ok(()) })
         }
     }
 

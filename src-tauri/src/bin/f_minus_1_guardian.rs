@@ -3,7 +3,7 @@ use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,6 +20,14 @@ type SheetsDataFuture<'a> =
 type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 type GithubTagFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send + 'a>>;
+
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -548,10 +556,24 @@ fn normalize_version(raw: &str) -> String {
     s.trim().to_string()
 }
 
-fn has_drift(repo_version: &str, github_latest: &str) -> bool {
-    let local = normalize_version(repo_version);
+fn has_drift(repo_analised_version: &str, github_latest: &str) -> bool {
+    let local = normalize_version(repo_analised_version);
     let remote = normalize_version(github_latest);
     !(remote.is_empty() || (!local.is_empty() && local == remote))
+}
+
+fn try_extract_project_name_from_repo_url(repo_url: &str) -> Option<String> {
+    let url = Url::parse(repo_url).ok()?;
+    if !url.host_str()?.eq_ignore_ascii_case("github.com") {
+        return None;
+    }
+    let mut parts = url.path().trim_matches('/').split('/');
+    let owner = parts.next()?.trim();
+    let repo = parts.next()?.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some(format!("{owner}/{repo}"))
 }
 
 fn normalize_header_cell(raw: &str) -> String {
@@ -574,36 +596,36 @@ fn col_idx_to_a1(col_idx0: usize) -> String {
 #[derive(Debug, Clone)]
 struct ColumnMap {
     status_atualizacao_idx: usize,
+    status_fase_idx: Option<usize>,
+    project_name_idx: Option<usize>,
     repo_url_idx: usize,
-    repo_version_idx: Option<usize>,
+    repo_analised_version_idx: Option<usize>,
     ultima_versao_online_idx: usize,
 }
 
-fn resolve_column_map(header_row: &[String], sample_row: Option<&Vec<String>>) -> Result<ColumnMap, String> {
+fn resolve_column_map(header_row: &[String]) -> Result<ColumnMap, String> {
     let mut status_atualizacao_idx = None;
+    let mut status_fase_idx = None;
+    let mut project_name_idx = None;
     let mut repo_url_idx = None;
-    let mut repo_version_idx = None;
+    let mut repo_analised_version_idx = None;
     let mut ultima_versao_online_idx = None;
 
     for (idx, raw) in header_row.iter().enumerate() {
         let h = normalize_header_cell(raw);
         match h.as_str() {
             "status_atualizacao" => status_atualizacao_idx = Some(idx),
+            "status_fase" => status_fase_idx = Some(idx),
+            "project_name" => project_name_idx = Some(idx),
             "repo_url" => repo_url_idx = Some(idx),
-            "repo_version" => repo_version_idx = Some(idx),
-            "ultima_versao_online" => ultima_versao_online_idx = Some(idx),
-            _ => {}
-        }
-    }
-
-    if repo_url_idx.is_none() {
-        if let Some(sample) = sample_row {
-            for (idx, cell) in sample.iter().enumerate() {
-                if cell.to_ascii_lowercase().contains("github.com") {
-                    repo_url_idx = Some(idx);
-                    break;
+            "repo_analised_version" => repo_analised_version_idx = Some(idx),
+            "repo_version" => {
+                if repo_analised_version_idx.is_none() {
+                    repo_analised_version_idx = Some(idx)
                 }
             }
+            "ultima_versao_online" => ultima_versao_online_idx = Some(idx),
+            _ => {}
         }
     }
 
@@ -611,7 +633,7 @@ fn resolve_column_map(header_row: &[String], sample_row: Option<&Vec<String>>) -
         return Err("Cabeçalho não contém 'status_atualizacao'".to_string());
     };
     let Some(repo_url_idx) = repo_url_idx else {
-        return Err("Cabeçalho não contém 'repo_url' e não foi possível inferir via amostra".to_string());
+        return Err("Cabeçalho não contém 'repo_url'".to_string());
     };
     let Some(ultima_versao_online_idx) = ultima_versao_online_idx else {
         return Err("Cabeçalho não contém 'ultima_versao_online'".to_string());
@@ -619,10 +641,42 @@ fn resolve_column_map(header_row: &[String], sample_row: Option<&Vec<String>>) -
 
     Ok(ColumnMap {
         status_atualizacao_idx,
+        status_fase_idx,
+        project_name_idx,
         repo_url_idx,
-        repo_version_idx,
+        repo_analised_version_idx,
         ultima_versao_online_idx,
     })
+}
+
+fn should_skip_by_status_atualizacao(status_atualizacao: &str) -> bool {
+    let s = status_atualizacao.trim();
+    if s.is_empty() {
+        return false;
+    }
+    let up = s.to_ascii_uppercase();
+    up == "INICIAR_TRIAGEM"
+        || up == "TRIAGEM_CONCLUIDA"
+        || up.starts_with("APROVADO_")
+        || up.starts_with("REJEITADO_")
+        || up == "DESATUALIZADA"
+        || up == "EM_PROCESSAMENTO"
+        || up.starts_with("PENDENTE_")
+        || up == "NOVO_LINK_OK"
+}
+
+fn try_build_repo_url_from_project_name(project_name: &str) -> Option<String> {
+    let raw = project_name.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let mut parts = raw.split('/');
+    let owner = parts.next()?.trim();
+    let repo = parts.next()?.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some(format!("https://github.com/{owner}/{repo}"))
 }
 
 struct Guardian<S: SheetsClient, G: GithubClient> {
@@ -638,21 +692,42 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
             .await?;
         let header_row = header.first().cloned().unwrap_or_default();
 
+        let cols = resolve_column_map(&header_row)?;
+        let mut required = vec![
+            cols.status_atualizacao_idx,
+            cols.repo_url_idx,
+            cols.ultima_versao_online_idx,
+        ];
+        if let Some(idx) = cols.project_name_idx {
+            required.push(idx);
+        }
+        if let Some(idx) = cols.repo_analised_version_idx {
+            required.push(idx);
+        }
+        let min_idx = *required.iter().min().unwrap_or(&0);
+        let max_idx = *required.iter().max().unwrap_or(&0);
+        let start_col = col_idx_to_a1(min_idx);
+        let end_col = col_idx_to_a1(max_idx);
+        let range = format!("{start_col}2:{end_col}");
         let values = self
             .sheets
-            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A2:CF".to_string())
+            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", range)
             .await?;
-        let sample_row = values.first();
-        let cols = resolve_column_map(&header_row, sample_row)?;
 
         let mut drifted = 0usize;
         let mut updated = 0usize;
+        let processed = Arc::new(AtomicUsize::new(0));
+        let drifted_atomic = Arc::new(AtomicUsize::new(0));
+        let updated_atomic = Arc::new(AtomicUsize::new(0));
 
         #[derive(Clone)]
         struct RowCtx {
             row_number_1based: u32,
             repo_url: String,
-            repo_version: String,
+            status_atualizacao: String,
+            repo_analised_version: String,
+            project_name: String,
+            ultima_versao_online: String,
         }
 
         let mut rows = Vec::new();
@@ -661,42 +736,91 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                 .get(cols.status_atualizacao_idx)
                 .map(|s| s.trim())
                 .unwrap_or("");
-            if status_atualizacao == "PENDENTE_FASE_0" || status_atualizacao == "PENDENTE_IA" {
+            if should_skip_by_status_atualizacao(status_atualizacao) {
                 continue;
             }
+            let project_name = cols
+                .project_name_idx
+                .and_then(|i| row.get(i))
+                .map(|s| s.trim())
+                .unwrap_or("");
             let repo_url = row.get(cols.repo_url_idx).map(|s| s.trim()).unwrap_or("");
-            if repo_url.is_empty() {
+            let repo_url = if !repo_url.is_empty() {
+                repo_url.to_string()
+            } else if let Some(built) = try_build_repo_url_from_project_name(project_name) {
+                built
+            } else {
                 continue;
-            }
+            };
             let ultima_versao_online = row
                 .get(cols.ultima_versao_online_idx)
                 .map(|s| s.trim())
                 .unwrap_or("");
-            if !ultima_versao_online.is_empty() {
-                continue;
-            }
-            let repo_version = cols
-                .repo_version_idx
+            let repo_analised_version = cols
+                .repo_analised_version_idx
                 .and_then(|i| row.get(i))
                 .map(|s| s.trim())
                 .unwrap_or("")
                 .to_string();
             rows.push(RowCtx {
                 row_number_1based: (idx as u32) + 2,
-                repo_url: repo_url.to_string(),
-                repo_version,
+                repo_url,
+                status_atualizacao: status_atualizacao.to_string(),
+                repo_analised_version,
+                project_name: project_name.to_string(),
+                ultima_versao_online: ultima_versao_online.to_string(),
             });
         }
 
-        let inspected = rows.len();
+        let inspected = values.len();
 
         let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
+        let status_fase_col = cols.status_fase_idx.map(col_idx_to_a1);
+        let project_name_col = cols.project_name_idx.map(col_idx_to_a1);
         let ultima_col = col_idx_to_a1(cols.ultima_versao_online_idx);
 
         let mut pending_ranges: HashMap<String, Vec<Vec<String>>> = HashMap::new();
         let mut pending_updates: usize = 0;
+        let max_updates_per_batch: usize = 50;
+        let total_to_write = rows.len();
+        let mut written_so_far = 0usize;
+        let ghost_processed = Arc::clone(&processed);
+        let ghost_drifted = Arc::clone(&drifted_atomic);
+        let ghost_updated = Arc::clone(&updated_atomic);
+        let ghost_started = Instant::now();
+        let ghost_handle = tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(30));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tick.tick().await;
+                info!(
+                    done = ghost_processed.load(Ordering::Relaxed),
+                    total = total_to_write,
+                    drifted = ghost_drifted.load(Ordering::Relaxed),
+                    updated = ghost_updated.load(Ordering::Relaxed),
+                    elapsed_s = ghost_started.elapsed().as_secs(),
+                    "Ghost Telemetry: Guardião processando"
+                );
+            }
+        });
+        let _ghost = AbortOnDrop(ghost_handle);
 
         for ctx in rows {
+            processed.fetch_add(1, Ordering::Relaxed);
+            if let Some(project_name_col) = project_name_col.as_deref() {
+                if ctx.project_name.trim().is_empty() {
+                    if let Some(extracted) = try_extract_project_name_from_repo_url(&ctx.repo_url) {
+                        pending_ranges.insert(
+                            format!(
+                                "{project_name_col}{}:{project_name_col}{}",
+                                ctx.row_number_1based, ctx.row_number_1based
+                            ),
+                            vec![vec![extracted]],
+                        );
+                    }
+                }
+            }
+
             let latest = match self.github.latest_release_tag(&ctx.repo_url).await {
                 Ok(v) => v,
                 Err(e) => {
@@ -709,44 +833,98 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                 }
             };
             let Some(latest) = latest else { continue };
+            let latest = latest.trim().to_string();
+            let is_new_link = ctx.status_atualizacao.trim().is_empty();
+            let drift = !ctx.repo_analised_version.trim().is_empty()
+                && has_drift(&ctx.repo_analised_version, &latest);
+            let should_write_latest = (is_new_link || drift) && ctx.ultima_versao_online.trim() != latest;
 
-            if !has_drift(&ctx.repo_version, &latest) {
+            if !is_new_link && !drift && !should_write_latest {
                 continue;
             }
-            drifted += 1;
 
-            pending_ranges.insert(
-                format!(
-                    "{status_col}{}:{status_col}{}",
-                    ctx.row_number_1based, ctx.row_number_1based
-                ),
-                vec![vec!["DESATUALIZADA".to_string()]],
-            );
-            pending_ranges.insert(
-                format!(
-                    "{ultima_col}{}:{ultima_col}{}",
-                    ctx.row_number_1based, ctx.row_number_1based
-                ),
-                vec![vec![latest.trim().to_string()]],
-            );
             pending_updates += 1;
 
-            if pending_updates >= 20 {
+            if is_new_link {
+                pending_ranges.insert(
+                    format!(
+                        "{status_col}{}:{status_col}{}",
+                        ctx.row_number_1based, ctx.row_number_1based
+                    ),
+                    vec![vec!["INICIAR_TRIAGEM".to_string()]],
+                );
+                if let Some(status_fase_col) = status_fase_col.as_deref() {
+                    pending_ranges.insert(
+                        format!(
+                            "{status_fase_col}{}:{status_fase_col}{}",
+                            ctx.row_number_1based, ctx.row_number_1based
+                        ),
+                        vec![vec!["FASE_-1_GUARDIAO_OK".to_string()]],
+                    );
+                }
+            } else if drift {
+                pending_ranges.insert(
+                    format!(
+                        "{status_col}{}:{status_col}{}",
+                        ctx.row_number_1based, ctx.row_number_1based
+                    ),
+                    vec![vec!["DESATUALIZADA".to_string()]],
+                );
+                if let Some(status_fase_col) = status_fase_col.as_deref() {
+                    pending_ranges.insert(
+                        format!(
+                            "{status_fase_col}{}:{status_fase_col}{}",
+                            ctx.row_number_1based, ctx.row_number_1based
+                        ),
+                        vec![vec!["FASE_-1_GUARDIAO_OK".to_string()]],
+                    );
+                }
+                drifted += 1;
+                drifted_atomic.store(drifted, Ordering::Relaxed);
+            }
+
+            if should_write_latest {
+                pending_ranges.insert(
+                    format!(
+                        "{ultima_col}{}:{ultima_col}{}",
+                        ctx.row_number_1based, ctx.row_number_1based
+                    ),
+                    vec![vec![latest]],
+                );
+            }
+
+            if pending_updates >= max_updates_per_batch {
                 let batch = std::mem::take(&mut pending_ranges);
+                written_so_far = written_so_far.saturating_add(pending_updates);
+                info!(
+                    written_so_far,
+                    total_to_write,
+                    updates = pending_updates,
+                    "Guardião: flush Sheets batch"
+                );
                 self.sheets
                     .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", batch)
                     .await?;
                 updated += pending_updates;
+                updated_atomic.store(updated, Ordering::Relaxed);
                 pending_updates = 0;
             }
         }
 
         if pending_updates > 0 {
             let batch = std::mem::take(&mut pending_ranges);
+            written_so_far = written_so_far.saturating_add(pending_updates);
+            info!(
+                written_so_far,
+                total_to_write,
+                updates = pending_updates,
+                "Guardião: flush final Sheets batch"
+            );
             self.sheets
                 .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", batch)
                 .await?;
             updated += pending_updates;
+            updated_atomic.store(updated, Ordering::Relaxed);
         }
 
 
@@ -984,7 +1162,7 @@ mod tests {
             "status_fase".to_string(),
             "project_name".to_string(),
             "repo_url".to_string(),
-            "repo_version".to_string(),
+            "repo_analised_version".to_string(),
             "ultima_versao_online".to_string(),
             "lote_id".to_string(),
         ]];
@@ -1018,14 +1196,14 @@ mod tests {
             "status_fase".to_string(),
             "project_name".to_string(),
             "repo_url".to_string(),
-            "repo_version".to_string(),
+            "repo_analised_version".to_string(),
             "ultima_versao_online".to_string(),
             "lote_id".to_string(),
         ]];
         let data = vec![vec![
-            "CONCLUIDO".to_string(),
-            "F4".to_string(),
-            "aaif-goose / goose".to_string(),
+            "".to_string(),
+            "".to_string(),
+            "aaif-goose/goose".to_string(),
             "https://github.com/aaif-goose/goose".to_string(),
             "v1.2.2".to_string(),
             "".to_string(),
@@ -1046,17 +1224,96 @@ mod tests {
         let ranges = &updates[0];
         assert_eq!(
             ranges.get("A2:A2").unwrap(),
-            &vec![vec!["DESATUALIZADA".to_string()]]
+            &vec![vec!["INICIAR_TRIAGEM".to_string()]]
+        );
+        assert_eq!(
+            ranges.get("B2:B2").unwrap(),
+            &vec![vec!["FASE_-1_GUARDIAO_OK".to_string()]]
         );
         assert_eq!(
             ranges.get("F2:F2").unwrap(),
             &vec![vec!["v1.2.3".to_string()]]
         );
+        assert_eq!(ranges.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn guardian_does_not_skip_rows_with_non_pending_status_atualizacao() {
+        let header = vec![vec![
+            "status_atualizacao".to_string(),
+            "status_fase".to_string(),
+            "project_name".to_string(),
+            "repo_url".to_string(),
+            "repo_analised_version".to_string(),
+            "ultima_versao_online".to_string(),
+            "lote_id".to_string(),
+        ]];
+        let data = vec![vec![
+            "OK".to_string(),
+            "".to_string(),
+            "aaif-goose/goose".to_string(),
+            "https://github.com/aaif-goose/goose".to_string(),
+            "v1.2.2".to_string(),
+            "v1.2.2".to_string(),
+            "LOTE_X".to_string(),
+        ]];
+        let sheets = Arc::new(MockSheets::new(header, data));
+        let github = MockGithub {
+            tag: Some("v1.2.3".to_string()),
+            calls: std::sync::atomic::AtomicU64::new(0),
+        };
+        let guardian = Guardian {
+            sheets,
+            github: Arc::new(github),
+        };
+        guardian.run_once("SHEET").await.unwrap();
+        let updates = guardian.sheets.updates.lock().await;
+        assert_eq!(updates.len(), 1);
+        let ranges = &updates[0];
+        assert!(ranges.get("A2:A2").is_some());
+        assert!(ranges.get("B2:B2").is_some());
+        assert!(ranges.get("F2:F2").is_some());
+    }
+
+    #[tokio::test]
+    async fn guardian_tolerates_missing_status_fase_and_project_name_columns() {
+        let header = vec![vec![
+            "repo_url".to_string(),
+            "status_atualizacao".to_string(),
+            "ultima_versao_online".to_string(),
+        ]];
+        let data = vec![vec![
+            "https://github.com/acme/widget".to_string(),
+            "".to_string(),
+            "".to_string(),
+        ]];
+        let sheets = Arc::new(MockSheets::new(header, data));
+        let github = MockGithub {
+            tag: Some("v2.0.0".to_string()),
+            calls: std::sync::atomic::AtomicU64::new(0),
+        };
+        let guardian = Guardian {
+            sheets,
+            github: Arc::new(github),
+        };
+        guardian.run_once("SHEET").await.unwrap();
+        let updates = guardian.sheets.updates.lock().await;
+        assert_eq!(updates.len(), 1);
+        let ranges = &updates[0];
+        assert_eq!(
+            ranges.get("B2:B2").unwrap(),
+            &vec![vec!["INICIAR_TRIAGEM".to_string()]]
+        );
+        assert_eq!(
+            ranges.get("C2:C2").unwrap(),
+            &vec![vec!["v2.0.0".to_string()]]
+        );
         assert_eq!(ranges.len(), 2);
     }
 
     #[tokio::test]
-    async fn guardian_treats_empty_repo_version_as_drift_but_preserves_pending_rows() {
+    async fn guardian_treats_empty_repo_analised_version_as_drift_but_preserves_pending_rows_legacy_header(
+    ) {
         let header = vec![vec![
             "status_atualizacao".to_string(),
             "status_fase".to_string(),
@@ -1068,8 +1325,8 @@ mod tests {
         ]];
         let data = vec![
             vec![
-                "PENDENTE_FASE_0".to_string(),
-                "F0".to_string(),
+                "INICIAR_TRIAGEM".to_string(),
+                "FASE_-1_GUARDIAO_OK".to_string(),
                 "acme / a".to_string(),
                 "https://github.com/acme/a".to_string(),
                 "".to_string(),
@@ -1077,8 +1334,8 @@ mod tests {
                 "L1".to_string(),
             ],
             vec![
-                "CONCLUIDO".to_string(),
-                "F4".to_string(),
+                "".to_string(),
+                "".to_string(),
                 "acme / b".to_string(),
                 "https://github.com/acme/b".to_string(),
                 "".to_string(),
@@ -1099,6 +1356,7 @@ mod tests {
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
         assert!(updates[0].get("A3:A3").is_some());
+        assert!(updates[0].get("B3:B3").is_some());
         assert!(updates[0].get("F3:F3").is_some());
     }
 
@@ -1109,13 +1367,13 @@ mod tests {
             "status_fase".to_string(),
             "project_name".to_string(),
             "repo_url".to_string(),
-            "repo_version".to_string(),
+            "repo_analised_version".to_string(),
             "ultima_versao_online".to_string(),
             "lote_id".to_string(),
         ]];
         let data = vec![vec![
-            "CONCLUIDO".to_string(),
-            "F4".to_string(),
+            "INICIAR_TRIAGEM".to_string(),
+            "FASE_-1_GUARDIAO_OK".to_string(),
             "acme / widget".to_string(),
             "https://github.com/acme/widget".to_string(),
             "v1.0.0".to_string(),
@@ -1147,19 +1405,19 @@ mod tests {
             "status_fase".to_string(),
             "project_name".to_string(),
             "repo_url".to_string(),
-            "repo_version".to_string(),
+            "repo_analised_version".to_string(),
             "ultima_versao_online".to_string(),
             "lote_id".to_string(),
         ]];
         let mut data = Vec::new();
         for i in 0..21u32 {
             data.push(vec![
-                "CONCLUIDO".to_string(),
-                "F4".to_string(),
+                "".to_string(),
+                "".to_string(),
                 format!("acme / r{i}"),
                 format!("https://github.com/acme/r{i}"),
                 "v1.0.0".to_string(),
-                "".to_string(),
+                "v1.0.0".to_string(),
                 "L".to_string(),
             ]);
         }
@@ -1174,9 +1432,8 @@ mod tests {
         };
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
-        assert_eq!(updates.len(), 2);
-        assert_eq!(updates[0].len(), 40);
-        assert_eq!(updates[1].len(), 2);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].len(), 63);
         assert_eq!(
             github.calls.load(std::sync::atomic::Ordering::Relaxed),
             21
@@ -1399,7 +1656,7 @@ mod tests {
             "repo_url".to_string(),
             "ultima_versao_online".to_string(),
             "status_atualizacao".to_string(),
-            "repo_version".to_string(),
+            "repo_analised_version".to_string(),
             "status_fase".to_string(),
             "lote_id".to_string(),
         ]];
@@ -1407,9 +1664,9 @@ mod tests {
             "acme / widget".to_string(),
             "https://github.com/acme/widget".to_string(),
             "".to_string(),
-            "CONCLUIDO".to_string(),
+            "".to_string(),
             "v1.0.0".to_string(),
-            "F4".to_string(),
+            "".to_string(),
             "L1".to_string(),
         ]];
 
@@ -1428,6 +1685,7 @@ mod tests {
         assert_eq!(updates.len(), 1);
         let ranges = &updates[0];
         assert!(ranges.get("D2:D2").is_some());
+        assert!(ranges.get("F2:F2").is_some());
         assert!(ranges.get("C2:C2").is_some());
     }
 }
