@@ -1242,8 +1242,14 @@ fn resolve_row_number_by_repo_url_and_lote_id(
 fn read_status_atualizacao_e_fase(
     spreadsheet_id: &str,
     row_number_1based: u32,
+    cols: MasterCols,
 ) -> io::Result<(String, String)> {
-    let range = format!("A{row_number_1based}:B{row_number_1based}");
+    let required = [cols.status_atualizacao_idx, cols.status_fase_idx];
+    let min_idx = *required.iter().min().unwrap_or(&0);
+    let max_idx = *required.iter().max().unwrap_or(&0);
+    let start_col = col_idx_to_a1(min_idx);
+    let end_col = col_idx_to_a1(max_idx);
+    let range = format!("{start_col}{row_number_1based}:{end_col}{row_number_1based}");
     let result = call_mcp(
         "get_sheet_data",
         json!({
@@ -1255,17 +1261,40 @@ fn read_status_atualizacao_e_fase(
     )?;
     let values = extract_values_2d(&result).unwrap_or_default();
     let row = values.first().cloned().unwrap_or_default();
-    let status_atualizacao = row.first().map(|s| s.trim().to_string()).unwrap_or_default();
-    let status_fase = row.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
+    let get = |abs_idx: usize| -> String {
+        let rel = abs_idx.saturating_sub(min_idx);
+        row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+    };
+    let status_atualizacao = get(cols.status_atualizacao_idx);
+    let status_fase = get(cols.status_fase_idx);
     Ok((status_atualizacao, status_fase))
+}
+
+#[derive(Clone, Copy)]
+struct MasterCols {
+    status_atualizacao_idx: usize,
+    status_fase_idx: usize,
+}
+
+fn resolve_master_cols(header_row: &[String]) -> io::Result<MasterCols> {
+    let status_atualizacao_idx = find_col_idx(header_row, "status_atualizacao")
+        .ok_or_else(|| io::Error::other("Header missing status_atualizacao"))?;
+    let status_fase_idx =
+        find_col_idx(header_row, "status_fase").ok_or_else(|| io::Error::other("Header missing status_fase"))?;
+    Ok(MasterCols {
+        status_atualizacao_idx,
+        status_fase_idx,
+    })
 }
 
 fn update_status_fase_only(
     spreadsheet_id: &str,
     row_number_1based: u32,
+    cols: MasterCols,
     status_fase: &str,
 ) -> io::Result<()> {
-    let range = format!("B{row_number_1based}:B{row_number_1based}");
+    let col = col_idx_to_a1(cols.status_fase_idx);
+    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
     let _ = call_mcp(
         "batch_update_cells",
         json!({
@@ -1282,11 +1311,14 @@ fn update_status_fase_only(
 fn update_status_atualizacao_e_fase(
     spreadsheet_id: &str,
     row_number_1based: u32,
+    cols: MasterCols,
     status_atualizacao: &str,
     status_fase: &str,
 ) -> io::Result<()> {
-    let range_a = format!("A{row_number_1based}:A{row_number_1based}");
-    let range_b = format!("B{row_number_1based}:B{row_number_1based}");
+    let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
+    let fase_col = col_idx_to_a1(cols.status_fase_idx);
+    let range_a = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
+    let range_b = format!("{fase_col}{row_number_1based}:{fase_col}{row_number_1based}");
     let _ = call_mcp(
         "batch_update_cells",
         json!({
@@ -1431,8 +1463,10 @@ async fn main() -> io::Result<()> {
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
         let row_number =
             resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
+        let header_row = read_master_header(&spreadsheet_id)?;
+        let cols = resolve_master_cols(&header_row)?;
         let (status_atualizacao, _status_fase) =
-            read_status_atualizacao_e_fase(&spreadsheet_id, row_number)?;
+            read_status_atualizacao_e_fase(&spreadsheet_id, row_number, cols)?;
         if status_atualizacao.trim() != "APROVADO_PARA_ENXAME" {
             info!(
                 repo_id = %repo_id,
@@ -1483,15 +1517,17 @@ async fn main() -> io::Result<()> {
         if let Ok(spreadsheet_id) = std::env::var("GOOGLE_SHEETS_ID") {
             let row_number =
                 resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
+            let header_row = read_master_header(&spreadsheet_id)?;
+            let cols = resolve_master_cols(&header_row)?;
             let (status_atualizacao, _status_fase) =
-                read_status_atualizacao_e_fase(&spreadsheet_id, row_number)?;
+                read_status_atualizacao_e_fase(&spreadsheet_id, row_number, cols)?;
             if status_atualizacao == "PENDENTE_FASE_0" {
                 info!(
                     row_number,
                     "Orquestrador: gatilho HITL detectado (PENDENTE_FASE_0). Executando apenas F0"
                 );
                 let phase0_ms = run_phase_binary("f0_harvester_cli", &repo_id).await?;
-                update_status_fase_only(&spreadsheet_id, row_number, "FASE_0_OK")?;
+                update_status_fase_only(&spreadsheet_id, row_number, cols, "FASE_0_OK")?;
                 info!(
                     phase0_ms,
                     row_number,
@@ -1726,9 +1762,12 @@ async fn main() -> io::Result<()> {
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+    let header_row = read_master_header(&spreadsheet_id)?;
+    let cols = resolve_master_cols(&header_row)?;
     update_status_atualizacao_e_fase(
         &spreadsheet_id,
         row_number,
+        cols,
         "CONCLUIDO_AGUARDANDO",
         "FASE_4_SYNTHESIZER_OK",
     )?;
