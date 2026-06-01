@@ -791,7 +791,10 @@ async fn main() -> io::Result<()> {
         "error" => tracing::Level::ERROR,
         _ => tracing::Level::INFO,
     };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    tracing_subscriber::fmt()
+        .with_max_level(level)
+        .with_ansi(true)
+        .init();
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;

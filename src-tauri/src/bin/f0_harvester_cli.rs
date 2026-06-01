@@ -14,6 +14,7 @@ use tracing::{error, info};
 use url::Url;
 
 const STATUS_GATE_HARVESTER: &str = "APROVADO_PARA_HARVESTER";
+const STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO: &str = "CONCLUIDO_AGUARDANDO";
 const STATUS_FASE_F0_OK: &str = "FASE_0_HARVESTER_OK";
 
 fn workspace_root() -> io::Result<PathBuf> {
@@ -445,21 +446,25 @@ async fn read_status_atualizacao_at_row(
         .unwrap_or_default())
 }
 
-async fn update_status_fase_only(
+async fn update_status_atualizacao_e_fase(
     spreadsheet_id: &str,
     row_number_1based: u32,
     cols: MasterCols,
+    status_atualizacao: &str,
     status_fase: &str,
 ) -> Result<(), String> {
-    let col = col_idx_to_a1(cols.status_fase_idx);
-    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+    let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
+    let fase_col = col_idx_to_a1(cols.status_fase_idx);
+    let status_range = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
+    let fase_range = format!("{fase_col}{row_number_1based}:{fase_col}{row_number_1based}");
     let _ = call_mcp(
         "batch_update_cells",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
             "ranges": {
-                range: [[status_fase]]
+                status_range: [[status_atualizacao]],
+                fase_range: [[status_fase]]
             }
         }),
     )
@@ -561,7 +566,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             info!(repo_id = %repo_id, "CLI: Status F0_OK persistido; exportando relatório local");
             let report_path = write_f0_report(&root_dir, &conn_arc, &repo_id)?;
-            update_status_fase_only(&spreadsheet_id, row_number, cols, STATUS_FASE_F0_OK)
+            update_status_atualizacao_e_fase(
+                &spreadsheet_id,
+                row_number,
+                cols,
+                STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO,
+                STATUS_FASE_F0_OK,
+            )
                 .await
                 .map_err(io::Error::other)?;
             info!(

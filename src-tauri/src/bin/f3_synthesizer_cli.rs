@@ -1279,6 +1279,28 @@ fn update_status_fase_only(
     Ok(())
 }
 
+fn update_status_atualizacao_e_fase(
+    spreadsheet_id: &str,
+    row_number_1based: u32,
+    status_atualizacao: &str,
+    status_fase: &str,
+) -> io::Result<()> {
+    let range_a = format!("A{row_number_1based}:A{row_number_1based}");
+    let range_b = format!("B{row_number_1based}:B{row_number_1based}");
+    let _ = call_mcp(
+        "batch_update_cells",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "ranges": {
+                range_a: [[status_atualizacao]],
+                range_b: [[status_fase]]
+            }
+        }),
+    )?;
+    Ok(())
+}
+
 fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Result<bool> {
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
@@ -1404,22 +1426,30 @@ async fn main() -> io::Result<()> {
     let mut n4_skip_columns: Vec<&'static str> = Vec::new();
     let mut n4_sheet_proposta: Option<String> = None;
     let mut n4_sheet_categoria: Option<String> = None;
-    if e2e_full && skip_harvester {
+    if skip_harvester || !e2e_full {
         let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
         let row_number =
             resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
-        let (status_atualizacao, _status_fase) = read_status_atualizacao_e_fase(&spreadsheet_id, row_number)?;
+        let (status_atualizacao, _status_fase) =
+            read_status_atualizacao_e_fase(&spreadsheet_id, row_number)?;
         if status_atualizacao.trim() != "APROVADO_PARA_ENXAME" {
             info!(
                 repo_id = %repo_id,
                 row_number,
                 status_atualizacao = %status_atualizacao,
                 expected = "APROVADO_PARA_ENXAME",
-                "N4: skip (fora do gatilho rígido)"
+                "N4/N5: skip (fora do gatilho rígido)"
             );
             return Ok(());
         }
+    }
+
+    if e2e_full && skip_harvester {
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+        let row_number =
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
 
         let blobs = count_raw_blobs_distinct(&conn, &repo_id)?;
         if blobs < 11 {
@@ -1693,6 +1723,15 @@ async fn main() -> io::Result<()> {
             "E2E: atualização enviada, mas confirmação via leitura não bateu",
         ));
     }
+
+    let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+        .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+    update_status_atualizacao_e_fase(
+        &spreadsheet_id,
+        row_number,
+        "CONCLUIDO_AGUARDANDO",
+        "FASE_4_SYNTHESIZER_OK",
+    )?;
 
     let width_a_to_cf = inspect_row_width_a_to_cf(row_number)?;
     info!(width_a_to_cf, "E2E: inspeção pós-write (A:CF) para largura do row");
