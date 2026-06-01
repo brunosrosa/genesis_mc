@@ -6,7 +6,7 @@ param(
     [string]$Choice = "",
     [switch]$DryRun,
     [switch]$Yes,
-    [string]$RepoId = "aaif-goose/goose"
+    [string]$RepoId = ""
 )
 try { Clear-Host } catch {}
 
@@ -16,7 +16,10 @@ Write-Host "================================================================" -F
 
 # 1. BLINDAGEM DE AMBIENTE: CARREGA O .ENV PARA A RAM
 Write-Host "`n[+] Calibrando Reator: Injetando chaves do .env na memória..." -ForegroundColor DarkGray
-$envPath = Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")) ".env"
+$rootCandidate = Join-Path $PSScriptRoot ".."
+$rootResolved = $rootCandidate
+try { $rootResolved = (Resolve-Path -LiteralPath $rootCandidate -ErrorAction Stop).Path } catch {}
+$envPath = Join-Path $rootResolved ".env"
 if (Test-Path $envPath) {
     Get-Content $envPath | ForEach-Object {
         if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)\s*$') {
@@ -56,6 +59,25 @@ if (-not (Test-Path $cargoManifest)) {
     exit
 }
 
+$isDryRun = $false
+if ($PSBoundParameters.ContainsKey('DryRun')) {
+    $isDryRun = $true
+} else {
+    $envDry = $env:SODA_DRY_RUN
+    if ($envDry -and ($envDry -match '^(1|true|yes|y|sim|s)$')) {
+        $isDryRun = $true
+    } elseif (-not $PSBoundParameters.ContainsKey('Yes')) {
+        $mode = Read-Host "Modo de execução: [1] Normal  [2] Dry-run (1 rodada)"
+        $isDryRun = ($mode -match '^\s*2\s*$')
+    }
+}
+
+if ($isDryRun) {
+    Write-Host "`nMODO: DRY-RUN ATIVO" -ForegroundColor Black -BackgroundColor Yellow
+} else {
+    Write-Host "`nMODO: EXECUÇÃO NORMAL" -ForegroundColor Black -BackgroundColor DarkGray
+}
+
 # 2. O MENU DE MÁQUINA DE ESTADOS (DAG V5)
 Write-Host "`nSELECIONE A ENGRENAGEM DE EXECUÇÃO:" -ForegroundColor Yellow
 Write-Host "----------------------------------------------------------------" -ForegroundColor Cyan
@@ -66,29 +88,19 @@ Write-Host "             (Puxa nomes oficiais e versões do GitHub via Idempotê
 Write-Host " [2] 🛰️  N2 - Batedor FinOps (Fase -0.5) (IA Flash)" -ForegroundColor White
 Write-Host "             (Busca README truncado + JSON Mode barato + Triagem Estruturada)"
 Write-Host " [3] 🚜  N3 - Harvester Local (Fase 0)" -ForegroundColor White
-Write-Host "             (Extração local O(1) para o SQLite Vault do RAW (Blobs)) (Custo Zero)"
+Write-Host "             (Extração local O(1) para o SQLite Vault do RAW (Blobs)) (Custo Zero) (gatilho: APROVADO_PARA_HARVESTER)"
 Write-Host " [4] 🧠  N4 - Motor Cloud Cognitivo (Fases 1, 2, 3 e 4) (IA Heavy)" -ForegroundColor White
-Write-Host "             (Destilador de Essências + Enxame IAs + Sintetizador + Injeção no GSheets)"
+Write-Host "             (Destilador + Enxame + Sintetizador + Injeção no GSheets) (gatilho: APROVADO_PARA_ENXAME)"
 Write-Host " [5] 🤹🏻‍♀️  N5 - Revisão ETL Cognitivo Pesado (Fases 3 e 4) (IA Heavy)" -ForegroundColor White
-Write-Host "             (Sintetizador com Pydantic + Escrita (Injeção) no GSheets)"
-Write-Host " [6] 🔬  N6 - Motor de Decomposição (Fase 5 - DEEP COMPONENTS) (ESQUELETO)" -ForegroundColor White
-Write-Host "             (Fatia ferramentas CORE em subcomponentes na aba Deep - ESQUELETO)"
+Write-Host "             (Sintetizador + Escrita (Injeção) no GSheets) (gatilho: APROVADO_PARA_ENXAME)"
+Write-Host " [6] 🔬  N6 - Deep Components Formatter (Fase 5)" -ForegroundColor White
+Write-Host "             (Escreve a aba DEEP_COMPONENTS) (gatilho: APROVADO_DEEP_COMPONENTS_ANALYSIS)"
 Write-Host " [X] 🛑  Abortar Ignição" -ForegroundColor Red
 Write-Host "----------------------------------------------------------------" -ForegroundColor Cyan
 
 $choice = $Choice
 if (-not $choice) {
     $choice = Read-Host "`nArquiteto, informe a rota de voo"
-}
-
-$isDryRun = $false
-if ($PSBoundParameters.ContainsKey('DryRun')) {
-    $isDryRun = $true
-} elseif ($PSBoundParameters.ContainsKey('Yes') -and $choice) {
-    $isDryRun = $false
-} else {
-    $dryRunInput = Read-Host "🧪 Ativar dry-run (1 rodada, sem loop infinito)? (S/N)"
-    $isDryRun = ($dryRunInput -match '^[sS]$')
 }
 
 # 3. ROTEAMENTO DE COMANDOS RUST (HITL)
@@ -113,22 +125,30 @@ switch ($choice) {
     }
     '3' {
         $bin = "f0_harvester_cli"
-        $binArgs = @("--repo", $RepoId)
+        $effectiveRepo = $RepoId
+        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
+        $binArgs = @("--repo", $effectiveRepo)
         $phaseName = "Fase 0 (HARVESTER LOCAL)"
     }
     '4' {
         $bin = "f3_synthesizer_cli"
-        $binArgs = @("--repo", $RepoId, "--e2e-full", "--skip-harvester")
+        $effectiveRepo = $RepoId
+        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
+        $binArgs = @("--repo", $effectiveRepo, "--e2e-full", "--skip-harvester")
         $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO)"
     }
     '5' {
         $bin = "f3_synthesizer_cli"
-        $binArgs = @("--repo", $RepoId)
+        $effectiveRepo = $RepoId
+        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
+        $binArgs = @("--repo", $effectiveRepo)
         $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO)"
     }
     '6' {
-        Write-Host "`n🔬 N6 (Fase 5) ainda é ESQUELETO. Nenhuma ação foi executada." -ForegroundColor Yellow
-        exit
+        $bin = "f5_deep_formatter_cli"
+        $binArgs = @()
+        if ($isDryRun) { $binArgs = @("--dry-run") }
+        $phaseName = "Fase 5 (DEEP COMPONENTS FORMATTER)"
     }
     'X' {
         Write-Host "`n🛑 Ignição abortada. O motor permanece em repouso." -ForegroundColor Yellow
