@@ -1,5 +1,5 @@
 # ==============================================================================
-# SODA IGNITION MATRIX V5 - ORQUESTRADOR BARE-METAL (JANELA DE VIDRO)
+# SODA ETL IGNITION MATRIX V5 - ORQUESTRADOR BARE-METAL (JANELA DE VIDRO)
 # ==============================================================================
 
 param(
@@ -11,7 +11,7 @@ param(
 try { Clear-Host } catch {}
 
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " 🦅 SODA GENESIS MC - PAINEL DE IGNIÇÃO V5 (JANELA DE VIDRO)" -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host " 🦅 SODA GENESIS MC - PAINEL DE IGNIÇÃO ETL V5 (JANELA DE VIDRO)" -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host "================================================================" -ForegroundColor Cyan
 
 # 1. BLINDAGEM DE AMBIENTE: CARREGA O .ENV PARA A RAM
@@ -126,9 +126,13 @@ switch ($choice) {
     '3' {
         $bin = "f0_harvester_cli"
         $effectiveRepo = $RepoId
-        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
-        $binArgs = @("--repo", $effectiveRepo)
-        $phaseName = "Fase 0 (HARVESTER LOCAL)"
+        if ($effectiveRepo) {
+            $binArgs = @("--repo", $effectiveRepo)
+            $phaseName = "Fase 0 (HARVESTER LOCAL)"
+        } else {
+            $binArgs = @("--batch")
+            $phaseName = "Fase 0 (HARVESTER LOCAL) [BATCH]"
+        }
     }
     '4' {
         $bin = "f3_synthesizer_cli"

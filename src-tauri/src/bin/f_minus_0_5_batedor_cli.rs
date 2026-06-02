@@ -999,7 +999,7 @@ mod tests {
         };
         let out = BatedorOut {
             proposta_original_resumo: "Ferramenta CLI para triagem barata.".to_string(),
-            categoria_arquitetural: "Tooling_Dev".to_string(),
+            categoria_arquitetural: "Tooling_Dev - CLI_Utilities".to_string(),
         };
         assert!(validate_batedor_out(&out).is_ok());
         let ranges = build_success_ranges(&cols, 2, &out);
@@ -1010,7 +1010,7 @@ mod tests {
 
         let bad = BatedorOut {
             proposta_original_resumo: "".to_string(),
-            categoria_arquitetural: "Tooling_Dev".to_string(),
+            categoria_arquitetural: "Tooling_Dev - CLI_Utilities".to_string(),
         };
         assert!(validate_batedor_out(&bad).is_err());
     }
