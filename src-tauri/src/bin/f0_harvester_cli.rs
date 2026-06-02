@@ -1,5 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -19,6 +20,20 @@ const STATUS_GATE_HARVESTER: &str = "APROVADO_PARA_HARVESTER";
 const STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO: &str = "CONCLUIDO_AGUARDANDO";
 const STATUS_FASE_F0_OK: &str = "FASE_0_HARVESTER_OK";
 const STATUS_ERRO_F0: &str = "ERRO_F0";
+
+const EXPECTED_F0_BLOBS: [&str; 11] = [
+    "blob_01_promessa_readme",
+    "blob_02_dependency_manifest",
+    "blob_03_test_intent",
+    "blob_04_repo_outline",
+    "blob_05_architecture_map",
+    "blob_06_unsafe_hotspots",
+    "blob_07_ops_blueprint",
+    "blob_08_health_report",
+    "blob_09_community_meta",
+    "blob_10_soda_canon_context",
+    "blob_11_ux_contracts",
+];
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -271,6 +286,53 @@ struct BatchCandidate {
     row_number_1based: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RepoOutcome {
+    Success,
+    Skipped,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RepoBatchSummary {
+    repo_id: String,
+    row_number_1based: u32,
+    outcome: RepoOutcome,
+    elapsed_ms: u128,
+    blobs_present: Vec<String>,
+    blobs_missing: Vec<String>,
+    report_path: Option<PathBuf>,
+    error: Option<String>,
+}
+
+fn read_repo_blobs_present(conn: &Connection, repo_id: &str) -> io::Result<Vec<String>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT artifact_type
+             FROM artefatos_brutos
+             WHERE repo_id = ?1 AND artifact_type LIKE 'blob_%'
+             ORDER BY artifact_type",
+        )
+        .map_err(io::Error::other)?;
+    let rows = stmt
+        .query_map([repo_id], |row| row.get::<_, String>(0))
+        .map_err(io::Error::other)?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r.map_err(io::Error::other)?);
+    }
+    Ok(out)
+}
+
+fn compute_missing_blobs(present: &[String]) -> Vec<String> {
+    let set = present.iter().cloned().collect::<BTreeSet<_>>();
+    EXPECTED_F0_BLOBS
+        .iter()
+        .filter(|t| !set.contains(**t))
+        .map(|t| t.to_string())
+        .collect()
+}
+
 async fn fetch_harvester_batch_candidates(
     spreadsheet_id: &str,
 ) -> Result<(Vec<BatchCandidate>, MasterCols), String> {
@@ -329,7 +391,7 @@ async fn process_one_repo_f0(
     repo_id: &str,
     row_number_1based: u32,
     batch_index: Option<(usize, usize)>,
-) -> io::Result<()> {
+) -> RepoBatchSummary {
     let started = Instant::now();
     if let Some((idx, total)) = batch_index {
         info!(
@@ -345,7 +407,7 @@ async fn process_one_repo_f0(
 
     let status_atualizacao = read_status_atualizacao_at_row(spreadsheet_id, row_number_1based, cols)
         .await
-        .map_err(io::Error::other)?;
+        .unwrap_or_default();
     if status_atualizacao.trim() != STATUS_GATE_HARVESTER {
         info!(
             repo_id = %repo_id,
@@ -354,15 +416,77 @@ async fn process_one_repo_f0(
             expected = STATUS_GATE_HARVESTER,
             "F0: skip (fora do gatilho rígido)"
         );
-        return Ok(());
+        return RepoBatchSummary {
+            repo_id: repo_id.to_string(),
+            row_number_1based,
+            outcome: RepoOutcome::Skipped,
+            elapsed_ms: started.elapsed().as_millis(),
+            blobs_present: Vec::new(),
+            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            report_path: None,
+            error: None,
+        };
     }
 
-    let conn = Connection::open(db_path).map_err(io::Error::other)?;
-    ensure_phase1_schema(&conn)?;
+    let conn = match Connection::open(db_path).map_err(io::Error::other) {
+        Ok(conn) => conn,
+        Err(e) => {
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based,
+                outcome: RepoOutcome::Error,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: Vec::new(),
+                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                report_path: None,
+                error: Some(e.to_string()),
+            };
+        }
+    };
+    if let Err(e) = ensure_phase1_schema(&conn) {
+        return RepoBatchSummary {
+            repo_id: repo_id.to_string(),
+            row_number_1based,
+            outcome: RepoOutcome::Error,
+            elapsed_ms: started.elapsed().as_millis(),
+            blobs_present: Vec::new(),
+            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            report_path: None,
+            error: Some(e.to_string()),
+        };
+    }
 
     let repo_url_str = format!("https://github.com/{}", repo_id);
-    let repo_url = Url::parse(&repo_url_str).map_err(io::Error::other)?;
-    let now = now_epoch_secs()?;
+    let repo_url = match Url::parse(&repo_url_str).map_err(io::Error::other) {
+        Ok(url) => url,
+        Err(e) => {
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based,
+                outcome: RepoOutcome::Error,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: Vec::new(),
+                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                report_path: None,
+                error: Some(e.to_string()),
+            };
+        }
+    };
+    let now = match now_epoch_secs() {
+        Ok(now) => now,
+        Err(e) => {
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based,
+                outcome: RepoOutcome::Error,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: Vec::new(),
+                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                report_path: None,
+                error: Some(e.to_string()),
+            };
+        }
+    };
 
     conn.execute(
         "INSERT INTO repositorios (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
@@ -385,7 +509,8 @@ async fn process_one_repo_f0(
             0
         ],
     )
-    .map_err(io::Error::other)?;
+    .map_err(io::Error::other)
+    .unwrap_or(0);
 
     let conn_arc = Arc::new(Mutex::new(conn));
 
@@ -436,24 +561,44 @@ async fn process_one_repo_f0(
     }
     hb.abort();
 
+    let (mut blobs_present, mut blobs_missing) = {
+        let present = match conn_arc.lock() {
+            Ok(conn_lock) => read_repo_blobs_present(&conn_lock, repo_id).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+        let missing = compute_missing_blobs(&present);
+        (present, missing)
+    };
+
     match res {
         Ok(_) => {
-            {
-                let conn_lock = conn_arc.lock().map_err(|e| {
-                    io::Error::other(format!("Falha ao adquirir lock do banco após F0: {}", e))
-                })?;
-                conn_lock
-                    .execute(
-                    "UPDATE repositorios
-                     SET status_processamento = ?1,
-                         timestamp_fase_1 = ?2
-                     WHERE project_name = ?3",
-                    params!["F0_OK", now_epoch_secs()?, repo_id],
-                    )
-                    .map_err(io::Error::other)?;
+            let mut post_error: Option<String> = None;
+            if let Ok(conn_lock) = conn_arc.lock() {
+                match now_epoch_secs() {
+                    Ok(now) => {
+                        if let Err(e) = conn_lock.execute(
+                            "UPDATE repositorios
+                             SET status_processamento = ?1,
+                                 timestamp_fase_1 = ?2
+                             WHERE project_name = ?3",
+                            params!["F0_OK", now, repo_id],
+                        ) {
+                            post_error = Some(e.to_string());
+                        }
+                    }
+                    Err(e) => post_error = Some(e.to_string()),
+                }
+            } else {
+                post_error = Some("Falha ao adquirir lock do banco após F0".to_string());
             }
 
-            let report_path = write_f0_report(root_dir, &conn_arc, repo_id)?;
+            let report_path = match write_f0_report(root_dir, &conn_arc, repo_id) {
+                Ok(p) => Some(p),
+                Err(e) => {
+                    post_error = Some(e.to_string());
+                    None
+                }
+            };
             update_status_atualizacao_e_fase(
                 spreadsheet_id,
                 row_number_1based,
@@ -462,14 +607,33 @@ async fn process_one_repo_f0(
                 STATUS_FASE_F0_OK,
             )
             .await
-            .map_err(io::Error::other)?;
-            info!(
-                repo_id = %repo_id,
-                row_number = row_number_1based,
-                report = %report_path.display(),
-                elapsed_ms = started.elapsed().as_millis(),
-                "F0: concluído"
-            );
+            .ok();
+            if let Some(ref path) = report_path {
+                info!(
+                    repo_id = %repo_id,
+                    row_number = row_number_1based,
+                    report = %path.display(),
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "F0: concluído"
+                );
+            } else {
+                info!(
+                    repo_id = %repo_id,
+                    row_number = row_number_1based,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "F0: concluído (sem relatório)"
+                );
+            }
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based,
+                outcome: RepoOutcome::Success,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: std::mem::take(&mut blobs_present),
+                blobs_missing: std::mem::take(&mut blobs_missing),
+                report_path,
+                error: post_error,
+            };
         }
         Err(e) => {
             error!(
@@ -478,10 +642,7 @@ async fn process_one_repo_f0(
                 error = %e,
                 "F0: falha fatal (fail-soft por repo)"
             );
-            {
-                let conn_lock = conn_arc.lock().map_err(|lock_err| {
-                    io::Error::other(format!("Falha ao adquirir lock do banco no erro da F0: {}", lock_err))
-                })?;
+            if let Ok(conn_lock) = conn_arc.lock() {
                 let _ = conn_lock.execute(
                     "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
                     params![STATUS_ERRO_F0, repo_id],
@@ -495,11 +656,18 @@ async fn process_one_repo_f0(
                 STATUS_ERRO_F0,
             )
             .await;
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based,
+                outcome: RepoOutcome::Error,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: std::mem::take(&mut blobs_present),
+                blobs_missing: std::mem::take(&mut blobs_missing),
+                report_path: None,
+                error: Some(e.to_string()),
+            };
         }
     };
-
-    tokio::task::yield_now().await;
-    Ok(())
 }
 
 async fn poll_for_jsonrpc_response_from_reader<R>(
@@ -787,12 +955,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             gate = STATUS_GATE_HARVESTER,
             "SODA F0 (Harvester/Zero-IA): modo batch sequencial"
         );
+        let batch_started = Instant::now();
         let (candidates, cols) =
             fetch_harvester_batch_candidates(&spreadsheet_id).await.map_err(io::Error::other)?;
         info!(count = candidates.len(), "F0(batch): fila carregada");
         let total = candidates.len();
+        let mut results: Vec<RepoBatchSummary> = Vec::new();
         for (idx, item) in candidates.into_iter().enumerate() {
-            let _ = process_one_repo_f0(
+            let summary = process_one_repo_f0(
                 &root_dir,
                 &db_path,
                 &spreadsheet_id,
@@ -802,7 +972,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some((idx + 1, total)),
             )
             .await;
+            results.push(summary);
             sleep_between_repos_jitter().await;
+        }
+        let total_elapsed_ms = batch_started.elapsed().as_millis();
+        let mut ok_count = 0usize;
+        let mut error_count = 0usize;
+        let mut skipped_count = 0usize;
+        let mut processed_elapsed_ms: u128 = 0;
+        let mut processed_count: u128 = 0;
+        for r in &results {
+            match r.outcome {
+                RepoOutcome::Success => {
+                    ok_count += 1;
+                    processed_count += 1;
+                    processed_elapsed_ms = processed_elapsed_ms.saturating_add(r.elapsed_ms);
+                }
+                RepoOutcome::Error => {
+                    error_count += 1;
+                    processed_count += 1;
+                    processed_elapsed_ms = processed_elapsed_ms.saturating_add(r.elapsed_ms);
+                }
+                RepoOutcome::Skipped => skipped_count += 1,
+            }
+        }
+        let avg_ms = if processed_count == 0 {
+            0
+        } else {
+            processed_elapsed_ms / processed_count
+        };
+
+        info!(
+            total_candidates = total,
+            ok = ok_count,
+            error = error_count,
+            skipped = skipped_count,
+            total_elapsed_ms,
+            avg_ms,
+            "F0(batch): resumo final"
+        );
+        for r in &results {
+            match r.outcome {
+                RepoOutcome::Success => {
+                    info!(
+                        repo_id = %r.repo_id,
+                        row_number = r.row_number_1based,
+                        elapsed_ms = r.elapsed_ms,
+                        blobs = r.blobs_present.len(),
+                        missing = r.blobs_missing.len(),
+                        missing_list = ?r.blobs_missing,
+                        report = ?r.report_path.as_ref().map(|p| p.display().to_string()),
+                        "F0(batch): OK"
+                    );
+                }
+                RepoOutcome::Skipped => {
+                    info!(
+                        repo_id = %r.repo_id,
+                        row_number = r.row_number_1based,
+                        elapsed_ms = r.elapsed_ms,
+                        "F0(batch): SKIP"
+                    );
+                }
+                RepoOutcome::Error => {
+                    warn!(
+                        repo_id = %r.repo_id,
+                        row_number = r.row_number_1based,
+                        elapsed_ms = r.elapsed_ms,
+                        blobs = r.blobs_present.len(),
+                        missing = r.blobs_missing.len(),
+                        missing_list = ?r.blobs_missing,
+                        error = ?r.error,
+                        "F0(batch): ERRO"
+                    );
+                }
+            }
         }
         info!("F0(batch): concluído");
         return Ok(());
@@ -815,7 +1058,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("SODA F0 (Harvester/Zero-IA): execução isolada (1 repo)");
     let (row_number, cols, _min_idx) =
         gate_harvester_by_sheet(&spreadsheet_id, &repo_id).await.map_err(io::Error::other)?;
-    process_one_repo_f0(
+    let _ = process_one_repo_f0(
         &root_dir,
         &db_path,
         &spreadsheet_id,
@@ -824,7 +1067,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         row_number,
         None,
     )
-    .await?;
+    .await;
     Ok(())
 }
 
