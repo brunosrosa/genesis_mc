@@ -1,11 +1,11 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
-#[cfg(not(target_os = "windows"))]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 use url::Url;
 use sha2::{Digest, Sha256};
+#[cfg(target_os = "windows")]
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 #[cfg(not(target_os = "windows"))]
 use tokio::time::timeout;
 use super::ramdisk::RamdiskHandle;
@@ -55,6 +55,21 @@ pub enum CloneError {
 
     #[error("Clone operation timed out")]
     Timeout,
+}
+
+#[cfg(target_os = "windows")]
+fn github_auth_header_value() -> Option<HeaderValue> {
+    let token = std::env::var("GITHUB_TOKEN")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            std::env::var("GITHUB_PAT")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })?;
+    HeaderValue::from_str(&format!("Bearer {}", token)).ok()
 }
 
 pub struct BloblessCloner;
@@ -165,8 +180,14 @@ impl BloblessCloner {
         let (owner, repo) = Self::github_owner_repo(repo_url)?;
         let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
             .unwrap_or_else(|_| "https://api.github.com".to_string());
+        let mut headers = HeaderMap::new();
+        if let Some(value) = github_auth_header_value() {
+            headers.insert(AUTHORIZATION, value);
+        }
         let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(20))
             .user_agent("genesis-mc-harvester-projfs/1.0")
+            .default_headers(headers)
             .build()
             .map_err(|e| CloneError::NetworkError {
                 reason: format!("Falha ao criar cliente HTTP para ProjFS: {}", e),
@@ -446,7 +467,8 @@ impl BloblessCloner {
                 status
             };
 
-            let wait_result = timeout(Duration::from_secs(600), run_fut).await;
+            const CLONE_TIMEOUT_SECONDS: u64 = 600;
+            let wait_result = timeout(Duration::from_secs(CLONE_TIMEOUT_SECONDS), run_fut).await;
 
             if wait_result.is_err() {
                 // Timeout expirou! Matamos o processo de forma assíncrona
@@ -520,8 +542,13 @@ impl BloblessCloner {
                     let owner = segments.pop().unwrap_or_else(|| "owner".to_string());
                     let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
                         .unwrap_or_else(|_| "https://api.github.com".to_string());
+                    let mut headers = HeaderMap::new();
+                    if let Some(value) = github_auth_header_value() {
+                        headers.insert(AUTHORIZATION, value);
+                    }
                     if let Ok(client) = reqwest::Client::builder()
                         .user_agent("genesis-mc-harvester-git/1.0")
+                        .default_headers(headers)
                         .build()
                     {
                         let release_url = format!(

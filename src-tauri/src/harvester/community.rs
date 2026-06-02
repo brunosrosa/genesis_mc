@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use url::Url;
 use thiserror::Error;
 use std::time::Duration;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
 pub struct CommunityMetaPayload {
@@ -58,6 +59,20 @@ impl RateLimiter {
 pub struct CommunityMetaFetcher;
 
 impl CommunityMetaFetcher {
+    fn github_auth_header_value() -> Option<HeaderValue> {
+        let token = std::env::var("GITHUB_TOKEN")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                std::env::var("GITHUB_PAT")
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            })?;
+        HeaderValue::from_str(&format!("Bearer {}", token)).ok()
+    }
+
     async fn fetch_json<T: for<'de> Deserialize<'de>>(
         client: &reqwest::Client,
         limiter: &RateLimiter,
@@ -95,9 +110,14 @@ impl CommunityMetaFetcher {
         limiter: &RateLimiter,
         api_base: Option<&str>,
     ) -> Result<CommunityMetaPayload, FetchError> {
+        let mut headers = HeaderMap::new();
+        if let Some(value) = Self::github_auth_header_value() {
+            headers.insert(AUTHORIZATION, value);
+        }
         let client_result = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .user_agent("SODA-Harvester/1.0")
+            .default_headers(headers)
             .build();
         let client = client_result.map_err(|e| FetchError::Network(e.to_string()))?;
 

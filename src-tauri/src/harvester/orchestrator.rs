@@ -236,12 +236,24 @@ impl HarvesterOrchestrator {
         if tasks.contains(&ExtractionTask::ExtractOpsBlueprint) {
             let input = OpsInput { repo_path: &repo_path };
             info!(repo_id = %repo_id, "N9: Extraindo blob_07_ops_blueprint");
-            let payload = super::extract::OpsBlueprintExtractor::extract_blob(input).await.map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha critica ao empacotar blob_07_ops_blueprint");
-                OrchestratorError::ExtractionError(e.to_string())
-            })?;
-            blobs.push(payload);
-            log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+            match super::extract::OpsBlueprintExtractor::extract_blob(input).await {
+                Ok(payload) => {
+                    blobs.push(payload);
+                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                }
+                Err(e) => {
+                    warn!(
+                        repo_id = %repo_id,
+                        error = %e,
+                        "Falha ao extrair blob_07_ops_blueprint; seguindo com fail-soft"
+                    );
+                    blobs.push(ArtifactBlob {
+                        artifact_type: "blob_07_ops_blueprint".to_string(),
+                        payload_blob: b"# Ops Blueprint\n\nFallback: nenhum artefato de infra encontrado ou leitura falhou.\n".to_vec(),
+                    });
+                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                }
+            }
         }
 
         info!(repo_id = %repo_id, "N11: Extraindo blob_03_test_intent");

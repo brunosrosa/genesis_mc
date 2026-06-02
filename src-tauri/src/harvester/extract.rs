@@ -313,49 +313,57 @@ fn truncate_chars(content: &str, max_chars: usize) -> String {
     content.chars().take(max_chars).collect()
 }
 
-fn html_anchor_image_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r#"(?is)<a\b[^>]*>\s*<img\b[^>]*>\s*</a>"#)
-            .expect("regex de anchor+img do README deve ser valida")
-    })
+fn html_anchor_image_regex() -> Option<&'static Regex> {
+    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    REGEX
+        .get_or_init(|| Regex::new(r#"(?is)<a\b[^>]*>\s*<img\b[^>]*>\s*</a>"#).ok())
+        .as_ref()
 }
 
-fn html_image_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r#"(?is)<img\b[^>]*>"#)
-            .expect("regex de imagem HTML do README deve ser valida")
-    })
+fn html_image_regex() -> Option<&'static Regex> {
+    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    REGEX
+        .get_or_init(|| Regex::new(r#"(?is)<img\b[^>]*>"#).ok())
+        .as_ref()
 }
 
-fn markdown_badge_link_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r#"\[\!\[[^\]]*\]\([^)]+\)\]\([^)]+\)"#)
-            .expect("regex de badge markdown do README deve ser valida")
-    })
+fn markdown_badge_link_regex() -> Option<&'static Regex> {
+    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    REGEX
+        .get_or_init(|| Regex::new(r#"\[\!\[[^\]]*\]\([^)]+\)\]\([^)]+\)"#).ok())
+        .as_ref()
 }
 
-fn markdown_image_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r#"\!\[[^\]]*\]\([^)]+\)"#)
-            .expect("regex de imagem markdown do README deve ser valida")
-    })
+fn markdown_image_regex() -> Option<&'static Regex> {
+    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    REGEX
+        .get_or_init(|| Regex::new(r#"\!\[[^\]]*\]\([^)]+\)"#).ok())
+        .as_ref()
 }
 
 fn strip_html_badge_links(content: &str) -> String {
-    let no_anchor_images = html_anchor_image_regex().replace_all(content, "");
-    html_image_regex().replace_all(&no_anchor_images, "").into_owned()
+    let Some(anchor_re) = html_anchor_image_regex() else {
+        return content.to_string();
+    };
+    let Some(img_re) = html_image_regex() else {
+        return content.to_string();
+    };
+    let no_anchor_images = anchor_re.replace_all(content, "");
+    img_re.replace_all(&no_anchor_images, "").into_owned()
 }
 
 fn strip_markdown_badges(content: &str) -> String {
-    markdown_badge_link_regex().replace_all(content, "").into_owned()
+    let Some(re) = markdown_badge_link_regex() else {
+        return content.to_string();
+    };
+    re.replace_all(content, "").into_owned()
 }
 
 fn strip_markdown_images(content: &str) -> String {
-    markdown_image_regex().replace_all(content, "").into_owned()
+    let Some(re) = markdown_image_regex() else {
+        return content.to_string();
+    };
+    re.replace_all(content, "").into_owned()
 }
 
 fn normalize_blank_lines(content: &str) -> String {
@@ -1148,9 +1156,7 @@ impl OpsBlueprintExtractor {
 
                     if file_type.is_file() {
                         let file_name = entry.file_name().to_string_lossy().to_string();
-                        if (file_name.ends_with(".yml") || file_name.ends_with(".yaml"))
-                            && Self::is_whitelisted_workflow(&file_name)
-                        {
+                        if file_name.ends_with(".yml") || file_name.ends_with(".yaml") {
                             let path = entry.path();
                             let rel_path = format!(".github/workflows/{}", file_name);
                             if let Some(infra) = Self::read_infra_file(&path, &rel_path).await? {
@@ -1174,15 +1180,6 @@ impl OpsBlueprintExtractor {
         } else {
             Ok(OpsPayload { infra_files })
         }
-    }
-
-    fn is_whitelisted_workflow(file_name: &str) -> bool {
-        let lower = file_name.to_ascii_lowercase();
-        let allowed = ["deploy", "release", "build", "publish", "docker", "infra"];
-        let denied = ["test", "lint", "check", "ci", "unit", "integration"];
-
-        allowed.iter().any(|needle| lower.contains(needle))
-            && !denied.iter().any(|needle| lower.contains(needle))
     }
 
     async fn read_infra_file(path: &std::path::Path, rel_path: &str) -> Result<Option<InfraFile>, ExtractionError> {
@@ -2378,12 +2375,11 @@ require (
         let repo_path = RepoPath(dir.path().to_path_buf());
         let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await.unwrap();
         
-        // Dockerfile/Makefile não existem aqui, então apenas workflows whitelisted entram.
-        assert_eq!(result.infra_files.len(), 2);
+        assert_eq!(result.infra_files.len(), 4);
         assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/deploy.yaml"));
         assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/docker-release.yml"));
-        assert!(!result.infra_files.iter().any(|f| f.path == ".github/workflows/ci.yml"));
-        assert!(!result.infra_files.iter().any(|f| f.path == ".github/workflows/lint.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/ci.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/lint.yml"));
         assert!(!result.infra_files.iter().any(|f| f.path.contains("ignored.yml")));
     }
 

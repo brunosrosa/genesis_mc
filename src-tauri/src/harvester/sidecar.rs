@@ -983,7 +983,17 @@ impl JCodemunchSidecar {
         )
         .await?;
         let repo_outline_blob = normalize_repo_outline(&claude_md_bytes)?;
-        let architecture_map_blob = normalize_architecture_map(input.executor.repo_path())?;
+        let architecture_map_blob = match normalize_architecture_map(input.executor.repo_path()) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                tracing::warn!(
+                    repo_path = %input.executor.repo_path().display(),
+                    error = %e,
+                    "jcodemunch: blob_05_architecture_map falhou; aplicando fallback (fail-soft)"
+                );
+                b"# Architecture Map\n\nFallback: relacoes topologicas indisponiveis; blob_04_repo_outline preservado.\n".to_vec()
+            }
+        };
         tracing::info!(
             repo_path = %input.executor.repo_path().display(),
             repo_outline_bytes = repo_outline_blob.len(),

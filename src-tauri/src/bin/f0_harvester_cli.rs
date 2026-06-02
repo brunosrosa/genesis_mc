@@ -10,8 +10,10 @@ use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_str
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use tokio::io::AsyncBufReadExt;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use url::Url;
+use rand::rngs::OsRng;
+use rand::RngCore;
 
 const STATUS_GATE_HARVESTER: &str = "APROVADO_PARA_HARVESTER";
 const STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO: &str = "CONCLUIDO_AGUARDANDO";
@@ -236,6 +238,33 @@ fn try_extract_repo_id_from_repo_url(repo_url: &str) -> Option<String> {
     Some(format!("{owner}/{repo}"))
 }
 
+fn is_rate_limit_error_text(raw: &str) -> bool {
+    let s = raw.to_ascii_lowercase();
+    s.contains("rate limit")
+        || s.contains("api limit exceeded")
+        || s.contains("403")
+        || s.contains("http status client error (403")
+}
+
+fn jitter_ms_3_to_7_from_u32(v: u32) -> u64 {
+    3_000 + (v as u64 % 4_001)
+}
+
+fn backoff_ms_from_attempt(attempt: u32, jitter_seed: u32) -> u64 {
+    let base_ms = 3_000_u64;
+    let exp = 1_u64
+        .checked_shl(attempt.min(6))
+        .unwrap_or(64);
+    let jitter = jitter_seed as u64 % 1_000;
+    (base_ms.saturating_mul(exp)).saturating_add(jitter).min(60_000)
+}
+
+async fn sleep_between_repos_jitter() {
+    let mut rng = OsRng;
+    let ms = jitter_ms_3_to_7_from_u32(rng.next_u32());
+    tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BatchCandidate {
     repo_id: String,
@@ -375,7 +404,36 @@ async fn process_one_repo_f0(
         }
     });
 
-    let res = HarvesterOrchestrator::run(repo_id, &repo_url, Arc::clone(&conn_arc)).await;
+    let max_attempts: u32 = 4;
+    let mut attempt: u32 = 0;
+    let mut res: Result<(), genesis_mc_lib::harvester::orchestrator::OrchestratorError> = Ok(());
+    while attempt < max_attempts {
+        match HarvesterOrchestrator::run(repo_id, &repo_url, Arc::clone(&conn_arc)).await {
+            Ok(()) => {
+                res = Ok(());
+                break;
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                if is_rate_limit_error_text(&msg) && attempt + 1 < max_attempts {
+                    let mut rng = OsRng;
+                    let backoff_ms = backoff_ms_from_attempt(attempt, rng.next_u32());
+                    warn!(
+                        repo_id = %repo_id,
+                        attempt = attempt + 1,
+                        backoff_ms,
+                        error = %msg,
+                        "F0: rate limit detectado; aplicando backoff e retry"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                    attempt += 1;
+                    continue;
+                }
+                res = Err(e);
+                break;
+            }
+        }
+    }
     hb.abort();
 
     match res {
@@ -744,6 +802,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some((idx + 1, total)),
             )
             .await;
+            sleep_between_repos_jitter().await;
         }
         info!("F0(batch): concluído");
         return Ok(());
