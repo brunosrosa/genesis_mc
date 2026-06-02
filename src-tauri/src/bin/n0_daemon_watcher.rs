@@ -402,7 +402,9 @@ enum RouteDecision {
     N2,
     N3,
     N4,
+    #[allow(dead_code)]
     N5,
+    N6,
     ShortCircuit,
     Skip,
 }
@@ -419,7 +421,7 @@ fn route_for_status_atualizacao(raw: &str) -> RouteDecision {
         "INICIAR_TRIAGEM" => RouteDecision::N2,
         "APROVADO_PARA_HARVESTER" => RouteDecision::N3,
         "APROVADO_PARA_ENXAME" => RouteDecision::N4,
-        "APROVADO_DEEP_COMPONENTS_ANALYSIS" => RouteDecision::N5,
+        "APROVADO_DEEP_COMPONENTS_ANALYSIS" => RouteDecision::N6,
         _ => RouteDecision::Skip,
     }
 }
@@ -449,9 +451,40 @@ struct Telemetry {
     roteadas_n3: usize,
     roteadas_n4: usize,
     roteadas_n5: usize,
+    roteadas_n6: usize,
     roteadas_short_circuit: usize,
     erros_sheets: usize,
     erros_dispatch: usize,
+}
+
+fn ansi_wrap(style: &str, text: &str) -> String {
+    format!("\x1b[{style}m{text}\x1b[0m")
+}
+
+fn colored_kv(key: &str, value: usize, style: &str) -> String {
+    ansi_wrap(style, &format!("{key}={value}"))
+}
+
+fn format_telemetry_line(tel: &Telemetry) -> String {
+    let n1 = colored_kv("n1", tel.roteadas_n1, "97;44");
+    let n2 = colored_kv("n2", tel.roteadas_n2, "97;45");
+    let n3 = colored_kv("n3", tel.roteadas_n3, "30;42");
+    let n4 = colored_kv("n4", tel.roteadas_n4, "30;43");
+    let n5 = colored_kv("n5", tel.roteadas_n5, "30;46");
+    let n6 = colored_kv("n6", tel.roteadas_n6, "97;41");
+    format!(
+        "N0: rodada concluída | linhas={} | {} {} {} {} {} {} | short_circuit={} | erros_sheets={} | erros_dispatch={}",
+        tel.linhas_inspecionadas,
+        n1,
+        n2,
+        n3,
+        n4,
+        n5,
+        n6,
+        tel.roteadas_short_circuit,
+        tel.erros_sheets,
+        tel.erros_dispatch
+    )
 }
 
 struct DaemonConfig {
@@ -538,6 +571,7 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
                 RouteDecision::N3 => tel.roteadas_n3 += 1,
                 RouteDecision::N4 => tel.roteadas_n4 += 1,
                 RouteDecision::N5 => tel.roteadas_n5 += 1,
+                RouteDecision::N6 => tel.roteadas_n6 += 1,
                 RouteDecision::ShortCircuit => tel.roteadas_short_circuit += 1,
                 RouteDecision::Skip => {}
             }
@@ -660,18 +694,7 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
         let mut rng = OsRng;
         loop {
             let tel = self.run_once(spreadsheet_id).await;
-            info!(
-                linhas_inspecionadas = tel.linhas_inspecionadas,
-                n1 = tel.roteadas_n1,
-                n2 = tel.roteadas_n2,
-                n3 = tel.roteadas_n3,
-                n4 = tel.roteadas_n4,
-                n5 = tel.roteadas_n5,
-                short_circuit = tel.roteadas_short_circuit,
-                erros_sheets = tel.erros_sheets,
-                erros_dispatch = tel.erros_dispatch,
-                "N0: rodada concluída"
-            );
+            info!("{}", format_telemetry_line(&tel));
             let sleep = self.config.scan_sleep.compute_sleep(&mut rng);
             tokio::time::sleep(sleep).await;
         }
@@ -768,7 +791,10 @@ async fn main() -> io::Result<()> {
         "error" => tracing::Level::ERROR,
         _ => tracing::Level::INFO,
     };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    tracing_subscriber::fmt()
+        .with_max_level(level)
+        .with_ansi(true)
+        .init();
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
@@ -923,7 +949,7 @@ mod tests {
         );
         assert_eq!(
             route_for_status_atualizacao("APROVADO_DEEP_COMPONENTS_ANALYSIS"),
-            RouteDecision::N5
+            RouteDecision::N6
         );
         assert_eq!(
             route_for_status_atualizacao("REJEITADO_LIXO_TOXICO"),

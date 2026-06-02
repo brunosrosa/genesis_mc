@@ -16,8 +16,9 @@ use tracing::{info, warn};
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 const DEEP_COMPONENTS_SHEET: &str = "DEEP_COMPONENTS";
 
-const STATUS_PENDING_F5: &str = "PENDENTE_FASE_5";
-const STATUS_CONCLUIDO: &str = "CONCLUIDO";
+const STATUS_PENDING_F5: &str = "APROVADO_DEEP_COMPONENTS_ANALYSIS";
+const STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO: &str = "CONCLUIDO_AGUARDANDO";
+const STATUS_FASE_F5_OK: &str = "FASE_5_DEEP_COMPONENTS_OK";
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -719,7 +720,7 @@ fn update_parent_status_local(conn: &Connection, project_name: &str) -> Result<(
          SET status_atualizacao = ?2,
              status_fase = ?3
          WHERE project_name = ?1",
-        params![project_name, STATUS_CONCLUIDO, "F5"],
+        params![project_name, STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO, STATUS_FASE_F5_OK],
     );
     Ok(())
 }
@@ -896,14 +897,14 @@ async fn process_parent_row<S: SheetsClient, L: LlmClient>(
             "{status_col}{}:{status_col}{}",
             parent.row_number_1based, parent.row_number_1based
         ),
-        vec![vec![STATUS_CONCLUIDO.to_string()]],
+        vec![vec![STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO.to_string()]],
     );
     master_ranges.insert(
         format!(
             "{fase_col}{}:{fase_col}{}",
             parent.row_number_1based, parent.row_number_1based
         ),
-        vec![vec!["F5".to_string()]],
+        vec![vec![STATUS_FASE_F5_OK.to_string()]],
     );
     sheets
         .batch_update_cells(ctx.spreadsheet_id, MASTER_SOLUTIONS_SHEET, master_ranges)
@@ -985,7 +986,12 @@ async fn main() -> io::Result<()> {
         pending.truncate(max);
     }
 
-    info!(count = pending.len(), dry_run, "F5: candidatos com PENDENTE_FASE_5");
+    info!(
+        count = pending.len(),
+        dry_run,
+        gate = STATUS_PENDING_F5,
+        "F5: candidatos no gatilho rígido"
+    );
 
     if pending.is_empty() {
         return Ok(());
@@ -1052,7 +1058,7 @@ mod tests {
     }
 
     #[test]
-    fn gating_filters_only_pendente_fase_5() {
+    fn gating_filters_only_aprovado_deep_components_analysis() {
         let cols = MasterColumns {
             status_atualizacao_idx: 0,
             status_fase_idx: 1,
@@ -1072,7 +1078,7 @@ mod tests {
                 "L1".to_string(),
             ],
             vec![
-                "PENDENTE_FASE_5".to_string(),
+                "APROVADO_DEEP_COMPONENTS_ANALYSIS".to_string(),
                 "F4".to_string(),
                 "b".to_string(),
                 "https://github.com/b/b".to_string(),
