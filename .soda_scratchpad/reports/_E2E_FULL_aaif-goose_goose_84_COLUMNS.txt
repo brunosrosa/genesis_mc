@@ -1,0 +1,12 @@
+repo_id=aaif-goose/goose
+row_number=380
+model_used=deepseek/deepseek-v4-pro
+lote_id=LOTE_01_ALPHA
+latency_f0_ms=278607
+latency_f1_ms=86822
+latency_f2_ms=73953
+latency_f3_f4_ms=339504
+latency_total_ms=778886
+cost_f2_usd=0.025167
+cost_f3_f4_usd=0.050363
+cost_total_usd=0.075530

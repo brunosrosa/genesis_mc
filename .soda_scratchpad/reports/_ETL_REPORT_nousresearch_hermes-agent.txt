@@ -1,0 +1,135 @@
+
+
+=== FASE 0: HARVESTER @ 2026-05-27T21:23:15.611930500-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+artifact_type	payload_bytes
+blob_01_promessa_readme	6108
+blob_02_dependency_manifest	2048
+blob_03_test_intent	499600
+blob_04_repo_outline	2460
+blob_05_architecture_map	1972
+blob_06_unsafe_hotspots	54544
+blob_07_ops_blueprint	33593
+blob_08_health_report	74370
+blob_09_community_meta	522
+blob_10_soda_canon_context	3189
+blob_11_ux_contracts	14823
+
+
+=== FASE 1.5: DESTILADOR @ 2026-05-27T21:24:36.127414800-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+== ESSENCES ==
+essence_name	routing_zone	token_count	destination	payload_bytes
+_essence_01_promessa_readme	Green	1476	PassThrough	6070
+_essence_02_dependency_manifest	Green	661	PassThrough	2048
+_essence_03_test_intent	Red	116033	CloudCascade	11363
+_essence_04_repo_outline	Green	632	PassThrough	2452
+_essence_05_architecture_map	Green	594	PassThrough	1972
+_essence_06_unsafe_hotspots	Green	14069	PassThrough	54544
+_essence_07_ops_blueprint	Green	9036	PassThrough	33551
+_essence_08_health_report	Yellow	20535	LocalModel:C:\Users\rosas\Dev_Projects\genesis_mc\.soda_data\models\Qwen3.5-4B-Q4_K_M.gguf	30148
+_essence_09_community_meta	Green	207	PassThrough	522
+_essence_10_soda_canon_context	Green	854	PassThrough	3189
+_essence_11_ux_contracts	Green	3965	PassThrough	14823
+== PACKAGES ==
+package_name	payload_bytes
+A	35530
+B	7696
+C	124090
+
+
+=== FASE 2: ENXAME @ 2026-05-27T21:25:32.663765700-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+elapsed_ms=55993
+phase_status=F2_OK
+persisted_in=debates_enxame
+model_used={
+  "lens_a": "google/gemini-3.5-flash",
+  "lens_b": "deepseek/deepseek-v4-pro",
+  "lens_c": "qwen/qwen3.6-plus"
+}
+prompt_tokens=48207
+completion_tokens=6032
+total_tokens=54239
+total_cost_usd=0.019296
+
+
+== LENS A ==
+{
+  "bullets": [
+    "O 'UAU moment' reside no loop de aprendizado fechado com criação autônoma de skills e persistência serverless (Daytona/Modal), permitindo que o agente hiberne e acorde sob demanda sem custo ocioso, mantendo a continuidade cognitiva entre sessões.",
+    "A UX do terminal (TUI) com autocomplete de comandos slash, edição multilinha e renderização de markdown limpa mitiga o Flow-Debt e elimina o Layout Shift, proporcionando uma navegação espacial focada e neuro-inclusiva.",
+    "Alinhamento estratégico com o SODA através do Agent Communication Protocol (ACP) e do Tool Gateway, que servem como excelentes candidatos para Canibalização Cirúrgica, transmutando a lógica de orquestração para o nosso motor nativo em Rust.",
+    "O mecanismo de aprovação de edição (Edit Approval com diffs visuais) e a proteção estrita de credenciais reforçam o Cercadinho do Determinismo, garantindo que alterações estruturais passem pelo crivo do operador humano."
+  ],
+  "completion_tokens": 1888,
+  "lens_id": "LensA_ProductUX",
+  "model_used": "google/gemini-3.5-flash",
+  "prompt_tokens": 10154,
+  "recommendation": "Canibalizar cirurgicamente o protocolo ACP e o loop de aprendizado autônomo de skills, transmutando-os para o motor nativo em Rust do SODA.",
+  "repo_id": "nousresearch/hermes-agent",
+  "risk_level": "Medio",
+  "total_cost_usd": 0.0,
+  "total_tokens": 12042
+}
+
+== LENS B ==
+{
+  "bullets": [
+    "O frontend do agente é fortemente acoplado a TypeScript/React e Node.js, violando o princípio de soberania bare-metal e introduzindo dependência de interpretador.",
+    "A arquitetura apresentada não demonstra isolamento da lógica matemática; a alma do sistema parece diluída entre camadas de UI, sem separação clara que permita transpilação para CubeCL/Burn.",
+    "O uso de React e TUI baseada em Ink/Node.js implica overhead de garbage collection, serialização JSON e consumo de memória, incompatível com restrições severas como a RTX 2060m.",
+    "Não há evidências de transporte zero-copy, ownership explícito ou design fail-closed; o fluxo de dados provavelmente depende de cópias e serialização pesada.",
+    "A estrutura monolítica do frontend inviabiliza a extração cirúrgica de heurísticas ou padrões de UX para um motor nativo em Rust/Svelte 5 sem reescrita significativa."
+  ],
+  "completion_tokens": 1162,
+  "lens_id": "LensB_Architecture",
+  "model_used": "deepseek/deepseek-v4-pro",
+  "prompt_tokens": 2712,
+  "recommendation": "Rejeitar a arquitetura atual; é necessário um redesign completo extraindo apenas a lógica matemática para um backend Rust nativo com interface Svelte 5.",
+  "repo_id": "nousresearch/hermes-agent",
+  "risk_level": "Alto",
+  "total_cost_usd": 0.0021687534,
+  "total_tokens": 3874
+}
+
+== LENS C ==
+{
+  "bullets": [
+    "A taxa de entropia é crítica (697 segredos hardcoded, subprocessos com shell=True e exec() dinâmico), indicando colapso estrutural que viola o determinismo e a falha fechada.",
+    "A dependência massiva de provedores externos sem circuit breakers visíveis gera risco iminente de custos em nuvem descontrolados e bloqueios por Rate Limits durante picos de inferência.",
+    "O lixo tóxico da stack (Node 22, React, Docusaurus, Playwright, s6-overlay) infla a imagem Docker para >5GB, contradizendo a soberania bare-metal e o IPC zero-copy exigidos.",
+    "A observabilidade é fragmentada em console.debug residuais e logs não estruturados, enquanto a execução não supervisionada impede falhas graciosas, promovendo vazamentos e estados órfãos."
+  ],
+  "completion_tokens": 2982,
+  "lens_id": "AUDIT-FINOPS-HW-001",
+  "model_used": "qwen/qwen3.6-plus",
+  "prompt_tokens": 35341,
+  "recommendation": "Refatore imediatamente para um núcleo Rust/Svelte 5 com gestão centralizada de segredos e circuit breakers, ou isole a stack atual em sidecars efêmeros com orçamentos rígidos de AP",
+  "repo_id": "nousresearch/hermes-agent",
+  "risk_level": "Alto",
+  "total_cost_usd": 0.01712771775,
+  "total_tokens": 38323
+}
+
+
+=== FASE 3-4: SGR + SSOT @ 2026-05-27T21:36:57.970645700-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+row_number=3
+model_used=deepseek/deepseek-v4-pro
+lote_id=LOTE_01_ALPHA
+latency_f3_f4_ms=684898
+latency_total_ms=1085928
+prompt_tokens=9643
+completion_tokens=19831
+total_tokens=29474
+total_cost_usd=0.113619
+cost_f2_usd=0.019296
+cost_f3_f4_usd=0.094323
+sheets_write_confirmed=true
+row_width_a_to_cf=84
+elapsed_total_wall_ms=1091531
