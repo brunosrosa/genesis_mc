@@ -53,6 +53,7 @@ conn.close()
 "@
  
 Write-Host "`n[1/3] Sincronizando com o Cérebro SQLite (Fase -1)..." -ForegroundColor Green
+New-Item -ItemType Directory -Force -Path ".soda_data" | Out-Null
 $pythonScript | python -
 Write-Host "[2/3] Memória de estados atualizada com sucesso!" -ForegroundColor Green
  
