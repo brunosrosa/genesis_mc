@@ -488,7 +488,7 @@ async fn process_one_repo_f0(
         }
     };
 
-    conn.execute(
+    if let Err(e) = conn.execute(
         "INSERT INTO repositorios (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(project_name) DO UPDATE SET
@@ -508,9 +508,33 @@ async fn process_one_repo_f0(
             now,
             0
         ],
-    )
-    .map_err(io::Error::other)
-    .unwrap_or(0);
+    ) {
+        let msg = format!("Falha ao inserir/atualizar repositorios: {e}");
+        error!(
+            repo_id = %repo_id,
+            row_number = row_number_1based,
+            error = %msg,
+            "F0: falha ao registrar repo no banco"
+        );
+        let _ = update_status_atualizacao_e_fase(
+            spreadsheet_id,
+            row_number_1based,
+            cols,
+            STATUS_ERRO_F0,
+            STATUS_ERRO_F0,
+        )
+        .await;
+        return RepoBatchSummary {
+            repo_id: repo_id.to_string(),
+            row_number_1based,
+            outcome: RepoOutcome::Error,
+            elapsed_ms: started.elapsed().as_millis(),
+            blobs_present: Vec::new(),
+            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            report_path: None,
+            error: Some(msg),
+        };
+    }
 
     let conn_arc = Arc::new(Mutex::new(conn));
 
@@ -1058,7 +1082,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("SODA F0 (Harvester/Zero-IA): execução isolada (1 repo)");
     let (row_number, cols, _min_idx) =
         gate_harvester_by_sheet(&spreadsheet_id, &repo_id).await.map_err(io::Error::other)?;
-    let _ = process_one_repo_f0(
+    let summary = process_one_repo_f0(
         &root_dir,
         &db_path,
         &spreadsheet_id,
@@ -1068,6 +1092,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None,
     )
     .await;
+    if summary.outcome == RepoOutcome::Error {
+        let detail = summary
+            .error
+            .unwrap_or_else(|| "Erro não especificado".to_string());
+        return Err(io::Error::other(format!("F0 falhou para {}: {}", summary.repo_id, detail)).into());
+    }
     Ok(())
 }
 
