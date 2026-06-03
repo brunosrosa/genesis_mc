@@ -931,6 +931,14 @@ impl JCodemunchSidecar {
             "jcodemunch: iniciando indexacao e digest"
         );
         let storage_path = code_index_path_for_repo(input.executor.repo_path());
+        let repo_path_arg = if input.executor.repo_path().is_absolute() {
+            input.executor.repo_path().display().to_string()
+        } else {
+            std::fs::canonicalize(input.executor.repo_path())
+                .unwrap_or_else(|_| input.executor.repo_path().to_path_buf())
+                .display()
+                .to_string()
+        };
         let index_args = vec![
             "index".to_string(),
             "--no-ai-summaries".to_string(),
@@ -943,6 +951,7 @@ impl JCodemunchSidecar {
             "node_modules".to_string(),
             "target".to_string(),
             ".git".to_string(),
+            repo_path_arg,
         ];
         let index_arg_refs: Vec<&str> = index_args.iter().map(String::as_str).collect();
         let index_bytes = execute_sidecar(

@@ -11,7 +11,7 @@ use tokio::time::timeout;
 use super::ramdisk::RamdiskHandle;
 #[cfg(not(target_os = "windows"))]
 use super::sandbox::kill_process_tree_by_pid;
-use tracing::info;
+use tracing::{info, warn};
 #[cfg(target_os = "windows")]
 use serde::Deserialize;
 #[cfg(target_os = "windows")]
@@ -81,6 +81,14 @@ struct GitHubRepoMetadata {
 }
 
 impl BloblessCloner {
+    #[cfg(target_os = "windows")]
+    fn is_retryable_github_zip_error(reason: &str) -> bool {
+        let lower = reason.to_ascii_lowercase();
+        lower.contains("error decoding response body")
+            || lower.contains("could not find eocd")
+            || lower.contains("invalid zip")
+    }
+
     fn repo_workspace_destination(workspace: &RamdiskHandle, repo_url: &Url) -> PathBuf {
         let mut segments = repo_url
             .path_segments()
@@ -185,7 +193,7 @@ impl BloblessCloner {
             headers.insert(AUTHORIZATION, value);
         }
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(120))
             .user_agent("genesis-mc-harvester-projfs/1.0")
             .default_headers(headers)
             .build()
@@ -386,41 +394,93 @@ impl BloblessCloner {
         #[cfg(target_os = "windows")]
         {
             let archive_started = Instant::now();
-            let (archive_bytes, repo_version, ultima_versao_online) =
-                Self::fetch_github_archive_bytes(repo_url).await?;
-            let snapshot = tokio::task::spawn_blocking(move || Self::build_projfs_snapshot(archive_bytes))
-                .await
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!("Falha ao aguardar montagem do snapshot ProjFS: {}", e),
-                })??;
+            let max_attempts: u32 = 4;
+            let mut last_error: Option<CloneError> = None;
 
-            let (projected_files, projected_bytes) = ramdisk
-                .mount_projected_repo(&dest, snapshot)
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!("Falha ao iniciar projeção ProjFS do repositório: {}", e),
-                })?;
-            tokio::fs::write(dest.join(".soda_repo_version"), repo_version)
-                .await
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!("Falha ao persistir repo_version no workspace ProjFS: {}", e),
-                })?;
-            tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online)
-                .await
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!(
-                        "Falha ao persistir ultima_versao_online no workspace ProjFS: {}",
-                        e
-                    ),
-                })?;
-            info!(
-                url = %repo_url,
-                dest = %dest.display(),
-                projected_files,
-                projected_bytes,
-                elapsed_ms = archive_started.elapsed().as_millis(),
-                "Clone virtual via ProjFS concluido"
-            );
-            return Ok(RepoPath(dest));
+            for attempt in 1..=max_attempts {
+                let (archive_bytes, repo_version, ultima_versao_online) =
+                    match Self::fetch_github_archive_bytes(repo_url).await {
+                        Ok(value) => value,
+                        Err(e) => {
+                            let retry = matches!(&e, CloneError::NetworkError { reason } if Self::is_retryable_github_zip_error(reason));
+                            if attempt < max_attempts && retry {
+                                warn!(
+                                    url = %repo_url,
+                                    attempt,
+                                    error = %e,
+                                    "ProjFS: falha transitória ao baixar ZIP; aplicando retry"
+                                );
+                                let backoff_ms = (2_000_u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6))))
+                                    .min(120_000);
+                                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                                last_error = Some(e);
+                                continue;
+                            }
+                            return Err(e);
+                        }
+                    };
+
+                let snapshot = match tokio::task::spawn_blocking(move || Self::build_projfs_snapshot(archive_bytes))
+                    .await
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!("Falha ao aguardar montagem do snapshot ProjFS: {}", e),
+                    }) {
+                    Ok(Ok(snapshot)) => snapshot,
+                    Ok(Err(e)) => {
+                        let retry = matches!(&e, CloneError::NetworkError { reason } if Self::is_retryable_github_zip_error(reason));
+                        if attempt < max_attempts && retry {
+                            warn!(
+                                url = %repo_url,
+                                attempt,
+                                error = %e,
+                                "ProjFS: snapshot ZIP inválido/corrompido; aplicando retry"
+                            );
+                            let backoff_ms = (2_000_u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6))))
+                                .min(120_000);
+                            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                            last_error = Some(e);
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                    Err(e) => return Err(e),
+                };
+
+                let (projected_files, projected_bytes) = ramdisk
+                    .mount_projected_repo(&dest, snapshot)
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!("Falha ao iniciar projeção ProjFS do repositório: {}", e),
+                    })?;
+                tokio::fs::write(dest.join(".soda_repo_version"), repo_version)
+                    .await
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!("Falha ao persistir repo_version no workspace ProjFS: {}", e),
+                    })?;
+                tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online)
+                    .await
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!(
+                            "Falha ao persistir ultima_versao_online no workspace ProjFS: {}",
+                            e
+                        ),
+                    })?;
+                info!(
+                    url = %repo_url,
+                    dest = %dest.display(),
+                    projected_files,
+                    projected_bytes,
+                    elapsed_ms = archive_started.elapsed().as_millis(),
+                    "Clone virtual via ProjFS concluido"
+                );
+                return Ok(RepoPath(dest));
+            }
+
+            if let Some(err) = last_error {
+                return Err(err);
+            }
+            return Err(CloneError::NetworkError {
+                reason: "ProjFS: falha inesperada (loop de retries encerrou sem erro registrado)".to_string(),
+            });
         }
 
         #[cfg(not(target_os = "windows"))]

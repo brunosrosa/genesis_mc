@@ -824,22 +824,37 @@ fn prioritize_ux_entries(entries: Vec<String>) -> CappedFileEntries {
 }
 
 fn collect_repo_files(root: &Path) -> Result<Vec<PathBuf>, ExtractionError> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), ExtractionError> {
-        let entries = std::fs::read_dir(dir).map_err(|e| ExtractionError::IoError {
-            file: dir.display().to_string(),
-            reason: e.to_string(),
-        })?;
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), ExtractionError> {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) => {
+                if dir == root {
+                    return Err(ExtractionError::IoError {
+                        file: dir.display().to_string(),
+                        reason: e.to_string(),
+                    });
+                }
+                warn!(dir = %dir.display(), error = %e, "Falha ao listar diretório; ignorando");
+                return Ok(());
+            }
+        };
 
         for entry in entries {
-            let entry = entry.map_err(|e| ExtractionError::IoError {
-                file: dir.display().to_string(),
-                reason: e.to_string(),
-            })?;
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    warn!(dir = %dir.display(), error = %e, "Falha ao iterar entrada; ignorando");
+                    continue;
+                }
+            };
             let path = entry.path();
-            let file_type = entry.file_type().map_err(|e| ExtractionError::IoError {
-                file: path.display().to_string(),
-                reason: e.to_string(),
-            })?;
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(e) => {
+                    warn!(path = %path.display(), error = %e, "Falha ao ler tipo da entrada; ignorando");
+                    continue;
+                }
+            };
 
             if file_type.is_dir() {
                 if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
@@ -847,7 +862,7 @@ fn collect_repo_files(root: &Path) -> Result<Vec<PathBuf>, ExtractionError> {
                         continue;
                     }
                 }
-                walk(&path, out)?;
+                walk(root, &path, out)?;
             } else if file_type.is_file() {
                 out.push(path);
             }
@@ -857,24 +872,24 @@ fn collect_repo_files(root: &Path) -> Result<Vec<PathBuf>, ExtractionError> {
     }
 
     let mut out = Vec::new();
-    walk(root, &mut out)?;
+    walk(root, root, &mut out)?;
     Ok(out)
 }
 
 fn read_small_text_file(path: &Path) -> Result<Option<String>, ExtractionError> {
-    let metadata = std::fs::metadata(path).map_err(|e| ExtractionError::IoError {
-        file: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(None),
+    };
 
     if metadata.len() > MAX_SCAN_FILE_BYTES {
         return Ok(None);
     }
 
-    let bytes = std::fs::read(path).map_err(|e| ExtractionError::IoError {
-        file: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_) => return Ok(None),
+    };
 
     match String::from_utf8(bytes) {
         Ok(text) => Ok(Some(text)),
@@ -1145,14 +1160,26 @@ impl OpsBlueprintExtractor {
         let workflows_path = input.repo_path.join(".github/workflows");
         match fs::read_dir(&workflows_path).await {
             Ok(mut entries) => {
-                while let Some(entry) = entries.next_entry().await.map_err(|e| ExtractionError::IoError {
-                    file: ".github/workflows".to_string(),
-                    reason: e.to_string(),
-                })? {
-                    let file_type = entry.file_type().await.map_err(|e| ExtractionError::IoError {
-                        file: entry.path().display().to_string(),
-                        reason: e.to_string(),
-                    })?;
+                loop {
+                    let entry = match entries.next_entry().await {
+                        Ok(Some(entry)) => entry,
+                        Ok(None) => break,
+                        Err(e) => {
+                            warn!(
+                                dir = %workflows_path.display(),
+                                error = %e,
+                                "Falha ao iterar workflows; ignorando restante"
+                            );
+                            break;
+                        }
+                    };
+                    let file_type = match entry.file_type().await {
+                        Ok(file_type) => file_type,
+                        Err(e) => {
+                            warn!(path = %entry.path().display(), error = %e, "Falha ao ler tipo do workflow; ignorando");
+                            continue;
+                        }
+                    };
 
                     if file_type.is_file() {
                         let file_name = entry.file_name().to_string_lossy().to_string();
@@ -1231,10 +1258,19 @@ impl ManifestExtractor {
                 if !file_name.is_empty() {
                     manifest_files_seen.insert(file_name);
                 }
-                let metadata = std::fs::metadata(&path).map_err(|e| ExtractionError::IoError {
-                    file: rel_path.clone(),
-                    reason: e.to_string(),
-                })?;
+                let metadata = match std::fs::metadata(&path) {
+                    Ok(metadata) => metadata,
+                    Err(e) => {
+                        warn!(
+                            artifact_type = "blob_02_dependency_manifest",
+                            manifest = %rel_path,
+                            abs_path = %path.display(),
+                            error = %e,
+                            "Falha ao ler metadata do manifesto; ignorando"
+                        );
+                        continue;
+                    }
+                };
 
                 let size = metadata.len();
                 if size > MAX_MANIFEST_SIZE {
@@ -1251,19 +1287,19 @@ impl ManifestExtractor {
                     abs_path = %path.display(),
                     "Tentando ler manifesto"
                 );
-                let content = std::fs::read_to_string(&path).map_err(|e| {
-                    warn!(
-                        artifact_type = "blob_02_dependency_manifest",
-                        manifest = %rel_path,
-                        abs_path = %path.display(),
-                        error = %e,
-                        "Falha ao ler manifesto"
-                    );
-                    ExtractionError::IoError {
-                        file: rel_path.clone(),
-                        reason: e.to_string(),
+                let content = match std::fs::read_to_string(&path) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        warn!(
+                            artifact_type = "blob_02_dependency_manifest",
+                            manifest = %rel_path,
+                            abs_path = %path.display(),
+                            error = %e,
+                            "Falha ao ler manifesto; ignorando"
+                        );
+                        continue;
                     }
-                })?;
+                };
 
                 if content.trim().is_empty() {
                     return Err(ExtractionError::EmptyArtifact {
