@@ -84,7 +84,7 @@ Write-Host "----------------------------------------------------------------" -F
 Write-Host " [0] 👁️  N0 - Daemon Watcher (Cron Job)" -ForegroundColor White
 Write-Host "             (Acorda o Olheiro Assíncrono para verificar novos links)"
 Write-Host " [1] 🛡️  N1 - Guardião (Fase -1)" -ForegroundColor White
-Write-Host "             (Puxa nomes oficiais e versões do GitHub via Idempotência) (Custo Zero)"
+Write-Host "             (Prioriza NOVO_LINK_OK; depois roda o batch amplo) (Custo Zero)"
 Write-Host " [2] 🛰️  N2 - Batedor FinOps (Fase -0.5) (IA Flash)" -ForegroundColor White
 Write-Host "             (Busca README truncado + JSON Mode barato + Triagem Estruturada)"
 Write-Host " [3] 🚜  N3 - Harvester Local (Fase 0)" -ForegroundColor White
@@ -137,9 +137,13 @@ switch ($choice) {
     '4' {
         $bin = "f3_synthesizer_cli"
         $effectiveRepo = $RepoId
-        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
-        $binArgs = @("--repo", $effectiveRepo, "--e2e-full", "--skip-harvester")
-        $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO)"
+        if ($effectiveRepo) {
+            $binArgs = @("--repo", $effectiveRepo, "--e2e-full", "--skip-harvester")
+            $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO)"
+        } else {
+            $binArgs = @("--batch", "--e2e-full", "--skip-harvester")
+            $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO) [BATCH Sheets]"
+        }
     }
     '5' {
         $bin = "f3_synthesizer_cli"
@@ -169,26 +173,15 @@ switch ($choice) {
 }
 
 Write-Host "`n================================================================" -ForegroundColor Cyan
-$confirmation = "N"
-if ($PSBoundParameters.ContainsKey('Yes')) {
-    $confirmation = "S"
-} else {
-    $confirmation = Read-Host "🔥 Autoriza a ativação do motor para [$phaseName]? (S/N)"
-}
-
-if ($confirmation -match "^[sS]$") {
-    Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
-    Push-Location $PSScriptRoot
-    try {
-        $env:CARGO_INCREMENTAL = "0"
-        if ($binArgs.Count -gt 0) {
-            & cargo run --manifest-path $cargoManifest --bin $bin -- @binArgs
-        } else {
-            & cargo run --manifest-path $cargoManifest --bin $bin
-        }
-    } finally {
-        Pop-Location
+Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
+Push-Location $PSScriptRoot
+try {
+    $env:CARGO_INCREMENTAL = "0"
+    if ($binArgs.Count -gt 0) {
+        & cargo run --manifest-path $cargoManifest --bin $bin -- @binArgs
+    } else {
+        & cargo run --manifest-path $cargoManifest --bin $bin
     }
-} else {
-    Write-Host "`n🛑 Execução cancelada pelo Arquiteto (HITL)." -ForegroundColor Yellow
+} finally {
+    Pop-Location
 }

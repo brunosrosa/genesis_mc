@@ -133,3 +133,20 @@ cost_f3_f4_usd=0.094323
 sheets_write_confirmed=true
 row_width_a_to_cf=84
 elapsed_total_wall_ms=1091531
+
+
+=== FASE 0: HARVESTER @ 2026-06-02T23:00:16.224553700-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+artifact_type	payload_bytes
+blob_01_promessa_readme	5892
+blob_02_dependency_manifest	3000
+blob_03_test_intent	498799
+blob_04_repo_outline	2460
+blob_05_architecture_map	4082
+blob_06_unsafe_hotspots	100
+blob_07_ops_blueprint	114217
+blob_08_health_report	102
+blob_09_community_meta	523
+blob_10_soda_canon_context	8173
+blob_11_ux_contracts	33689

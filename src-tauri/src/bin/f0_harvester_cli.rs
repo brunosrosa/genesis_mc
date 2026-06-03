@@ -8,7 +8,7 @@ use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use tokio::io::AsyncBufReadExt;
 use tracing::{error, info, warn};
@@ -20,6 +20,8 @@ const STATUS_GATE_HARVESTER: &str = "APROVADO_PARA_HARVESTER";
 const STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO: &str = "CONCLUIDO_AGUARDANDO";
 const STATUS_FASE_F0_OK: &str = "FASE_0_HARVESTER_OK";
 const STATUS_ERRO_F0: &str = "ERRO_F0";
+const STATUS_DEGRADADO_F0: &str = "DEGRADADO_F0";
+const STATUS_FASE_F0_DEGRADADA: &str = "FASE_0_DEGRADADA";
 
 const EXPECTED_F0_BLOBS: [&str; 11] = [
     "blob_01_promessa_readme",
@@ -324,6 +326,41 @@ fn read_repo_blobs_present(conn: &Connection, repo_id: &str) -> io::Result<Vec<S
     Ok(out)
 }
 
+fn read_repo_blob_text(conn: &Connection, repo_id: &str, artifact_type: &str) -> io::Result<Option<String>> {
+    conn.query_row(
+        "SELECT CAST(payload_blob AS TEXT)
+         FROM artefatos_brutos
+         WHERE repo_id = ?1 AND artifact_type = ?2
+         LIMIT 1",
+        params![repo_id, artifact_type],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(io::Error::other)
+}
+
+fn detect_degraded_blobs(conn: &Connection, repo_id: &str) -> io::Result<Vec<String>> {
+    let mut degraded = Vec::new();
+
+    if let Some(text) = read_repo_blob_text(conn, repo_id, "blob_04_repo_outline")? {
+        if text.contains("Fallback:") {
+            degraded.push("blob_04_repo_outline".to_string());
+        }
+    }
+    if let Some(text) = read_repo_blob_text(conn, repo_id, "blob_05_architecture_map")? {
+        if text.contains("Fallback:") {
+            degraded.push("blob_05_architecture_map".to_string());
+        }
+    }
+    if let Some(text) = read_repo_blob_text(conn, repo_id, "blob_08_health_report")? {
+        if text.contains("\"fallback\":true") || text.contains("\"fallback\": true") {
+            degraded.push("blob_08_health_report".to_string());
+        }
+    }
+
+    Ok(degraded)
+}
+
 fn compute_missing_blobs(present: &[String]) -> Vec<String> {
     let set = present.iter().cloned().collect::<BTreeSet<_>>();
     EXPECTED_F0_BLOBS
@@ -623,15 +660,56 @@ async fn process_one_repo_f0(
                     None
                 }
             };
-            update_status_atualizacao_e_fase(
-                spreadsheet_id,
-                row_number_1based,
-                cols,
-                STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO,
-                STATUS_FASE_F0_OK,
-            )
-            .await
-            .ok();
+            let degraded_blobs = match conn_arc.lock() {
+                Ok(conn_lock) => detect_degraded_blobs(&conn_lock, repo_id).unwrap_or_default(),
+                Err(_) => Vec::new(),
+            };
+            if !degraded_blobs.is_empty() {
+                let msg = format!(
+                    "F0 degradada: blobs com fallback detectado: {}",
+                    degraded_blobs.join(", ")
+                );
+                error!(
+                    repo_id = %repo_id,
+                    row_number = row_number_1based,
+                    degraded = ?degraded_blobs,
+                    "F0: degradação detectada; bloqueando avanço"
+                );
+                if let Ok(conn_lock) = conn_arc.lock() {
+                    let _ = conn_lock.execute(
+                        "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
+                        params![STATUS_DEGRADADO_F0, repo_id],
+                    );
+                }
+                let _ = update_status_atualizacao_e_fase(
+                    spreadsheet_id,
+                    row_number_1based,
+                    cols,
+                    STATUS_DEGRADADO_F0,
+                    STATUS_FASE_F0_DEGRADADA,
+                )
+                .await;
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: std::mem::take(&mut blobs_present),
+                    blobs_missing: std::mem::take(&mut blobs_missing),
+                    report_path,
+                    error: Some(msg),
+                };
+            } else {
+                update_status_atualizacao_e_fase(
+                    spreadsheet_id,
+                    row_number_1based,
+                    cols,
+                    STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO,
+                    STATUS_FASE_F0_OK,
+                )
+                .await
+                .ok();
+            }
             if let Some(ref path) = report_path {
                 info!(
                     repo_id = %repo_id,

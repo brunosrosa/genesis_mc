@@ -28,6 +28,17 @@ pub struct PackageAssembler<'a, DB: DbReader> {
     db: &'a DB,
 }
 
+fn detect_repo_kind(essence_04: &str, essence_05: &str) -> &'static str {
+    let hay = format!("{}\n{}", essence_04, essence_05).to_ascii_lowercase();
+    if hay.contains("kind: skilllibrary") {
+        return "SkillLibrary";
+    }
+    if hay.contains("kind: contentrepo") {
+        return "ContentRepo";
+    }
+    "CodeRepo"
+}
+
 impl<'a, DB: DbReader> PackageAssembler<'a, DB> {
     pub fn new(db: &'a DB) -> Self {
         PackageAssembler { db }
@@ -87,20 +98,22 @@ impl<'a, DB: DbReader> PackageAssembler<'a, DB> {
             .map_err(AssemblerError::DatabaseReadError)?;
 
         let canon_marker = "\n=== BLOB_10_CANON_CONTEXT ===\n";
+        let repo_kind = detect_repo_kind(&essence_04, &essence_05);
+        let kind_marker = format!("repo_kind={repo_kind}\n");
 
         let package_a = format!(
-            "=== PACOTE A (PRODUTO/UX) ===\n{}\n{}\n{}\n{}{}\n=== FIM PACOTE A ===",
-            essence_01, essence_03, essence_11, canon_marker, blob_10
+            "=== PACOTE A (PRODUTO/UX) ===\n{}{}\n{}\n{}\n{}{}\n=== FIM PACOTE A ===",
+            kind_marker, essence_01, essence_03, essence_11, canon_marker, blob_10
         );
 
         let package_b = format!(
-            "=== PACOTE B (ARQUITETO) ===\n{}\n{}\n{}{}\n=== FIM PACOTE B ===",
-            essence_04, essence_05, canon_marker, blob_10
+            "=== PACOTE B (ARQUITETO) ===\n{}{}\n{}\n{}{}\n=== FIM PACOTE B ===",
+            kind_marker, essence_04, essence_05, canon_marker, blob_10
         );
 
         let package_c = format!(
-            "=== PACOTE C (OPS/AUDITOR) ===\n{}\n{}\n{}\n{}\n{}\n{}{}\n=== FIM PACOTE C ===",
-            essence_02, essence_06, essence_07, essence_08, essence_09, canon_marker, blob_10
+            "=== PACOTE C (OPS/AUDITOR) ===\n{}{}\n{}\n{}\n{}\n{}\n{}{}\n=== FIM PACOTE C ===",
+            kind_marker, essence_02, essence_06, essence_07, essence_08, essence_09, canon_marker, blob_10
         );
 
         Ok(Phase2Payloads {

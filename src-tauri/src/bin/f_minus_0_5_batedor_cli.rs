@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -19,6 +19,7 @@ const FASE_OK: &str = "FASE_-0.5_BATEDOR_OK";
 const README_CHAR_LIMIT: usize = 3_000;
 const MAX_UPDATES_PER_BATCH: usize = 50;
 const MAX_RESUMO_CHARS: usize = 800;
+const MAX_DEDUP_LINKS_IN_RESUMO: usize = 12;
 
 const ALLOWED_CATEGORIA_ARQUITETURAL: [&str; 47] = [
         "AI_Research - Foundation_Model",
@@ -614,6 +615,52 @@ impl OpenRouterClient {
         validate_batedor_out(&parsed)?;
         Ok(parsed)
     }
+
+    async fn dedup_links_default_model(&self, repo_urls: &[String]) -> Result<Vec<String>, String> {
+        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let model = std::env::var("OPENROUTER_DEFAULT_MODEL")
+            .ok()
+            .map(|v| normalize_batedor_model(&v))
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| self.model.clone());
+        let prompt = build_link_dedup_prompt(repo_urls);
+        let body = openrouter_body_for_link_dedup(&model, &prompt);
+        let response = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.api_key)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .timeout(Duration::from_secs(35))
+            .send()
+            .await
+            .map_err(|e| format!("Falha HTTP OpenRouter (dedup): {e}"))?;
+
+        let status = response.status();
+        let json = response
+            .json::<Value>()
+            .await
+            .map_err(|e| format!("Falha ao parsear JSON OpenRouter (dedup): {e}"))?;
+        if !status.is_success() {
+            return Err(format!("OpenRouter HTTP {} (dedup): {}", status.as_u16(), json));
+        }
+        let content = extract_openrouter_content(&json)
+            .ok_or_else(|| format!("OpenRouter: resposta vazia/inesperada (dedup): {json}"))?;
+        let parsed: LinkDedupOut = serde_json::from_str(&content)
+            .map_err(|e| format!("OpenRouter: JSON inválido para dedup: {e}. content={content}"))?;
+        let mut out = Vec::new();
+        for item in parsed.repos {
+            let trimmed = item.trim();
+            if trimmed.is_empty() || !trimmed.contains('/') {
+                continue;
+            }
+            out.push(trimmed.to_string());
+            if out.len() >= 80 {
+                break;
+            }
+        }
+        Ok(out)
+    }
 }
 
 fn is_expensive_model(model: &str) -> bool {
@@ -735,6 +782,138 @@ fn build_prompt(readme_trunc: &str) -> String {
     out
 }
 
+fn extract_urls_from_text(text: &str, max_urls: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    let bytes = text.as_bytes();
+    while idx < bytes.len() && out.len() < max_urls {
+        let rest = &text[idx..];
+        let Some(rel_pos) = rest.find("http") else {
+            break;
+        };
+        idx = idx.saturating_add(rel_pos);
+        let candidate = &text[idx..];
+        let end = candidate
+            .find(|c: char| c.is_whitespace() || matches!(c, ')' | ']' | '"' | '\'' | '<' | '>'))
+            .unwrap_or(candidate.len());
+        let mut url = candidate[..end].trim().trim_end_matches(['.', ',', ';', ':']).to_string();
+        if url.starts_with("http://") || url.starts_with("https://") {
+            if url.len() > 2048 {
+                url.truncate(2048);
+            }
+            out.push(url);
+        }
+        idx = idx.saturating_add(end.max(1));
+    }
+    out
+}
+
+fn extract_github_repo_ids(urls: &[String], max_repos: usize) -> Vec<String> {
+    let mut out = BTreeSet::<String>::new();
+    for url in urls {
+        if out.len() >= max_repos {
+            break;
+        }
+        let lower = url.to_ascii_lowercase();
+        let marker = "github.com/";
+        let Some(pos) = lower.find(marker) else {
+            continue;
+        };
+        let mut rest = url[(pos + marker.len())..].to_string();
+        if let Some(hash) = rest.find('#') {
+            rest.truncate(hash);
+        }
+        if let Some(q) = rest.find('?') {
+            rest.truncate(q);
+        }
+        rest = rest.trim_end_matches('/').trim_end_matches(".git").to_string();
+        let mut parts = rest.split('/').map(|p| p.trim()).filter(|p| !p.is_empty());
+        let Some(owner) = parts.next() else { continue };
+        let Some(repo) = parts.next() else { continue };
+        if owner.eq_ignore_ascii_case("topics")
+            || owner.eq_ignore_ascii_case("search")
+            || owner.eq_ignore_ascii_case("orgs")
+            || owner.eq_ignore_ascii_case("users")
+        {
+            continue;
+        }
+        out.insert(format!("{owner}/{repo}"));
+    }
+    out.into_iter().take(max_repos).collect()
+}
+
+fn looks_like_content_repo(readme_trunc: &str, github_repo_links: usize) -> bool {
+    let s = readme_trunc.to_ascii_lowercase();
+    if s.contains("awesome") {
+        return true;
+    }
+    if github_repo_links >= 25 {
+        return true;
+    }
+    s.contains("curated list") || s.contains("resources") || s.contains("collection of")
+}
+
+fn response_format_for_link_dedup() -> Value {
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "repos": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 3, "maxLength": 200 },
+                "minItems": 0,
+                "maxItems": 120
+            }
+        },
+        "required": ["repos"],
+        "additionalProperties": false
+    });
+    json!({
+        "type": "json_schema",
+        "json_schema": {
+            "name": "soda_link_dedup_v1",
+            "strict": true,
+            "schema": schema
+        }
+    })
+}
+
+fn openrouter_body_for_link_dedup(model: &str, prompt: &str) -> Value {
+    json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "Responda SOMENTE com JSON válido (sem markdown, sem texto extra)."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.0,
+        "max_tokens": 2000,
+        "response_format": response_format_for_link_dedup()
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct LinkDedupOut {
+    repos: Vec<String>,
+}
+
+fn build_link_dedup_prompt(repo_urls: &[String]) -> String {
+    let mut out = String::new();
+    out.push_str("Tarefa: deduplicar e normalizar uma lista de repositórios GitHub.\n");
+    out.push_str("Entrada: lista de strings (owner/repo).\n");
+    out.push_str("Saída: JSON com campo repos: array deduplicado, ordenado por relevância.\n");
+    out.push_str("Regras:\n");
+    out.push_str("- Remova duplicatas e variações (maiúsculas/minúsculas).\n");
+    out.push_str("- Mantenha apenas entradas no formato owner/repo.\n");
+    out.push_str("- Priorize projetos centrais (não forks óbvios) quando houver redundância.\n");
+    out.push_str("- Limite a 80 itens.\n\n");
+    out.push_str("Lista:\n");
+    for item in repo_urls.iter().take(400) {
+        out.push_str("- ");
+        out.push_str(item);
+        out.push('\n');
+    }
+    out
+}
+
 fn build_success_ranges(cols: &Columns, row_number_1based: u32, out: &BatedorOut) -> HashMap<String, Vec<Vec<String>>> {
     let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
     let fase_col = col_idx_to_a1(cols.status_fase_idx);
@@ -763,7 +942,34 @@ async fn process_one_row(
 ) -> Result<Option<HashMap<String, Vec<Vec<String>>>>, String> {
     let readme = fetch_readme_truncated(&row.repo_url).await?;
     let prompt = build_prompt(&readme);
-    let out = llm.triage(&prompt).await?;
+    let mut out = llm.triage(&prompt).await?;
+
+    let urls = extract_urls_from_text(&readme, 500);
+    let repo_ids = extract_github_repo_ids(&urls, 200);
+    if !repo_ids.is_empty() && looks_like_content_repo(&readme, repo_ids.len()) {
+        match llm.dedup_links_default_model(&repo_ids).await {
+            Ok(deduped) => {
+                if !deduped.is_empty() {
+                    let mut take_n = MAX_DEDUP_LINKS_IN_RESUMO.min(deduped.len());
+                    loop {
+                        let suffix = format!(" | Links-chave: {}", deduped[..take_n].join(", "));
+                        let candidate = format!("{}{}", out.proposta_original_resumo.trim(), suffix);
+                        if candidate.chars().count() <= MAX_RESUMO_CHARS || take_n <= 1 {
+                            if candidate.chars().count() <= MAX_RESUMO_CHARS {
+                                out.proposta_original_resumo = candidate;
+                            }
+                            break;
+                        }
+                        take_n = take_n.saturating_sub(1);
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(row = row.row_number_1based, repo_url = %row.repo_url, error = %e, "Batedor: dedup de links falhou; seguindo sem links");
+            }
+        }
+    }
+
     Ok(Some(build_success_ranges(cols, row.row_number_1based, &out)))
 }
 

@@ -13,7 +13,7 @@ use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use url::Url;
 
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
@@ -99,6 +99,94 @@ fn read_cell_at(spreadsheet_id: &str, row_number_1based: u32, col_idx0: usize) -
         .and_then(|r| r.first())
         .map(|s| s.trim().to_string())
         .unwrap_or_default())
+}
+
+fn try_extract_repo_id_from_repo_url(repo_url: &str) -> Option<String> {
+    let url = Url::parse(repo_url).ok()?;
+    let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+    if url.host_str() != Some("github.com") && !allow_host_override {
+        return None;
+    }
+    let mut segments = url
+        .path_segments()?
+        .filter(|s| !s.is_empty())
+        .map(|s| s.trim_end_matches(".git"))
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return None;
+    }
+    let repo = segments.pop()?;
+    let owner = segments.pop()?;
+    Some(format!("{owner}/{repo}"))
+}
+
+#[derive(Debug, Clone)]
+struct BatchCandidate {
+    repo_id: String,
+    row_number_1based: u32,
+}
+
+async fn fetch_enxame_batch_candidates(spreadsheet_id: &str) -> io::Result<Vec<BatchCandidate>> {
+    let header_row = read_master_header(spreadsheet_id)?;
+    let status_idx = find_col_idx(&header_row, "status_atualizacao")
+        .ok_or_else(|| io::Error::other("Header missing status_atualizacao"))?;
+    let repo_url_idx = find_col_idx(&header_row, "repo_url")
+        .ok_or_else(|| io::Error::other("Header missing repo_url"))?;
+    let lote_idx = find_col_idx(&header_row, "lote_id");
+
+    let required = [status_idx, repo_url_idx];
+    let min_idx = *required.iter().min().unwrap_or(&0);
+    let max_idx = *required.iter().max().unwrap_or(&0);
+    let start_col = col_idx_to_a1(min_idx);
+    let end_col = col_idx_to_a1(max_idx.max(lote_idx.unwrap_or(0)));
+
+    let range = format!("{start_col}2:{end_col}");
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": range,
+            "include_grid_data": false
+        }),
+    )?;
+    let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
+
+    let lote_override = std::env::var("SODA_LOTE_ID_OVERRIDE")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+
+    let mut out = Vec::new();
+    for (idx, row) in values.into_iter().enumerate() {
+        let row_number_1based = (idx as u32) + 2;
+        let get = |abs_idx: usize| -> String {
+            let rel = abs_idx.saturating_sub(min_idx);
+            row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+        };
+        let status = get(status_idx);
+        if status.trim() != "APROVADO_PARA_ENXAME" {
+            continue;
+        }
+        if let Some(ref lote_expected) = lote_override {
+            let Some(lote_idx) = lote_idx else { continue };
+            let lote = get(lote_idx);
+            if lote.trim() != lote_expected {
+                continue;
+            }
+        }
+        let repo_url = get(repo_url_idx);
+        let Some(repo_id) = try_extract_repo_id_from_repo_url(&repo_url) else {
+            continue;
+        };
+        out.push(BatchCandidate {
+            repo_id,
+            row_number_1based,
+        });
+    }
+    out.sort_by(|a, b| a.repo_id.cmp(&b.repo_id).then_with(|| a.row_number_1based.cmp(&b.row_number_1based)));
+    out.dedup_by(|a, b| a.repo_id == b.repo_id && a.row_number_1based == b.row_number_1based);
+    Ok(out)
 }
 
 async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
@@ -191,6 +279,8 @@ struct CliArgs {
     repo_id: String,
     e2e_full: bool,
     skip_harvester: bool,
+    batch: bool,
+    row_override: Option<u32>,
 }
 
 fn parse_cli_args() -> CliArgs {
@@ -199,6 +289,8 @@ fn parse_cli_args() -> CliArgs {
     let mut repo_id = String::from("aaif-goose/goose");
     let mut e2e_full = false;
     let mut skip_harvester = false;
+    let mut batch = false;
+    let mut row_override: Option<u32> = None;
     while let Some(arg) = args.next() {
         if arg == "--repo" {
             if let Some(value) = args.next() {
@@ -214,11 +306,23 @@ fn parse_cli_args() -> CliArgs {
             skip_harvester = true;
             continue;
         }
+        if arg == "--batch" {
+            batch = true;
+            continue;
+        }
+        if arg == "--row" {
+            if let Some(value) = args.next() {
+                row_override = value.trim().parse::<u32>().ok().filter(|v| *v >= 2);
+            }
+            continue;
+        }
     }
     CliArgs {
         repo_id,
         e2e_full,
         skip_harvester,
+        batch,
+        row_override,
     }
 }
 
@@ -523,12 +627,16 @@ fn response_format_for_block(block: u8) -> Value {
             props.insert(
                 "categoria_arquitetural".to_string(),
                 enum_schema(&[
-                    "LIBRARY",
-                    "FRAMEWORK",
-                    "APPLICATION",
-                    "TOOLING",
-                    "INFRASTRUCTURE",
-                    "RUNTIME",
+                    "CanvasUI",
+                    "UILibrary",
+                    "Memoria_RAG",
+                    "Roteamento_FinOps",
+                    "Orquestracao_Agentes",
+                    "Model_Serving",
+                    "Knowledge_Extraction",
+                    "Seguranca_Sandbox",
+                    "Infraestrutura_Core",
+                    "Tooling_Dev",
                 ]),
             );
             props.insert(
@@ -732,7 +840,7 @@ fn example_output_for_block(block: u8) -> Value {
         3 => json!({
             "classificacao_terminal": "APROVADO_COM_RESSALVAS",
             "acao_de_canibalizacao": "NENHUMA",
-            "categoria_arquitetural": "TOOLING",
+            "categoria_arquitetural": "Tooling_Dev",
             "horizonte_extracao": "SHORT",
             "tipo_integracao": "INTEGRATE_AS_COMPONENT",
             "capability_nature_primary": "TOOLING",
@@ -958,6 +1066,51 @@ fn is_unknown_like(value: &str) -> bool {
     lower == "unknown" || lower == "desconhecido" || lower == "n/a"
 }
 
+fn normalize_categoria_arquitetural_seed(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || is_unknown_like(trimmed) {
+        return None;
+    }
+    let mapped = match trimmed {
+        "Tooling_Dev"
+        | "Infraestrutura_Core"
+        | "Seguranca_Sandbox"
+        | "Knowledge_Extraction"
+        | "Model_Serving"
+        | "Orquestracao_Agentes"
+        | "Roteamento_FinOps"
+        | "Memoria_RAG"
+        | "UILibrary"
+        | "CanvasUI" => trimmed.to_string(),
+        "TOOLING" => "Tooling_Dev".to_string(),
+        "INFRASTRUCTURE" => "Infraestrutura_Core".to_string(),
+        "RUNTIME" => "Model_Serving".to_string(),
+        "LIBRARY" => "UILibrary".to_string(),
+        _ => return None,
+    };
+    Some(mapped)
+}
+
+fn detect_repo_kind_from_raw_blobs(conn: &Connection, repo_id: &str) -> &'static str {
+    let mut hay = String::new();
+    if let Some(t) = fetch_raw_artifact_text(conn, repo_id, "blob_04_repo_outline") {
+        hay.push_str(&t);
+        hay.push('\n');
+    }
+    if let Some(t) = fetch_raw_artifact_text(conn, repo_id, "blob_05_architecture_map") {
+        hay.push_str(&t);
+        hay.push('\n');
+    }
+    let lower = hay.to_ascii_lowercase();
+    if lower.contains("kind: skilllibrary") {
+        return "SkillLibrary";
+    }
+    if lower.contains("kind: contentrepo") {
+        return "ContentRepo";
+    }
+    "CodeRepo"
+}
+
 fn fetch_raw_artifact_text(conn: &Connection, repo_id: &str, artifact_type: &str) -> Option<String> {
     conn.query_row(
         "SELECT CAST(payload_blob AS TEXT)
@@ -1096,53 +1249,111 @@ fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
         }
     });
 
-    let mut child = Command::new("mcp-google-sheets")
-        .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
-        .env("UV_NO_PROGRESS", "1")
-        .env("UV_QUIET", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| io::Error::other(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
+    let max_attempts: u32 = match tool_name {
+        "get_sheet_data" | "batch_update_cells" => 4,
+        _ => 1,
+    };
 
-    {
-        use std::io::Write;
-        let stdin = child.stdin.as_mut().ok_or_else(|| io::Error::other("stdin indisponível"))?;
-        writeln!(stdin, "{}", init_req)?;
-        writeln!(stdin, "{}", initialized_notif)?;
-        writeln!(stdin, "{}", mcp_request)?;
-    }
+    for attempt in 1..=max_attempts {
+        if attempt > 1 {
+            let jitter_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_millis() as u64
+                % 250;
+            let exp = attempt.saturating_sub(2).min(10);
+            let base_ms = 500_u64.saturating_mul(1_u64 << exp);
+            std::thread::sleep(Duration::from_millis(base_ms.saturating_add(jitter_ms)));
+        }
 
-    let output = child
-        .wait_with_output()
-        .map_err(|e| io::Error::other(format!("Falha ao aguardar mcp-google-sheets: {}", e)))?;
-    if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "mcp-google-sheets falhou. Exit {}. STDERR: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        )));
-    }
+        let mut child = Command::new("mcp-google-sheets")
+            .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
+            .env("UV_NO_PROGRESS", "1")
+            .env("UV_QUIET", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| io::Error::other(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
 
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    for line in stdout_str.lines().rev() {
-        if let Ok(value) = serde_json::from_str::<Value>(line) {
-            if value.get("id").and_then(|v| v.as_i64()) == Some(1) {
-                if value.get("error").is_some() {
-                    return Err(io::Error::other(format!("MCP retornou erro: {}", value)));
-                }
-                if let Some(result) = value.get("result") {
-                    return Ok(normalize_mcp_tool_result(result.clone()));
+        {
+            use std::io::Write;
+            let stdin =
+                child.stdin.as_mut().ok_or_else(|| io::Error::other("stdin indisponível"))?;
+            writeln!(stdin, "{}", init_req)?;
+            writeln!(stdin, "{}", initialized_notif)?;
+            writeln!(stdin, "{}", mcp_request)?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|e| io::Error::other(format!("Falha ao aguardar mcp-google-sheets: {}", e)))?;
+        if !output.status.success() {
+            let err = io::Error::other(format!(
+                "mcp-google-sheets falhou. Exit {}. STDERR: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+            if attempt < max_attempts {
+                continue;
+            }
+            return Err(err);
+        }
+
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        for line in stdout_str.lines().rev() {
+            if let Ok(value) = serde_json::from_str::<Value>(line) {
+                if value.get("id").and_then(|v| v.as_i64()) == Some(1) {
+                    if value.get("error").is_some() {
+                        let err = io::Error::other(format!("MCP retornou erro: {}", value));
+                        if attempt < max_attempts {
+                            continue;
+                        }
+                        return Err(err);
+                    }
+                    if let Some(result) = value.get("result") {
+                        let normalized = normalize_mcp_tool_result(result.clone());
+                        if tool_name == "get_sheet_data"
+                            && normalized.get("error").is_none()
+                            && normalized.get("values").is_none()
+                            && normalized.get("valueRanges").is_none()
+                            && normalized
+                                .get("data")
+                                .and_then(|d| d.get("values"))
+                                .is_none()
+                        {
+                            let err = io::Error::other(
+                                "Sheets payload inválido: sem 'values', 'valueRanges' ou 'data.values'",
+                            );
+                            if attempt < max_attempts {
+                                continue;
+                            }
+                            return Err(err);
+                        }
+                        return Ok(normalized);
+                    }
                 }
             }
         }
+
+        if attempt < max_attempts {
+            continue;
+        }
+        return Err(io::Error::other("Resposta MCP não encontrada no stdout"));
     }
 
-    Err(io::Error::other("Resposta MCP não encontrada no stdout"))
+    Err(io::Error::other("Falha inesperada: loop de tentativas vazio"))
 }
 
 fn normalize_mcp_tool_result(result: Value) -> Value {
+    if result.get("values").is_some()
+        || result.get("valueRanges").is_some()
+        || result.get("data").and_then(|d| d.get("values")).is_some()
+        || result.get("error").is_some()
+    {
+        return result;
+    }
+
     let content = match result.get("content").and_then(|v| v.as_array()) {
         Some(arr) => arr,
         None => return result,
@@ -1150,12 +1361,25 @@ fn normalize_mcp_tool_result(result: Value) -> Value {
 
     for item in content {
         if let Some(json_val) = item.get("json") {
-            return json_val.clone();
+            if json_val.is_string() {
+                if let Some(s) = json_val.as_str() {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(s) {
+                        return parsed;
+                    }
+                }
+            } else {
+                return json_val.clone();
+            }
         }
         if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
             if let Ok(parsed) = serde_json::from_str::<Value>(text) {
                 return parsed;
             }
+            let mut msg = text.trim().to_string();
+            if msg.len() > 800 {
+                msg.truncate(800);
+            }
+            return json!({ "error": { "message": msg } });
         }
     }
 
@@ -1431,7 +1655,35 @@ async fn main() -> io::Result<()> {
         repo_id,
         e2e_full,
         skip_harvester,
+        batch,
+        row_override,
     } = parse_cli_args();
+
+    if batch {
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+        let candidates = fetch_enxame_batch_candidates(&spreadsheet_id).await?;
+        info!(count = candidates.len(), "F3/F4: modo batch (APROVADO_PARA_ENXAME)");
+        let exe = std::env::current_exe().map_err(|e| io::Error::other(format!("Falha ao resolver current_exe: {e}")))?;
+        for item in candidates {
+            info!(repo_id = %item.repo_id, row_number = item.row_number_1based, "F3/F4(batch): iniciando");
+            let mut cmd = tokio::process::Command::new(&exe);
+            cmd.arg("--repo").arg(&item.repo_id);
+            cmd.arg("--row").arg(item.row_number_1based.to_string());
+            if e2e_full {
+                cmd.arg("--e2e-full");
+            }
+            if skip_harvester {
+                cmd.arg("--skip-harvester");
+            }
+            let status = cmd.status().await.map_err(|e| io::Error::other(format!("Falha ao executar f3_synthesizer_cli (batch): {e}")))?;
+            if !status.success() {
+                warn!(repo_id = %item.repo_id, row_number = item.row_number_1based, status = %status, "F3/F4(batch): falha (seguindo fail-soft)");
+            }
+        }
+        return Ok(());
+    }
+
     if e2e_full {
         info!(repo_id = %repo_id, "E2E FULL: iniciando F0 → F4 (disparo completo)");
     } else {
@@ -1461,8 +1713,11 @@ async fn main() -> io::Result<()> {
     if skip_harvester || !e2e_full {
         let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-        let row_number =
-            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
+        let row_number = if let Some(row) = row_override {
+            row
+        } else {
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?
+        };
         let header_row = read_master_header(&spreadsheet_id)?;
         let cols = resolve_master_cols(&header_row)?;
         let (status_atualizacao, _status_fase) =
@@ -1482,8 +1737,11 @@ async fn main() -> io::Result<()> {
     if e2e_full && skip_harvester {
         let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-        let row_number =
-            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
+        let row_number = if let Some(row) = row_override {
+            row
+        } else {
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?
+        };
 
         let blobs = count_raw_blobs_distinct(&conn, &repo_id)?;
         if blobs < 11 {
@@ -1589,6 +1847,17 @@ async fn main() -> io::Result<()> {
     if let Some(v) = n4_sheet_categoria.as_deref() {
         seed_categoria_arquitetural = v.trim().to_string();
     }
+
+    let repo_kind = detect_repo_kind_from_raw_blobs(&conn, &repo_id);
+    seed_categoria_arquitetural = normalize_categoria_arquitetural_seed(&seed_categoria_arquitetural)
+        .or_else(|| {
+            if repo_kind != "CodeRepo" {
+                Some("Knowledge_Extraction".to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
 
     let now = now_epoch_secs()?;
     let (repo_analised_version_from_repositorios, ultima_versao_online_from_repositorios) =
@@ -1740,6 +2009,18 @@ async fn main() -> io::Result<()> {
         row.categoria_arquitetural =
             genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::parse_strict(v)
                 .unwrap_or(row.categoria_arquitetural);
+    }
+    if matches!(
+        row.categoria_arquitetural,
+        genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::Unspecified
+            | genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::Unknown
+    ) {
+        let repo_kind = detect_repo_kind_from_raw_blobs(&conn, &repo_id);
+        row.categoria_arquitetural = if repo_kind != "CodeRepo" {
+            genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::KnowledgeExtraction
+        } else {
+            genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::ToolingDev
+        };
     }
 
     let row_number = if n4_skip_columns.is_empty() {

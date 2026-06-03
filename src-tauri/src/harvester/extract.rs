@@ -1118,17 +1118,17 @@ impl OpsBlueprintExtractor {
         }
 
         if sections.is_empty() {
-            return Err(ExtractionError::RequiredArtifactMissing {
+            return Ok(ArtifactBlob {
                 artifact_type: "blob_07_ops_blueprint".to_string(),
-                candidates: "Dockerfile, docker-compose.yml, docker-compose.yaml, .github/workflows/*.yml".to_string(),
+                payload_blob: b"Nenhum artefato operacional detectado (Dockerfile/docker-compose/.github/workflows/Makefile).\n".to_vec(),
             });
         }
 
         let packed = truncate_utf8(&sections.join("\n"), OPS_BLOB_MAX_CHARS, OPS_BLOB_MAX_CHARS);
         if packed.trim().is_empty() {
-            return Err(ExtractionError::EmptyArtifact {
+            return Ok(ArtifactBlob {
                 artifact_type: "blob_07_ops_blueprint".to_string(),
-                file: "ops_blueprint_bundle".to_string(),
+                payload_blob: b"Nenhum artefato operacional detectado (bundle vazio apos truncagem).\n".to_vec(),
             });
         }
 
@@ -1302,10 +1302,13 @@ impl ManifestExtractor {
                 };
 
                 if content.trim().is_empty() {
-                    return Err(ExtractionError::EmptyArtifact {
-                        artifact_type: "blob_02_dependency_manifest".to_string(),
-                        file: rel_path,
-                    });
+                    warn!(
+                        artifact_type = "blob_02_dependency_manifest",
+                        manifest = %rel_path,
+                        abs_path = %path.display(),
+                        "Manifesto vazio; ignorando"
+                    );
+                    continue;
                 }
 
                 if let Some(block) = Self::extract_manifest_block(&rel_path, &content)? {

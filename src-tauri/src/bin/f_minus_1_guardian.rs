@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -12,6 +12,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 use url::Url;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tokio::time::Instant;
 use tokio::io::AsyncBufReadExt;
 
@@ -662,7 +664,6 @@ fn should_skip_by_status_atualizacao(status_atualizacao: &str) -> bool {
         || up == "DESATUALIZADA"
         || up == "EM_PROCESSAMENTO"
         || up.starts_with("PENDENTE_")
-        || up == "NOVO_LINK_OK"
 }
 
 fn try_build_repo_url_from_project_name(project_name: &str) -> Option<String> {
@@ -774,6 +775,74 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
 
         let inspected = values.len();
 
+        let mut priority_rows = Vec::new();
+        let mut normal_rows = Vec::new();
+        for ctx in rows {
+            if ctx
+                .status_atualizacao
+                .trim()
+                .eq_ignore_ascii_case("NOVO_LINK_OK")
+            {
+                priority_rows.push(ctx);
+            } else {
+                normal_rows.push(ctx);
+            }
+        }
+        let (mut rows, priority_mode) = if !priority_rows.is_empty() {
+            (priority_rows, true)
+        } else {
+            (normal_rows, false)
+        };
+
+        let max_rows_per_run = std::env::var("SODA_GUARDIAN_MAX_ROWS")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        if max_rows_per_run > 0 && rows.len() > max_rows_per_run {
+            rows.truncate(max_rows_per_run);
+        }
+
+        let max_parallel_github = std::env::var("SODA_GUARDIAN_GITHUB_PARALLEL")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(2)
+            .max(1);
+        let sem_github = Arc::new(Semaphore::new(max_parallel_github));
+        let mut urls_to_fetch = HashSet::<String>::new();
+        for ctx in &rows {
+            let is_new_link = ctx.status_atualizacao.trim().is_empty()
+                || ctx.status_atualizacao.trim().eq_ignore_ascii_case("NOVO_LINK_OK");
+            let drift_candidate = !ctx.repo_analised_version.trim().is_empty();
+            if is_new_link || drift_candidate {
+                urls_to_fetch.insert(ctx.repo_url.clone());
+            }
+        }
+
+        let mut latest_by_url: HashMap<String, Result<Option<String>, String>> = HashMap::new();
+        if !urls_to_fetch.is_empty() {
+            let mut join_set: JoinSet<(String, Result<Option<String>, String>)> = JoinSet::new();
+            for url in urls_to_fetch {
+                let sem = Arc::clone(&sem_github);
+                let github = Arc::clone(&self.github);
+                join_set.spawn(async move {
+                    let _permit = sem.acquire_owned().await.unwrap();
+                    let res = github.latest_release_tag(&url).await;
+                    (url, res)
+                });
+            }
+
+            while let Some(out) = join_set.join_next().await {
+                match out {
+                    Ok((url, res)) => {
+                        latest_by_url.insert(url, res);
+                    }
+                    Err(e) => {
+                        warn!(error = ?e, "Guardião: falha ao aguardar tarefa de GitHub (join)");
+                    }
+                }
+            }
+        }
+
         let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
         let status_fase_col = cols.status_fase_idx.map(col_idx_to_a1);
         let project_name_col = cols.project_name_idx.map(col_idx_to_a1);
@@ -821,22 +890,39 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                 }
             }
 
-            let latest = match self.github.latest_release_tag(&ctx.repo_url).await {
-                Ok(v) => v,
-                Err(e) => {
-                    warn!(
-                        repo_url = %ctx.repo_url,
-                        error = %e,
-                        "Guardião: falha ao consultar GitHub; pulando linha"
-                    );
-                    continue;
+            let is_new_link = ctx.status_atualizacao.trim().is_empty()
+                || ctx.status_atualizacao.trim().eq_ignore_ascii_case("NOVO_LINK_OK");
+            let drift_candidate = !ctx.repo_analised_version.trim().is_empty();
+            let latest = if is_new_link || drift_candidate {
+                match latest_by_url.get(&ctx.repo_url) {
+                    Some(Ok(value)) => value.clone(),
+                    Some(Err(e)) => {
+                        warn!(
+                            repo_url = %ctx.repo_url,
+                            error = %e,
+                            "Guardião: falha ao consultar GitHub; pulando linha"
+                        );
+                        continue;
+                    }
+                    None => match self.github.latest_release_tag(&ctx.repo_url).await {
+                        Ok(value) => value,
+                        Err(e) => {
+                            warn!(
+                                repo_url = %ctx.repo_url,
+                                error = %e,
+                                "Guardião: falha ao consultar GitHub; pulando linha"
+                            );
+                            continue;
+                        }
+                    },
                 }
+            } else {
+                None
             };
             let Some(latest) = latest else { continue };
             let latest = latest.trim().to_string();
-            let is_new_link = ctx.status_atualizacao.trim().is_empty();
-            let drift = !ctx.repo_analised_version.trim().is_empty()
-                && has_drift(&ctx.repo_analised_version, &latest);
+
+            let drift = drift_candidate && has_drift(&ctx.repo_analised_version, &latest);
             let should_write_latest = (is_new_link || drift) && ctx.ultima_versao_online.trim() != latest;
 
             if !is_new_link && !drift && !should_write_latest {
@@ -932,6 +1018,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
             inspected,
             drifted,
             updated,
+            priority_mode,
             "Guardião: rodada concluída (mutação somente com drift)"
         );
         Ok(())

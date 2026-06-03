@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -457,21 +458,30 @@ struct Telemetry {
     erros_dispatch: usize,
 }
 
+fn should_colorize_telemetry() -> bool {
+    std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+}
+
 fn ansi_wrap(style: &str, text: &str) -> String {
     format!("\x1b[{style}m{text}\x1b[0m")
 }
 
-fn colored_kv(key: &str, value: usize, style: &str) -> String {
-    ansi_wrap(style, &format!("{key}={value}"))
+fn colored_kv(key: &str, value: usize, style: &str, enabled: bool) -> String {
+    if enabled {
+        ansi_wrap(style, &format!("{key}={value}"))
+    } else {
+        format!("{key}={value}")
+    }
 }
 
 fn format_telemetry_line(tel: &Telemetry) -> String {
-    let n1 = colored_kv("n1", tel.roteadas_n1, "97;44");
-    let n2 = colored_kv("n2", tel.roteadas_n2, "97;45");
-    let n3 = colored_kv("n3", tel.roteadas_n3, "30;42");
-    let n4 = colored_kv("n4", tel.roteadas_n4, "30;43");
-    let n5 = colored_kv("n5", tel.roteadas_n5, "30;46");
-    let n6 = colored_kv("n6", tel.roteadas_n6, "97;41");
+    let color = should_colorize_telemetry();
+    let n1 = colored_kv("n1", tel.roteadas_n1, "97;44", color);
+    let n2 = colored_kv("n2", tel.roteadas_n2, "97;45", color);
+    let n3 = colored_kv("n3", tel.roteadas_n3, "30;42", color);
+    let n4 = colored_kv("n4", tel.roteadas_n4, "30;43", color);
+    let n5 = colored_kv("n5", tel.roteadas_n5, "30;46", color);
+    let n6 = colored_kv("n6", tel.roteadas_n6, "97;41", color);
     format!(
         "N0: rodada concluída | linhas={} | {} {} {} {} {} {} | short_circuit={} | erros_sheets={} | erros_dispatch={}",
         tel.linhas_inspecionadas,
@@ -559,6 +569,8 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
 
         let sem = Arc::new(Semaphore::new(self.config.max_parallel.max(1)));
         let mut tasks = Vec::new();
+        let mut prioritized = Vec::new();
+        let mut others = Vec::new();
         for (idx, row) in values.into_iter().enumerate() {
             tel.linhas_inspecionadas += 1;
             let row_number_1based = (idx as u32) + 2;
@@ -632,7 +644,16 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
                 }
                 continue;
             }
+            let item = (ctx, route);
+            if route == RouteDecision::N1 {
+                prioritized.push(item);
+            } else {
+                others.push(item);
+            }
+        }
 
+        prioritized.extend(others);
+        for (ctx, route) in prioritized {
             let permit = sem.clone().acquire_owned().await.unwrap();
             let dispatcher = self.dispatcher.clone();
             let guard = self.guard.clone();
@@ -793,7 +814,7 @@ async fn main() -> io::Result<()> {
     };
     tracing_subscriber::fmt()
         .with_max_level(level)
-        .with_ansi(true)
+        .with_ansi(std::io::stderr().is_terminal())
         .init();
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")

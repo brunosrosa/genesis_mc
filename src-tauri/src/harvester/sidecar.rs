@@ -81,6 +81,327 @@ fn digest_json_is_empty(value: &serde_json::Value) -> bool {
     }
 }
 
+fn jcodemunch_exit_code_one_is_retryable_success(args: &[&str], stdout_bytes: &[u8]) -> bool {
+    let Some(subcommand) = args.first().copied() else {
+        return false;
+    };
+    if stdout_is_blank(stdout_bytes) {
+        return false;
+    }
+
+    match subcommand {
+        "index" => {
+            let Ok(index_json) = serde_json::from_slice::<serde_json::Value>(stdout_bytes) else {
+                return false;
+            };
+            matches!(index_json.get("success").and_then(|value| value.as_bool()), Some(true))
+        }
+        "digest" => stdout_contains_json_payload(stdout_bytes),
+        _ => false,
+    }
+}
+
+fn stdout_preview(bytes: &[u8], max_chars: usize) -> String {
+    if stdout_is_blank(bytes) {
+        return String::new();
+    }
+    let text = String::from_utf8_lossy(bytes);
+    truncate_chars(&text.replace('\r', " ").replace('\n', " "), max_chars)
+}
+
+fn fallback_jcodemunch_repo_outline(repo_path: &Path, reason: &str) -> Vec<u8> {
+    let mut entries = Vec::new();
+    if let Ok(read_dir) = std::fs::read_dir(repo_path) {
+        for item in read_dir.take(80) {
+            let Ok(item) = item else { continue };
+            let name = item
+                .file_name()
+                .to_str()
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            if !name.is_empty() {
+                entries.push(name);
+            }
+        }
+    }
+    entries.sort();
+    let mut out = String::new();
+    out.push_str("# Repository Outline\n\n");
+    out.push_str("Fallback: ");
+    out.push_str(reason.trim());
+    out.push_str("\n\n## Root Entries\n");
+    if entries.is_empty() {
+        out.push_str("- <vazio>\n");
+    } else {
+        for entry in entries {
+            out.push_str("- ");
+            out.push_str(&entry);
+            out.push('\n');
+        }
+    }
+    out.into_bytes()
+}
+
+fn fallback_jcodemunch_health_report(reason: &str) -> Vec<u8> {
+    serde_json::to_string(&serde_json::json!({
+        "fallback": true,
+        "source": "jcodemunch-mcp",
+        "reason": truncate_chars(reason.trim(), 800),
+    }))
+    .unwrap_or_else(|_| "{\"fallback\":true}".to_string())
+    .into_bytes()
+}
+
+fn fallback_jcodemunch_architecture_map(reason: &str) -> Vec<u8> {
+    format!(
+        "# Architecture Map\n\nFallback: {}\n",
+        truncate_chars(reason.trim(), 800)
+    )
+    .into_bytes()
+}
+
+fn is_no_source_files_found(reason: &str) -> bool {
+    reason.to_ascii_lowercase().contains("no source files found")
+}
+
+fn extract_urls_from_text(text: &str, max_urls: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    let bytes = text.as_bytes();
+    while idx < bytes.len() && out.len() < max_urls {
+        let rest = &text[idx..];
+        let Some(rel_pos) = rest.find("http") else {
+            break;
+        };
+        idx = idx.saturating_add(rel_pos);
+        let candidate = &text[idx..];
+        let end = candidate
+            .find(|c: char| c.is_whitespace() || matches!(c, ')' | ']' | '"' | '\'' | '<' | '>'))
+            .unwrap_or(candidate.len());
+        let mut url = candidate[..end].trim().trim_end_matches(['.', ',', ';', ':']).to_string();
+        if url.starts_with("http://") || url.starts_with("https://") {
+            if url.len() > 2048 {
+                url.truncate(2048);
+            }
+            out.push(url);
+        }
+        idx = idx.saturating_add(end.max(1));
+    }
+    out
+}
+
+fn extract_github_repo_ids(urls: &[String], max_repos: usize) -> Vec<String> {
+    let mut out = BTreeSet::<String>::new();
+    for url in urls {
+        if out.len() >= max_repos {
+            break;
+        }
+        let lower = url.to_ascii_lowercase();
+        let marker = "github.com/";
+        let Some(pos) = lower.find(marker) else {
+            continue;
+        };
+        let mut rest = url[(pos + marker.len())..].to_string();
+        if let Some(hash) = rest.find('#') {
+            rest.truncate(hash);
+        }
+        if let Some(q) = rest.find('?') {
+            rest.truncate(q);
+        }
+        rest = rest.trim_end_matches('/').trim_end_matches(".git").to_string();
+        let mut parts = rest.split('/').map(|p| p.trim()).filter(|p| !p.is_empty());
+        let Some(owner) = parts.next() else { continue };
+        let Some(repo) = parts.next() else { continue };
+        if owner.eq_ignore_ascii_case("topics")
+            || owner.eq_ignore_ascii_case("search")
+            || owner.eq_ignore_ascii_case("orgs")
+            || owner.eq_ignore_ascii_case("users")
+        {
+            continue;
+        }
+        out.insert(format!("{owner}/{repo}"));
+    }
+    out.into_iter().take(max_repos).collect()
+}
+
+fn collect_markdown_files(repo_path: &Path, max_files: usize) -> Vec<PathBuf> {
+    fn should_skip_dir(name: &str) -> bool {
+        matches!(name, ".git" | "node_modules" | "target" | "vendor" | ".jj" | ".svn")
+    }
+
+    let mut out = Vec::new();
+    let mut stack = vec![repo_path.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        if out.len() >= max_files {
+            break;
+        }
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.take(512) {
+            if out.len() >= max_files {
+                break;
+            }
+            let Ok(entry) = entry else { continue };
+            let path = entry.path();
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_dir() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if should_skip_dir(name) {
+                        continue;
+                    }
+                }
+                stack.push(path);
+                continue;
+            }
+            if !ft.is_file() {
+                continue;
+            }
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase());
+            if matches!(ext.as_deref(), Some("md" | "markdown" | "mdx")) {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
+    let md_files = collect_markdown_files(repo_path, 24);
+    let mut blocks: Vec<(i32, ScopedTextBlock)> = Vec::new();
+    let mut all_text = String::new();
+    let mut skill_signal = false;
+    for path in &md_files {
+        let rel = sanitize_repo_relative_path(repo_path, &path.to_string_lossy())
+            .unwrap_or_else(|| path.file_name().and_then(|n| n.to_str()).unwrap_or("file").to_string());
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let mut score = 0i32;
+        if !skill_signal {
+            let rel_l = rel.to_ascii_lowercase();
+            let c_l = content.to_ascii_lowercase();
+            if rel_l.contains("skill")
+                || rel_l.contains("prompt")
+                || c_l.contains("skills for ai")
+                || c_l.contains("coding agents")
+                || c_l.contains("diagram")
+                || c_l.contains("visualization")
+            {
+                skill_signal = true;
+            }
+        }
+        {
+            let rel_l = rel.to_ascii_lowercase();
+            if rel_l.contains("readme") {
+                score += 5;
+            }
+            if rel_l.contains("skill") || rel_l.contains("prompt") {
+                score += 3;
+            }
+            let c_l = content.to_ascii_lowercase();
+            if c_l.contains("problems_and_diagnostics") {
+                score += 10;
+            }
+        }
+        all_text.push_str(&content);
+        all_text.push('\n');
+        let snippet = truncate_chars(&content, 6000);
+        blocks.push((
+            score,
+            ScopedTextBlock {
+                file_path: rel,
+                items: vec![snippet],
+                omitted_count: 0,
+            },
+        ));
+    }
+
+    blocks.sort_by(|(score_l, block_l), (score_r, block_r)| {
+        score_r.cmp(score_l).then_with(|| block_l.file_path.cmp(&block_r.file_path))
+    });
+    let packed_blocks = blocks.iter().map(|(_, b)| b.clone()).collect::<Vec<_>>();
+    let packed = pack_scoped_text_blocks(&packed_blocks, BLOB_04_REPO_OUTLINE_MAX_CHARS);
+    let kind = if skill_signal { "SkillLibrary" } else { "ContentRepo" };
+    let mut outline = String::new();
+    outline.push_str("# Repository Outline\n\n");
+    outline.push_str("kind: ");
+    outline.push_str(kind);
+    outline.push_str("\n");
+    outline.push_str("note: Repositório sem arquivos de código indexáveis (curadoria/documentação/skills).\n");
+    outline.push_str("why: ");
+    outline.push_str(truncate_chars(why.trim(), 600).trim());
+    outline.push_str("\n\n");
+    if packed.trim().is_empty() {
+        outline.push_str("Sem markdown legível encontrado.\n");
+    } else {
+        outline.push_str("## Markdown Extract (amostra)\n\n");
+        outline.push_str(&packed);
+    }
+
+    let urls = extract_urls_from_text(&all_text, 600);
+    let gh_repos = extract_github_repo_ids(&urls, 250);
+    let mut external = BTreeSet::<String>::new();
+    for url in urls {
+        if url.to_ascii_lowercase().contains("github.com/") {
+            continue;
+        }
+        external.insert(url);
+    }
+
+    let mut link_map = String::new();
+    link_map.push_str("# Link Map\n\n");
+    link_map.push_str("kind: ");
+    link_map.push_str(kind);
+    link_map.push_str("\n");
+    link_map.push_str(&format!("markdown_files: {}\n", md_files.len()));
+    link_map.push_str(&format!("github_repo_links: {}\n", gh_repos.len()));
+    link_map.push_str(&format!("external_links: {}\n\n", external.len()));
+    link_map.push_str("## GitHub Repos\n");
+    if gh_repos.is_empty() {
+        link_map.push_str("- <nenhum>\n");
+    } else {
+        for repo in &gh_repos {
+            link_map.push_str("- ");
+            link_map.push_str(repo);
+            link_map.push('\n');
+        }
+    }
+    link_map.push_str("\n## External URLs\n");
+    if external.is_empty() {
+        link_map.push_str("- <nenhum>\n");
+    } else {
+        for url in external.iter().take(200) {
+            link_map.push_str("- ");
+            link_map.push_str(url);
+            link_map.push('\n');
+        }
+    }
+
+    let health = serde_json::to_string(&serde_json::json!({
+        "kind": kind,
+        "why": truncate_chars(why.trim(), 800),
+        "markdown_files": md_files.len(),
+        "github_repo_links": gh_repos.len(),
+        "external_links": external.len(),
+        "skill_signal": skill_signal,
+    }))
+    .unwrap_or_else(|_| "{\"kind\":\"ContentRepo\"}".to_string());
+
+    JCodemunchArtifacts {
+        repo_outline_blob: truncate_chars(&outline, BLOB_04_REPO_OUTLINE_MAX_CHARS).into_bytes(),
+        architecture_map_blob: truncate_chars(&link_map, BLOB_05_ARCHITECTURE_MAP_MAX_CHARS).into_bytes(),
+        health_report_blob: truncate_chars(&health, BLOB_08_HEALTH_REPORT_MAX_CHARS).into_bytes(),
+    }
+}
+
 fn stdout_contains_json_payload(bytes: &[u8]) -> bool {
     serde_json::from_slice::<serde_json::Value>(bytes).is_ok()
 }
@@ -896,18 +1217,35 @@ async fn execute_sidecar<E: SandboxExecutor>(
             let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
             let sanitized_stderr = sanitize_host_paths_in_text(executor.repo_path(), &stderr);
             if (binary == "semgrep" && !stdout_is_blank(&sanitized_stdout) && stdout_contains_json_payload(&sanitized_stdout))
+                || (binary == "jcodemunch-mcp"
+                    && exit_code == 1
+                    && jcodemunch_exit_code_one_is_retryable_success(args, &sanitized_stdout))
                 || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
             {
+                if binary == "jcodemunch-mcp" && exit_code == 1 {
+                    tracing::warn!(
+                        binary = %binary,
+                        args = ?args,
+                        "Sidecar retornou exit code 1, mas stdout indica sucesso; tolerando"
+                    );
+                }
                 Ok(sanitized_stdout)
             } else {
+                let stdout_hint = stdout_preview(&sanitized_stdout, 400);
                 error!(
                     binary = %binary,
                     exit_code,
                     stderr = %sanitized_stderr,
+                    stdout = %stdout_hint,
                     "Sidecar terminou com exit code nao zero"
                 );
+                let reason = if sanitized_stderr.trim().is_empty() && !stdout_hint.trim().is_empty() {
+                    format!("exit code {exit_code}: stdout={stdout_hint}")
+                } else {
+                    format!("exit code {exit_code}: {sanitized_stderr}")
+                };
                 Err(SidecarError::ExecutionFailed {
-                    reason: format!("exit code {exit_code}: {sanitized_stderr}"),
+                    reason,
                 })
             }
         }
@@ -931,6 +1269,13 @@ impl JCodemunchSidecar {
             "jcodemunch: iniciando indexacao e digest"
         );
         let storage_path = code_index_path_for_repo(input.executor.repo_path());
+        if let Err(e) = tokio::fs::create_dir_all(&storage_path).await {
+            tracing::warn!(
+                repo_path = %input.executor.repo_path().display(),
+                error = %e,
+                "jcodemunch: falha ao preparar diretório de índice; seguindo"
+            );
+        }
         let repo_path_arg = if input.executor.repo_path().is_absolute() {
             input.executor.repo_path().display().to_string()
         } else {
@@ -941,6 +1286,7 @@ impl JCodemunchSidecar {
         };
         let index_args = vec![
             "index".to_string(),
+            repo_path_arg,
             "--no-ai-summaries".to_string(),
             "--extra-ignore".to_string(),
             "documentation".to_string(),
@@ -951,18 +1297,53 @@ impl JCodemunchSidecar {
             "node_modules".to_string(),
             "target".to_string(),
             ".git".to_string(),
-            repo_path_arg,
         ];
         let index_arg_refs: Vec<&str> = index_args.iter().map(String::as_str).collect();
-        let index_bytes = execute_sidecar(
+        let _index_bytes = match execute_sidecar(
             input.executor,
             "jcodemunch-mcp",
             &index_arg_refs,
             input.timeout_secs,
             SidecarExitPolicy::StrictZeroOnly,
         )
-        .await?;
-        validate_index_response(&index_bytes)?;
+        .await
+        {
+            Ok(bytes) => {
+                if let Err(e) = validate_index_response(&bytes) {
+                    let reason = format!("index inválido: {}", e);
+                    if is_no_source_files_found(&reason) {
+                        return Ok(content_repo_artifacts(input.executor.repo_path(), &reason));
+                    }
+                    tracing::warn!(
+                        repo_path = %input.executor.repo_path().display(),
+                        error = %reason,
+                        "jcodemunch: index falhou; aplicando fallback (fail-soft)"
+                    );
+                    return Ok(JCodemunchArtifacts {
+                        repo_outline_blob: fallback_jcodemunch_repo_outline(input.executor.repo_path(), &reason),
+                        health_report_blob: fallback_jcodemunch_health_report(&reason),
+                        architecture_map_blob: fallback_jcodemunch_architecture_map(&reason),
+                    });
+                }
+                bytes
+            }
+            Err(e) => {
+                let reason = e.to_string();
+                if is_no_source_files_found(&reason) {
+                    return Ok(content_repo_artifacts(input.executor.repo_path(), &reason));
+                }
+                tracing::warn!(
+                    repo_path = %input.executor.repo_path().display(),
+                    error = %reason,
+                    "jcodemunch: index falhou; aplicando fallback (fail-soft)"
+                );
+                return Ok(JCodemunchArtifacts {
+                    repo_outline_blob: fallback_jcodemunch_repo_outline(input.executor.repo_path(), &reason),
+                    health_report_blob: fallback_jcodemunch_health_report(&reason),
+                    architecture_map_blob: fallback_jcodemunch_architecture_map(&reason),
+                });
+            }
+        };
 
         let digest_args: Vec<&str> = vec![
             "digest",
@@ -971,27 +1352,60 @@ impl JCodemunchSidecar {
             &storage_path,
         ];
         let digest_arg_refs: Vec<&str> = digest_args;
-        let bytes = execute_sidecar(
+        let bytes = match execute_sidecar(
             input.executor,
             "jcodemunch-mcp",
             &digest_arg_refs,
             input.timeout_secs,
             SidecarExitPolicy::StrictZeroOnly,
         )
-        .await?;
-        let health_report_blob = normalize_health_report(&bytes)?;
+        .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let reason = format!("digest falhou: {}", e);
+                tracing::warn!(
+                    repo_path = %input.executor.repo_path().display(),
+                    error = %reason,
+                    "jcodemunch: digest falhou; seguindo com fallback do health report"
+                );
+                Vec::new()
+            }
+        };
+        let health_report_blob = match normalize_health_report(&bytes) {
+            Ok(blob) => blob,
+            Err(e) => fallback_jcodemunch_health_report(&format!("health report inválido: {}", e)),
+        };
 
         let claude_md_args: Vec<&str> = ["claude-md", "--generate"].to_vec();
         let claude_md_arg_refs: Vec<&str> = claude_md_args;
-        let claude_md_bytes = execute_sidecar(
+        let claude_md_bytes = match execute_sidecar(
             input.executor,
             "jcodemunch-mcp",
             &claude_md_arg_refs,
             input.timeout_secs,
             SidecarExitPolicy::StrictZeroOnly,
         )
-        .await?;
-        let repo_outline_blob = normalize_repo_outline(&claude_md_bytes)?;
+        .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let reason = format!("claude-md falhou: {}", e);
+                tracing::warn!(
+                    repo_path = %input.executor.repo_path().display(),
+                    error = %reason,
+                    "jcodemunch: repo outline indisponível; usando fallback"
+                );
+                Vec::new()
+            }
+        };
+        let repo_outline_blob = match normalize_repo_outline(&claude_md_bytes) {
+            Ok(blob) => blob,
+            Err(e) => fallback_jcodemunch_repo_outline(
+                input.executor.repo_path(),
+                &format!("repo outline inválido: {}", e),
+            ),
+        };
         let architecture_map_blob = match normalize_architecture_map(input.executor.repo_path()) {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -1000,7 +1414,7 @@ impl JCodemunchSidecar {
                     error = %e,
                     "jcodemunch: blob_05_architecture_map falhou; aplicando fallback (fail-soft)"
                 );
-                b"# Architecture Map\n\nFallback: relacoes topologicas indisponiveis; blob_04_repo_outline preservado.\n".to_vec()
+                fallback_jcodemunch_architecture_map(&e.to_string())
             }
         };
         tracing::info!(
@@ -2219,12 +2633,10 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert_eq!(
-            result,
-            Err(SidecarError::BinaryNotFound {
-                binary: "jcodemunch-mcp".to_string()
-            })
-        );
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        assert!(outline.contains("Fallback:"), "Outline deveria conter fallback");
     }
 
     #[tokio::test]
@@ -2242,12 +2654,10 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert_eq!(
-            result,
-            Err(SidecarError::ExecutionFailed {
-                reason: "exit code 2: fatal error".to_string()
-            })
-        );
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        assert!(outline.contains("Fallback:"), "Outline deveria conter fallback");
     }
 
     #[tokio::test]
@@ -2260,10 +2670,7 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert_eq!(
-            result,
-            Err(SidecarError::Timeout { timeout_secs: 45 })
-        );
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
     #[tokio::test]
@@ -2281,12 +2688,7 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        match result {
-            Err(SidecarError::ParseError { reason }) => {
-                assert!(reason.contains("key must be a string") || reason.contains("expected"));
-            }
-            other => panic!("Esperava ParseError, obteve: {:?}", other),
-        }
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
     #[tokio::test]
@@ -2304,12 +2706,7 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert_eq!(
-            result,
-            Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch-mcp digest returned an empty health payload".to_string()
-            })
-        );
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
     #[tokio::test]
@@ -2326,12 +2723,7 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert_eq!(
-            result,
-            Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch-mcp digest returned empty stdout".to_string()
-            })
-        );
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
     #[tokio::test]
@@ -2349,12 +2741,32 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert_eq!(
-            result,
-            Err(SidecarError::ExecutionFailed {
-                reason: "exit code 1: usage error".to_string()
-            })
-        );
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_jcodemunch_index_exit_code_1_with_success_json_is_allowed() {
+        let index_json = r#"{"success": true}"#;
+        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
+        let run_err = SandboxError::ProcessNonZeroExit {
+            exit_code: 1,
+            stderr: "".to_string(),
+            stdout: index_json.as_bytes().to_vec(),
+        };
+        let executor = MockExecutor::new(vec![
+            Err(run_err),
+            Ok(digest_json.as_bytes().to_vec()),
+            Ok(claude_md.as_bytes().to_vec()),
+        ]);
+        let input = JCodemunchInput {
+            executor: &executor,
+            timeout_secs: 30,
+            persist_artifacts: None,
+        };
+
+        let result = JCodemunchSidecar::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria tolerar exit 1 no index: {:?}", result);
     }
 
     #[tokio::test]
@@ -2373,12 +2785,7 @@ mod tests {
         };
 
         let result = JCodemunchSidecar::extract(input).await;
-        assert_eq!(
-            result,
-            Err(SidecarError::ExecutionFailed {
-                reason: "jcodemunch-mcp claude-md returned empty stdout".to_string()
-            })
-        );
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
     #[tokio::test]
