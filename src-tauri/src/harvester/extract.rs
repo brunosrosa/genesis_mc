@@ -106,6 +106,7 @@ pub struct OpsBlueprintExtractor;
 pub struct LocalStaticExtractor;
 
 const README_MAX_CHARS: usize = 8_000;
+const README_MISSING_COGNITIVE_DIRECTIVE: &str = "[DIRETIVA SODA COGNITIVA: DOCUMENTAÇÃO RAIZ NÃO ENCONTRADA. O repositório não possui um arquivo README padrão na raiz (.md, .rst, .txt). Lentes de Avaliação: penalizem a experiência de onboarding e documentação (Lente A e Lente C), mas prossigam com a análise arquitetural utilizando apenas a AST e os manifestos.]";
 const MANIFEST_BLOB_MAX_CHARS: usize = 3_000;
 const OPS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
 const COMMUNITY_META_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
@@ -194,13 +195,23 @@ impl LocalStaticExtractor {
     pub async fn extract_all(repo_path: &Path) -> Result<Vec<ArtifactBlob>, ExtractionError> {
         let mut blobs = Vec::new();
 
-        blobs.push(Self::extract_blob(
+        blobs.push(Self::extract_optional_blob(
             repo_path,
-            &["README.md", "README.txt"],
+            &[
+                "README.md",
+                "README.rst",
+                "README.txt",
+                "README",
+                "readme.md",
+                "readme.rst",
+                "readme.txt",
+                "readme",
+            ],
             "blob_01_promessa_readme",
             README_MAX_CHARS,
+            README_MISSING_COGNITIVE_DIRECTIVE,
         )
-        .await?);
+        .await);
 
         Ok(blobs)
     }
@@ -306,6 +317,30 @@ impl LocalStaticExtractor {
             artifact_type: artifact_type.to_string(),
             candidates: candidates.join(", "),
         })
+    }
+
+    async fn extract_optional_blob(
+        repo_path: &Path,
+        candidates: &[&str],
+        artifact_type: &str,
+        max_chars: usize,
+        missing_directive: &str,
+    ) -> ArtifactBlob {
+        match Self::extract_blob(repo_path, candidates, artifact_type, max_chars).await {
+            Ok(blob) => blob,
+            Err(ExtractionError::RequiredArtifactMissing { .. }) | Err(ExtractionError::NotFound) => {
+                blob_from_text(artifact_type, missing_directive.to_string())
+            }
+            Err(e) => {
+                warn!(
+                    artifact_type,
+                    error = %e,
+                    repo_root = %repo_path.display(),
+                    "Falha ao extrair artefato opcional; seguindo com fallback cognitivo"
+                );
+                blob_from_text(artifact_type, missing_directive.to_string())
+            }
+        }
     }
 }
 
@@ -1368,13 +1403,8 @@ impl ManifestExtractor {
             "__mocks__",
             "__tests__",
         ];
-        let lower = rel_path.to_ascii_lowercase();
-        for segment in lower.split('/') {
-            if SKIP_DIRS.iter().any(|needle| segment == *needle) {
-                return true;
-            }
-        }
-        false
+        let normalized = super::normalize_repo_path_key(rel_path);
+        super::normalized_path_has_any_segment(&normalized, &SKIP_DIRS)
     }
 
     fn is_manifest_blob_target(path: &Path) -> bool {

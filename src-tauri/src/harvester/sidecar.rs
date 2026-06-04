@@ -722,10 +722,7 @@ const BACKEND_PRIORITY_PREFIXES: &[(&str, u8)] = &[
 ];
 
 fn normalize_topology_key(value: &str) -> String {
-    value
-        .to_ascii_lowercase()
-        .replace('\\', "/")
-        .replace("::", "/")
+    super::normalize_repo_path_key(value)
 }
 
 fn has_visual_extension(value: &str) -> bool {
@@ -748,9 +745,7 @@ fn should_skip_visual_topology(value: &str) -> bool {
 
 fn should_skip_non_core_topology(value: &str) -> bool {
     let normalized = normalize_topology_key(value);
-    normalized
-        .split('/')
-        .any(|segment| NON_CORE_PATH_SEGMENTS.contains(&segment))
+    super::normalized_path_has_any_segment(&normalized, NON_CORE_PATH_SEGMENTS)
         || NON_CORE_FILE_PATTERNS
         .iter()
         .any(|pattern| normalized.contains(pattern))
