@@ -1,6 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use oxc::{
     allocator::Allocator,
     ast::ast::CallExpression,
@@ -162,7 +163,13 @@ fn fallback_jcodemunch_architecture_map(reason: &str) -> Vec<u8> {
 }
 
 fn is_no_source_files_found(reason: &str) -> bool {
-    reason.to_ascii_lowercase().contains("no source files found")
+    let lower = reason.to_ascii_lowercase();
+    lower.contains("no source files found")
+        || lower.contains("no source files were found")
+        || lower.contains("no source file found")
+        || lower.contains("no source files")
+        || lower.contains("no indexable source")
+        || lower.contains("no supported source")
 }
 
 fn extract_urls_from_text(text: &str, max_urls: usize) -> Vec<String> {
@@ -1506,6 +1513,7 @@ impl OxcSidecar {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestIntentPayload {
     pub runner_name: String,
+    pub timed_out: bool,
     pub blocks: Vec<ScopedTextBlock>,
 }
 
@@ -1657,46 +1665,6 @@ fn read_static_test_file(path: &Path) -> Result<Option<String>, SidecarError> {
         Ok(text) => Ok(Some(text)),
         Err(_) => Ok(None),
     }
-}
-
-fn collect_static_test_files(
-    root: &Path,
-    profile: &StackProfile,
-    out: &mut Vec<PathBuf>,
-) -> Result<(), SidecarError> {
-    for entry in std::fs::read_dir(root).map_err(|e| SidecarError::ExecutionFailed {
-        reason: format!("Falha ao listar '{}': {}", root.display(), e),
-    })? {
-        let entry = entry.map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!("Falha ao iterar '{}': {}", root.display(), e),
-        })?;
-        let path = entry.path();
-        let file_type = entry.file_type().map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!("Falha ao ler tipo de '{}': {}", path.display(), e),
-        })?;
-
-        if file_type.is_dir() {
-            if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
-                if should_skip_test_dir(name) {
-                    continue;
-                }
-            }
-            collect_static_test_files(&path, profile, out)?;
-            continue;
-        }
-
-        if !file_type.is_file() || !is_supported_test_file(profile, &path) {
-            continue;
-        }
-
-        let relative = relative_display(root, &path);
-        if should_skip_discovered_test_entry(&relative) {
-            continue;
-        }
-        out.push(path);
-    }
-
-    Ok(())
 }
 
 fn capture_line_at_offset(source: &str, offset: u32) -> Option<&str> {
@@ -1896,42 +1864,188 @@ fn build_scoped_blocks_from_pairs(
         .collect()
 }
 
-fn discover_static_test_entries(
+#[derive(Debug, Clone, Default)]
+struct TestDiscoveryProgress {
+    blocks: Vec<ScopedTextBlock>,
+    bfs_dirs: Vec<String>,
+    bfs_test_files: Vec<String>,
+}
+
+fn discover_static_test_entries_bfs(
     repo_path: &Path,
     profile: &StackProfile,
+    progress: Option<&Arc<Mutex<TestDiscoveryProgress>>>,
 ) -> Result<Vec<ScopedTextBlock>, SidecarError> {
-    let mut files = Vec::new();
-    collect_static_test_files(repo_path, profile, &mut files)?;
+    const MAX_SNAPSHOT_DIRS: usize = 64;
+    const MAX_SNAPSHOT_FILES: usize = 96;
+    const PROGRESS_FLUSH_EVERY: usize = 32;
 
-    let mut entries = Vec::new();
-    for path in files {
-        let Some(content) = read_static_test_file(&path)? else {
-            continue;
-        };
-        let relative = relative_display(repo_path, &path);
-        let extension = path
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(|value| value.to_ascii_lowercase());
+    let mut blocks = Vec::new();
+    let mut bfs_dirs = Vec::new();
+    let mut bfs_test_files = Vec::new();
 
-        let discovered = match extension.as_deref() {
-            Some("rs") => parse_rust_test_entries(&content),
-            Some("py") => parse_python_test_entries(&content),
-            Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
-                parse_frontend_test_entries(&path, &content)
+    let mut queue = VecDeque::new();
+    queue.push_back(repo_path.to_path_buf());
+
+    let mut pending_blocks = Vec::new();
+    let mut steps = 0usize;
+
+    while let Some(dir) = queue.pop_front() {
+        let rel_dir = relative_display(repo_path, &dir);
+        let rel_dir = if rel_dir.is_empty() { ".".to_string() } else { rel_dir };
+        if bfs_dirs.len() < MAX_SNAPSHOT_DIRS && !should_skip_discovered_test_entry(&rel_dir) {
+            bfs_dirs.push(rel_dir);
+        }
+
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(v) => v,
+            Err(_e) => {
+                steps += 1;
+                if steps % PROGRESS_FLUSH_EVERY == 0 {
+                    if let Some(progress) = progress {
+                        let mut guard = progress.lock().unwrap();
+                        if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
+                            for item in &bfs_dirs {
+                                if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
+                                    break;
+                                }
+                                if !guard.bfs_dirs.contains(item) {
+                                    guard.bfs_dirs.push(item.clone());
+                                }
+                            }
+                        }
+                        if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
+                            for item in &bfs_test_files {
+                                if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
+                                    break;
+                                }
+                                if !guard.bfs_test_files.contains(item) {
+                                    guard.bfs_test_files.push(item.clone());
+                                }
+                            }
+                        }
+                        if !pending_blocks.is_empty() {
+                            guard.blocks.extend(pending_blocks.drain(..));
+                        }
+                    }
+                }
+                continue;
             }
-            _ => Vec::new(),
         };
 
-        for entry in discovered {
-            let candidate = format!("{} :: {}", relative, entry);
-            if !should_skip_discovered_test_entry(&candidate) {
-                entries.push((relative.clone(), entry));
+        for entry in entries {
+            let entry = entry.map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao iterar '{}': {}", dir.display(), e),
+            })?;
+            let path = entry.path();
+            let file_type = entry.file_type().map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao ler tipo de '{}': {}", path.display(), e),
+            })?;
+
+            if file_type.is_dir() {
+                if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
+                    if should_skip_test_dir(name) {
+                        continue;
+                    }
+                }
+                queue.push_back(path);
+                continue;
+            }
+
+            if !file_type.is_file() || !is_supported_test_file(profile, &path) {
+                continue;
+            }
+
+            let relative = relative_display(repo_path, &path);
+            if should_skip_discovered_test_entry(&relative) {
+                continue;
+            }
+
+            if bfs_test_files.len() < MAX_SNAPSHOT_FILES {
+                bfs_test_files.push(relative.clone());
+            }
+
+            let Some(content) = read_static_test_file(&path)? else {
+                continue;
+            };
+            let extension = path
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.to_ascii_lowercase());
+
+            let discovered = match extension.as_deref() {
+                Some("rs") => parse_rust_test_entries(&content),
+                Some("py") => parse_python_test_entries(&content),
+                Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
+                    parse_frontend_test_entries(&path, &content)
+                }
+                _ => Vec::new(),
+            };
+
+            let mut items = Vec::new();
+            for entry in discovered {
+                let candidate = format!("{} :: {}", relative, entry);
+                if !should_skip_discovered_test_entry(&candidate) {
+                    items.push(entry);
+                }
+            }
+
+            if !items.is_empty() {
+                let block = ScopedTextBlock {
+                    file_path: relative,
+                    items,
+                    omitted_count: 0,
+                };
+                blocks.push(block.clone());
+                pending_blocks.push(block);
+            }
+
+            steps += 1;
+            if steps % PROGRESS_FLUSH_EVERY == 0 {
+                if let Some(progress) = progress {
+                    let mut guard = progress.lock().unwrap();
+                    if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
+                        for item in &bfs_dirs {
+                            if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
+                                break;
+                            }
+                            if !guard.bfs_dirs.contains(item) {
+                                guard.bfs_dirs.push(item.clone());
+                            }
+                        }
+                    }
+                    if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
+                        for item in &bfs_test_files {
+                            if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
+                                break;
+                            }
+                            if !guard.bfs_test_files.contains(item) {
+                                guard.bfs_test_files.push(item.clone());
+                            }
+                        }
+                    }
+                    if !pending_blocks.is_empty() {
+                        guard.blocks.extend(pending_blocks.drain(..));
+                    }
+                }
             }
         }
     }
 
-    Ok(build_scoped_blocks_from_pairs(entries))
+    if let Some(progress) = progress {
+        let mut guard = progress.lock().unwrap();
+        if guard.bfs_dirs.is_empty() {
+            guard.bfs_dirs = bfs_dirs;
+        }
+        if guard.bfs_test_files.is_empty() {
+            guard.bfs_test_files = bfs_test_files;
+        }
+        if !pending_blocks.is_empty() {
+            guard.blocks.extend(pending_blocks);
+        }
+    }
+
+    Ok(blocks)
 }
 
 pub struct NativeTestDiscoverySidecar;
@@ -1940,16 +2054,51 @@ impl NativeTestDiscoverySidecar {
     pub async fn extract(input: NativeTestDiscoveryInput<'_>) -> Result<TestIntentPayload, SidecarError> {
         let repo_path = input.repo_path.to_path_buf();
         let profile = input.profile.clone();
-        let entries = tokio::task::spawn_blocking(move || discover_static_test_entries(&repo_path, &profile))
-            .await
-            .map_err(|e| SidecarError::ExecutionFailed {
-                reason: format!("Static test discovery join failed: {}", e),
-            })??;
+        let progress = Arc::new(Mutex::new(TestDiscoveryProgress::default()));
+        let progress_ref = progress.clone();
 
-        Ok(TestIntentPayload {
-            runner_name: "static-ast".to_string(),
-            blocks: entries,
-        })
+        let mut handle = tokio::task::spawn_blocking(move || {
+            discover_static_test_entries_bfs(&repo_path, &profile, Some(&progress_ref))
+        });
+
+        match tokio::time::timeout(Duration::from_secs(60), &mut handle).await {
+            Ok(joined) => {
+                let blocks = joined
+                    .map_err(|e| SidecarError::ExecutionFailed {
+                        reason: format!("Static test discovery join failed: {}", e),
+                    })??;
+                Ok(TestIntentPayload {
+                    runner_name: "static-ast-bfs".to_string(),
+                    timed_out: false,
+                    blocks,
+                })
+            }
+            Err(_) => {
+                handle.abort();
+                let snapshot = progress.lock().unwrap().clone();
+                let mut blocks = Vec::new();
+                if !snapshot.bfs_dirs.is_empty() {
+                    blocks.push(ScopedTextBlock {
+                        file_path: "bfs_snapshot::dirs".to_string(),
+                        items: snapshot.bfs_dirs,
+                        omitted_count: 0,
+                    });
+                }
+                if !snapshot.bfs_test_files.is_empty() {
+                    blocks.push(ScopedTextBlock {
+                        file_path: "bfs_snapshot::test_files".to_string(),
+                        items: snapshot.bfs_test_files,
+                        omitted_count: 0,
+                    });
+                }
+                blocks.extend(snapshot.blocks);
+                Ok(TestIntentPayload {
+                    runner_name: "static-ast-bfs".to_string(),
+                    timed_out: true,
+                    blocks,
+                })
+            }
+        }
     }
 }
 

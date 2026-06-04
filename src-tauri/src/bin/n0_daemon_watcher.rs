@@ -15,6 +15,7 @@ use tracing::{error, info, warn};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use rusqlite::Connection;
+use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -514,9 +515,10 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
     async fn run_once(&self, spreadsheet_id: &str) -> Telemetry {
         let mut tel = Telemetry::default();
 
+        let header_range = master_solutions_header_range();
         let header = match self
             .sheets
-            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string())
+            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone())
             .await
         {
             Ok(v) => v,
@@ -529,7 +531,7 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
         let header_row = header.first().cloned().unwrap_or_default();
         if header_row.is_empty() {
             tel.erros_sheets += 1;
-            error!("N0: header vazio em MASTER_SOLUTIONS!A1:CF1 (falha de leitura ou payload inesperado)");
+            error!(range = %header_range, "N0: header vazio em MASTER_SOLUTIONS (falha de leitura ou payload inesperado)");
             return tel;
         }
         let cols = match resolve_column_map(&header_row) {

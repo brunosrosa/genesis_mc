@@ -1,5 +1,6 @@
 use crate::cognition::synthesizer::{
-    apply_phase4_block5, sheet_range_for_row, MasterSolutionsRow, MASTER_SOLUTIONS_CANONICAL_COLUMNS,
+    apply_phase4_block5, master_solutions_header_range, sheet_range_for_row, MasterSolutionsRow,
+    MASTER_SOLUTIONS_CANONICAL_COLUMNS,
 };
 use thiserror::Error;
 use serde_json::{json, Value};
@@ -28,7 +29,7 @@ pub enum SsotError {
 
 pub struct SsotInjector;
 
-const SSOT_EXPECTED_COLUMNS: usize = 84;
+const SSOT_EXPECTED_COLUMNS: usize = 85;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
 pub type SheetsDataFuture<'a> =
@@ -711,9 +712,9 @@ impl SsotInjector {
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
-                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status
+                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status, indicacao_otimista_canibalizacao
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84, ?85
             )",
             rusqlite::params![
                 &validated.project_name,
@@ -800,6 +801,7 @@ impl SsotInjector {
                 payload.valid_from,
                 payload.valid_to,
                 payload.embargo_status,
+                &payload.indicacao_otimista_canibalizacao,
             ],
         ).map_err(|e| format!("Falha ao executar INSERT repo_heuristics: {}", e))?;
 
@@ -848,6 +850,7 @@ impl SsotInjector {
                 repo_analised_version TEXT NOT NULL,
                 repo_version TEXT,
                 ultima_versao_online TEXT,
+                indicacao_otimista_canibalizacao TEXT NOT NULL DEFAULT '',
                 lote_id TEXT NOT NULL,
                 data_ultima_analise INTEGER NOT NULL,
                 analise_origem TEXT NOT NULL,
@@ -942,6 +945,7 @@ impl SsotInjector {
         let mut has_status_fase = false;
         let mut has_repo_analised_version = false;
         let mut has_repo_version = false;
+        let mut has_indicacao_otimista = false;
         while let Some(row) = rows
             .next()
             .map_err(|e| format!("Falha ao iterar PRAGMA table_info(repo_heuristics): {e}"))?
@@ -954,6 +958,7 @@ impl SsotInjector {
                 "status_fase" => has_status_fase = true,
                 "repo_analised_version" => has_repo_analised_version = true,
                 "repo_version" => has_repo_version = true,
+                "indicacao_otimista_canibalizacao" => has_indicacao_otimista = true,
                 _ => {}
             }
         }
@@ -985,6 +990,13 @@ impl SsotInjector {
                 [],
             )
             .map_err(|e| format!("Falha ao adicionar coluna repo_version (legado): {e}"))?;
+        }
+        if !has_indicacao_otimista {
+            conn.execute(
+                "ALTER TABLE repo_heuristics ADD COLUMN indicacao_otimista_canibalizacao TEXT NOT NULL DEFAULT ''",
+                [],
+            )
+            .map_err(|e| format!("Falha ao adicionar coluna indicacao_otimista_canibalizacao: {e}"))?;
         }
 
         let _ = conn.execute(
@@ -1036,7 +1048,11 @@ impl SsotInjector {
         spreadsheet_id: &str,
     ) -> Result<Vec<String>, SsotError> {
         let raw = sheets
-            .get_sheet_data(spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A1:CF1".to_string())
+            .get_sheet_data(
+                spreadsheet_id,
+                MASTER_SOLUTIONS_SHEET,
+                master_solutions_header_range(),
+            )
             .await
             .map_err(SsotError::CloudFailure)?;
         Ok(raw.first().cloned().unwrap_or_default())
@@ -1201,7 +1217,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_batch_payload_is_84_columns_a_to_cf() {
+    fn test_prepare_batch_payload_is_85_columns_a_to_cg() {
         let mut row = MasterSolutionsRow::default();
         row.status_atualizacao = "CONCLUIDO".to_string();
         row.status_fase = "F4".to_string();
@@ -1237,7 +1253,7 @@ mod tests {
             &json!(vec![vec![json!("https://github.com/owner/repo")]])
         );
         assert!(obj
-            .get("CD2:CD2")
+            .get("CE2:CE2")
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first())
             .and_then(|v| v.as_array())
@@ -1245,9 +1261,9 @@ mod tests {
             .and_then(|v| v.as_str())
             .map(|s| !s.trim().is_empty() && s.contains('-'))
             .unwrap_or(false));
-        assert_eq!(obj.get("CE2:CE2").unwrap(), &json!(vec![vec![json!("")]]));
+        assert_eq!(obj.get("CF2:CF2").unwrap(), &json!(vec![vec![json!("")]]));
         assert_eq!(
-            obj.get("CF2:CF2").unwrap(),
+            obj.get("CG2:CG2").unwrap(),
             &json!(vec![vec![json!("LIVRE")]])
         );
         assert_eq!(validated.project_name, "owner/repo");

@@ -296,30 +296,77 @@ impl HarvesterOrchestrator {
             })?;
             let semgrep_started = Instant::now();
             info!(repo_id = %repo_id, "N11: Invocando sidecar semgrep");
-            let payload = SemgrepSidecar::extract(SemgrepInput {
+            match SemgrepSidecar::extract(SemgrepInput {
                 executor: sandbox_ref,
                 timeout_secs: 600,
             })
             .await
-            .map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha ao extrair blobs 06/08 via semgrep");
-                OrchestratorError::ExtractionError(e.to_string())
-            })?;
-            info!(
-                repo_id = %repo_id,
-                elapsed_ms = semgrep_started.elapsed().as_millis(),
-                unsafe_hotspots_bytes = payload.unsafe_hotspots_blob.len(),
-                health_report_bytes = payload.health_report_blob.len(),
-                "N11: semgrep concluido"
-            );
+            {
+                Ok(payload) => {
+                    info!(
+                        repo_id = %repo_id,
+                        elapsed_ms = semgrep_started.elapsed().as_millis(),
+                        unsafe_hotspots_bytes = payload.unsafe_hotspots_blob.len(),
+                        health_report_bytes = payload.health_report_blob.len(),
+                        "N11: semgrep concluido"
+                    );
+                    blobs.push(ArtifactBlob {
+                        artifact_type: "blob_06_unsafe_hotspots".to_string(),
+                        payload_blob: payload.unsafe_hotspots_blob,
+                    });
+                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                    blobs.push(ArtifactBlob {
+                        artifact_type: "blob_08_health_report".to_string(),
+                        payload_blob: payload.health_report_blob,
+                    });
+                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                }
+                Err(e) => {
+                    let reason = e.to_string();
+                    warn!(
+                        repo_id = %repo_id,
+                        error = %reason,
+                        "Falha ao extrair blobs 06/08 via semgrep; seguindo com fail-soft"
+                    );
+                    let unsafe_blob = format!(
+                        "# Unsafe Hotspots\n\nFallback: semgrep falhou.\nreason: {}\n",
+                        reason
+                    )
+                    .into_bytes();
+                    let health_blob = serde_json::to_vec(&serde_json::json!({
+                        "fallback": true,
+                        "source": "semgrep",
+                        "reason": reason,
+                    }))
+                    .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
+                    blobs.push(ArtifactBlob {
+                        artifact_type: "blob_06_unsafe_hotspots".to_string(),
+                        payload_blob: unsafe_blob,
+                    });
+                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                    blobs.push(ArtifactBlob {
+                        artifact_type: "blob_08_health_report".to_string(),
+                        payload_blob: health_blob,
+                    });
+                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                }
+            }
+        } else {
+            let unsafe_blob = b"# Unsafe Hotspots\n\nFallback: static analysis (semgrep) foi pulado pelo roteamento de tarefas.\n".to_vec();
+            let health_blob = serde_json::to_vec(&serde_json::json!({
+                "fallback": true,
+                "source": "semgrep",
+                "reason": "static analysis (semgrep) foi pulado pelo roteamento de tarefas",
+            }))
+            .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
             blobs.push(ArtifactBlob {
                 artifact_type: "blob_06_unsafe_hotspots".to_string(),
-                payload_blob: payload.unsafe_hotspots_blob,
+                payload_blob: unsafe_blob,
             });
             log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
             blobs.push(ArtifactBlob {
                 artifact_type: "blob_08_health_report".to_string(),
-                payload_blob: payload.health_report_blob,
+                payload_blob: health_blob,
             });
             log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
         }

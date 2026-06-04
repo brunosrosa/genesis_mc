@@ -68,12 +68,13 @@ fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usiz
 }
 
 fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
+    let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let result = call_mcp(
         "get_sheet_data",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
-            "range": "A1:CF1",
+            "range": header_range,
             "include_grid_data": false
         }),
     )?;
@@ -281,6 +282,8 @@ struct CliArgs {
     skip_harvester: bool,
     batch: bool,
     row_override: Option<u32>,
+    dry_run: bool,
+    feedback_inject: bool,
 }
 
 fn parse_cli_args() -> CliArgs {
@@ -291,6 +294,8 @@ fn parse_cli_args() -> CliArgs {
     let mut skip_harvester = false;
     let mut batch = false;
     let mut row_override: Option<u32> = None;
+    let mut dry_run = false;
+    let mut feedback_inject = false;
     while let Some(arg) = args.next() {
         if arg == "--repo" {
             if let Some(value) = args.next() {
@@ -310,6 +315,14 @@ fn parse_cli_args() -> CliArgs {
             batch = true;
             continue;
         }
+        if arg == "--dry-run" {
+            dry_run = true;
+            continue;
+        }
+        if arg == "--feedback-inject" {
+            feedback_inject = true;
+            continue;
+        }
         if arg == "--row" {
             if let Some(value) = args.next() {
                 row_override = value.trim().parse::<u32>().ok().filter(|v| *v >= 2);
@@ -323,7 +336,170 @@ fn parse_cli_args() -> CliArgs {
         skip_harvester,
         batch,
         row_override,
+        dry_run,
+        feedback_inject,
     }
+}
+
+fn feedback_bmad_report_path(root_dir: &Path) -> io::Result<PathBuf> {
+    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    std::fs::create_dir_all(&reports_dir)?;
+    Ok(reports_dir.join("_FEEDBACK_BMAD_E2E.md"))
+}
+
+fn append_feedback_bmad_report(
+    root_dir: &Path,
+    repo_id: &str,
+    payload: &serde_json::Value,
+) -> io::Result<PathBuf> {
+    let report_path = feedback_bmad_report_path(root_dir)?;
+    let now = now_brt_rfc3339();
+    let json = serde_json::to_string_pretty(payload).unwrap_or_else(|_| "{}".to_string());
+    let mut out = String::new();
+    out.push_str(&format!("\n\n## BMAD E2E ({})\n\n", now));
+    out.push_str(&format!("repo_id={}\n\n", repo_id));
+    out.push_str("```json\n");
+    out.push_str(&json);
+    out.push_str("\n```\n");
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&report_path)?;
+    file.write_all(out.as_bytes())?;
+    Ok(report_path)
+}
+
+fn extract_json_blocks_from_feedback(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut in_block = false;
+    let mut current = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim_end_matches('\r');
+        if !in_block {
+            if trimmed.trim() == "```json" {
+                in_block = true;
+                current.clear();
+            }
+            continue;
+        }
+
+        if trimmed.trim() == "```" {
+            let candidate = current.trim().to_string();
+            if !candidate.is_empty() {
+                out.push(candidate);
+            }
+            in_block = false;
+            current.clear();
+            continue;
+        }
+        current.push_str(trimmed);
+        current.push('\n');
+    }
+    out
+}
+
+fn select_approved_feedback_payload(
+    repo_id: &str,
+    blocks: &[serde_json::Value],
+) -> Option<serde_json::Value> {
+    let mut best: Option<(i32, usize)> = None;
+    for (idx, block) in blocks.iter().enumerate() {
+        let Some(obj_repo) = block.get("repo_id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if obj_repo.trim() != repo_id.trim() {
+            continue;
+        }
+        let mut score = 0_i32;
+        if let Some(row) = block.get("row").and_then(|v| v.as_object()) {
+            let ct = row
+                .get("classificacao_terminal")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_ascii_uppercase();
+            let acao = row
+                .get("acao_de_canibalizacao")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_ascii_uppercase();
+            if ct.starts_with("APROVADO") {
+                score += 10;
+            }
+            if acao != "NENHUMA" && !acao.is_empty() {
+                score += 5;
+            }
+        }
+        match best {
+            None => best = Some((score, idx)),
+            Some((best_score, _)) if score > best_score => best = Some((score, idx)),
+            _ => {}
+        }
+    }
+    best.map(|(_, idx)| blocks[idx].clone())
+}
+
+fn update_local_status_after_manual_f4(conn: &Connection, repo_id: &str) -> io::Result<()> {
+    let now = now_epoch_secs()?;
+    let _ = conn.execute(
+        "UPDATE repositorios
+         SET status_processamento = ?1,
+             timestamp_fase_1 = COALESCE(NULLIF(timestamp_fase_1, 0), ?2)
+         WHERE project_name = ?3",
+        rusqlite::params!["CONCLUIDO", now, repo_id],
+    );
+    let _ = conn.execute(
+        "UPDATE repo_heuristics
+         SET status_atualizacao = ?2,
+             status_fase = ?3
+         WHERE project_name = ?1",
+        rusqlite::params![repo_id, "CONCLUIDO_AGUARDANDO", "FASE_4_SYNTHESIZER_OK"],
+    );
+    Ok(())
+}
+
+fn build_dynamic_sheet_ranges_for_row(
+    row_number_1based: u32,
+    header_row: &[String],
+    row: &genesis_mc_lib::cognition::synthesizer::MasterSolutionsRow,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut ranges = serde_json::Map::new();
+    let canonical_cols = genesis_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS;
+    let canonical_values = row.to_sheet_row();
+    let mut by_name: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for (idx, name) in canonical_cols.iter().enumerate() {
+        let v = canonical_values
+            .get(idx)
+            .cloned()
+            .unwrap_or_else(|| serde_json::Value::String(String::new()));
+        let cell = match v {
+            serde_json::Value::Null => String::new(),
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::Number(n) => n.to_string(),
+            serde_json::Value::String(s) => s,
+            other => other.to_string(),
+        };
+        by_name.insert(
+            genesis_mc_lib::persist::sheets_utils::normalize_header_cell(name),
+            cell,
+        );
+    }
+
+    for (idx, header) in header_row.iter().enumerate() {
+        let key_norm = genesis_mc_lib::persist::sheets_utils::normalize_header_cell(header);
+        if key_norm.is_empty() {
+            continue;
+        }
+        if let Some(value) = by_name.get(&key_norm).cloned() {
+            let col = col_idx_to_a1(idx);
+            let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+            ranges.insert(range, serde_json::json!(vec![vec![value]]));
+        }
+    }
+
+    ranges
 }
 
 fn get_first_env(keys: &[&str]) -> Option<String> {
@@ -953,26 +1129,61 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                 "response_format": response_format_for_block(block)
             });
 
-            let response = self
-                .client
-                .post(&self.base_url)
-                .header("Authorization", format!("Bearer {}", self.api_key))
-                .header("Content-Type", "application/json")
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| format!("Erro de rede: {}", e))?;
+            let max_attempts: u32 = 3;
+            for attempt in 1..=max_attempts {
+                let response = self
+                    .client
+                    .post(&self.base_url)
+                    .header("Authorization", format!("Bearer {}", self.api_key))
+                    .header("Content-Type", "application/json")
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Erro de rede: {}", e))?;
 
-            let status = response.status();
-            let raw = response.text().await.map_err(|e| e.to_string())?;
-            if !status.is_success() {
-                return Err(format!("HTTP {}: {}", status.as_u16(), raw));
+                let status = response.status();
+                let raw = response.text().await.map_err(|e| e.to_string())?;
+                if !status.is_success() {
+                    let should_retry = (status.as_u16() == 429 || status.is_server_error())
+                        && attempt < max_attempts;
+                    if should_retry {
+                        let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+                        let exp = attempt.saturating_sub(1).min(10);
+                        let base_ms = 800_u64.saturating_mul(1_u64 << exp);
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            base_ms.saturating_add(jitter_ms),
+                        ))
+                        .await;
+                        continue;
+                    }
+                    return Err(format!("HTTP {}: {}", status.as_u16(), raw));
+                }
+
+                let envelope: Value = serde_json::from_str(&raw)
+                    .map_err(|e| format!("Envelope JSON inválido do OpenRouter: {}", e))?;
+                self.harvest_usage(&envelope);
+                let content_opt = Self::extract_openrouter_content(&envelope)
+                    .map(|c| c.trim().to_string())
+                    .filter(|c| !c.is_empty());
+                if let Some(content) = content_opt {
+                    return Ok(content);
+                }
+
+                if attempt < max_attempts {
+                    let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+                    let exp = attempt.saturating_sub(1).min(10);
+                    let base_ms = 800_u64.saturating_mul(1_u64 << exp);
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        base_ms.saturating_add(jitter_ms),
+                    ))
+                    .await;
+                    continue;
+                }
+
+                return Err("Resposta vazia do OpenRouter".to_string());
             }
 
-            let envelope: Value = serde_json::from_str(&raw)
-                .map_err(|e| format!("Envelope JSON inválido do OpenRouter: {}", e))?;
-            self.harvest_usage(&envelope);
-            Self::extract_openrouter_content(&envelope).ok_or_else(|| "Resposta vazia do OpenRouter".to_string())
+            Err("Resposta vazia do OpenRouter".to_string())
         })
     }
 }
@@ -1426,41 +1637,111 @@ fn resolve_row_number_by_repo_url_and_lote_id(
     repo_url: &str,
     lote_id: &str,
 ) -> io::Result<u32> {
+    let header_row = read_master_header(spreadsheet_id)?;
+    let repo_url_idx = find_col_idx(&header_row, "repo_url")
+        .ok_or_else(|| io::Error::other("Header missing repo_url"))?;
+    let lote_id_idx =
+        find_col_idx(&header_row, "lote_id").ok_or_else(|| io::Error::other("Header missing lote_id"))?;
+    let min_idx = repo_url_idx.min(lote_id_idx);
+    let max_idx = repo_url_idx.max(lote_id_idx);
+    let start_col = col_idx_to_a1(min_idx);
+    let end_col = col_idx_to_a1(max_idx);
+    let range = format!("{start_col}2:{end_col}");
     let result = call_mcp(
         "get_sheet_data",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
-            "range": "D2:G",
+            "range": range,
             "include_grid_data": false
         }),
     )?;
     let values = extract_values_2d(&result).unwrap_or_default();
     let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
     let lote_needle = lote_id.trim();
+    let needle_repo_id = try_extract_repo_id_from_repo_url(repo_url)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    let extract_repo_id_loose = |raw: &str| -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Some(repo_id) = try_extract_repo_id_from_repo_url(trimmed) {
+            return Some(repo_id.to_ascii_lowercase());
+        }
+        if trimmed.contains("://") {
+            return None;
+        }
+        let candidate = trimmed.replace(' ', "");
+        let parts: Vec<&str> = candidate.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.len() == 2 {
+            return Some(format!("{}/{}", parts[0], parts[1]).to_ascii_lowercase());
+        }
+        None
+    };
 
     for (idx, row) in values.iter().enumerate() {
-        let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
-        let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
+        let repo_cell = row
+            .get(repo_url_idx.saturating_sub(min_idx))
+            .map(|s| s.trim())
+            .unwrap_or("");
+        let lote_cell = row
+            .get(lote_id_idx.saturating_sub(min_idx))
+            .map(|s| s.trim())
+            .unwrap_or("");
         let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
-        if !repo_hay.is_empty()
-            && repo_hay == needle
-            && !lote_cell.is_empty()
-            && lote_cell == lote_needle
+        let repo_id_hay = extract_repo_id_loose(repo_cell);
+        let repo_matches = (!repo_hay.is_empty() && repo_hay == needle)
+            || (!needle_repo_id.is_empty()
+                && repo_id_hay
+                    .as_deref()
+                    .map(|v| v == needle_repo_id)
+                    .unwrap_or(false));
+        if repo_matches && !lote_cell.is_empty() && lote_cell == lote_needle
         {
             return Ok((idx as u32) + 2);
         }
     }
 
     for (idx, row) in values.iter().enumerate() {
-        let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
-        let lote_cell = row.get(3).map(|s| s.trim()).unwrap_or("");
+        let repo_cell = row
+            .get(repo_url_idx.saturating_sub(min_idx))
+            .map(|s| s.trim())
+            .unwrap_or("");
+        let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
+        let repo_id_hay = extract_repo_id_loose(repo_cell);
+        let repo_matches = (!repo_hay.is_empty() && repo_hay == needle)
+            || (!needle_repo_id.is_empty()
+                && repo_id_hay
+                    .as_deref()
+                    .map(|v| v == needle_repo_id)
+                    .unwrap_or(false));
+        if repo_matches {
+            return Ok((idx as u32) + 2);
+        }
+    }
+
+    for (idx, row) in values.iter().enumerate() {
+        let repo_cell = row
+            .get(repo_url_idx.saturating_sub(min_idx))
+            .map(|s| s.trim())
+            .unwrap_or("");
+        let lote_cell = row
+            .get(lote_id_idx.saturating_sub(min_idx))
+            .map(|s| s.trim())
+            .unwrap_or("");
         if repo_cell.is_empty() && lote_cell.is_empty() {
             return Ok((idx as u32) + 2);
         }
     }
 
-    Ok(((values.len() as u32) + 2).max(2))
+    Err(io::Error::other(format!(
+        "Não foi possível resolver row_number: repo_url+lote_id não encontrados e não há linhas vazias disponíveis (planilha aparenta estar cheia até a última linha do range). repo_url={} lote_id={}",
+        repo_url,
+        lote_id
+    )))
 }
 
 fn read_status_atualizacao_e_fase(
@@ -1561,7 +1842,19 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
     let expected_pretty = expected_repo_id.replace("/", " / ");
-    let range = format!("C{}:C{}", row_number_1based, row_number_1based);
+    let expected_url = format!("https://github.com/{}", expected_repo_id.trim());
+    let header_row = read_master_header(&spreadsheet_id)?;
+    let project_idx = find_col_idx(&header_row, "project_name")
+        .ok_or_else(|| io::Error::other("Header missing project_name"))?;
+    let repo_url_idx = find_col_idx(&header_row, "repo_url")
+        .ok_or_else(|| io::Error::other("Header missing repo_url"))?;
+    let min_idx = project_idx.min(repo_url_idx);
+    let max_idx = project_idx.max(repo_url_idx);
+    let start_col = col_idx_to_a1(min_idx);
+    let end_col = col_idx_to_a1(max_idx);
+    let range = format!(
+        "{start_col}{row_number_1based}:{end_col}{row_number_1based}"
+    );
     let result = call_mcp(
         "get_sheet_data",
         json!({
@@ -1572,18 +1865,25 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
         }),
     )?;
     let values = extract_values_2d(&result).unwrap_or_default();
-    let cell = values
+    let row = values
         .first()
-        .and_then(|r| r.first())
-        .map(|s| s.trim().to_string())
+        .cloned()
         .unwrap_or_default();
-    Ok(cell == expected_repo_id || cell == expected_pretty)
+    let get = |abs_idx: usize| -> String {
+        let rel = abs_idx.saturating_sub(min_idx);
+        row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+    };
+    let project_cell = get(project_idx);
+    let repo_url_cell = get(repo_url_idx);
+    Ok(project_cell == expected_repo_id
+        || project_cell == expected_pretty
+        || repo_url_cell == expected_url)
 }
 
 fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    let range = format!("A{}:CF{}", row_number_1based, row_number_1based);
+    let range = genesis_mc_lib::cognition::synthesizer::sheet_range_for_row(row_number_1based);
     let result = call_mcp(
         "get_sheet_data",
         json!({
@@ -1657,6 +1957,8 @@ async fn main() -> io::Result<()> {
         skip_harvester,
         batch,
         row_override,
+        dry_run,
+        feedback_inject,
     } = parse_cli_args();
 
     if batch {
@@ -1695,6 +1997,144 @@ async fn main() -> io::Result<()> {
         io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
     })?;
 
+    if feedback_inject {
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+        let feedback_path = feedback_bmad_report_path(&root_dir)?;
+        let feedback_text = std::fs::read_to_string(&feedback_path).map_err(|e| {
+            io::Error::other(format!(
+                "Falha ao ler feedback report em {}: {}",
+                feedback_path.display(),
+                e
+            ))
+        })?;
+        let raw_blocks = extract_json_blocks_from_feedback(&feedback_text);
+        let mut parsed_blocks = Vec::new();
+        for raw in raw_blocks {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                parsed_blocks.push(v);
+            }
+        }
+        let selected = select_approved_feedback_payload(&repo_id, &parsed_blocks).ok_or_else(|| {
+            io::Error::other(format!(
+                "Nenhum payload JSON correspondente encontrado no feedback para repo_id={}",
+                repo_id
+            ))
+        })?;
+        let row_val = selected.get("row").cloned().ok_or_else(|| {
+            io::Error::other("Payload no feedback sem campo 'row'".to_string())
+        })?;
+        let just_val = selected
+            .get("block3_justifications")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+
+        let mut row: genesis_mc_lib::cognition::synthesizer::MasterSolutionsRow =
+            serde_json::from_value(row_val).map_err(|e| {
+                io::Error::other(format!("Falha ao decodificar MasterSolutionsRow do feedback: {}", e))
+            })?;
+        row.status_atualizacao = "CONCLUIDO_AGUARDANDO".to_string();
+        row.status_fase = "FASE_4_SYNTHESIZER_OK".to_string();
+        let _ = just_val;
+        info!(
+            repo_id = %repo_id,
+            project_name = %row.project_name,
+            repo_url = %row.repo_url,
+            lote_id = %row.lote_id,
+            "Feedback-inject: payload selecionado do arquivo"
+        );
+
+        let row_number = if let Some(row) = row_override {
+            row
+        } else {
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &row.repo_url, &row.lote_id)?
+        };
+
+        let header_row = read_master_header(&spreadsheet_id)?;
+        let project_idx = find_col_idx(&header_row, "project_name").unwrap_or(0);
+        let repo_url_idx = find_col_idx(&header_row, "repo_url").unwrap_or(0);
+        let lote_id_idx = find_col_idx(&header_row, "lote_id").unwrap_or(0);
+        info!(
+            row_number,
+            header_len = header_row.len(),
+            project_idx,
+            repo_url_idx,
+            lote_id_idx,
+            project_header = %header_row.get(project_idx).cloned().unwrap_or_default(),
+            repo_url_header = %header_row.get(repo_url_idx).cloned().unwrap_or_default(),
+            lote_id_header = %header_row.get(lote_id_idx).cloned().unwrap_or_default(),
+            "Feedback-inject: header resolvido"
+        );
+        let ranges = build_dynamic_sheet_ranges_for_row(row_number, &header_row, &row);
+        let project_col = col_idx_to_a1(project_idx);
+        let repo_url_col = col_idx_to_a1(repo_url_idx);
+        let project_range = format!("{project_col}{row_number}:{project_col}{row_number}");
+        let repo_url_range = format!("{repo_url_col}{row_number}:{repo_url_col}{row_number}");
+        info!(
+            ranges_len = ranges.len(),
+            has_project = ranges.contains_key(&project_range),
+            has_repo_url = ranges.contains_key(&repo_url_range),
+            "Feedback-inject: payload ranges montado"
+        );
+        let update_result = call_mcp(
+            "batch_update_cells",
+            json!({
+                "spreadsheet_id": spreadsheet_id,
+                "sheet": "MASTER_SOLUTIONS",
+                "ranges": ranges
+            }),
+        )?;
+        let mut update_result_str = update_result.to_string();
+        if update_result_str.len() > 800 {
+            update_result_str.truncate(800);
+        }
+        info!(payload = %update_result_str, "Feedback-inject: retorno batch_update_cells");
+        if let Some(err) = update_result.get("error") {
+            return Err(io::Error::other(format!(
+                "Feedback-inject: batch_update_cells falhou: {}",
+                err
+            )));
+        }
+
+        let confirmed = confirm_sheet_write(row_number, &repo_id)?;
+        if !confirmed {
+            let header_row = read_master_header(&spreadsheet_id)?;
+            let project_idx = find_col_idx(&header_row, "project_name").unwrap_or(0);
+            let repo_url_idx = find_col_idx(&header_row, "repo_url").unwrap_or(0);
+            let min_idx = project_idx.min(repo_url_idx);
+            let max_idx = project_idx.max(repo_url_idx);
+            let start_col = col_idx_to_a1(min_idx);
+            let end_col = col_idx_to_a1(max_idx);
+            let range = format!("{start_col}{row_number}:{end_col}{row_number}");
+            let result = call_mcp(
+                "get_sheet_data",
+                json!({
+                    "spreadsheet_id": spreadsheet_id,
+                    "sheet": "MASTER_SOLUTIONS",
+                    "range": range,
+                    "include_grid_data": false
+                }),
+            )?;
+            let values = extract_values_2d(&result).unwrap_or_default();
+            let row_read = values.first().cloned().unwrap_or_default();
+            let get = |abs_idx: usize| -> String {
+                let rel = abs_idx.saturating_sub(min_idx);
+                row_read.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+            };
+            let project_cell = get(project_idx);
+            let repo_url_cell = get(repo_url_idx);
+            return Err(io::Error::other(format!(
+                "Feedback-inject: confirmação falhou. row_number={} project_name_cell='{}' repo_url_cell='{}'",
+                row_number, project_cell, repo_url_cell
+            )));
+        }
+
+        update_local_status_after_manual_f4(&conn, &repo_id)?;
+
+        info!(repo_id = %repo_id, row_number, "Feedback-inject: concluído com confirmação");
+        return Ok(());
+    }
+
     let (lote_id, repo_url) = fetch_repo_core(&conn, &repo_id).unwrap_or_else(|_| {
         (
             "LOTE_E2E".to_string(),
@@ -1710,7 +2150,7 @@ async fn main() -> io::Result<()> {
     let mut n4_skip_columns: Vec<&'static str> = Vec::new();
     let mut n4_sheet_proposta: Option<String> = None;
     let mut n4_sheet_categoria: Option<String> = None;
-    if skip_harvester || !e2e_full {
+    if !dry_run && (skip_harvester || !e2e_full) {
         let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
         let row_number = if let Some(row) = row_override {
@@ -1813,6 +2253,9 @@ async fn main() -> io::Result<()> {
     };
 
     let (lens_a, lens_b, lens_c) = fetch_debates(&conn, &repo_id)?;
+    let lens_a_report = lens_a.clone();
+    let lens_b_report = lens_b.clone();
+    let lens_c_report = lens_c.clone();
     let phase2_cost_usd = if e2e_full {
         extract_total_cost_usd_from_lens_json(&lens_a)
             + extract_total_cost_usd_from_lens_json(&lens_b)
@@ -1998,6 +2441,20 @@ async fn main() -> io::Result<()> {
     };
     drop(_ghost_f3);
 
+    if dry_run {
+        let payload = serde_json::json!({
+            "repo_id": repo_id,
+            "block3_justifications": phase3_out.block3_justifications,
+            "row": phase3_out.row,
+            "lens_a_json": lens_a_report,
+            "lens_b_json": lens_b_report,
+            "lens_c_json": lens_c_report
+        });
+        let path = append_feedback_bmad_report(&root_dir, &repo_id, &payload)?;
+        info!(report = %path.display(), "BMAD E2E: relatório anexado (dry-run)");
+        return Ok(());
+    }
+
     info!("E2E: F3 concluída. Iniciando F4 (carga atômica Sheets)");
     let block3_justifications = phase3_out.block3_justifications;
     let mut row = phase3_out.row;
@@ -2054,7 +2511,7 @@ async fn main() -> io::Result<()> {
     )?;
 
     let width_a_to_cf = inspect_row_width_a_to_cf(row_number)?;
-    info!(width_a_to_cf, "E2E: inspeção pós-write (A:CF) para largura do row");
+    info!(width_a_to_cf, "E2E: inspeção pós-write (A:END) para largura do row");
 
     let usage = formatter.usage_totals();
     let elapsed_phase3_4_ms = started_phase3_4.elapsed().as_millis();

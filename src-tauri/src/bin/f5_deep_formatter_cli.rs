@@ -966,15 +966,22 @@ async fn main() -> io::Result<()> {
     ensure_deep_components_schema(&conn).map_err(io::Error::other)?;
 
     let sheets = SheetsMcpClient;
+    let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let header = sheets
-        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A1:CF1".to_string())
+        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, header_range)
         .await
         .map_err(io::Error::other)?;
     let header_row = header.first().cloned().unwrap_or_default();
     let cols = resolve_master_columns(&header_row).map_err(io::Error::other)?;
 
+    let end_col = col_idx_to_a1(
+        genesis_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .len()
+            .saturating_sub(1),
+    );
+    let values_range = format!("A2:{end_col}");
     let values = sheets
-        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A2:CF".to_string())
+        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, values_range)
         .await
         .map_err(io::Error::other)?;
     let mut pending = find_pending_phase5_rows(&values, &cols);

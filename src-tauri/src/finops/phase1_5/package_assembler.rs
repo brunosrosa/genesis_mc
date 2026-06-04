@@ -28,12 +28,20 @@ pub struct PackageAssembler<'a, DB: DbReader> {
     db: &'a DB,
 }
 
-fn detect_repo_kind(essence_04: &str, essence_05: &str) -> &'static str {
+fn detect_repo_kind(essence_02: &str, essence_04: &str, essence_05: &str) -> &'static str {
     let hay = format!("{}\n{}", essence_04, essence_05).to_ascii_lowercase();
     if hay.contains("kind: skilllibrary") {
         return "SkillLibrary";
     }
     if hay.contains("kind: contentrepo") {
+        return "ContentRepo";
+    }
+    let dep = essence_02.to_ascii_lowercase();
+    if dep.contains("stack_base: unknown")
+        || dep.contains("stack_base: n/a")
+        || dep.contains("stack_base: ")
+            && dep.lines().any(|line| line.trim() == "stack_base:")
+    {
         return "ContentRepo";
     }
     "CodeRepo"
@@ -98,7 +106,7 @@ impl<'a, DB: DbReader> PackageAssembler<'a, DB> {
             .map_err(AssemblerError::DatabaseReadError)?;
 
         let canon_marker = "\n=== BLOB_10_CANON_CONTEXT ===\n";
-        let repo_kind = detect_repo_kind(&essence_04, &essence_05);
+        let repo_kind = detect_repo_kind(&essence_02, &essence_04, &essence_05);
         let kind_marker = format!("repo_kind={repo_kind}\n");
 
         let package_a = format!(

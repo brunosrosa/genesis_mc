@@ -380,6 +380,10 @@ impl LensInvoker for HttpLensInvoker {
         Box::pin(async move {
             let config = self.config_for(lens);
             let model_used = model_override.unwrap_or(&config.model);
+            let mut user_prefix = format!("repo_id={}\n", repo_id);
+            if payload_looks_like_knowledge_repo(payload) {
+                user_prefix.push_str("ALERTA: Este é um repositório de Conhecimento/Metodologia (stack_base desconhecida ou conteúdo sem stack). Ignore exigências de código fonte/AVX2/Bare-Metal. Avalie prompts, padrões teóricos, metodologia e artefatos textuais a serem canibalizados.\n");
+            }
             let body = ChatCompletionsRequest {
                 model: model_used.to_string(),
                 messages: vec![
@@ -389,7 +393,7 @@ impl LensInvoker for HttpLensInvoker {
                     },
                     ChatMessage {
                         role: "user".to_string(),
-                        content: format!("repo_id={}\n{}", repo_id, payload),
+                        content: format!("{}{}", user_prefix, payload),
                     },
                 ],
                 max_tokens: 8192,
@@ -835,6 +839,17 @@ impl DebateStore for SqliteDebateStore {
 
 fn get_first_env(keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| std::env::var(key).ok().filter(|value| !value.trim().is_empty()))
+}
+
+fn payload_looks_like_knowledge_repo(payload: &str) -> bool {
+    let lower = payload.to_ascii_lowercase();
+    lower.contains("stack_base: unknown")
+        || lower.contains("stack_base: n/a")
+        || lower.contains("\nstack_base: unknown")
+        || lower.contains("\nstack_base: n/a")
+        || lower.contains("\nstack_base: \n")
+        || lower.contains("repo_kind=skilllibrary")
+        || lower.contains("repo_kind=contentrepo")
 }
 
 fn normalize_lens_payload(

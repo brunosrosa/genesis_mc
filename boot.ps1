@@ -70,5 +70,7 @@ Start-Sleep -Seconds 3
 
 Write-Host "`n[🚀] Iniciando Supervisor (genesis_mc) + Proxy (3000) + Gateway (3001)..." -ForegroundColor Cyan
 Push-Location "src-tauri"
+cargo build --quiet --bin agentgateway_tcp_proxy
+cargo build --quiet --bin mcp_stdio_guard
 cargo run --quiet --features tauri-app --bin genesis_mc
 Pop-Location

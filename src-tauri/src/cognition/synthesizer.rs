@@ -3,6 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
+use crate::persist::sheets_utils::col_idx_to_a1;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
@@ -413,6 +414,8 @@ pub struct MasterSolutionsRow {
     pub repo_url: String,
     pub repo_analised_version: String,
     pub ultima_versao_online: String,
+    #[serde(default)]
+    pub indicacao_otimista_canibalizacao: String,
     pub lote_id: String,
     pub data_ultima_analise: i64,
     pub analise_origem: String,
@@ -503,6 +506,7 @@ impl Default for MasterSolutionsRow {
             repo_url: String::new(),
             repo_analised_version: String::new(),
             ultima_versao_online: String::new(),
+            indicacao_otimista_canibalizacao: String::new(),
             lote_id: String::new(),
             data_ultima_analise: 0,
             analise_origem: String::new(),
@@ -670,6 +674,7 @@ impl MasterSolutionsRow {
             serde_json::json!(&self.repo_url),
             serde_json::json!(&self.repo_analised_version),
             serde_json::json!(&self.ultima_versao_online),
+            serde_json::json!(&self.indicacao_otimista_canibalizacao),
             serde_json::json!(&self.lote_id),
             serde_json::json!(data_ultima_analise),
             serde_json::json!(&self.analise_origem),
@@ -991,6 +996,74 @@ fn normalize_pydantic_list_field(raw: &str) -> String {
     scrub_json_syntax_to_text(trimmed)
 }
 
+fn split_bullet_segments(value: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let cleaned = value.replace("•", "-").replace("—", "-");
+    for chunk in cleaned.split(['\n', ';', '|']) {
+        let c = chunk.trim().trim_start_matches("- ").trim();
+        if c.is_empty() {
+            continue;
+        }
+        for sentence in c.split(". ") {
+            let s = sentence.trim().trim_end_matches('.').trim();
+            if s.is_empty() {
+                continue;
+            }
+            out.push(s.to_string());
+        }
+    }
+    out
+}
+
+fn truncate_chars_simple(content: &str, max_chars: usize) -> String {
+    let trimmed = content.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    let mut out = String::new();
+    for (idx, ch) in trimmed.chars().enumerate() {
+        if idx >= max_chars {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn enforce_bullets_3_to_5(raw: &str, max_chars: usize) -> String {
+    let normalized = normalize_pydantic_list_field(raw);
+    let mut items = normalized
+        .lines()
+        .filter_map(|line| line.strip_prefix("- ").map(|v| v.trim().to_string()))
+        .filter(|v| !v.is_empty())
+        .collect::<Vec<_>>();
+
+    if items.len() >= 3 {
+        items.truncate(5);
+        return truncate_chars_simple(&format_bullets(&items), max_chars);
+    }
+
+    let mut expanded = Vec::new();
+    for item in items.drain(..) {
+        for seg in split_bullet_segments(&item) {
+            if expanded.len() >= 5 {
+                break;
+            }
+            expanded.push(seg);
+        }
+        if expanded.len() >= 5 {
+            break;
+        }
+    }
+
+    if expanded.len() >= 3 {
+        expanded.truncate(5);
+        return truncate_chars_simple(&format_bullets(&expanded), max_chars);
+    }
+
+    truncate_chars_simple(normalized.trim(), max_chars)
+}
+
 fn extract_bullets_array(val: &serde_json::Value) -> Option<Vec<String>> {
     let obj = val.as_object()?;
     let bullets = obj.get("bullets")?.as_array()?;
@@ -1125,12 +1198,32 @@ struct Block2Fields {
     real_structural_problem: String,
     categoria_nuance_tecnica: String,
     integracao_papel_exato: String,
+    indicacao_otimista_canibalizacao: String,
     must_components_prod_ux: String,
     must_components_arq: String,
     must_components_ops: String,
     detected_toxic_deps: String,
     do_not_absorb: String,
     where_ai_should_not_enter: String,
+}
+
+impl Block2Fields {
+    fn sanitize(self) -> Self {
+        let max_chars = 400usize;
+        Self {
+            indicacao_otimista_canibalizacao: enforce_bullets_3_to_5(
+                &self.indicacao_otimista_canibalizacao,
+                max_chars,
+            ),
+            must_components_prod_ux: enforce_bullets_3_to_5(&self.must_components_prod_ux, max_chars),
+            must_components_arq: enforce_bullets_3_to_5(&self.must_components_arq, max_chars),
+            must_components_ops: enforce_bullets_3_to_5(&self.must_components_ops, max_chars),
+            detected_toxic_deps: enforce_bullets_3_to_5(&self.detected_toxic_deps, max_chars),
+            do_not_absorb: enforce_bullets_3_to_5(&self.do_not_absorb, max_chars),
+            where_ai_should_not_enter: enforce_bullets_3_to_5(&self.where_ai_should_not_enter, max_chars),
+            ..self
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1217,11 +1310,14 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
         }
         2 => {
             prompt.push_str("LIMITS_BLOCK2: cada valor string em fields deve ter no máximo 400 caracteres. Para listas, escreva em bullets (ex: \"- item\\n- item\").\n");
+            prompt.push_str("BULLETS_BLOCK2: para indicacao_otimista_canibalizacao, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter: escreva EXATAMENTE de 3 a 5 bullets. Se necessário, divida um item grande em itens menores.\n");
+            prompt.push_str("OTIMISMO_BLOCK2: indicacao_otimista_canibalizacao deve ser ESTRITAMENTE 3 a 5 bullet points otimistas e diretos. Sintetize tudo o que o SODA pode roubar deste projeto hoje ou no futuro, incluindo lógicas, inspirações de UX, conhecimentos teóricos ou códigos físicos.\n");
         }
         3 => {
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
             prompt.push_str("MODO_ROBOTICO_ENUMS_BLOCK3: para TODOS os campos ENUM do Bloco 3, fields deve conter APENAS o valor do catálogo (1 token). Qualquer explicação deve ir EXCLUSIVAMENTE em justifications[mesma_chave].\n");
             prompt.push_str("PROIBIDO: hífens, ':' , parênteses, frases, ou duas opções no mesmo campo.\n");
+            prompt.push_str("KNOWLEDGE_MODE_BLOCK3: se project.stack_base == \"UNKNOWN\" (ou context_alert presente), trate como repositorio de Conhecimento/Metodologia. Nesse caso, bare_metal_fit, runtime_sovereignty_fit e local_first_fit DEVEM ser HIGH ou EXCELLENT (nunca LOW/VERY_LOW), pois não há runtime externo.\n");
             prompt.push_str(enum_catalog_block3());
         }
         _ => {}
@@ -1257,7 +1353,7 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
-        2 => r#"["ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
+        2 => r#"["ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","indicacao_otimista_canibalizacao","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
         3 => {
             let mut keys = vec![
                 "classificacao_terminal",
@@ -1343,6 +1439,18 @@ fn compact_context_for_block(
     block: u8,
 ) -> serde_json::Value {
     let mut ctx = serde_json::Map::new();
+    let stack_trimmed = block0.stack_base.trim();
+    if stack_trimmed.is_empty()
+        || stack_trimmed.eq_ignore_ascii_case("unknown")
+        || stack_trimmed.eq_ignore_ascii_case("n/a")
+    {
+        ctx.insert(
+            "context_alert".to_string(),
+            serde_json::json!(
+                "ALERTA: Repositório de Conhecimento/Metodologia (stack_base UNKNOWN). Ignore exigências de código fonte/hardware (AVX2/Bare-Metal). Avalie prompts, padrões teóricos e processo para canibalização."
+            ),
+        );
+    }
     ctx.insert(
         "project".to_string(),
         serde_json::json!({
@@ -1650,7 +1758,9 @@ pub async fn run_phase3_sgr(
     row.observacoes = block1.observacoes;
     info!("F3 (Sintetizador SGR): Bloco 1 concluído");
 
-    let block2: Block2Fields = run_block(client, cfg, 2, &block0, &row).await?;
+    let block2: Block2Fields = run_block::<Block2Fields>(client, cfg, 2, &block0, &row)
+        .await?
+        .sanitize();
     row.ouro_a_extrair = block2.ouro_a_extrair;
     row.deep_pattern = block2.deep_pattern;
     row.transplantable_core = block2.transplantable_core;
@@ -1658,6 +1768,8 @@ pub async fn run_phase3_sgr(
     row.real_structural_problem = block2.real_structural_problem;
     row.categoria_nuance_tecnica = block2.categoria_nuance_tecnica;
     row.integracao_papel_exato = block2.integracao_papel_exato;
+    row.indicacao_otimista_canibalizacao =
+        normalize_pydantic_list_field(&block2.indicacao_otimista_canibalizacao);
     row.must_components_prod_ux = normalize_pydantic_list_field(&block2.must_components_prod_ux);
     row.must_components_arq = normalize_pydantic_list_field(&block2.must_components_arq);
     row.must_components_ops = normalize_pydantic_list_field(&block2.must_components_ops);
@@ -1791,16 +1903,23 @@ fn salvage_balanced_json(text: &str) -> Option<String> {
 }
 
 pub fn sheet_range_for_row(row_number_1based: u32) -> String {
-    format!("A{}:CF{}", row_number_1based, row_number_1based)
+    let end_col = col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.len().saturating_sub(1));
+    format!("A{}:{}{}", row_number_1based, end_col, row_number_1based)
 }
 
-pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 84] = [
+pub fn master_solutions_header_range() -> String {
+    let end_col = col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.len().saturating_sub(1));
+    format!("A1:{}1", end_col)
+}
+
+pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 85] = [
     "status_atualizacao",
     "status_fase",
     "project_name",
     "repo_url",
     "repo_analised_version",
     "ultima_versao_online",
+    "indicacao_otimista_canibalizacao",
     "lote_id",
     "data_ultima_analise",
     "analise_origem",
@@ -2098,13 +2217,13 @@ mod tests {
     }
 
     #[test]
-    fn batch_payload_maps_a_to_cf_and_84_columns() {
+    fn batch_payload_maps_dynamic_range_and_85_columns() {
         let row = MasterSolutionsRow::from_block0(block0());
         let payload = build_batch_update_payload(2, &row);
         let range = sheet_range_for_row(2);
         let rows = payload.get(&range).unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].len(), 84);
+        assert_eq!(rows[0].len(), 85);
         assert_eq!(rows[0][2], serde_json::json!("owner / repo"));
     }
 
@@ -2161,16 +2280,16 @@ mod tests {
         row.valid_to = None;
         row.embargo_status = 0;
         let arr = row.to_sheet_row();
-        assert_eq!(arr.len(), 84);
-        assert_eq!(arr[74], serde_json::json!("1.2"));
-        assert_eq!(arr[75], serde_json::json!("2.3"));
-        assert_eq!(arr[76], serde_json::json!("3.4"));
-        assert_eq!(arr[77], serde_json::json!("4.5"));
-        assert_eq!(arr[78], serde_json::json!("5.6"));
-        assert_eq!(arr[79], serde_json::json!("6.7"));
-        assert_eq!(arr[80], serde_json::json!("7.8"));
-        assert_eq!(arr[81], serde_json::json!(format_epoch_utc(1_700_000_000)));
-        assert_eq!(arr[82], serde_json::json!(""));
-        assert_eq!(arr[83], serde_json::json!("LIVRE"));
+        assert_eq!(arr.len(), 85);
+        assert_eq!(arr[75], serde_json::json!("1.2"));
+        assert_eq!(arr[76], serde_json::json!("2.3"));
+        assert_eq!(arr[77], serde_json::json!("3.4"));
+        assert_eq!(arr[78], serde_json::json!("4.5"));
+        assert_eq!(arr[79], serde_json::json!("5.6"));
+        assert_eq!(arr[80], serde_json::json!("6.7"));
+        assert_eq!(arr[81], serde_json::json!("7.8"));
+        assert_eq!(arr[82], serde_json::json!(format_epoch_utc(1_700_000_000)));
+        assert_eq!(arr[83], serde_json::json!(""));
+        assert_eq!(arr[84], serde_json::json!("LIVRE"));
     }
 }

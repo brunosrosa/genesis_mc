@@ -16,6 +16,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 use tokio::io::AsyncBufReadExt;
+use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -687,9 +688,10 @@ struct Guardian<S: SheetsClient, G: GithubClient> {
 
 impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
     async fn run_once(&self, spreadsheet_id: &str) -> Result<(), String> {
+        let header_range = master_solutions_header_range();
         let header = self
             .sheets
-            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string())
+            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range)
             .await?;
         let header_row = header.first().cloned().unwrap_or_default();
 
@@ -1116,7 +1118,7 @@ mod tests {
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>
         {
             Box::pin(async move {
-                if range.ends_with("1:CF1") {
+                if range == master_solutions_header_range() {
                     return Ok(self.header.clone());
                 }
                 Ok(self.data.clone())

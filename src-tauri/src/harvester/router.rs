@@ -89,7 +89,6 @@ fn unknown_fallback() -> Vec<ExtractionTask> {
     vec![
         ExtractionTask::RunJCodemunch,
         ExtractionTask::ExtractManifests,
-        ExtractionTask::RunStaticAnalysis,
         ExtractionTask::FetchCommunityMeta,
         ExtractionTask::ExtractOpsBlueprint,
     ]
@@ -293,7 +292,6 @@ mod tests {
             vec![
                 ExtractionTask::RunJCodemunch,
                 ExtractionTask::ExtractManifests,
-                ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
                 ExtractionTask::ExtractOpsBlueprint,
             ]

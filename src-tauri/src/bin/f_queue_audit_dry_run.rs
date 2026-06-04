@@ -184,12 +184,13 @@ fn main() -> io::Result<()> {
         .or_else(|| std::env::var("GOOGLE_SHEETS_ID").ok())
         .ok_or_else(|| io::Error::other("Missing GOOGLE_SHEETS_ID (or --sheets-id)"))?;
 
+    let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let header = call_mcp(
         "get_sheet_data",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
-            "range": "A1:CF1",
+            "range": header_range,
             "include_grid_data": false
         }),
     )?;
@@ -200,12 +201,18 @@ fn main() -> io::Result<()> {
         .unwrap_or_default();
     let cols = resolve_column_map(&header_row)?;
 
+    let end_col = genesis_mc_lib::persist::sheets_utils::col_idx_to_a1(
+        genesis_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .len()
+            .saturating_sub(1),
+    );
+    let data_range = format!("A2:{end_col}");
     let data = call_mcp(
         "get_sheet_data",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
-            "range": "A2:CF",
+            "range": data_range,
             "include_grid_data": false
         }),
     )?;

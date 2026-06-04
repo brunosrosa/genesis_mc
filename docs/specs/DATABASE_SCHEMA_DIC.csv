@@ -34,6 +34,7 @@ repo_heuristics,project_name,TEXT,NOT NULL,"PRIMARY KEY, FOREIGN KEY (repositori
 repo_heuristics,repo_url,TEXT,NOT NULL,UNIQUE,"URL canônica de origem. Trava UNIQUE garante que o script faça UPSERT (atualização) se a URL já existir, evitando duplicatas."
 repo_heuristics,repo_version,TEXT,NOT NULL,-,Hash curto do commit ou Tag de release (ex: v2.4.1). Ancara a imutabilidade temporal da análise.
 repo_heuristics,ultima_versao_online,TEXT,-,-,Tag ou hash curto do último commit disponível na nuvem (Fase -1). Usado para o cálculo mecânico de Drift de atualização.
+repo_heuristics,indicacao_otimista_canibalizacao,TEXT,NOT NULL,-,"Lista otimista (3–5 bullets) do que o SODA pode canibalizar hoje ou no futuro; gerada tardiamente na Fase 3 (Bloco 2)."
 repo_heuristics,lote_id,TEXT,NOT NULL,-,Identificador do batch de ingestão (ex: LOTE_015_Infra).
 repo_heuristics,data_ultima_analise,INTEGER,NOT NULL,-,Timestamp em formato estrito ISO-8601 (YYYY-MM-DDTHH:MM:SSZ).
 repo_heuristics,analise_origem,TEXT,NOT NULL,-,"Assinatura do motor responsável pela inserção (ex: ""SODA ETL V3 Auto"")."

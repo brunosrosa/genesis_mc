@@ -925,17 +925,26 @@ impl TestIntentExtractor {
             reason: e.to_string(),
         })?;
 
-        let body = if payload.blocks.is_empty() {
+        let timed_out = payload.timed_out;
+        let mut blocks = payload.blocks;
+
+        let mut body = if blocks.is_empty() {
             default_test_intent_message()
         } else {
-            let mut ordered = payload.blocks;
-            ordered.sort_by(|left, right| {
-                test_intent_priority(&left.file_path)
-                    .cmp(&test_intent_priority(&right.file_path))
-                    .then_with(|| left.file_path.cmp(&right.file_path))
-            });
-            pack_scoped_text_blocks(&ordered, TEST_INTENT_BLOB_MAX_CHARS)
+            if !timed_out {
+                blocks.sort_by(|left, right| {
+                    test_intent_priority(&left.file_path)
+                        .cmp(&test_intent_priority(&right.file_path))
+                        .then_with(|| left.file_path.cmp(&right.file_path))
+                });
+            };
+            pack_scoped_text_blocks(&blocks, TEST_INTENT_BLOB_MAX_CHARS)
         };
+
+        if timed_out {
+            body.push_str("\n\n[AVISO SODA FINOPS: Repositório massivo. Extração profunda abortada aos 60s. O texto acima representa a topologia ampla extraída em Busca em Largura.]");
+            body = truncate_utf8(&body, TEST_INTENT_BLOB_MAX_CHARS, TEST_INTENT_BLOB_MAX_CHARS);
+        }
 
         Ok(body)
     }

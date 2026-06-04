@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{info, warn};
+use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
 
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 const STATUS_GATILHO: &str = "INICIAR_TRIAGEM";
@@ -997,14 +998,18 @@ async fn main() -> io::Result<()> {
     let dry_run = parse_cli_args();
 
     let sheets = SheetsMcpClient;
+    let header_range = master_solutions_header_range();
     let header = sheets
-        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A1:CF1".to_string())
+        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, header_range.clone())
         .await
         .map_err(io::Error::other)?;
     let header_row = header.first().cloned().unwrap_or_default();
     if header_row.is_empty() {
         return Err(io::Error::other(
-            "Header vazio em MASTER_SOLUTIONS!A1:CF1. Verifique GOOGLE_SHEETS_ID, nome da aba e se o header está na linha 1.",
+            format!(
+                "Header vazio em MASTER_SOLUTIONS!{}. Verifique GOOGLE_SHEETS_ID, nome da aba e se o header está na linha 1.",
+                header_range
+            ),
         ));
     }
     let cols = resolve_columns(&header_row).map_err(io::Error::other)?;
