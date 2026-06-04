@@ -1259,6 +1259,9 @@ impl ManifestExtractor {
 
             for path in files.into_iter().filter(|path| Self::is_manifest_blob_target(path)) {
                 let rel_path = relative_display(&root, &path);
+                if Self::should_skip_manifest_fixture_path(&rel_path) {
+                    continue;
+                }
                 let file_name = Path::new(&rel_path)
                     .file_name()
                     .and_then(|name| name.to_str())
@@ -1353,6 +1356,25 @@ impl ManifestExtractor {
             file: "blob_02_dependency_manifest".to_string(),
             reason: e.to_string(),
         })?
+    }
+
+    fn should_skip_manifest_fixture_path(rel_path: &str) -> bool {
+        const SKIP_DIRS: [&str; 7] = [
+            "tests",
+            "test",
+            "fixtures",
+            "vendor",
+            "node_modules",
+            "__mocks__",
+            "__tests__",
+        ];
+        let lower = rel_path.to_ascii_lowercase();
+        for segment in lower.split('/') {
+            if SKIP_DIRS.iter().any(|needle| segment == *needle) {
+                return true;
+            }
+        }
+        false
     }
 
     fn is_manifest_blob_target(path: &Path) -> bool {
