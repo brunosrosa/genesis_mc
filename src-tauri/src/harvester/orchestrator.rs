@@ -8,7 +8,7 @@ use tracing::{info, error, warn};
 use super::ramdisk::{RamdiskAllocator, RamdiskHandle};
 use super::git::{BloblessCloner};
 use super::sandbox::{SandboxOrchestrator, SandboxPolicy, SandboxHandle};
-use super::detect::LanguageDetector;
+use super::detect::{LanguageDetector, StackProfile};
 use super::router::{ExtractionInput, ExtractionRouter, ExtractionTask};
 use super::community::{CommunityMetaFetcher, RateLimiter};
 use super::persist::{BlobNormalizer, ArtifactBlob};
@@ -36,6 +36,8 @@ pub enum OrchestratorError {
 }
 
 pub struct HarvesterOrchestrator;
+
+const SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE: &str = "[DIRETIVA SODA COGNITIVA: NÃO SE APLICA. Este artefato é categorizado como uma Biblioteca de Conhecimento, Metodologia ou Skill. A ausência de código compilável, análise estática de segurança ou infraestrutura CI/CD é intencional (By-Design). As Lentes de IA estão estritamente proibidas de penalizar este repositório por não possuir estes artefatos. O foco absoluto do debate deve ser a genialidade teórica, os padrões de prompts, as abstrações estruturais e as heurísticas metodológicas.]";
 
 impl HarvesterOrchestrator {
     /// Maestro do pipeline SODA ETL (F0: Harvester/Zero-IA).
@@ -159,6 +161,7 @@ impl HarvesterOrchestrator {
             .await
             .map_err(|e| OrchestratorError::InfraError(e.to_string()))?;
         info!(repo_id = %repo_id, profile = ?profile, "N4: Stack detectada");
+        let is_unknown_stack = matches!(profile, StackProfile::Unknown);
 
         // [N5] Roteamento de Tarefas
         info!(repo_id = %repo_id, "N5: Roteando tarefas de extração");
@@ -234,24 +237,32 @@ impl HarvesterOrchestrator {
         }
 
         if tasks.contains(&ExtractionTask::ExtractOpsBlueprint) {
-            let input = OpsInput { repo_path: &repo_path };
             info!(repo_id = %repo_id, "N9: Extraindo blob_07_ops_blueprint");
-            match super::extract::OpsBlueprintExtractor::extract_blob(input).await {
-                Ok(payload) => {
-                    blobs.push(payload);
-                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
-                }
-                Err(e) => {
-                    warn!(
-                        repo_id = %repo_id,
-                        error = %e,
-                        "Falha ao extrair blob_07_ops_blueprint; seguindo com fail-soft"
-                    );
-                    blobs.push(ArtifactBlob {
-                        artifact_type: "blob_07_ops_blueprint".to_string(),
-                        payload_blob: b"# Ops Blueprint\n\nFallback: nenhum artefato de infra encontrado ou leitura falhou.\n".to_vec(),
-                    });
-                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+            if is_unknown_stack {
+                blobs.push(ArtifactBlob {
+                    artifact_type: "blob_07_ops_blueprint".to_string(),
+                    payload_blob: SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec(),
+                });
+                log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+            } else {
+                let input = OpsInput { repo_path: &repo_path };
+                match super::extract::OpsBlueprintExtractor::extract_blob(input).await {
+                    Ok(payload) => {
+                        blobs.push(payload);
+                        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                    }
+                    Err(e) => {
+                        warn!(
+                            repo_id = %repo_id,
+                            error = %e,
+                            "Falha ao extrair blob_07_ops_blueprint; seguindo com fail-soft"
+                        );
+                        blobs.push(ArtifactBlob {
+                            artifact_type: "blob_07_ops_blueprint".to_string(),
+                            payload_blob: b"# Ops Blueprint\n\nFallback: nenhum artefato de infra encontrado ou leitura falhou.\n".to_vec(),
+                        });
+                        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                    }
                 }
             }
         }
@@ -328,17 +339,23 @@ impl HarvesterOrchestrator {
                         error = %reason,
                         "Falha ao extrair blobs 06/08 via semgrep; seguindo com fail-soft"
                     );
-                    let unsafe_blob = format!(
-                        "# Unsafe Hotspots\n\nFallback: semgrep falhou.\nreason: {}\n",
-                        reason
-                    )
-                    .into_bytes();
-                    let health_blob = serde_json::to_vec(&serde_json::json!({
-                        "fallback": true,
-                        "source": "semgrep",
-                        "reason": reason,
-                    }))
-                    .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
+                    let (unsafe_blob, health_blob) = if is_unknown_stack {
+                        let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
+                        (bytes.clone(), bytes)
+                    } else {
+                        let unsafe_blob = format!(
+                            "# Unsafe Hotspots\n\nFallback: semgrep falhou.\nreason: {}\n",
+                            reason
+                        )
+                        .into_bytes();
+                        let health_blob = serde_json::to_vec(&serde_json::json!({
+                            "fallback": true,
+                            "source": "semgrep",
+                            "reason": reason,
+                        }))
+                        .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
+                        (unsafe_blob, health_blob)
+                    };
                     blobs.push(ArtifactBlob {
                         artifact_type: "blob_06_unsafe_hotspots".to_string(),
                         payload_blob: unsafe_blob,
@@ -352,13 +369,19 @@ impl HarvesterOrchestrator {
                 }
             }
         } else {
-            let unsafe_blob = b"# Unsafe Hotspots\n\nFallback: static analysis (semgrep) foi pulado pelo roteamento de tarefas.\n".to_vec();
-            let health_blob = serde_json::to_vec(&serde_json::json!({
-                "fallback": true,
-                "source": "semgrep",
-                "reason": "static analysis (semgrep) foi pulado pelo roteamento de tarefas",
-            }))
-            .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
+            let (unsafe_blob, health_blob) = if is_unknown_stack {
+                let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
+                (bytes.clone(), bytes)
+            } else {
+                let unsafe_blob = b"# Unsafe Hotspots\n\nFallback: static analysis (semgrep) foi pulado pelo roteamento de tarefas.\n".to_vec();
+                let health_blob = serde_json::to_vec(&serde_json::json!({
+                    "fallback": true,
+                    "source": "semgrep",
+                    "reason": "static analysis (semgrep) foi pulado pelo roteamento de tarefas",
+                }))
+                .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
+                (unsafe_blob, health_blob)
+            };
             blobs.push(ArtifactBlob {
                 artifact_type: "blob_06_unsafe_hotspots".to_string(),
                 payload_blob: unsafe_blob,

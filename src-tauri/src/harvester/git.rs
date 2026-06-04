@@ -87,6 +87,7 @@ impl BloblessCloner {
         lower.contains("error decoding response body")
             || lower.contains("could not find eocd")
             || lower.contains("invalid zip")
+            || lower.contains("snapshot não-zip")
     }
 
     fn repo_workspace_destination(workspace: &RamdiskHandle, repo_url: &Url) -> PathBuf {
@@ -185,6 +186,52 @@ impl BloblessCloner {
     async fn fetch_github_archive_bytes(
         repo_url: &Url,
     ) -> Result<(Vec<u8>, String, String), CloneError> {
+        fn is_probably_zip(bytes: &[u8]) -> bool {
+            bytes.starts_with(b"PK\x03\x04")
+                || bytes.starts_with(b"PK\x05\x06")
+                || bytes.starts_with(b"PK\x07\x08")
+        }
+
+        fn preview_bytes_lossy(bytes: &[u8]) -> String {
+            let head_len = bytes.len().min(240);
+            let head = &bytes[..head_len];
+            let mut s = String::from_utf8_lossy(head).to_string();
+            s = s.replace('\r', " ").replace('\n', " ");
+            if bytes.len() > head_len {
+                s.push_str(" …");
+            }
+            s
+        }
+
+        async fn download_zip_bytes(
+            client: &reqwest::Client,
+            url: &str,
+        ) -> Result<Vec<u8>, CloneError> {
+            let resp = client.get(url).send().await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao baixar snapshot compactado do GitHub: {}", e),
+            })?;
+            let status = resp.status();
+            let resp = resp.error_for_status().map_err(|e| CloneError::NetworkError {
+                reason: format!("GitHub respondeu erro ao baixar snapshot compactado: {}", e),
+            })?;
+            let bytes = resp.bytes().await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao ler bytes do snapshot GitHub: {}", e),
+            })?;
+            let raw = bytes.to_vec();
+            if !is_probably_zip(&raw) {
+                return Err(CloneError::NetworkError {
+                    reason: format!(
+                        "ProjFS: snapshot não-ZIP recebido (status={}) bytes={} preview='{}' url={}",
+                        status,
+                        raw.len(),
+                        preview_bytes_lossy(&raw),
+                        url
+                    ),
+                });
+            }
+            Ok(raw)
+        }
+
         let (owner, repo) = Self::github_owner_repo(repo_url)?;
         let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
             .unwrap_or_else(|_| "https://api.github.com".to_string());
@@ -249,64 +296,84 @@ impl BloblessCloner {
             _ => None,
         };
 
-        let commits_url = format!(
-            "{}/repos/{owner}/{repo}/commits?sha={}&per_page=1",
-            github_api_base.trim_end_matches('/'),
-            metadata.default_branch
-        );
-        info!(url = %commits_url, "ProjFS: consultando SHA do commit HEAD");
-        let commits_resp = client
-            .get(&commits_url)
-            .send()
-            .await
-            .map_err(|e| CloneError::NetworkError {
+        let mut candidate_branches = vec![metadata.default_branch.clone()];
+        if metadata.default_branch.eq_ignore_ascii_case("main") {
+            candidate_branches.push("master".to_string());
+        } else if metadata.default_branch.eq_ignore_ascii_case("master") {
+            candidate_branches.push("main".to_string());
+        }
+
+        let mut selected_branch: Option<String> = None;
+        let mut head_sha: Option<String> = None;
+        for branch in candidate_branches.iter() {
+            let commits_url = format!(
+                "{}/repos/{owner}/{repo}/commits?sha={}&per_page=1",
+                github_api_base.trim_end_matches('/'),
+                branch
+            );
+            info!(url = %commits_url, "ProjFS: consultando SHA do commit HEAD");
+            let commits_resp = client.get(&commits_url).send().await.map_err(|e| CloneError::NetworkError {
                 reason: format!("Falha ao consultar commits do GitHub: {}", e),
             })?;
-        let commits_resp = commits_resp.error_for_status().map_err(|e| CloneError::NetworkError {
-            reason: format!("GitHub respondeu erro ao consultar commits: {}", e),
-        })?;
-        let commits = commits_resp
-            .json::<Vec<GithubCommit>>()
-            .await
-            .map_err(|e| CloneError::NetworkError {
+            if commits_resp.status() == reqwest::StatusCode::NOT_FOUND {
+                continue;
+            }
+            let commits_resp = commits_resp.error_for_status().map_err(|e| CloneError::NetworkError {
+                reason: format!("GitHub respondeu erro ao consultar commits: {}", e),
+            })?;
+            let commits = commits_resp.json::<Vec<GithubCommit>>().await.map_err(|e| CloneError::NetworkError {
                 reason: format!("Falha ao decodificar commits do GitHub: {}", e),
             })?;
-        let head_sha = commits
-            .first()
-            .map(|c| c.sha.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| CloneError::NetworkError {
-                reason: "GitHub retornou lista de commits vazia; impossível extrair SHA".to_string(),
-            })?;
+            let sha = commits
+                .first()
+                .map(|c| c.sha.trim().to_string())
+                .filter(|s| !s.is_empty());
+            if let Some(sha) = sha {
+                selected_branch = Some(branch.clone());
+                head_sha = Some(sha);
+                break;
+            }
+        }
+
+        let selected_branch = selected_branch.ok_or_else(|| CloneError::NetworkError {
+            reason: "GitHub não retornou commits válidos (main/master); impossível extrair SHA".to_string(),
+        })?;
+        let head_sha = head_sha.ok_or_else(|| CloneError::NetworkError {
+            reason: "GitHub não retornou SHA válido; impossível extrair SHA".to_string(),
+        })?;
         let short_sha = head_sha.chars().take(7).collect::<String>();
         let repo_version = release_tag.clone().unwrap_or_else(|| short_sha.clone());
         let ultima_versao_online = release_tag.unwrap_or(short_sha);
 
-        let archive_url = format!(
+        let api_archive_url = format!(
             "{}/repos/{owner}/{repo}/zipball/{}",
             github_api_base.trim_end_matches('/'),
-            metadata.default_branch
+            selected_branch
         );
         info!(
-            url = %archive_url,
+            url = %api_archive_url,
             default_branch = %metadata.default_branch,
+            selected_branch = %selected_branch,
             "ProjFS: baixando snapshot compactado do repositório"
         );
-        let archive_response = client
-            .get(&archive_url)
-            .send()
-            .await
-            .map_err(|e| CloneError::NetworkError {
-                reason: format!("Falha ao baixar snapshot compactado do GitHub: {}", e),
-            })?;
-        let archive_response = archive_response.error_for_status().map_err(|e| CloneError::NetworkError {
-            reason: format!("GitHub respondeu erro ao baixar snapshot compactado: {}", e),
-        })?;
-        let bytes = archive_response.bytes().await.map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha ao ler bytes do snapshot GitHub: {}", e),
-        })?;
-        info!(archive_bytes = bytes.len(), "ProjFS: snapshot compactado recebido em memória");
-        Ok((bytes.to_vec(), repo_version, ultima_versao_online))
+
+        let bytes = match download_zip_bytes(&client, &api_archive_url).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let codeload_url = format!(
+                    "https://codeload.github.com/{owner}/{repo}/zip/refs/heads/{selected_branch}"
+                );
+                warn!(
+                    url = %repo_url,
+                    error = %e,
+                    fallback_url = %codeload_url,
+                    "ProjFS: fallback para codeload (ZIP) após falha no endpoint zipball"
+                );
+                download_zip_bytes(&client, &codeload_url).await?
+            }
+        };
+        info!(archive_bytes = bytes.len(), "ProjFS: snapshot ZIP recebido em memória");
+        Ok((bytes, repo_version, ultima_versao_online))
     }
 
     #[cfg(target_os = "windows")]
@@ -342,6 +409,80 @@ impl BloblessCloner {
         }
 
         ProjectedRepoSnapshot::from_files(files).map_err(|reason| CloneError::NetworkError { reason })
+    }
+
+    #[cfg(target_os = "windows")]
+    async fn git_clone_fallback(repo_url: &Url, dest: &Path) -> Result<(), CloneError> {
+        let git_ok = tokio::process::Command::new("git")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+        match git_ok {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(CloneError::GitNotInstalled),
+            Err(e) => {
+                return Err(CloneError::NetworkError {
+                    reason: format!("Erro ao verificar presença do git no sistema: {}", e),
+                });
+            }
+        }
+
+        if tokio::fs::try_exists(dest).await.map_err(|e| CloneError::NetworkError {
+            reason: format!("Falha ao verificar existência do destino do clone: {}", e),
+        })? {
+            tokio::fs::remove_dir_all(dest).await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao limpar destino do clone antes do fallback git: {}", e),
+            })?;
+        }
+
+        let url = repo_url.as_str().to_string();
+        let mut last_err = String::new();
+
+        let mut attempts = Vec::new();
+        for branch in ["main", "master"] {
+            attempts.push(Some(branch.to_string()));
+        }
+        attempts.push(None);
+
+        let clone_variants: [&[&str]; 2] = [
+            &["--filter=blob:none", "--single-branch", "--no-tags", "--quiet"],
+            &["--depth", "1", "--single-branch", "--no-tags", "--quiet"],
+        ];
+
+        for branch in attempts {
+            for variant in clone_variants.iter() {
+                let mut cmd = tokio::process::Command::new("git");
+                cmd.arg("clone");
+                for a in variant.iter() {
+                    cmd.arg(a);
+                }
+                if let Some(branch) = branch.as_deref() {
+                    cmd.arg("--branch").arg(branch);
+                }
+                cmd.arg(&url).arg(dest);
+                let output = cmd.output().await;
+                match output {
+                    Ok(out) if out.status.success() => return Ok(()),
+                    Ok(out) => {
+                        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                        last_err = format!(
+                            "git clone falhou (status={}) stdout='{}' stderr='{}'",
+                            out.status,
+                            stdout.trim(),
+                            stderr.trim()
+                        );
+                    }
+                    Err(e) => {
+                        last_err = format!("Falha ao executar git clone no fallback: {}", e);
+                    }
+                }
+            }
+        }
+
+        Err(CloneError::NetworkError { reason: last_err })
     }
 
     pub async fn clone(
@@ -396,6 +537,8 @@ impl BloblessCloner {
             let archive_started = Instant::now();
             let max_attempts: u32 = 4;
             let mut last_error: Option<CloneError> = None;
+            let mut last_repo_version: Option<String> = None;
+            let mut last_ultima_versao_online: Option<String> = None;
 
             for attempt in 1..=max_attempts {
                 let (archive_bytes, repo_version, ultima_versao_online) =
@@ -419,6 +562,8 @@ impl BloblessCloner {
                             return Err(e);
                         }
                     };
+                last_repo_version = Some(repo_version.clone());
+                last_ultima_versao_online = Some(ultima_versao_online.clone());
 
                 let snapshot = match tokio::task::spawn_blocking(move || Self::build_projfs_snapshot(archive_bytes))
                     .await
@@ -475,7 +620,36 @@ impl BloblessCloner {
                 return Ok(RepoPath(dest));
             }
 
-            if let Some(err) = last_error {
+            if let Some(err) = last_error.clone() {
+                let should_try_git = matches!(
+                    &err,
+                    CloneError::NetworkError { reason } if Self::is_retryable_github_zip_error(reason)
+                );
+                if should_try_git {
+                    warn!(
+                        url = %repo_url,
+                        error = %err,
+                        "ProjFS: retries esgotados; aplicando fallback para git clone (main/master)"
+                    );
+                    let repo_version = last_repo_version.unwrap_or_default();
+                    let ultima_versao_online = last_ultima_versao_online.unwrap_or_default();
+                    Self::git_clone_fallback(repo_url, &dest).await?;
+                    if !repo_version.is_empty() {
+                        tokio::fs::write(dest.join(".soda_repo_version"), repo_version)
+                            .await
+                            .map_err(|e| CloneError::NetworkError {
+                                reason: format!("Falha ao persistir repo_version no workspace: {}", e),
+                            })?;
+                    }
+                    if !ultima_versao_online.is_empty() {
+                        tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online)
+                            .await
+                            .map_err(|e| CloneError::NetworkError {
+                                reason: format!("Falha ao persistir ultima_versao_online no workspace: {}", e),
+                            })?;
+                    }
+                    return Ok(RepoPath(dest));
+                }
                 return Err(err);
             }
             return Err(CloneError::NetworkError {

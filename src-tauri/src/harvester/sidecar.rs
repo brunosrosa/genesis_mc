@@ -2,17 +2,9 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use oxc::{
-    allocator::Allocator,
-    ast::ast::CallExpression,
-    ast_visit::{walk, Visit as OxcVisit},
-    parser::{ParseOptions, Parser},
-    span::SourceType,
-};
 use rusqlite::params;
 use thiserror::Error;
 use serde::Deserialize;
-use syn::visit::Visit as SynVisit;
 use tracing::error;
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::detect::{SingleStack, StackProfile};
@@ -1533,7 +1525,7 @@ const UNIVERSAL_TEST_SKIP_SEGMENTS: [&str; 8] = [
     "e2e",
 ];
 const UNIVERSAL_TEST_SKIP_SUBSTRINGS: [&str; 3] = ["integration_mocks", "mock_", "/docs/"];
-const STATIC_TEST_DISCOVERY_MAX_FILE_BYTES: u64 = 262_144;
+const STATIC_TEST_DISCOVERY_READ_BYTES: usize = 50 * 1024;
 fn primary_stack(profile: &StackProfile) -> Option<SingleStack> {
     match profile {
         StackProfile::Rust => Some(SingleStack::Rust),
@@ -1651,38 +1643,20 @@ fn is_supported_test_file(profile: &StackProfile, path: &Path) -> bool {
 }
 
 fn read_static_test_file(path: &Path) -> Result<Option<String>, SidecarError> {
-    let metadata = std::fs::metadata(path).map_err(|e| SidecarError::ExecutionFailed {
-        reason: format!("Falha ao ler metadata de '{}': {}", path.display(), e),
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao abrir '{}': {}", path.display(), e),
     })?;
-    if metadata.len() > STATIC_TEST_DISCOVERY_MAX_FILE_BYTES {
-        return Ok(None);
-    }
-
-    let bytes = std::fs::read(path).map_err(|e| SidecarError::ExecutionFailed {
-        reason: format!("Falha ao ler '{}': {}", path.display(), e),
-    })?;
-    match String::from_utf8(bytes) {
+    let mut buf = Vec::new();
+    let _ = (&mut file)
+        .take(STATIC_TEST_DISCOVERY_READ_BYTES as u64)
+        .read_to_end(&mut buf)
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao ler primeiros {} bytes de '{}': {}", STATIC_TEST_DISCOVERY_READ_BYTES, path.display(), e),
+        })?;
+    match String::from_utf8(buf) {
         Ok(text) => Ok(Some(text)),
         Err(_) => Ok(None),
-    }
-}
-
-fn capture_line_at_offset(source: &str, offset: u32) -> Option<&str> {
-    let safe_offset = usize::try_from(offset).ok()?.min(source.len());
-    let start = source[..safe_offset].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-    let end = source[safe_offset..]
-        .find('\n')
-        .map(|idx| safe_offset + idx)
-        .unwrap_or(source.len());
-    source.get(start..end)
-}
-
-fn normalize_code_line_snippet(snippet: &str) -> Option<String> {
-    let normalized = snippet.trim().to_string();
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
     }
 }
 
@@ -1702,123 +1676,9 @@ fn compact_signature_text(signature: &str) -> Option<String> {
     }
 }
 
-fn frontend_test_ast_input(path: &Path, content: &str) -> Option<(String, PathBuf)> {
-    let extension = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_ascii_lowercase())?;
-
-    match extension.as_str() {
-        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "mts" | "cts" => {
-            Some((content.to_string(), path.to_path_buf()))
-        }
-        _ => None,
-    }
-}
-
-#[derive(Default)]
-struct JsTestAstCollector<'a> {
-    source_text: &'a str,
-    entries: BTreeSet<String>,
-}
-
-impl<'a> JsTestAstCollector<'a> {
-    fn finish(self) -> Vec<String> {
-        self.entries.into_iter().collect()
-    }
-}
-
-impl<'a> OxcVisit<'a> for JsTestAstCollector<'a> {
-    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
-        if let Some(callee_name) = call.callee_name() {
-            if matches!(callee_name, "describe" | "it" | "test") {
-                if let Some(signature) = capture_line_at_offset(self.source_text, call.span.start)
-                    .and_then(normalize_code_line_snippet)
-                    .and_then(|line| compact_signature_text(&line))
-                {
-                    self.entries.insert(signature);
-                }
-            }
-        }
-        walk::walk_call_expression(self, call);
-    }
-}
-
-fn parse_frontend_test_entries(path: &Path, content: &str) -> Vec<String> {
-    let Some((source_text, parse_path)) = frontend_test_ast_input(path, content) else {
-        return Vec::new();
-    };
-    let Ok(source_type) = SourceType::from_path(&parse_path) else {
-        return Vec::new();
-    };
-
-    let allocator = Allocator::default();
-    let parser_return = Parser::new(&allocator, &source_text, source_type)
-        .with_options(ParseOptions {
-            parse_regular_expression: true,
-            ..ParseOptions::default()
-        })
-        .parse();
-    if parser_return.panicked {
-        return Vec::new();
-    }
-
-    let mut collector = JsTestAstCollector {
-        source_text: &source_text,
-        entries: BTreeSet::new(),
-    };
-    collector.visit_program(&parser_return.program);
-    collector.finish()
-}
-
-fn rust_attr_is_test(attr: &syn::Attribute) -> bool {
-    attr.path()
-        .segments
-        .last()
-        .map(|segment| {
-            let ident = segment.ident.to_string();
-            ident == "test" || ident == "rstest"
-        })
-        .unwrap_or(false)
-}
-
-#[derive(Default)]
-struct RustTestAstCollector {
-    entries: BTreeSet<String>,
-}
-
-impl<'ast> SynVisit<'ast> for RustTestAstCollector {
-    fn visit_item_fn(&mut self, item_fn: &'ast syn::ItemFn) {
-        let is_test = item_fn.sig.ident.to_string().starts_with("test_")
-            || item_fn.attrs.iter().any(rust_attr_is_test);
-        if is_test {
-            let prefix = if item_fn.sig.asyncness.is_some() {
-                "async fn"
-            } else {
-                "fn"
-            };
-            self.entries
-                .insert(format!("{prefix} {}", item_fn.sig.ident));
-        }
-        syn::visit::visit_item_fn(self, item_fn);
-    }
-}
-
-fn parse_rust_test_entries(content: &str) -> Vec<String> {
-    let Ok(file) = syn::parse_file(content) else {
-        return Vec::new();
-    };
-
-    let mut collector = RustTestAstCollector {
-        entries: BTreeSet::new(),
-    };
-    collector.visit_file(&file);
-    collector.entries.into_iter().collect()
-}
-
-fn parse_python_test_entries(content: &str) -> Vec<String> {
+fn extract_python_test_entries_shallow(content: &str) -> Vec<String> {
     let mut entries = BTreeSet::new();
-    for line in content.lines() {
+    for line in content.lines().take(2_000) {
         let trimmed = line.trim();
         let signature = if trimmed.starts_with("async def test_") || trimmed.starts_with("def test_") {
             Some(trimmed.trim_end_matches(':'))
@@ -1831,6 +1691,53 @@ fn parse_python_test_entries(content: &str) -> Vec<String> {
         }
     }
     entries.into_iter().collect()
+}
+
+fn extract_rust_test_entries_shallow(content: &str) -> Vec<String> {
+    let mut out = BTreeSet::new();
+    let mut saw_test_attr = false;
+    for line in content.lines().take(2_000) {
+        let trimmed = line.trim();
+        if trimmed.starts_with("#[test]") || trimmed.starts_with("#[rstest]") {
+            saw_test_attr = true;
+            continue;
+        }
+
+        let is_fn_line = trimmed.starts_with("fn ") || trimmed.starts_with("async fn ");
+        if is_fn_line {
+            let is_test_name = trimmed.contains(" fn test_") || trimmed.starts_with("fn test_") || trimmed.starts_with("async fn test_");
+            if saw_test_attr || is_test_name {
+                saw_test_attr = false;
+                let normalized = trimmed
+                    .trim_end_matches('{')
+                    .trim()
+                    .trim_end_matches(';')
+                    .trim();
+                if let Some(signature) = compact_signature_text(normalized) {
+                    out.insert(signature);
+                }
+                continue;
+            }
+            saw_test_attr = false;
+        } else if !trimmed.starts_with("#[") && !trimmed.is_empty() {
+            saw_test_attr = false;
+        }
+    }
+    out.into_iter().collect()
+}
+
+fn extract_frontend_test_entries_shallow(content: &str) -> Vec<String> {
+    let mut out = BTreeSet::new();
+    for line in content.lines().take(2_000) {
+        let trimmed = line.trim();
+        if !(trimmed.contains("describe(") || trimmed.contains("it(") || trimmed.contains("test(")) {
+            continue;
+        }
+        if let Some(signature) = compact_signature_text(trimmed) {
+            out.insert(signature);
+        }
+    }
+    out.into_iter().collect()
 }
 
 fn build_scoped_blocks_from_pairs(
@@ -1974,10 +1881,10 @@ fn discover_static_test_entries_bfs(
                 .map(|value| value.to_ascii_lowercase());
 
             let discovered = match extension.as_deref() {
-                Some("rs") => parse_rust_test_entries(&content),
-                Some("py") => parse_python_test_entries(&content),
+                Some("rs") => extract_rust_test_entries_shallow(&content),
+                Some("py") => extract_python_test_entries_shallow(&content),
                 Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
-                    parse_frontend_test_entries(&path, &content)
+                    extract_frontend_test_entries_shallow(&content)
                 }
                 _ => Vec::new(),
             };

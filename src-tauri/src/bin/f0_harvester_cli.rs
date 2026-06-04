@@ -415,8 +415,11 @@ fn detect_degraded_blobs(conn: &Connection, repo_id: &str) -> io::Result<Vec<Str
         }
     }
     if let Some(text) = read_repo_blob_text(conn, repo_id, "blob_08_health_report")? {
-        if !is_knowledge_repo
-            && (text.contains("\"fallback\":true") || text.contains("\"fallback\": true"))
+        let has_fallback = text.contains("\"fallback\":true") || text.contains("\"fallback\": true");
+        let is_skipped = text.to_ascii_lowercase().contains("foi pulado")
+            || text.to_ascii_lowercase().contains("pulado pelo roteamento")
+            || text.to_ascii_lowercase().contains("static analysis (semgrep) foi pulado");
+        if !is_knowledge_repo && has_fallback && !is_skipped
         {
             degraded.push("blob_08_health_report".to_string());
         }
