@@ -16,6 +16,26 @@ use serde_json::{json, Value};
 use tracing::{error, info, warn};
 use url::Url;
 
+#[cfg(not(test))]
+const MCP_TIMEOUT: Duration = Duration::from_secs(180);
+#[cfg(test)]
+const MCP_TIMEOUT: Duration = Duration::from_millis(250);
+
+#[cfg(not(test))]
+const FORMATTER_HTTP_TIMEOUT: Duration = Duration::from_secs(300);
+#[cfg(test)]
+const FORMATTER_HTTP_TIMEOUT: Duration = Duration::from_millis(400);
+
+#[cfg(not(test))]
+const SGR_TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
+#[cfg(test)]
+const SGR_TOTAL_TIMEOUT: Duration = Duration::from_millis(400);
+
+#[cfg(not(test))]
+const GITHUB_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const GITHUB_HTTP_TIMEOUT: Duration = Duration::from_millis(250);
+
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
 
 impl Drop for AbortOnDrop {
@@ -67,7 +87,7 @@ fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usiz
     Ok(count.max(0) as usize)
 }
 
-fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
+async fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
     let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let result = call_mcp(
         "get_sheet_data",
@@ -77,12 +97,17 @@ fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
             "range": header_range,
             "include_grid_data": false
         }),
-    )?;
+    )
+    .await?;
     let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
     Ok(values.first().cloned().unwrap_or_default())
 }
 
-fn read_cell_at(spreadsheet_id: &str, row_number_1based: u32, col_idx0: usize) -> io::Result<String> {
+async fn read_cell_at(
+    spreadsheet_id: &str,
+    row_number_1based: u32,
+    col_idx0: usize,
+) -> io::Result<String> {
     let col = col_idx_to_a1(col_idx0);
     let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
     let result = call_mcp(
@@ -93,7 +118,8 @@ fn read_cell_at(spreadsheet_id: &str, row_number_1based: u32, col_idx0: usize) -
             "range": range,
             "include_grid_data": false
         }),
-    )?;
+    )
+    .await?;
     let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
     Ok(values
         .first()
@@ -128,7 +154,7 @@ struct BatchCandidate {
 }
 
 async fn fetch_enxame_batch_candidates(spreadsheet_id: &str) -> io::Result<Vec<BatchCandidate>> {
-    let header_row = read_master_header(spreadsheet_id)?;
+    let header_row = read_master_header(spreadsheet_id).await?;
     let status_idx = find_col_idx(&header_row, "status_atualizacao")
         .ok_or_else(|| io::Error::other("Header missing status_atualizacao"))?;
     let repo_url_idx = find_col_idx(&header_row, "repo_url")
@@ -150,7 +176,8 @@ async fn fetch_enxame_batch_candidates(spreadsheet_id: &str) -> io::Result<Vec<B
             "range": range,
             "include_grid_data": false
         }),
-    )?;
+    )
+    .await?;
     let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
 
     let lote_override = std::env::var("SODA_LOTE_ID_OVERRIDE")
@@ -222,14 +249,20 @@ async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
         .user_agent("f3-synthesizer-cli/1.0")
         .build()
         .ok()?;
-    let resp = client.get(&endpoint).send().await.ok()?;
+    let resp = tokio::time::timeout(GITHUB_HTTP_TIMEOUT, client.get(&endpoint).send())
+        .await
+        .ok()?
+        .ok()?;
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         return None;
     }
     if !resp.status().is_success() {
         return None;
     }
-    let release = resp.json::<GithubRelease>().await.ok()?;
+    let release = tokio::time::timeout(GITHUB_HTTP_TIMEOUT, resp.json::<GithubRelease>())
+        .await
+        .ok()?
+        .ok()?;
     release
         .tag_name
         .map(|s| s.trim().to_string())
@@ -1124,8 +1157,8 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                     }
                 ],
                 "temperature": 0.0,
-                "max_tokens": 16000,
-                "reasoning_effort": "xhigh",
+                "max_tokens": 4096,
+                "reasoning_effort": "high",
                 "response_format": response_format_for_block(block)
             });
 
@@ -1137,12 +1170,27 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                     .header("Authorization", format!("Bearer {}", self.api_key))
                     .header("Content-Type", "application/json")
                     .json(&body)
-                    .send()
+                    .send();
+                let response = tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response)
                     .await
+                    .map_err(|_| {
+                        format!(
+                            "Timeout chamando OpenRouter (timeout_s={})",
+                            FORMATTER_HTTP_TIMEOUT.as_secs()
+                        )
+                    })?
                     .map_err(|e| format!("Erro de rede: {}", e))?;
 
                 let status = response.status();
-                let raw = response.text().await.map_err(|e| e.to_string())?;
+                let raw = tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response.text())
+                    .await
+                    .map_err(|_| {
+                        format!(
+                            "Timeout lendo body OpenRouter (timeout_s={})",
+                            FORMATTER_HTTP_TIMEOUT.as_secs()
+                        )
+                    })?
+                    .map_err(|e| e.to_string())?;
                 if !status.is_success() {
                     let should_retry = (status.as_u16() == 429 || status.is_server_error())
                         && attempt < max_attempts;
@@ -1430,8 +1478,10 @@ fn derive_declared_description_from_readme(text: &str) -> Option<String> {
     fallback_heading
 }
 
-fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
-    use std::process::{Command, Stdio};
+async fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+    use tokio::process::Command;
 
     let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
         .map_err(|_| io::Error::other("Missing GOOGLE_APPLICATION_CREDENTIALS"))?;
@@ -1474,7 +1524,7 @@ fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
                 % 250;
             let exp = attempt.saturating_sub(2).min(10);
             let base_ms = 500_u64.saturating_mul(1_u64 << exp);
-            std::thread::sleep(Duration::from_millis(base_ms.saturating_add(jitter_ms)));
+            tokio::time::sleep(Duration::from_millis(base_ms.saturating_add(jitter_ms))).await;
         }
 
         let mut child = Command::new("mcp-google-sheets")
@@ -1487,23 +1537,74 @@ fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
             .spawn()
             .map_err(|e| io::Error::other(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
 
-        {
-            use std::io::Write;
-            let stdin =
-                child.stdin.as_mut().ok_or_else(|| io::Error::other("stdin indisponível"))?;
-            writeln!(stdin, "{}", init_req)?;
-            writeln!(stdin, "{}", initialized_notif)?;
-            writeln!(stdin, "{}", mcp_request)?;
-        }
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("stdin indisponível"))?;
+        stdin
+            .write_all(format!("{}\n", init_req).as_bytes())
+            .await
+            .map_err(|e| io::Error::other(format!("Falha ao escrever init no MCP: {}", e)))?;
+        stdin
+            .write_all(format!("{}\n", initialized_notif).as_bytes())
+            .await
+            .map_err(|e| io::Error::other(format!("Falha ao escrever initialized no MCP: {}", e)))?;
+        stdin
+            .write_all(format!("{}\n", mcp_request).as_bytes())
+            .await
+            .map_err(|e| io::Error::other(format!("Falha ao escrever tools/call no MCP: {}", e)))?;
+        drop(stdin);
 
-        let output = child
-            .wait_with_output()
-            .map_err(|e| io::Error::other(format!("Falha ao aguardar mcp-google-sheets: {}", e)))?;
-        if !output.status.success() {
+        let mut stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("stdout indisponível"))?;
+        let mut stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| io::Error::other("stderr indisponível"))?;
+        let (status, stdout_buf, stderr_buf) = match tokio::time::timeout(MCP_TIMEOUT, async {
+            use tokio::io::AsyncReadExt;
+            let mut out_buf = Vec::new();
+            let mut err_buf = Vec::new();
+            let (out_res, err_res, status_res) = tokio::join!(
+                stdout.read_to_end(&mut out_buf),
+                stderr.read_to_end(&mut err_buf),
+                child.wait()
+            );
+            out_res.map_err(|e| io::Error::other(format!("Falha ao ler stdout MCP: {}", e)))?;
+            err_res.map_err(|e| io::Error::other(format!("Falha ao ler stderr MCP: {}", e)))?;
+            let status =
+                status_res.map_err(|e| io::Error::other(format!("Falha ao aguardar mcp-google-sheets: {}", e)))?;
+            Ok::<_, io::Error>((status, out_buf, err_buf))
+        })
+        .await
+        {
+            Ok(Ok(v)) => v,
+            Ok(Err(e)) => {
+                if attempt < max_attempts {
+                    continue;
+                }
+                return Err(e);
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                let err = io::Error::other(format!(
+                    "Timeout aguardando mcp-google-sheets tool={} timeout_s={}",
+                    tool_name,
+                    MCP_TIMEOUT.as_secs()
+                ));
+                if attempt < max_attempts {
+                    continue;
+                }
+                return Err(err);
+            }
+        };
+        if !status.success() {
             let err = io::Error::other(format!(
                 "mcp-google-sheets falhou. Exit {}. STDERR: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
+                status,
+                String::from_utf8_lossy(&stderr_buf)
             ));
             if attempt < max_attempts {
                 continue;
@@ -1511,7 +1612,7 @@ fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
             return Err(err);
         }
 
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stdout_str = String::from_utf8_lossy(&stdout_buf);
         for line in stdout_str.lines().rev() {
             if let Ok(value) = serde_json::from_str::<Value>(line) {
                 if value.get("id").and_then(|v| v.as_i64()) == Some(1) {
@@ -1632,12 +1733,12 @@ fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
     None
 }
 
-fn resolve_row_number_by_repo_url_and_lote_id(
+async fn resolve_row_number_by_repo_url_and_lote_id(
     spreadsheet_id: &str,
     repo_url: &str,
     lote_id: &str,
 ) -> io::Result<u32> {
-    let header_row = read_master_header(spreadsheet_id)?;
+    let header_row = read_master_header(spreadsheet_id).await?;
     let repo_url_idx = find_col_idx(&header_row, "repo_url")
         .ok_or_else(|| io::Error::other("Header missing repo_url"))?;
     let lote_id_idx =
@@ -1655,7 +1756,8 @@ fn resolve_row_number_by_repo_url_and_lote_id(
             "range": range,
             "include_grid_data": false
         }),
-    )?;
+    )
+    .await?;
     let values = extract_values_2d(&result).unwrap_or_default();
     let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
     let lote_needle = lote_id.trim();
@@ -1744,7 +1846,7 @@ fn resolve_row_number_by_repo_url_and_lote_id(
     )))
 }
 
-fn read_status_atualizacao_e_fase(
+async fn read_status_atualizacao_e_fase(
     spreadsheet_id: &str,
     row_number_1based: u32,
     cols: MasterCols,
@@ -1763,7 +1865,8 @@ fn read_status_atualizacao_e_fase(
             "range": range,
             "include_grid_data": false
         }),
-    )?;
+    )
+    .await?;
     let values = extract_values_2d(&result).unwrap_or_default();
     let row = values.first().cloned().unwrap_or_default();
     let get = |abs_idx: usize| -> String {
@@ -1792,7 +1895,7 @@ fn resolve_master_cols(header_row: &[String]) -> io::Result<MasterCols> {
     })
 }
 
-fn update_status_fase_only(
+async fn update_status_fase_only(
     spreadsheet_id: &str,
     row_number_1based: u32,
     cols: MasterCols,
@@ -1809,11 +1912,12 @@ fn update_status_fase_only(
                 range: [[status_fase]]
             }
         }),
-    )?;
+    )
+    .await?;
     Ok(())
 }
 
-fn update_status_atualizacao_e_fase(
+async fn update_status_atualizacao_e_fase(
     spreadsheet_id: &str,
     row_number_1based: u32,
     cols: MasterCols,
@@ -1834,16 +1938,17 @@ fn update_status_atualizacao_e_fase(
                 range_b: [[status_fase]]
             }
         }),
-    )?;
+    )
+    .await?;
     Ok(())
 }
 
-fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Result<bool> {
+async fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Result<bool> {
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
     let expected_pretty = expected_repo_id.replace("/", " / ");
     let expected_url = format!("https://github.com/{}", expected_repo_id.trim());
-    let header_row = read_master_header(&spreadsheet_id)?;
+    let header_row = read_master_header(&spreadsheet_id).await?;
     let project_idx = find_col_idx(&header_row, "project_name")
         .ok_or_else(|| io::Error::other("Header missing project_name"))?;
     let repo_url_idx = find_col_idx(&header_row, "repo_url")
@@ -1863,7 +1968,8 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
             "range": range,
             "include_grid_data": false
         }),
-    )?;
+    )
+    .await?;
     let values = extract_values_2d(&result).unwrap_or_default();
     let row = values
         .first()
@@ -1880,7 +1986,7 @@ fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> io::Re
         || repo_url_cell == expected_url)
 }
 
-fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
+async fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
     let range = genesis_mc_lib::cognition::synthesizer::sheet_range_for_row(row_number_1based);
@@ -1892,7 +1998,8 @@ fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
             "range": range,
             "include_grid_data": false
         }),
-    )?;
+    )
+    .await?;
     let values = extract_values_2d(&result).unwrap_or_default();
     Ok(values.first().map(|r| r.len()).unwrap_or(0))
 }
@@ -1901,23 +2008,106 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
     use std::process::Stdio;
 
     let started = Instant::now();
-    let mut exe_path = std::env::current_exe()?;
-    let bin_name = if cfg!(target_os = "windows") {
-        if binary_stem.to_ascii_lowercase().ends_with(".exe") {
-            binary_stem.to_string()
-        } else {
-            format!("{binary_stem}.exe")
-        }
+    let current_exe = std::env::current_exe()?;
+    let exe_dir = current_exe
+        .parent()
+        .ok_or_else(|| io::Error::other("Falha ao resolver pasta do executável atual (parent = None)"))?;
+    let profile = exe_dir
+        .file_name()
+        .and_then(|v| v.to_str())
+        .map(|v| v.to_ascii_lowercase())
+        .filter(|v| v == "debug" || v == "release")
+        .unwrap_or_else(|| "debug".to_string());
+    let cargo_bin = if cfg!(target_os = "windows") {
+        binary_stem.trim_end_matches(".exe").to_string()
     } else {
         binary_stem.to_string()
     };
-    exe_path.set_file_name(bin_name);
+    let bin_name = if cfg!(target_os = "windows") {
+        format!("{cargo_bin}.exe")
+    } else {
+        cargo_bin.clone()
+    };
+    let candidate_local = exe_dir.join(&bin_name);
+    let root_dir = workspace_root()?;
+    let candidate_target = root_dir
+        .join("src-tauri")
+        .join("target")
+        .join(&profile)
+        .join(&bin_name);
+    let manifest_path = root_dir.join("src-tauri").join("Cargo.toml");
 
     let _ghost = spawn_ghost_telemetry(
         repo_id.to_string(),
         format!("Executando subfase '{binary_stem}'"),
     );
-    let status = tokio::process::Command::new(exe_path)
+    let mut command = if candidate_local.exists() {
+        tokio::process::Command::new(candidate_local)
+    } else if candidate_target.exists() {
+        tokio::process::Command::new(candidate_target)
+    } else {
+        let mut build_cmd = tokio::process::Command::new("cargo");
+        build_cmd
+            .arg("build")
+            .arg("--manifest-path")
+            .arg(&manifest_path)
+            .arg("--bin")
+            .arg(&cargo_bin);
+        if profile == "release" {
+            build_cmd.arg("--release");
+        }
+        build_cmd
+            .current_dir(root_dir.join("src-tauri"))
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        let build_status = build_cmd.status().await.map_err(|e| {
+            io::Error::other(format!(
+                "Falha ao compilar subfase '{binary_stem}' via cargo: {e}"
+            ))
+        })?;
+        if !build_status.success() {
+            return Err(io::Error::other(format!(
+                "Compilação da subfase '{binary_stem}' falhou via cargo: {build_status}"
+            )));
+        }
+
+        if candidate_local.exists() {
+            tokio::process::Command::new(candidate_local)
+        } else if candidate_target.exists() {
+            tokio::process::Command::new(candidate_target)
+        } else {
+            let mut run_cmd = tokio::process::Command::new("cargo");
+            run_cmd
+                .arg("run")
+                .arg("--quiet")
+                .arg("--manifest-path")
+                .arg(&manifest_path)
+                .arg("--bin")
+                .arg(&cargo_bin);
+            if profile == "release" {
+                run_cmd.arg("--release");
+            }
+            run_cmd
+                .arg("--")
+                .args(["--repo", repo_id])
+                .current_dir(root_dir.join("src-tauri"))
+                .stdin(Stdio::null())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit());
+            let status = run_cmd.status().await.map_err(|e| {
+                io::Error::other(format!("Falha ao executar fase '{binary_stem}' via cargo run: {e}"))
+            })?;
+            if !status.success() {
+                return Err(io::Error::other(format!(
+                    "Fase '{binary_stem}' via cargo run retornou exit code != 0: {status}"
+                )));
+            }
+            return Ok(started.elapsed().as_millis());
+        }
+    };
+
+    let status = command
         .args(["--repo", repo_id])
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
@@ -2047,10 +2237,11 @@ async fn main() -> io::Result<()> {
         let row_number = if let Some(row) = row_override {
             row
         } else {
-            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &row.repo_url, &row.lote_id)?
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &row.repo_url, &row.lote_id)
+                .await?
         };
 
-        let header_row = read_master_header(&spreadsheet_id)?;
+        let header_row = read_master_header(&spreadsheet_id).await?;
         let project_idx = find_col_idx(&header_row, "project_name").unwrap_or(0);
         let repo_url_idx = find_col_idx(&header_row, "repo_url").unwrap_or(0);
         let lote_id_idx = find_col_idx(&header_row, "lote_id").unwrap_or(0);
@@ -2083,7 +2274,8 @@ async fn main() -> io::Result<()> {
                 "sheet": "MASTER_SOLUTIONS",
                 "ranges": ranges
             }),
-        )?;
+        )
+        .await?;
         let mut update_result_str = update_result.to_string();
         if update_result_str.len() > 800 {
             update_result_str.truncate(800);
@@ -2096,9 +2288,9 @@ async fn main() -> io::Result<()> {
             )));
         }
 
-        let confirmed = confirm_sheet_write(row_number, &repo_id)?;
+        let confirmed = confirm_sheet_write(row_number, &repo_id).await?;
         if !confirmed {
-            let header_row = read_master_header(&spreadsheet_id)?;
+            let header_row = read_master_header(&spreadsheet_id).await?;
             let project_idx = find_col_idx(&header_row, "project_name").unwrap_or(0);
             let repo_url_idx = find_col_idx(&header_row, "repo_url").unwrap_or(0);
             let min_idx = project_idx.min(repo_url_idx);
@@ -2114,7 +2306,8 @@ async fn main() -> io::Result<()> {
                     "range": range,
                     "include_grid_data": false
                 }),
-            )?;
+            )
+            .await?;
             let values = extract_values_2d(&result).unwrap_or_default();
             let row_read = values.first().cloned().unwrap_or_default();
             let get = |abs_idx: usize| -> String {
@@ -2156,12 +2349,12 @@ async fn main() -> io::Result<()> {
         let row_number = if let Some(row) = row_override {
             row
         } else {
-            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id).await?
         };
-        let header_row = read_master_header(&spreadsheet_id)?;
+        let header_row = read_master_header(&spreadsheet_id).await?;
         let cols = resolve_master_cols(&header_row)?;
         let (status_atualizacao, _status_fase) =
-            read_status_atualizacao_e_fase(&spreadsheet_id, row_number, cols)?;
+            read_status_atualizacao_e_fase(&spreadsheet_id, row_number, cols).await?;
         if status_atualizacao.trim() != "APROVADO_PARA_ENXAME" {
             info!(
                 repo_id = %repo_id,
@@ -2180,7 +2373,7 @@ async fn main() -> io::Result<()> {
         let row_number = if let Some(row) = row_override {
             row
         } else {
-            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?
+            resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id).await?
         };
 
         let blobs = count_raw_blobs_distinct(&conn, &repo_id)?;
@@ -2194,16 +2387,16 @@ async fn main() -> io::Result<()> {
             return Ok(());
         }
 
-        let header_row = read_master_header(&spreadsheet_id)?;
+        let header_row = read_master_header(&spreadsheet_id).await?;
         if let Some(idx) = find_col_idx(&header_row, "proposta_original_resumo") {
-            let v = read_cell_at(&spreadsheet_id, row_number, idx)?;
+            let v = read_cell_at(&spreadsheet_id, row_number, idx).await?;
             if !v.trim().is_empty() {
                 n4_sheet_proposta = Some(v);
                 n4_skip_columns.push("proposta_original_resumo");
             }
         }
         if let Some(idx) = find_col_idx(&header_row, "categoria_arquitetural") {
-            let v = read_cell_at(&spreadsheet_id, row_number, idx)?;
+            let v = read_cell_at(&spreadsheet_id, row_number, idx).await?;
             if !v.trim().is_empty() {
                 n4_sheet_categoria = Some(v);
                 n4_skip_columns.push("categoria_arquitetural");
@@ -2214,18 +2407,18 @@ async fn main() -> io::Result<()> {
     if e2e_full && !skip_harvester {
         if let Ok(spreadsheet_id) = std::env::var("GOOGLE_SHEETS_ID") {
             let row_number =
-                resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id)?;
-            let header_row = read_master_header(&spreadsheet_id)?;
+                resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id).await?;
+            let header_row = read_master_header(&spreadsheet_id).await?;
             let cols = resolve_master_cols(&header_row)?;
             let (status_atualizacao, _status_fase) =
-                read_status_atualizacao_e_fase(&spreadsheet_id, row_number, cols)?;
+                read_status_atualizacao_e_fase(&spreadsheet_id, row_number, cols).await?;
             if status_atualizacao == "PENDENTE_FASE_0" {
                 info!(
                     row_number,
                     "Orquestrador: gatilho HITL detectado (PENDENTE_FASE_0). Executando apenas F0"
                 );
                 let phase0_ms = run_phase_binary("f0_harvester_cli", &repo_id).await?;
-                update_status_fase_only(&spreadsheet_id, row_number, cols, "FASE_0_OK")?;
+                update_status_fase_only(&spreadsheet_id, row_number, cols, "FASE_0_OK").await?;
                 info!(
                     phase0_ms,
                     row_number,
@@ -2428,15 +2621,21 @@ async fn main() -> io::Result<()> {
 
     let started_phase3_4 = Instant::now();
     let _ghost_f3 = spawn_ghost_telemetry(repo_id.clone(), "F3 (SGR) em processamento".to_string());
-    let phase3_out = match run_phase3_sgr(&formatter, &cfg, block0).await {
-        Ok(out) => out,
-        Err(Phase3Error::RetryExhausted { block, attempts, message }) => {
+    let phase3_out = match tokio::time::timeout(SGR_TOTAL_TIMEOUT, run_phase3_sgr(&formatter, &cfg, block0)).await {
+        Ok(Ok(out)) => out,
+        Ok(Err(Phase3Error::RetryExhausted { block, attempts, message })) => {
             error!(block, attempts, message = %message, "E2E: falha terminal no SGR após retries");
             return Err(io::Error::other("Falha terminal no SGR"));
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             error!(error = %e, "E2E: falha no SGR");
             return Err(io::Error::other(format!("Falha SGR: {}", e)));
+        }
+        Err(_) => {
+            return Err(io::Error::other(format!(
+                "Timeout no SGR total (timeout_s={})",
+                SGR_TOTAL_TIMEOUT.as_secs()
+            )));
         }
     };
     drop(_ghost_f3);
@@ -2491,7 +2690,7 @@ async fn main() -> io::Result<()> {
     };
     drop(_ghost_f4);
 
-    let confirmed = confirm_sheet_write(row_number, &repo_id)?;
+    let confirmed = confirm_sheet_write(row_number, &repo_id).await?;
     if !confirmed {
         return Err(io::Error::other(
             "E2E: atualização enviada, mas confirmação via leitura não bateu",
@@ -2500,7 +2699,7 @@ async fn main() -> io::Result<()> {
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    let header_row = read_master_header(&spreadsheet_id)?;
+    let header_row = read_master_header(&spreadsheet_id).await?;
     let cols = resolve_master_cols(&header_row)?;
     update_status_atualizacao_e_fase(
         &spreadsheet_id,
@@ -2508,9 +2707,10 @@ async fn main() -> io::Result<()> {
         cols,
         "CONCLUIDO_AGUARDANDO",
         "FASE_4_SYNTHESIZER_OK",
-    )?;
+    )
+    .await?;
 
-    let width_a_to_cf = inspect_row_width_a_to_cf(row_number)?;
+    let width_a_to_cf = inspect_row_width_a_to_cf(row_number).await?;
     info!(width_a_to_cf, "E2E: inspeção pós-write (A:END) para largura do row");
 
     let usage = formatter.usage_totals();

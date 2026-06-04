@@ -99,7 +99,7 @@ fn stdout_preview(bytes: &[u8], max_chars: usize) -> String {
         return String::new();
     }
     let text = String::from_utf8_lossy(bytes);
-    truncate_chars(&text.replace('\r', " ").replace('\n', " "), max_chars)
+    truncate_chars(&text.replace(['\r', '\n'], " "), max_chars)
 }
 
 fn fallback_jcodemunch_repo_outline(repo_path: &Path, reason: &str) -> Vec<u8> {
@@ -333,7 +333,7 @@ fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
     outline.push_str("# Repository Outline\n\n");
     outline.push_str("kind: ");
     outline.push_str(kind);
-    outline.push_str("\n");
+    outline.push('\n');
     outline.push_str("note: Repositório sem arquivos de código indexáveis (curadoria/documentação/skills).\n");
     outline.push_str("why: ");
     outline.push_str(truncate_chars(why.trim(), 600).trim());
@@ -359,7 +359,7 @@ fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
     link_map.push_str("# Link Map\n\n");
     link_map.push_str("kind: ");
     link_map.push_str(kind);
-    link_map.push_str("\n");
+    link_map.push('\n');
     link_map.push_str(&format!("markdown_files: {}\n", md_files.len()));
     link_map.push_str(&format!("github_repo_links: {}\n", gh_repos.len()));
     link_map.push_str(&format!("external_links: {}\n\n", external.len()));
@@ -1803,31 +1803,32 @@ fn discover_static_test_entries_bfs(
             Ok(v) => v,
             Err(_e) => {
                 steps += 1;
-                if steps % PROGRESS_FLUSH_EVERY == 0 {
+                if steps.is_multiple_of(PROGRESS_FLUSH_EVERY) {
                     if let Some(progress) = progress {
-                        let mut guard = progress.lock().unwrap();
-                        if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
-                            for item in &bfs_dirs {
-                                if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
-                                    break;
-                                }
-                                if !guard.bfs_dirs.contains(item) {
-                                    guard.bfs_dirs.push(item.clone());
-                                }
-                            }
-                        }
-                        if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
-                            for item in &bfs_test_files {
-                                if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
-                                    break;
-                                }
-                                if !guard.bfs_test_files.contains(item) {
-                                    guard.bfs_test_files.push(item.clone());
+                        if let Ok(mut guard) = progress.lock() {
+                            if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
+                                for item in &bfs_dirs {
+                                    if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
+                                        break;
+                                    }
+                                    if !guard.bfs_dirs.contains(item) {
+                                        guard.bfs_dirs.push(item.clone());
+                                    }
                                 }
                             }
-                        }
-                        if !pending_blocks.is_empty() {
-                            guard.blocks.extend(pending_blocks.drain(..));
+                            if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
+                                for item in &bfs_test_files {
+                                    if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
+                                        break;
+                                    }
+                                    if !guard.bfs_test_files.contains(item) {
+                                        guard.bfs_test_files.push(item.clone());
+                                    }
+                                }
+                            }
+                            if !pending_blocks.is_empty() {
+                                guard.blocks.append(&mut pending_blocks);
+                            }
                         }
                     }
                 }
@@ -1903,31 +1904,32 @@ fn discover_static_test_entries_bfs(
             }
 
             steps += 1;
-            if steps % PROGRESS_FLUSH_EVERY == 0 {
+            if steps.is_multiple_of(PROGRESS_FLUSH_EVERY) {
                 if let Some(progress) = progress {
-                    let mut guard = progress.lock().unwrap();
-                    if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
-                        for item in &bfs_dirs {
-                            if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
-                                break;
-                            }
-                            if !guard.bfs_dirs.contains(item) {
-                                guard.bfs_dirs.push(item.clone());
-                            }
-                        }
-                    }
-                    if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
-                        for item in &bfs_test_files {
-                            if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
-                                break;
-                            }
-                            if !guard.bfs_test_files.contains(item) {
-                                guard.bfs_test_files.push(item.clone());
+                    if let Ok(mut guard) = progress.lock() {
+                        if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
+                            for item in &bfs_dirs {
+                                if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
+                                    break;
+                                }
+                                if !guard.bfs_dirs.contains(item) {
+                                    guard.bfs_dirs.push(item.clone());
+                                }
                             }
                         }
-                    }
-                    if !pending_blocks.is_empty() {
-                        guard.blocks.extend(pending_blocks.drain(..));
+                        if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
+                            for item in &bfs_test_files {
+                                if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
+                                    break;
+                                }
+                                if !guard.bfs_test_files.contains(item) {
+                                    guard.bfs_test_files.push(item.clone());
+                                }
+                            }
+                        }
+                        if !pending_blocks.is_empty() {
+                            guard.blocks.append(&mut pending_blocks);
+                        }
                     }
                 }
             }
@@ -1935,15 +1937,16 @@ fn discover_static_test_entries_bfs(
     }
 
     if let Some(progress) = progress {
-        let mut guard = progress.lock().unwrap();
-        if guard.bfs_dirs.is_empty() {
-            guard.bfs_dirs = bfs_dirs;
-        }
-        if guard.bfs_test_files.is_empty() {
-            guard.bfs_test_files = bfs_test_files;
-        }
-        if !pending_blocks.is_empty() {
-            guard.blocks.extend(pending_blocks);
+        if let Ok(mut guard) = progress.lock() {
+            if guard.bfs_dirs.is_empty() {
+                guard.bfs_dirs = bfs_dirs;
+            }
+            if guard.bfs_test_files.is_empty() {
+                guard.bfs_test_files = bfs_test_files;
+            }
+            if !pending_blocks.is_empty() {
+                guard.blocks.extend(pending_blocks);
+            }
         }
     }
 

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use thiserror::Error;
 
 const STATUS_OK: &str = "F2_OK";
@@ -14,6 +15,13 @@ const STATUS_ERR: &str = "ERRO_F2";
 const DEFAULT_OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 
 type LensFuture<'a> = Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;
+
+#[cfg(not(test))]
+const LENS_TIMEOUT: Duration = Duration::from_secs(180);
+#[cfg(test)]
+const LENS_TIMEOUT: Duration = Duration::from_millis(220);
+
+const LENS_MAX_TOKENS: usize = 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LensKind {
@@ -209,14 +217,21 @@ where
             let max_attempts = if stage == "primario" { 3 } else { 1 };
 
             for attempt in 1..=max_attempts {
-                match self
-                    .invoker
-                    .invoke(lens, repo_id, payload, Some(model))
-                    .await
-                {
-                    Ok(result) => return Ok(result),
-                    Err(err) => {
-                        let msg = format!("stage={}, attempt {} => {}", stage, attempt, truncate_for_log(&err, 1400));
+                let res = tokio::time::timeout(
+                    LENS_TIMEOUT,
+                    self.invoker.invoke(lens, repo_id, payload, Some(model)),
+                )
+                .await;
+
+                match res {
+                    Ok(Ok(result)) => return Ok(result),
+                    Ok(Err(err)) => {
+                        let msg = format!(
+                            "stage={}, attempt {} => {}",
+                            stage,
+                            attempt,
+                            truncate_for_log(&err, 1400)
+                        );
                         errors.push(msg.clone());
                         tracing::warn!(
                             lens_id = lens.lens_id(),
@@ -228,7 +243,25 @@ where
                             "Falha no passo da cascata FinOps"
                         );
                     }
-                }
+                    Err(_) => {
+                        let msg = format!(
+                            "stage={}, attempt {} => timeout_ms={}",
+                            stage,
+                            attempt,
+                            LENS_TIMEOUT.as_millis()
+                        );
+                        errors.push(msg.clone());
+                        tracing::warn!(
+                            lens_id = lens.lens_id(),
+                            repo_id = repo_id,
+                            model_used = model,
+                            stage = stage,
+                            attempt = attempt,
+                            error = %msg,
+                            "Falha no passo da cascata FinOps"
+                        );
+                    }
+                };
             }
         }
 
@@ -396,7 +429,7 @@ impl LensInvoker for HttpLensInvoker {
                         content: format!("{}{}", user_prefix, payload),
                     },
                 ],
-                max_tokens: 8192,
+                max_tokens: LENS_MAX_TOKENS,
                 temperature: 0.0,
                 response_format: ChatResponseFormat {
                     kind: "json_object".to_string(),
@@ -1402,6 +1435,25 @@ mod tests {
         assert!(result.is_ok());
         assert!(elapsed < Duration::from_millis(320), "tempo parece sequencial: {:?}", elapsed);
         assert!(elapsed >= Duration::from_millis(180), "tempo nao refletiu a lente mais lenta: {:?}", elapsed);
+    }
+
+    #[tokio::test]
+    async fn test_timeout_does_not_hang_join_and_marks_phase2_error() {
+        let store = MemoryStore::new(sample_payloads());
+        let store_errors = Arc::clone(&store.errors);
+        let invoker = RecordingLensInvoker::new(
+            HashMap::from([(LensKind::Architecture, 800)]),
+            HashMap::new(),
+        );
+        let dispatcher = CognitiveSwarmDispatcher::new(store, invoker);
+
+        let started = Instant::now();
+        let result = dispatcher.dispatch_swarm("repo/test").await;
+        let elapsed = started.elapsed();
+
+        assert!(result.is_err());
+        assert!(elapsed < Duration::from_secs(2), "timeout nao abortou em tempo util: {:?}", elapsed);
+        assert_eq!(store_errors.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

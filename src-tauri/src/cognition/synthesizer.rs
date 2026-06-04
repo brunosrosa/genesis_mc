@@ -1198,7 +1198,6 @@ struct Block2Fields {
     real_structural_problem: String,
     categoria_nuance_tecnica: String,
     integracao_papel_exato: String,
-    indicacao_otimista_canibalizacao: String,
     must_components_prod_ux: String,
     must_components_arq: String,
     must_components_ops: String,
@@ -1211,10 +1210,6 @@ impl Block2Fields {
     fn sanitize(self) -> Self {
         let max_chars = 400usize;
         Self {
-            indicacao_otimista_canibalizacao: enforce_bullets_3_to_5(
-                &self.indicacao_otimista_canibalizacao,
-                max_chars,
-            ),
             must_components_prod_ux: enforce_bullets_3_to_5(&self.must_components_prod_ux, max_chars),
             must_components_arq: enforce_bullets_3_to_5(&self.must_components_arq, max_chars),
             must_components_ops: enforce_bullets_3_to_5(&self.must_components_ops, max_chars),
@@ -1310,8 +1305,7 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
         }
         2 => {
             prompt.push_str("LIMITS_BLOCK2: cada valor string em fields deve ter no máximo 400 caracteres. Para listas, escreva em bullets (ex: \"- item\\n- item\").\n");
-            prompt.push_str("BULLETS_BLOCK2: para indicacao_otimista_canibalizacao, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter: escreva EXATAMENTE de 3 a 5 bullets. Se necessário, divida um item grande em itens menores.\n");
-            prompt.push_str("OTIMISMO_BLOCK2: indicacao_otimista_canibalizacao deve ser ESTRITAMENTE 3 a 5 bullet points otimistas e diretos. Sintetize tudo o que o SODA pode roubar deste projeto hoje ou no futuro, incluindo lógicas, inspirações de UX, conhecimentos teóricos ou códigos físicos.\n");
+            prompt.push_str("BULLETS_BLOCK2: para must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter: escreva EXATAMENTE de 3 a 5 bullets. Se necessário, divida um item grande em itens menores.\n");
         }
         3 => {
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
@@ -1353,7 +1347,7 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
-        2 => r#"["ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","indicacao_otimista_canibalizacao","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
+        2 => r#"["ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
         3 => {
             let mut keys = vec![
                 "classificacao_terminal",
@@ -1768,8 +1762,6 @@ pub async fn run_phase3_sgr(
     row.real_structural_problem = block2.real_structural_problem;
     row.categoria_nuance_tecnica = block2.categoria_nuance_tecnica;
     row.integracao_papel_exato = block2.integracao_papel_exato;
-    row.indicacao_otimista_canibalizacao =
-        normalize_pydantic_list_field(&block2.indicacao_otimista_canibalizacao);
     row.must_components_prod_ux = normalize_pydantic_list_field(&block2.must_components_prod_ux);
     row.must_components_arq = normalize_pydantic_list_field(&block2.must_components_arq);
     row.must_components_ops = normalize_pydantic_list_field(&block2.must_components_ops);
@@ -2265,20 +2257,22 @@ mod tests {
 
     #[test]
     fn sheet_row_exports_floats_as_dot_strings_and_valid_to_as_empty() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "CONCLUIDO".to_string();
-        row.status_fase = "F4".to_string();
-        row.project_name = "owner/repo".to_string();
-        row.score_final = 1.2;
-        row.score_fit_geral_soda = 2.3;
-        row.score_architectural_priority = 3.4;
-        row.score_human_product_priority = 4.5;
-        row.score_absorption_readiness = 5.6;
-        row.score_operational_priority = 6.7;
-        row.score_sustainability_adjusted_fit = 7.8;
-        row.valid_from = 1_700_000_000;
-        row.valid_to = None;
-        row.embargo_status = 0;
+        let row = MasterSolutionsRow {
+            status_atualizacao: "CONCLUIDO".to_string(),
+            status_fase: "F4".to_string(),
+            project_name: "owner/repo".to_string(),
+            score_final: 1.2,
+            score_fit_geral_soda: 2.3,
+            score_architectural_priority: 3.4,
+            score_human_product_priority: 4.5,
+            score_absorption_readiness: 5.6,
+            score_operational_priority: 6.7,
+            score_sustainability_adjusted_fit: 7.8,
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
         let arr = row.to_sheet_row();
         assert_eq!(arr.len(), 85);
         assert_eq!(arr[75], serde_json::json!("1.2"));

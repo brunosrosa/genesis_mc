@@ -32,6 +32,11 @@ pub struct SsotInjector;
 const SSOT_EXPECTED_COLUMNS: usize = 85;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
+#[cfg(not(test))]
+const MCP_TIMEOUT: Duration = Duration::from_secs(180);
+#[cfg(test)]
+const MCP_TIMEOUT: Duration = Duration::from_millis(250);
+
 pub type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
 pub type SheetsFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
@@ -124,16 +129,47 @@ impl SheetsClient for McpGoogleSheetsClient {
                 let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
             }
 
-            let output = child
-                .wait_with_output()
+            let mut stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| "stdout indisponível".to_string())?;
+            let mut stderr = child
+                .stderr
+                .take()
+                .ok_or_else(|| "stderr indisponível".to_string())?;
+            let (status, stdout_buf, stderr_buf) =
+                match tokio::time::timeout(MCP_TIMEOUT, async {
+                    use tokio::io::AsyncReadExt;
+                    let mut out_buf = Vec::new();
+                    let mut err_buf = Vec::new();
+                    let (out_res, err_res, status_res) = tokio::join!(
+                        stdout.read_to_end(&mut out_buf),
+                        stderr.read_to_end(&mut err_buf),
+                        child.wait()
+                    );
+                    out_res.map_err(|e| format!("Falha ao ler stdout MCP: {}", e))?;
+                    err_res.map_err(|e| format!("Falha ao ler stderr MCP: {}", e))?;
+                    let status = status_res.map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
+                    Ok::<_, String>((status, out_buf, err_buf))
+                })
                 .await
-                .map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
-            let stdout_str = String::from_utf8_lossy(&output.stdout);
-            let stderr_str = String::from_utf8_lossy(&output.stderr);
-            if !output.status.success() {
+                {
+                    Ok(Ok(v)) => v,
+                    Ok(Err(e)) => return Err(e),
+                    Err(_) => {
+                        let _ = child.kill().await;
+                        return Err(format!(
+                            "Timeout aguardando mcp-google-sheets (get_sheet_data) timeout_s={}",
+                            MCP_TIMEOUT.as_secs()
+                        ));
+                    }
+                };
+            let stdout_str = String::from_utf8_lossy(&stdout_buf);
+            let stderr_str = String::from_utf8_lossy(&stderr_buf);
+            if !status.success() {
                 return Err(format!(
                     "MCP get_sheet_data falhou: status={} stderr={}",
-                    output.status, stderr_str
+                    status, stderr_str
                 ));
             }
 
@@ -211,21 +247,52 @@ impl SheetsClient for McpGoogleSheetsClient {
                 let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
             }
 
-            let output = child
-                .wait_with_output()
+            let mut stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| "stdout indisponível".to_string())?;
+            let mut stderr = child
+                .stderr
+                .take()
+                .ok_or_else(|| "stderr indisponível".to_string())?;
+            let (status, stdout_buf, stderr_buf) =
+                match tokio::time::timeout(MCP_TIMEOUT, async {
+                    use tokio::io::AsyncReadExt;
+                    let mut out_buf = Vec::new();
+                    let mut err_buf = Vec::new();
+                    let (out_res, err_res, status_res) = tokio::join!(
+                        stdout.read_to_end(&mut out_buf),
+                        stderr.read_to_end(&mut err_buf),
+                        child.wait()
+                    );
+                    out_res.map_err(|e| format!("Falha ao ler stdout MCP: {}", e))?;
+                    err_res.map_err(|e| format!("Falha ao ler stderr MCP: {}", e))?;
+                    let status = status_res.map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
+                    Ok::<_, String>((status, out_buf, err_buf))
+                })
                 .await
-                .map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
-            let stdout_str = String::from_utf8_lossy(&output.stdout);
-            let stderr_str = String::from_utf8_lossy(&output.stderr);
+                {
+                    Ok(Ok(v)) => v,
+                    Ok(Err(e)) => return Err(e),
+                    Err(_) => {
+                        let _ = child.kill().await;
+                        return Err(format!(
+                            "Timeout aguardando mcp-google-sheets (batch_update_cells) timeout_s={}",
+                            MCP_TIMEOUT.as_secs()
+                        ));
+                    }
+                };
+            let stdout_str = String::from_utf8_lossy(&stdout_buf);
+            let stderr_str = String::from_utf8_lossy(&stderr_buf);
 
             if stdout_str.contains("\"isError\":true") || stdout_str.contains("\"error\":") {
                 return Err(format!("MCP Retornou Erro: {}", stdout_str));
             }
 
-            if !output.status.success() {
+            if !status.success() {
                 return Err(format!(
                     "Falha no processo MCP. Exit {}. STDERR: {}",
-                    output.status, stderr_str
+                    status, stderr_str
                 ));
             }
 
@@ -325,21 +392,8 @@ impl SsotInjector {
     ) -> Result<u32, SsotError> {
         let validated = Self::validate_payload(repo_id, &row)?;
 
-        // 1. Selagem L2 (Execução Durável)
-        // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
         apply_phase4_block5(now_epoch, &mut row);
-        row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
-        Self::update_local_status(
-            repo_id,
-            row.status_atualizacao.as_str(),
-            &row,
-            &validated,
-            &block3_justifications,
-            now_epoch,
-        )
-            .map_err(SsotError::L2Failure)?;
 
-        // 2. Roteamento Dinâmico no Sheets (coluna D = repo_url, coluna G = lote_id)
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
@@ -351,16 +405,39 @@ impl SsotInjector {
             )
             .await?;
 
-        // 3. Manobra Anti-503: Desmembramento e Agregação na RAM
         let client = McpGoogleSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let batch_payload =
             Self::prepare_batch_payload_dynamic(row_number_1based, &header_row, &row)?;
 
-        // 4. Despacho Atômico (Simulado conforme Phase C)
-        Self::dispatch_to_cloud(batch_payload).await?;
-
-        Ok(row_number_1based)
+        match Self::dispatch_to_cloud(batch_payload).await {
+            Ok(()) => {
+                row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Ok(row_number_1based)
+            }
+            Err(err) => {
+                row.status_fase = "FASE_4_CLOUD_FAILED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Err(err)
+            }
+        }
     }
 
     pub async fn inject_ssot_with_skip_columns(
@@ -373,16 +450,6 @@ impl SsotInjector {
         let validated = Self::validate_payload(repo_id, &row)?;
 
         apply_phase4_block5(now_epoch, &mut row);
-        row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
-        Self::update_local_status(
-            repo_id,
-            row.status_atualizacao.as_str(),
-            &row,
-            &validated,
-            &block3_justifications,
-            now_epoch,
-        )
-        .map_err(SsotError::L2Failure)?;
 
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
@@ -399,9 +466,34 @@ impl SsotInjector {
             skip_columns,
         )?;
 
-        Self::dispatch_to_cloud(batch_payload).await?;
-
-        Ok(row_number_1based)
+        match Self::dispatch_to_cloud(batch_payload).await {
+            Ok(()) => {
+                row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Ok(row_number_1based)
+            }
+            Err(err) => {
+                row.status_fase = "FASE_4_CLOUD_FAILED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Err(err)
+            }
+        }
     }
 
     async fn resolve_row_number_by_repo_url(
@@ -502,19 +594,52 @@ impl SsotInjector {
                 .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever tools/call no MCP: {}", e)))?;
         }
 
-        let output = child
-            .wait_with_output()
+        let mut stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| SsotError::NetworkFailure("stdout indisponível".to_string()))?;
+        let mut stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| SsotError::NetworkFailure("stderr indisponível".to_string()))?;
+        let (status, stdout_buf, stderr_buf) =
+            match tokio::time::timeout(MCP_TIMEOUT, async {
+                use tokio::io::AsyncReadExt;
+                let mut out_buf = Vec::new();
+                let mut err_buf = Vec::new();
+                let (out_res, err_res, status_res) = tokio::join!(
+                    stdout.read_to_end(&mut out_buf),
+                    stderr.read_to_end(&mut err_buf),
+                    child.wait()
+                );
+                out_res.map_err(|e| SsotError::NetworkFailure(format!("Falha ao ler stdout MCP: {}", e)))?;
+                err_res.map_err(|e| SsotError::NetworkFailure(format!("Falha ao ler stderr MCP: {}", e)))?;
+                let status =
+                    status_res.map_err(|e| SsotError::NetworkFailure(format!("Falha ao aguardar processo MCP: {}", e)))?;
+                Ok::<_, SsotError>((status, out_buf, err_buf))
+            })
             .await
-            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao aguardar processo MCP: {}", e)))?;
-        if !output.status.success() {
+            {
+                Ok(Ok(v)) => v,
+                Ok(Err(e)) => return Err(e),
+                Err(_) => {
+                    let _ = child.kill().await;
+                    return Err(SsotError::NetworkFailure(format!(
+                        "Timeout aguardando mcp-google-sheets tool={} timeout_s={}",
+                        tool_name,
+                        MCP_TIMEOUT.as_secs()
+                    )));
+                }
+            };
+        if !status.success() {
             return Err(SsotError::NetworkFailure(format!(
                 "Falha no processo MCP. Exit {}. STDERR: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
+                status,
+                String::from_utf8_lossy(&stderr_buf)
             )));
         }
 
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stdout_str = String::from_utf8_lossy(&stdout_buf);
         Self::parse_mcp_tool_stdout(&stdout_str, 2).map_err(SsotError::NetworkFailure)
     }
 
@@ -709,12 +834,26 @@ impl SsotInjector {
             Self::status_fase_to_persist(&payload.status_atualizacao, &payload.status_fase)
                 .to_string();
 
+        let repo_version_to_persist = {
+            let primary = payload.repo_analised_version.trim();
+            if !primary.is_empty() {
+                primary.to_string()
+            } else {
+                let fallback = payload.ultima_versao_online.trim();
+                if !fallback.is_empty() {
+                    fallback.to_string()
+                } else {
+                    "unknown".to_string()
+                }
+            }
+        };
+
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
-                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status, indicacao_otimista_canibalizacao
+                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, repo_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status, indicacao_otimista_canibalizacao
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84, ?85
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84, ?85, ?86
             )",
             rusqlite::params![
                 &validated.project_name,
@@ -722,6 +861,7 @@ impl SsotInjector {
                 &status_fase_to_persist,
                 &validated.repo_url,
                 &validated.repo_analised_version,
+                &repo_version_to_persist,
                 &payload.ultima_versao_online,
                 &payload.lote_id,
                 payload.data_ultima_analise,
@@ -1218,23 +1358,25 @@ mod tests {
 
     #[test]
     fn test_prepare_batch_payload_is_85_columns_a_to_cg() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "CONCLUIDO".to_string();
-        row.status_fase = "F4".to_string();
-        row.project_name = "owner/repo".to_string();
-        row.repo_url = "https://github.com/owner/repo".to_string();
-        row.repo_analised_version = "v1.0.0".to_string();
-        row.ultima_versao_online = "v1.0.1".to_string();
-        row.lote_id = "LOTE_01".to_string();
-        row.data_ultima_analise = 1_715_000_000;
-        row.analise_origem = "SGR".to_string();
-        row.declared_description = "Descricao".to_string();
-        row.proposta_original_resumo = "Resumo".to_string();
-        row.stack_base = "Rust".to_string();
-        row.licenca = "MIT".to_string();
-        row.valid_from = 1_700_000_000;
-        row.valid_to = None;
-        row.embargo_status = 0;
+        let row = MasterSolutionsRow {
+            status_atualizacao: "CONCLUIDO".to_string(),
+            status_fase: "F4".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
 
         let validated = SsotInjector::validate_payload("owner/repo", &row).unwrap();
         let header_row: Vec<String> = MASTER_SOLUTIONS_CANONICAL_COLUMNS
@@ -1278,24 +1420,26 @@ mod tests {
 
     #[test]
     fn categoria_arquitetural_rejects_value_outside_10_enums_fail_closed() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "INICIAR_TRIAGEM".to_string();
-        row.status_fase = "FASE_-0.5_BATEDOR_OK".to_string();
-        row.project_name = "owner/repo".to_string();
-        row.repo_url = "https://github.com/owner/repo".to_string();
-        row.repo_analised_version = "v1.0.0".to_string();
-        row.ultima_versao_online = "v1.0.1".to_string();
-        row.lote_id = "LOTE_01".to_string();
-        row.data_ultima_analise = 1_715_000_000;
-        row.analise_origem = "SGR".to_string();
-        row.declared_description = "Descricao".to_string();
-        row.proposta_original_resumo = "Resumo".to_string();
-        row.stack_base = "Rust".to_string();
-        row.licenca = "MIT".to_string();
-        row.valid_from = 1_700_000_000;
-        row.valid_to = None;
-        row.embargo_status = 0;
-        row.categoria_arquitetural = crate::cognition::synthesizer::ArchitecturalCategory::Unknown;
+        let row = MasterSolutionsRow {
+            status_atualizacao: "INICIAR_TRIAGEM".to_string(),
+            status_fase: "FASE_-0.5_BATEDOR_OK".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            categoria_arquitetural: crate::cognition::synthesizer::ArchitecturalCategory::Unknown,
+            ..Default::default()
+        };
 
         let out = SsotInjector::validate_payload("owner/repo", &row);
         assert!(matches!(out, Err(SsotError::ValidationFailure(_))));
@@ -1472,23 +1616,25 @@ mod tests {
 
     #[tokio::test]
     async fn dispatch_uses_mock_sheets_client() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "CONCLUIDO".to_string();
-        row.status_fase = "F4".to_string();
-        row.project_name = "owner/repo".to_string();
-        row.repo_url = "https://github.com/owner/repo".to_string();
-        row.repo_analised_version = "v1.0.0".to_string();
-        row.ultima_versao_online = "v1.0.1".to_string();
-        row.lote_id = "LOTE_01".to_string();
-        row.data_ultima_analise = 1_715_000_000;
-        row.analise_origem = "SGR".to_string();
-        row.declared_description = "Descricao".to_string();
-        row.proposta_original_resumo = "Resumo".to_string();
-        row.stack_base = "Rust".to_string();
-        row.licenca = "MIT".to_string();
-        row.valid_from = 1_700_000_000;
-        row.valid_to = None;
-        row.embargo_status = 0;
+        let row = MasterSolutionsRow {
+            status_atualizacao: "CONCLUIDO".to_string(),
+            status_fase: "F4".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
 
         let sheets = MockSheetsClient::new();
         SsotInjector::dispatch_master_solutions_row(&sheets, "SHEET_ID", 2, &row)

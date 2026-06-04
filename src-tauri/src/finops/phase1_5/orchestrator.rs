@@ -165,6 +165,9 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
+    type EssenceInsertRecord = (String, String, usize, String);
+    type SharedEssenceRecords = Arc<Mutex<Vec<EssenceInsertRecord>>>;
+
     struct MockRouter {
         decisions: Vec<RoutingDecision>,
         call_count: Arc<AtomicUsize>,
@@ -260,7 +263,7 @@ mod tests {
     }
 
     struct MockDbWriter {
-        essences: Arc<Mutex<Vec<(String, String, usize, String)>>>,
+        essences: SharedEssenceRecords,
         insert_count: Arc<AtomicUsize>,
     }
 
@@ -283,7 +286,7 @@ mod tests {
         fn get_insert_count(&self) -> usize {
             self.insert_count.load(Ordering::SeqCst)
         }
-        fn get_essences(&self) -> Vec<(String, String, usize, String)> {
+        fn get_essences(&self) -> Vec<EssenceInsertRecord> {
             self.essences.lock().unwrap().clone()
         }
     }

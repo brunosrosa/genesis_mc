@@ -196,7 +196,7 @@ impl BloblessCloner {
             let head_len = bytes.len().min(240);
             let head = &bytes[..head_len];
             let mut s = String::from_utf8_lossy(head).to_string();
-            s = s.replace('\r', " ").replace('\n', " ");
+            s = s.replace(['\r', '\n'], " ");
             if bytes.len() > head_len {
                 s.push_str(" …");
             }

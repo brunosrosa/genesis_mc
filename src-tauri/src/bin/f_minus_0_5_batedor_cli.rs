@@ -511,7 +511,7 @@ fn response_format_for_batedor() -> Value {
         "categoria_arquitetural".to_string(),
         json!({
             "type": "string",
-            "enum": ALLOWED_CATEGORIA_ARQUITETURAL.iter().copied().collect::<Vec<&str>>()
+            "enum": ALLOWED_CATEGORIA_ARQUITETURAL.to_vec()
         }),
     );
 
@@ -766,9 +766,7 @@ async fn fetch_readme_truncated(repo_url: &str) -> Result<String, String> {
 
 fn build_prompt(readme_trunc: &str) -> String {
     let allowed = ALLOWED_CATEGORIA_ARQUITETURAL
-        .iter()
-        .copied()
-        .collect::<Vec<&str>>()
+        .to_vec()
         .join(", ");
     let mut out = String::new();
     out.push_str("Tarefa: Resuma o repositório em 1 frase técnica, neutra e desidratada e classifique-o.\n");
@@ -1214,10 +1212,10 @@ mod tests {
         };
         assert!(validate_batedor_out(&out).is_ok());
         let ranges = build_success_ranges(&cols, 2, &out);
-        assert!(ranges.get("A2:A2").is_some());
-        assert!(ranges.get("B2:B2").is_some());
-        assert!(ranges.get("K2:K2").is_some());
-        assert!(ranges.get("L2:L2").is_some());
+        assert!(ranges.contains_key("A2:A2"));
+        assert!(ranges.contains_key("B2:B2"));
+        assert!(ranges.contains_key("K2:K2"));
+        assert!(ranges.contains_key("L2:L2"));
 
         let bad = BatedorOut {
             proposta_original_resumo: "".to_string(),

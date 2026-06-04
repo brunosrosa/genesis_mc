@@ -794,7 +794,7 @@ async fn process_one_repo_f0(
                     "F0: concluído (sem relatório)"
                 );
             }
-            return RepoBatchSummary {
+            RepoBatchSummary {
                 repo_id: repo_id.to_string(),
                 row_number_1based,
                 outcome: RepoOutcome::Success,
@@ -803,7 +803,7 @@ async fn process_one_repo_f0(
                 blobs_missing: std::mem::take(&mut blobs_missing),
                 report_path,
                 error: post_error,
-            };
+            }
         }
         Err(e) => {
             error!(
@@ -826,7 +826,7 @@ async fn process_one_repo_f0(
                 STATUS_ERRO_F0,
             )
             .await;
-            return RepoBatchSummary {
+            RepoBatchSummary {
                 repo_id: repo_id.to_string(),
                 row_number_1based,
                 outcome: RepoOutcome::Error,
@@ -835,9 +835,9 @@ async fn process_one_repo_f0(
                 blobs_missing: std::mem::take(&mut blobs_missing),
                 report_path: None,
                 error: Some(e.to_string()),
-            };
+            }
         }
-    };
+    }
 }
 
 async fn process_one_repo_f0_direct(
@@ -997,10 +997,7 @@ async fn process_one_repo_f0_direct(
                 }
             }
 
-            let report_path = match write_f0_report(root_dir, &conn_arc, repo_id) {
-                Ok(p) => Some(p),
-                Err(_) => None,
-            };
+            let report_path = write_f0_report(root_dir, &conn_arc, repo_id).ok();
 
             let degraded_blobs = match conn_arc.lock() {
                 Ok(conn_lock) => detect_degraded_blobs(&conn_lock, repo_id).unwrap_or_default(),
@@ -1267,11 +1264,8 @@ async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<
         }
         if repo_url == expected {
             let status = get(cols.status_atualizacao_idx);
-            return Ok(((i as u32) + 2, cols, min_idx))
-                .and_then(|x| {
-                    let _ = status;
-                    Ok(x)
-                });
+            let _ = status;
+            return Ok(((i as u32) + 2, cols, min_idx));
         }
     }
     Err(format!(

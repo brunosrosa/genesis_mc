@@ -67,7 +67,7 @@ if ($PSBoundParameters.ContainsKey('DryRun')) {
     if ($envDry -and ($envDry -match '^(1|true|yes|y|sim|s)$')) {
         $isDryRun = $true
     } elseif (-not $PSBoundParameters.ContainsKey('Yes')) {
-        $mode = Read-Host "Modo de execução: [1] Normal  [2] Dry-run (1 rodada)"
+        $mode = Read-Host "Modo de execução: [ENTER] Normal  [2] Dry-run (1 rodada)"
         $isDryRun = ($mode -match '^\s*2\s*$')
     }
 }
@@ -130,7 +130,12 @@ switch ($choice) {
             $binArgs = @("--repo", $effectiveRepo)
             $phaseName = "Fase 0 (HARVESTER LOCAL)"
         } else {
+            $loteCustom = Read-Host "Informe o nome do Lote (Ex: LOTE_01_UX) ou deixe em branco para o padrao"
             $binArgs = @("--batch")
+            if (-not [string]::IsNullOrWhiteSpace($loteCustom)) {
+                $binArgs += "--lote-id"
+                $binArgs += $loteCustom
+            }
             $phaseName = "Fase 0 (HARVESTER LOCAL) [BATCH]"
         }
     }
@@ -141,7 +146,12 @@ switch ($choice) {
             $binArgs = @("--repo", $effectiveRepo, "--e2e-full", "--skip-harvester")
             $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO)"
         } else {
+            $loteCustom = Read-Host "Informe o nome do Lote (Ex: LOTE_02_INFRA) ou deixe em branco para o padrao"
             $binArgs = @("--batch", "--e2e-full", "--skip-harvester")
+            if (-not [string]::IsNullOrWhiteSpace($loteCustom)) {
+                $binArgs += "--lote-id"
+                $binArgs += $loteCustom
+            }
             $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO) [BATCH Sheets]"
         }
     }
@@ -175,6 +185,7 @@ switch ($choice) {
 Write-Host "`n================================================================" -ForegroundColor Cyan
 Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
 Push-Location $PSScriptRoot
+
 try {
     $env:CARGO_INCREMENTAL = "0"
     if ($binArgs.Count -gt 0) {
@@ -182,6 +193,13 @@ try {
     } else {
         & cargo run --manifest-path $cargoManifest --bin $bin
     }
+    
+    # Trava de Segurança do Exit Code
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`n[FALHA LETAL] O Motor Rust abortou com Exit Code $LASTEXITCODE." -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+    
 } finally {
     Pop-Location
 }

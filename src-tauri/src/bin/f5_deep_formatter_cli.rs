@@ -1029,6 +1029,8 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
+    type SheetUpdate = (String, HashMap<String, Vec<Vec<String>>>);
+
     #[test]
     fn schema_is_strict_and_requires_components() {
         let rf = response_format_for_phase5();
@@ -1252,7 +1254,7 @@ mod tests {
     }
 
     struct MockSheets {
-        updates: Mutex<Vec<(String, HashMap<String, Vec<Vec<String>>>)>>,
+        updates: Mutex<Vec<SheetUpdate>>,
         deep_col_a: Vec<Vec<String>>,
     }
 

@@ -1444,9 +1444,9 @@ mod tests {
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
-        assert!(updates[0].get("A3:A3").is_some());
-        assert!(updates[0].get("B3:B3").is_some());
-        assert!(updates[0].get("F3:F3").is_some());
+        assert!(updates[0].contains_key("A3:A3"));
+        assert!(updates[0].contains_key("B3:B3"));
+        assert!(updates[0].contains_key("F3:F3"));
     }
 
     #[tokio::test]
