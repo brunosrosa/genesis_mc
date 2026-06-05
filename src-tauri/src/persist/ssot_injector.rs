@@ -1,6 +1,6 @@
 use crate::cognition::synthesizer::{
-    apply_phase4_block5, master_solutions_header_range, sheet_range_for_row, MasterSolutionsRow,
-    MASTER_SOLUTIONS_CANONICAL_COLUMNS,
+    apply_phase4_block5, master_solutions_header_range, sheet_range_for_row, ArchitecturalCategory,
+    MasterSolutionsRow, MASTER_SOLUTIONS_CANONICAL_COLUMNS,
 };
 use thiserror::Error;
 use serde_json::{json, Value};
@@ -75,115 +75,18 @@ impl SheetsClient for McpGoogleSheetsClient {
         range: String,
     ) -> SheetsDataFuture<'a> {
         Box::pin(async move {
-            use std::process::Stdio;
-            use tokio::io::AsyncWriteExt;
-            use tokio::process::Command;
-
-            let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-                .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-            let init_req = json!({
-                "jsonrpc": "2.0",
-                "id": 0,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": { "name": "soda-injector", "version": "1.0.0" }
-                }
-            });
-            let initialized_notif = json!({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            });
-            let mcp_request = json!({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "get_sheet_data",
-                    "arguments": {
-                        "spreadsheet_id": spreadsheet_id,
-                        "sheet": sheet,
-                        "range": range,
-                        "include_grid_data": false
-                    }
-                }
-            });
-
-            let mut child = Command::new("mcp-google-sheets")
-                .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
-                .env("UV_NO_PROGRESS", "1")
-                .env("UV_QUIET", "1")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {}", e))?;
-
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(format!("{}\n", init_req).as_bytes()).await;
-                let _ = stdin
-                    .write_all(format!("{}\n", initialized_notif).as_bytes())
-                    .await;
-                let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
-            }
-
-            let mut stdout = child
-                .stdout
-                .take()
-                .ok_or_else(|| "stdout indisponível".to_string())?;
-            let mut stderr = child
-                .stderr
-                .take()
-                .ok_or_else(|| "stderr indisponível".to_string())?;
-            let (status, stdout_buf, stderr_buf) =
-                match tokio::time::timeout(MCP_TIMEOUT, async {
-                    use tokio::io::AsyncReadExt;
-                    let mut out_buf = Vec::new();
-                    let mut err_buf = Vec::new();
-                    let (out_res, err_res, status_res) = tokio::join!(
-                        stdout.read_to_end(&mut out_buf),
-                        stderr.read_to_end(&mut err_buf),
-                        child.wait()
-                    );
-                    out_res.map_err(|e| format!("Falha ao ler stdout MCP: {}", e))?;
-                    err_res.map_err(|e| format!("Falha ao ler stderr MCP: {}", e))?;
-                    let status = status_res.map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
-                    Ok::<_, String>((status, out_buf, err_buf))
-                })
-                .await
-                {
-                    Ok(Ok(v)) => v,
-                    Ok(Err(e)) => return Err(e),
-                    Err(_) => {
-                        let _ = child.kill().await;
-                        return Err(format!(
-                            "Timeout aguardando mcp-google-sheets (get_sheet_data) timeout_s={}",
-                            MCP_TIMEOUT.as_secs()
-                        ));
-                    }
-                };
-            let stdout_str = String::from_utf8_lossy(&stdout_buf);
-            let stderr_str = String::from_utf8_lossy(&stderr_buf);
-            if !status.success() {
-                return Err(format!(
-                    "MCP get_sheet_data falhou: status={} stderr={}",
-                    status, stderr_str
-                ));
-            }
-
-            let mut last_json: Option<Value> = None;
-            for line in stdout_str.lines() {
-                if let Ok(v) = serde_json::from_str::<Value>(line) {
-                    last_json = Some(v);
-                }
-            }
-            let Some(msg) = last_json else {
-                return Err("Resposta MCP inválida (stdout vazio)".to_string());
-            };
-            let values = SsotInjector::extract_values_2d(&msg).unwrap_or_default();
-            Ok(values)
+            let result = SsotInjector::call_mcp_google_sheets_tool(
+                "get_sheet_data",
+                json!({
+                    "spreadsheet_id": spreadsheet_id,
+                    "sheet": sheet,
+                    "range": range,
+                    "include_grid_data": false
+                }),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            Ok(SsotInjector::extract_values_2d(&result).unwrap_or_default())
         })
     }
 
@@ -194,108 +97,16 @@ impl SheetsClient for McpGoogleSheetsClient {
         ranges: Value,
     ) -> SheetsFuture<'a> {
         Box::pin(async move {
-            use std::process::Stdio;
-            use tokio::io::AsyncWriteExt;
-            use tokio::process::Command;
-
-            let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-                .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-            let init_req = json!({
-                "jsonrpc": "2.0",
-                "id": 0,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": { "name": "soda-injector", "version": "1.0.0" }
-                }
-            });
-            let initialized_notif = json!({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            });
-            let mcp_request = json!({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "batch_update_cells",
-                    "arguments": {
-                        "spreadsheet_id": spreadsheet_id,
-                        "sheet": sheet,
-                        "ranges": ranges
-                    }
-                }
-            });
-
-            let mut child = Command::new("mcp-google-sheets")
-                .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
-                .env("UV_NO_PROGRESS", "1")
-                .env("UV_QUIET", "1")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {}", e))?;
-
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(format!("{}\n", init_req).as_bytes()).await;
-                let _ = stdin
-                    .write_all(format!("{}\n", initialized_notif).as_bytes())
-                    .await;
-                let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
-            }
-
-            let mut stdout = child
-                .stdout
-                .take()
-                .ok_or_else(|| "stdout indisponível".to_string())?;
-            let mut stderr = child
-                .stderr
-                .take()
-                .ok_or_else(|| "stderr indisponível".to_string())?;
-            let (status, stdout_buf, stderr_buf) =
-                match tokio::time::timeout(MCP_TIMEOUT, async {
-                    use tokio::io::AsyncReadExt;
-                    let mut out_buf = Vec::new();
-                    let mut err_buf = Vec::new();
-                    let (out_res, err_res, status_res) = tokio::join!(
-                        stdout.read_to_end(&mut out_buf),
-                        stderr.read_to_end(&mut err_buf),
-                        child.wait()
-                    );
-                    out_res.map_err(|e| format!("Falha ao ler stdout MCP: {}", e))?;
-                    err_res.map_err(|e| format!("Falha ao ler stderr MCP: {}", e))?;
-                    let status = status_res.map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
-                    Ok::<_, String>((status, out_buf, err_buf))
-                })
-                .await
-                {
-                    Ok(Ok(v)) => v,
-                    Ok(Err(e)) => return Err(e),
-                    Err(_) => {
-                        let _ = child.kill().await;
-                        return Err(format!(
-                            "Timeout aguardando mcp-google-sheets (batch_update_cells) timeout_s={}",
-                            MCP_TIMEOUT.as_secs()
-                        ));
-                    }
-                };
-            let stdout_str = String::from_utf8_lossy(&stdout_buf);
-            let stderr_str = String::from_utf8_lossy(&stderr_buf);
-
-            if stdout_str.contains("\"isError\":true") || stdout_str.contains("\"error\":") {
-                return Err(format!("MCP Retornou Erro: {}", stdout_str));
-            }
-
-            if !status.success() {
-                return Err(format!(
-                    "Falha no processo MCP. Exit {}. STDERR: {}",
-                    status, stderr_str
-                ));
-            }
-
+            SsotInjector::call_mcp_google_sheets_tool(
+                "batch_update_cells",
+                json!({
+                    "spreadsheet_id": spreadsheet_id,
+                    "sheet": sheet,
+                    "ranges": ranges
+                }),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
             Ok(())
         })
     }
@@ -317,6 +128,67 @@ struct ValidatedSsotFields {
 }
 
 impl SsotInjector {
+    fn open_vault_connection() -> Result<Connection, SsotError> {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let root_dir = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+        Connection::open(&db_path).map_err(|e| SsotError::L2Failure(format!("Falha ao conectar no SQLite: {}", e)))
+    }
+
+    fn load_l2_curated_overrides(
+        repo_id: &str,
+    ) -> Result<(Option<String>, Option<String>), SsotError> {
+        let conn = Self::open_vault_connection()?;
+        let out: Result<(String, String), _> = conn.query_row(
+            "SELECT proposta_original_resumo, categoria_arquitetural
+             FROM repo_heuristics
+             WHERE project_name = ?1
+             LIMIT 1",
+            rusqlite::params![repo_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+        let (proposta, categoria) = match out {
+            Ok(v) => v,
+            Err(_) => return Ok((None, None)),
+        };
+        let proposta = proposta.trim().to_string();
+        let proposta = (!proposta.is_empty()).then_some(proposta);
+        let categoria = categoria.trim().to_string();
+        let categoria = (!categoria.is_empty() && !categoria.eq_ignore_ascii_case("unknown")).then_some(categoria);
+        Ok((proposta, categoria))
+    }
+
+    fn header_idx(header_row: &[String], canonical: &str) -> Option<usize> {
+        header_row.iter().enumerate().find_map(|(idx, raw)| {
+            (Self::normalize_header_cell(raw) == canonical).then_some(idx)
+        })
+    }
+
+    async fn read_sheet_cell(
+        client: &dyn SheetsClient,
+        spreadsheet_id: &str,
+        sheet: &str,
+        row_number_1based: u32,
+        header_row: &[String],
+        canonical_col: &str,
+    ) -> Result<String, SsotError> {
+        let Some(idx) = Self::header_idx(header_row, canonical_col) else {
+            return Ok(String::new());
+        };
+        let col = Self::col_idx_to_a1(idx);
+        let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+        let values = client
+            .get_sheet_data(spreadsheet_id, sheet, range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        Ok(values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default())
+    }
     fn should_short_circuit(status_atualizacao: &str) -> bool {
         status_atualizacao.trim().starts_with("REJEITADO_")
     }
@@ -407,8 +279,74 @@ impl SsotInjector {
 
         let client = McpGoogleSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
+        let sheet_proposta = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "proposta_original_resumo",
+        )
+        .await?;
+        let sheet_categoria = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "categoria_arquitetural",
+        )
+        .await?;
+
+        if !sheet_proposta.is_empty() {
+            row.proposta_original_resumo = sheet_proposta.clone();
+        } else if let Some(v) = l2_proposta.as_deref() {
+            if !v.trim().is_empty() {
+                row.proposta_original_resumo = v.trim().to_string();
+            }
+        }
+        if !sheet_categoria.is_empty() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(&sheet_categoria) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        } else if let Some(v) = l2_categoria.as_deref() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(v) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        }
+        let lote_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "lote_id").then_some(idx))
+            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
+        let lote_col = Self::col_idx_to_a1(lote_idx);
+        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
+        let lote_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let lote_cell = lote_values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let mut dynamic_skip: Vec<&'static str> = Vec::new();
+        if !lote_cell.is_empty() {
+            dynamic_skip.push("lote_id");
+        }
+        if !sheet_proposta.is_empty() {
+            dynamic_skip.push("proposta_original_resumo");
+        }
+        if !sheet_categoria.is_empty() {
+            dynamic_skip.push("categoria_arquitetural");
+        }
         let batch_payload =
-            Self::prepare_batch_payload_dynamic(row_number_1based, &header_row, &row)?;
+            Self::prepare_batch_payload_dynamic_with_skip(row_number_1based, &header_row, &row, &dynamic_skip)?;
 
         match Self::dispatch_to_cloud(batch_payload).await {
             Ok(()) => {
@@ -459,11 +397,77 @@ impl SsotInjector {
 
         let client = McpGoogleSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
+        let sheet_proposta = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "proposta_original_resumo",
+        )
+        .await?;
+        let sheet_categoria = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "categoria_arquitetural",
+        )
+        .await?;
+
+        if !sheet_proposta.is_empty() {
+            row.proposta_original_resumo = sheet_proposta.clone();
+        } else if let Some(v) = l2_proposta.as_deref() {
+            if !v.trim().is_empty() {
+                row.proposta_original_resumo = v.trim().to_string();
+            }
+        }
+        if !sheet_categoria.is_empty() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(&sheet_categoria) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        } else if let Some(v) = l2_categoria.as_deref() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(v) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        }
+        let lote_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "lote_id").then_some(idx))
+            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
+        let lote_col = Self::col_idx_to_a1(lote_idx);
+        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
+        let lote_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let lote_cell = lote_values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let mut merged_skip: Vec<&'static str> = skip_columns.iter().copied().collect();
+        if !lote_cell.is_empty() && !merged_skip.contains(&"lote_id") {
+            merged_skip.push("lote_id");
+        }
+        if !sheet_proposta.is_empty() && !merged_skip.contains(&"proposta_original_resumo") {
+            merged_skip.push("proposta_original_resumo");
+        }
+        if !sheet_categoria.is_empty() && !merged_skip.contains(&"categoria_arquitetural") {
+            merged_skip.push("categoria_arquitetural");
+        }
         let batch_payload = Self::prepare_batch_payload_dynamic_with_skip(
             row_number_1based,
             &header_row,
             &row,
-            skip_columns,
+            &merged_skip,
         )?;
 
         match Self::dispatch_to_cloud(batch_payload).await {
@@ -501,26 +505,48 @@ impl SsotInjector {
         sheet: &str,
         repo_url: &str,
     ) -> Result<u32, SsotError> {
-        let result = Self::call_mcp_google_sheets_tool(
-            "get_sheet_data",
-            json!({
-                "spreadsheet_id": spreadsheet_id,
-                "sheet": sheet,
-                "range": "D2:D",
-                "include_grid_data": false
-            }),
-        )
-        .await?;
+        let client = McpGoogleSheetsClient;
+        let header_row = Self::load_master_solutions_header(&client, spreadsheet_id).await?;
+        let repo_url_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "repo_url").then_some(idx))
+            .ok_or_else(|| {
+                SsotError::CloudFailure(format!(
+                    "Header missing repo_url (headers_len={})",
+                    header_row.len()
+                ))
+            })?;
+        let col = Self::col_idx_to_a1(repo_url_idx);
+        let range = format!("{col}2:{col}");
+        let values = client
+            .get_sheet_data(spreadsheet_id, sheet, range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
 
-        let values = Self::extract_values_2d(&result).unwrap_or_default();
         let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
         if let Some(found) = Self::resolve_row_number_from_repo_url_column(&values, &needle) {
             return Ok(found);
         }
 
+        let mut non_empty_examples: Vec<String> = Vec::new();
+        for row in values.iter().take(500) {
+            let v = row.first().map(|s| s.trim()).unwrap_or("");
+            if v.is_empty() {
+                continue;
+            }
+            non_empty_examples.push(v.to_string());
+            if non_empty_examples.len() >= 5 {
+                break;
+            }
+        }
         Err(SsotError::CloudFailure(format!(
-            "Linha SSOT não encontrada para repo_url='{}'. Append é proibido; abortando.",
-            repo_url
+            "Linha SSOT não encontrada por match perfeito repo_url='{}' (repo_url_col={} idx0={} headers_len={} examples={:?}). Append é proibido; abortando.",
+            repo_url,
+            col,
+            repo_url_idx,
+            header_row.len(),
+            non_empty_examples
         )))
     }
 
@@ -848,6 +874,27 @@ impl SsotInjector {
             }
         };
 
+        let existing_curated: Result<(String, String), _> = conn.query_row(
+            "SELECT proposta_original_resumo, categoria_arquitetural
+             FROM repo_heuristics
+             WHERE project_name = ?1
+             LIMIT 1",
+            rusqlite::params![repo_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+        let mut proposta_original_resumo_to_persist = payload.proposta_original_resumo.trim().to_string();
+        let mut categoria_arquitetural_to_persist = payload.categoria_arquitetural.as_str().to_string();
+        if let Ok((proposta, categoria)) = existing_curated {
+            let proposta = proposta.trim();
+            if !proposta.is_empty() {
+                proposta_original_resumo_to_persist = proposta.to_string();
+            }
+            let categoria = categoria.trim();
+            if !categoria.is_empty() {
+                categoria_arquitetural_to_persist = categoria.to_string();
+            }
+        }
+
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
@@ -867,7 +914,7 @@ impl SsotInjector {
                 payload.data_ultima_analise,
                 &payload.analise_origem,
                 &payload.declared_description,
-                &payload.proposta_original_resumo,
+                &proposta_original_resumo_to_persist,
                 &payload.stack_base,
                 &payload.licenca,
                 &payload.lente_a_sentido_prod_ux,
@@ -878,7 +925,7 @@ impl SsotInjector {
                 &payload.executive_verdict,
                 payload.classificacao_terminal.as_str(),
                 payload.acao_de_canibalizacao.as_str(),
-                payload.categoria_arquitetural.as_str(),
+                &categoria_arquitetural_to_persist,
                 payload.horizonte_extracao.as_str(),
                 payload.tipo_integracao.as_str(),
                 &payload.categoria_nuance_tecnica,
@@ -978,6 +1025,27 @@ impl SsotInjector {
         ).map_err(|e| format!("Falha ao executar UPDATE repositorios: {}", e))?;
         
         Ok(())
+    }
+
+    pub fn persist_phase3_snapshot(
+        repo_id: &str,
+        row: &MasterSolutionsRow,
+        block3_justifications: &HashMap<String, String>,
+        now_epoch: i64,
+    ) -> Result<(), SsotError> {
+        let mut snapshot = row.clone();
+        snapshot.status_atualizacao = "CONCLUIDO_AGUARDANDO".to_string();
+        snapshot.status_fase = "FASE_3_SYNTHESIZER_OK".to_string();
+        let validated = Self::validate_payload(repo_id, &snapshot)?;
+        Self::update_local_status(
+            repo_id,
+            snapshot.status_atualizacao.as_str(),
+            &snapshot,
+            &validated,
+            block3_justifications,
+            now_epoch,
+        )
+        .map_err(SsotError::L2Failure)
     }
 
     fn ensure_repo_heuristics_schema(conn: &Connection) -> Result<(), String> {

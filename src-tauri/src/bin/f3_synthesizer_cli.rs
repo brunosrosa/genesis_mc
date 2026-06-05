@@ -1,4 +1,5 @@
 use std::io;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -27,7 +28,7 @@ const FORMATTER_HTTP_TIMEOUT: Duration = Duration::from_secs(300);
 const FORMATTER_HTTP_TIMEOUT: Duration = Duration::from_millis(400);
 
 #[cfg(not(test))]
-const SGR_TOTAL_TIMEOUT: Duration = Duration::from_secs(300);
+const SGR_TOTAL_TIMEOUT: Duration = Duration::from_secs(1800);
 #[cfg(test)]
 const SGR_TOTAL_TIMEOUT: Duration = Duration::from_millis(400);
 
@@ -328,6 +329,7 @@ struct CliArgs {
     row_override: Option<u32>,
     dry_run: bool,
     feedback_inject: bool,
+    phase4_only: bool,
 }
 
 fn parse_cli_args() -> CliArgs {
@@ -340,6 +342,7 @@ fn parse_cli_args() -> CliArgs {
     let mut row_override: Option<u32> = None;
     let mut dry_run = false;
     let mut feedback_inject = false;
+    let mut phase4_only = false;
     while let Some(arg) = args.next() {
         if arg == "--repo" {
             if let Some(value) = args.next() {
@@ -353,6 +356,10 @@ fn parse_cli_args() -> CliArgs {
         }
         if arg == "--skip-harvester" {
             skip_harvester = true;
+            continue;
+        }
+        if arg == "--phase4-only" {
+            phase4_only = true;
             continue;
         }
         if arg == "--batch" {
@@ -382,6 +389,7 @@ fn parse_cli_args() -> CliArgs {
         row_override,
         dry_run,
         feedback_inject,
+        phase4_only,
     }
 }
 
@@ -499,7 +507,7 @@ fn update_local_status_after_manual_f4(conn: &Connection, repo_id: &str) -> io::
          SET status_atualizacao = ?2,
              status_fase = ?3
          WHERE project_name = ?1",
-        rusqlite::params![repo_id, "CONCLUIDO_AGUARDANDO", "FASE_4_SYNTHESIZER_OK"],
+        rusqlite::params![repo_id, "CONCLUIDO_AGUARDANDO", "FASE_4_SHEETS_UPDATED"],
     );
     Ok(())
 }
@@ -681,7 +689,13 @@ impl OpenRouterFormatterClient {
                             return Some(t.to_string());
                         }
                     }
-                    None
+                    if obj.is_empty() {
+                        return None;
+                    }
+                    serde_json::to_string(obj).ok().and_then(|s| {
+                        let t = s.trim();
+                        if t.is_empty() { None } else { Some(t.to_string()) }
+                    })
                 }
                 _ => None,
             }
@@ -693,6 +707,30 @@ impl OpenRouterFormatterClient {
             if let Some(content) = message.get("content") {
                 if let Some(text) = flatten(content) {
                     return Some(text);
+                }
+            }
+            if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
+                if let Some(first_call) = tool_calls.first() {
+                    if let Some(args) = first_call
+                        .get("function")
+                        .and_then(|f| f.get("arguments"))
+                        .and_then(|a| a.as_str())
+                    {
+                        let t = args.trim();
+                        if !t.is_empty() {
+                            return Some(t.to_string());
+                        }
+                    }
+                }
+            }
+            if let Some(args) = message
+                .get("function_call")
+                .and_then(|f| f.get("arguments"))
+                .and_then(|a| a.as_str())
+            {
+                let t = args.trim();
+                if !t.is_empty() {
+                    return Some(t.to_string());
                 }
             }
         }
@@ -743,6 +781,14 @@ fn response_format_for_block(block: u8) -> Value {
         json!({ "type": "string", "maxLength": max_len })
     }
 
+    fn bullets_min_3_schema(max_len: u32) -> Value {
+        json!({
+            "type": "string",
+            "maxLength": max_len,
+            "pattern": r"^\s*-\s+[^\n].*(\n\s*-\s+[^\n].*){2,}\s*$"
+        })
+    }
+
     fn enum_schema(options: &[&str]) -> Value {
         json!({ "type": "string", "enum": options })
     }
@@ -774,6 +820,7 @@ fn response_format_for_block(block: u8) -> Value {
         1 => {
             let mut props = serde_json::Map::new();
             props.insert("proposta_original_resumo".to_string(), string_schema(3000));
+            props.insert("indicacao_otimista_canibalizacao".to_string(), string_schema(3000));
             props.insert("declared_description_ptbr".to_string(), string_schema(3000));
             props.insert("visao_do_enxame".to_string(), string_schema(3000));
             props.insert("justificativa_decisao".to_string(), string_schema(3000));
@@ -784,7 +831,7 @@ fn response_format_for_block(block: u8) -> Value {
             strict_object(
                 props,
                 vec![
-                    "proposta_original_resumo",
+                    "indicacao_otimista_canibalizacao",
                     "declared_description_ptbr",
                     "visao_do_enxame",
                     "justificativa_decisao",
@@ -804,9 +851,9 @@ fn response_format_for_block(block: u8) -> Value {
             props.insert("real_structural_problem".to_string(), string_schema(3000));
             props.insert("categoria_nuance_tecnica".to_string(), string_schema(1200));
             props.insert("integracao_papel_exato".to_string(), string_schema(1200));
-            props.insert("must_components_prod_ux".to_string(), string_schema(3000));
-            props.insert("must_components_arq".to_string(), string_schema(3000));
-            props.insert("must_components_ops".to_string(), string_schema(3000));
+            props.insert("must_components_prod_ux".to_string(), bullets_min_3_schema(3000));
+            props.insert("must_components_arq".to_string(), bullets_min_3_schema(3000));
+            props.insert("must_components_ops".to_string(), bullets_min_3_schema(3000));
             props.insert("detected_toxic_deps".to_string(), string_schema(3000));
             props.insert("do_not_absorb".to_string(), string_schema(3000));
             props.insert("where_ai_should_not_enter".to_string(), string_schema(3000));
@@ -1037,6 +1084,7 @@ fn example_output_for_block(block: u8) -> Value {
     let fields = match block {
         1 => json!({
             "proposta_original_resumo": "",
+            "indicacao_otimista_canibalizacao": "",
             "declared_description_ptbr": "",
             "visao_do_enxame": "",
             "justificativa_decisao": "",
@@ -1053,9 +1101,9 @@ fn example_output_for_block(block: u8) -> Value {
             "real_structural_problem": "",
             "categoria_nuance_tecnica": "",
             "integracao_papel_exato": "",
-            "must_components_prod_ux": "",
-            "must_components_arq": "",
-            "must_components_ops": "",
+            "must_components_prod_ux": "- item\n- item\n- item",
+            "must_components_arq": "- item\n- item\n- item",
+            "must_components_ops": "- item\n- item\n- item",
             "detected_toxic_deps": "",
             "do_not_absorb": "",
             "where_ai_should_not_enter": ""
@@ -1368,6 +1416,154 @@ fn try_fetch_repo_heuristics_seed(
         ))
     })
     .ok()
+}
+
+fn try_fetch_repo_heuristics_row(
+    conn: &Connection,
+    repo_id: &str,
+) -> Option<genesis_mc_lib::cognition::synthesizer::MasterSolutionsRow> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT status_atualizacao, status_fase, project_name, repo_url,
+                    COALESCE(NULLIF(repo_analised_version, ''), NULLIF(repo_version, '')) AS repo_analised_version,
+                    ultima_versao_online, indicacao_otimista_canibalizacao, lote_id, data_ultima_analise, analise_origem,
+                    licenca, stack_base, declared_description, proposta_original_resumo,
+                    lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops,
+                    visao_do_enxame, justificativa_decisao, executive_verdict,
+                    risco_principal, risco_linha_vermelha, observacoes,
+                    ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem,
+                    categoria_nuance_tecnica, integracao_papel_exato,
+                    must_components_prod_ux, must_components_arq, must_components_ops,
+                    detected_toxic_deps, do_not_absorb, where_ai_should_not_enter,
+                    classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao,
+                    capability_nature_primary, architectural_topology, temporal_stability,
+                    bare_metal_fit, extractability_level, runtime_sovereignty_fit, local_first_fit,
+                    adoptability_level, longitudinal_sustainability,
+                    maintenance_burden, onboarding_friction, observability_operational, recoverability_level,
+                    degradation_behavior, curation_burden, evolution_cost, operability_level,
+                    abandonment_risk, time_to_first_clear_value, imperfection_tolerance,
+                    entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, regulatory_risk,
+                    score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability,
+                    score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value,
+                    score_ethics_safety, score_intrinsic_risk,
+                    score_final, score_fit_geral_soda,
+                    score_architectural_priority, score_human_product_priority, score_absorption_readiness,
+                    score_operational_priority, score_sustainability_adjusted_fit,
+                    valid_from, valid_to, embargo_status
+             FROM repo_heuristics
+             WHERE project_name = ?1
+             LIMIT 1",
+        )
+        .ok()?;
+    let json_val: serde_json::Value = stmt
+        .query_row(params![repo_id], |row| {
+            let mut obj = serde_json::Map::new();
+            obj.insert("status_atualizacao".to_string(), serde_json::json!(row.get::<_, String>(0)?));
+            obj.insert("status_fase".to_string(), serde_json::json!(row.get::<_, String>(1)?));
+            obj.insert("project_name".to_string(), serde_json::json!(row.get::<_, String>(2)?));
+            obj.insert("repo_url".to_string(), serde_json::json!(row.get::<_, String>(3)?));
+            obj.insert("repo_analised_version".to_string(), serde_json::json!(row.get::<_, String>(4)?));
+            obj.insert("ultima_versao_online".to_string(), serde_json::json!(row.get::<_, String>(5)?));
+            obj.insert("indicacao_otimista_canibalizacao".to_string(), serde_json::json!(row.get::<_, String>(6)?));
+            obj.insert("lote_id".to_string(), serde_json::json!(row.get::<_, String>(7)?));
+            obj.insert("data_ultima_analise".to_string(), serde_json::json!(row.get::<_, i64>(8)?));
+            obj.insert("analise_origem".to_string(), serde_json::json!(row.get::<_, String>(9)?));
+            obj.insert("licenca".to_string(), serde_json::json!(row.get::<_, String>(10)?));
+            obj.insert("stack_base".to_string(), serde_json::json!(row.get::<_, String>(11)?));
+            obj.insert("declared_description".to_string(), serde_json::json!(row.get::<_, String>(12)?));
+            obj.insert("declared_description_ptbr".to_string(), serde_json::json!(""));
+            obj.insert("proposta_original_resumo".to_string(), serde_json::json!(row.get::<_, String>(13)?));
+            obj.insert("lente_a_sentido_prod_ux".to_string(), serde_json::json!(row.get::<_, String>(14)?));
+            obj.insert("lente_b_estrutura_arq".to_string(), serde_json::json!(row.get::<_, String>(15)?));
+            obj.insert("lente_c_realidade_ops".to_string(), serde_json::json!(row.get::<_, String>(16)?));
+            obj.insert("visao_do_enxame".to_string(), serde_json::json!(row.get::<_, String>(17)?));
+            obj.insert("justificativa_decisao".to_string(), serde_json::json!(row.get::<_, String>(18)?));
+            obj.insert("executive_verdict".to_string(), serde_json::json!(row.get::<_, String>(19)?));
+            obj.insert("risco_principal".to_string(), serde_json::json!(row.get::<_, String>(20)?));
+            obj.insert("risco_linha_vermelha".to_string(), serde_json::json!(row.get::<_, String>(21)?));
+            obj.insert("observacoes".to_string(), serde_json::json!(row.get::<_, String>(22)?));
+            obj.insert("ouro_a_extrair".to_string(), serde_json::json!(row.get::<_, String>(23)?));
+            obj.insert("deep_pattern".to_string(), serde_json::json!(row.get::<_, String>(24)?));
+            obj.insert("transplantable_core".to_string(), serde_json::json!(row.get::<_, String>(25)?));
+            obj.insert("logic_math_heuristic".to_string(), serde_json::json!(row.get::<_, String>(26)?));
+            obj.insert("real_structural_problem".to_string(), serde_json::json!(row.get::<_, String>(27)?));
+            obj.insert("categoria_nuance_tecnica".to_string(), serde_json::json!(row.get::<_, String>(28)?));
+            obj.insert("integracao_papel_exato".to_string(), serde_json::json!(row.get::<_, String>(29)?));
+            obj.insert("must_components_prod_ux".to_string(), serde_json::json!(row.get::<_, String>(30)?));
+            obj.insert("must_components_arq".to_string(), serde_json::json!(row.get::<_, String>(31)?));
+            obj.insert("must_components_ops".to_string(), serde_json::json!(row.get::<_, String>(32)?));
+            obj.insert("detected_toxic_deps".to_string(), serde_json::json!(row.get::<_, String>(33)?));
+            obj.insert("do_not_absorb".to_string(), serde_json::json!(row.get::<_, String>(34)?));
+            obj.insert("where_ai_should_not_enter".to_string(), serde_json::json!(row.get::<_, String>(35)?));
+            obj.insert("classificacao_terminal".to_string(), serde_json::json!(row.get::<_, String>(36)?));
+            obj.insert("acao_de_canibalizacao".to_string(), serde_json::json!(row.get::<_, String>(37)?));
+            obj.insert("categoria_arquitetural".to_string(), serde_json::json!(row.get::<_, String>(38)?));
+            obj.insert("horizonte_extracao".to_string(), serde_json::json!(row.get::<_, String>(39)?));
+            obj.insert("tipo_integracao".to_string(), serde_json::json!(row.get::<_, String>(40)?));
+            obj.insert("capability_nature_primary".to_string(), serde_json::json!(row.get::<_, String>(41)?));
+            obj.insert("architectural_topology".to_string(), serde_json::json!(row.get::<_, String>(42)?));
+            obj.insert("temporal_stability".to_string(), serde_json::json!(row.get::<_, String>(43)?));
+            obj.insert("bare_metal_fit".to_string(), serde_json::json!(row.get::<_, String>(44)?));
+            obj.insert("extractability_level".to_string(), serde_json::json!(row.get::<_, String>(45)?));
+            obj.insert("runtime_sovereignty_fit".to_string(), serde_json::json!(row.get::<_, String>(46)?));
+            obj.insert("local_first_fit".to_string(), serde_json::json!(row.get::<_, String>(47)?));
+            obj.insert("adoptability_level".to_string(), serde_json::json!(row.get::<_, String>(48)?));
+            obj.insert("longitudinal_sustainability".to_string(), serde_json::json!(row.get::<_, String>(49)?));
+            obj.insert("maintenance_burden".to_string(), serde_json::json!(row.get::<_, String>(50)?));
+            obj.insert("onboarding_friction".to_string(), serde_json::json!(row.get::<_, String>(51)?));
+            obj.insert("observability_operational".to_string(), serde_json::json!(row.get::<_, String>(52)?));
+            obj.insert("recoverability_level".to_string(), serde_json::json!(row.get::<_, String>(53)?));
+            obj.insert("degradation_behavior".to_string(), serde_json::json!(row.get::<_, String>(54)?));
+            obj.insert("curation_burden".to_string(), serde_json::json!(row.get::<_, String>(55)?));
+            obj.insert("evolution_cost".to_string(), serde_json::json!(row.get::<_, String>(56)?));
+            obj.insert("operability_level".to_string(), serde_json::json!(row.get::<_, String>(57)?));
+            obj.insert("abandonment_risk".to_string(), serde_json::json!(row.get::<_, String>(58)?));
+            obj.insert("time_to_first_clear_value".to_string(), serde_json::json!(row.get::<_, String>(59)?));
+            obj.insert("imperfection_tolerance".to_string(), serde_json::json!(row.get::<_, String>(60)?));
+            obj.insert("entropy_risk".to_string(), serde_json::json!(row.get::<_, String>(61)?));
+            obj.insert("design_misuse_risk".to_string(), serde_json::json!(row.get::<_, String>(62)?));
+            obj.insert("intrinsic_ethics_risk".to_string(), serde_json::json!(row.get::<_, String>(63)?));
+            obj.insert("discipline_dependency".to_string(), serde_json::json!(row.get::<_, String>(64)?));
+            obj.insert("regulatory_risk".to_string(), serde_json::json!(row.get::<_, String>(65)?));
+            obj.insert("score_philosophical_fit".to_string(), serde_json::json!(row.get::<_, i64>(66)?));
+            obj.insert("score_bare_metal_fit".to_string(), serde_json::json!(row.get::<_, i64>(67)?));
+            obj.insert("score_architectural_extractability".to_string(), serde_json::json!(row.get::<_, i64>(68)?));
+            obj.insert("score_operability".to_string(), serde_json::json!(row.get::<_, i64>(69)?));
+            obj.insert("score_creep_risk".to_string(), serde_json::json!(row.get::<_, i64>(70)?));
+            obj.insert("score_runtime_sovereignty".to_string(), serde_json::json!(row.get::<_, i64>(71)?));
+            obj.insert("score_model_logic_value".to_string(), serde_json::json!(row.get::<_, i64>(72)?));
+            obj.insert("score_ethics_safety".to_string(), serde_json::json!(row.get::<_, i64>(73)?));
+            obj.insert("score_intrinsic_risk".to_string(), serde_json::json!(row.get::<_, i64>(74)?));
+            obj.insert("score_final".to_string(), serde_json::json!(row.get::<_, f64>(75)?));
+            obj.insert("score_fit_geral_soda".to_string(), serde_json::json!(row.get::<_, f64>(76)?));
+            obj.insert("score_architectural_priority".to_string(), serde_json::json!(row.get::<_, f64>(77)?));
+            obj.insert("score_human_product_priority".to_string(), serde_json::json!(row.get::<_, f64>(78)?));
+            obj.insert("score_absorption_readiness".to_string(), serde_json::json!(row.get::<_, f64>(79)?));
+            obj.insert("score_operational_priority".to_string(), serde_json::json!(row.get::<_, f64>(80)?));
+            obj.insert("score_sustainability_adjusted_fit".to_string(), serde_json::json!(row.get::<_, f64>(81)?));
+            obj.insert("valid_from".to_string(), serde_json::json!(row.get::<_, i64>(82)?));
+            obj.insert("valid_to".to_string(), serde_json::json!(row.get::<_, Option<i64>>(83)?));
+            obj.insert("embargo_status".to_string(), serde_json::json!(row.get::<_, i64>(84)?));
+            Ok(serde_json::Value::Object(obj))
+        })
+        .ok()?;
+    serde_json::from_value::<genesis_mc_lib::cognition::synthesizer::MasterSolutionsRow>(json_val).ok()
+}
+
+fn fetch_block3_justifications(conn: &Connection, repo_id: &str) -> HashMap<String, String> {
+    let json_text: Option<String> = conn
+        .query_row(
+            "SELECT justifications_json
+             FROM repo_heuristics_justifications
+             WHERE project_name = ?1 AND block = 3
+             LIMIT 1",
+            params![repo_id],
+            |row| row.get::<_, String>(0),
+        )
+        .ok();
+    json_text
+        .and_then(|t| serde_json::from_str::<HashMap<String, String>>(&t).ok())
+        .unwrap_or_default()
 }
 
 fn is_unknown_like(value: &str) -> bool {
@@ -2203,6 +2399,7 @@ async fn main() -> io::Result<()> {
         row_override,
         dry_run,
         feedback_inject,
+        phase4_only,
     } = parse_cli_args();
 
     if batch {
@@ -2278,7 +2475,7 @@ async fn main() -> io::Result<()> {
                 io::Error::other(format!("Falha ao decodificar MasterSolutionsRow do feedback: {}", e))
             })?;
         row.status_atualizacao = "CONCLUIDO_AGUARDANDO".to_string();
-        row.status_fase = "FASE_4_SYNTHESIZER_OK".to_string();
+        row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
         let _ = just_val;
         info!(
             repo_id = %repo_id,
@@ -2382,6 +2579,40 @@ async fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    if phase4_only {
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+        let row = try_fetch_repo_heuristics_row(&conn, &repo_id).ok_or_else(|| {
+            io::Error::other(format!(
+                "F4-only: repo_heuristics vazio/ausente para repo_id={}",
+                repo_id
+            ))
+        })?;
+        let block3_justifications = fetch_block3_justifications(&conn, &repo_id);
+        let now = now_epoch_secs()?;
+        let row_number = SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
+            .await
+            .map_err(|e| io::Error::other(format!("F4-only: falha ao injetar no Sheets: {}", e)))?;
+        let confirmed = confirm_sheet_write(row_number, &repo_id).await?;
+        if !confirmed {
+            return Err(io::Error::other(
+                "F4-only: atualização enviada, mas confirmação via leitura não bateu",
+            ));
+        }
+        let header_row = read_master_header(&spreadsheet_id).await?;
+        let cols = resolve_master_cols(&header_row)?;
+        update_status_atualizacao_e_fase(
+            &spreadsheet_id,
+            row_number,
+            cols,
+            "CONCLUIDO_AGUARDANDO",
+            "FASE_4_SHEETS_UPDATED",
+        )
+        .await?;
+        info!(repo_id = %repo_id, row_number, "F4-only: concluído com confirmação");
+        return Ok(());
+    }
+
     let (lote_id, repo_url) = fetch_repo_core(&conn, &repo_id).unwrap_or_else(|_| {
         (
             "LOTE_E2E".to_string(),
@@ -2407,9 +2638,12 @@ async fn main() -> io::Result<()> {
         };
         let header_row = read_master_header(&spreadsheet_id).await?;
         let cols = resolve_master_cols(&header_row)?;
-        let (status_atualizacao, _status_fase) =
+        let (status_atualizacao, status_fase) =
             read_status_atualizacao_e_fase(&spreadsheet_id, row_number, cols).await?;
-        if status_atualizacao.trim() != "APROVADO_PARA_ENXAME" {
+        let status_ok = status_atualizacao.trim() == "APROVADO_PARA_ENXAME"
+            || (status_atualizacao.trim() == "CONCLUIDO_AGUARDANDO"
+                && status_fase.trim() == "FASE_4_SHEETS_UPDATED");
+        if !status_ok {
             info!(
                 repo_id = %repo_id,
                 row_number,
@@ -2733,6 +2967,9 @@ async fn main() -> io::Result<()> {
         };
     }
 
+    SsotInjector::persist_phase3_snapshot(&repo_id, &row, &block3_justifications, now)
+        .map_err(|e| io::Error::other(format!("Falha ao persistir snapshot F3 em SQLite: {}", e)))?;
+
     let row_number = if n4_skip_columns.is_empty() {
         SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
             .await
@@ -2760,7 +2997,7 @@ async fn main() -> io::Result<()> {
         row_number,
         cols,
         "CONCLUIDO_AGUARDANDO",
-        "FASE_4_SYNTHESIZER_OK",
+        "FASE_4_SHEETS_UPDATED",
     )
     .await?;
 

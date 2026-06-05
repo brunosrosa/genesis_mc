@@ -1180,6 +1180,7 @@ struct BlockResponse<T> {
 #[serde(deny_unknown_fields)]
 struct Block1Fields {
     proposta_original_resumo: Option<String>,
+    indicacao_otimista_canibalizacao: String,
     declared_description_ptbr: String,
     visao_do_enxame: String,
     justificativa_decisao: String,
@@ -1308,10 +1309,11 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
         1 => {
             prompt.push_str("LIMITS_BLOCK1: cada valor string em fields deve ter no máximo 600 caracteres.\n");
             prompt.push_str("TRANSLATE_BLOCK1: gere declared_description_ptbr como tradução fiel para PT-BR de project.declared_description. Comece com letra maiúscula. Não adicione comentários sobre tradução.\n");
+            prompt.push_str("INDICACAO_OTIMISTA_BLOCK1: gere indicacao_otimista_canibalizacao como uma visão estratégica e otimista do que vale canibalizar do repositório para o ecossistema SODA. Baseie-se nas três lentes e no debate (valor potencial, reaproveitabilidade, riscos e fronteiras). Não concatene colunas; sintetize uma proposta inteligente.\n");
         }
         2 => {
             prompt.push_str("LIMITS_BLOCK2: cada valor string em fields deve ter no máximo 400 caracteres. Para listas, escreva em bullets (ex: \"- item\\n- item\").\n");
-            prompt.push_str("BULLETS_BLOCK2: para must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter: escreva EXATAMENTE de 3 a 5 bullets. Se necessário, divida um item grande em itens menores.\n");
+            prompt.push_str("BULLETS_BLOCK2: para must_components_prod_ux, must_components_arq, must_components_ops: escreva NO MÍNIMO 3 bullets detalhados (componentes concretos + papel + por quê). Para detected_toxic_deps, do_not_absorb, where_ai_should_not_enter: escreva de 3 a 5 bullets.\n");
         }
         3 => {
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
@@ -1340,6 +1342,7 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
         1 => {
             let mut keys = vec![
                 "proposta_original_resumo",
+                "indicacao_otimista_canibalizacao",
                 "declared_description_ptbr",
                 "visao_do_enxame",
                 "justificativa_decisao",
@@ -1747,8 +1750,11 @@ pub async fn run_phase3_sgr(
 
     let block1: Block1Fields = run_block(client, cfg, 1, &block0, &row).await?;
     if let Some(value) = block1.proposta_original_resumo {
-        row.proposta_original_resumo = value;
+        if !value.trim().is_empty() {
+            row.proposta_original_resumo = value;
+        }
     }
+    row.indicacao_otimista_canibalizacao = block1.indicacao_otimista_canibalizacao;
     row.declared_description_ptbr = block1.declared_description_ptbr;
     row.visao_do_enxame = block1.visao_do_enxame;
     row.justificativa_decisao = block1.justificativa_decisao;
@@ -1834,6 +1840,12 @@ pub async fn run_phase3_sgr(
 }
 
 pub fn extract_json_fence(text: &str) -> Result<String, Phase3Error> {
+    let trimmed = text.trim();
+    if (trimmed.starts_with('{') || trimmed.starts_with('['))
+        && serde_json::from_str::<serde_json::Value>(trimmed).is_ok()
+    {
+        return Ok(trimmed.to_string());
+    }
     let Some(start) = text.find("```json") else {
         if let Some(salvaged) = salvage_balanced_json(text) {
             return Ok(salvaged);
