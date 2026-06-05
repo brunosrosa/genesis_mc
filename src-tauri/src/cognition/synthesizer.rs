@@ -1172,6 +1172,7 @@ pub enum Phase3Error {
 #[serde(deny_unknown_fields)]
 struct BlockResponse<T> {
     fields: T,
+    #[serde(default)]
     justifications: HashMap<String, String>,
 }
 
@@ -1293,8 +1294,13 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
     prompt.push_str(&format!("project_name={}\n", block0.project_name));
     prompt.push_str(&format!("repo_url={}\n", block0.repo_url));
     prompt.push_str("OUTPUT: responda com um bloco Markdown ```json ... ``` contendo um objeto JSON.\n");
-    prompt.push_str("O JSON deve conter: {\"fields\":{...},\"justifications\":{...}}.\n");
-    prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields/justifications. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
+    if block == 3 {
+        prompt.push_str("O JSON deve conter: {\"fields\":{...}}.\n");
+        prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
+    } else {
+        prompt.push_str("O JSON deve conter: {\"fields\":{...},\"justifications\":{...}}.\n");
+        prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields/justifications. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
+    }
     prompt.push_str("FIELDS_KEYS_EXATAS:\n");
     prompt.push_str(&fields_keys_for_block(block, prior));
     prompt.push('\n');
@@ -1309,7 +1315,7 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
         }
         3 => {
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
-            prompt.push_str("MODO_ROBOTICO_ENUMS_BLOCK3: para TODOS os campos ENUM do Bloco 3, fields deve conter APENAS o valor do catálogo (1 token). Qualquer explicação deve ir EXCLUSIVAMENTE em justifications[mesma_chave].\n");
+            prompt.push_str("MODO_ROBOTICO_ENUMS_BLOCK3: para TODOS os campos ENUM do Bloco 3, fields deve conter APENAS o valor do catálogo (1 token).\n");
             prompt.push_str("PROIBIDO: hífens, ':' , parênteses, frases, ou duas opções no mesmo campo.\n");
             prompt.push_str("KNOWLEDGE_MODE_BLOCK3: se project.stack_base == \"UNKNOWN\" (ou context_alert presente), trate como repositorio de Conhecimento/Metodologia. Nesse caso, bare_metal_fit, runtime_sovereignty_fit e local_first_fit DEVEM ser HIGH ou EXCELLENT (nunca LOW/VERY_LOW), pois não há runtime externo.\n");
             prompt.push_str(enum_catalog_block3());
@@ -2159,7 +2165,7 @@ mod tests {
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"x\"}, \"justifications\": {}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"r\",\"declared_description_ptbr\":\"Descricao\",\"visao_do_enxame\":\"v\",\"justificativa_decisao\":\"j\",\"executive_verdict\":\"t\",\"risco_principal\":\"rp\",\"risco_linha_vermelha\":\"rlv\",\"observacoes\":\"o\"}, \"justifications\": {\"proposta_original_resumo\":\"k\"}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"ouro_a_extrair\": \"1\",\"deep_pattern\":\"2\",\"transplantable_core\":\"3\",\"logic_math_heuristic\":\"4\",\"real_structural_problem\":\"5\",\"categoria_nuance_tecnica\":\"6\",\"integracao_papel_exato\":\"7\",\"must_components_prod_ux\":\"8\",\"must_components_arq\":\"9\",\"must_components_ops\":\"10\",\"detected_toxic_deps\":\"11\",\"do_not_absorb\":\"12\",\"where_ai_should_not_enter\":\"13\"}, \"justifications\": {\"ouro_a_extrair\":\"k\"}}\n```".to_string()),
-            Ok("```json\n{\"fields\": {\"classificacao_terminal\": \"APROVADO_PARA_PRODUCAO\",\"acao_de_canibalizacao\":\"NENHUMA\",\"categoria_arquitetural\":\"LIBRARY\",\"horizonte_extracao\":\"SHORT\",\"tipo_integracao\":\"INTEGRATE_AS_COMPONENT\",\"capability_nature_primary\":\"LIBRARY\",\"architectural_topology\":\"MODULAR\",\"temporal_stability\":\"STABLE\",\"bare_metal_fit\":\"HIGH\",\"extractability_level\":\"HIGH\",\"runtime_sovereignty_fit\":\"HIGH\",\"local_first_fit\":\"HIGH\",\"adoptability_level\":\"HIGH\",\"longitudinal_sustainability\":\"HIGH\",\"maintenance_burden\":\"LOW\",\"onboarding_friction\":\"LOW\",\"observability_operational\":\"HIGH\",\"recoverability_level\":\"HIGH\",\"degradation_behavior\":\"GRACEFUL\",\"curation_burden\":\"LOW\",\"evolution_cost\":\"LOW\",\"operability_level\":\"HIGH\",\"abandonment_risk\":\"LOW\",\"time_to_first_clear_value\":\"SHORT\",\"imperfection_tolerance\":\"HIGH\",\"entropy_risk\":\"LOW\",\"design_misuse_risk\":\"LOW\",\"intrinsic_ethics_risk\":\"LOW\",\"discipline_dependency\":\"NENHUMA\",\"regulatory_risk\":\"LOW\"}, \"justifications\": {\"classificacao_terminal\":\"k\"}}\n```".to_string()),
+            Ok("```json\n{\"fields\": {\"classificacao_terminal\": \"APROVADO_PARA_PRODUCAO\",\"acao_de_canibalizacao\":\"NENHUMA\",\"categoria_arquitetural\":\"LIBRARY\",\"horizonte_extracao\":\"SHORT\",\"tipo_integracao\":\"INTEGRATE_AS_COMPONENT\",\"capability_nature_primary\":\"LIBRARY\",\"architectural_topology\":\"MODULAR\",\"temporal_stability\":\"STABLE\",\"bare_metal_fit\":\"HIGH\",\"extractability_level\":\"HIGH\",\"runtime_sovereignty_fit\":\"HIGH\",\"local_first_fit\":\"HIGH\",\"adoptability_level\":\"HIGH\",\"longitudinal_sustainability\":\"HIGH\",\"maintenance_burden\":\"LOW\",\"onboarding_friction\":\"LOW\",\"observability_operational\":\"HIGH\",\"recoverability_level\":\"HIGH\",\"degradation_behavior\":\"GRACEFUL\",\"curation_burden\":\"LOW\",\"evolution_cost\":\"LOW\",\"operability_level\":\"HIGH\",\"abandonment_risk\":\"LOW\",\"time_to_first_clear_value\":\"SHORT\",\"imperfection_tolerance\":\"HIGH\",\"entropy_risk\":\"LOW\",\"design_misuse_risk\":\"LOW\",\"intrinsic_ethics_risk\":\"LOW\",\"discipline_dependency\":\"NENHUMA\",\"regulatory_risk\":\"LOW\"}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"score_philosophical_fit\": 1,\"score_bare_metal_fit\":2,\"score_architectural_extractability\":3,\"score_operability\":4,\"score_creep_risk\":5,\"score_runtime_sovereignty\":6,\"score_model_logic_value\":7,\"score_ethics_safety\":8,\"score_intrinsic_risk\":9}, \"justifications\": {\"score_philosophical_fit\":\"k\"}}\n```".to_string()),
         ];
         let client = MockFormatterClient::new(responses);

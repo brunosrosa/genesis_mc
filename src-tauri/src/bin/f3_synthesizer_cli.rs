@@ -740,7 +740,13 @@ fn response_format_for_block(block: u8) -> Value {
         json!({ "type": "integer", "minimum": 0, "maximum": 10 })
     }
 
-    fn envelope(fields_schema: Value, strict_fields: bool) -> Value {
+    fn envelope_fields_only(fields_schema: Value) -> Value {
+        let mut props = serde_json::Map::new();
+        props.insert("fields".to_string(), fields_schema);
+        strict_object(props, vec!["fields"])
+    }
+
+    fn envelope_with_justifications(fields_schema: Value) -> Value {
         let mut props = serde_json::Map::new();
         props.insert("fields".to_string(), fields_schema);
         props.insert(
@@ -750,14 +756,7 @@ fn response_format_for_block(block: u8) -> Value {
                 "additionalProperties": { "type": "string", "maxLength": 3000 }
             }),
         );
-        let mut schema = strict_object(props, vec!["fields", "justifications"]);
-        if let Some(obj) = schema.as_object_mut() {
-            if strict_fields {
-                // no-op, kept for readability: fields_schema already has additionalProperties=false
-                let _ = obj;
-            }
-        }
-        schema
+        strict_object(props, vec!["fields", "justifications"])
     }
 
     let fields_schema = match block {
@@ -1008,7 +1007,11 @@ fn response_format_for_block(block: u8) -> Value {
         }
     };
 
-    let schema = envelope(fields_schema, true);
+    let schema = if block == 3 {
+        envelope_fields_only(fields_schema)
+    } else {
+        envelope_with_justifications(fields_schema)
+    };
     json!({
         "type": "json_schema",
         "json_schema": {
@@ -1092,10 +1095,14 @@ fn example_output_for_block(block: u8) -> Value {
         _ => json!({ "note": "" }),
     };
 
-    json!({
-        "fields": fields,
-        "justifications": {}
-    })
+    if block == 3 {
+        json!({ "fields": fields })
+    } else {
+        json!({
+            "fields": fields,
+            "justifications": {}
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1117,6 +1124,13 @@ mod tests {
                 .and_then(|v| v.as_bool()),
             Some(false)
         );
+        let required = schema.get("required").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(required.len(), 1);
+        assert_eq!(required[0].as_str(), Some("fields"));
+        assert!(schema
+            .get("properties")
+            .and_then(|v| v.get("justifications"))
+            .is_none());
         let fields = schema
             .get("properties")
             .and_then(|v| v.get("fields"))
@@ -1140,13 +1154,21 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
             let example = example_output_for_block(block);
             let mut user_prompt = prompt.to_string();
             user_prompt.push_str("\n\nExample Output (JSON)\n");
+            let fallback_example = if block == 3 {
+                r#"{"fields":{}}"#.to_string()
+            } else {
+                r#"{"fields":{},"justifications":{}}"#.to_string()
+            };
             user_prompt.push_str(
                 &serde_json::to_string_pretty(&example)
-                    .unwrap_or_else(|_| r#"{"fields":{},"justifications":{}}"#.to_string()),
+                    .unwrap_or_else(|_| fallback_example),
             );
-            let body = json!({
-                "model": model,
-                "messages": [
+            let max_tokens = if block == 3 { 1800 } else { 4096 };
+            let mut body_obj = serde_json::Map::new();
+            body_obj.insert("model".to_string(), json!(model));
+            body_obj.insert(
+                "messages".to_string(),
+                json!([
                     {
                         "role": "system",
                         "content": "Responda SOMENTE com JSON válido (sem markdown, sem texto extra)."
@@ -1155,12 +1177,20 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                         "role": "user",
                         "content": user_prompt
                     }
-                ],
-                "temperature": 0.0,
-                "max_tokens": 4096,
-                "reasoning_effort": "high",
-                "response_format": response_format_for_block(block)
-            });
+                ]),
+            );
+            body_obj.insert("temperature".to_string(), json!(0.0));
+            body_obj.insert("max_tokens".to_string(), json!(max_tokens));
+            body_obj.insert("reasoning_effort".to_string(), json!("high"));
+            if block == 3 {
+                body_obj.insert("reasoning".to_string(), json!({ "exclude": true }));
+                body_obj.insert("include_reasoning".to_string(), json!(false));
+            }
+            body_obj.insert(
+                "response_format".to_string(),
+                response_format_for_block(block),
+            );
+            let body = Value::Object(body_obj);
 
             let max_attempts: u32 = 3;
             for attempt in 1..=max_attempts {
@@ -1171,26 +1201,72 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                     .header("Content-Type", "application/json")
                     .json(&body)
                     .send();
-                let response = tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response)
-                    .await
-                    .map_err(|_| {
-                        format!(
+                let response = match tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response).await {
+                    Ok(Ok(resp)) => resp,
+                    Ok(Err(e)) => {
+                        if attempt < max_attempts {
+                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+                            let exp = attempt.saturating_sub(1).min(10);
+                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                base_ms.saturating_add(jitter_ms),
+                            ))
+                            .await;
+                            continue;
+                        }
+                        return Err(format!("Erro de rede: {}", e));
+                    }
+                    Err(_) => {
+                        if attempt < max_attempts {
+                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+                            let exp = attempt.saturating_sub(1).min(10);
+                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                base_ms.saturating_add(jitter_ms),
+                            ))
+                            .await;
+                            continue;
+                        }
+                        return Err(format!(
                             "Timeout chamando OpenRouter (timeout_s={})",
                             FORMATTER_HTTP_TIMEOUT.as_secs()
-                        )
-                    })?
-                    .map_err(|e| format!("Erro de rede: {}", e))?;
+                        ));
+                    }
+                };
 
                 let status = response.status();
-                let raw = tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response.text())
-                    .await
-                    .map_err(|_| {
-                        format!(
+                let raw = match tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response.text()).await {
+                    Ok(Ok(v)) => v,
+                    Ok(Err(e)) => {
+                        if attempt < max_attempts {
+                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+                            let exp = attempt.saturating_sub(1).min(10);
+                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                base_ms.saturating_add(jitter_ms),
+                            ))
+                            .await;
+                            continue;
+                        }
+                        return Err(e.to_string());
+                    }
+                    Err(_) => {
+                        if attempt < max_attempts {
+                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+                            let exp = attempt.saturating_sub(1).min(10);
+                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                base_ms.saturating_add(jitter_ms),
+                            ))
+                            .await;
+                            continue;
+                        }
+                        return Err(format!(
                             "Timeout lendo body OpenRouter (timeout_s={})",
                             FORMATTER_HTTP_TIMEOUT.as_secs()
-                        )
-                    })?
-                    .map_err(|e| e.to_string())?;
+                        ));
+                    }
+                };
                 if !status.is_success() {
                     let should_retry = (status.as_u16() == 429 || status.is_server_error())
                         && attempt < max_attempts;
@@ -1207,8 +1283,22 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                     return Err(format!("HTTP {}: {}", status.as_u16(), raw));
                 }
 
-                let envelope: Value = serde_json::from_str(&raw)
-                    .map_err(|e| format!("Envelope JSON inválido do OpenRouter: {}", e))?;
+                let envelope: Value = match serde_json::from_str(&raw) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        if attempt < max_attempts {
+                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+                            let exp = attempt.saturating_sub(1).min(10);
+                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                base_ms.saturating_add(jitter_ms),
+                            ))
+                            .await;
+                            continue;
+                        }
+                        return Err(format!("Envelope JSON inválido do OpenRouter: {}", e));
+                    }
+                };
                 self.harvest_usage(&envelope);
                 let content_opt = Self::extract_openrouter_content(&envelope)
                     .map(|c| c.trim().to_string())
