@@ -36,6 +36,17 @@ const GITHUB_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(test)]
 const GITHUB_HTTP_TIMEOUT: Duration = Duration::from_millis(250);
 
+async fn retry_backoff_sleep(attempt: u32, max_attempts: u32, base_ms: u64) -> bool {
+    if attempt >= max_attempts {
+        return false;
+    }
+    let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+    let exp = attempt.saturating_sub(1).min(10);
+    let delay_ms = base_ms.saturating_mul(1_u64 << exp).saturating_add(jitter_ms);
+    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+    true
+}
+
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
 
 impl Drop for AbortOnDrop {
@@ -1204,27 +1215,13 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                 let response = match tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response).await {
                     Ok(Ok(resp)) => resp,
                     Ok(Err(e)) => {
-                        if attempt < max_attempts {
-                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
-                            let exp = attempt.saturating_sub(1).min(10);
-                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
-                            tokio::time::sleep(std::time::Duration::from_millis(
-                                base_ms.saturating_add(jitter_ms),
-                            ))
-                            .await;
+                        if retry_backoff_sleep(attempt, max_attempts, 800).await {
                             continue;
                         }
                         return Err(format!("Erro de rede: {}", e));
                     }
                     Err(_) => {
-                        if attempt < max_attempts {
-                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
-                            let exp = attempt.saturating_sub(1).min(10);
-                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
-                            tokio::time::sleep(std::time::Duration::from_millis(
-                                base_ms.saturating_add(jitter_ms),
-                            ))
-                            .await;
+                        if retry_backoff_sleep(attempt, max_attempts, 800).await {
                             continue;
                         }
                         return Err(format!(
@@ -1238,27 +1235,13 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                 let raw = match tokio::time::timeout(FORMATTER_HTTP_TIMEOUT, response.text()).await {
                     Ok(Ok(v)) => v,
                     Ok(Err(e)) => {
-                        if attempt < max_attempts {
-                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
-                            let exp = attempt.saturating_sub(1).min(10);
-                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
-                            tokio::time::sleep(std::time::Duration::from_millis(
-                                base_ms.saturating_add(jitter_ms),
-                            ))
-                            .await;
+                        if retry_backoff_sleep(attempt, max_attempts, 800).await {
                             continue;
                         }
                         return Err(e.to_string());
                     }
                     Err(_) => {
-                        if attempt < max_attempts {
-                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
-                            let exp = attempt.saturating_sub(1).min(10);
-                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
-                            tokio::time::sleep(std::time::Duration::from_millis(
-                                base_ms.saturating_add(jitter_ms),
-                            ))
-                            .await;
+                        if retry_backoff_sleep(attempt, max_attempts, 800).await {
                             continue;
                         }
                         return Err(format!(
@@ -1271,13 +1254,7 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                     let should_retry = (status.as_u16() == 429 || status.is_server_error())
                         && attempt < max_attempts;
                     if should_retry {
-                        let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
-                        let exp = attempt.saturating_sub(1).min(10);
-                        let base_ms = 800_u64.saturating_mul(1_u64 << exp);
-                        tokio::time::sleep(std::time::Duration::from_millis(
-                            base_ms.saturating_add(jitter_ms),
-                        ))
-                        .await;
+                        let _ = retry_backoff_sleep(attempt, max_attempts, 800).await;
                         continue;
                     }
                     return Err(format!("HTTP {}: {}", status.as_u16(), raw));
@@ -1286,14 +1263,7 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                 let envelope: Value = match serde_json::from_str(&raw) {
                     Ok(v) => v,
                     Err(e) => {
-                        if attempt < max_attempts {
-                            let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
-                            let exp = attempt.saturating_sub(1).min(10);
-                            let base_ms = 800_u64.saturating_mul(1_u64 << exp);
-                            tokio::time::sleep(std::time::Duration::from_millis(
-                                base_ms.saturating_add(jitter_ms),
-                            ))
-                            .await;
+                        if retry_backoff_sleep(attempt, max_attempts, 800).await {
                             continue;
                         }
                         return Err(format!("Envelope JSON inválido do OpenRouter: {}", e));
@@ -1308,13 +1278,7 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                 }
 
                 if attempt < max_attempts {
-                    let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
-                    let exp = attempt.saturating_sub(1).min(10);
-                    let base_ms = 800_u64.saturating_mul(1_u64 << exp);
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        base_ms.saturating_add(jitter_ms),
-                    ))
-                    .await;
+                    let _ = retry_backoff_sleep(attempt, max_attempts, 800).await;
                     continue;
                 }
 
