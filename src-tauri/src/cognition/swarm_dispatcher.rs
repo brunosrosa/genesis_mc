@@ -12,7 +12,7 @@ pub enum SwarmError {
 
 pub struct CognitiveSwarmDispatcher;
 
-use crate::cognition::sgr_synthesizer::SwarmDebate;
+use crate::cognition::swarm::SwarmDebate;
 
 impl CognitiveSwarmDispatcher {
     pub async fn dispatch_swarm(

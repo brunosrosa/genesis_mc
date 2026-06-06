@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
 use crate::persist::sheets_utils::col_idx_to_a1;
@@ -8,7 +10,83 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
 
-pub const OFFICIAL_FORMATTER_MODEL: &str = "deepseek/deepseek-v4-pro";
+pub const OFFICIAL_FORMATTER_MODEL: &str = "deepseek/deepseek-chat";
+
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Phase3TelemetryState {
+    block: u8,
+    label: String,
+    block_started: Instant,
+}
+
+fn spawn_phase3_total_telemetry(
+    repo_id: String,
+    started_total: Instant,
+    state: Arc<tokio::sync::Mutex<Phase3TelemetryState>>,
+) -> AbortOnDrop {
+    let handle = tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(60));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            let snapshot = state.lock().await.clone();
+            info!(
+                repo_id = %repo_id,
+                total_s = started_total.elapsed().as_secs(),
+                block = snapshot.block,
+                block_label = %snapshot.label,
+                block_s = snapshot.block_started.elapsed().as_secs(),
+                "F3 Telemetry"
+            );
+        }
+    });
+    AbortOnDrop(handle)
+}
+
+fn spawn_phase3_block_telemetry(
+    repo_id: String,
+    started_total: Instant,
+    state: Arc<tokio::sync::Mutex<Phase3TelemetryState>>,
+) -> AbortOnDrop {
+    let handle = tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(30));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            let snapshot = state.lock().await.clone();
+            let total_s = started_total.elapsed().as_secs();
+            if total_s > 0 && total_s % 60 == 0 {
+                continue;
+            }
+            info!(
+                repo_id = %repo_id,
+                total_s = total_s,
+                block = snapshot.block,
+                block_label = %snapshot.label,
+                block_s = snapshot.block_started.elapsed().as_secs(),
+                "F3 Telemetry"
+            );
+        }
+    });
+    AbortOnDrop(handle)
+}
+
+async fn set_phase3_block(state: &Arc<tokio::sync::Mutex<Phase3TelemetryState>>, block: u8, label: &str) {
+    let mut guard = state.lock().await;
+    guard.block = block;
+    guard.label = label.to_string();
+    guard.block_started = Instant::now();
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TerminalClassification {
@@ -631,36 +709,36 @@ impl MasterSolutionsRow {
             self.declared_description_ptbr.clone()
         };
 
-        let classificacao_terminal = to_human_readable(self.classificacao_terminal.as_str());
-        let acao_de_canibalizacao = to_human_readable(self.acao_de_canibalizacao.as_str());
-        let categoria_arquitetural = to_human_readable(self.categoria_arquitetural.as_str());
-        let horizonte_extracao = to_human_readable(self.horizonte_extracao.as_str());
-        let tipo_integracao = to_human_readable(self.tipo_integracao.as_str());
-        let capability_nature_primary = to_human_readable(self.capability_nature_primary.as_str());
-        let architectural_topology = to_human_readable(self.architectural_topology.as_str());
-        let temporal_stability = to_human_readable(self.temporal_stability.as_str());
-        let bare_metal_fit = to_human_readable(self.bare_metal_fit.as_str());
-        let extractability_level = to_human_readable(self.extractability_level.as_str());
-        let runtime_sovereignty_fit = to_human_readable(self.runtime_sovereignty_fit.as_str());
-        let local_first_fit = to_human_readable(self.local_first_fit.as_str());
-        let adoptability_level = to_human_readable(self.adoptability_level.as_str());
-        let longitudinal_sustainability = to_human_readable(self.longitudinal_sustainability.as_str());
-        let maintenance_burden = to_human_readable(self.maintenance_burden.as_str());
-        let onboarding_friction = to_human_readable(self.onboarding_friction.as_str());
-        let observability_operational = to_human_readable(self.observability_operational.as_str());
-        let recoverability_level = to_human_readable(self.recoverability_level.as_str());
-        let degradation_behavior = to_human_readable(self.degradation_behavior.as_str());
-        let curation_burden = to_human_readable(self.curation_burden.as_str());
-        let evolution_cost = to_human_readable(self.evolution_cost.as_str());
-        let operability_level = to_human_readable(self.operability_level.as_str());
-        let abandonment_risk = to_human_readable(self.abandonment_risk.as_str());
-        let time_to_first_clear_value = to_human_readable(self.time_to_first_clear_value.as_str());
-        let imperfection_tolerance = to_human_readable(self.imperfection_tolerance.as_str());
-        let entropy_risk = to_human_readable(self.entropy_risk.as_str());
-        let design_misuse_risk = to_human_readable(self.design_misuse_risk.as_str());
-        let intrinsic_ethics_risk = to_human_readable(self.intrinsic_ethics_risk.as_str());
-        let discipline_dependency = to_human_readable(self.discipline_dependency.as_str());
-        let regulatory_risk = to_human_readable(self.regulatory_risk.as_str());
+        let classificacao_terminal = self.classificacao_terminal.as_str();
+        let acao_de_canibalizacao = self.acao_de_canibalizacao.as_str();
+        let categoria_arquitetural = self.categoria_arquitetural.as_str();
+        let horizonte_extracao = self.horizonte_extracao.as_str();
+        let tipo_integracao = self.tipo_integracao.as_str();
+        let capability_nature_primary = self.capability_nature_primary.as_str();
+        let architectural_topology = self.architectural_topology.as_str();
+        let temporal_stability = self.temporal_stability.as_str();
+        let bare_metal_fit = self.bare_metal_fit.as_str();
+        let extractability_level = self.extractability_level.as_str();
+        let runtime_sovereignty_fit = self.runtime_sovereignty_fit.as_str();
+        let local_first_fit = self.local_first_fit.as_str();
+        let adoptability_level = self.adoptability_level.as_str();
+        let longitudinal_sustainability = self.longitudinal_sustainability.as_str();
+        let maintenance_burden = self.maintenance_burden.as_str();
+        let onboarding_friction = self.onboarding_friction.as_str();
+        let observability_operational = self.observability_operational.as_str();
+        let recoverability_level = self.recoverability_level.as_str();
+        let degradation_behavior = self.degradation_behavior.as_str();
+        let curation_burden = self.curation_burden.as_str();
+        let evolution_cost = self.evolution_cost.as_str();
+        let operability_level = self.operability_level.as_str();
+        let abandonment_risk = self.abandonment_risk.as_str();
+        let time_to_first_clear_value = self.time_to_first_clear_value.as_str();
+        let imperfection_tolerance = self.imperfection_tolerance.as_str();
+        let entropy_risk = self.entropy_risk.as_str();
+        let design_misuse_risk = self.design_misuse_risk.as_str();
+        let intrinsic_ethics_risk = self.intrinsic_ethics_risk.as_str();
+        let discipline_dependency = self.discipline_dependency.as_str();
+        let regulatory_risk = self.regulatory_risk.as_str();
 
         let data_ultima_analise = format_epoch_utc(self.data_ultima_analise);
         let valid_from = format_epoch_utc(self.valid_from);
@@ -762,127 +840,6 @@ fn format_float_1(value: f64) -> String {
     raw.replace(',', ".")
 }
 
-fn normalize_enum_value(raw: &str) -> String {
-    let line = raw.lines().next().unwrap_or("").trim();
-    if line.is_empty() {
-        return String::new();
-    }
-    let mut out = String::with_capacity(line.len());
-    for ch in line.chars() {
-        let ch = match ch {
-            '"' | '\'' | '`' => continue,
-            '-' | '—' | '–' => '_',
-            c if c.is_ascii_alphanumeric() || c == '_' => c,
-            c if c.is_whitespace() => '_',
-            _ => '_',
-        };
-        out.push(ch);
-    }
-    let mut compact = String::with_capacity(out.len());
-    let mut last_underscore = false;
-    for ch in out.chars() {
-        if ch == '_' {
-            if last_underscore {
-                continue;
-            }
-            last_underscore = true;
-            compact.push('_');
-            continue;
-        }
-        last_underscore = false;
-        compact.push(ch);
-    }
-    compact.trim_matches('_').to_ascii_uppercase()
-}
-
-fn to_human_readable(enum_str: &str) -> String {
-    let token = normalize_enum_value(enum_str);
-    if token.is_empty() {
-        return String::new();
-    }
-    match token.as_str() {
-        "LOW" => "Baixo".to_string(),
-        "MEDIUM" => "Médio".to_string(),
-        "HIGH" => "Alto".to_string(),
-        "EXCELLENT" => "Excelente".to_string(),
-        "VERY_LOW" => "Muito Baixo".to_string(),
-        "VERY_HIGH" => "Muito Alto".to_string(),
-        "CRITICAL" => "Crítico".to_string(),
-        "NENHUMA" => "Nenhuma".to_string(),
-        "BAIXA" => "Baixa".to_string(),
-        "MEDIA" => "Média".to_string(),
-        "ALTA" => "Alta".to_string(),
-        "CRITICA" => "Crítica".to_string(),
-        "STABLE" => "Estável".to_string(),
-        "EVOLVING" => "Evolutivo".to_string(),
-        "GRACEFUL" => "Suave".to_string(),
-        "ACCEPTABLE" => "Aceitável".to_string(),
-        "FRAGILE" => "Frágil".to_string(),
-        "CATASTROPHIC" => "Catastrófico".to_string(),
-        "IMMEDIATE" => "Imediato".to_string(),
-        "SHORT" => "Curto".to_string(),
-        "LONG" => "Longo".to_string(),
-        "VERY_LONG" => "Muito Longo".to_string(),
-        "INTEGRATE_AS_COMPONENT" => "Integração como Componente".to_string(),
-        "REIMPLEMENT_INTERNALLY" => "Reimplementação Interna".to_string(),
-        "REJECT" => "Rejeitar".to_string(),
-        _ => humanize_token_title(&token),
-    }
-}
-
-fn humanize_token_title(token: &str) -> String {
-    let parts = token
-        .split('_')
-        .filter(|p| !p.trim().is_empty())
-        .collect::<Vec<_>>();
-    if parts.is_empty() {
-        return String::new();
-    }
-    let mut out = Vec::new();
-    for part in parts {
-        out.push(humanize_word(part));
-    }
-    out.join(" ")
-}
-
-fn humanize_word(word: &str) -> String {
-    let mapped = match word {
-        "CANIBALIZACAO" => "Canibalização",
-        "CIRURGICA" => "Cirúrgica",
-        "INTEGRACAO" => "Integração",
-        "COMPONENTE" => "Componente",
-        "EFEMERO" => "Efêmero",
-        "ORQUESTRACAO" => "Orquestração",
-        "MEMORIA" => "Memória",
-        "ARQUITETURA" => "Arquitetura",
-        "OPERACAO" => "Operação",
-        "SOBERANIA" => "Soberania",
-        "LOGICA" => "Lógica",
-        "REIMPLEMENTACAO" => "Reimplementação",
-        "NATIVA" => "Nativa",
-        "CRATE" => "Crate",
-        "RISCO" => "Risco",
-        "HUMANO" => "Humano",
-        "PRODUTO" => "Produto",
-        "CURTO" => "Curto",
-        "LONGO" => "Longo",
-        _ => "",
-    };
-    if !mapped.is_empty() {
-        return mapped.to_string();
-    }
-
-    let lower = word.to_ascii_lowercase();
-    let mut chars = lower.chars();
-    let Some(first) = chars.next() else {
-        return String::new();
-    };
-    let mut s = String::new();
-    s.push(first.to_ascii_uppercase());
-    s.extend(chars);
-    s
-}
-
 fn format_epoch_utc(epoch: i64) -> String {
     if epoch <= 0 {
         return String::new();
@@ -911,6 +868,74 @@ fn format_bullets(lines: &[String]) -> String {
         return String::new();
     }
     format!("- {}", cleaned.join("\n- "))
+}
+
+fn format_dot_bullets(lines: &[String]) -> String {
+    let mut out = String::new();
+    for item in lines {
+        let trimmed = item.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str("• ");
+        out.push_str(trimmed);
+    }
+    out
+}
+
+fn normalize_string_vec(mut raw: Vec<String>, min_items: usize, max_items: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for item in raw.drain(..) {
+        let t = item.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if t.contains('\n') || t.starts_with("- ") || t.starts_with("• ") {
+            for line in t.lines() {
+                let lt = line.trim();
+                if lt.is_empty() {
+                    continue;
+                }
+                let stripped = lt
+                    .strip_prefix("- ")
+                    .or_else(|| lt.strip_prefix("• "))
+                    .unwrap_or(lt)
+                    .trim();
+                if stripped.is_empty() {
+                    continue;
+                }
+                out.push(stripped.to_string());
+                if out.len() >= max_items {
+                    break;
+                }
+            }
+        } else {
+            out.push(t.to_string());
+        }
+        if out.len() >= max_items {
+            break;
+        }
+    }
+    if out.len() >= min_items {
+        return out;
+    }
+
+    let mut expanded: Vec<String> = Vec::new();
+    for item in out {
+        for seg in split_bullet_segments(&item) {
+            if expanded.len() >= max_items {
+                break;
+            }
+            expanded.push(seg);
+        }
+        if expanded.len() >= max_items {
+            break;
+        }
+    }
+    expanded
 }
 
 fn normalize_lens_bullets(raw: &str) -> String {
@@ -1030,40 +1055,6 @@ fn truncate_chars_simple(content: &str, max_chars: usize) -> String {
     out
 }
 
-fn enforce_bullets_3_to_5(raw: &str, max_chars: usize) -> String {
-    let normalized = normalize_pydantic_list_field(raw);
-    let mut items = normalized
-        .lines()
-        .filter_map(|line| line.strip_prefix("- ").map(|v| v.trim().to_string()))
-        .filter(|v| !v.is_empty())
-        .collect::<Vec<_>>();
-
-    if items.len() >= 3 {
-        items.truncate(5);
-        return truncate_chars_simple(&format_bullets(&items), max_chars);
-    }
-
-    let mut expanded = Vec::new();
-    for item in items.drain(..) {
-        for seg in split_bullet_segments(&item) {
-            if expanded.len() >= 5 {
-                break;
-            }
-            expanded.push(seg);
-        }
-        if expanded.len() >= 5 {
-            break;
-        }
-    }
-
-    if expanded.len() >= 3 {
-        expanded.truncate(5);
-        return truncate_chars_simple(&format_bullets(&expanded), max_chars);
-    }
-
-    truncate_chars_simple(normalized.trim(), max_chars)
-}
-
 fn extract_bullets_array(val: &serde_json::Value) -> Option<Vec<String>> {
     let obj = val.as_object()?;
     let bullets = obj.get("bullets")?.as_array()?;
@@ -1180,7 +1171,6 @@ struct BlockResponse<T> {
 #[serde(deny_unknown_fields)]
 struct Block1Fields {
     proposta_original_resumo: Option<String>,
-    indicacao_otimista_canibalizacao: String,
     declared_description_ptbr: String,
     visao_do_enxame: String,
     justificativa_decisao: String,
@@ -1193,6 +1183,7 @@ struct Block1Fields {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block2Fields {
+    indicacao_otimista_canibalizacao: String,
     ouro_a_extrair: String,
     deep_pattern: String,
     transplantable_core: String,
@@ -1200,9 +1191,9 @@ struct Block2Fields {
     real_structural_problem: String,
     categoria_nuance_tecnica: String,
     integracao_papel_exato: String,
-    must_components_prod_ux: String,
-    must_components_arq: String,
-    must_components_ops: String,
+    must_components_prod_ux: Vec<String>,
+    must_components_arq: Vec<String>,
+    must_components_ops: Vec<String>,
     detected_toxic_deps: String,
     do_not_absorb: String,
     where_ai_should_not_enter: String,
@@ -1210,14 +1201,23 @@ struct Block2Fields {
 
 impl Block2Fields {
     fn sanitize(self) -> Self {
-        let max_chars = 400usize;
+        let max_items = 8usize;
+        let mut must_components_prod_ux = normalize_string_vec(self.must_components_prod_ux, 3, max_items);
+        let mut must_components_arq = normalize_string_vec(self.must_components_arq, 3, max_items);
+        let mut must_components_ops = normalize_string_vec(self.must_components_ops, 3, max_items);
+        if must_components_prod_ux.len() > max_items {
+            must_components_prod_ux.truncate(max_items);
+        }
+        if must_components_arq.len() > max_items {
+            must_components_arq.truncate(max_items);
+        }
+        if must_components_ops.len() > max_items {
+            must_components_ops.truncate(max_items);
+        }
         Self {
-            must_components_prod_ux: enforce_bullets_3_to_5(&self.must_components_prod_ux, max_chars),
-            must_components_arq: enforce_bullets_3_to_5(&self.must_components_arq, max_chars),
-            must_components_ops: enforce_bullets_3_to_5(&self.must_components_ops, max_chars),
-            detected_toxic_deps: enforce_bullets_3_to_5(&self.detected_toxic_deps, max_chars),
-            do_not_absorb: enforce_bullets_3_to_5(&self.do_not_absorb, max_chars),
-            where_ai_should_not_enter: enforce_bullets_3_to_5(&self.where_ai_should_not_enter, max_chars),
+            must_components_prod_ux,
+            must_components_arq,
+            must_components_ops,
             ..self
         }
     }
@@ -1307,13 +1307,15 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
     prompt.push('\n');
     match block {
         1 => {
-            prompt.push_str("LIMITS_BLOCK1: cada valor string em fields deve ter no máximo 600 caracteres.\n");
+            prompt.push_str("IDIOMA_BLOCK1: todos os textos descritivos devem estar em Português (PT-BR).\n");
+            prompt.push_str("STYLE_BLOCK1: seja conciso (5 a 8 linhas por campo), objetivo e sem jargão corporativo.\n");
             prompt.push_str("TRANSLATE_BLOCK1: gere declared_description_ptbr como tradução fiel para PT-BR de project.declared_description. Comece com letra maiúscula. Não adicione comentários sobre tradução.\n");
-            prompt.push_str("INDICACAO_OTIMISTA_BLOCK1: gere indicacao_otimista_canibalizacao como uma visão estratégica e otimista do que vale canibalizar do repositório para o ecossistema SODA. Baseie-se nas três lentes e no debate (valor potencial, reaproveitabilidade, riscos e fronteiras). Não concatene colunas; sintetize uma proposta inteligente.\n");
         }
         2 => {
-            prompt.push_str("LIMITS_BLOCK2: cada valor string em fields deve ter no máximo 400 caracteres. Para listas, escreva em bullets (ex: \"- item\\n- item\").\n");
-            prompt.push_str("BULLETS_BLOCK2: para must_components_prod_ux, must_components_arq, must_components_ops: escreva NO MÍNIMO 3 bullets detalhados (componentes concretos + papel + por quê). Para detected_toxic_deps, do_not_absorb, where_ai_should_not_enter: escreva de 3 a 5 bullets.\n");
+            prompt.push_str("IDIOMA_BLOCK2: todos os textos descritivos devem estar em Português (PT-BR).\n");
+            prompt.push_str("STYLE_BLOCK2: evite generalidades. Use termos concretos e testáveis.\n");
+            prompt.push_str("MUST_COMPONENTS_ARRAY_BLOCK2: must_components_prod_ux, must_components_arq, must_components_ops DEVEM ser arrays JSON (ex: [\"item 1\", \"item 2\", \"item 3\"]) com NO MÍNIMO 3 itens, cada item detalhado (componente + papel + por quê).\n");
+            prompt.push_str("INDICACAO_OTIMISTA_BLOCK2: gere indicacao_otimista_canibalizacao como Arquiteto-Chefe SODA. Use as 3 lentes para propor estrategicamente o que canibalizar (valor de produto, núcleo arquitetural transplantável, riscos/limites). Não concatene colunas; sintetize uma proposta inteligente.\n");
         }
         3 => {
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
@@ -1342,7 +1344,6 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
         1 => {
             let mut keys = vec![
                 "proposta_original_resumo",
-                "indicacao_otimista_canibalizacao",
                 "declared_description_ptbr",
                 "visao_do_enxame",
                 "justificativa_decisao",
@@ -1356,7 +1357,7 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
-        2 => r#"["ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
+        2 => r#"["indicacao_otimista_canibalizacao","ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
         3 => {
             let mut keys = vec![
                 "classificacao_terminal",
@@ -1472,23 +1473,17 @@ fn compact_context_for_block(
     ctx.insert(
         "debates_enxame".to_string(),
         serde_json::json!({
-            "lente_a_sentido_prod_ux": &row.lente_a_sentido_prod_ux,
-            "lente_b_estrutura_arq": &row.lente_b_estrutura_arq,
-            "lente_c_realidade_ops": &row.lente_c_realidade_ops
+            "lente_a_sentido_prod_ux": truncate_chars_simple(&row.lente_a_sentido_prod_ux, 2200),
+            "lente_b_estrutura_arq": truncate_chars_simple(&row.lente_b_estrutura_arq, 2200),
+            "lente_c_realidade_ops": truncate_chars_simple(&row.lente_c_realidade_ops, 2200)
         }),
     );
 
     if block >= 2 {
         ctx.insert(
-            "block1".to_string(),
+            "curation".to_string(),
             serde_json::json!({
-                "proposta_original_resumo": &row.proposta_original_resumo,
-                "visao_do_enxame": &row.visao_do_enxame,
-                "justificativa_decisao": &row.justificativa_decisao,
-                "executive_verdict": &row.executive_verdict,
-                "risco_principal": &row.risco_principal,
-                "risco_linha_vermelha": &row.risco_linha_vermelha,
-                "observacoes": &row.observacoes
+                "proposta_original_resumo": truncate_chars_simple(&row.proposta_original_resumo, 1200)
             }),
         );
     }
@@ -1496,19 +1491,14 @@ fn compact_context_for_block(
         ctx.insert(
             "block2".to_string(),
             serde_json::json!({
+                "indicacao_otimista_canibalizacao": truncate_chars_simple(&row.indicacao_otimista_canibalizacao, 1800),
                 "ouro_a_extrair": &row.ouro_a_extrair,
                 "deep_pattern": &row.deep_pattern,
                 "transplantable_core": &row.transplantable_core,
                 "logic_math_heuristic": &row.logic_math_heuristic,
                 "real_structural_problem": &row.real_structural_problem,
                 "categoria_nuance_tecnica": &row.categoria_nuance_tecnica,
-                "integracao_papel_exato": &row.integracao_papel_exato,
-                "must_components_prod_ux": &row.must_components_prod_ux,
-                "must_components_arq": &row.must_components_arq,
-                "must_components_ops": &row.must_components_ops,
-                "detected_toxic_deps": &row.detected_toxic_deps,
-                "do_not_absorb": &row.do_not_absorb,
-                "where_ai_should_not_enter": &row.where_ai_should_not_enter
+                "integracao_papel_exato": &row.integracao_papel_exato
             }),
         );
     }
@@ -1746,15 +1736,24 @@ pub async fn run_phase3_sgr(
         model = %cfg.model,
         "F3 (Sintetizador SGR): iniciando SGR em cascata (Blocos 1..4)"
     );
+    let started_total = Instant::now();
+    let state = Arc::new(tokio::sync::Mutex::new(Phase3TelemetryState {
+        block: 0,
+        label: "init".to_string(),
+        block_started: Instant::now(),
+    }));
+    let _telemetry_total = spawn_phase3_total_telemetry(block0.project_name.clone(), started_total, state.clone());
     let mut row = MasterSolutionsRow::from_block0(block0.clone());
 
+    set_phase3_block(&state, 1, "Bloco 1").await;
+    let _telemetry_block1 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
     let block1: Block1Fields = run_block(client, cfg, 1, &block0, &row).await?;
+    drop(_telemetry_block1);
     if let Some(value) = block1.proposta_original_resumo {
         if !value.trim().is_empty() {
             row.proposta_original_resumo = value;
         }
     }
-    row.indicacao_otimista_canibalizacao = block1.indicacao_otimista_canibalizacao;
     row.declared_description_ptbr = block1.declared_description_ptbr;
     row.visao_do_enxame = block1.visao_do_enxame;
     row.justificativa_decisao = block1.justificativa_decisao;
@@ -1764,9 +1763,13 @@ pub async fn run_phase3_sgr(
     row.observacoes = block1.observacoes;
     info!("F3 (Sintetizador SGR): Bloco 1 concluído");
 
+    set_phase3_block(&state, 2, "Bloco 2").await;
+    let _telemetry_block2 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
     let block2: Block2Fields = run_block::<Block2Fields>(client, cfg, 2, &block0, &row)
         .await?
         .sanitize();
+    drop(_telemetry_block2);
+    row.indicacao_otimista_canibalizacao = block2.indicacao_otimista_canibalizacao;
     row.ouro_a_extrair = block2.ouro_a_extrair;
     row.deep_pattern = block2.deep_pattern;
     row.transplantable_core = block2.transplantable_core;
@@ -1774,15 +1777,18 @@ pub async fn run_phase3_sgr(
     row.real_structural_problem = block2.real_structural_problem;
     row.categoria_nuance_tecnica = block2.categoria_nuance_tecnica;
     row.integracao_papel_exato = block2.integracao_papel_exato;
-    row.must_components_prod_ux = normalize_pydantic_list_field(&block2.must_components_prod_ux);
-    row.must_components_arq = normalize_pydantic_list_field(&block2.must_components_arq);
-    row.must_components_ops = normalize_pydantic_list_field(&block2.must_components_ops);
+    row.must_components_prod_ux = format_dot_bullets(&block2.must_components_prod_ux);
+    row.must_components_arq = format_dot_bullets(&block2.must_components_arq);
+    row.must_components_ops = format_dot_bullets(&block2.must_components_ops);
     row.detected_toxic_deps = normalize_pydantic_list_field(&block2.detected_toxic_deps);
     row.do_not_absorb = normalize_pydantic_list_field(&block2.do_not_absorb);
     row.where_ai_should_not_enter = normalize_pydantic_list_field(&block2.where_ai_should_not_enter);
     info!("F3 (Sintetizador SGR): Bloco 2 concluído");
 
+    set_phase3_block(&state, 3, "Bloco 3 (ENUMs)").await;
+    let _telemetry_block3 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
     let block3_env = run_block_envelope::<Block3Fields>(client, cfg, 3, &block0, &row).await?;
+    drop(_telemetry_block3);
     let block3_justifications = block3_env.justifications;
     let block3 = block3_env.fields.sanitize();
     row.classificacao_terminal = block3.classificacao_terminal;
@@ -1819,7 +1825,10 @@ pub async fn run_phase3_sgr(
     row.regulatory_risk = block3.regulatory_risk;
     info!("F3 (Sintetizador SGR): Bloco 3 concluído");
 
+    set_phase3_block(&state, 4, "Bloco 4 (Scores)").await;
+    let _telemetry_block4 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
     let block4: Block4Fields = run_block4_validated(client, cfg, &block0, &row).await?;
+    drop(_telemetry_block4);
 
     row.score_philosophical_fit = block4.score_philosophical_fit;
     row.score_bare_metal_fit = block4.score_bare_metal_fit;

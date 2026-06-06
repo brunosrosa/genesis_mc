@@ -81,6 +81,29 @@ impl FinOpsRouter {
 
         Ok(RoutingDecision { token_count, zone, destination })
     }
+
+    pub fn classify_text(text: &str) -> Result<RoutingDecision, FinOpsRouterError> {
+        let token_count = tiktoken_count(text)?;
+
+        let (zone, destination) = if token_count < GREEN_THRESHOLD {
+            (RoutingZone::Green, RoutingDestination::PassThrough)
+        } else if token_count <= YELLOW_MAX {
+            if is_factory_cloud_only() {
+                (RoutingZone::Yellow, RoutingDestination::CloudCascade)
+            } else {
+                (
+                    RoutingZone::Yellow,
+                    RoutingDestination::LocalModel {
+                        path: qwen_model_path(),
+                    },
+                )
+            }
+        } else {
+            (RoutingZone::Red, RoutingDestination::CloudCascade)
+        };
+
+        Ok(RoutingDecision { token_count, zone, destination })
+    }
 }
 
 fn tiktoken_count(text: &str) -> Result<usize, FinOpsRouterError> {

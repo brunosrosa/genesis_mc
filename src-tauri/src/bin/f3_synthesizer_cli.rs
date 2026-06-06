@@ -1,4 +1,5 @@
 use std::io;
+use std::io::IsTerminal;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -7,6 +8,7 @@ use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::cognition::synthesizer::{
     run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, OFFICIAL_FORMATTER_MODEL,
 };
+use genesis_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination};
 use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
 use genesis_mc_lib::persist::ssot_injector::SsotInjector;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, find_col_idx};
@@ -781,11 +783,12 @@ fn response_format_for_block(block: u8) -> Value {
         json!({ "type": "string", "maxLength": max_len })
     }
 
-    fn bullets_min_3_schema(max_len: u32) -> Value {
+    fn string_array_schema(min_items: u32, max_items: u32, item_max_len: u32) -> Value {
         json!({
-            "type": "string",
-            "maxLength": max_len,
-            "pattern": r"^\s*-\s+[^\n].*(\n\s*-\s+[^\n].*){2,}\s*$"
+            "type": "array",
+            "minItems": min_items,
+            "maxItems": max_items,
+            "items": { "type": "string", "maxLength": item_max_len }
         })
     }
 
@@ -810,7 +813,7 @@ fn response_format_for_block(block: u8) -> Value {
             "justifications".to_string(),
             json!({
                 "type": "object",
-                "additionalProperties": { "type": "string", "maxLength": 3000 }
+                "additionalProperties": { "type": "string", "maxLength": 5000 }
             }),
         );
         strict_object(props, vec!["fields", "justifications"])
@@ -819,19 +822,17 @@ fn response_format_for_block(block: u8) -> Value {
     let fields_schema = match block {
         1 => {
             let mut props = serde_json::Map::new();
-            props.insert("proposta_original_resumo".to_string(), string_schema(3000));
-            props.insert("indicacao_otimista_canibalizacao".to_string(), string_schema(3000));
-            props.insert("declared_description_ptbr".to_string(), string_schema(3000));
-            props.insert("visao_do_enxame".to_string(), string_schema(3000));
-            props.insert("justificativa_decisao".to_string(), string_schema(3000));
-            props.insert("executive_verdict".to_string(), string_schema(3000));
-            props.insert("risco_principal".to_string(), string_schema(3000));
-            props.insert("risco_linha_vermelha".to_string(), string_schema(3000));
-            props.insert("observacoes".to_string(), string_schema(3000));
+            props.insert("proposta_original_resumo".to_string(), string_schema(5000));
+            props.insert("declared_description_ptbr".to_string(), string_schema(5000));
+            props.insert("visao_do_enxame".to_string(), string_schema(5000));
+            props.insert("justificativa_decisao".to_string(), string_schema(5000));
+            props.insert("executive_verdict".to_string(), string_schema(5000));
+            props.insert("risco_principal".to_string(), string_schema(5000));
+            props.insert("risco_linha_vermelha".to_string(), string_schema(5000));
+            props.insert("observacoes".to_string(), string_schema(5000));
             strict_object(
                 props,
                 vec![
-                    "indicacao_otimista_canibalizacao",
                     "declared_description_ptbr",
                     "visao_do_enxame",
                     "justificativa_decisao",
@@ -844,22 +845,33 @@ fn response_format_for_block(block: u8) -> Value {
         }
         2 => {
             let mut props = serde_json::Map::new();
-            props.insert("ouro_a_extrair".to_string(), string_schema(3000));
-            props.insert("deep_pattern".to_string(), string_schema(3000));
-            props.insert("transplantable_core".to_string(), string_schema(3000));
-            props.insert("logic_math_heuristic".to_string(), string_schema(3000));
-            props.insert("real_structural_problem".to_string(), string_schema(3000));
-            props.insert("categoria_nuance_tecnica".to_string(), string_schema(1200));
-            props.insert("integracao_papel_exato".to_string(), string_schema(1200));
-            props.insert("must_components_prod_ux".to_string(), bullets_min_3_schema(3000));
-            props.insert("must_components_arq".to_string(), bullets_min_3_schema(3000));
-            props.insert("must_components_ops".to_string(), bullets_min_3_schema(3000));
-            props.insert("detected_toxic_deps".to_string(), string_schema(3000));
-            props.insert("do_not_absorb".to_string(), string_schema(3000));
-            props.insert("where_ai_should_not_enter".to_string(), string_schema(3000));
+            props.insert("indicacao_otimista_canibalizacao".to_string(), string_schema(5000));
+            props.insert("ouro_a_extrair".to_string(), string_schema(5000));
+            props.insert("deep_pattern".to_string(), string_schema(5000));
+            props.insert("transplantable_core".to_string(), string_schema(5000));
+            props.insert("logic_math_heuristic".to_string(), string_schema(5000));
+            props.insert("real_structural_problem".to_string(), string_schema(5000));
+            props.insert("categoria_nuance_tecnica".to_string(), string_schema(2000));
+            props.insert("integracao_papel_exato".to_string(), string_schema(2000));
+            props.insert(
+                "must_components_prod_ux".to_string(),
+                string_array_schema(3, 8, 800),
+            );
+            props.insert(
+                "must_components_arq".to_string(),
+                string_array_schema(3, 8, 800),
+            );
+            props.insert(
+                "must_components_ops".to_string(),
+                string_array_schema(3, 8, 800),
+            );
+            props.insert("detected_toxic_deps".to_string(), string_schema(5000));
+            props.insert("do_not_absorb".to_string(), string_schema(5000));
+            props.insert("where_ai_should_not_enter".to_string(), string_schema(5000));
             strict_object(
                 props,
                 vec![
+                    "indicacao_otimista_canibalizacao",
                     "ouro_a_extrair",
                     "deep_pattern",
                     "transplantable_core",
@@ -1084,7 +1096,6 @@ fn example_output_for_block(block: u8) -> Value {
     let fields = match block {
         1 => json!({
             "proposta_original_resumo": "",
-            "indicacao_otimista_canibalizacao": "",
             "declared_description_ptbr": "",
             "visao_do_enxame": "",
             "justificativa_decisao": "",
@@ -1094,6 +1105,7 @@ fn example_output_for_block(block: u8) -> Value {
             "observacoes": ""
         }),
         2 => json!({
+            "indicacao_otimista_canibalizacao": "",
             "ouro_a_extrair": "",
             "deep_pattern": "",
             "transplantable_core": "",
@@ -1101,9 +1113,9 @@ fn example_output_for_block(block: u8) -> Value {
             "real_structural_problem": "",
             "categoria_nuance_tecnica": "",
             "integracao_papel_exato": "",
-            "must_components_prod_ux": "- item\n- item\n- item",
-            "must_components_arq": "- item\n- item\n- item",
-            "must_components_ops": "- item\n- item\n- item",
+            "must_components_prod_ux": ["item 1", "item 2", "item 3"],
+            "must_components_arq": ["item 1", "item 2", "item 3"],
+            "must_components_ops": ["item 1", "item 2", "item 3"],
             "detected_toxic_deps": "",
             "do_not_absorb": "",
             "where_ai_should_not_enter": ""
@@ -1230,7 +1242,7 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                 json!([
                     {
                         "role": "system",
-                        "content": "Responda SOMENTE com JSON válido (sem markdown, sem texto extra)."
+                        "content": "Responda SOMENTE com JSON válido (sem markdown, sem texto extra). Campos descritivos devem estar em Português (PT-BR). Campos ENUM devem manter tokens canônicos do catálogo."
                     },
                     {
                         "role": "user",
@@ -1240,7 +1252,6 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
             );
             body_obj.insert("temperature".to_string(), json!(0.0));
             body_obj.insert("max_tokens".to_string(), json!(max_tokens));
-            body_obj.insert("reasoning_effort".to_string(), json!("high"));
             if block == 3 {
                 body_obj.insert("reasoning".to_string(), json!({ "exclude": true }));
                 body_obj.insert("include_reasoning".to_string(), json!(false));
@@ -1253,6 +1264,15 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
 
             let max_attempts: u32 = 3;
             for attempt in 1..=max_attempts {
+                let decision = FinOpsRouter::classify_text(&user_prompt).map_err(|e| e.to_string())?;
+                match decision.destination {
+                    RoutingDestination::PassThrough | RoutingDestination::CloudCascade => {}
+                    RoutingDestination::LocalModel { .. } => {
+                        return Err(
+                            "FinOpsRouter exigiu LocalModel para SGR, mas este caminho é cloud-only. Ajuste SODA_FACTORY_CLOUD_ONLY=true ou implemente SGR local.".to_string()
+                        );
+                    }
+                }
                 let response = self
                     .client
                     .post(&self.base_url)
@@ -2385,7 +2405,8 @@ async fn main() -> io::Result<()> {
         "error" => tracing::Level::ERROR,
         _ => tracing::Level::INFO,
     };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    let ansi = !cfg!(windows) && std::io::stderr().is_terminal();
+    tracing_subscriber::fmt().with_max_level(level).with_ansi(ansi).init();
 
     let started_total = Instant::now();
     let root_dir = workspace_root()?;
@@ -2908,7 +2929,6 @@ async fn main() -> io::Result<()> {
     };
 
     let started_phase3_4 = Instant::now();
-    let _ghost_f3 = spawn_ghost_telemetry(repo_id.clone(), "F3 (SGR) em processamento".to_string());
     let phase3_out = match tokio::time::timeout(SGR_TOTAL_TIMEOUT, run_phase3_sgr(&formatter, &cfg, block0)).await {
         Ok(Ok(out)) => out,
         Ok(Err(Phase3Error::RetryExhausted { block, attempts, message })) => {
@@ -2926,7 +2946,6 @@ async fn main() -> io::Result<()> {
             )));
         }
     };
-    drop(_ghost_f3);
 
     if dry_run {
         let payload = serde_json::json!({

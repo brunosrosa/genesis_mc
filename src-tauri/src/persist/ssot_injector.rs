@@ -1480,6 +1480,44 @@ mod tests {
     }
 
     #[test]
+    fn prepare_batch_payload_respects_header_reordering_by_index() {
+        let row = MasterSolutionsRow {
+            status_atualizacao: "CONCLUIDO".to_string(),
+            status_fase: "F4".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            score_final: 9.4,
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
+        let mut header_row: Vec<String> = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let score_idx = header_row
+            .iter()
+            .position(|s| s == "score_final")
+            .expect("score_final missing in canonical header");
+        let score_col = header_row.remove(score_idx);
+        header_row.insert(10, score_col);
+
+        let batch = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap();
+        let obj = batch.as_object().unwrap();
+        assert_eq!(obj.get("K2:K2").unwrap(), &json!(vec![vec![json!("9.4")]]));
+    }
+
+    #[test]
     fn test_payload_validation_rejects_missing_required_fields() {
         let row = MasterSolutionsRow::default();
         let result = SsotInjector::validate_payload("owner/repo", &row);

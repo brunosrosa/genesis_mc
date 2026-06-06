@@ -1,4 +1,3 @@
-use crate::cognition::sgr_synthesizer::SwarmDebate;
 use crate::finops::phase1_5::package_assembler::Phase2Payloads;
 use reqwest::Client;
 use rusqlite::types::Value;
@@ -22,6 +21,14 @@ const LENS_TIMEOUT: Duration = Duration::from_secs(180);
 const LENS_TIMEOUT: Duration = Duration::from_millis(220);
 
 const LENS_MAX_TOKENS: usize = 1024;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SwarmDebate {
+    pub repo_id: String,
+    pub lente_a: String,
+    pub lente_b: String,
+    pub lente_c: String,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LensKind {
