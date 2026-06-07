@@ -223,7 +223,11 @@ fn spawn_supervised(program: ProgramSpec, args: Vec<String>, project_root: PathB
             let spawned = match cmd.spawn() {
                 Ok(child) => child,
                 Err(e) => {
+                    consecutive_fast_failures = consecutive_fast_failures.saturating_add(1);
                     eprintln!("Falha ao spawnar {}: {}", program.label, e);
+                    if consecutive_fast_failures >= 3 {
+                        panic!("Falha crítica persistente no processo {}", program.label);
+                    }
                     std::thread::sleep(Duration::from_millis(500));
                     continue;
                 }

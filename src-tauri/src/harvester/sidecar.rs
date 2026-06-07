@@ -673,8 +673,7 @@ fn sanitize_repo_relative_path(repo_path: &Path, value: &str) -> Option<String> 
         || lower.starts_with(".soda_scratchpad/")
         || lower.starts_with("sandbox/")
         || lower.starts_with("diagnostics/")
-        || lower.contains(".souls_workspaces")
-        || lower.contains("souls_workspaces");
+        || lower.contains(".souls_workspaces");
     if host_drive || internal {
         return None;
     }
