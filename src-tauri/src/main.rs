@@ -4,8 +4,12 @@
 use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use tauri::Manager;
 
 #[tauri::command]
 fn genesis_ping(payload: &str) -> String {
@@ -17,7 +21,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![genesis_ping])
-        .setup(|_app| {
+        .setup(|app| {
             let fallback_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("target")
                 .join("debug");
@@ -30,11 +34,13 @@ fn main() {
                 }
             };
 
-            spawn_supervised(
+            let project_root = resolve_project_root();
+            let agentgateway = spawn_supervised(
                 ProgramSpec::global("agentgateway.exe"),
                 vec!["-f".to_string(), "gateway-config.yaml".to_string()],
+                project_root.clone(),
             );
-            spawn_supervised(
+            let tcp_proxy = spawn_supervised(
                 ProgramSpec::path(bin_dir.join("agentgateway_tcp_proxy.exe")),
                 vec![
                     "--listen".to_string(),
@@ -42,12 +48,72 @@ fn main() {
                     "--upstream".to_string(),
                     "127.0.0.1:3001".to_string(),
                 ],
+                project_root,
             );
+
+            app.manage(Supervisor {
+                processes: vec![agentgateway, tcp_proxy],
+            });
+
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
+
+            let toggle_overlay = tauri::menu::MenuItem::with_id(
+                app,
+                "toggle_overlay",
+                "Toggle Overlay",
+                true,
+                None::<&str>,
+            )?;
+            let quit = tauri::menu::MenuItem::with_id(app, "quit", "Sair / Quit", true, None::<&str>)?;
+            let menu = tauri::menu::Menu::with_items(app, &[&toggle_overlay, &quit])?;
+
+            let icon = app.default_window_icon().cloned().unwrap();
+            tauri::tray::TrayIconBuilder::new()
+                .icon(icon)
+                .menu(&menu)
+                .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id().as_ref() {
+                    "toggle_overlay" => toggle_overlay_window(app),
+                    "quit" => {
+                        app.state::<Supervisor>().shutdown();
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event: tauri::tray::TrayIconEvent| {
+                    if let tauri::tray::TrayIconEvent::DoubleClick {
+                        button: tauri::tray::MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        toggle_overlay_window(&tray.app_handle());
+                    }
+                })
+                .build(app)?;
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
         .run(tauri::generate_context!())
         .expect("erro ao rodar a aplicação tauri");
+}
+
+fn toggle_overlay_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_visible {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
 }
 
 fn resolve_running_bin_dir() -> Result<PathBuf, String> {
@@ -80,7 +146,38 @@ impl ProgramSpec {
     }
 }
 
-fn spawn_supervised(program: ProgramSpec, args: Vec<String>) {
+#[derive(Clone)]
+struct Supervisor {
+    processes: Vec<SupervisedProcess>,
+}
+
+impl Supervisor {
+    fn shutdown(&self) {
+        for process in &self.processes {
+            process.shutdown();
+        }
+    }
+}
+
+#[derive(Clone)]
+struct SupervisedProcess {
+    stop: Arc<AtomicBool>,
+    child: Arc<Mutex<Option<Child>>>,
+}
+
+impl SupervisedProcess {
+    fn shutdown(&self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Ok(mut guard) = self.child.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
+fn resolve_project_root() -> PathBuf {
     let cwd = std::env::current_dir().expect("Falha ao obter CWD");
     let mut project_root = cwd.clone();
     if project_root
@@ -101,46 +198,102 @@ fn spawn_supervised(program: ProgramSpec, args: Vec<String>) {
         }
     }
 
+    project_root
+}
+
+fn spawn_supervised(program: ProgramSpec, args: Vec<String>, project_root: PathBuf) -> SupervisedProcess {
+    let stop = Arc::new(AtomicBool::new(false));
+    let child = Arc::new(Mutex::new(None));
+
+    let stop_thread = stop.clone();
+    let child_thread = child.clone();
     std::thread::spawn(move || {
         let mut consecutive_fast_failures: u32 = 0;
         loop {
-        let started = Instant::now();
-        let mut cmd = Command::new(&program.command);
-        cmd.args(&args)
-            .env("PATH", build_dynamic_path())
-            .current_dir(&project_root);
-
-        let status = match cmd.spawn() {
-            Ok(mut child) => child.wait().ok(),
-            Err(e) => {
-                eprintln!("Falha ao spawnar {}: {}", program.label, e);
-                None
+            if stop_thread.load(Ordering::SeqCst) {
+                break;
             }
-        };
 
-        let lived = started.elapsed();
-        if lived < Duration::from_secs(2) {
-            consecutive_fast_failures = consecutive_fast_failures.saturating_add(1);
-            eprintln!(
-                "Falha rápida no processo {} ({}). lived_ms={} status={:?}",
-                program.label,
-                consecutive_fast_failures,
-                lived.as_millis(),
-                status
-            );
-            if consecutive_fast_failures >= 3 {
-                panic!(
-                    "Falha crítica persistente no processo {}",
-                    program.label
-                );
+            let started = Instant::now();
+            let mut cmd = Command::new(&program.command);
+            cmd.args(&args)
+                .env("PATH", build_dynamic_path())
+                .current_dir(&project_root);
+
+            let spawned = match cmd.spawn() {
+                Ok(child) => child,
+                Err(e) => {
+                    eprintln!("Falha ao spawnar {}: {}", program.label, e);
+                    std::thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
+            };
+
+            if let Ok(mut guard) = child_thread.lock() {
+                *guard = Some(spawned);
             }
-        } else if lived > Duration::from_secs(5) {
-            consecutive_fast_failures = 0;
-        }
 
-        std::thread::sleep(Duration::from_millis(500));
+            loop {
+                if stop_thread.load(Ordering::SeqCst) {
+                    if let Ok(mut guard) = child_thread.lock() {
+                        if let Some(mut child) = guard.take() {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                        }
+                    }
+                    return;
+                }
+
+                let status = {
+                    let mut guard = match child_thread.lock() {
+                        Ok(g) => g,
+                        Err(_) => {
+                            std::thread::sleep(Duration::from_millis(200));
+                            continue;
+                        }
+                    };
+
+                    match guard.as_mut() {
+                        Some(child) => match child.try_wait() {
+                            Ok(Some(status)) => {
+                                let _ = guard.take();
+                                Some(status)
+                            }
+                            Ok(None) => None,
+                            Err(_) => None,
+                        },
+                        None => None,
+                    }
+                };
+
+                if let Some(status) = status {
+                    let lived = started.elapsed();
+                    if lived < Duration::from_secs(2) {
+                        consecutive_fast_failures = consecutive_fast_failures.saturating_add(1);
+                        eprintln!(
+                            "Falha rápida no processo {} ({}). lived_ms={} status={:?}",
+                            program.label,
+                            consecutive_fast_failures,
+                            lived.as_millis(),
+                            status
+                        );
+                        if consecutive_fast_failures >= 3 {
+                            panic!("Falha crítica persistente no processo {}", program.label);
+                        }
+                    } else if lived > Duration::from_secs(5) {
+                        consecutive_fast_failures = 0;
+                    }
+                    break;
+                }
+
+                std::thread::sleep(Duration::from_millis(200));
+            }
+
+            std::thread::sleep(Duration::from_millis(500));
         }
     });
+
+    SupervisedProcess { stop, child }
 }
 
 /// Descobre onde os gerenciadores de pacote instalam os binários no Windows
