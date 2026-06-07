@@ -1,5 +1,5 @@
 use crate::finops::phase1_5::package_assembler::Phase2Payloads;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ const OPENROUTER_HTTP_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(test)]
 const OPENROUTER_HTTP_TIMEOUT: Duration = Duration::from_secs(3);
 
-const LENS_MAX_TOKENS: usize = 2048;
+const LENS_MAX_TOKENS: usize = 4096;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwarmDebate {
@@ -435,12 +435,27 @@ impl LensInvoker for HttpLensInvoker {
             if payload_looks_like_knowledge_repo(payload) {
                 user_prefix.push_str("ALERTA: Este é um repositório de Conhecimento/Metodologia (stack_base desconhecida ou conteúdo sem stack). Ignore exigências de código fonte/AVX2/Bare-Metal. Avalie prompts, padrões teóricos, metodologia e artefatos textuais a serem canibalizados.\n");
             }
+            let mut system_prompt = lens.system_prompt().to_string();
+            let mut reasoning_effort: Option<String> = None;
+            system_prompt.push_str("\nVocê deve retornar EXCLUSIVAMENTE um JSON válido. Não utilize blocos de código Markdown (```json).");
+            if model_used.contains("deepseek-v4-pro") {
+                reasoning_effort = Some("xhigh".to_string());
+            }
+
+            let response_format = if model_used.contains("google/") {
+                None
+            } else {
+                Some(ChatResponseFormat {
+                    kind: "json_object".to_string(),
+                })
+            };
+
             let body = ChatCompletionsRequest {
                 model: model_used.to_string(),
                 messages: vec![
                     ChatMessage {
                         role: "system".to_string(),
-                        content: lens.system_prompt().to_string(),
+                        content: system_prompt,
                     },
                     ChatMessage {
                         role: "user".to_string(),
@@ -449,9 +464,8 @@ impl LensInvoker for HttpLensInvoker {
                 ],
                 max_tokens: LENS_MAX_TOKENS,
                 temperature: 0.0,
-                response_format: ChatResponseFormat {
-                    kind: "json_object".to_string(),
-                },
+                response_format,
+                reasoning_effort,
             };
 
             #[cfg(not(test))]
@@ -459,6 +473,17 @@ impl LensInvoker for HttpLensInvoker {
                 let jitter_ms = rand::random::<u64>() % 2500;
                 tokio::time::sleep(tokio::time::Duration::from_millis(jitter_ms)).await;
             }
+
+            tracing::info!(
+                lens_id = lens.lens_id(),
+                repo_id = repo_id,
+                model_used = model_used,
+                max_tokens = LENS_MAX_TOKENS,
+                response_format_enabled = !model_used.contains("google/"),
+                reasoning_effort_enabled = model_used.contains("deepseek-v4-pro"),
+                base_url = %config.base_url,
+                "F2: enviando request para OpenRouter"
+            );
 
             let response = self
                 .client
@@ -482,12 +507,23 @@ impl LensInvoker for HttpLensInvoker {
                 })?;
 
             let status = response.status();
-            if !status.is_success() {
-                let body = response.text().await.unwrap_or_default();
-                return Err(format!("HTTP {}: {}", status.as_u16(), body));
+            let raw_response = response.text().await.map_err(|e| e.to_string())?;
+            if status != StatusCode::OK {
+                tracing::error!(
+                    lens_id = lens.lens_id(),
+                    repo_id = repo_id,
+                    model_used = model_used,
+                    status = status.as_u16(),
+                    response_body = %truncate_for_log(&raw_response, 6000),
+                    "OpenRouter retornou status != 200; abortando parse"
+                );
+                return Err(format!(
+                    "HTTP {}: {}",
+                    status.as_u16(),
+                    truncate_for_log(&raw_response, 6000)
+                ));
             }
 
-            let raw_response = response.text().await.map_err(|e| e.to_string())?;
             let parsed: serde_json::Value = serde_json::from_str(&raw_response).map_err(|e| {
                 format!(
                     "Resposta HTTP invalida da lente {}: {}",
@@ -528,7 +564,10 @@ struct ChatCompletionsRequest {
     messages: Vec<ChatMessage>,
     max_tokens: usize,
     temperature: f32,
-    response_format: ChatResponseFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<ChatResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
