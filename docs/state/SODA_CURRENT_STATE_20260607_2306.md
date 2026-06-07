@@ -1,6 +1,14 @@
-# SODA Current State — 20260527_2305
+# SODA Current State — 20260607_2306
 
 Este documento é uma foto técnica do estado operacional do Pipeline ETL Cognitivo SODA (V3) no workspace `genesis_mc` neste timestamp.
+
+Atualizado: 2026-06-07
+
+## 0) Leis da Física (Infra Bare-Metal)
+- Fronteira de I/O opera como System Tray Daemon (Tauri v2), invisível no boot. A UI Svelte 5 atua como lente sob demanda.
+- Repo/estado durável podem residir em Dev Drive (ReFS, ex: Z:), mas ProjFS não anexa minifiltro em ReFS.
+- Workspaces efêmeros do ProjFS migram para %TEMP% (NTFS) via `std::env::temp_dir()` sob `.souls_workspaces` (Zero-Config com `create_dir_all`).
+- Guilhotina mantida: teardown assíncrono não-bloqueante via deleção externa (`spawn_detached_delete_process`).
 
 ## 1) Fronteira de I/O (Cérebro vs Janela de Vidro)
 
@@ -20,6 +28,10 @@ Este documento é uma foto técnica do estado operacional do Pipeline ETL Cognit
 - Escrita: sempre por `batch_update_cells` para minimizar round-trips e manter escrita atômica por ranges.
 - Proteção operacional: `mcp_stdio_guard` impõe guilhotina (timeout) por target. Para `mcp-google-sheets`, o timeout foi elevado para permitir batches maiores.
 
+### Runtime / Boot (Tauri v2 System Tray Daemon)
+- O daemon sobe em background e mantém o Event Loop Tokio ativo (AgentGateway + proxy).
+- A janela principal inicia oculta e só é exibida sob demanda (menu/duplo-clique no ícone de bandeja).
+
 ## 2) Orquestrador de Lotes (HITL)
 
 ### Script
@@ -35,6 +47,8 @@ Este documento é uma foto técnica do estado operacional do Pipeline ETL Cognit
 - Na prática, o operador deve garantir que o terminal esteja num CWD onde:
   - `.soda_data/` seja resolvido corretamente (raiz do projeto), e
   - `cargo run` encontre o `Cargo.toml` (pasta `src-tauri/`).
+
+Observação (pós-Máquina Silenciosa): quando o pipeline roda como daemon (tray), o runtime do Tauri fixa o CWD para a raiz do projeto e não requer terminal aberto.
 
 ## 3) Guardião (Fase -1)
 

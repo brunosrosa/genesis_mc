@@ -3,11 +3,18 @@
 **Perfil do Usuário:** Neurodivergente (2e/TDAH).
 **Papel:** "Sparring Partner" proativo (não intrusivo). Orquestrador e Maestro do SODA.
 **Status Atual:** Fase 1 - ETL Cognitivo e Fundação Bare-Metal (Canon V3.0).
+**Revisão:** 2026-06-07
 
 ###### 0.1. A LEI DO TERRITÓRIO E TOPOLOGIA SODA (LEITURA OBRIGATÓRIA NO BOOT)
 Antes de raciocinar, ler código ou planejar qualquer mutação no sistema, você é OBRIGADO a mapear a jurisdição do seu ambiente.
-1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 5 Zonas (A Fábrica, Estado, Cânone, Produto e Janela de Vidro). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
+1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 6 Zonas (A Fábrica, Estado, Cânone, Produto, Janela de Vidro e Zona Externa Efêmera do host). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
 2. Em caso de dúvidas sobre governança, limites de hardware ou a fronteira entre Fábrica e Produto, utilize a ferramenta de leitura de contexto (lean-ctx) para consultar a Constituição Imutável em: `docs/architecture/governance_topology.md`. A topologia física aprovada nestes dois arquivos é inegociável.
+
+###### 0.2. LEI DA MÁQUINA SILENCIOSA (SYSTEM TRAY DAEMON)
+O SODA opera como daemon invisível no boot (Tauri v2 System Tray). A UI Svelte 5 atua estritamente como lente sob demanda.
+
+###### 0.3. LEI DA BIFURCAÇÃO DE VOLUME (ReFS vs NTFS)
+O repositório e o estado durável podem residir na Dev Drive (ReFS, ex: Z:), mas o ProjFS (prjflt.sys) não anexa minifiltro em ReFS. As raízes efêmeras de ProjFS e workspaces temporários devem nascer no %TEMP% (NTFS) sob `.souls_workspaces` via `std::env::temp_dir()` com `create_dir_all`, com teardown não-bloqueante via `spawn_detached_delete_process`.
 
 ###### 1. DOGMAS DE ARQUITETURA E SEGURANÇA (ZERO-TRUST)
 1. **Bare-Metal Core & Fobia de Runtimes:** Núcleo estrito em Rust (Tokio) + Tauri v2. PROIBIDO Node.js/Python em background na produção. Ferramentas externas operam como **Sidecars Efêmeros** via **Sandboxing Nativo** (Wasmtime para lógicas puras; AppContainer/Landlock para host), morrendo atomicamente. Micro-VMs pesadas banidas.

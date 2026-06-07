@@ -20,7 +20,12 @@ const LENS_TIMEOUT: Duration = Duration::from_secs(180);
 #[cfg(test)]
 const LENS_TIMEOUT: Duration = Duration::from_millis(220);
 
-const LENS_MAX_TOKENS: usize = 1024;
+#[cfg(not(test))]
+const OPENROUTER_HTTP_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(test)]
+const OPENROUTER_HTTP_TIMEOUT: Duration = Duration::from_secs(3);
+
+const LENS_MAX_TOKENS: usize = 2048;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwarmDebate {
@@ -265,7 +270,7 @@ where
                             stage = stage,
                             attempt = attempt,
                             error = %msg,
-                            "Falha no passo da cascata FinOps"
+                            "Timeout atingido na execução da lente"
                         );
                     }
                 };
@@ -323,7 +328,10 @@ impl HttpLensInvoker {
             .unwrap_or_else(|_| DEFAULT_OPENROUTER_URL.to_string());
 
         Ok(Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(OPENROUTER_HTTP_TIMEOUT)
+                .build()
+                .map_err(|e| Phase2Error::ConfigError(format!("Falha ao construir reqwest client: {}", e)))?,
             claude: HttpLensConfig {
                 base_url: base_url.clone(),
                 api_key: api_key.clone(),
@@ -378,7 +386,10 @@ impl HttpLensInvoker {
     #[cfg(test)]
     fn with_configs(claude: HttpLensConfig, deepseek: HttpLensConfig, glm: HttpLensConfig) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(OPENROUTER_HTTP_TIMEOUT)
+                .build()
+                .expect("reqwest client"),
             claude,
             deepseek,
             glm,
@@ -443,6 +454,12 @@ impl LensInvoker for HttpLensInvoker {
                 },
             };
 
+            #[cfg(not(test))]
+            {
+                let jitter_ms = rand::random::<u64>() % 2500;
+                tokio::time::sleep(tokio::time::Duration::from_millis(jitter_ms)).await;
+            }
+
             let response = self
                 .client
                 .post(&config.base_url)
@@ -451,7 +468,18 @@ impl LensInvoker for HttpLensInvoker {
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        tracing::warn!(
+                            lens_id = lens.lens_id(),
+                            repo_id = repo_id,
+                            model_used = model_used,
+                            timeout_ms = OPENROUTER_HTTP_TIMEOUT.as_millis(),
+                            "Timeout HTTP ao chamar OpenRouter"
+                        );
+                    }
+                    e.to_string()
+                })?;
 
             let status = response.status();
             if !status.is_success() {

@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+Revisado: 2026-06-07
+
 ### REGRA DE GITOPS INEGOCIÁVEL (AS 4 PISTAS DE VOO)
 Você está TERMINANTEMENTE PROIBIDO de atuar na branch `main` ou criar ramificações dinâmicas. O SODA opera com 4 pistas de voo fixas. O seu domínio de orquestração se restringe unicamente às branches `ANTIGRAVITY-IDE` (interativo) e `ANTIGRAVITY-Solo` (background).
 1. Faça o checkout para a sua branch respectiva antes de escrever no disco.
@@ -13,6 +15,7 @@ Você está TERMINANTEMENTE PROIBIDO de atuar na branch `main` ou criar ramifica
 - A pasta `.soda_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
 - A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
 - Lixo não sobrevivente deve ser apagado fisicamente após o uso.
+- Exceção governada (Zona Externa Efêmera): workspaces efêmeros do SO para ProjFS/extração rodam no %TEMP% (NTFS) sob `.souls_workspaces` e DEVEM ser aniquilados fora do repositório host via `spawn_detached_delete_process` (não-bloqueante).
 
 ###### 1. A REGRA DE OURO E A TOPOLOGIA DE WORKSPACES
 Respeite as fronteiras absolutas de dados. O armazenamento persistente NUNCA se mistura com a execução:

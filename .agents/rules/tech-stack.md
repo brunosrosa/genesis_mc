@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+Revisado: 2026-06-07
+
 ###### 1. A REGRA DE OURO DA STACK: FÁBRICA VS. PRODUTO (DUALIDADE SISTÊMICA)
 Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do código que será entregue ao usuário.
 *   **Na Fábrica (Seu Ambiente de Dev):** Você TEM PERMISSÃO para usar contêineres Docker, Python, Bash e APIs de nuvem nos seus *Shadow Workspaces* para debugar, prototipar algoritmos e executar o ETL Cognitivo massivo.
@@ -9,7 +11,7 @@ Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do có
 
 ###### 2. STACK TECNOLÓGICO IMUTÁVEL E HARDWARE-OPS
 *   **Backend / Core:** Rust puro (assíncrono via `tokio`).
-*   **Frontend / UI:** Svelte 5 (Runes), TypeScript e Tailwind CSS v4 empacotados em Tauri v2.
+*   **Frontend / UI:** Svelte 5 (Runes), TypeScript e Tailwind CSS v4 empacotados em Tauri v2. Em runtime, o SODA opera como System Tray Daemon invisível no boot; a UI é lente sob demanda.
 *   **HardwareOps (A Lei da Separação Termodinâmica):**
     *   **dGPU (RTX 2060m - 6GB VRAM):** USO EXCLUSIVO para inferência generativa de "trabalho braçal" e retenção do *KV Cache*. Restrita a micro-SLMs quantizados em Q4_K_M (1.5B a 4B parâmetros, ex: Qwen 2.5 3B). ESTRITAMENTE PROIBIDOS modelos de 8B+ para aniquilar o letal *Spillover* do barramento PCIe.
     *   **CPU (Intel i9 + AVX2):** USO EXCLUSIVO para o Roteamento Semântico (Nível 0 do ParetoBandit), o *Garbage Collection Semântico* (Chyros Daemon), processamento de áudio em FP32 (Kokoro-82M) e Avaliação Epistêmica ultrarrápida via AVX2.
@@ -33,6 +35,7 @@ A infraestrutura repudia o *overengineering* de hipervisores pesados e máquinas
 *   **Lógicas Puras (IA e Scripts Leves):** Ferramentas autônomas geradas pelos agentes devem rodar isoladas e sem estado usando o **Wasmtime** (WASI 0.2/0.3).
 *   **Sidecars Efêmeros Pesados (Clone VMM):** Para rodar bibliotecas Python pesadas (como OCR/Docling), o sistema utilizará Micro-VMs com *Copy-on-Write* (CoW) a partir de um *Snapshot* inerte na RAM, garantindo boot em ~10ms. A GPU NUNCA é repassada fisicamente a estes sidecars; usa-se o padrão *Mediator Broker* via memória compartilhada (`iceoryx2`).
 *   **Ferramentas de Host e Binários:** Interações que exijam acesso físico aos recursos da máquina devem ser enjauladas através de Sandboxing Nativo do Kernel. Uso rigoroso do **AppContainer e LPAC (Low Privilege AppContainer)** no Windows (via crate `rappct`) e **Landlock** no Linux.
+*   **Bifurcação ReFS/NTFS (ProjFS):** O ProjFS (prjflt.sys) exige minifiltro e não funciona em Dev Drive (ReFS). Workspaces efêmeros devem usar %TEMP% (NTFS) em `.souls_workspaces` via `std::env::temp_dir()` e ser removidos via guilhotina não-bloqueante (`spawn_detached_delete_process`).
 *   **Process Pool Guard (A Guilhotina Atômica):** Qualquer *Sidecar* possui um limite de memória via `Cgroups v2`. O SODA usa o paradigma `Drop trait` do Rust para emitir um `SIGKILL` atômico assim que a tarefa finaliza ou aborta. Processos zumbis estão banidos.
 
 ###### 6. FINOPS, ROTEAMENTO HÍBRIDO E PARETOBANDIT

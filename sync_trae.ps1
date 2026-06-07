@@ -6,7 +6,12 @@ $rulesDir = Join-Path $agentsDir "rules"
 
 $traeDir = Join-Path $root ".trae"
 $traeRulesDir = Join-Path $traeDir "rules"
-$userRulesSrc = "C:\Users\rosas\.gemini\GEMINI.md"
+$userRulesSrc = Join-Path $rulesDir "GEMINI.md"
+$legacyUserRulesSrc = "C:\Users\rosas\.gemini\GEMINI.md"
+$userRulesSrcExists = Test-Path $userRulesSrc
+if (-not $userRulesSrcExists) {
+    $userRulesSrc = $legacyUserRulesSrc
+}
 $userRulesDst = Join-Path $traeRulesDir "user_rules.md"
 $projectRulesPath = Join-Path $traeRulesDir "project_rules.md"
 $dstSkillsDir = Join-Path $traeDir "skills"

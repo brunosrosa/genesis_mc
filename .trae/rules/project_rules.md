@@ -8,8 +8,18 @@ trigger: always_on
 
 ###### 0.1. A LEI DO TERRITÓRIO E TOPOLOGIA SODA (LEITURA OBRIGATÓRIA NO BOOT)
 Antes de raciocinar, ler código ou planejar qualquer mutação no sistema, você é OBRIGADO a mapear a jurisdição do seu ambiente.
-1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 5 Zonas (A Fábrica, Estado, Cânone, Produto e Janela de Vidro). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
+1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 6 Zonas (A Fábrica, Estado, Cânone, Produto, Janela de Vidro e Zona Externa Efêmera do host). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
 2. Em caso de dúvidas sobre governança, limites de hardware ou a fronteira entre Fábrica e Produto, utilize a ferramenta de leitura de contexto (lean-ctx) para consultar a Constituição Imutável em: `docs/architecture/governance_topology.md`. A topologia física aprovada nestes dois arquivos é inegociável.
+
+###### 0.2. LEI DA MÁQUINA SILENCIOSA (SYSTEM TRAY DAEMON) (ATUALIZADO 2026-06-07)
+O SODA opera como daemon invisível no boot (Tauri v2 System Tray). A UI Svelte 5 atua estritamente como lente sob demanda:
+*   A janela principal inicia oculta e é acionada via menu/duplo-clique no ícone de bandeja.
+*   O Event Loop do Tokio permanece ativo em background com o AgentGateway e seus sidecars supervisionados.
+
+###### 0.3. LEI DA BIFURCAÇÃO DE VOLUME (ReFS vs NTFS) (ATUALIZADO 2026-06-07)
+*   O repositório e o estado durável do SODA podem residir na Dev Drive (ReFS, ex: Z:).
+*   O ProjFS (prjflt.sys) não anexa minifiltro em ReFS; portanto, workspaces efêmeros de ProjFS devem nascer no %TEMP% (NTFS) via `std::env::temp_dir()` sob `.souls_workspaces`.
+*   A guilhotina de teardown permanece não-bloqueante fora do repositório host (deleção assíncrona via `spawn_detached_delete_process`).
 
 ###### 1. MOSAICO COMPOSICIONAL E PLANARIDADE ABSOLUTA
 O frontend é fracionado matematicamente via CSS Grid, repudiando janelas flutuantes caóticas.
