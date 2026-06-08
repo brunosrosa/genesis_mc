@@ -407,7 +407,12 @@ fn fetch_resume_f3_candidates(conn: &Connection) -> io::Result<Vec<String>> {
         .prepare(
             "SELECT project_name
              FROM repositorios
-             WHERE status_processamento IN ('FASE_2_OK', 'FASE_2_ENXAME_OK', 'FASE_3_SINTETIZADOR_OK', 'ERRO_FASE_4')
+             WHERE project_name IN (
+                 SELECT project_name
+                 FROM repo_heuristics
+                 WHERE status_atualizacao = 'APROVADO_PARA_ENXAME'
+             )
+               AND status_processamento IN ('F2_OK', 'FASE_2_ENXAME_OK', 'FASE_3_SINTETIZADOR_OK', 'ERRO_FASE_4')
              ORDER BY project_name ASC",
         )
         .map_err(|e| io::Error::other(format!("Falha ao preparar query de resume_f3: {}", e)))?;
