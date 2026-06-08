@@ -328,6 +328,7 @@ struct CliArgs {
     e2e_full: bool,
     skip_harvester: bool,
     batch: bool,
+    resume_f3: bool,
     row_override: Option<u32>,
     dry_run: bool,
     feedback_inject: bool,
@@ -341,6 +342,7 @@ fn parse_cli_args() -> CliArgs {
     let mut e2e_full = false;
     let mut skip_harvester = false;
     let mut batch = false;
+    let mut resume_f3 = false;
     let mut row_override: Option<u32> = None;
     let mut dry_run = false;
     let mut feedback_inject = false;
@@ -368,6 +370,10 @@ fn parse_cli_args() -> CliArgs {
             batch = true;
             continue;
         }
+        if arg == "--resume-f3" {
+            resume_f3 = true;
+            continue;
+        }
         if arg == "--dry-run" {
             dry_run = true;
             continue;
@@ -388,11 +394,37 @@ fn parse_cli_args() -> CliArgs {
         e2e_full,
         skip_harvester,
         batch,
+        resume_f3,
         row_override,
         dry_run,
         feedback_inject,
         phase4_only,
     }
+}
+
+fn fetch_resume_f3_candidates(conn: &Connection) -> io::Result<Vec<String>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT project_name
+             FROM repositorios
+             WHERE status_atualizacao = 'APROVADO_PARA_ENXAME'
+               AND status_fase IN ('FASE_2_ENXAME_OK', 'FASE_3_SINTETIZADOR_OK', 'ERRO_FASE_4')
+             ORDER BY project_name ASC",
+        )
+        .map_err(|e| io::Error::other(format!("Falha ao preparar query de resume_f3: {}", e)))?;
+
+    let mut out = Vec::new();
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| io::Error::other(format!("Falha ao executar query de resume_f3: {}", e)))?;
+    for r in rows {
+        let repo_id = r.map_err(|e| io::Error::other(format!("Falha ao ler repo_id: {}", e)))?;
+        let repo_id = repo_id.trim().to_string();
+        if !repo_id.is_empty() {
+            out.push(repo_id);
+        }
+    }
+    Ok(out)
 }
 
 fn feedback_bmad_report_path(root_dir: &Path) -> io::Result<PathBuf> {
@@ -2417,6 +2449,7 @@ async fn main() -> io::Result<()> {
         e2e_full,
         skip_harvester,
         batch,
+        resume_f3,
         row_override,
         dry_run,
         feedback_inject,
@@ -2424,28 +2457,76 @@ async fn main() -> io::Result<()> {
     } = parse_cli_args();
 
     if batch {
-        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
-            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-        let candidates = fetch_enxame_batch_candidates(&spreadsheet_id).await?;
-        info!(count = candidates.len(), "F3/F4: modo batch (APROVADO_PARA_ENXAME)");
-        let exe = std::env::current_exe().map_err(|e| io::Error::other(format!("Falha ao resolver current_exe: {e}")))?;
-        for item in candidates {
-            info!(repo_id = %item.repo_id, row_number = item.row_number_1based, "F3/F4(batch): iniciando");
-            let mut cmd = tokio::process::Command::new(&exe);
-            cmd.arg("--repo").arg(&item.repo_id);
-            cmd.arg("--row").arg(item.row_number_1based.to_string());
-            if e2e_full {
-                cmd.arg("--e2e-full");
+        if resume_f3 {
+            let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+            let conn = Connection::open(&db_path).map_err(|e| {
+                io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
+            })?;
+            let repo_ids = fetch_resume_f3_candidates(&conn)?;
+            info!(
+                count = repo_ids.len(),
+                "F3/F4: modo batch (resume_f3) via SQLite (APROVADO_PARA_ENXAME + F2_OK/F3_OK/ERRO_F4)"
+            );
+            let exe = std::env::current_exe()
+                .map_err(|e| io::Error::other(format!("Falha ao resolver current_exe: {e}")))?;
+            for repo_id in repo_ids {
+                info!(repo_id = %repo_id, "F3/F4(batch resume_f3): iniciando");
+                let mut cmd = tokio::process::Command::new(&exe);
+                cmd.arg("--repo").arg(&repo_id);
+                if e2e_full {
+                    cmd.arg("--e2e-full");
+                }
+                if skip_harvester {
+                    cmd.arg("--skip-harvester");
+                }
+                let status = cmd.status().await.map_err(|e| {
+                    io::Error::other(format!("Falha ao executar f3_synthesizer_cli (batch resume_f3): {e}"))
+                })?;
+                if !status.success() {
+                    warn!(
+                        repo_id = %repo_id,
+                        status = %status,
+                        "F3/F4(batch resume_f3): falha (seguindo fail-soft)"
+                    );
+                }
             }
-            if skip_harvester {
-                cmd.arg("--skip-harvester");
+            return Ok(());
+        } else {
+            let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+                .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+            let candidates = fetch_enxame_batch_candidates(&spreadsheet_id).await?;
+            info!(count = candidates.len(), "F3/F4: modo batch (APROVADO_PARA_ENXAME)");
+            let exe = std::env::current_exe()
+                .map_err(|e| io::Error::other(format!("Falha ao resolver current_exe: {e}")))?;
+            for item in candidates {
+                info!(
+                    repo_id = %item.repo_id,
+                    row_number = item.row_number_1based,
+                    "F3/F4(batch): iniciando"
+                );
+                let mut cmd = tokio::process::Command::new(&exe);
+                cmd.arg("--repo").arg(&item.repo_id);
+                cmd.arg("--row").arg(item.row_number_1based.to_string());
+                if e2e_full {
+                    cmd.arg("--e2e-full");
+                }
+                if skip_harvester {
+                    cmd.arg("--skip-harvester");
+                }
+                let status = cmd.status().await.map_err(|e| {
+                    io::Error::other(format!("Falha ao executar f3_synthesizer_cli (batch): {e}"))
+                })?;
+                if !status.success() {
+                    warn!(
+                        repo_id = %item.repo_id,
+                        row_number = item.row_number_1based,
+                        status = %status,
+                        "F3/F4(batch): falha (seguindo fail-soft)"
+                    );
+                }
             }
-            let status = cmd.status().await.map_err(|e| io::Error::other(format!("Falha ao executar f3_synthesizer_cli (batch): {e}")))?;
-            if !status.success() {
-                warn!(repo_id = %item.repo_id, row_number = item.row_number_1based, status = %status, "F3/F4(batch): falha (seguindo fail-soft)");
-            }
+            return Ok(());
         }
-        return Ok(());
     }
 
     if e2e_full {

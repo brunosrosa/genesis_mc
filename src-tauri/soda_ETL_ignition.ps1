@@ -158,7 +158,20 @@ switch ($choice) {
     '5' {
         $bin = "f3_synthesizer_cli"
         $effectiveRepo = $RepoId
-        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
+        if ($effectiveRepo -and $effectiveRepo.Trim().ToUpperInvariant() -eq "BATCH") {
+            $binArgs = @("--batch", "--resume-f3")
+            $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO) [BATCH RESUME_F3]"
+            break
+        }
+        if (-not $effectiveRepo) {
+            $mode = Read-Host "RepoId (owner/repo) ou BATCH (Enter=BATCH)"
+            if ([string]::IsNullOrWhiteSpace($mode) -or $mode.Trim().ToUpperInvariant() -eq "BATCH") {
+                $binArgs = @("--batch", "--resume-f3")
+                $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO) [BATCH RESUME_F3]"
+                break
+            }
+            $effectiveRepo = $mode
+        }
         $binArgs = @("--repo", $effectiveRepo)
         $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO)"
     }

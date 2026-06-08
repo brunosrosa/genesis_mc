@@ -11,7 +11,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 use url::Url;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum SsotError {
@@ -36,6 +36,16 @@ const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 const MCP_TIMEOUT: Duration = Duration::from_secs(180);
 #[cfg(test)]
 const MCP_TIMEOUT: Duration = Duration::from_millis(250);
+
+#[cfg(not(test))]
+const MCP_CHUNK_DELAY: Duration = Duration::from_secs(1);
+#[cfg(test)]
+const MCP_CHUNK_DELAY: Duration = Duration::from_millis(1);
+
+#[cfg(not(test))]
+const MCP_RELOAD_DELAY: Duration = Duration::from_secs(4);
+#[cfg(test)]
+const MCP_RELOAD_DELAY: Duration = Duration::from_millis(10);
 
 pub type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -97,16 +107,72 @@ impl SheetsClient for McpGoogleSheetsClient {
         ranges: Value,
     ) -> SheetsFuture<'a> {
         Box::pin(async move {
-            SsotInjector::call_mcp_google_sheets_tool(
-                "batch_update_cells",
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "sheet": sheet,
-                    "ranges": ranges
-                }),
-            )
-            .await
-            .map_err(|e| e.to_string())?;
+            let call_once = |chunk: Value| async move {
+                SsotInjector::call_mcp_google_sheets_tool(
+                    "batch_update_cells",
+                    json!({
+                        "spreadsheet_id": spreadsheet_id,
+                        "sheet": sheet,
+                        "ranges": chunk
+                    }),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok::<(), String>(())
+            };
+
+            let call_with_reload = |chunk: Value| async move {
+                match call_once(chunk.clone()).await {
+                    Ok(()) => Ok(()),
+                    Err(err1) => {
+                        warn!(
+                            spreadsheet_id = spreadsheet_id,
+                            sheet = sheet,
+                            error = %err1,
+                            "Falha no MCP Sheets; reiniciando sessão (cold-start) antes do retry"
+                        );
+                        tokio::time::sleep(MCP_RELOAD_DELAY).await;
+                        call_once(chunk).await
+                    }
+                }
+            };
+
+            match ranges {
+                Value::Object(map) if map.len() > 30 => {
+                    let entries: Vec<(String, Value)> = map.into_iter().collect();
+                    let total = entries.len();
+                    let chunk_count = 3.min(total.max(1));
+                    let chunk_size = (total + chunk_count - 1) / chunk_count;
+
+                    for chunk_idx in 0..chunk_count {
+                        let start = chunk_idx * chunk_size;
+                        if start >= total {
+                            break;
+                        }
+                        let end = ((chunk_idx + 1) * chunk_size).min(total);
+                        let mut chunk_map = serde_json::Map::new();
+                        for (k, v) in entries[start..end].iter() {
+                            chunk_map.insert(k.clone(), v.clone());
+                        }
+                        info!(
+                            spreadsheet_id = spreadsheet_id,
+                            sheet = sheet,
+                            chunk_idx = chunk_idx,
+                            chunk_count = chunk_count,
+                            ranges = chunk_map.len(),
+                            "Despachando micro-lote para Google Sheets (chunking)"
+                        );
+                        call_with_reload(Value::Object(chunk_map)).await?;
+
+                        if chunk_idx + 1 < chunk_count {
+                            tokio::time::sleep(MCP_CHUNK_DELAY).await;
+                        }
+                    }
+                }
+                other => {
+                    call_with_reload(other).await?;
+                }
+            }
             Ok(())
         })
     }
