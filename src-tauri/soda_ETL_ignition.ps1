@@ -164,7 +164,7 @@ switch ($choice) {
             break
         }
         if (-not $effectiveRepo) {
-            $mode = Read-Host "RepoId (owner/repo) ou BATCH (Enter=BATCH)"
+            $mode = Read-Host "BATCH (Enter) ou RepoId (owner/repo)"
             if ([string]::IsNullOrWhiteSpace($mode) -or $mode.Trim().ToUpperInvariant() -eq "BATCH") {
                 $binArgs = @("--batch", "--resume-f3")
                 $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO) [BATCH RESUME_F3]"

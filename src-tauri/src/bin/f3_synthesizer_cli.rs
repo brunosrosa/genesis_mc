@@ -402,32 +402,77 @@ fn parse_cli_args() -> CliArgs {
     }
 }
 
-fn fetch_resume_f3_candidates(conn: &Connection) -> io::Result<Vec<String>> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT project_name
-             FROM repositorios
-             WHERE project_name IN (
-                 SELECT project_name
-                 FROM repo_heuristics
-                 WHERE status_atualizacao = 'APROVADO_PARA_ENXAME'
-             )
-               AND status_processamento IN ('F2_OK', 'FASE_2_ENXAME_OK', 'FASE_3_SINTETIZADOR_OK', 'ERRO_FASE_4')
-             ORDER BY project_name ASC",
-        )
-        .map_err(|e| io::Error::other(format!("Falha ao preparar query de resume_f3: {}", e)))?;
+async fn fetch_resume_f3_candidates(spreadsheet_id: &str) -> io::Result<Vec<BatchCandidate>> {
+    let header_row = read_master_header(spreadsheet_id).await?;
+    let status_idx = find_col_idx(&header_row, "status_atualizacao")
+        .ok_or_else(|| io::Error::other("Header missing status_atualizacao"))?;
+    let fase_idx =
+        find_col_idx(&header_row, "status_fase").ok_or_else(|| io::Error::other("Header missing status_fase"))?;
+    let repo_url_idx = find_col_idx(&header_row, "repo_url")
+        .ok_or_else(|| io::Error::other("Header missing repo_url"))?;
+    let lote_idx = find_col_idx(&header_row, "lote_id");
+
+    let required = [status_idx, fase_idx, repo_url_idx];
+    let min_idx = *required.iter().min().unwrap_or(&0);
+    let max_idx = *required.iter().max().unwrap_or(&0);
+    let start_col = col_idx_to_a1(min_idx);
+    let end_col = col_idx_to_a1(max_idx.max(lote_idx.unwrap_or(0)));
+
+    let range = format!("{start_col}2:{end_col}");
+    let result = call_mcp(
+        "get_sheet_data",
+        json!({
+            "spreadsheet_id": spreadsheet_id,
+            "sheet": "MASTER_SOLUTIONS",
+            "range": range,
+            "include_grid_data": false
+        }),
+    )
+    .await?;
+    let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
+
+    let lote_override = std::env::var("SODA_LOTE_ID_OVERRIDE")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
 
     let mut out = Vec::new();
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|e| io::Error::other(format!("Falha ao executar query de resume_f3: {}", e)))?;
-    for r in rows {
-        let repo_id = r.map_err(|e| io::Error::other(format!("Falha ao ler repo_id: {}", e)))?;
-        let repo_id = repo_id.trim().to_string();
-        if !repo_id.is_empty() {
-            out.push(repo_id);
+    for (idx, row) in values.into_iter().enumerate() {
+        let row_number_1based = (idx as u32) + 2;
+        let get = |abs_idx: usize| -> String {
+            let rel = abs_idx.saturating_sub(min_idx);
+            row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+        };
+        let status = get(status_idx);
+        if status.trim() != "APROVADO_PARA_ENXAME" {
+            continue;
         }
+        let status_fase = get(fase_idx);
+        let status_fase_ok = matches!(
+            status_fase.trim(),
+            "FASE_2_ENXAME_OK" | "FASE_3_SINTETIZADOR_OK" | "ERRO_FASE_4"
+        );
+        if !status_fase_ok {
+            continue;
+        }
+        if let Some(ref lote_expected) = lote_override {
+            let Some(lote_idx) = lote_idx else { continue };
+            let lote = get(lote_idx);
+            if lote.trim() != lote_expected {
+                continue;
+            }
+        }
+        let repo_url = get(repo_url_idx);
+        let Some(repo_id) = try_extract_repo_id_from_repo_url(&repo_url) else {
+            continue;
+        };
+        out.push(BatchCandidate {
+            repo_id,
+            row_number_1based,
+        });
     }
+    out.sort_by(|a, b| a.repo_id.cmp(&b.repo_id).then_with(|| a.row_number_1based.cmp(&b.row_number_1based)));
+    out.dedup_by(|a, b| a.repo_id == b.repo_id && a.row_number_1based == b.row_number_1based);
     Ok(out)
 }
 
@@ -2462,21 +2507,24 @@ async fn main() -> io::Result<()> {
 
     if batch {
         if resume_f3 {
-            let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
-            let conn = Connection::open(&db_path).map_err(|e| {
-                io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
-            })?;
-            let repo_ids = fetch_resume_f3_candidates(&conn)?;
+            let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+                .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+            let candidates = fetch_resume_f3_candidates(&spreadsheet_id).await?;
             info!(
-                count = repo_ids.len(),
-                "F3/F4: modo batch (resume_f3) via SQLite (APROVADO_PARA_ENXAME + F2_OK/F3_OK/ERRO_F4)"
+                count = candidates.len(),
+                "F3/F4: modo batch (resume_f3) via Sheets (APROVADO_PARA_ENXAME + F2_OK|F3_OK|ERRO_F4)"
             );
             let exe = std::env::current_exe()
                 .map_err(|e| io::Error::other(format!("Falha ao resolver current_exe: {e}")))?;
-            for repo_id in repo_ids {
-                info!(repo_id = %repo_id, "F3/F4(batch resume_f3): iniciando");
+            for item in candidates {
+                info!(
+                    repo_id = %item.repo_id,
+                    row_number = item.row_number_1based,
+                    "F3/F4(batch resume_f3): iniciando"
+                );
                 let mut cmd = tokio::process::Command::new(&exe);
-                cmd.arg("--repo").arg(&repo_id);
+                cmd.arg("--repo").arg(&item.repo_id);
+                cmd.arg("--row").arg(item.row_number_1based.to_string());
                 if e2e_full {
                     cmd.arg("--e2e-full");
                 }
@@ -2488,7 +2536,8 @@ async fn main() -> io::Result<()> {
                 })?;
                 if !status.success() {
                     warn!(
-                        repo_id = %repo_id,
+                        repo_id = %item.repo_id,
+                        row_number = item.row_number_1based,
                         status = %status,
                         "F3/F4(batch resume_f3): falha (seguindo fail-soft)"
                     );
