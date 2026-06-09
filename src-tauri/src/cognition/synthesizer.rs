@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
+use crate::persist::ssot_injector::SsotInjector;
 use crate::persist::sheets_utils::col_idx_to_a1;
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
@@ -1175,6 +1177,8 @@ pub enum Phase3Error {
     },
     #[error("Falha de transporte do formatador: {0}")]
     Transport(String),
+    #[error("Falha de persistência L2 (SQLite): {0}")]
+    L2Failure(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1789,6 +1793,43 @@ pub async fn run_phase3_sgr(
     cfg: &Phase3Config,
     block0: Block0Context,
 ) -> Result<Phase3Output, Phase3Error> {
+    fn stage_from_status_fase(status_fase: &str) -> u8 {
+        match status_fase.trim() {
+            "FASE_3_BLOCK_1_OK" => 1,
+            "FASE_3_BLOCK_2A_OK" => 2,
+            "FASE_3_BLOCK_2B_OK" => 3,
+            "FASE_3_BLOCK_3_OK" => 4,
+            "FASE_3_SINTETIZADOR_OK" | "FASE_3_SYNTHESIZER_OK" | "FASE_4_SHEETS_UPDATED" | "ERRO_FASE_4" => 5,
+            _ => 0,
+        }
+    }
+
+    fn infer_stage_from_row(row: &MasterSolutionsRow) -> u8 {
+        let mut stage = 0u8;
+        let block1_ok = !row.justificativa_decisao.trim().is_empty()
+            && !row.executive_verdict.trim().is_empty()
+            && !row.visao_do_enxame.trim().is_empty();
+        if block1_ok {
+            stage = 1;
+        }
+        let block2a_ok = stage >= 1
+            && !row.ouro_a_extrair.trim().is_empty()
+            && !row.deep_pattern.trim().is_empty()
+            && !row.transplantable_core.trim().is_empty()
+            && !row.logic_math_heuristic.trim().is_empty();
+        if block2a_ok {
+            stage = 2;
+        }
+        let block2b_ok = stage >= 2
+            && !row.must_components_prod_ux.trim().is_empty()
+            && !row.must_components_arq.trim().is_empty()
+            && !row.must_components_ops.trim().is_empty();
+        if block2b_ok {
+            stage = 3;
+        }
+        stage
+    }
+
     info!(
         repo_id = %block0.project_name,
         model = %cfg.model,
@@ -1801,110 +1842,378 @@ pub async fn run_phase3_sgr(
         block_started: Instant::now(),
     }));
     let _telemetry_total = spawn_phase3_total_telemetry(block0.project_name.clone(), started_total, state.clone());
+    let repo_id = block0.project_name.clone();
+    let now_epoch = block0.data_ultima_analise;
     let mut row = MasterSolutionsRow::from_block0(block0.clone());
+    let mut block3_justifications: HashMap<String, String> = HashMap::new();
+    let mut stage: u8 = 0;
 
-    set_phase3_block(&state, 1, "Bloco 1").await;
-    let _telemetry_block1 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block1: Block1Fields = run_block(client, cfg, BLOCK_1, &block0, &row).await?;
-    drop(_telemetry_block1);
-    if let Some(value) = block1.proposta_original_resumo {
-        if !value.trim().is_empty() {
-            row.proposta_original_resumo = value;
+    if let Some(existing) = SsotInjector::try_load_repo_heuristics_row(&repo_id)
+        .map_err(|e| Phase3Error::L2Failure(e.to_string()))?
+    {
+        stage = stage_from_status_fase(existing.status_fase.as_str());
+        stage = stage.max(infer_stage_from_row(&existing));
+        if stage > 0 {
+            row = existing;
+            block3_justifications = SsotInjector::load_block3_justifications(&repo_id)
+                .unwrap_or_default();
         }
     }
-    row.declared_description_ptbr = block1.declared_description_ptbr;
-    row.visao_do_enxame = block1.visao_do_enxame;
-    row.justificativa_decisao = block1.justificativa_decisao;
-    row.executive_verdict = block1.executive_verdict;
-    row.risco_principal = block1.risco_principal;
-    row.risco_linha_vermelha = block1.risco_linha_vermelha;
-    row.observacoes = block1.observacoes;
-    info!("F3 (Sintetizador SGR): Bloco 1 concluído");
 
-    set_phase3_block(&state, 2, "Bloco 2A").await;
-    let _telemetry_block2a = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block2a: Block2NarrativeFields =
-        run_block::<Block2NarrativeFields>(client, cfg, BLOCK_2A, &block0, &row).await?;
-    drop(_telemetry_block2a);
-    row.indicacao_otimista_canibalizacao = block2a.indicacao_otimista_canibalizacao;
-    row.ouro_a_extrair = block2a.ouro_a_extrair;
-    row.deep_pattern = block2a.deep_pattern;
-    row.transplantable_core = block2a.transplantable_core;
-    row.logic_math_heuristic = block2a.logic_math_heuristic;
-    row.real_structural_problem = block2a.real_structural_problem;
-    row.categoria_nuance_tecnica = block2a.categoria_nuance_tecnica;
-    row.integracao_papel_exato = block2a.integracao_papel_exato;
-    info!("F3 (Sintetizador SGR): Bloco 2A concluído");
-
-    set_phase3_block(&state, 2, "Bloco 2B").await;
-    let _telemetry_block2b = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block2b: Block2MatrixFields = run_block::<Block2MatrixFields>(client, cfg, BLOCK_2B, &block0, &row)
-        .await?
-        .sanitize();
-    drop(_telemetry_block2b);
-    row.must_components_prod_ux = format_dot_bullets(&block2b.must_components_prod_ux);
-    row.must_components_arq = format_dot_bullets(&block2b.must_components_arq);
-    row.must_components_ops = format_dot_bullets(&block2b.must_components_ops);
-    row.detected_toxic_deps = format_dot_bullets(&block2b.detected_toxic_deps);
-    row.do_not_absorb = format_dot_bullets(&block2b.do_not_absorb);
-    row.where_ai_should_not_enter = format_dot_bullets(&block2b.where_ai_should_not_enter);
-    info!("F3 (Sintetizador SGR): Bloco 2B concluído");
-
-    set_phase3_block(&state, 3, "Bloco 3 (ENUMs)").await;
-    let _telemetry_block3 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block3_env = run_block_envelope::<Block3Fields>(client, cfg, BLOCK_3, &block0, &row).await?;
-    drop(_telemetry_block3);
-    let block3_justifications = block3_env.justifications;
-    let block3 = block3_env.fields.sanitize();
-    row.classificacao_terminal = block3.classificacao_terminal;
-    row.acao_de_canibalizacao = block3.acao_de_canibalizacao;
-    if let Some(value) = block3.categoria_arquitetural {
-        row.categoria_arquitetural = value;
+    if stage >= 5 {
+        info!(
+            repo_id = %repo_id,
+            status_fase = %row.status_fase,
+            "F3 (Sintetizador SGR): checkpoint detectado; pulando Fase 3 (já concluída)"
+        );
+        return Ok(Phase3Output {
+            model_used: cfg.model.clone(),
+            row,
+            block3_justifications,
+        });
     }
-    row.horizonte_extracao = block3.horizonte_extracao;
-    row.tipo_integracao = block3.tipo_integracao;
-    row.capability_nature_primary = block3.capability_nature_primary;
-    row.architectural_topology = block3.architectural_topology;
-    row.temporal_stability = block3.temporal_stability;
-    row.bare_metal_fit = block3.bare_metal_fit;
-    row.extractability_level = block3.extractability_level;
-    row.runtime_sovereignty_fit = block3.runtime_sovereignty_fit;
-    row.local_first_fit = block3.local_first_fit;
-    row.adoptability_level = block3.adoptability_level;
-    row.longitudinal_sustainability = block3.longitudinal_sustainability;
-    row.maintenance_burden = block3.maintenance_burden;
-    row.onboarding_friction = block3.onboarding_friction;
-    row.observability_operational = block3.observability_operational;
-    row.recoverability_level = block3.recoverability_level;
-    row.degradation_behavior = block3.degradation_behavior;
-    row.curation_burden = block3.curation_burden;
-    row.evolution_cost = block3.evolution_cost;
-    row.operability_level = block3.operability_level;
-    row.abandonment_risk = block3.abandonment_risk;
-    row.time_to_first_clear_value = block3.time_to_first_clear_value;
-    row.imperfection_tolerance = block3.imperfection_tolerance;
-    row.entropy_risk = block3.entropy_risk;
-    row.design_misuse_risk = block3.design_misuse_risk;
-    row.intrinsic_ethics_risk = block3.intrinsic_ethics_risk;
-    row.discipline_dependency = block3.discipline_dependency;
-    row.regulatory_risk = block3.regulatory_risk;
-    info!("F3 (Sintetizador SGR): Bloco 3 concluído");
 
-    set_phase3_block(&state, 4, "Bloco 4 (Scores)").await;
-    let _telemetry_block4 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block4: Block4Fields = run_block4_validated(client, cfg, &block0, &row).await?;
-    drop(_telemetry_block4);
+    if stage < 1 {
+        set_phase3_block(&state, 1, "Bloco 1").await;
+        let _telemetry_block1 =
+            spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
+        let block1: Block1Fields = run_block(client, cfg, BLOCK_1, &block0, &row).await?;
+        drop(_telemetry_block1);
+        if let Some(value) = block1.proposta_original_resumo {
+            if !value.trim().is_empty() {
+                row.proposta_original_resumo = value;
+            }
+        }
+        row.declared_description_ptbr = block1.declared_description_ptbr;
+        row.visao_do_enxame = block1.visao_do_enxame;
+        row.justificativa_decisao = block1.justificativa_decisao;
+        row.executive_verdict = block1.executive_verdict;
+        row.risco_principal = block1.risco_principal;
+        row.risco_linha_vermelha = block1.risco_linha_vermelha;
+        row.observacoes = block1.observacoes;
 
-    row.score_philosophical_fit = block4.score_philosophical_fit;
-    row.score_bare_metal_fit = block4.score_bare_metal_fit;
-    row.score_architectural_extractability = block4.score_architectural_extractability;
-    row.score_operability = block4.score_operability;
-    row.score_creep_risk = block4.score_creep_risk;
-    row.score_runtime_sovereignty = block4.score_runtime_sovereignty;
-    row.score_model_logic_value = block4.score_model_logic_value;
-    row.score_ethics_safety = block4.score_ethics_safety;
-    row.score_intrinsic_risk = block4.score_intrinsic_risk;
-    info!("F3 (Sintetizador SGR): Bloco 4 concluído");
+        row.status_fase = "FASE_3_BLOCK_1_OK".to_string();
+        SsotInjector::checkpoint_upsert_repo_heuristics_full(
+            &repo_id,
+            &row,
+            row.status_atualizacao.as_str(),
+            row.status_fase.as_str(),
+            &HashMap::new(),
+            now_epoch,
+        )
+        .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+        stage = 1;
+        info!("F3 (Sintetizador SGR): Bloco 1 concluído (checkpoint OK)");
+    } else {
+        info!(repo_id = %repo_id, "F3 (Sintetizador SGR): Bloco 1 já está no SQLite; skip");
+    }
+
+    if stage < 2 {
+        set_phase3_block(&state, 2, "Bloco 2A").await;
+        let _telemetry_block2a =
+            spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
+        let block2a: Block2NarrativeFields =
+            run_block::<Block2NarrativeFields>(client, cfg, BLOCK_2A, &block0, &row).await?;
+        drop(_telemetry_block2a);
+        row.indicacao_otimista_canibalizacao = block2a.indicacao_otimista_canibalizacao;
+        row.ouro_a_extrair = block2a.ouro_a_extrair;
+        row.deep_pattern = block2a.deep_pattern;
+        row.transplantable_core = block2a.transplantable_core;
+        row.logic_math_heuristic = block2a.logic_math_heuristic;
+        row.real_structural_problem = block2a.real_structural_problem;
+        row.categoria_nuance_tecnica = block2a.categoria_nuance_tecnica;
+        row.integracao_papel_exato = block2a.integracao_papel_exato;
+
+        {
+            let conn = SsotInjector::open_vault_connection()
+                .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+            SsotInjector::ensure_repo_heuristics_schema(&conn)
+                .map_err(Phase3Error::L2Failure)?;
+            let _ = conn.execute(
+                "UPDATE repo_heuristics
+                 SET indicacao_otimista_canibalizacao = ?2,
+                     ouro_a_extrair = ?3,
+                     deep_pattern = ?4,
+                     transplantable_core = ?5,
+                     logic_math_heuristic = ?6,
+                     real_structural_problem = ?7,
+                     categoria_nuance_tecnica = ?8,
+                     integracao_papel_exato = ?9,
+                     status_fase = ?10
+                 WHERE project_name = ?1",
+                params![
+                    repo_id.as_str(),
+                    &row.indicacao_otimista_canibalizacao,
+                    &row.ouro_a_extrair,
+                    &row.deep_pattern,
+                    &row.transplantable_core,
+                    &row.logic_math_heuristic,
+                    &row.real_structural_problem,
+                    &row.categoria_nuance_tecnica,
+                    &row.integracao_papel_exato,
+                    "FASE_3_BLOCK_2A_OK"
+                ],
+            )
+            .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+        }
+        row.status_fase = "FASE_3_BLOCK_2A_OK".to_string();
+        stage = 2;
+        info!("F3 (Sintetizador SGR): Bloco 2A concluído (checkpoint OK)");
+    } else {
+        info!(repo_id = %repo_id, "F3 (Sintetizador SGR): Bloco 2A já está no SQLite; skip");
+    }
+
+    if stage < 3 {
+        set_phase3_block(&state, 2, "Bloco 2B").await;
+        let _telemetry_block2b =
+            spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
+        let block2b: Block2MatrixFields = run_block::<Block2MatrixFields>(client, cfg, BLOCK_2B, &block0, &row)
+            .await?
+            .sanitize();
+        drop(_telemetry_block2b);
+        row.must_components_prod_ux = format_dot_bullets(&block2b.must_components_prod_ux);
+        row.must_components_arq = format_dot_bullets(&block2b.must_components_arq);
+        row.must_components_ops = format_dot_bullets(&block2b.must_components_ops);
+        row.detected_toxic_deps = format_dot_bullets(&block2b.detected_toxic_deps);
+        row.do_not_absorb = format_dot_bullets(&block2b.do_not_absorb);
+        row.where_ai_should_not_enter = format_dot_bullets(&block2b.where_ai_should_not_enter);
+
+        {
+            let conn = SsotInjector::open_vault_connection()
+                .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+            SsotInjector::ensure_repo_heuristics_schema(&conn)
+                .map_err(Phase3Error::L2Failure)?;
+            let _ = conn.execute(
+                "UPDATE repo_heuristics
+                 SET must_components_prod_ux = ?2,
+                     must_components_arq = ?3,
+                     must_components_ops = ?4,
+                     detected_toxic_deps = ?5,
+                     do_not_absorb = ?6,
+                     where_ai_should_not_enter = ?7,
+                     status_fase = ?8
+                 WHERE project_name = ?1",
+                params![
+                    repo_id.as_str(),
+                    &row.must_components_prod_ux,
+                    &row.must_components_arq,
+                    &row.must_components_ops,
+                    &row.detected_toxic_deps,
+                    &row.do_not_absorb,
+                    &row.where_ai_should_not_enter,
+                    "FASE_3_BLOCK_2B_OK"
+                ],
+            )
+            .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+        }
+        row.status_fase = "FASE_3_BLOCK_2B_OK".to_string();
+        stage = 3;
+        info!("F3 (Sintetizador SGR): Bloco 2B concluído (checkpoint OK)");
+    } else {
+        info!(repo_id = %repo_id, "F3 (Sintetizador SGR): Bloco 2B já está no SQLite; skip");
+    }
+
+    if stage < 4 {
+        set_phase3_block(&state, 3, "Bloco 3 (ENUMs)").await;
+        let _telemetry_block3 =
+            spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
+        let block3_env = run_block_envelope::<Block3Fields>(client, cfg, BLOCK_3, &block0, &row).await?;
+        drop(_telemetry_block3);
+        block3_justifications = block3_env.justifications;
+        let block3 = block3_env.fields.sanitize();
+        row.classificacao_terminal = block3.classificacao_terminal;
+        row.acao_de_canibalizacao = block3.acao_de_canibalizacao;
+        if let Some(value) = block3.categoria_arquitetural {
+            row.categoria_arquitetural = value;
+        }
+        row.horizonte_extracao = block3.horizonte_extracao;
+        row.tipo_integracao = block3.tipo_integracao;
+        row.capability_nature_primary = block3.capability_nature_primary;
+        row.architectural_topology = block3.architectural_topology;
+        row.temporal_stability = block3.temporal_stability;
+        row.bare_metal_fit = block3.bare_metal_fit;
+        row.extractability_level = block3.extractability_level;
+        row.runtime_sovereignty_fit = block3.runtime_sovereignty_fit;
+        row.local_first_fit = block3.local_first_fit;
+        row.adoptability_level = block3.adoptability_level;
+        row.longitudinal_sustainability = block3.longitudinal_sustainability;
+        row.maintenance_burden = block3.maintenance_burden;
+        row.onboarding_friction = block3.onboarding_friction;
+        row.observability_operational = block3.observability_operational;
+        row.recoverability_level = block3.recoverability_level;
+        row.degradation_behavior = block3.degradation_behavior;
+        row.curation_burden = block3.curation_burden;
+        row.evolution_cost = block3.evolution_cost;
+        row.operability_level = block3.operability_level;
+        row.abandonment_risk = block3.abandonment_risk;
+        row.time_to_first_clear_value = block3.time_to_first_clear_value;
+        row.imperfection_tolerance = block3.imperfection_tolerance;
+        row.entropy_risk = block3.entropy_risk;
+        row.design_misuse_risk = block3.design_misuse_risk;
+        row.intrinsic_ethics_risk = block3.intrinsic_ethics_risk;
+        row.discipline_dependency = block3.discipline_dependency;
+        row.regulatory_risk = block3.regulatory_risk;
+
+        {
+            let conn = SsotInjector::open_vault_connection()
+                .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+            SsotInjector::ensure_repo_heuristics_schema(&conn)
+                .map_err(Phase3Error::L2Failure)?;
+            SsotInjector::ensure_repo_heuristics_justifications_schema(&conn)
+                .map_err(Phase3Error::L2Failure)?;
+            let _ = conn.execute(
+                "UPDATE repo_heuristics
+                 SET classificacao_terminal = ?2,
+                     acao_de_canibalizacao = ?3,
+                     categoria_arquitetural = ?4,
+                     horizonte_extracao = ?5,
+                     tipo_integracao = ?6,
+                     capability_nature_primary = ?7,
+                     architectural_topology = ?8,
+                     temporal_stability = ?9,
+                     bare_metal_fit = ?10,
+                     extractability_level = ?11,
+                     runtime_sovereignty_fit = ?12,
+                     local_first_fit = ?13,
+                     adoptability_level = ?14,
+                     longitudinal_sustainability = ?15,
+                     maintenance_burden = ?16,
+                     onboarding_friction = ?17,
+                     observability_operational = ?18,
+                     recoverability_level = ?19,
+                     degradation_behavior = ?20,
+                     curation_burden = ?21,
+                     evolution_cost = ?22,
+                     operability_level = ?23,
+                     abandonment_risk = ?24,
+                     time_to_first_clear_value = ?25,
+                     imperfection_tolerance = ?26,
+                     entropy_risk = ?27,
+                     design_misuse_risk = ?28,
+                     intrinsic_ethics_risk = ?29,
+                     discipline_dependency = ?30,
+                     regulatory_risk = ?31,
+                     status_fase = ?32
+                 WHERE project_name = ?1",
+                params![
+                    repo_id.as_str(),
+                    row.classificacao_terminal.as_str(),
+                    row.acao_de_canibalizacao.as_str(),
+                    row.categoria_arquitetural.as_str(),
+                    row.horizonte_extracao.as_str(),
+                    row.tipo_integracao.as_str(),
+                    row.capability_nature_primary.as_str(),
+                    row.architectural_topology.as_str(),
+                    row.temporal_stability.as_str(),
+                    row.bare_metal_fit.as_str(),
+                    row.extractability_level.as_str(),
+                    row.runtime_sovereignty_fit.as_str(),
+                    row.local_first_fit.as_str(),
+                    row.adoptability_level.as_str(),
+                    row.longitudinal_sustainability.as_str(),
+                    row.maintenance_burden.as_str(),
+                    row.onboarding_friction.as_str(),
+                    row.observability_operational.as_str(),
+                    row.recoverability_level.as_str(),
+                    row.degradation_behavior.as_str(),
+                    row.curation_burden.as_str(),
+                    row.evolution_cost.as_str(),
+                    row.operability_level.as_str(),
+                    row.abandonment_risk.as_str(),
+                    row.time_to_first_clear_value.as_str(),
+                    row.imperfection_tolerance.as_str(),
+                    row.entropy_risk.as_str(),
+                    row.design_misuse_risk.as_str(),
+                    row.intrinsic_ethics_risk.as_str(),
+                    row.discipline_dependency.as_str(),
+                    row.regulatory_risk.as_str(),
+                    "FASE_3_BLOCK_3_OK"
+                ],
+            )
+            .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+            if !block3_justifications.is_empty() {
+                let json_text =
+                    serde_json::to_string(&block3_justifications).unwrap_or_else(|_| "{}".to_string());
+                let _ = conn.execute(
+                    "INSERT INTO repo_heuristics_justifications (project_name, block, justifications_json, created_at)
+                     VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(project_name, block) DO UPDATE SET
+                        justifications_json = excluded.justifications_json,
+                        created_at = excluded.created_at",
+                    params![repo_id.as_str(), 3_i64, json_text, now_epoch],
+                );
+            }
+        }
+        row.status_fase = "FASE_3_BLOCK_3_OK".to_string();
+        stage = 4;
+        info!("F3 (Sintetizador SGR): Bloco 3 concluído (checkpoint OK)");
+    } else {
+        info!(repo_id = %repo_id, "F3 (Sintetizador SGR): Bloco 3 já está no SQLite; skip");
+        block3_justifications = SsotInjector::load_block3_justifications(&repo_id)
+            .unwrap_or_default();
+    }
+
+    if stage < 5 {
+        set_phase3_block(&state, 4, "Bloco 4 (Scores)").await;
+        let _telemetry_block4 =
+            spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
+        let block4: Block4Fields = run_block4_validated(client, cfg, &block0, &row).await?;
+        drop(_telemetry_block4);
+
+        row.score_philosophical_fit = block4.score_philosophical_fit;
+        row.score_bare_metal_fit = block4.score_bare_metal_fit;
+        row.score_architectural_extractability = block4.score_architectural_extractability;
+        row.score_operability = block4.score_operability;
+        row.score_creep_risk = block4.score_creep_risk;
+        row.score_runtime_sovereignty = block4.score_runtime_sovereignty;
+        row.score_model_logic_value = block4.score_model_logic_value;
+        row.score_ethics_safety = block4.score_ethics_safety;
+        row.score_intrinsic_risk = block4.score_intrinsic_risk;
+
+        {
+            let conn = SsotInjector::open_vault_connection()
+                .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+            SsotInjector::ensure_repo_heuristics_schema(&conn)
+                .map_err(Phase3Error::L2Failure)?;
+            let _ = conn.execute(
+                "UPDATE repo_heuristics
+                 SET score_philosophical_fit = ?2,
+                     score_bare_metal_fit = ?3,
+                     score_architectural_extractability = ?4,
+                     score_operability = ?5,
+                     score_creep_risk = ?6,
+                     score_runtime_sovereignty = ?7,
+                     score_model_logic_value = ?8,
+                     score_ethics_safety = ?9,
+                     score_intrinsic_risk = ?10,
+                     status_fase = ?11
+                 WHERE project_name = ?1",
+                params![
+                    repo_id.as_str(),
+                    row.score_philosophical_fit,
+                    row.score_bare_metal_fit,
+                    row.score_architectural_extractability,
+                    row.score_operability,
+                    row.score_creep_risk,
+                    row.score_runtime_sovereignty,
+                    row.score_model_logic_value,
+                    row.score_ethics_safety,
+                    row.score_intrinsic_risk,
+                    "FASE_3_SINTETIZADOR_OK"
+                ],
+            )
+            .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+            let _ = conn.execute(
+                "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
+                params!["FASE_3_SINTETIZADOR_OK", repo_id.as_str()],
+            );
+        }
+
+        row.status_fase = "FASE_3_SINTETIZADOR_OK".to_string();
+        info!("F3 (Sintetizador SGR): Bloco 4 concluído (checkpoint OK)");
+    } else {
+        info!(repo_id = %repo_id, "F3 (Sintetizador SGR): Bloco 4 já está no SQLite; skip");
+    }
 
     Ok(Phase3Output {
         model_used: cfg.model.clone(),

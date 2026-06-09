@@ -1486,6 +1486,29 @@ fn fetch_repo_core(conn: &Connection, repo_id: &str) -> io::Result<(String, Stri
     .map_err(|e| io::Error::other(format!("Metadados base ausentes em repositorios para {}: {}", repo_id, e)))
 }
 
+fn read_local_phase_status(conn: &Connection, repo_id: &str) -> (String, String) {
+    let status_processamento: Result<String, _> = conn.query_row(
+        "SELECT status_processamento
+         FROM repositorios
+         WHERE project_name = ?1
+         LIMIT 1",
+        params![repo_id],
+        |row| row.get(0),
+    );
+    let status_fase: Result<String, _> = conn.query_row(
+        "SELECT status_fase
+         FROM repo_heuristics
+         WHERE project_name = ?1
+         LIMIT 1",
+        params![repo_id],
+        |row| row.get(0),
+    );
+    (
+        status_processamento.unwrap_or_default(),
+        status_fase.unwrap_or_default(),
+    )
+}
+
 fn try_fetch_repositorios_release_info(
     conn: &Connection,
     repo_id: &str,
@@ -2803,7 +2826,7 @@ async fn main() -> io::Result<()> {
         .filter(|v| !v.is_empty())
         .unwrap_or(lote_id);
 
-    let mut n4_skip_columns: Vec<&'static str> = Vec::new();
+    let mut _n4_skip_columns: Vec<&'static str> = Vec::new();
     let mut n4_sheet_proposta: Option<String> = None;
     let mut n4_sheet_categoria: Option<String> = None;
     if !dry_run && (skip_harvester || !e2e_full) {
@@ -2858,14 +2881,14 @@ async fn main() -> io::Result<()> {
             let v = read_cell_at(&spreadsheet_id, row_number, idx).await?;
             if !v.trim().is_empty() {
                 n4_sheet_proposta = Some(v);
-                n4_skip_columns.push("proposta_original_resumo");
+                _n4_skip_columns.push("proposta_original_resumo");
             }
         }
         if let Some(idx) = find_col_idx(&header_row, "categoria_arquitetural") {
             let v = read_cell_at(&spreadsheet_id, row_number, idx).await?;
             if !v.trim().is_empty() {
                 n4_sheet_categoria = Some(v);
-                n4_skip_columns.push("categoria_arquitetural");
+                _n4_skip_columns.push("categoria_arquitetural");
             }
         }
     }
@@ -3089,6 +3112,53 @@ async fn main() -> io::Result<()> {
         lente_c_realidade_ops: lens_c,
     };
 
+    let (local_status_processamento, local_status_fase) = read_local_phase_status(&conn, &repo_id);
+    let local_status_processamento = local_status_processamento.trim().to_string();
+    let local_status_fase = local_status_fase.trim().to_string();
+    let should_skip_phase3 = matches!(
+        local_status_processamento.as_str(),
+        "FASE_3_SINTETIZADOR_OK" | "FASE_3_SYNTHESIZER_OK" | "ERRO_FASE_4"
+    ) || matches!(
+        local_status_fase.as_str(),
+        "FASE_3_SINTETIZADOR_OK" | "FASE_3_SYNTHESIZER_OK" | "ERRO_FASE_4"
+    );
+
+    if should_skip_phase3 && !dry_run {
+        info!(
+            repo_id = %repo_id,
+            status_processamento = %local_status_processamento,
+            status_fase = %local_status_fase,
+            "Auto-cura: pulando Fase 3 (SGR); executando somente Fase 4 a partir do outbox (SQLite)"
+        );
+        let _ghost_f4 =
+            spawn_ghost_telemetry(repo_id.clone(), "F4 (SSOT Sheets) em processamento".to_string());
+        let row_number = SsotInjector::inject_ssot_from_db(&repo_id, now)
+            .await
+            .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?;
+        drop(_ghost_f4);
+
+        let confirmed = confirm_sheet_write(row_number, &repo_id).await?;
+        if !confirmed {
+            return Err(io::Error::other(
+                "E2E: atualização enviada, mas confirmação via leitura não bateu",
+            ));
+        }
+
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
+        let header_row = read_master_header(&spreadsheet_id).await?;
+        let cols = resolve_master_cols(&header_row)?;
+        update_status_atualizacao_e_fase(
+            &spreadsheet_id,
+            row_number,
+            cols,
+            "CONCLUIDO_AGUARDANDO",
+            "FASE_4_SHEETS_UPDATED",
+        )
+        .await?;
+        return Ok(());
+    }
+
     let formatter = OpenRouterFormatterClient::from_env().map_err(io::Error::other)?;
     let formatter_model = std::env::var("OPENROUTER_FORMATTER_MODEL")
         .ok()
@@ -3134,42 +3204,10 @@ async fn main() -> io::Result<()> {
     }
 
     info!("E2E: F3 concluída. Iniciando F4 (carga atômica Sheets)");
-    let block3_justifications = phase3_out.block3_justifications;
-    let mut row = phase3_out.row;
     let _ghost_f4 = spawn_ghost_telemetry(repo_id.clone(), "F4 (SSOT Sheets) em processamento".to_string());
-    if let Some(v) = n4_sheet_proposta.as_deref() {
-        row.proposta_original_resumo = v.trim().to_string();
-    }
-    if let Some(v) = n4_sheet_categoria.as_deref() {
-        row.categoria_arquitetural =
-            genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::parse_strict(v)
-                .unwrap_or(row.categoria_arquitetural);
-    }
-    if matches!(
-        row.categoria_arquitetural,
-        genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::Unspecified
-            | genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::Unknown
-    ) {
-        let repo_kind = detect_repo_kind_from_raw_blobs(&conn, &repo_id);
-        row.categoria_arquitetural = if repo_kind != "CodeRepo" {
-            genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::KnowledgeExtraction
-        } else {
-            genesis_mc_lib::cognition::synthesizer::ArchitecturalCategory::ToolingDev
-        };
-    }
-
-    SsotInjector::persist_phase3_snapshot(&repo_id, &row, &block3_justifications, now)
-        .map_err(|e| io::Error::other(format!("Falha ao persistir snapshot F3 em SQLite: {}", e)))?;
-
-    let row_number = if n4_skip_columns.is_empty() {
-        SsotInjector::inject_ssot(&repo_id, row, block3_justifications, now)
-            .await
-            .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?
-    } else {
-        SsotInjector::inject_ssot_with_skip_columns(&repo_id, row, block3_justifications, now, &n4_skip_columns)
-            .await
-            .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?
-    };
+    let row_number = SsotInjector::inject_ssot_from_db(&repo_id, now)
+        .await
+        .map_err(|e| io::Error::other(format!("Falha na F4 (Carga SSOT Sheets): {}", e)))?;
     drop(_ghost_f4);
 
     let confirmed = confirm_sheet_write(row_number, &repo_id).await?;

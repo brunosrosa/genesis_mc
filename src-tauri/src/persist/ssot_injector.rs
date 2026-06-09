@@ -194,13 +194,422 @@ struct ValidatedSsotFields {
 }
 
 impl SsotInjector {
-    fn open_vault_connection() -> Result<Connection, SsotError> {
+    pub(crate) fn open_vault_connection() -> Result<Connection, SsotError> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let root_dir = std::path::Path::new(manifest_dir)
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."));
         let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
         Connection::open(&db_path).map_err(|e| SsotError::L2Failure(format!("Falha ao conectar no SQLite: {}", e)))
+    }
+
+    pub(crate) fn try_load_repo_heuristics_row(
+        repo_id: &str,
+    ) -> Result<Option<MasterSolutionsRow>, SsotError> {
+        let conn = Self::open_vault_connection()?;
+        Self::ensure_repo_heuristics_schema(&conn).map_err(SsotError::L2Failure)?;
+
+        let mut stmt = match conn.prepare(
+            "SELECT status_atualizacao, status_fase, project_name, repo_url,
+                    COALESCE(NULLIF(repo_analised_version, ''), NULLIF(repo_version, '')) AS repo_analised_version,
+                    ultima_versao_online, indicacao_otimista_canibalizacao, lote_id, data_ultima_analise, analise_origem,
+                    licenca, stack_base, declared_description, proposta_original_resumo,
+                    lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops,
+                    visao_do_enxame, justificativa_decisao, executive_verdict,
+                    risco_principal, risco_linha_vermelha, observacoes,
+                    ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem,
+                    categoria_nuance_tecnica, integracao_papel_exato,
+                    must_components_prod_ux, must_components_arq, must_components_ops,
+                    detected_toxic_deps, do_not_absorb, where_ai_should_not_enter,
+                    classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao,
+                    capability_nature_primary, architectural_topology, temporal_stability,
+                    bare_metal_fit, extractability_level, runtime_sovereignty_fit, local_first_fit,
+                    adoptability_level, longitudinal_sustainability,
+                    maintenance_burden, onboarding_friction, observability_operational, recoverability_level,
+                    degradation_behavior, curation_burden, evolution_cost, operability_level,
+                    abandonment_risk, time_to_first_clear_value, imperfection_tolerance,
+                    entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, regulatory_risk,
+                    score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability,
+                    score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value,
+                    score_ethics_safety, score_intrinsic_risk,
+                    score_final, score_fit_geral_soda,
+                    score_architectural_priority, score_human_product_priority, score_absorption_readiness,
+                    score_operational_priority, score_sustainability_adjusted_fit,
+                    valid_from, valid_to, embargo_status
+             FROM repo_heuristics
+             WHERE project_name = ?1
+             LIMIT 1",
+        ) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                return Err(SsotError::L2Failure(format!(
+                    "Falha ao preparar SELECT repo_heuristics: {e}"
+                )))
+            }
+        };
+
+        let json_val: Result<Value, _> = stmt.query_row(rusqlite::params![repo_id], |row| {
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "status_atualizacao".to_string(),
+                serde_json::json!(row.get::<_, String>(0)?),
+            );
+            obj.insert("status_fase".to_string(), serde_json::json!(row.get::<_, String>(1)?));
+            obj.insert("project_name".to_string(), serde_json::json!(row.get::<_, String>(2)?));
+            obj.insert("repo_url".to_string(), serde_json::json!(row.get::<_, String>(3)?));
+            obj.insert(
+                "repo_analised_version".to_string(),
+                serde_json::json!(row.get::<_, String>(4)?),
+            );
+            obj.insert(
+                "ultima_versao_online".to_string(),
+                serde_json::json!(row.get::<_, String>(5)?),
+            );
+            obj.insert(
+                "indicacao_otimista_canibalizacao".to_string(),
+                serde_json::json!(row.get::<_, String>(6)?),
+            );
+            obj.insert("lote_id".to_string(), serde_json::json!(row.get::<_, String>(7)?));
+            obj.insert(
+                "data_ultima_analise".to_string(),
+                serde_json::json!(row.get::<_, i64>(8)?),
+            );
+            obj.insert(
+                "analise_origem".to_string(),
+                serde_json::json!(row.get::<_, String>(9)?),
+            );
+            obj.insert("licenca".to_string(), serde_json::json!(row.get::<_, String>(10)?));
+            obj.insert(
+                "stack_base".to_string(),
+                serde_json::json!(row.get::<_, String>(11)?),
+            );
+            obj.insert(
+                "declared_description".to_string(),
+                serde_json::json!(row.get::<_, String>(12)?),
+            );
+            obj.insert("declared_description_ptbr".to_string(), serde_json::json!(""));
+            obj.insert(
+                "proposta_original_resumo".to_string(),
+                serde_json::json!(row.get::<_, String>(13)?),
+            );
+            obj.insert(
+                "lente_a_sentido_prod_ux".to_string(),
+                serde_json::json!(row.get::<_, String>(14)?),
+            );
+            obj.insert(
+                "lente_b_estrutura_arq".to_string(),
+                serde_json::json!(row.get::<_, String>(15)?),
+            );
+            obj.insert(
+                "lente_c_realidade_ops".to_string(),
+                serde_json::json!(row.get::<_, String>(16)?),
+            );
+            obj.insert(
+                "visao_do_enxame".to_string(),
+                serde_json::json!(row.get::<_, String>(17)?),
+            );
+            obj.insert(
+                "justificativa_decisao".to_string(),
+                serde_json::json!(row.get::<_, String>(18)?),
+            );
+            obj.insert(
+                "executive_verdict".to_string(),
+                serde_json::json!(row.get::<_, String>(19)?),
+            );
+            obj.insert(
+                "risco_principal".to_string(),
+                serde_json::json!(row.get::<_, String>(20)?),
+            );
+            obj.insert(
+                "risco_linha_vermelha".to_string(),
+                serde_json::json!(row.get::<_, String>(21)?),
+            );
+            obj.insert(
+                "observacoes".to_string(),
+                serde_json::json!(row.get::<_, String>(22)?),
+            );
+            obj.insert(
+                "ouro_a_extrair".to_string(),
+                serde_json::json!(row.get::<_, String>(23)?),
+            );
+            obj.insert(
+                "deep_pattern".to_string(),
+                serde_json::json!(row.get::<_, String>(24)?),
+            );
+            obj.insert(
+                "transplantable_core".to_string(),
+                serde_json::json!(row.get::<_, String>(25)?),
+            );
+            obj.insert(
+                "logic_math_heuristic".to_string(),
+                serde_json::json!(row.get::<_, String>(26)?),
+            );
+            obj.insert(
+                "real_structural_problem".to_string(),
+                serde_json::json!(row.get::<_, String>(27)?),
+            );
+            obj.insert(
+                "categoria_nuance_tecnica".to_string(),
+                serde_json::json!(row.get::<_, String>(28)?),
+            );
+            obj.insert(
+                "integracao_papel_exato".to_string(),
+                serde_json::json!(row.get::<_, String>(29)?),
+            );
+            obj.insert(
+                "must_components_prod_ux".to_string(),
+                serde_json::json!(row.get::<_, String>(30)?),
+            );
+            obj.insert(
+                "must_components_arq".to_string(),
+                serde_json::json!(row.get::<_, String>(31)?),
+            );
+            obj.insert(
+                "must_components_ops".to_string(),
+                serde_json::json!(row.get::<_, String>(32)?),
+            );
+            obj.insert(
+                "detected_toxic_deps".to_string(),
+                serde_json::json!(row.get::<_, String>(33)?),
+            );
+            obj.insert(
+                "do_not_absorb".to_string(),
+                serde_json::json!(row.get::<_, String>(34)?),
+            );
+            obj.insert(
+                "where_ai_should_not_enter".to_string(),
+                serde_json::json!(row.get::<_, String>(35)?),
+            );
+            obj.insert(
+                "classificacao_terminal".to_string(),
+                serde_json::json!(row.get::<_, String>(36)?),
+            );
+            obj.insert(
+                "acao_de_canibalizacao".to_string(),
+                serde_json::json!(row.get::<_, String>(37)?),
+            );
+            obj.insert(
+                "categoria_arquitetural".to_string(),
+                serde_json::json!(row.get::<_, String>(38)?),
+            );
+            obj.insert(
+                "horizonte_extracao".to_string(),
+                serde_json::json!(row.get::<_, String>(39)?),
+            );
+            obj.insert(
+                "tipo_integracao".to_string(),
+                serde_json::json!(row.get::<_, String>(40)?),
+            );
+            obj.insert(
+                "capability_nature_primary".to_string(),
+                serde_json::json!(row.get::<_, String>(41)?),
+            );
+            obj.insert(
+                "architectural_topology".to_string(),
+                serde_json::json!(row.get::<_, String>(42)?),
+            );
+            obj.insert(
+                "temporal_stability".to_string(),
+                serde_json::json!(row.get::<_, String>(43)?),
+            );
+            obj.insert(
+                "bare_metal_fit".to_string(),
+                serde_json::json!(row.get::<_, String>(44)?),
+            );
+            obj.insert(
+                "extractability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(45)?),
+            );
+            obj.insert(
+                "runtime_sovereignty_fit".to_string(),
+                serde_json::json!(row.get::<_, String>(46)?),
+            );
+            obj.insert(
+                "local_first_fit".to_string(),
+                serde_json::json!(row.get::<_, String>(47)?),
+            );
+            obj.insert(
+                "adoptability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(48)?),
+            );
+            obj.insert(
+                "longitudinal_sustainability".to_string(),
+                serde_json::json!(row.get::<_, String>(49)?),
+            );
+            obj.insert(
+                "maintenance_burden".to_string(),
+                serde_json::json!(row.get::<_, String>(50)?),
+            );
+            obj.insert(
+                "onboarding_friction".to_string(),
+                serde_json::json!(row.get::<_, String>(51)?),
+            );
+            obj.insert(
+                "observability_operational".to_string(),
+                serde_json::json!(row.get::<_, String>(52)?),
+            );
+            obj.insert(
+                "recoverability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(53)?),
+            );
+            obj.insert(
+                "degradation_behavior".to_string(),
+                serde_json::json!(row.get::<_, String>(54)?),
+            );
+            obj.insert(
+                "curation_burden".to_string(),
+                serde_json::json!(row.get::<_, String>(55)?),
+            );
+            obj.insert(
+                "evolution_cost".to_string(),
+                serde_json::json!(row.get::<_, String>(56)?),
+            );
+            obj.insert(
+                "operability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(57)?),
+            );
+            obj.insert(
+                "abandonment_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(58)?),
+            );
+            obj.insert(
+                "time_to_first_clear_value".to_string(),
+                serde_json::json!(row.get::<_, String>(59)?),
+            );
+            obj.insert(
+                "imperfection_tolerance".to_string(),
+                serde_json::json!(row.get::<_, String>(60)?),
+            );
+            obj.insert(
+                "entropy_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(61)?),
+            );
+            obj.insert(
+                "design_misuse_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(62)?),
+            );
+            obj.insert(
+                "intrinsic_ethics_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(63)?),
+            );
+            obj.insert(
+                "discipline_dependency".to_string(),
+                serde_json::json!(row.get::<_, String>(64)?),
+            );
+            obj.insert(
+                "regulatory_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(65)?),
+            );
+            obj.insert(
+                "score_philosophical_fit".to_string(),
+                serde_json::json!(row.get::<_, i64>(66)?),
+            );
+            obj.insert(
+                "score_bare_metal_fit".to_string(),
+                serde_json::json!(row.get::<_, i64>(67)?),
+            );
+            obj.insert(
+                "score_architectural_extractability".to_string(),
+                serde_json::json!(row.get::<_, i64>(68)?),
+            );
+            obj.insert(
+                "score_operability".to_string(),
+                serde_json::json!(row.get::<_, i64>(69)?),
+            );
+            obj.insert(
+                "score_creep_risk".to_string(),
+                serde_json::json!(row.get::<_, i64>(70)?),
+            );
+            obj.insert(
+                "score_runtime_sovereignty".to_string(),
+                serde_json::json!(row.get::<_, i64>(71)?),
+            );
+            obj.insert(
+                "score_model_logic_value".to_string(),
+                serde_json::json!(row.get::<_, i64>(72)?),
+            );
+            obj.insert(
+                "score_ethics_safety".to_string(),
+                serde_json::json!(row.get::<_, i64>(73)?),
+            );
+            obj.insert(
+                "score_intrinsic_risk".to_string(),
+                serde_json::json!(row.get::<_, i64>(74)?),
+            );
+            obj.insert(
+                "score_final".to_string(),
+                serde_json::json!(row.get::<_, f64>(75)?),
+            );
+            obj.insert(
+                "score_fit_geral_soda".to_string(),
+                serde_json::json!(row.get::<_, f64>(76)?),
+            );
+            obj.insert(
+                "score_architectural_priority".to_string(),
+                serde_json::json!(row.get::<_, f64>(77)?),
+            );
+            obj.insert(
+                "score_human_product_priority".to_string(),
+                serde_json::json!(row.get::<_, f64>(78)?),
+            );
+            obj.insert(
+                "score_absorption_readiness".to_string(),
+                serde_json::json!(row.get::<_, f64>(79)?),
+            );
+            obj.insert(
+                "score_operational_priority".to_string(),
+                serde_json::json!(row.get::<_, f64>(80)?),
+            );
+            obj.insert(
+                "score_sustainability_adjusted_fit".to_string(),
+                serde_json::json!(row.get::<_, f64>(81)?),
+            );
+            obj.insert(
+                "valid_from".to_string(),
+                serde_json::json!(row.get::<_, i64>(82)?),
+            );
+            obj.insert(
+                "valid_to".to_string(),
+                serde_json::json!(row.get::<_, Option<i64>>(83)?),
+            );
+            obj.insert(
+                "embargo_status".to_string(),
+                serde_json::json!(row.get::<_, i64>(84)?),
+            );
+            Ok(serde_json::Value::Object(obj))
+        });
+
+        match json_val {
+            Ok(value) => serde_json::from_value::<MasterSolutionsRow>(value)
+                .map(Some)
+                .map_err(|e| SsotError::L2Failure(format!("Falha ao decodificar MasterSolutionsRow do SQLite: {e}"))),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(SsotError::L2Failure(format!(
+                "Falha ao ler repo_heuristics do SQLite: {e}"
+            ))),
+        }
+    }
+
+    pub(crate) fn load_block3_justifications(
+        repo_id: &str,
+    ) -> Result<HashMap<String, String>, SsotError> {
+        let conn = Self::open_vault_connection()?;
+        Self::ensure_repo_heuristics_justifications_schema(&conn).map_err(SsotError::L2Failure)?;
+        let json_text: Result<String, _> = conn.query_row(
+            "SELECT justifications_json
+             FROM repo_heuristics_justifications
+             WHERE project_name = ?1 AND block = 3
+             LIMIT 1",
+            rusqlite::params![repo_id],
+            |row| row.get::<_, String>(0),
+        );
+        match json_text {
+            Ok(text) => Ok(serde_json::from_str::<HashMap<String, String>>(&text).unwrap_or_default()),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(HashMap::new()),
+            Err(e) => Err(SsotError::L2Failure(format!(
+                "Falha ao ler justifications do Bloco 3 no SQLite: {e}"
+            ))),
+        }
     }
 
     fn load_l2_curated_overrides(
@@ -566,6 +975,173 @@ impl SsotInjector {
         }
     }
 
+    pub async fn inject_ssot_from_db(repo_id: &str, now_epoch: i64) -> Result<u32, SsotError> {
+        let Some(mut row) = Self::try_load_repo_heuristics_row(repo_id)? else {
+            return Err(SsotError::L2Failure(format!(
+                "Outbox ausente: repo_heuristics não encontrado para repo_id={}",
+                repo_id
+            )));
+        };
+        let block3_justifications = Self::load_block3_justifications(repo_id)?;
+
+        let validated = Self::validate_payload(repo_id, &row)?;
+        apply_phase4_block5(now_epoch, &mut row);
+
+        let spreadsheet_id =
+            env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
+        let sheet = "MASTER_SOLUTIONS";
+        let row_number_1based =
+            Self::resolve_row_number_by_repo_url(&spreadsheet_id, sheet, &validated.repo_url).await?;
+
+        let client = McpGoogleSheetsClient;
+        let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
+        let sheet_proposta = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "proposta_original_resumo",
+        )
+        .await?;
+        let sheet_categoria = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "categoria_arquitetural",
+        )
+        .await?;
+
+        if !sheet_proposta.is_empty() {
+            row.proposta_original_resumo = sheet_proposta.clone();
+        } else if let Some(v) = l2_proposta.as_deref() {
+            if !v.trim().is_empty() {
+                row.proposta_original_resumo = v.trim().to_string();
+            }
+        }
+        if !sheet_categoria.is_empty() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(&sheet_categoria) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        } else if let Some(v) = l2_categoria.as_deref() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(v) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        }
+
+        let lote_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "lote_id").then_some(idx))
+            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
+        let lote_col = Self::col_idx_to_a1(lote_idx);
+        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
+        let lote_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let lote_cell = lote_values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let mut dynamic_skip: Vec<&'static str> = Vec::new();
+        if !lote_cell.is_empty() {
+            dynamic_skip.push("lote_id");
+        }
+        if !sheet_proposta.is_empty() {
+            dynamic_skip.push("proposta_original_resumo");
+        }
+        if !sheet_categoria.is_empty() {
+            dynamic_skip.push("categoria_arquitetural");
+        }
+        let batch_payload =
+            Self::prepare_batch_payload_dynamic_with_skip(row_number_1based, &header_row, &row, &dynamic_skip)?;
+
+        {
+            let conn = Self::open_vault_connection()?;
+            Self::ensure_repo_heuristics_schema(&conn).map_err(SsotError::L2Failure)?;
+            let _ = conn.execute(
+                "UPDATE repo_heuristics
+                 SET score_final = ?2,
+                     score_fit_geral_soda = ?3,
+                     score_architectural_priority = ?4,
+                     score_human_product_priority = ?5,
+                     score_absorption_readiness = ?6,
+                     score_operational_priority = ?7,
+                     score_sustainability_adjusted_fit = ?8,
+                     valid_from = ?9,
+                     valid_to = ?10,
+                     embargo_status = ?11
+                 WHERE project_name = ?1",
+                rusqlite::params![
+                    repo_id,
+                    row.score_final,
+                    row.score_fit_geral_soda,
+                    row.score_architectural_priority,
+                    row.score_human_product_priority,
+                    row.score_absorption_readiness,
+                    row.score_operational_priority,
+                    row.score_sustainability_adjusted_fit,
+                    row.valid_from,
+                    row.valid_to,
+                    row.embargo_status
+                ],
+            );
+        }
+
+        match Self::dispatch_to_cloud(batch_payload).await {
+            Ok(()) => {
+                let conn = Self::open_vault_connection()?;
+                let _ = conn.execute(
+                    "UPDATE repo_heuristics
+                     SET status_atualizacao = ?2,
+                         status_fase = ?3
+                     WHERE project_name = ?1",
+                    rusqlite::params![repo_id, "CONCLUIDO_AGUARDANDO", "FASE_4_SHEETS_UPDATED"],
+                );
+                let _ = conn.execute(
+                    "UPDATE repositorios
+                     SET status_processamento = ?1
+                     WHERE project_name = ?2",
+                    rusqlite::params!["CONCLUIDO", repo_id],
+                );
+                let _ = Self::checkpoint_upsert_repo_heuristics_full(
+                    repo_id,
+                    &row,
+                    "CONCLUIDO_AGUARDANDO",
+                    "FASE_4_SHEETS_UPDATED",
+                    &block3_justifications,
+                    now_epoch,
+                );
+                Ok(row_number_1based)
+            }
+            Err(err) => {
+                let conn = Self::open_vault_connection()?;
+                let _ = conn.execute(
+                    "UPDATE repo_heuristics
+                     SET status_fase = ?2
+                     WHERE project_name = ?1",
+                    rusqlite::params![repo_id, "ERRO_FASE_4"],
+                );
+                let _ = conn.execute(
+                    "UPDATE repositorios
+                     SET status_processamento = ?1
+                     WHERE project_name = ?2",
+                    rusqlite::params!["ERRO_FASE_4", repo_id],
+                );
+                Err(err)
+            }
+        }
+    }
+
     async fn resolve_row_number_by_repo_url(
         spreadsheet_id: &str,
         sheet: &str,
@@ -912,12 +1488,8 @@ impl SsotInjector {
         block3_justifications: &HashMap<String, String>,
         now_epoch: i64,
     ) -> Result<(), String> {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let root_dir = std::path::Path::new(manifest_dir).parent().unwrap_or_else(|| std::path::Path::new("."));
-        let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
-        
-        let conn = Connection::open(&db_path)
-            .map_err(|e| format!("Falha ao conectar no SQLite: {}", e))?;
+        let conn = Self::open_vault_connection()
+            .map_err(|e| format!("Falha ao conectar no SQLite: {e:?}"))?;
 
         Self::ensure_repo_heuristics_schema(&conn)?;
         Self::ensure_repo_heuristics_justifications_schema(&conn)?;
@@ -926,6 +1498,65 @@ impl SsotInjector {
             Self::status_fase_to_persist(&payload.status_atualizacao, &payload.status_fase)
                 .to_string();
 
+        Self::upsert_repo_heuristics_row_internal(
+            &conn,
+            repo_id,
+            payload,
+            validated,
+            payload.status_atualizacao.as_str(),
+            &status_fase_to_persist,
+            block3_justifications,
+            now_epoch,
+        )?;
+
+        // Atualizando o status em repositorios
+        let _ = conn.execute(
+            "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
+            rusqlite::params![status_value, repo_id],
+        )
+        .map_err(|e| format!("Falha ao executar UPDATE repositorios: {}", e))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn checkpoint_upsert_repo_heuristics_full(
+        repo_id: &str,
+        payload: &MasterSolutionsRow,
+        status_atualizacao: &str,
+        status_fase: &str,
+        block3_justifications: &HashMap<String, String>,
+        now_epoch: i64,
+    ) -> Result<(), SsotError> {
+        let validated = Self::validate_payload(repo_id, payload)?;
+        let conn = Self::open_vault_connection()?;
+        Self::ensure_repo_heuristics_schema(&conn).map_err(SsotError::L2Failure)?;
+        Self::ensure_repo_heuristics_justifications_schema(&conn).map_err(SsotError::L2Failure)?;
+        let status_fase_to_persist =
+            Self::status_fase_to_persist(status_atualizacao, status_fase).to_string();
+        Self::upsert_repo_heuristics_row_internal(
+            &conn,
+            repo_id,
+            payload,
+            &validated,
+            status_atualizacao,
+            &status_fase_to_persist,
+            block3_justifications,
+            now_epoch,
+        )
+        .map_err(SsotError::L2Failure)?;
+        Ok(())
+    }
+
+    fn upsert_repo_heuristics_row_internal(
+        conn: &Connection,
+        repo_id: &str,
+        payload: &MasterSolutionsRow,
+        validated: &ValidatedSsotFields,
+        status_atualizacao_to_persist: &str,
+        status_fase_to_persist: &str,
+        block3_justifications: &HashMap<String, String>,
+        now_epoch: i64,
+    ) -> Result<(), String> {
         let repo_version_to_persist = {
             let primary = payload.repo_analised_version.trim();
             if !primary.is_empty() {
@@ -970,7 +1601,7 @@ impl SsotInjector {
             )",
             rusqlite::params![
                 &validated.project_name,
-                &payload.status_atualizacao,
+                status_atualizacao_to_persist,
                 &status_fase_to_persist,
                 &validated.repo_url,
                 &validated.repo_analised_version,
@@ -1083,13 +1714,6 @@ impl SsotInjector {
             )
             .map_err(|e| format!("Falha ao persistir justifications do Bloco 3 em SQLite: {}", e))?;
         }
-
-        // Atualizando o status em repositorios
-        let _ = conn.execute(
-            "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
-            rusqlite::params![status_value, repo_id],
-        ).map_err(|e| format!("Falha ao executar UPDATE repositorios: {}", e))?;
-        
         Ok(())
     }
 
@@ -1114,7 +1738,7 @@ impl SsotInjector {
         .map_err(SsotError::L2Failure)
     }
 
-    fn ensure_repo_heuristics_schema(conn: &Connection) -> Result<(), String> {
+    pub(crate) fn ensure_repo_heuristics_schema(conn: &Connection) -> Result<(), String> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS repo_heuristics (
                 project_name TEXT PRIMARY KEY,
@@ -1285,7 +1909,7 @@ impl SsotInjector {
         Ok(())
     }
 
-    fn ensure_repo_heuristics_justifications_schema(conn: &Connection) -> Result<(), String> {
+    pub(crate) fn ensure_repo_heuristics_justifications_schema(conn: &Connection) -> Result<(), String> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS repo_heuristics_justifications (
                 project_name TEXT NOT NULL,
