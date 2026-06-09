@@ -1451,6 +1451,37 @@ impl SsotInjector {
             .map_err(SsotError::CloudFailure)
     }
 
+    pub async fn update_single_status_fase(
+        row_number_1based: u32,
+        new_status: &str,
+    ) -> Result<(), SsotError> {
+        let spreadsheet_id =
+            env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
+        let client = McpGoogleSheetsClient;
+        let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let status_idx = Self::header_idx(&header_row, "status_fase").ok_or_else(|| {
+            SsotError::CloudFailure("Header missing status_fase".to_string())
+        })?;
+        let col = Self::col_idx_to_a1(status_idx);
+        let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+        client
+            .batch_update_cells(
+                &spreadsheet_id,
+                MASTER_SOLUTIONS_SHEET,
+                json!({
+                    range: [[new_status]]
+                }),
+            )
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        info!(
+            row_number = row_number_1based,
+            status_fase = new_status,
+            "SSOT: micro-sync de status_fase concluído"
+        );
+        Ok(())
+    }
+
     async fn dispatch_to_cloud(payload: Value) -> Result<(), SsotError> {
         let sheets_id = env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_SHEETS_ID".to_string()))?;

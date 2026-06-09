@@ -970,6 +970,7 @@ fn normalize_lens_bullets(raw: &str) -> String {
     scrub_json_syntax_to_text(trimmed)
 }
 
+#[cfg(test)]
 fn normalize_pydantic_list_field(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -1143,6 +1144,23 @@ pub struct Phase3Output {
     pub block3_justifications: HashMap<String, String>,
 }
 
+const BLOCK_1: u8 = 1;
+const BLOCK_2A: u8 = 21;
+const BLOCK_2B: u8 = 22;
+const BLOCK_3: u8 = 3;
+const BLOCK_4: u8 = 4;
+
+fn block_prompt_tag(block: u8) -> &'static str {
+    match block {
+        BLOCK_1 => "1",
+        BLOCK_2A => "2A",
+        BLOCK_2B => "2B",
+        BLOCK_3 => "3",
+        BLOCK_4 => "4",
+        _ => "0",
+    }
+}
+
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Phase3Error {
     #[error("Falha no parse do code-fence JSON: {0}")]
@@ -1182,7 +1200,7 @@ struct Block1Fields {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Block2Fields {
+struct Block2NarrativeFields {
     indicacao_otimista_canibalizacao: String,
     ouro_a_extrair: String,
     deep_pattern: String,
@@ -1191,20 +1209,29 @@ struct Block2Fields {
     real_structural_problem: String,
     categoria_nuance_tecnica: String,
     integracao_papel_exato: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Block2MatrixFields {
     must_components_prod_ux: Vec<String>,
     must_components_arq: Vec<String>,
     must_components_ops: Vec<String>,
-    detected_toxic_deps: String,
-    do_not_absorb: String,
-    where_ai_should_not_enter: String,
+    detected_toxic_deps: Vec<String>,
+    do_not_absorb: Vec<String>,
+    where_ai_should_not_enter: Vec<String>,
 }
 
-impl Block2Fields {
+impl Block2MatrixFields {
     fn sanitize(self) -> Self {
         let max_items = 8usize;
         let mut must_components_prod_ux = normalize_string_vec(self.must_components_prod_ux, 3, max_items);
         let mut must_components_arq = normalize_string_vec(self.must_components_arq, 3, max_items);
         let mut must_components_ops = normalize_string_vec(self.must_components_ops, 3, max_items);
+        let mut detected_toxic_deps = normalize_string_vec(self.detected_toxic_deps, 1, max_items);
+        let mut do_not_absorb = normalize_string_vec(self.do_not_absorb, 1, max_items);
+        let mut where_ai_should_not_enter =
+            normalize_string_vec(self.where_ai_should_not_enter, 1, max_items);
         if must_components_prod_ux.len() > max_items {
             must_components_prod_ux.truncate(max_items);
         }
@@ -1214,10 +1241,22 @@ impl Block2Fields {
         if must_components_ops.len() > max_items {
             must_components_ops.truncate(max_items);
         }
+        if detected_toxic_deps.len() > max_items {
+            detected_toxic_deps.truncate(max_items);
+        }
+        if do_not_absorb.len() > max_items {
+            do_not_absorb.truncate(max_items);
+        }
+        if where_ai_should_not_enter.len() > max_items {
+            where_ai_should_not_enter.truncate(max_items);
+        }
         Self {
             must_components_prod_ux,
             must_components_arq,
             must_components_ops,
+            detected_toxic_deps,
+            do_not_absorb,
+            where_ai_should_not_enter,
             ..self
         }
     }
@@ -1291,11 +1330,11 @@ fn validate_score_0_10(field: &str, value: i64, block: u8) -> Result<(), Phase3E
 
 fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, last_error: Option<&str>) -> String {
     let mut prompt = String::new();
-    prompt.push_str(&format!("BLOCK={}\n", block));
+    prompt.push_str(&format!("BLOCK={}\n", block_prompt_tag(block)));
     prompt.push_str(&format!("project_name={}\n", block0.project_name));
     prompt.push_str(&format!("repo_url={}\n", block0.repo_url));
     prompt.push_str("OUTPUT: responda com um bloco Markdown ```json ... ``` contendo um objeto JSON.\n");
-    if block == 3 {
+    if block == BLOCK_3 {
         prompt.push_str("O JSON deve conter: {\"fields\":{...}}.\n");
         prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
     } else {
@@ -1306,18 +1345,23 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
     prompt.push_str(&fields_keys_for_block(block, prior));
     prompt.push('\n');
     match block {
-        1 => {
+        BLOCK_1 => {
             prompt.push_str("IDIOMA_BLOCK1: todos os textos descritivos devem estar em Português (PT-BR).\n");
             prompt.push_str("STYLE_BLOCK1: seja conciso (5 a 8 linhas por campo), objetivo e sem jargão corporativo.\n");
             prompt.push_str("TRANSLATE_BLOCK1: gere declared_description_ptbr como tradução fiel para PT-BR de project.declared_description. Comece com letra maiúscula. Não adicione comentários sobre tradução.\n");
         }
-        2 => {
-            prompt.push_str("IDIOMA_BLOCK2: todos os textos descritivos devem estar em Português (PT-BR).\n");
-            prompt.push_str("STYLE_BLOCK2: evite generalidades. Use termos concretos e testáveis.\n");
-            prompt.push_str("MUST_COMPONENTS_ARRAY_BLOCK2: must_components_prod_ux, must_components_arq, must_components_ops DEVEM ser arrays JSON (ex: [\"item 1\", \"item 2\", \"item 3\"]) com NO MÍNIMO 3 itens, cada item detalhado (componente + papel + por quê).\n");
-            prompt.push_str("INDICACAO_OTIMISTA_BLOCK2: gere indicacao_otimista_canibalizacao como Arquiteto-Chefe SODA. Use as 3 lentes para propor estrategicamente o que canibalizar (valor de produto, núcleo arquitetural transplantável, riscos/limites). Não concatene colunas; sintetize uma proposta inteligente.\n");
+        BLOCK_2A => {
+            prompt.push_str("IDIOMA_BLOCK2A: todos os textos descritivos devem estar em Português (PT-BR).\n");
+            prompt.push_str("STYLE_BLOCK2A: evite generalidades. Use termos concretos, testáveis e com densidade técnica.\n");
+            prompt.push_str("INDICACAO_OTIMISTA_BLOCK2A: gere indicacao_otimista_canibalizacao como Arquiteto-Chefe SODA. Use as 3 lentes para propor estrategicamente o que canibalizar (valor de produto, núcleo arquitetural transplantável, riscos/limites). Não concatene colunas; sintetize uma proposta inteligente.\n");
         }
-        3 => {
+        BLOCK_2B => {
+            prompt.push_str("IDIOMA_BLOCK2B: todos os itens devem estar em Português (PT-BR).\n");
+            prompt.push_str("STYLE_BLOCK2B: entregue somente listas concretas, sem narrativa extra, sem parágrafos e sem markdown.\n");
+            prompt.push_str("ARRAYS_BLOCK2B: must_components_prod_ux, must_components_arq e must_components_ops DEVEM ser arrays JSON com NO MÍNIMO 3 itens, cada item detalhado (componente + papel + por quê).\n");
+            prompt.push_str("ARRAYS_BLOCK2B_LIGHT: detected_toxic_deps, do_not_absorb e where_ai_should_not_enter DEVEM ser arrays JSON com NO MÍNIMO 1 item cada.\n");
+        }
+        BLOCK_3 => {
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
             prompt.push_str("MODO_ROBOTICO_ENUMS_BLOCK3: para TODOS os campos ENUM do Bloco 3, fields deve conter APENAS o valor do catálogo (1 token).\n");
             prompt.push_str("PROIBIDO: hífens, ':' , parênteses, frases, ou duas opções no mesmo campo.\n");
@@ -1326,7 +1370,7 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
         }
         _ => {}
     }
-    if block == 4 {
+    if block == BLOCK_4 {
         prompt.push_str("CONSTRAINTS_BLOCK4: todos os campos em fields são inteiros no intervalo [0,10].\n");
     }
     if let Some(error) = last_error {
@@ -1341,7 +1385,7 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
 
 fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
     match block {
-        1 => {
+        BLOCK_1 => {
             let mut keys = vec![
                 "proposta_original_resumo",
                 "declared_description_ptbr",
@@ -1357,8 +1401,9 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
-        2 => r#"["indicacao_otimista_canibalizacao","ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato","must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
-        3 => {
+        BLOCK_2A => r#"["indicacao_otimista_canibalizacao","ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato"]"#.to_string(),
+        BLOCK_2B => r#"["must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
+        BLOCK_3 => {
             let mut keys = vec![
                 "classificacao_terminal",
                 "acao_de_canibalizacao",
@@ -1400,7 +1445,7 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
-        4 => r#"["score_philosophical_fit","score_bare_metal_fit","score_architectural_extractability","score_operability","score_creep_risk","score_runtime_sovereignty","score_model_logic_value","score_ethics_safety","score_intrinsic_risk"]"#.to_string(),
+        BLOCK_4 => r#"["score_philosophical_fit","score_bare_metal_fit","score_architectural_extractability","score_operability","score_creep_risk","score_runtime_sovereignty","score_model_logic_value","score_ethics_safety","score_intrinsic_risk"]"#.to_string(),
         _ => "[]".to_string(),
     }
 }
@@ -1479,7 +1524,7 @@ fn compact_context_for_block(
         }),
     );
 
-    if block >= 2 {
+    if matches!(block, BLOCK_2A | BLOCK_2B | BLOCK_3 | BLOCK_4) {
         ctx.insert(
             "curation".to_string(),
             serde_json::json!({
@@ -1487,9 +1532,9 @@ fn compact_context_for_block(
             }),
         );
     }
-    if block >= 3 {
+    if matches!(block, BLOCK_2B | BLOCK_3 | BLOCK_4) {
         ctx.insert(
-            "block2".to_string(),
+            "block2a".to_string(),
             serde_json::json!({
                 "indicacao_otimista_canibalizacao": truncate_chars_simple(&row.indicacao_otimista_canibalizacao, 1800),
                 "ouro_a_extrair": &row.ouro_a_extrair,
@@ -1502,7 +1547,20 @@ fn compact_context_for_block(
             }),
         );
     }
-    if block >= 4 {
+    if matches!(block, BLOCK_3 | BLOCK_4) {
+        ctx.insert(
+            "block2b".to_string(),
+            serde_json::json!({
+                "must_components_prod_ux": &row.must_components_prod_ux,
+                "must_components_arq": &row.must_components_arq,
+                "must_components_ops": &row.must_components_ops,
+                "detected_toxic_deps": &row.detected_toxic_deps,
+                "do_not_absorb": &row.do_not_absorb,
+                "where_ai_should_not_enter": &row.where_ai_should_not_enter
+            }),
+        );
+    }
+    if matches!(block, BLOCK_4) {
         ctx.insert(
             "block3".to_string(),
             serde_json::json!({
@@ -1734,7 +1792,7 @@ pub async fn run_phase3_sgr(
     info!(
         repo_id = %block0.project_name,
         model = %cfg.model,
-        "F3 (Sintetizador SGR): iniciando SGR em cascata (Blocos 1..4)"
+        "F3 (Sintetizador SGR): iniciando SGR em cascata (Blocos 1 -> 2A -> 2B -> 3 -> 4)"
     );
     let started_total = Instant::now();
     let state = Arc::new(tokio::sync::Mutex::new(Phase3TelemetryState {
@@ -1747,7 +1805,7 @@ pub async fn run_phase3_sgr(
 
     set_phase3_block(&state, 1, "Bloco 1").await;
     let _telemetry_block1 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block1: Block1Fields = run_block(client, cfg, 1, &block0, &row).await?;
+    let block1: Block1Fields = run_block(client, cfg, BLOCK_1, &block0, &row).await?;
     drop(_telemetry_block1);
     if let Some(value) = block1.proposta_original_resumo {
         if !value.trim().is_empty() {
@@ -1763,31 +1821,38 @@ pub async fn run_phase3_sgr(
     row.observacoes = block1.observacoes;
     info!("F3 (Sintetizador SGR): Bloco 1 concluído");
 
-    set_phase3_block(&state, 2, "Bloco 2").await;
-    let _telemetry_block2 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block2: Block2Fields = run_block::<Block2Fields>(client, cfg, 2, &block0, &row)
+    set_phase3_block(&state, 2, "Bloco 2A").await;
+    let _telemetry_block2a = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
+    let block2a: Block2NarrativeFields =
+        run_block::<Block2NarrativeFields>(client, cfg, BLOCK_2A, &block0, &row).await?;
+    drop(_telemetry_block2a);
+    row.indicacao_otimista_canibalizacao = block2a.indicacao_otimista_canibalizacao;
+    row.ouro_a_extrair = block2a.ouro_a_extrair;
+    row.deep_pattern = block2a.deep_pattern;
+    row.transplantable_core = block2a.transplantable_core;
+    row.logic_math_heuristic = block2a.logic_math_heuristic;
+    row.real_structural_problem = block2a.real_structural_problem;
+    row.categoria_nuance_tecnica = block2a.categoria_nuance_tecnica;
+    row.integracao_papel_exato = block2a.integracao_papel_exato;
+    info!("F3 (Sintetizador SGR): Bloco 2A concluído");
+
+    set_phase3_block(&state, 2, "Bloco 2B").await;
+    let _telemetry_block2b = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
+    let block2b: Block2MatrixFields = run_block::<Block2MatrixFields>(client, cfg, BLOCK_2B, &block0, &row)
         .await?
         .sanitize();
-    drop(_telemetry_block2);
-    row.indicacao_otimista_canibalizacao = block2.indicacao_otimista_canibalizacao;
-    row.ouro_a_extrair = block2.ouro_a_extrair;
-    row.deep_pattern = block2.deep_pattern;
-    row.transplantable_core = block2.transplantable_core;
-    row.logic_math_heuristic = block2.logic_math_heuristic;
-    row.real_structural_problem = block2.real_structural_problem;
-    row.categoria_nuance_tecnica = block2.categoria_nuance_tecnica;
-    row.integracao_papel_exato = block2.integracao_papel_exato;
-    row.must_components_prod_ux = format_dot_bullets(&block2.must_components_prod_ux);
-    row.must_components_arq = format_dot_bullets(&block2.must_components_arq);
-    row.must_components_ops = format_dot_bullets(&block2.must_components_ops);
-    row.detected_toxic_deps = normalize_pydantic_list_field(&block2.detected_toxic_deps);
-    row.do_not_absorb = normalize_pydantic_list_field(&block2.do_not_absorb);
-    row.where_ai_should_not_enter = normalize_pydantic_list_field(&block2.where_ai_should_not_enter);
-    info!("F3 (Sintetizador SGR): Bloco 2 concluído");
+    drop(_telemetry_block2b);
+    row.must_components_prod_ux = format_dot_bullets(&block2b.must_components_prod_ux);
+    row.must_components_arq = format_dot_bullets(&block2b.must_components_arq);
+    row.must_components_ops = format_dot_bullets(&block2b.must_components_ops);
+    row.detected_toxic_deps = format_dot_bullets(&block2b.detected_toxic_deps);
+    row.do_not_absorb = format_dot_bullets(&block2b.do_not_absorb);
+    row.where_ai_should_not_enter = format_dot_bullets(&block2b.where_ai_should_not_enter);
+    info!("F3 (Sintetizador SGR): Bloco 2B concluído");
 
     set_phase3_block(&state, 3, "Bloco 3 (ENUMs)").await;
     let _telemetry_block3 = spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-    let block3_env = run_block_envelope::<Block3Fields>(client, cfg, 3, &block0, &row).await?;
+    let block3_env = run_block_envelope::<Block3Fields>(client, cfg, BLOCK_3, &block0, &row).await?;
     drop(_telemetry_block3);
     let block3_justifications = block3_env.justifications;
     let block3 = block3_env.fields.sanitize();

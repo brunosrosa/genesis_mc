@@ -847,7 +847,11 @@ impl OpenRouterFormatterClient {
 fn parse_block_from_prompt(prompt: &str) -> Option<u8> {
     let first = prompt.lines().next()?.trim();
     let value = first.strip_prefix("BLOCK=")?.trim();
-    value.parse::<u8>().ok()
+    match value {
+        "2A" => Some(21),
+        "2B" => Some(22),
+        _ => value.parse::<u8>().ok(),
+    }
 }
 
 fn response_format_for_block(block: u8) -> Value {
@@ -924,7 +928,7 @@ fn response_format_for_block(block: u8) -> Value {
                 ],
             )
         }
-        2 => {
+        21 => {
             let mut props = serde_json::Map::new();
             props.insert("indicacao_otimista_canibalizacao".to_string(), string_schema(5000));
             props.insert("ouro_a_extrair".to_string(), string_schema(5000));
@@ -934,6 +938,22 @@ fn response_format_for_block(block: u8) -> Value {
             props.insert("real_structural_problem".to_string(), string_schema(5000));
             props.insert("categoria_nuance_tecnica".to_string(), string_schema(2000));
             props.insert("integracao_papel_exato".to_string(), string_schema(2000));
+            strict_object(
+                props,
+                vec![
+                    "indicacao_otimista_canibalizacao",
+                    "ouro_a_extrair",
+                    "deep_pattern",
+                    "transplantable_core",
+                    "logic_math_heuristic",
+                    "real_structural_problem",
+                    "categoria_nuance_tecnica",
+                    "integracao_papel_exato",
+                ],
+            )
+        }
+        22 => {
+            let mut props = serde_json::Map::new();
             props.insert(
                 "must_components_prod_ux".to_string(),
                 string_array_schema(3, 8, 800),
@@ -946,20 +966,21 @@ fn response_format_for_block(block: u8) -> Value {
                 "must_components_ops".to_string(),
                 string_array_schema(3, 8, 800),
             );
-            props.insert("detected_toxic_deps".to_string(), string_schema(5000));
-            props.insert("do_not_absorb".to_string(), string_schema(5000));
-            props.insert("where_ai_should_not_enter".to_string(), string_schema(5000));
+            props.insert(
+                "detected_toxic_deps".to_string(),
+                string_array_schema(1, 8, 800),
+            );
+            props.insert(
+                "do_not_absorb".to_string(),
+                string_array_schema(1, 8, 800),
+            );
+            props.insert(
+                "where_ai_should_not_enter".to_string(),
+                string_array_schema(1, 8, 800),
+            );
             strict_object(
                 props,
                 vec![
-                    "indicacao_otimista_canibalizacao",
-                    "ouro_a_extrair",
-                    "deep_pattern",
-                    "transplantable_core",
-                    "logic_math_heuristic",
-                    "real_structural_problem",
-                    "categoria_nuance_tecnica",
-                    "integracao_papel_exato",
                     "must_components_prod_ux",
                     "must_components_arq",
                     "must_components_ops",
@@ -1185,7 +1206,7 @@ fn example_output_for_block(block: u8) -> Value {
             "risco_linha_vermelha": "",
             "observacoes": ""
         }),
-        2 => json!({
+        21 => json!({
             "indicacao_otimista_canibalizacao": "",
             "ouro_a_extrair": "",
             "deep_pattern": "",
@@ -1193,13 +1214,15 @@ fn example_output_for_block(block: u8) -> Value {
             "logic_math_heuristic": "",
             "real_structural_problem": "",
             "categoria_nuance_tecnica": "",
-            "integracao_papel_exato": "",
+            "integracao_papel_exato": ""
+        }),
+        22 => json!({
             "must_components_prod_ux": ["item 1", "item 2", "item 3"],
             "must_components_arq": ["item 1", "item 2", "item 3"],
             "must_components_ops": ["item 1", "item 2", "item 3"],
-            "detected_toxic_deps": "",
-            "do_not_absorb": "",
-            "where_ai_should_not_enter": ""
+            "detected_toxic_deps": ["item 1"],
+            "do_not_absorb": ["item 1"],
+            "where_ai_should_not_enter": ["item 1"]
         }),
         3 => json!({
             "classificacao_terminal": "APROVADO_COM_RESSALVAS",
@@ -2887,6 +2910,21 @@ async fn main() -> io::Result<()> {
     } else {
         0
     };
+
+    if e2e_full {
+        if let Ok(spreadsheet_id) = std::env::var("GOOGLE_SHEETS_ID") {
+            let row_number =
+                resolve_row_number_by_repo_url_and_lote_id(&spreadsheet_id, &repo_url, &lote_id).await?;
+            SsotInjector::update_single_status_fase(row_number, "FASE_2_ENXAME_OK")
+                .await
+                .map_err(|e| io::Error::other(format!("Falha no micro-sync F2->F3: {e}")))?;
+            info!(
+                repo_id = %repo_id,
+                row_number,
+                "E2E: micro-sync intermediário executado após Fase 2 e antes do SGR"
+            );
+        }
+    }
 
     let (lens_a, lens_b, lens_c) = fetch_debates(&conn, &repo_id)?;
     let lens_a_report = lens_a.clone();
