@@ -75,9 +75,9 @@ pub trait SheetsClient: Send + Sync {
     ) -> SheetsFuture<'a>;
 }
 
-pub struct McpGoogleSheetsClient;
+pub struct McpGoogleWorkspaceSheetsClient;
 
-impl SheetsClient for McpGoogleSheetsClient {
+impl SheetsClient for McpGoogleWorkspaceSheetsClient {
     fn get_sheet_data<'a>(
         &'a self,
         spreadsheet_id: &'a str,
@@ -85,13 +85,19 @@ impl SheetsClient for McpGoogleSheetsClient {
         range: String,
     ) -> SheetsDataFuture<'a> {
         Box::pin(async move {
-            let result = SsotInjector::call_mcp_google_sheets_tool(
-                "get_sheet_data",
+            let access_token = SsotInjector::google_workspace_access_token()
+                .await
+                .map_err(|e| e.to_string())?;
+            let result = SsotInjector::call_mcp_google_workspace_sheets_tool(
+                "read_values",
                 json!({
-                    "spreadsheet_id": spreadsheet_id,
                     "sheet": sheet,
                     "range": range,
-                    "include_grid_data": false
+                    "major_dimension": "ROWS"
+                }),
+                json!({
+                    "spreadsheet_id": spreadsheet_id,
+                    "access_token": access_token
                 }),
             )
             .await
@@ -108,16 +114,30 @@ impl SheetsClient for McpGoogleSheetsClient {
     ) -> SheetsFuture<'a> {
         Box::pin(async move {
             let call_once = |chunk: Value| async move {
-                SsotInjector::call_mcp_google_sheets_tool(
-                    "batch_update_cells",
-                    json!({
-                        "spreadsheet_id": spreadsheet_id,
-                        "sheet": sheet,
-                        "ranges": chunk
-                    }),
-                )
-                .await
-                .map_err(|e| e.to_string())?;
+                let access_token = SsotInjector::google_workspace_access_token()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let map = chunk
+                    .as_object()
+                    .ok_or_else(|| "Chunk inválido para write_values".to_string())?;
+
+                for (range, values) in map {
+                    SsotInjector::call_mcp_google_workspace_sheets_tool(
+                        "write_values",
+                        json!({
+                            "sheet": sheet,
+                            "range": range,
+                            "values": values,
+                            "major_dimension": "ROWS"
+                        }),
+                        json!({
+                            "spreadsheet_id": spreadsheet_id,
+                            "access_token": access_token
+                        }),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                }
                 Ok::<(), String>(())
             };
 
@@ -752,7 +772,7 @@ impl SsotInjector {
             )
             .await?;
 
-        let client = McpGoogleSheetsClient;
+        let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
         let sheet_proposta = Self::read_sheet_cell(
@@ -870,7 +890,7 @@ impl SsotInjector {
         let row_number_1based =
             Self::resolve_row_number_by_repo_url(&spreadsheet_id, sheet, &validated.repo_url).await?;
 
-        let client = McpGoogleSheetsClient;
+        let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
         let sheet_proposta = Self::read_sheet_cell(
@@ -993,7 +1013,7 @@ impl SsotInjector {
         let row_number_1based =
             Self::resolve_row_number_by_repo_url(&spreadsheet_id, sheet, &validated.repo_url).await?;
 
-        let client = McpGoogleSheetsClient;
+        let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
         let sheet_proposta = Self::read_sheet_cell(
@@ -1147,7 +1167,7 @@ impl SsotInjector {
         sheet: &str,
         repo_url: &str,
     ) -> Result<u32, SsotError> {
-        let client = McpGoogleSheetsClient;
+        let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, spreadsheet_id).await?;
         let repo_url_idx = header_row
             .iter()
@@ -1206,16 +1226,79 @@ impl SsotInjector {
         None
     }
 
-    async fn call_mcp_google_sheets_tool(
+    async fn google_workspace_access_token() -> Result<String, SsotError> {
+        if let Ok(token) = env::var("GOOGLE_ACCESS_TOKEN") {
+            let token = token.trim().to_string();
+            if !token.is_empty() {
+                return Ok(token);
+            }
+        }
+        if let Ok(token) = env::var("ACCESS_TOKEN") {
+            let token = token.trim().to_string();
+            if !token.is_empty() {
+                return Ok(token);
+            }
+        }
+
+        let client_id = env::var("GOOGLE_CLIENT_ID")
+            .map_err(|_| SsotError::ConfigMissing("GOOGLE_CLIENT_ID"))?;
+        let client_secret = env::var("GOOGLE_CLIENT_SECRET")
+            .map_err(|_| SsotError::ConfigMissing("GOOGLE_CLIENT_SECRET"))?;
+        let refresh_token = env::var("GOOGLE_REFRESH_TOKEN")
+            .map_err(|_| SsotError::ConfigMissing("GOOGLE_REFRESH_TOKEN"))?;
+
+        let http = reqwest::Client::new();
+        let response = http
+            .post("https://oauth2.googleapis.com/token")
+            .json(&json!({
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token"
+            }))
+            .send()
+            .await
+            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao renovar Google OAuth token: {e}")))?;
+
+        if !response.status().is_success() {
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "unknown".to_string());
+            return Err(SsotError::NetworkFailure(format!(
+                "Falha ao renovar Google OAuth token: {}",
+                body
+            )));
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao parsear refresh token Google: {e}")))?;
+        payload
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| SsotError::NetworkFailure("OAuth refresh retornou access_token vazio".to_string()))
+    }
+
+    fn mcp_google_workspace_command() -> String {
+        env::var("MCP_GOOGLE_WORKSPACE_BIN")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "mcp-google".to_string())
+    }
+
+    async fn call_mcp_google_workspace_sheets_tool(
         tool_name: &str,
         arguments: Value,
+        meta: Value,
     ) -> Result<Value, SsotError> {
         use std::process::Stdio;
         use tokio::io::AsyncWriteExt;
         use tokio::process::Command;
-
-        let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-            .map_err(|_| SsotError::ConfigMissing("GOOGLE_APPLICATION_CREDENTIALS"))?;
 
         let init_req = json!({
             "jsonrpc": "2.0",
@@ -1236,16 +1319,17 @@ impl SsotInjector {
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
-            "params": { "name": tool_name, "arguments": arguments }
+            "params": { "name": tool_name, "arguments": arguments, "_meta": meta }
         });
 
-        let mut child = Command::new("mcp-google-sheets")
-            .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
+        let mut child = Command::new(Self::mcp_google_workspace_command())
+            .arg("sheets")
+            .env("RUST_LOG", "off")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
+            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao spawnar mcp-google-workspace: {}", e)))?;
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
@@ -1293,7 +1377,7 @@ impl SsotInjector {
                 Err(_) => {
                     let _ = child.kill().await;
                     return Err(SsotError::NetworkFailure(format!(
-                        "Timeout aguardando mcp-google-sheets tool={} timeout_s={}",
+                        "Timeout aguardando mcp-google-workspace tool={} timeout_s={}",
                         tool_name,
                         MCP_TIMEOUT.as_secs()
                     )));
@@ -2081,7 +2165,7 @@ impl SsotInjector {
     ) -> Result<(), SsotError> {
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
-        let client = McpGoogleSheetsClient;
+        let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let status_idx = Self::header_idx(&header_row, "status_fase").ok_or_else(|| {
             SsotError::CloudFailure("Header missing status_fase".to_string())
@@ -2109,7 +2193,7 @@ impl SsotInjector {
     async fn dispatch_to_cloud(payload: Value) -> Result<(), SsotError> {
         let sheets_id = env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_SHEETS_ID".to_string()))?;
-        let client = McpGoogleSheetsClient;
+        let client = McpGoogleWorkspaceSheetsClient;
         client
             .batch_update_cells(&sheets_id, MASTER_SOLUTIONS_SHEET, payload)
             .await

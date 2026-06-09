@@ -25,7 +25,7 @@ binds:
                     || mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|notebook_create|notebook_delete|source_get_content|source_add|source_delete|add_source|delete_source)$")
                     || mcp.tool.name.matches("^(web_search|duckduckgo_search|fetch_content)$")
                     || mcp.tool.name.matches("^(webcrawl_search|webcrawl_scrape|webcrawl_map|webcrawl_crawl)$")
-                    || mcp.tool.name.matches("^(get_sheet_data|add_rows|batch_update_cells)$")
+                    || mcp.tool.name.matches("^(read_values|write_values|create_spreadsheet|clear_values|get_sheet_info)$")
                     || mcp.tool.name.matches("^(search_docs|get_docs_tree|docfork_search_docs|fetch_doc)$")
                     || mcp.tool.name.matches("^(memory_.*|sqlite_.*|lean_.*|sqz_.*|toon_compress)$")
             backends:
@@ -159,21 +159,23 @@ binds:
                         env:
                           UV_NO_PROGRESS: '1'
                           UV_QUIET: '1'
-                    - name: mcp-google-sheets
+                    - name: mcp-google-workspace
                       stdio:
                         cmd: 'Z:/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
                         args:
                           [
                             '--timeout-ms',
-                            '150000',
+                            '180000',
                             '--',
-                            'uvx.exe',
-                            'mcp-google-sheets',
+                            'mcp-google.exe',
+                            'sheets',
                           ]
                         env:
-                          UV_NO_PROGRESS: '1'
-                          UV_QUIET: '1'
-                          GOOGLE_APPLICATION_CREDENTIALS: '${GOOGLE_APPLICATION_CREDENTIALS}'
+                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+                          GOOGLE_CLIENT_ID: '${GOOGLE_CLIENT_ID}'
+                          GOOGLE_CLIENT_SECRET: '${GOOGLE_CLIENT_SECRET}'
+                          GOOGLE_REFRESH_TOKEN: '${GOOGLE_REFRESH_TOKEN}'
+                          GOOGLE_ACCESS_TOKEN: '${GOOGLE_ACCESS_TOKEN}'
                     - name: docfork
                       mcp:
                         host: 'https://mcp.docfork.com/mcp'
