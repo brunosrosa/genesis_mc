@@ -2826,7 +2826,6 @@ async fn main() -> io::Result<()> {
         .filter(|v| !v.is_empty())
         .unwrap_or(lote_id);
 
-    let mut _n4_skip_columns: Vec<&'static str> = Vec::new();
     let mut n4_sheet_proposta: Option<String> = None;
     let mut n4_sheet_categoria: Option<String> = None;
     if !dry_run && (skip_harvester || !e2e_full) {
@@ -2881,14 +2880,12 @@ async fn main() -> io::Result<()> {
             let v = read_cell_at(&spreadsheet_id, row_number, idx).await?;
             if !v.trim().is_empty() {
                 n4_sheet_proposta = Some(v);
-                _n4_skip_columns.push("proposta_original_resumo");
             }
         }
         if let Some(idx) = find_col_idx(&header_row, "categoria_arquitetural") {
             let v = read_cell_at(&spreadsheet_id, row_number, idx).await?;
             if !v.trim().is_empty() {
                 n4_sheet_categoria = Some(v);
-                _n4_skip_columns.push("categoria_arquitetural");
             }
         }
     }
