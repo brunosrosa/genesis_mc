@@ -1,5 +1,8 @@
 use std::env;
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 use chrono::Utc;
@@ -259,21 +262,91 @@ pub fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
     Some(out)
 }
 
-fn parse_mcp_response(stdout: &[u8], response_id: i64) -> Result<Value, String> {
-    let stdout_str = String::from_utf8_lossy(stdout);
-    for line in stdout_str.lines().rev() {
-        if let Ok(value) = serde_json::from_str::<Value>(line) {
-            if value.get("id").and_then(|v| v.as_i64()) == Some(response_id) {
-                if value.get("error").is_some() {
-                    return Err(format!("MCP retornou erro: {value}"));
+fn summarize_debug_pipe(bytes: &[u8]) -> String {
+    const MAX_CHARS: usize = 1200;
+    let rendered = String::from_utf8_lossy(bytes).replace('\r', "").replace('\n', " | ");
+    if rendered.len() > MAX_CHARS {
+        format!("{}...(truncated)", &rendered[..MAX_CHARS])
+    } else {
+        rendered
+    }
+}
+
+fn summarize_seen_lines(lines: &[String]) -> String {
+    summarize_debug_pipe(lines.join("\n").as_bytes())
+}
+
+fn spawn_line_reader<R>(reader: R) -> (mpsc::Receiver<String>, Arc<Mutex<Vec<String>>>)
+where
+    R: std::io::Read + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel();
+    let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen_for_thread = Arc::clone(&seen);
+    thread::spawn(move || {
+        let reader = BufReader::new(reader);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            let trimmed = line.trim().to_string();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok(mut guard) = seen_for_thread.lock() {
+                guard.push(trimmed.clone());
+            }
+            let _ = tx.send(trimmed);
+        }
+    });
+    (rx, seen)
+}
+
+fn wait_for_jsonrpc_response(
+    rx: &mpsc::Receiver<String>,
+    seen: &Arc<Mutex<Vec<String>>>,
+    timeout: Duration,
+    expected_id: i64,
+    label: &str,
+) -> Result<Value, String> {
+    let started = std::time::Instant::now();
+    loop {
+        if started.elapsed() > timeout {
+            let snapshot = seen.lock().map(|g| g.clone()).unwrap_or_default();
+            return Err(format!(
+                "Timeout aguardando resposta JSON-RPC id={} em {} stdout={}",
+                expected_id,
+                label,
+                summarize_seen_lines(&snapshot)
+            ));
+        }
+        match rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(line) => {
+                let Ok(value) = serde_json::from_str::<Value>(&line) else {
+                    continue;
+                };
+                let id_matches = match value.get("id") {
+                    Some(Value::Number(n)) => n.as_i64() == Some(expected_id),
+                    Some(Value::String(s)) => s.parse::<i64>().ok() == Some(expected_id),
+                    _ => false,
+                };
+                if id_matches {
+                    if value.get("error").is_some() {
+                        return Err(format!("MCP retornou erro: {value}"));
+                    }
+                    return Ok(value);
                 }
-                if let Some(result) = value.get("result") {
-                    return Ok(normalize_mcp_tool_result(result.clone()));
-                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                let snapshot = seen.lock().map(|g| g.clone()).unwrap_or_default();
+                return Err(format!(
+                    "Pipe {} do mcp-google-workspace foi encerrado antes da resposta id={} stdout={}",
+                    label,
+                    expected_id,
+                    summarize_seen_lines(&snapshot)
+                ));
             }
         }
     }
-    Err("Resposta MCP não encontrada no stdout".to_string())
 }
 
 pub fn call_google_workspace_tool_blocking(
@@ -317,46 +390,39 @@ pub fn call_google_workspace_tool_blocking(
         .spawn()
         .map_err(|e| format!("Falha ao spawnar mcp-google-workspace: {e}"))?;
 
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "stdout indisponível".to_string())?;
+    let (stdout_rx, stdout_seen) = spawn_line_reader(stdout);
+
     {
         use std::io::Write;
         let stdin = child.stdin.as_mut().ok_or_else(|| "stdin indisponível".to_string())?;
         writeln!(stdin, "{}", init_req).map_err(|e| format!("Falha ao escrever init no MCP: {e}"))?;
+        stdin.flush().map_err(|e| format!("Falha ao flush init no MCP: {e}"))?;
+    }
+    let _init_response =
+        wait_for_jsonrpc_response(&stdout_rx, &stdout_seen, timeout, 0, "stdout-init")?;
+
+    {
+        use std::io::Write;
+        let stdin = child.stdin.as_mut().ok_or_else(|| "stdin indisponível".to_string())?;
         writeln!(stdin, "{}", initialized_notif)
             .map_err(|e| format!("Falha ao escrever initialized no MCP: {e}"))?;
         writeln!(stdin, "{}", mcp_request)
             .map_err(|e| format!("Falha ao escrever tools/call no MCP: {e}"))?;
+        stdin.flush().map_err(|e| format!("Falha ao flush tools/call no MCP: {e}"))?;
     }
-
-    let started = std::time::Instant::now();
-    loop {
-        if let Some(_status) = child
-            .try_wait()
-            .map_err(|e| format!("Falha ao aguardar mcp-google-workspace: {e}"))?
-        {
-            break;
-        }
-        if started.elapsed() > timeout {
-            let _ = child.kill();
-            return Err(format!(
-                "Timeout aguardando mcp-google-workspace tool={} timeout_s={}",
-                tool_name,
-                timeout.as_secs()
-            ));
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("Falha ao aguardar mcp-google-workspace: {e}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "mcp-google-workspace falhou. Exit {}. STDERR: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    parse_mcp_response(&output.stdout, 1)
+    let tool_response =
+        wait_for_jsonrpc_response(&stdout_rx, &stdout_seen, timeout, 1, "stdout-tools-call")?;
+    let _ = child.kill();
+    let _ = child.wait();
+    let result = tool_response
+        .get("result")
+        .cloned()
+        .ok_or_else(|| "Resposta MCP sem campo result".to_string())?;
+    Ok(normalize_mcp_tool_result(result))
 }
 
 pub async fn call_google_workspace_tool_async(
@@ -375,92 +441,151 @@ pub async fn call_google_workspace_tool_async(
     .map_err(|e| format!("Falha ao aguardar thread MCP Google Workspace: {e}"))?
 }
 
-pub fn call_legacy_sheets_tool_blocking(
-    tool_name: &str,
-    arguments: Value,
-    client_name: &str,
-    timeout: Duration,
-) -> Result<Value, String> {
-    let spreadsheet_id = arguments
-        .get("spreadsheet_id")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| "Missing spreadsheet_id".to_string())?
-        .to_string();
-    let access_token = google_workspace_access_token_blocking()?;
-    let meta = json!({
+fn workspace_meta(spreadsheet_id: &str, access_token: &str) -> Value {
+    json!({
         "spreadsheet_id": spreadsheet_id,
         "access_token": access_token
-    });
-
-    match tool_name {
-        "get_sheet_data" => {
-            let sheet = arguments
-                .get("sheet")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "Missing sheet".to_string())?;
-            let range = arguments
-                .get("range")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "Missing range".to_string())?;
-            call_google_workspace_tool_blocking(
-                "read_values",
-                json!({
-                    "sheet": sheet,
-                    "range": range,
-                    "major_dimension": "ROWS"
-                }),
-                meta,
-                client_name,
-                timeout,
-            )
-        }
-        "batch_update_cells" => {
-            let sheet = arguments
-                .get("sheet")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "Missing sheet".to_string())?;
-            let ranges = arguments
-                .get("ranges")
-                .and_then(|v| v.as_object())
-                .ok_or_else(|| "Missing ranges".to_string())?;
-            let mut updated_ranges = Vec::with_capacity(ranges.len());
-            for (range, values) in ranges {
-                call_google_workspace_tool_blocking(
-                    "write_values",
-                    json!({
-                        "sheet": sheet,
-                        "range": range,
-                        "values": values,
-                        "major_dimension": "ROWS"
-                    }),
-                    meta.clone(),
-                    client_name,
-                    timeout,
-                )?;
-                updated_ranges.push(range.clone());
-            }
-            Ok(json!({
-                "ok": true,
-                "updated_ranges": updated_ranges
-            }))
-        }
-        other => Err(format!("Tool legado não suportado no bridge Rust: {other}")),
-    }
+    })
 }
 
-pub async fn call_legacy_sheets_tool_async(
-    tool_name: &str,
-    arguments: Value,
+pub fn read_values_blocking(
+    spreadsheet_id: &str,
+    sheet: &str,
+    range: &str,
     client_name: &str,
     timeout: Duration,
 ) -> Result<Value, String> {
-    let tool_name = tool_name.to_string();
-    let client_name = client_name.to_string();
-    tokio::task::spawn_blocking(move || {
-        call_legacy_sheets_tool_blocking(&tool_name, arguments, &client_name, timeout)
-    })
-    .await
-    .map_err(|e| format!("Falha ao aguardar thread bridge Google Workspace: {e}"))?
+    let access_token = google_workspace_access_token_blocking()?;
+    call_google_workspace_tool_blocking(
+        "read_values",
+        json!({
+            "sheet": sheet,
+            "range": range,
+            "major_dimension": "ROWS"
+        }),
+        workspace_meta(spreadsheet_id, &access_token),
+        client_name,
+        timeout,
+    )
 }
+
+pub async fn read_values_async(
+    spreadsheet_id: &str,
+    sheet: &str,
+    range: &str,
+    client_name: &str,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let access_token = google_workspace_access_token_async().await?;
+    call_google_workspace_tool_async(
+        "read_values",
+        json!({
+            "sheet": sheet,
+            "range": range,
+            "major_dimension": "ROWS"
+        }),
+        workspace_meta(spreadsheet_id, &access_token),
+        client_name,
+        timeout,
+    )
+    .await
+}
+
+pub fn write_values_blocking(
+    spreadsheet_id: &str,
+    sheet: &str,
+    range: &str,
+    values: Value,
+    client_name: &str,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let access_token = google_workspace_access_token_blocking()?;
+    call_google_workspace_tool_blocking(
+        "write_values",
+        json!({
+            "sheet": sheet,
+            "range": range,
+            "values": values,
+            "major_dimension": "ROWS"
+        }),
+        workspace_meta(spreadsheet_id, &access_token),
+        client_name,
+        timeout,
+    )
+}
+
+pub async fn write_values_async(
+    spreadsheet_id: &str,
+    sheet: &str,
+    range: &str,
+    values: Value,
+    client_name: &str,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let access_token = google_workspace_access_token_async().await?;
+    call_google_workspace_tool_async(
+        "write_values",
+        json!({
+            "sheet": sheet,
+            "range": range,
+            "values": values,
+            "major_dimension": "ROWS"
+        }),
+        workspace_meta(spreadsheet_id, &access_token),
+        client_name,
+        timeout,
+    )
+    .await
+}
+
+pub fn write_ranges_blocking(
+    spreadsheet_id: &str,
+    sheet: &str,
+    ranges: &serde_json::Map<String, Value>,
+    client_name: &str,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let mut updated_ranges = Vec::with_capacity(ranges.len());
+    for (range, values) in ranges {
+        write_values_blocking(
+            spreadsheet_id,
+            sheet,
+            range,
+            values.clone(),
+            client_name,
+            timeout,
+        )?;
+        updated_ranges.push(range.clone());
+    }
+    Ok(json!({
+        "ok": true,
+        "updated_ranges": updated_ranges
+    }))
+}
+
+pub async fn write_ranges_async(
+    spreadsheet_id: &str,
+    sheet: &str,
+    ranges: &serde_json::Map<String, Value>,
+    client_name: &str,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let mut updated_ranges = Vec::with_capacity(ranges.len());
+    for (range, values) in ranges {
+        write_values_async(
+            spreadsheet_id,
+            sheet,
+            range,
+            values.clone(),
+            client_name,
+            timeout,
+        )
+        .await?;
+        updated_ranges.push(range.clone());
+    }
+    Ok(json!({
+        "ok": true,
+        "updated_ranges": updated_ranges
+    }))
+}
+

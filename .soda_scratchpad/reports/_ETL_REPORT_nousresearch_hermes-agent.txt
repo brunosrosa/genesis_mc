@@ -173,3 +173,26 @@ package_name	payload_bytes
 A	49659
 B	14636
 C	30571
+
+
+=== FASE 1.5: DESTILADOR @ 2026-06-10T20:00:28.823573-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+== ESSENCES ==
+essence_name	routing_zone	token_count	destination	payload_bytes
+_essence_01_promessa_readme	Green	1428	PassThrough	5854
+_essence_02_dependency_manifest	Green	888	PassThrough	3000
+_essence_03_test_intent	Red	116356	CloudCascade	10826
+_essence_04_repo_outline	Green	632	PassThrough	2452
+_essence_05_architecture_map	Green	1089	PassThrough	4082
+_essence_06_unsafe_hotspots	Green	27	PassThrough	100
+_essence_07_ops_blueprint	Yellow	29737	LocalModel:Z:\genesis_mc\.soda_data\models\Qwen3.5-4B-Q4_K_M.gguf	22686
+_essence_08_health_report	Green	27	PassThrough	102
+_essence_09_community_meta	Green	202	PassThrough	523
+_essence_10_soda_canon_context	Green	2315	PassThrough	8000
+_essence_11_ux_contracts	Green	8398	PassThrough	33687
+== PACKAGES ==
+package_name	payload_bytes
+A	54524
+B	14636
+C	30571

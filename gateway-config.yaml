@@ -159,7 +159,7 @@ binds:
                         env:
                           UV_NO_PROGRESS: '1'
                           UV_QUIET: '1'
-                    - name: mcp-google-workspace
+                    - name: gsheets
                       stdio:
                         cmd: 'Z:/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
                         args:
@@ -167,11 +167,12 @@ binds:
                             '--timeout-ms',
                             '180000',
                             '--',
-                            '${MCP_GOOGLE_WORKSPACE_BIN}',
+                            'Z:/genesis_mc/src-tauri/bin/mcp-google.exe',
                             'sheets',
                           ]
                         env:
-                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+                          PATH: 'Z:/genesis_mc/src-tauri/bin;C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+                          RUST_LOG: 'off'
                     - name: docfork
                       mcp:
                         host: 'https://mcp.docfork.com/mcp'

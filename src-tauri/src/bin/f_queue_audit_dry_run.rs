@@ -1,7 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -41,10 +41,11 @@ fn normalize_header_cell(raw: &str) -> String {
         .replace([' ', '-'], "_")
 }
 
-fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
-    genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_blocking(
-        tool_name,
-        arguments,
+fn read_sheet_values(spreadsheet_id: &str, sheet: &str, range: &str) -> io::Result<Value> {
+    genesis_mc_lib::persist::google_workspace_mcp::read_values_blocking(
+        spreadsheet_id,
+        sheet,
+        range,
         "f-queue-audit-dry-run",
         std::time::Duration::from_secs(180),
     )
@@ -99,15 +100,7 @@ fn main() -> io::Result<()> {
         .ok_or_else(|| io::Error::other("Missing GOOGLE_SHEETS_ID (or --sheets-id)"))?;
 
     let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
-    let header = call_mcp(
-        "get_sheet_data",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": "MASTER_SOLUTIONS",
-            "range": header_range,
-            "include_grid_data": false
-        }),
-    )?;
+    let header = read_sheet_values(&spreadsheet_id, "MASTER_SOLUTIONS", &header_range)?;
     let header_row = extract_values_2d(&header)
         .unwrap_or_default()
         .first()
@@ -121,15 +114,7 @@ fn main() -> io::Result<()> {
             .saturating_sub(1),
     );
     let data_range = format!("A2:{end_col}");
-    let data = call_mcp(
-        "get_sheet_data",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": "MASTER_SOLUTIONS",
-            "range": data_range,
-            "include_grid_data": false
-        }),
-    )?;
+    let data = read_sheet_values(&spreadsheet_id, "MASTER_SOLUTIONS", &data_range)?;
     let values = extract_values_2d(&data).unwrap_or_default();
 
     for row in values {

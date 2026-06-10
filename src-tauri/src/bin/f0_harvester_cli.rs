@@ -1058,27 +1058,34 @@ async fn process_one_repo_f0_direct(
     }
 }
 
-async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
-    genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_async(
-        tool_name,
-        arguments,
+async fn read_sheet_values(spreadsheet_id: &str, sheet: &str, range: &str) -> Result<Value, String> {
+    genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+        spreadsheet_id,
+        sheet,
+        range,
         "f0-harvester-cli",
-        std::time::Duration::from_secs(20),
+        std::time::Duration::from_secs(180),
+    )
+    .await
+}
+
+async fn write_sheet_ranges(
+    spreadsheet_id: &str,
+    sheet: &str,
+    ranges: &serde_json::Map<String, Value>,
+) -> Result<Value, String> {
+    genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+        spreadsheet_id,
+        sheet,
+        ranges,
+        "f0-harvester-cli",
+        std::time::Duration::from_secs(180),
     )
     .await
 }
 
 async fn get_sheet_data(spreadsheet_id: &str, sheet: &str, range: String) -> Result<Vec<Vec<String>>, String> {
-    let result = call_mcp(
-        "get_sheet_data",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": sheet,
-            "range": range,
-            "include_grid_data": false
-        }),
-    )
-    .await?;
+    let result = read_sheet_values(spreadsheet_id, sheet, &range).await?;
     extract_values_2d_strict(&result)
 }
 
@@ -1178,18 +1185,10 @@ async fn update_status_atualizacao_e_fase(
     let fase_col = col_idx_to_a1(cols.status_fase_idx);
     let status_range = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
     let fase_range = format!("{fase_col}{row_number_1based}:{fase_col}{row_number_1based}");
-    let _ = call_mcp(
-        "batch_update_cells",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": "MASTER_SOLUTIONS",
-            "ranges": {
-                status_range: [[status_atualizacao]],
-                fase_range: [[status_fase]]
-            }
-        }),
-    )
-    .await?;
+    let mut ranges = serde_json::Map::new();
+    ranges.insert(status_range, json!([[status_atualizacao]]));
+    ranges.insert(fase_range, json!([[status_fase]]));
+    let _ = write_sheet_ranges(spreadsheet_id, "MASTER_SOLUTIONS", &ranges).await?;
     Ok(())
 }
 

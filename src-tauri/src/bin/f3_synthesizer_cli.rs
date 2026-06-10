@@ -104,7 +104,7 @@ fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usiz
 async fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
     let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -125,7 +125,7 @@ async fn read_cell_at(
     let col = col_idx_to_a1(col_idx0);
     let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -183,7 +183,7 @@ async fn fetch_enxame_batch_candidates(spreadsheet_id: &str) -> io::Result<Vec<B
 
     let range = format!("{start_col}2:{end_col}");
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -420,7 +420,7 @@ async fn fetch_resume_f3_candidates(spreadsheet_id: &str) -> io::Result<Vec<Batc
 
     let range = format!("{start_col}2:{end_col}");
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -1877,7 +1877,7 @@ fn derive_declared_description_from_readme(text: &str) -> Option<String> {
 
 async fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
     let max_attempts: u32 = match tool_name {
-        "get_sheet_data" | "batch_update_cells" => 4,
+        "read_values" | "write_values" => 4,
         _ => 1,
     };
 
@@ -1892,16 +1892,72 @@ async fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
             let base_ms = 500_u64.saturating_mul(1_u64 << exp);
             tokio::time::sleep(Duration::from_millis(base_ms.saturating_add(jitter_ms))).await;
         }
-        match genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_async(
-            tool_name,
-            arguments.clone(),
-            "phase3-4-cli",
-            MCP_TIMEOUT,
-        )
-        .await
-        {
+        let result = match tool_name {
+            "read_values" => {
+                let spreadsheet_id = arguments
+                    .get("spreadsheet_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| io::Error::other("Missing spreadsheet_id"))?;
+                let sheet = arguments
+                    .get("sheet")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| io::Error::other("Missing sheet"))?;
+                let range = arguments
+                    .get("range")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| io::Error::other("Missing range"))?;
+                genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+                    spreadsheet_id,
+                    sheet,
+                    range,
+                    "phase3-4-cli",
+                    MCP_TIMEOUT,
+                )
+                .await
+            }
+            "write_values" => {
+                let spreadsheet_id = arguments
+                    .get("spreadsheet_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| io::Error::other("Missing spreadsheet_id"))?;
+                let sheet = arguments
+                    .get("sheet")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| io::Error::other("Missing sheet"))?;
+                if let Some(ranges) = arguments.get("ranges").and_then(|v| v.as_object()) {
+                    genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+                        spreadsheet_id,
+                        sheet,
+                        ranges,
+                        "phase3-4-cli",
+                        MCP_TIMEOUT,
+                    )
+                    .await
+                } else {
+                    let range = arguments
+                        .get("range")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| io::Error::other("Missing range"))?;
+                    let values = arguments
+                        .get("values")
+                        .cloned()
+                        .ok_or_else(|| io::Error::other("Missing values"))?;
+                    genesis_mc_lib::persist::google_workspace_mcp::write_values_async(
+                        spreadsheet_id,
+                        sheet,
+                        range,
+                        values,
+                        "phase3-4-cli",
+                        MCP_TIMEOUT,
+                    )
+                    .await
+                }
+            }
+            other => Err(format!("Tool Sheets não suportada em f3_synthesizer_cli: {other}")),
+        };
+        match result {
             Ok(normalized) => {
-                if tool_name == "get_sheet_data"
+                if tool_name == "read_values"
                     && normalized.get("error").is_none()
                     && normalized.get("values").is_none()
                     && normalized.get("valueRanges").is_none()
@@ -1983,7 +2039,7 @@ async fn resolve_row_number_by_repo_url_and_lote_id(
     let end_col = col_idx_to_a1(max_idx);
     let range = format!("{start_col}2:{end_col}");
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -2092,7 +2148,7 @@ async fn read_status_atualizacao_e_fase(
     let end_col = col_idx_to_a1(max_idx);
     let range = format!("{start_col}{row_number_1based}:{end_col}{row_number_1based}");
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -2138,7 +2194,7 @@ async fn update_status_fase_only(
     let col = col_idx_to_a1(cols.status_fase_idx);
     let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
     let _ = call_mcp(
-        "batch_update_cells",
+        "write_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -2163,7 +2219,7 @@ async fn update_status_atualizacao_e_fase(
     let range_a = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
     let range_b = format!("{fase_col}{row_number_1based}:{fase_col}{row_number_1based}");
     let _ = call_mcp(
-        "batch_update_cells",
+        "write_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -2195,7 +2251,7 @@ async fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> 
         "{start_col}{row_number_1based}:{end_col}{row_number_1based}"
     );
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -2225,7 +2281,7 @@ async fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> 
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
     let range = genesis_mc_lib::cognition::synthesizer::sheet_range_for_row(row_number_1based);
     let result = call_mcp(
-        "get_sheet_data",
+        "read_values",
         json!({
             "spreadsheet_id": spreadsheet_id,
             "sheet": "MASTER_SOLUTIONS",
@@ -2557,7 +2613,7 @@ async fn main() -> io::Result<()> {
             "Feedback-inject: payload ranges montado"
         );
         let update_result = call_mcp(
-            "batch_update_cells",
+            "write_values",
             json!({
                 "spreadsheet_id": spreadsheet_id,
                 "sheet": "MASTER_SOLUTIONS",
@@ -2569,10 +2625,10 @@ async fn main() -> io::Result<()> {
         if update_result_str.len() > 800 {
             update_result_str.truncate(800);
         }
-        info!(payload = %update_result_str, "Feedback-inject: retorno batch_update_cells");
+        info!(payload = %update_result_str, "Feedback-inject: retorno write_values");
         if let Some(err) = update_result.get("error") {
             return Err(io::Error::other(format!(
-                "Feedback-inject: batch_update_cells falhou: {}",
+                "Feedback-inject: write_values falhou: {}",
                 err
             )));
         }
@@ -2588,7 +2644,7 @@ async fn main() -> io::Result<()> {
             let end_col = col_idx_to_a1(max_idx);
             let range = format!("{start_col}{row_number}:{end_col}{row_number}");
             let result = call_mcp(
-                "get_sheet_data",
+                "read_values",
                 json!({
                     "spreadsheet_id": spreadsheet_id,
                     "sheet": "MASTER_SOLUTIONS",

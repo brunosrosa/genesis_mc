@@ -89,6 +89,8 @@ type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + 
 type LlmComponentsFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(DeepComponentsEnvelope, f64), String>> + Send + 'a>>;
 
+const GOOGLE_MCP_TIMEOUT: Duration = Duration::from_secs(180);
+
 trait LlmClient: Send + Sync {
     fn run_components<'a>(&'a self, prompt: &'a str) -> LlmComponentsFuture<'a>;
 }
@@ -96,14 +98,40 @@ trait LlmClient: Send + Sync {
 struct SheetsMcpClient;
 
 impl SheetsMcpClient {
-    async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
-        genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_async(
-            tool_name,
-            arguments,
+    async fn read_values(
+        spreadsheet_id: &str,
+        sheet: &str,
+        range: &str,
+    ) -> Result<Vec<Vec<String>>, String> {
+        let result = genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+            spreadsheet_id,
+            sheet,
+            range,
             "f5-deep-formatter",
-            Duration::from_secs(20),
+            GOOGLE_MCP_TIMEOUT,
         )
-        .await
+        .await?;
+        Ok(extract_values_2d(&result).unwrap_or_default())
+    }
+
+    async fn write_values(
+        spreadsheet_id: &str,
+        sheet: &str,
+        ranges: HashMap<String, Vec<Vec<String>>>,
+    ) -> Result<(), String> {
+        let mut payload_ranges = serde_json::Map::new();
+        for (range, values) in ranges {
+            payload_ranges.insert(range, json!(values));
+        }
+        genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+            spreadsheet_id,
+            sheet,
+            &payload_ranges,
+            "f5-deep-formatter",
+            GOOGLE_MCP_TIMEOUT,
+        )
+        .await?;
+        Ok(())
     }
 }
 
@@ -115,19 +143,7 @@ impl SheetsClient for SheetsMcpClient {
         range: String,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>
     {
-        Box::pin(async move {
-            let result = Self::call_mcp(
-                "get_sheet_data",
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "sheet": sheet,
-                    "range": range,
-                    "include_grid_data": false
-                }),
-            )
-            .await?;
-            Ok(extract_values_2d(&result).unwrap_or_default())
-        })
+        Box::pin(async move { Self::read_values(spreadsheet_id, sheet, &range).await })
     }
 
     fn batch_update_cells<'a>(
@@ -136,22 +152,7 @@ impl SheetsClient for SheetsMcpClient {
         sheet: &'a str,
         ranges: HashMap<String, Vec<Vec<String>>>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
-        Box::pin(async move {
-            let mut payload_ranges = serde_json::Map::new();
-            for (range, values) in ranges {
-                payload_ranges.insert(range, json!(values));
-            }
-            let _ = Self::call_mcp(
-                "batch_update_cells",
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "sheet": sheet,
-                    "ranges": Value::Object(payload_ranges)
-                }),
-            )
-            .await?;
-            Ok(())
-        })
+        Box::pin(async move { Self::write_values(spreadsheet_id, sheet, ranges).await })
     }
 }
 
