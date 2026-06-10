@@ -60,7 +60,7 @@ O Guardião NUNCA aciona automaticamente as Fases 0 a 4. Ele apenas:
    - Calcular drift
 3. Para cada drift detectado:
    - Montar payload de update para a linha correspondente
-   - Executar `batch_update_cells` com range atômico da linha
+   - Executar `write_values` com range atômico da linha via `mcp-google-workspace`
 
 ## Restrições e Segurança
 - Rate limiting agressivo (GitHub e Sheets)

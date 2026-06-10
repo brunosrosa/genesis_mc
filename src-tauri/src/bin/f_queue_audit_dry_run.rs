@@ -42,99 +42,13 @@ fn normalize_header_cell(raw: &str) -> String {
 }
 
 fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
-    use std::process::{Command, Stdio};
-
-    let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-        .map_err(|_| io::Error::other("Missing GOOGLE_APPLICATION_CREDENTIALS"))?;
-
-    let init_req = json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": { "name": "f-queue-audit-dry-run", "version": "1.0.0" }
-        }
-    });
-    let initialized_notif = json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized"
-    });
-    let mcp_request = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments
-        }
-    });
-
-    let mut child = Command::new("mcp-google-sheets")
-        .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
-        .env("UV_NO_PROGRESS", "1")
-        .env("UV_QUIET", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| io::Error::other(format!("Falha ao spawnar mcp-google-sheets: {e}")))?;
-
-    {
-        use std::io::Write;
-        let stdin = child.stdin.as_mut().ok_or_else(|| io::Error::other("stdin indisponível"))?;
-        writeln!(stdin, "{}", init_req)?;
-        writeln!(stdin, "{}", initialized_notif)?;
-        writeln!(stdin, "{}", mcp_request)?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|e| io::Error::other(format!("Falha ao aguardar mcp-google-sheets: {e}")))?;
-    if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "mcp-google-sheets falhou. Exit {}. STDERR: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        )));
-    }
-
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    for line in stdout_str.lines().rev() {
-        if let Ok(value) = serde_json::from_str::<Value>(line) {
-            if value.get("id").and_then(|v| v.as_i64()) == Some(1) {
-                if value.get("error").is_some() {
-                    return Err(io::Error::other(format!("MCP retornou erro: {}", value)));
-                }
-                if let Some(result) = value.get("result") {
-                    return Ok(normalize_mcp_tool_result(result.clone()));
-                }
-            }
-        }
-    }
-
-    Err(io::Error::other("Resposta MCP não encontrada no stdout"))
-}
-
-fn normalize_mcp_tool_result(result: Value) -> Value {
-    let content = match result.get("content").and_then(|v| v.as_array()) {
-        Some(arr) => arr,
-        None => return result,
-    };
-
-    for item in content {
-        if let Some(json_val) = item.get("json") {
-            return json_val.clone();
-        }
-        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                return parsed;
-            }
-        }
-    }
-
-    result
+    genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_blocking(
+        tool_name,
+        arguments,
+        "f-queue-audit-dry-run",
+        std::time::Duration::from_secs(180),
+    )
+    .map_err(io::Error::other)
 }
 
 #[derive(Debug)]

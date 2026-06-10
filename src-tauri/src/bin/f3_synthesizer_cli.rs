@@ -1876,37 +1876,6 @@ fn derive_declared_description_from_readme(text: &str) -> Option<String> {
 }
 
 async fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
-    use std::process::Stdio;
-    use tokio::io::AsyncWriteExt;
-    use tokio::process::Command;
-
-    let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-        .map_err(|_| io::Error::other("Missing GOOGLE_APPLICATION_CREDENTIALS"))?;
-
-    let init_req = json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": { "name": "phase3-4-cli", "version": "1.0.0" }
-        }
-    });
-    let initialized_notif = json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized"
-    });
-    let mcp_request = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments
-        }
-    });
-
     let max_attempts: u32 = match tool_name {
         "get_sheet_data" | "batch_update_cells" => 4,
         _ => 1,
@@ -1923,176 +1892,44 @@ async fn call_mcp(tool_name: &str, arguments: Value) -> io::Result<Value> {
             let base_ms = 500_u64.saturating_mul(1_u64 << exp);
             tokio::time::sleep(Duration::from_millis(base_ms.saturating_add(jitter_ms))).await;
         }
-
-        let mut child = Command::new("mcp-google-sheets")
-            .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
-            .env("UV_NO_PROGRESS", "1")
-            .env("UV_QUIET", "1")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| io::Error::other(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
-
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| io::Error::other("stdin indisponível"))?;
-        stdin
-            .write_all(format!("{}\n", init_req).as_bytes())
-            .await
-            .map_err(|e| io::Error::other(format!("Falha ao escrever init no MCP: {}", e)))?;
-        stdin
-            .write_all(format!("{}\n", initialized_notif).as_bytes())
-            .await
-            .map_err(|e| io::Error::other(format!("Falha ao escrever initialized no MCP: {}", e)))?;
-        stdin
-            .write_all(format!("{}\n", mcp_request).as_bytes())
-            .await
-            .map_err(|e| io::Error::other(format!("Falha ao escrever tools/call no MCP: {}", e)))?;
-        drop(stdin);
-
-        let mut stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| io::Error::other("stdout indisponível"))?;
-        let mut stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| io::Error::other("stderr indisponível"))?;
-        let (status, stdout_buf, stderr_buf) = match tokio::time::timeout(MCP_TIMEOUT, async {
-            use tokio::io::AsyncReadExt;
-            let mut out_buf = Vec::new();
-            let mut err_buf = Vec::new();
-            let (out_res, err_res, status_res) = tokio::join!(
-                stdout.read_to_end(&mut out_buf),
-                stderr.read_to_end(&mut err_buf),
-                child.wait()
-            );
-            out_res.map_err(|e| io::Error::other(format!("Falha ao ler stdout MCP: {}", e)))?;
-            err_res.map_err(|e| io::Error::other(format!("Falha ao ler stderr MCP: {}", e)))?;
-            let status =
-                status_res.map_err(|e| io::Error::other(format!("Falha ao aguardar mcp-google-sheets: {}", e)))?;
-            Ok::<_, io::Error>((status, out_buf, err_buf))
-        })
+        match genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_async(
+            tool_name,
+            arguments.clone(),
+            "phase3-4-cli",
+            MCP_TIMEOUT,
+        )
         .await
         {
-            Ok(Ok(v)) => v,
-            Ok(Err(e)) => {
+            Ok(normalized) => {
+                if tool_name == "get_sheet_data"
+                    && normalized.get("error").is_none()
+                    && normalized.get("values").is_none()
+                    && normalized.get("valueRanges").is_none()
+                    && normalized
+                        .get("data")
+                        .and_then(|d| d.get("values"))
+                        .is_none()
+                {
+                    let err = io::Error::other(
+                        "Sheets payload inválido: sem 'values', 'valueRanges' ou 'data.values'",
+                    );
+                    if attempt < max_attempts {
+                        continue;
+                    }
+                    return Err(err);
+                }
+                return Ok(normalized);
+            }
+            Err(e) => {
                 if attempt < max_attempts {
                     continue;
                 }
-                return Err(e);
-            }
-            Err(_) => {
-                let _ = child.kill().await;
-                let err = io::Error::other(format!(
-                    "Timeout aguardando mcp-google-sheets tool={} timeout_s={}",
-                    tool_name,
-                    MCP_TIMEOUT.as_secs()
-                ));
-                if attempt < max_attempts {
-                    continue;
-                }
-                return Err(err);
-            }
-        };
-        if !status.success() {
-            let err = io::Error::other(format!(
-                "mcp-google-sheets falhou. Exit {}. STDERR: {}",
-                status,
-                String::from_utf8_lossy(&stderr_buf)
-            ));
-            if attempt < max_attempts {
-                continue;
-            }
-            return Err(err);
-        }
-
-        let stdout_str = String::from_utf8_lossy(&stdout_buf);
-        for line in stdout_str.lines().rev() {
-            if let Ok(value) = serde_json::from_str::<Value>(line) {
-                if value.get("id").and_then(|v| v.as_i64()) == Some(1) {
-                    if value.get("error").is_some() {
-                        let err = io::Error::other(format!("MCP retornou erro: {}", value));
-                        if attempt < max_attempts {
-                            continue;
-                        }
-                        return Err(err);
-                    }
-                    if let Some(result) = value.get("result") {
-                        let normalized = normalize_mcp_tool_result(result.clone());
-                        if tool_name == "get_sheet_data"
-                            && normalized.get("error").is_none()
-                            && normalized.get("values").is_none()
-                            && normalized.get("valueRanges").is_none()
-                            && normalized
-                                .get("data")
-                                .and_then(|d| d.get("values"))
-                                .is_none()
-                        {
-                            let err = io::Error::other(
-                                "Sheets payload inválido: sem 'values', 'valueRanges' ou 'data.values'",
-                            );
-                            if attempt < max_attempts {
-                                continue;
-                            }
-                            return Err(err);
-                        }
-                        return Ok(normalized);
-                    }
-                }
+                return Err(io::Error::other(e));
             }
         }
-
-        if attempt < max_attempts {
-            continue;
-        }
-        return Err(io::Error::other("Resposta MCP não encontrada no stdout"));
     }
 
     Err(io::Error::other("Falha inesperada: loop de tentativas vazio"))
-}
-
-fn normalize_mcp_tool_result(result: Value) -> Value {
-    if result.get("values").is_some()
-        || result.get("valueRanges").is_some()
-        || result.get("data").and_then(|d| d.get("values")).is_some()
-        || result.get("error").is_some()
-    {
-        return result;
-    }
-
-    let content = match result.get("content").and_then(|v| v.as_array()) {
-        Some(arr) => arr,
-        None => return result,
-    };
-
-    for item in content {
-        if let Some(json_val) = item.get("json") {
-            if json_val.is_string() {
-                if let Some(s) = json_val.as_str() {
-                    if let Ok(parsed) = serde_json::from_str::<Value>(s) {
-                        return parsed;
-                    }
-                }
-            } else {
-                return json_val.clone();
-            }
-        }
-        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                return parsed;
-            }
-            let mut msg = text.trim().to_string();
-            if msg.len() > 800 {
-                msg.truncate(800);
-            }
-            return json!({ "error": { "message": msg } });
-        }
-    }
-
-    result
 }
 
 fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {

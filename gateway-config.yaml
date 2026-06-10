@@ -167,15 +167,11 @@ binds:
                             '--timeout-ms',
                             '180000',
                             '--',
-                            'mcp-google.exe',
+                            '${MCP_GOOGLE_WORKSPACE_BIN}',
                             'sheets',
                           ]
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
-                          GOOGLE_CLIENT_ID: '${GOOGLE_CLIENT_ID}'
-                          GOOGLE_CLIENT_SECRET: '${GOOGLE_CLIENT_SECRET}'
-                          GOOGLE_REFRESH_TOKEN: '${GOOGLE_REFRESH_TOKEN}'
-                          GOOGLE_ACCESS_TOKEN: '${GOOGLE_ACCESS_TOKEN}'
                     - name: docfork
                       mcp:
                         host: 'https://mcp.docfork.com/mcp'

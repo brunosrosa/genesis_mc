@@ -2,6 +2,7 @@ use crate::cognition::synthesizer::{
     apply_phase4_block5, master_solutions_header_range, sheet_range_for_row, ArchitecturalCategory,
     MasterSolutionsRow, MASTER_SOLUTIONS_CANONICAL_COLUMNS,
 };
+use crate::persist::google_workspace_mcp;
 use thiserror::Error;
 use serde_json::{json, Value};
 use rusqlite::{Connection, ErrorCode};
@@ -1227,68 +1228,9 @@ impl SsotInjector {
     }
 
     async fn google_workspace_access_token() -> Result<String, SsotError> {
-        if let Ok(token) = env::var("GOOGLE_ACCESS_TOKEN") {
-            let token = token.trim().to_string();
-            if !token.is_empty() {
-                return Ok(token);
-            }
-        }
-        if let Ok(token) = env::var("ACCESS_TOKEN") {
-            let token = token.trim().to_string();
-            if !token.is_empty() {
-                return Ok(token);
-            }
-        }
-
-        let client_id = env::var("GOOGLE_CLIENT_ID")
-            .map_err(|_| SsotError::ConfigMissing("GOOGLE_CLIENT_ID"))?;
-        let client_secret = env::var("GOOGLE_CLIENT_SECRET")
-            .map_err(|_| SsotError::ConfigMissing("GOOGLE_CLIENT_SECRET"))?;
-        let refresh_token = env::var("GOOGLE_REFRESH_TOKEN")
-            .map_err(|_| SsotError::ConfigMissing("GOOGLE_REFRESH_TOKEN"))?;
-
-        let http = reqwest::Client::new();
-        let response = http
-            .post("https://oauth2.googleapis.com/token")
-            .json(&json!({
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "refresh_token": refresh_token,
-                "grant_type": "refresh_token"
-            }))
-            .send()
+        google_workspace_mcp::google_workspace_access_token_async()
             .await
-            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao renovar Google OAuth token: {e}")))?;
-
-        if !response.status().is_success() {
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "unknown".to_string());
-            return Err(SsotError::NetworkFailure(format!(
-                "Falha ao renovar Google OAuth token: {}",
-                body
-            )));
-        }
-
-        let payload: Value = response
-            .json()
-            .await
-            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao parsear refresh token Google: {e}")))?;
-        payload
-            .get("access_token")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .filter(|s| !s.trim().is_empty())
-            .ok_or_else(|| SsotError::NetworkFailure("OAuth refresh retornou access_token vazio".to_string()))
-    }
-
-    fn mcp_google_workspace_command() -> String {
-        env::var("MCP_GOOGLE_WORKSPACE_BIN")
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "mcp-google".to_string())
+            .map_err(SsotError::NetworkFailure)
     }
 
     async fn call_mcp_google_workspace_sheets_tool(
@@ -1296,144 +1238,15 @@ impl SsotInjector {
         arguments: Value,
         meta: Value,
     ) -> Result<Value, SsotError> {
-        use std::process::Stdio;
-        use tokio::io::AsyncWriteExt;
-        use tokio::process::Command;
-
-        let init_req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "clientInfo": { "name": "genesis-mc", "version": "1.0" },
-                "capabilities": {}
-            }
-        });
-        let initialized_notif = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-            "params": {}
-        });
-        let mcp_request = json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": { "name": tool_name, "arguments": arguments, "_meta": meta }
-        });
-
-        let mut child = Command::new(Self::mcp_google_workspace_command())
-            .arg("sheets")
-            .env("RUST_LOG", "off")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao spawnar mcp-google-workspace: {}", e)))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(format!("{}\n", init_req).as_bytes())
-                .await
-                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever init no MCP: {}", e)))?;
-            stdin
-                .write_all(format!("{}\n", initialized_notif).as_bytes())
-                .await
-                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever initialized no MCP: {}", e)))?;
-            stdin
-                .write_all(format!("{}\n", mcp_request).as_bytes())
-                .await
-                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever tools/call no MCP: {}", e)))?;
-        }
-
-        let mut stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| SsotError::NetworkFailure("stdout indisponível".to_string()))?;
-        let mut stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| SsotError::NetworkFailure("stderr indisponível".to_string()))?;
-        let (status, stdout_buf, stderr_buf) =
-            match tokio::time::timeout(MCP_TIMEOUT, async {
-                use tokio::io::AsyncReadExt;
-                let mut out_buf = Vec::new();
-                let mut err_buf = Vec::new();
-                let (out_res, err_res, status_res) = tokio::join!(
-                    stdout.read_to_end(&mut out_buf),
-                    stderr.read_to_end(&mut err_buf),
-                    child.wait()
-                );
-                out_res.map_err(|e| SsotError::NetworkFailure(format!("Falha ao ler stdout MCP: {}", e)))?;
-                err_res.map_err(|e| SsotError::NetworkFailure(format!("Falha ao ler stderr MCP: {}", e)))?;
-                let status =
-                    status_res.map_err(|e| SsotError::NetworkFailure(format!("Falha ao aguardar processo MCP: {}", e)))?;
-                Ok::<_, SsotError>((status, out_buf, err_buf))
-            })
-            .await
-            {
-                Ok(Ok(v)) => v,
-                Ok(Err(e)) => return Err(e),
-                Err(_) => {
-                    let _ = child.kill().await;
-                    return Err(SsotError::NetworkFailure(format!(
-                        "Timeout aguardando mcp-google-workspace tool={} timeout_s={}",
-                        tool_name,
-                        MCP_TIMEOUT.as_secs()
-                    )));
-                }
-            };
-        if !status.success() {
-            return Err(SsotError::NetworkFailure(format!(
-                "Falha no processo MCP. Exit {}. STDERR: {}",
-                status,
-                String::from_utf8_lossy(&stderr_buf)
-            )));
-        }
-
-        let stdout_str = String::from_utf8_lossy(&stdout_buf);
-        Self::parse_mcp_tool_stdout(&stdout_str, 2).map_err(SsotError::NetworkFailure)
-    }
-
-    fn parse_mcp_tool_stdout(stdout: &str, expected_id: i64) -> Result<Value, String> {
-        for line in stdout.lines() {
-            let Ok(value) = serde_json::from_str::<Value>(line) else {
-                continue;
-            };
-            let id = value.get("id").and_then(|v| v.as_i64());
-            if id != Some(expected_id) {
-                continue;
-            }
-            if let Some(err) = value.get("error") {
-                return Err(format!("MCP error: {}", err));
-            }
-            let Some(result) = value.get("result") else {
-                return Err("MCP missing result".to_string());
-            };
-            if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-                let mut combined = String::new();
-                for part in content {
-                    if part.get("type").and_then(|t| t.as_str()) != Some("text") {
-                        continue;
-                    }
-                    let text = part.get("text").and_then(|t| t.as_str()).unwrap_or("");
-                    if !text.trim().is_empty() {
-                        if !combined.is_empty() {
-                            combined.push('\n');
-                        }
-                        combined.push_str(text);
-                    }
-                }
-                if !combined.trim().is_empty() {
-                    if let Ok(json_val) = serde_json::from_str::<Value>(&combined) {
-                        return Ok(json_val);
-                    }
-                    return Ok(json!({ "text": combined }));
-                }
-            }
-            return Ok(result.clone());
-        }
-        Err("MCP tool response not found in stdout".to_string())
+        google_workspace_mcp::call_google_workspace_tool_async(
+            tool_name,
+            arguments,
+            meta,
+            "genesis-mc",
+            MCP_TIMEOUT,
+        )
+        .await
+        .map_err(SsotError::NetworkFailure)
     }
 
     fn extract_values_2d(value: &Value) -> Option<Vec<Vec<String>>> {

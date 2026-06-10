@@ -24,9 +24,10 @@ Atualizado: 2026-06-07
 
 ### Janela de Vidro / Output (L0: Google Sheets via MCP)
 - Planilha SSOT humana: `MASTER_SOLUTIONS` (Google Sheets).
-- Acesso: via MCP `mcp-google-sheets` roteado pelo AgentGateway (configurado em `gateway-config.yaml`).
-- Escrita: sempre por `batch_update_cells` para minimizar round-trips e manter escrita atômica por ranges.
-- Proteção operacional: `mcp_stdio_guard` impõe guilhotina (timeout) por target. Para `mcp-google-sheets`, o timeout foi elevado para permitir batches maiores.
+- Acesso: via MCP Rust `mcp-google-workspace` roteado pelo AgentGateway (configurado em `gateway-config.yaml`).
+- Leitura: por `read_values`, com resolução dinâmica de header/range.
+- Escrita: por `write_values`, fatiada em micro-lotes por ranges para preservar a atomicidade por linha sem asfixiar o stdio.
+- Proteção operacional: `mcp_stdio_guard` impõe guilhotina (timeout) por target. Para o target de Sheets, o timeout foi elevado para permitir batches maiores.
 
 ### Runtime / Boot (Tauri v2 System Tray Daemon)
 - O daemon sobe em background e mantém o Event Loop Tokio ativo (AgentGateway + proxy).
@@ -63,7 +64,7 @@ Observação (pós-Máquina Silenciosa): quando o pipeline roda como daemon (tra
   - Fallback para tags.
   - Fallback final para SHA curto (7 chars) do último commit da branch default.
 - Escrita:
-  - Micro-lotes (chunking) para `batch_update_cells` (reduz payload e evita asfixia de stdio/Batch API).
+  - Micro-lotes (chunking) para `write_values` (reduz payload e evita asfixia de stdio/Batch API).
   - Timeout do lado Rust ajustado para operações em lote.
 - Persistência local:
   - Atualiza SQLite local de forma durável conforme o estado evolui.

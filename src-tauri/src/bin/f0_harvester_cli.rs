@@ -10,7 +10,6 @@ use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
-use tokio::io::AsyncBufReadExt;
 use tracing::{error, info, warn};
 use url::Url;
 use rand::rngs::OsRng;
@@ -1059,135 +1058,14 @@ async fn process_one_repo_f0_direct(
     }
 }
 
-async fn poll_for_jsonrpc_response_from_reader<R>(
-    reader: R,
-    timeout: std::time::Duration,
-    expected_id: i64,
-) -> Result<Value, String>
-where
-    R: tokio::io::AsyncBufRead + Unpin,
-{
-    let started = Instant::now();
-    let mut lines = reader.lines();
-    loop {
-        if started.elapsed() > timeout {
-            return Err(format!(
-                "Timeout: O servidor MCP (Sheets) não emitiu o payload após {} segundos.",
-                timeout.as_secs()
-            ));
-        }
-        match tokio::time::timeout(std::time::Duration::from_millis(200), lines.next_line()).await {
-            Ok(Ok(Some(line))) => {
-                if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                    let id_matches = match value.get("id") {
-                        Some(Value::Number(n)) => n.as_i64() == Some(expected_id),
-                        Some(Value::String(s)) => s.parse::<i64>().ok() == Some(expected_id),
-                        _ => false,
-                    };
-                    if id_matches {
-                        return Ok(value);
-                    }
-                }
-            }
-            Ok(Ok(None)) => tokio::time::sleep(std::time::Duration::from_millis(200)).await,
-            Ok(Err(e)) => return Err(format!("Falha ao ler stdout do MCP: {e}")),
-            Err(_) => {}
-        }
-    }
-}
-
-fn normalize_mcp_tool_result(result: Value) -> Value {
-    let content = match result.get("content").and_then(|v| v.as_array()) {
-        Some(arr) => arr,
-        None => return result,
-    };
-    for item in content {
-        if let Some(json_val) = item.get("json") {
-            return json_val.clone();
-        }
-        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                return parsed;
-            }
-        }
-    }
-    result
-}
-
 async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
-    use std::process::Stdio;
-    use tokio::io::AsyncWriteExt;
-    use tokio::process::Command;
-
-    let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-        .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-    let init_req = json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": { "name": "f0-harvester-cli", "version": "1.0.0" }
-        }
-    });
-    let initialized_notif = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
-    let mcp_request = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": { "name": tool_name, "arguments": arguments }
-    });
-
-    let mut child = Command::new("mcp-google-sheets")
-        .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
-        .env("UV_NO_PROGRESS", "1")
-        .env("UV_QUIET", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {e}"))?;
-
-    let msg_res: Result<Value, String> = async {
-        let mut stdin = child.stdin.take().ok_or_else(|| "stdin indisponível".to_string())?;
-        stdin
-            .write_all(format!("{init_req}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
-        stdin
-            .write_all(format!("{initialized_notif}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
-        stdin
-            .write_all(format!("{mcp_request}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
-        drop(stdin);
-
-        let stdout = child.stdout.take().ok_or_else(|| "stdout indisponível".to_string())?;
-        poll_for_jsonrpc_response_from_reader(
-            tokio::io::BufReader::new(stdout),
-            std::time::Duration::from_secs(20),
-            1,
-        )
-        .await
-    }
-    .await;
-
-    let _ = child.kill().await;
-    let _ = child.wait().await;
-
-    let msg = msg_res?;
-
-    if msg.get("error").is_some() {
-        return Err(format!("MCP retornou erro: {msg}"));
-    }
-    if let Some(result) = msg.get("result") {
-        return Ok(normalize_mcp_tool_result(result.clone()));
-    }
-    Err("Resposta MCP inválida (sem campo result)".to_string())
+    genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_async(
+        tool_name,
+        arguments,
+        "f0-harvester-cli",
+        std::time::Duration::from_secs(20),
+    )
+    .await
 }
 
 async fn get_sheet_data(spreadsheet_id: &str, sheet: &str, range: String) -> Result<Vec<Vec<String>>, String> {

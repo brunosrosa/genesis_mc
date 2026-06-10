@@ -15,6 +15,7 @@ use url::Url;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
+#[cfg(test)]
 use tokio::io::AsyncBufReadExt;
 use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
 
@@ -90,6 +91,7 @@ fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
 struct SheetsMcpClient;
 
 impl SheetsMcpClient {
+    #[cfg(test)]
     async fn poll_for_jsonrpc_response_from_reader<R>(
         reader: R,
         timeout: Duration,
@@ -133,115 +135,19 @@ impl SheetsMcpClient {
     }
 
     async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
-        use tokio::io::{AsyncWriteExt, BufReader};
-        use tokio::process::Command;
-        use std::process::Stdio;
-
-        let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-            .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-        let init_req = json!({
-            "jsonrpc": "2.0",
-            "id": 0,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": { "name": "f-minus-1-guardian", "version": "1.0.0" }
-            }
-        });
-        let initialized_notif = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized"
-        });
-        let mcp_request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": arguments
-            }
-        });
-
-        let mut child = Command::new("mcp-google-sheets")
-            .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
-            .env("UV_NO_PROGRESS", "1")
-            .env("UV_QUIET", "1")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {e}"))?;
-
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "stdin indisponível".to_string())?;
-        stdin
-            .write_all(format!("{}\n", init_req).as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
-        stdin
-            .write_all(format!("{}\n", initialized_notif).as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
-        stdin
-            .write_all(format!("{}\n", mcp_request).as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
-        drop(stdin);
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| "stdout indisponível".to_string())?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| "stderr indisponível".to_string())?;
-
-        let stdout_reader = BufReader::new(stdout);
-        let _stderr_reader = BufReader::new(stderr);
-
         let timeout = match tool_name {
             "batch_update_cells" => Duration::from_secs(120),
             _ => Duration::from_secs(20),
         };
-        let msg = Self::poll_for_jsonrpc_response_from_reader(stdout_reader, timeout, 1).await?;
-
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-
-        if msg.get("error").is_some() {
-            return Err(format!("MCP retornou erro: {msg}"));
-        }
-        if let Some(result) = msg.get("result") {
-            return Ok(Self::normalize_mcp_tool_result(result.clone()));
-        }
-
-        Err("Resposta MCP inválida (sem campo result)".to_string())
+        genesis_mc_lib::persist::google_workspace_mcp::call_legacy_sheets_tool_async(
+            tool_name,
+            arguments,
+            "f-minus-1-guardian",
+            timeout,
+        )
+        .await
     }
 
-    fn normalize_mcp_tool_result(result: Value) -> Value {
-        let content = match result.get("content").and_then(|v| v.as_array()) {
-            Some(arr) => arr,
-            None => return result,
-        };
-
-        for item in content {
-            if let Some(json_val) = item.get("json") {
-                return json_val.clone();
-            }
-            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                    return parsed;
-                }
-            }
-        }
-
-        result
-    }
 }
 
 impl SheetsClient for SheetsMcpClient {
