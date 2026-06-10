@@ -58,8 +58,21 @@ $packagedExe = Join-Path $packagedBinDir "mcp-google.exe"
 if (Test-Path $packagedExe) {
     $env:MCP_GOOGLE_WORKSPACE_BIN = $packagedExe
 } else {
+    $repoRoot = $rootResolved
+    try {
+        Push-Location $PSScriptRoot
+        try {
+            $gitRootCandidate = (git rev-parse --show-toplevel 2>$null | Select-Object -First 1)
+            if ($gitRootCandidate) {
+                $repoRoot = $gitRootCandidate.Trim()
+            }
+        } finally {
+            Pop-Location
+        }
+    } catch {}
     $vendorRoot = Join-Path $PSScriptRoot "vendor"
     $vendorRepo = Join-Path $vendorRoot "mcp-google-workspace"
+    $vendorRepoRelative = "src-tauri/vendor/mcp-google-workspace"
     if (-not (Test-Path $vendorRepo)) {
         New-Item -ItemType Directory -Path $vendorRoot -Force | Out-Null
         Write-Host "`n[+] Canibalizando mcp-google-workspace (Rust) para vendor/..." -ForegroundColor DarkGray
@@ -69,16 +82,16 @@ if (Test-Path $packagedExe) {
             $subrepoOk = $true
         } catch {}
         if ($subrepoOk) {
-            Push-Location $PSScriptRoot
+            Push-Location $repoRoot
             try {
-                git subrepo clone https://github.com/distrihub/mcp-google-workspace $vendorRepo
+                git subrepo clone https://github.com/distrihub/mcp-google-workspace $vendorRepoRelative
             } finally {
                 Pop-Location
             }
         } else {
-            Push-Location $PSScriptRoot
+            Push-Location $repoRoot
             try {
-                git clone --depth 1 https://github.com/distrihub/mcp-google-workspace $vendorRepo
+                git clone --depth 1 https://github.com/distrihub/mcp-google-workspace $vendorRepoRelative
             } finally {
                 Pop-Location
             }
