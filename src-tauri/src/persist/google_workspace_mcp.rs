@@ -145,17 +145,74 @@ pub async fn google_workspace_access_token_async() -> Result<String, String> {
 }
 
 fn mcp_google_workspace_command() -> String {
-    env::var("MCP_GOOGLE_WORKSPACE_BIN")
+    fn default_bin_name() -> &'static str {
+        if cfg!(windows) {
+            "mcp-google.exe"
+        } else {
+            "mcp-google"
+        }
+    }
+
+    fn exists(path: &str) -> bool {
+        std::fs::metadata(path).is_ok()
+    }
+
+    let configured = env::var("MCP_GOOGLE_WORKSPACE_BIN")
         .ok()
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            if cfg!(windows) {
-                "mcp-google.exe".to_string()
-            } else {
-                "mcp-google".to_string()
+        .filter(|s| !s.is_empty());
+    let primary = configured.unwrap_or_else(|| default_bin_name().to_string());
+
+    if primary.contains(['\\', '/', ':']) && exists(&primary) {
+        return primary;
+    }
+
+    let packaged = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("bin")
+        .join(default_bin_name());
+    if let Some(packaged_str) = packaged.to_str() {
+        if exists(packaged_str) {
+            return packaged_str.to_string();
+        }
+    }
+
+    if let Ok(cargo_path) = env::var("SODA_CARGO_PATH") {
+        let cargo_path = cargo_path.trim();
+        if !cargo_path.is_empty() {
+            let candidate = std::path::Path::new(cargo_path)
+                .join(&primary)
+                .to_string_lossy()
+                .to_string();
+            if exists(&candidate) {
+                return candidate;
             }
-        })
+        }
+    }
+
+    if let Ok(profile) = env::var("USERPROFILE") {
+        let candidate = std::path::Path::new(profile.trim())
+            .join(".cargo")
+            .join("bin")
+            .join(&primary)
+            .to_string_lossy()
+            .to_string();
+        if exists(&candidate) {
+            return candidate;
+        }
+    }
+    if let Ok(home) = env::var("HOME") {
+        let candidate = std::path::Path::new(home.trim())
+            .join(".cargo")
+            .join("bin")
+            .join(&primary)
+            .to_string_lossy()
+            .to_string();
+        if exists(&candidate) {
+            return candidate;
+        }
+    }
+
+    primary
 }
 
 pub fn normalize_mcp_tool_result(result: Value) -> Value {

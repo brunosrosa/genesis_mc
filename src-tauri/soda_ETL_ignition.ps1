@@ -53,6 +53,68 @@ if (Test-Path $envPath) {
     exit
 }
 
+$packagedBinDir = Join-Path $PSScriptRoot "bin"
+$packagedExe = Join-Path $packagedBinDir "mcp-google.exe"
+if (Test-Path $packagedExe) {
+    $env:MCP_GOOGLE_WORKSPACE_BIN = $packagedExe
+} else {
+    $vendorRoot = Join-Path $PSScriptRoot "vendor"
+    $vendorRepo = Join-Path $vendorRoot "mcp-google-workspace"
+    if (-not (Test-Path $vendorRepo)) {
+        New-Item -ItemType Directory -Path $vendorRoot -Force | Out-Null
+        Write-Host "`n[+] Canibalizando mcp-google-workspace (Rust) para vendor/..." -ForegroundColor DarkGray
+        $subrepoOk = $false
+        try {
+            $null = (git subrepo --version 2>$null)
+            $subrepoOk = $true
+        } catch {}
+        if ($subrepoOk) {
+            Push-Location $PSScriptRoot
+            try {
+                git subrepo clone https://github.com/distrihub/mcp-google-workspace $vendorRepo
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Push-Location $PSScriptRoot
+            try {
+                git clone --depth 1 https://github.com/distrihub/mcp-google-workspace $vendorRepo
+            } finally {
+                Pop-Location
+            }
+        }
+    }
+
+    $shadowRoot = Join-Path ([System.IO.Path]::GetTempPath()) ".souls_workspaces"
+    New-Item -ItemType Directory -Path $shadowRoot -Force | Out-Null
+    $shadowBuild = Join-Path $shadowRoot ("mcp-google-workspace-build_" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $shadowBuild -Force | Out-Null
+
+    Write-Host "`n[+] Build isolado (Shadow Workspace) do mcp-google-workspace..." -ForegroundColor DarkGray
+    try {
+        robocopy $vendorRepo $shadowBuild /MIR /XD ".git" "target" | Out-Null
+        $env:CARGO_TARGET_DIR = Join-Path $shadowBuild "target"
+        Push-Location $shadowBuild
+        try {
+            cargo build --release --locked --bin mcp-google
+        } finally {
+            Pop-Location
+        }
+        $builtExe = Join-Path $env:CARGO_TARGET_DIR "release\\mcp-google.exe"
+        if (-not (Test-Path $builtExe)) {
+            Write-Host "[ERRO] mcp-google.exe não foi gerado em: $builtExe" -ForegroundColor Red
+            exit 1
+        }
+        New-Item -ItemType Directory -Path $packagedBinDir -Force | Out-Null
+        Copy-Item -LiteralPath $builtExe -Destination $packagedExe -Force
+        $env:MCP_GOOGLE_WORKSPACE_BIN = $packagedExe
+        Write-Host "[OK] mcp-google-workspace empacotado em src-tauri/bin/." -ForegroundColor Green
+    } finally {
+        try { Remove-Item -LiteralPath $shadowBuild -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+        Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+    }
+}
+
 $cargoManifest = Join-Path $PSScriptRoot "Cargo.toml"
 if (-not (Test-Path $cargoManifest)) {
     Write-Host "[ERRO] Cargo.toml não encontrado em: $cargoManifest" -ForegroundColor Red
