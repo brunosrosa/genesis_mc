@@ -56,8 +56,17 @@ pub struct CloudCascade {
 
 impl CloudCascade {
     pub fn new() -> Result<Self, CascadeError> {
-        let api_key = std::env::var("OPENROUTER_API_KEY")
-            .map_err(|_| CascadeError::NetworkError("OPENROUTER_API_KEY not set".to_string()))?;
+        let api_key = ["OPENROUTER_API_FAST_KEY", "OPENROUTER_API_FREE_KEY", "OPENROUTER_API_HEAVY_KEY"]
+            .into_iter()
+            .find_map(|key| std::env::var(key).ok())
+            .map(|value| value.trim().trim_matches('"').to_string())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                CascadeError::NetworkError(
+                    "OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY not set"
+                        .to_string(),
+                )
+            })?;
 
         Ok(CloudCascade {
             api_key,
@@ -159,7 +168,9 @@ impl CloudCascade {
 
 impl Default for CloudCascade {
     fn default() -> Self {
-        Self::new().expect("CloudCascade requires OPENROUTER_API_KEY")
+        Self::new().expect(
+            "CloudCascade requires OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY",
+        )
     }
 }
 

@@ -412,16 +412,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let blobs = fetch_required_blobs(&conn, &repo_id)?;
     info!(repo_id = %repo_id, blobs = blobs.len(), "F1 (Destilador FinOps): blobs carregados do vault");
 
-    if std::env::var("OPENROUTER_API_KEY").is_err() {
-        if let Ok(val) = std::env::var("OPENROUTER_API_FAST_KEY") {
-            std::env::set_var("OPENROUTER_API_KEY", val);
-        } else if let Ok(val) = std::env::var("OPENROUTER_API_FREE_KEY") {
-            std::env::set_var("OPENROUTER_API_KEY", val);
-        } else if let Ok(val) = std::env::var("OPENROUTER_API_HEAVY_KEY") {
-            std::env::set_var("OPENROUTER_API_KEY", val);
-        }
-    }
-
     let cascade = CloudCascade::new().map_err(|e| io::Error::other(format!("{:?}", e)))?;
 
     let mut yellow_total = 0_u32;

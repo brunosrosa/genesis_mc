@@ -395,6 +395,11 @@ pub fn call_google_workspace_tool_blocking(
         .take()
         .ok_or_else(|| "stdout indisponível".to_string())?;
     let (stdout_rx, stdout_seen) = spawn_line_reader(stdout);
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "stderr indisponível".to_string())?;
+    let (_stderr_rx, _stderr_seen) = spawn_line_reader(stderr);
 
     {
         use std::io::Write;

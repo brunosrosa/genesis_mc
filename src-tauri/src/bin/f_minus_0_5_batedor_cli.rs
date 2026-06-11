@@ -449,12 +449,11 @@ impl OpenRouterClient {
         let api_key = [
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
-            "OPENROUTER_API_KEY",
         ]
         .into_iter()
         .find_map(|k| std::env::var(k).ok().map(|v| v.trim().trim_matches('"').to_string()))
         .filter(|v| !v.is_empty())
-        .ok_or_else(|| "Missing OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_KEY".to_string())?;
+        .ok_or_else(|| "Missing OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY".to_string())?;
 
         let mut model = std::env::var("OPENROUTER_BATEDOR_MODEL")
             .ok()

@@ -313,13 +313,13 @@ impl HttpLensInvoker {
     pub fn from_openrouter_env() -> Result<Self, Phase2Error> {
         let api_key = get_first_env(&[
             "OPENROUTER_API_HEAVY_KEY",
-            "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
         ])
         .ok_or_else(|| {
             Phase2Error::ConfigError(
-                "OPENROUTER_API_HEAVY_KEY/OPENROUTER_API_KEY/OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY ausente".to_string(),
+                "OPENROUTER_API_HEAVY_KEY/OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY ausente"
+                    .to_string(),
             )
         })?;
         let base_url = std::env::var("OPENAI_BASE_URL")
@@ -1409,7 +1409,6 @@ mod tests {
     fn test_from_env_missing_var_returns_config_error() {
         let env_keys = [
             "OPENROUTER_API_HEAVY_KEY",
-            "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
             "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX",
@@ -1446,7 +1445,6 @@ mod tests {
     fn test_from_openrouter_env_missing_key_returns_config_error() {
         let env_keys = [
             "OPENROUTER_API_HEAVY_KEY",
-            "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
             "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX",

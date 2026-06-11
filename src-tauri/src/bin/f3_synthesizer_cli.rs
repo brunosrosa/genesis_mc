@@ -670,12 +670,14 @@ struct OpenRouterFormatterClient {
 impl OpenRouterFormatterClient {
     fn from_env() -> Result<Self, String> {
         let api_key = get_first_env(&[
-            "OPENROUTER_API_HEAVY_KEY",
-            "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
+            "OPENROUTER_API_HEAVY_KEY",
         ])
-        .ok_or_else(|| "OPENROUTER_API_HEAVY_KEY/OPENROUTER_API_KEY/OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY ausente".to_string())?;
+        .ok_or_else(|| {
+            "OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY ausente"
+                .to_string()
+        })?;
         let base_url = std::env::var("OPENAI_BASE_URL")
             .map(|base| format!("{}/chat/completions", base.trim_end_matches('/')))
             .unwrap_or_else(|_| "https://openrouter.ai/api/v1/chat/completions".to_string());
