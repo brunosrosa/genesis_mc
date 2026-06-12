@@ -21,7 +21,7 @@ Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Bluepr
 
 3. **Arquitetura Multi-Aba (O Desmembramento):**
    * O Sheets não é uma tabela plana, é um banco de dados relacional visual. Ao enviar dados, distribua as fatias nas abas correspondentes [2]:
-     * `MASTER_SOLUTIONS_v3`: A matriz principal de 45 colunas.
+     * `MASTER_SOLUTIONS`: A matriz principal de 85 colunas.
      * `SODA_GRAPH_TOPOLOGY`: Para dependências e stack_base.
      * `ACTION_MATRIX`: Apenas para itens de `acao_de_canibalizacao` que geram tickets de código em Rust.
      * `QUARANTINE_RADAR`: Para componentes com alto risco ético ou de design (design_misuse_risk). Estes exigirão HITL manual futuro [2].
@@ -40,6 +40,6 @@ Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Bluepr
 **Ação do Agente:**
 1. Aborta o instinto de usar loops `add_rows` consecutivos para evitar o Erro 503 de *Rate Limit*.
 2. Empacota os 5 JSONs na memória global local, garantindo que passaram pela decodificação restrita (`llguidance`).
-3. Estrutura o payload do `batch_update_cells` fatiando os dados: joga a matriz primária na `MASTER_SOLUTIONS_v3`, os algoritmos perigosos na `QUARANTINE_RADAR` e as tarefas braçais de Rust na `ACTION_MATRIX`.
+3. Estrutura o payload do `batch_update_cells` fatiando os dados: joga a matriz primária na `MASTER_SOLUTIONS`, os algoritmos perigosos na `QUARANTINE_RADAR` e as tarefas braçais de Rust na `ACTION_MATRIX`.
 4. Dispara a chamada atômica O(1) para o Gateway.
 5. Retorna no Canvas: *"-> SSOT atualizada via batchUpdate atômico. Disjuntor 60 RPM respeitado. Componentes perigosos movidos para a Aba de Quarentena."*

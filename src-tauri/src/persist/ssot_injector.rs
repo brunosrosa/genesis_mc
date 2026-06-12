@@ -6,7 +6,7 @@ use crate::persist::google_workspace_mcp;
 use thiserror::Error;
 use serde_json::{json, Value};
 use rusqlite::{Connection, ErrorCode};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::future::Future;
 use std::pin::Pin;
@@ -122,8 +122,10 @@ impl SheetsClient for McpGoogleWorkspaceSheetsClient {
                     .as_object()
                     .ok_or_else(|| "Chunk inválido para write_values".to_string())?;
 
-                for (range, values) in map {
-                    SsotInjector::call_mcp_google_workspace_sheets_tool(
+                let entries: Vec<(&String, &Value)> = map.iter().collect();
+                let total = entries.len();
+                for (idx, (range, values)) in entries.into_iter().enumerate() {
+                    let result = SsotInjector::call_mcp_google_workspace_sheets_tool(
                         "write_values",
                         json!({
                             "sheet": sheet,
@@ -138,6 +140,15 @@ impl SheetsClient for McpGoogleWorkspaceSheetsClient {
                     )
                     .await
                     .map_err(|e| e.to_string())?;
+                    SsotInjector::validate_write_values_result(range, &result)?;
+                    if idx + 1 < total {
+                        info!(
+                            seconds = 2u64,
+                            range = %range,
+                            "Resfriamento de API (Jitter): aguardando antes do próximo chunk/range"
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    }
                 }
                 Ok::<(), String>(())
             };
@@ -215,6 +226,89 @@ struct ValidatedSsotFields {
 }
 
 impl SsotInjector {
+    fn maybe_fix_mojibake(s: &str) -> String {
+        let s = s.trim();
+        if s.is_empty() {
+            return String::new();
+        }
+        let looks_like_mojibake =
+            s.contains('Ã') || s.contains('Â') || s.contains("â€") || s.contains("â€™") || s.contains("â€œ");
+        if !looks_like_mojibake {
+            return s.to_string();
+        }
+        fn marker_score(s: &str) -> usize {
+            s.matches('Ã').count() + s.matches('Â').count() + s.matches('â').count()
+        }
+
+        fn try_decode_latin1_as_utf8(s: &str) -> Option<String> {
+            let mut bytes: Vec<u8> = Vec::with_capacity(s.len());
+            for ch in s.chars() {
+                let cp = ch as u32;
+                if cp > 0xFF {
+                    return None;
+                }
+                bytes.push(cp as u8);
+            }
+            String::from_utf8(bytes).ok()
+        }
+
+        let mut out = s.to_string();
+        out = out.replace('Â', "");
+
+        for (from, to) in [
+            ("Ã\u{00A1}", "á"),
+            ("Ã\u{00A0}", "à"),
+            ("Ã\u{00A2}", "â"),
+            ("Ã\u{00A3}", "ã"),
+            ("Ã\u{00A4}", "ä"),
+            ("Ã\u{00A9}", "é"),
+            ("Ã\u{00A8}", "è"),
+            ("Ã\u{00AA}", "ê"),
+            ("Ã\u{00AB}", "ë"),
+            ("Ã\u{00AD}", "í"),
+            ("Ã\u{00AC}", "ì"),
+            ("Ã\u{00AE}", "î"),
+            ("Ã\u{00AF}", "ï"),
+            ("Ã\u{00B3}", "ó"),
+            ("Ã\u{00B2}", "ò"),
+            ("Ã\u{00B4}", "ô"),
+            ("Ã\u{00B5}", "õ"),
+            ("Ã\u{00B6}", "ö"),
+            ("Ã\u{00BA}", "ú"),
+            ("Ã\u{00B9}", "ù"),
+            ("Ã\u{00BB}", "û"),
+            ("Ã\u{00BC}", "ü"),
+            ("Ã\u{00A7}", "ç"),
+            ("Ã\u{00B1}", "ñ"),
+            ("â€™", "’"),
+            ("â€˜", "‘"),
+            ("â€œ", "“"),
+            ("â€�", "”"),
+            ("â€“", "–"),
+            ("â€”", "—"),
+            ("â€¦", "…"),
+            ("â€¢", "•"),
+        ] {
+            out = out.replace(from, to);
+        }
+
+        if marker_score(&out) > 0 {
+            let mut best = out.clone();
+            for _ in 0..2 {
+                let Some(decoded) = try_decode_latin1_as_utf8(&best) else {
+                    break;
+                };
+                if marker_score(&decoded) >= marker_score(&best) {
+                    break;
+                }
+                best = decoded;
+            }
+            out = best;
+        }
+
+        out
+    }
+
     pub(crate) fn open_vault_connection() -> Result<Connection, SsotError> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let root_dir = std::path::Path::new(manifest_dir)
@@ -657,9 +751,11 @@ impl SsotInjector {
     }
 
     fn header_idx(header_row: &[String], canonical: &str) -> Option<usize> {
-        header_row.iter().enumerate().find_map(|(idx, raw)| {
-            (Self::normalize_header_cell(raw) == canonical).then_some(idx)
-        })
+        let idx = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .position(|name| *name == canonical)?;
+        let raw = header_row.get(idx)?;
+        (raw.trim() == canonical).then_some(idx)
     }
 
     async fn read_sheet_cell(
@@ -818,7 +914,7 @@ impl SsotInjector {
         let lote_idx = header_row
             .iter()
             .enumerate()
-            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "lote_id").then_some(idx))
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
             .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
         let lote_col = Self::col_idx_to_a1(lote_idx);
         let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
@@ -846,6 +942,14 @@ impl SsotInjector {
 
         match Self::dispatch_to_cloud(batch_payload).await {
             Ok(()) => {
+                Self::confirm_cloud_write_projection(
+                    &client,
+                    &spreadsheet_id,
+                    row_number_1based,
+                    &header_row,
+                    &row,
+                )
+                .await?;
                 row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
                 Self::update_local_status(
                     repo_id,
@@ -936,7 +1040,7 @@ impl SsotInjector {
         let lote_idx = header_row
             .iter()
             .enumerate()
-            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "lote_id").then_some(idx))
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
             .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
         let lote_col = Self::col_idx_to_a1(lote_idx);
         let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
@@ -968,6 +1072,14 @@ impl SsotInjector {
 
         match Self::dispatch_to_cloud(batch_payload).await {
             Ok(()) => {
+                Self::confirm_cloud_write_projection(
+                    &client,
+                    &spreadsheet_id,
+                    row_number_1based,
+                    &header_row,
+                    &row,
+                )
+                .await?;
                 row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
                 Self::update_local_status(
                     repo_id,
@@ -1060,7 +1172,7 @@ impl SsotInjector {
         let lote_idx = header_row
             .iter()
             .enumerate()
-            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "lote_id").then_some(idx))
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
             .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
         let lote_col = Self::col_idx_to_a1(lote_idx);
         let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
@@ -1120,6 +1232,14 @@ impl SsotInjector {
 
         match Self::dispatch_to_cloud(batch_payload).await {
             Ok(()) => {
+                Self::confirm_cloud_write_projection(
+                    &client,
+                    &spreadsheet_id,
+                    row_number_1based,
+                    &header_row,
+                    &row,
+                )
+                .await?;
                 let conn = Self::open_vault_connection()?;
                 let _ = conn.execute(
                     "UPDATE repo_heuristics
@@ -1173,7 +1293,7 @@ impl SsotInjector {
         let repo_url_idx = header_row
             .iter()
             .enumerate()
-            .find_map(|(idx, raw)| (Self::normalize_header_cell(raw) == "repo_url").then_some(idx))
+            .find_map(|(idx, raw)| (raw.trim() == "repo_url").then_some(idx))
             .ok_or_else(|| {
                 SsotError::CloudFailure(format!(
                     "Header missing repo_url (headers_len={})",
@@ -1187,7 +1307,7 @@ impl SsotInjector {
             .await
             .map_err(SsotError::CloudFailure)?;
 
-        let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
+        let needle = repo_url.trim_end_matches('/').to_string();
         if let Some(found) = Self::resolve_row_number_from_repo_url_column(&values, &needle) {
             return Ok(found);
         }
@@ -1219,7 +1339,7 @@ impl SsotInjector {
     ) -> Option<u32> {
         for (idx, row) in values.iter().enumerate() {
             let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
-            let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
+            let repo_hay = repo_cell.trim_end_matches('/').to_string();
             if !repo_hay.is_empty() && repo_hay == repo_url_needle {
                 return Some((idx as u32) + 2);
             }
@@ -1821,10 +1941,26 @@ impl SsotInjector {
         Ok(())
     }
 
-    fn normalize_header_cell(raw: &str) -> String {
-        raw.trim()
-            .to_ascii_lowercase()
-            .replace([' ', '-'], "_")
+    fn validate_master_solutions_header_exact(header_row: &[String]) -> Result<(), SsotError> {
+        if header_row.len() != SSOT_EXPECTED_COLUMNS {
+            return Err(SsotError::CloudFailure(format!(
+                "Header MASTER_SOLUTIONS inválido: esperado {} colunas, recebeu {}",
+                SSOT_EXPECTED_COLUMNS,
+                header_row.len()
+            )));
+        }
+        for (idx, expected) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
+            let actual = header_row.get(idx).map(|s| s.trim()).unwrap_or("");
+            if actual != *expected {
+                return Err(SsotError::CloudFailure(format!(
+                    "Header MASTER_SOLUTIONS divergente na coluna {}: esperado '{}', recebido '{}'",
+                    idx,
+                    expected,
+                    actual
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn col_idx_to_a1(idx_0based: usize) -> String {
@@ -1850,7 +1986,9 @@ impl SsotInjector {
             )
             .await
             .map_err(SsotError::CloudFailure)?;
-        Ok(raw.first().cloned().unwrap_or_default())
+        let header_row = raw.first().cloned().unwrap_or_default();
+        Self::validate_master_solutions_header_exact(&header_row)?;
+        Ok(header_row)
     }
 
     fn validate_sheet_row_values(row_values_by_name: &HashMap<&'static str, Value>) -> Result<(), SsotError> {
@@ -1887,6 +2025,36 @@ impl SsotInjector {
         Ok(())
     }
 
+    fn validate_write_values_result(range: &str, result: &Value) -> Result<(), String> {
+        if let Some(err) = result.get("error") {
+            return Err(format!("write_values retornou erro para {}: {}", range, err));
+        }
+        let has_updated_range = result
+            .get("updatedRange")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        let has_updated_cells = result
+            .get("updatedCells")
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().and_then(|n| (n > 0).then_some(n as u64))))
+            .map(|n| n > 0)
+            .unwrap_or(false);
+        let has_updated_rows = result
+            .get("updatedRows")
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().and_then(|n| (n > 0).then_some(n as u64))))
+            .map(|n| n > 0)
+            .unwrap_or(false);
+        let ok_flag = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        if has_updated_range || has_updated_cells || has_updated_rows || ok_flag {
+            return Ok(());
+        }
+        Err(format!(
+            "write_values sem confirmação inequívoca para {}: {}",
+            range,
+            result
+        ))
+    }
+
     fn prepare_batch_payload_dynamic(
         row_number_1based: u32,
         header_row: &[String],
@@ -1901,6 +2069,7 @@ impl SsotInjector {
         payload: &MasterSolutionsRow,
         skip_columns: &[&'static str],
     ) -> Result<Value, SsotError> {
+        Self::validate_master_solutions_header_exact(header_row)?;
         let row_values = payload.to_sheet_row();
         if row_values.len() != SSOT_EXPECTED_COLUMNS {
             return Err(SsotError::ValidationFailure(format!(
@@ -1914,31 +2083,22 @@ impl SsotInjector {
         for (idx, name) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
             by_name.insert(*name, row_values[idx].clone());
         }
-        if let Some(v) = by_name.get("repo_analised_version").cloned() {
-            by_name.insert("repo_version", v);
-        }
         Self::validate_sheet_row_values(&by_name)?;
-
-        let mut canonical_set: HashSet<&'static str> =
-            MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().copied().collect();
-        canonical_set.insert("repo_version");
-        let mut skip_set: HashSet<&'static str> = HashSet::new();
-        for s in skip_columns {
-            skip_set.insert(*s);
-        }
         let mut map = serde_json::Map::new();
-        for (idx, raw) in header_row.iter().enumerate() {
-            let key = Self::normalize_header_cell(raw);
-            if key.is_empty() {
+        for (idx, canonical_name) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
+            if skip_columns.iter().any(|skip| skip == canonical_name) {
                 continue;
             }
-            if !canonical_set.contains(key.as_str()) {
-                continue;
-            }
-            if skip_set.contains(key.as_str()) {
-                continue;
-            }
-            let Some(value) = by_name.get(key.as_str()) else { continue };
+            let Some(value) = by_name.get(canonical_name) else { continue };
+            let value = match value {
+                Value::Number(n) => Value::String(n.to_string()),
+                Value::Null => Value::String(String::new()),
+                other => other.clone(),
+            };
+            let value = match value {
+                Value::String(s) => Value::String(Self::maybe_fix_mojibake(&s)),
+                other => other,
+            };
             let col = Self::col_idx_to_a1(idx);
             let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
             map.insert(range, json!(vec![vec![value]]));
@@ -2012,6 +2172,51 @@ impl SsotInjector {
             .await
             .map_err(SsotError::CloudFailure)
     }
+
+    fn cell_text_for_confirmation(payload: &MasterSolutionsRow, canonical_col: &str) -> Option<String> {
+        let idx = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .position(|col| *col == canonical_col)?;
+        let value = payload.to_sheet_row().get(idx)?.clone();
+        match value {
+            Value::String(s) => Some(Self::maybe_fix_mojibake(&s)),
+            Value::Number(n) => Some(n.to_string()),
+            Value::Null => Some(String::new()),
+            other => Some(other.to_string().trim_matches('"').to_string()),
+        }
+    }
+
+    async fn confirm_cloud_write_projection(
+        client: &dyn SheetsClient,
+        spreadsheet_id: &str,
+        row_number_1based: u32,
+        header_row: &[String],
+        payload: &MasterSolutionsRow,
+    ) -> Result<(), SsotError> {
+        for canonical in ["project_name", "repo_url", "score_final", "analise_origem"] {
+            let Some(expected) = Self::cell_text_for_confirmation(payload, canonical) else {
+                continue;
+            };
+            let actual = Self::read_sheet_cell(
+                client,
+                spreadsheet_id,
+                MASTER_SOLUTIONS_SHEET,
+                row_number_1based,
+                header_row,
+                canonical,
+            )
+            .await?;
+            if actual != expected {
+                return Err(SsotError::CloudFailure(format!(
+                    "Confirmação de escrita falhou para '{}': esperado '{}', recebido '{}'",
+                    canonical,
+                    expected,
+                    actual
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -2043,6 +2248,23 @@ mod tests {
     }
 
     #[test]
+    fn maybe_fix_mojibake_repairs_common_ptbr_sequences() {
+        let input = "Orquestração Multiagente com MemÃ³ria Persistente via Code-as-Prompt";
+        let fixed = SsotInjector::maybe_fix_mojibake(input);
+        assert_eq!(
+            fixed,
+            "Orquestração Multiagente com Memória Persistente via Code-as-Prompt"
+        );
+    }
+
+    #[test]
+    fn maybe_fix_mojibake_is_noop_for_valid_ptbr() {
+        let input = "Orquestração Multiagente com Memória Persistente via Code-as-Prompt";
+        let fixed = SsotInjector::maybe_fix_mojibake(input);
+        assert_eq!(fixed, input);
+    }
+
+    #[test]
     fn test_prepare_batch_payload_is_85_columns_a_to_cg() {
         let row = MasterSolutionsRow {
             status_atualizacao: "CONCLUIDO".to_string(),
@@ -2071,17 +2293,27 @@ mod tests {
             .collect();
         let batch = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap();
         let obj = batch.as_object().unwrap();
+        let project_col =
+            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "project_name").unwrap());
+        let repo_url_col =
+            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "repo_url").unwrap());
+        let valid_from_col =
+            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "valid_from").unwrap());
+        let valid_to_col =
+            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "valid_to").unwrap());
+        let embargo_col =
+            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "embargo_status").unwrap());
 
         assert_eq!(
-            obj.get("C2:C2").unwrap(),
+            obj.get(&format!("{project_col}2:{project_col}2")).unwrap(),
             &json!(vec![vec![json!("owner / repo")]])
         );
         assert_eq!(
-            obj.get("D2:D2").unwrap(),
+            obj.get(&format!("{repo_url_col}2:{repo_url_col}2")).unwrap(),
             &json!(vec![vec![json!("https://github.com/owner/repo")]])
         );
         assert!(obj
-            .get("CE2:CE2")
+            .get(&format!("{valid_from_col}2:{valid_from_col}2"))
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first())
             .and_then(|v| v.as_array())
@@ -2089,16 +2321,19 @@ mod tests {
             .and_then(|v| v.as_str())
             .map(|s| !s.trim().is_empty() && s.contains('-'))
             .unwrap_or(false));
-        assert_eq!(obj.get("CF2:CF2").unwrap(), &json!(vec![vec![json!("")]]));
         assert_eq!(
-            obj.get("CG2:CG2").unwrap(),
+            obj.get(&format!("{valid_to_col}2:{valid_to_col}2")).unwrap(),
+            &json!(vec![vec![json!("")]])
+        );
+        assert_eq!(
+            obj.get(&format!("{embargo_col}2:{embargo_col}2")).unwrap(),
             &json!(vec![vec![json!("LIVRE")]])
         );
         assert_eq!(validated.project_name, "owner/repo");
     }
 
     #[test]
-    fn prepare_batch_payload_respects_header_reordering_by_index() {
+    fn prepare_batch_payload_rejects_header_reordering() {
         let row = MasterSolutionsRow {
             status_atualizacao: "CONCLUIDO".to_string(),
             status_fase: "F4".to_string(),
@@ -2130,9 +2365,55 @@ mod tests {
         let score_col = header_row.remove(score_idx);
         header_row.insert(10, score_col);
 
-        let batch = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap();
-        let obj = batch.as_object().unwrap();
-        assert_eq!(obj.get("K2:K2").unwrap(), &json!(vec![vec![json!("9.4")]]));
+        let err = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap_err();
+        assert!(matches!(err, SsotError::CloudFailure(_)));
+    }
+
+    #[test]
+    fn header_idx_requires_exact_name_and_position() {
+        let headers: Vec<String> = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(SsotInjector::header_idx(&headers, "declared_description"), Some(8));
+        assert_eq!(SsotInjector::header_idx(&headers, "score_final"), Some(63));
+        assert_eq!(SsotInjector::header_idx(&headers, "status_fase"), Some(1));
+        assert_eq!(SsotInjector::header_idx(&headers, "lote_id"), Some(83));
+        assert_eq!(SsotInjector::header_idx(&headers, "repo_url"), Some(4));
+    }
+
+    #[test]
+    fn prepare_batch_payload_rejects_alias_headers() {
+        let row = MasterSolutionsRow {
+            project_name: "owner/repo".to_string(),
+            declared_description: "Descricao forte".to_string(),
+            score_final: 8.5,
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
+        let header_row = vec![
+            "status_atualizacao".to_string(),
+            "status_fase".to_string(),
+            "description".to_string(),
+            "project_name".to_string(),
+            "repo_url".to_string(),
+        ];
+
+        let err = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap_err();
+        assert!(matches!(err, SsotError::CloudFailure(_)));
+    }
+
+    #[test]
+    fn validate_write_values_result_rejects_ambiguous_success() {
+        let err = SsotInjector::validate_write_values_result("A2:A2", &json!({"noop": true})).unwrap_err();
+        assert!(err.contains("sem confirmação inequívoca"));
+        assert!(SsotInjector::validate_write_values_result(
+            "A2:A2",
+            &json!({"updatedRange":"MASTER_SOLUTIONS!A2:A2","updatedCells":1})
+        )
+        .is_ok());
     }
 
     #[test]

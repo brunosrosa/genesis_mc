@@ -42,6 +42,7 @@ tempfile = "3"
 dotenvy = "0.15"
 quote = "1"
 syn = { version = "2", features = ["full", "visit"] }
+enable-ansi-support = "0.2.1"
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Security",

@@ -11,6 +11,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
+use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 const STATUS_GATILHO: &str = "INICIAR_TRIAGEM";
@@ -865,15 +866,11 @@ async fn process_one_row(
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();

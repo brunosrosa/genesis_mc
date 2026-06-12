@@ -1,5 +1,4 @@
 use std::io;
-use std::io::IsTerminal;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -12,6 +11,7 @@ use genesis_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination};
 use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
 use genesis_mc_lib::persist::ssot_injector::SsotInjector;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, find_col_idx};
+use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::Deserialize;
@@ -496,12 +496,7 @@ fn append_feedback_bmad_report(
     out.push_str("```json\n");
     out.push_str(&json);
     out.push_str("\n```\n");
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&report_path)?;
-    file.write_all(out.as_bytes())?;
+    append_plaintext_report(&report_path, &out)?;
     Ok(report_path)
 }
 
@@ -866,6 +861,13 @@ fn response_format_for_block(block: u8) -> Value {
         })
     }
 
+    fn with_description(mut schema: Value, description: &'static str) -> Value {
+        if let Some(obj) = schema.as_object_mut() {
+            obj.insert("description".to_string(), Value::String(description.to_string()));
+        }
+        schema
+    }
+
     fn string_schema(max_len: u32) -> Value {
         json!({ "type": "string", "maxLength": max_len })
     }
@@ -909,14 +911,14 @@ fn response_format_for_block(block: u8) -> Value {
     let fields_schema = match block {
         1 => {
             let mut props = serde_json::Map::new();
-            props.insert("proposta_original_resumo".to_string(), string_schema(5000));
-            props.insert("declared_description_ptbr".to_string(), string_schema(5000));
-            props.insert("visao_do_enxame".to_string(), string_schema(5000));
-            props.insert("justificativa_decisao".to_string(), string_schema(5000));
-            props.insert("executive_verdict".to_string(), string_schema(5000));
-            props.insert("risco_principal".to_string(), string_schema(5000));
-            props.insert("risco_linha_vermelha".to_string(), string_schema(5000));
-            props.insert("observacoes".to_string(), string_schema(5000));
+            props.insert("proposta_original_resumo".to_string(), with_description(string_schema(5000), "Resumo canônico do problema e proposta original."));
+            props.insert("declared_description_ptbr".to_string(), with_description(string_schema(5000), "Descricao oficial do repositório em PT-BR."));
+            props.insert("visao_do_enxame".to_string(), with_description(string_schema(5000), "Sintese consolidada das 3 lentes do enxame."));
+            props.insert("justificativa_decisao".to_string(), with_description(string_schema(5000), "Racional objetivo da decisao arquitetural."));
+            props.insert("executive_verdict".to_string(), with_description(string_schema(5000), "Veredito executivo curto e acionavel."));
+            props.insert("risco_principal".to_string(), with_description(string_schema(5000), "Maior risco objetivo do ativo analisado."));
+            props.insert("risco_linha_vermelha".to_string(), with_description(string_schema(5000), "Condicao que bloquearia absorcao ou integracao."));
+            props.insert("observacoes".to_string(), with_description(string_schema(5000), "Observacoes curtas para auditoria futura."));
             strict_object(
                 props,
                 vec![
@@ -932,14 +934,14 @@ fn response_format_for_block(block: u8) -> Value {
         }
         21 => {
             let mut props = serde_json::Map::new();
-            props.insert("indicacao_otimista_canibalizacao".to_string(), string_schema(5000));
-            props.insert("ouro_a_extrair".to_string(), string_schema(5000));
-            props.insert("deep_pattern".to_string(), string_schema(5000));
-            props.insert("transplantable_core".to_string(), string_schema(5000));
-            props.insert("logic_math_heuristic".to_string(), string_schema(5000));
-            props.insert("real_structural_problem".to_string(), string_schema(5000));
-            props.insert("categoria_nuance_tecnica".to_string(), string_schema(2000));
-            props.insert("integracao_papel_exato".to_string(), string_schema(2000));
+            props.insert("indicacao_otimista_canibalizacao".to_string(), with_description(string_schema(5000), "Proposta otimista e concreta do que canibalizar no ativo."));
+            props.insert("ouro_a_extrair".to_string(), with_description(string_schema(5000), "Maior valor reaproveitavel a ser extraido."));
+            props.insert("deep_pattern".to_string(), with_description(string_schema(5000), "Padrao profundo recorrente identificado no ativo."));
+            props.insert("transplantable_core".to_string(), with_description(string_schema(5000), "Nucleo transplantavel com menor acoplamento."));
+            props.insert("logic_math_heuristic".to_string(), with_description(string_schema(5000), "Heuristica ou logica matematica de maior valor."));
+            props.insert("real_structural_problem".to_string(), with_description(string_schema(5000), "Problema estrutural real que o ativo tenta resolver."));
+            props.insert("categoria_nuance_tecnica".to_string(), with_description(string_schema(2000), "Nuance tecnica dominante do caso."));
+            props.insert("integracao_papel_exato".to_string(), with_description(string_schema(2000), "Papel exato do ativo dentro da stack SODA."));
             strict_object(
                 props,
                 vec![
@@ -958,27 +960,27 @@ fn response_format_for_block(block: u8) -> Value {
             let mut props = serde_json::Map::new();
             props.insert(
                 "must_components_prod_ux".to_string(),
-                string_array_schema(3, 8, 800),
+                with_description(string_array_schema(3, 8, 800), "Componentes obrigatorios sob a lente de produto e UX."),
             );
             props.insert(
                 "must_components_arq".to_string(),
-                string_array_schema(3, 8, 800),
+                with_description(string_array_schema(3, 8, 800), "Componentes obrigatorios sob a lente arquitetural."),
             );
             props.insert(
                 "must_components_ops".to_string(),
-                string_array_schema(3, 8, 800),
+                with_description(string_array_schema(3, 8, 800), "Componentes obrigatorios sob a lente operacional."),
             );
             props.insert(
                 "detected_toxic_deps".to_string(),
-                string_array_schema(1, 8, 800),
+                with_description(string_array_schema(1, 8, 800), "Dependencias toxicas ou arriscadas a evitar."),
             );
             props.insert(
                 "do_not_absorb".to_string(),
-                string_array_schema(1, 8, 800),
+                with_description(string_array_schema(1, 8, 800), "Partes explicitamente proibidas de absorver."),
             );
             props.insert(
                 "where_ai_should_not_enter".to_string(),
-                string_array_schema(1, 8, 800),
+                with_description(string_array_schema(1, 8, 800), "Zonas onde a IA nao deve intervir."),
             );
             strict_object(
                 props,
@@ -996,19 +998,19 @@ fn response_format_for_block(block: u8) -> Value {
             let mut props = serde_json::Map::new();
             props.insert(
                 "classificacao_terminal".to_string(),
-                enum_schema(&[
+                with_description(enum_schema(&[
                     "APROVADO_PARA_PRODUCAO",
                     "APROVADO_COM_RESSALVAS",
                     "REJEITADO_DESCARTE",
-                ]),
+                ]), "Classificacao terminal final do ativo."),
             );
             props.insert(
                 "acao_de_canibalizacao".to_string(),
-                enum_schema(&["NENHUMA", "ABSORVER_LOGICA", "EXTRAIR_SCRIPTS"]),
+                with_description(enum_schema(&["NENHUMA", "ABSORVER_LOGICA", "EXTRAIR_SCRIPTS"]), "Acao principal de canibalizacao recomendada."),
             );
             props.insert(
                 "categoria_arquitetural".to_string(),
-                enum_schema(&[
+                with_description(enum_schema(&[
                     "CanvasUI",
                     "UILibrary",
                     "Memoria_RAG",
@@ -1019,19 +1021,38 @@ fn response_format_for_block(block: u8) -> Value {
                     "Seguranca_Sandbox",
                     "Infraestrutura_Core",
                     "Tooling_Dev",
-                ]),
+                ]), "Categoria arquitetural canonica do ativo."),
             );
             props.insert(
                 "horizonte_extracao".to_string(),
-                enum_schema(&["IMMEDIATE", "SHORT", "MEDIUM", "LONG", "VERY_LONG"]),
+                with_description(enum_schema(&[
+                    "IMMEDIATE",
+                    "SHORT",
+                    "MEDIUM",
+                    "LONG",
+                    "VERY_LONG",
+                    "IMEDIATO",
+                    "CURTO",
+                    "MÉDIO",
+                    "MEDIO",
+                    "LONGO",
+                    "MUITO_LONGO",
+                ]), "Horizonte temporal para extrair valor claro."),
             );
             props.insert(
                 "tipo_integracao".to_string(),
-                enum_schema(&["INTEGRATE_AS_COMPONENT", "REIMPLEMENT_INTERNALLY", "REJECT"]),
+                with_description(enum_schema(&[
+                    "INTEGRATE_AS_COMPONENT",
+                    "REIMPLEMENT_INTERNALLY",
+                    "REJECT",
+                    "INTEGRAR_COMO_COMPONENTE",
+                    "REIMPLEMENTAR_INTERNAMENTE",
+                    "REJEITAR",
+                ]), "Modo de integracao recomendado para o SODA."),
             );
             props.insert(
                 "capability_nature_primary".to_string(),
-                enum_schema(&[
+                with_description(enum_schema(&[
                     "LIBRARY",
                     "TOOLING",
                     "SERVICE",
@@ -1039,7 +1060,16 @@ fn response_format_for_block(block: u8) -> Value {
                     "SYSTEM",
                     "ALGORITHM",
                     "DATA_STRUCTURE",
-                ]),
+                    "BIBLIOTECA",
+                    "FERRAMENTA",
+                    "SERVIÇO",
+                    "SERVICO",
+                    "APLICAÇÃO",
+                    "APLICACAO",
+                    "SISTEMA",
+                    "ALGORITMO",
+                    "ESTRUTURA_DE_DADOS",
+                ]), "Natureza primaria da capacidade entregue pelo ativo."),
             );
             props.insert(
                 "architectural_topology".to_string(),
@@ -1051,67 +1081,192 @@ fn response_format_for_block(block: u8) -> Value {
                     "EVENT_DRIVEN",
                     "PIPELINE",
                     "PLUGIN",
+                    "MONOLITO",
+                    "EM_CAMADAS",
+                    "CAMADAS",
+                    "MICROSSERVIÇOS",
+                    "MICROSSERVICOS",
+                    "DIRIGIDO_A_EVENTOS",
+                    "PLUGÁVEL",
+                    "PLUGAVEL",
                 ]),
             );
-            props.insert("temporal_stability".to_string(), enum_schema(&["STABLE", "EVOLVING"]));
-            props.insert("bare_metal_fit".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
-            props.insert("extractability_level".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
-            props.insert("runtime_sovereignty_fit".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
-            props.insert("local_first_fit".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
+            props.insert(
+                "temporal_stability".to_string(),
+                enum_schema(&["STABLE", "EVOLVING", "ESTÁVEL", "ESTAVEL", "EVOLUTIVO"]),
+            );
+            props.insert(
+                "bare_metal_fit".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "EXCELENTE"]),
+            );
+            props.insert(
+                "extractability_level".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "EXCELENTE"]),
+            );
+            props.insert(
+                "runtime_sovereignty_fit".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "EXCELENTE"]),
+            );
+            props.insert(
+                "local_first_fit".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "EXCELENTE"]),
+            );
             props.insert(
                 "adoptability_level".to_string(),
-                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+                enum_schema(&[
+                    "VERY_LOW",
+                    "LOW",
+                    "MEDIUM",
+                    "HIGH",
+                    "EXCELLENT",
+                    "MUITO_BAIXA",
+                    "BAIXA",
+                    "MÉDIA",
+                    "MEDIA",
+                    "ALTA",
+                    "EXCELENTE",
+                ]),
             );
             props.insert(
                 "longitudinal_sustainability".to_string(),
-                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+                enum_schema(&[
+                    "VERY_LOW",
+                    "LOW",
+                    "MEDIUM",
+                    "HIGH",
+                    "EXCELLENT",
+                    "MUITO_BAIXA",
+                    "BAIXA",
+                    "MÉDIA",
+                    "MEDIA",
+                    "ALTA",
+                    "EXCELENTE",
+                ]),
             );
             props.insert(
                 "maintenance_burden".to_string(),
-                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "MUITO_ALTA"]),
             );
             props.insert(
                 "onboarding_friction".to_string(),
-                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "MUITO_ALTA"]),
             );
             props.insert(
                 "observability_operational".to_string(),
-                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+                enum_schema(&[
+                    "VERY_LOW",
+                    "LOW",
+                    "MEDIUM",
+                    "HIGH",
+                    "EXCELLENT",
+                    "MUITO_BAIXA",
+                    "BAIXA",
+                    "MÉDIA",
+                    "MEDIA",
+                    "ALTA",
+                    "EXCELENTE",
+                ]),
             );
             props.insert(
                 "recoverability_level".to_string(),
-                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+                enum_schema(&[
+                    "VERY_LOW",
+                    "LOW",
+                    "MEDIUM",
+                    "HIGH",
+                    "EXCELLENT",
+                    "MUITO_BAIXA",
+                    "BAIXA",
+                    "MÉDIA",
+                    "MEDIA",
+                    "ALTA",
+                    "EXCELENTE",
+                ]),
             );
             props.insert(
                 "degradation_behavior".to_string(),
-                enum_schema(&["GRACEFUL", "ACCEPTABLE", "FRAGILE", "CATASTROPHIC"]),
+                enum_schema(&[
+                    "GRACEFUL",
+                    "ACCEPTABLE",
+                    "FRAGILE",
+                    "CATASTROPHIC",
+                    "GRACIOSA",
+                    "ACEITÁVEL",
+                    "ACEITAVEL",
+                    "FRÁGIL",
+                    "FRAGIL",
+                    "CATASTRÓFICA",
+                    "CATASTROFICA",
+                ]),
             );
             props.insert(
                 "curation_burden".to_string(),
-                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "MUITO_ALTA"]),
             );
             props.insert(
                 "evolution_cost".to_string(),
-                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "VERY_HIGH", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "MUITO_ALTA"]),
             );
-            props.insert("operability_level".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT"]));
-            props.insert("abandonment_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            props.insert(
+                "operability_level".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "EXCELLENT", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "EXCELENTE"]),
+            );
+            props.insert(
+                "abandonment_risk".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "CRÍTICA", "CRITICA"]),
+            );
             props.insert(
                 "time_to_first_clear_value".to_string(),
-                enum_schema(&["IMMEDIATE", "SHORT", "MEDIUM", "LONG", "VERY_LONG"]),
+                with_description(enum_schema(&[
+                    "IMMEDIATE",
+                    "SHORT",
+                    "MEDIUM",
+                    "LONG",
+                    "VERY_LONG",
+                    "IMEDIATO",
+                    "CURTO",
+                    "MÉDIO",
+                    "MEDIO",
+                    "LONGO",
+                    "MUITO_LONGO",
+                ]), "Tempo para entregar valor claro e verificavel."),
             );
             props.insert(
                 "imperfection_tolerance".to_string(),
-                enum_schema(&["VERY_LOW", "LOW", "MEDIUM", "HIGH", "EXCELLENT"]),
+                enum_schema(&[
+                    "VERY_LOW",
+                    "LOW",
+                    "MEDIUM",
+                    "HIGH",
+                    "EXCELLENT",
+                    "MUITO_BAIXA",
+                    "BAIXA",
+                    "MÉDIA",
+                    "MEDIA",
+                    "ALTA",
+                    "EXCELENTE",
+                ]),
             );
-            props.insert("entropy_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
-            props.insert("design_misuse_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
-            props.insert("intrinsic_ethics_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            props.insert(
+                "entropy_risk".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "CRÍTICA", "CRITICA"]),
+            );
+            props.insert(
+                "design_misuse_risk".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "CRÍTICA", "CRITICA"]),
+            );
+            props.insert(
+                "intrinsic_ethics_risk".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "CRÍTICA", "CRITICA"]),
+            );
             props.insert(
                 "discipline_dependency".to_string(),
-                enum_schema(&["NENHUMA", "BAIXA", "MEDIA", "ALTA", "CRITICA"]),
+                enum_schema(&["NENHUMA", "BAIXA", "MEDIA", "ALTA", "CRITICA", "MÉDIA", "CRÍTICA"]),
             );
-            props.insert("regulatory_risk".to_string(), enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL"]));
+            props.insert(
+                "regulatory_risk".to_string(),
+                enum_schema(&["LOW", "MEDIUM", "HIGH", "CRITICAL", "BAIXA", "MÉDIA", "MEDIA", "ALTA", "CRÍTICA", "CRITICA"]),
+            );
             strict_object(
                 props,
                 vec![
@@ -1150,15 +1305,15 @@ fn response_format_for_block(block: u8) -> Value {
         }
         4 => {
             let mut props = serde_json::Map::new();
-            props.insert("score_philosophical_fit".to_string(), int_0_10_schema());
-            props.insert("score_bare_metal_fit".to_string(), int_0_10_schema());
-            props.insert("score_architectural_extractability".to_string(), int_0_10_schema());
-            props.insert("score_operability".to_string(), int_0_10_schema());
-            props.insert("score_creep_risk".to_string(), int_0_10_schema());
-            props.insert("score_runtime_sovereignty".to_string(), int_0_10_schema());
-            props.insert("score_model_logic_value".to_string(), int_0_10_schema());
-            props.insert("score_ethics_safety".to_string(), int_0_10_schema());
-            props.insert("score_intrinsic_risk".to_string(), int_0_10_schema());
+            props.insert("score_philosophical_fit".to_string(), with_description(int_0_10_schema(), "Aderencia filosofica aos principios SODA."));
+            props.insert("score_bare_metal_fit".to_string(), with_description(int_0_10_schema(), "Compatibilidade com execucao bare-metal local."));
+            props.insert("score_architectural_extractability".to_string(), with_description(int_0_10_schema(), "Facilidade de extrair o nucleo arquitetural."));
+            props.insert("score_operability".to_string(), with_description(int_0_10_schema(), "Facilidade de operar e manter em producao."));
+            props.insert("score_creep_risk".to_string(), with_description(int_0_10_schema(), "Risco de creep, excesso de escopo ou acoplamento."));
+            props.insert("score_runtime_sovereignty".to_string(), with_description(int_0_10_schema(), "Aderencia a soberania local de runtime e dados."));
+            props.insert("score_model_logic_value".to_string(), with_description(int_0_10_schema(), "Valor da logica central para os modelos e agentes."));
+            props.insert("score_ethics_safety".to_string(), with_description(int_0_10_schema(), "Seguranca etica e operacional do reaproveitamento."));
+            props.insert("score_intrinsic_risk".to_string(), with_description(int_0_10_schema(), "Risco intrinseco total do ativo analisado."));
             strict_object(
                 props,
                 vec![
@@ -1317,6 +1472,42 @@ mod tests {
         let ct = fields.get("classificacao_terminal").unwrap();
         let opts = ct.get("enum").and_then(|v| v.as_array()).unwrap();
         assert!(opts.iter().any(|v| v.as_str() == Some("APROVADO_PARA_PRODUCAO")));
+        let risk = fields.get("abandonment_risk").unwrap();
+        let risk_opts = risk.get("enum").and_then(|v| v.as_array()).unwrap();
+        assert!(risk_opts.iter().any(|v| v.as_str() == Some("CRÍTICA")));
+    }
+
+    #[test]
+    fn schema_includes_descriptions_for_new_block_fields() {
+        let block21 = response_format_for_block(21);
+        let block21_fields = block21
+            .get("json_schema")
+            .and_then(|v| v.get("schema"))
+            .and_then(|v| v.get("properties"))
+            .and_then(|v| v.get("fields"))
+            .and_then(|v| v.get("properties"))
+            .and_then(|v| v.as_object())
+            .unwrap();
+        assert!(block21_fields
+            .get("indicacao_otimista_canibalizacao")
+            .and_then(|v| v.get("description"))
+            .and_then(|v| v.as_str())
+            .is_some());
+
+        let block4 = response_format_for_block(4);
+        let block4_fields = block4
+            .get("json_schema")
+            .and_then(|v| v.get("schema"))
+            .and_then(|v| v.get("properties"))
+            .and_then(|v| v.get("fields"))
+            .and_then(|v| v.get("properties"))
+            .and_then(|v| v.as_object())
+            .unwrap();
+        assert!(block4_fields
+            .get("score_architectural_extractability")
+            .and_then(|v| v.get("description"))
+            .and_then(|v| v.as_str())
+            .is_some());
     }
 }
 
@@ -2419,16 +2610,11 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    let ansi = !cfg!(windows) && std::io::stderr().is_terminal();
-    tracing_subscriber::fmt().with_max_level(level).with_ansi(ansi).init();
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let started_total = Instant::now();
     let root_dir = workspace_root()?;
@@ -2457,7 +2643,7 @@ async fn main() -> io::Result<()> {
             );
             let exe = std::env::current_exe()
                 .map_err(|e| io::Error::other(format!("Falha ao resolver current_exe: {e}")))?;
-            for item in candidates {
+            for (idx, item) in candidates.iter().enumerate() {
                 info!(
                     repo_id = %item.repo_id,
                     row_number = item.row_number_1based,
@@ -2482,6 +2668,13 @@ async fn main() -> io::Result<()> {
                         status = %status,
                         "F3/F4(batch resume_f3): falha (seguindo fail-soft)"
                     );
+                } else if idx + 1 < candidates.len() {
+                    info!(
+                        seconds = 5u64,
+                        repo_id = %item.repo_id,
+                        "Resfriamento de Lote: aguardando para evitar Rate Limit antes do próximo repositório"
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
             }
             return Ok(());
@@ -2492,7 +2685,7 @@ async fn main() -> io::Result<()> {
             info!(count = candidates.len(), "F3/F4: modo batch (APROVADO_PARA_ENXAME)");
             let exe = std::env::current_exe()
                 .map_err(|e| io::Error::other(format!("Falha ao resolver current_exe: {e}")))?;
-            for item in candidates {
+            for (idx, item) in candidates.iter().enumerate() {
                 info!(
                     repo_id = %item.repo_id,
                     row_number = item.row_number_1based,
@@ -2517,6 +2710,13 @@ async fn main() -> io::Result<()> {
                         status = %status,
                         "F3/F4(batch): falha (seguindo fail-soft)"
                     );
+                } else if idx + 1 < candidates.len() {
+                    info!(
+                        seconds = 5u64,
+                        repo_id = %item.repo_id,
+                        "Resfriamento de Lote: aguardando para evitar Rate Limit antes do próximo repositório"
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
             }
             return Ok(());
@@ -3169,14 +3369,8 @@ async fn main() -> io::Result<()> {
         started_total.elapsed().as_millis()
     ));
 
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&report_path)
-        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
-    file.write_all(report.as_bytes())
-        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
+    append_plaintext_report(&report_path, &report)
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL {}: {}", report_path.display(), e)))?;
     info!(report = %report_path.display(), "E2E: relatório ETL anexado");
     Ok(())
 }

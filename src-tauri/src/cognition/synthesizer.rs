@@ -93,13 +93,13 @@ async fn set_phase3_block(state: &Arc<tokio::sync::Mutex<Phase3TelemetryState>>,
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TerminalClassification {
     #[default]
-    #[serde(rename = "APROVADO_PARA_PRODUCAO")]
+    #[serde(rename = "APROVADO_PARA_PRODUCAO", alias = "APPROVED_FOR_PRODUCTION")]
     AprovadoParaProducao,
-    #[serde(rename = "APROVADO_COM_RESSALVAS")]
+    #[serde(rename = "APROVADO_COM_RESSALVAS", alias = "APPROVED_WITH_REMARKS")]
     AprovadoComRessalvas,
-    #[serde(rename = "REJEITADO_DESCARTE")]
+    #[serde(rename = "REJEITADO_DESCARTE", alias = "REJECT_DISCARD", alias = "REJECTED_DISCARD")]
     RejeitadoDescarte,
-    #[serde(rename = "UNKNOWN")]
+    #[serde(other)]
     Unknown,
 }
 
@@ -117,13 +117,13 @@ impl TerminalClassification {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CannibalizationAction {
     #[default]
-    #[serde(rename = "NENHUMA")]
+    #[serde(rename = "NENHUMA", alias = "NONE")]
     Nenhuma,
-    #[serde(rename = "ABSORVER_LOGICA")]
+    #[serde(rename = "ABSORVER_LOGICA", alias = "ABSORB_LOGIC")]
     AbsorverLogica,
-    #[serde(rename = "EXTRAIR_SCRIPTS")]
+    #[serde(rename = "EXTRAIR_SCRIPTS", alias = "EXTRACT_SCRIPTS")]
     ExtrairScripts,
-    #[serde(rename = "UNKNOWN")]
+    #[serde(other)]
     Unknown,
 }
 
@@ -147,21 +147,21 @@ pub enum ArchitecturalCategory {
     CanvasUi,
     #[serde(rename = "UILibrary")]
     UiLibrary,
-    #[serde(rename = "Memoria_RAG")]
+    #[serde(rename = "Memoria_RAG", alias = "MEMORIA_RAG")]
     MemoriaRag,
-    #[serde(rename = "Roteamento_FinOps")]
+    #[serde(rename = "Roteamento_FinOps", alias = "ROTEAMENTO_FINOPS")]
     RoteamentoFinOps,
-    #[serde(rename = "Orquestracao_Agentes")]
+    #[serde(rename = "Orquestracao_Agentes", alias = "ORQUESTRACAO_AGENTES")]
     OrquestracaoAgentes,
-    #[serde(rename = "Model_Serving")]
+    #[serde(rename = "Model_Serving", alias = "MODEL_SERVING")]
     ModelServing,
-    #[serde(rename = "Knowledge_Extraction")]
+    #[serde(rename = "Knowledge_Extraction", alias = "KNOWLEDGE_EXTRACTION")]
     KnowledgeExtraction,
-    #[serde(rename = "Seguranca_Sandbox")]
+    #[serde(rename = "Seguranca_Sandbox", alias = "SEGURANCA_SANDBOX")]
     SegurancaSandbox,
-    #[serde(rename = "Infraestrutura_Core")]
+    #[serde(rename = "Infraestrutura_Core", alias = "INFRAESTRUTURA_CORE")]
     InfraestruturaCore,
-    #[serde(rename = "Tooling_Dev")]
+    #[serde(rename = "Tooling_Dev", alias = "TOOLING_DEV")]
     ToolingDev,
     #[serde(other)]
     Unknown,
@@ -216,9 +216,13 @@ impl ArchitecturalCategory {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum IntegrationType {
     #[default]
+    #[serde(alias = "INTEGRAR_COMO_COMPONENTE")]
     IntegrateAsComponent,
+    #[serde(alias = "REIMPLEMENTAR_INTERNAMENTE")]
     ReimplementInternally,
+    #[serde(alias = "REJEITAR")]
     Reject,
+    #[serde(other)]
     Unknown,
 }
 
@@ -237,13 +241,21 @@ impl IntegrationType {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CapabilityNaturePrimary {
     #[default]
+    #[serde(alias = "BIBLIOTECA")]
     Library,
+    #[serde(alias = "FERRAMENTA")]
     Tooling,
+    #[serde(alias = "SERVICO", alias = "SERVIÇO")]
     Service,
+    #[serde(alias = "APLICACAO", alias = "APLICAÇÃO")]
     Application,
+    #[serde(alias = "SISTEMA")]
     System,
+    #[serde(alias = "ALGORITMO")]
     Algorithm,
+    #[serde(alias = "ESTRUTURA_DE_DADOS")]
     DataStructure,
+    #[serde(other)]
     Unknown,
 }
 
@@ -266,13 +278,21 @@ impl CapabilityNaturePrimary {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ArchitecturalTopology {
     #[default]
+    #[serde(alias = "MODULAR")]
     Modular,
+    #[serde(alias = "MONOLITO")]
     Monolith,
+    #[serde(alias = "EM_CAMADAS", alias = "CAMADAS")]
     Layered,
+    #[serde(alias = "MICROSSERVICOS", alias = "MICROSSERVIÇOS")]
     Microservices,
+    #[serde(alias = "DIRIGIDO_A_EVENTOS")]
     EventDriven,
+    #[serde(alias = "PIPELINE")]
     Pipeline,
+    #[serde(alias = "PLUGAVEL", alias = "PLUGÁVEL")]
     Plugin,
+    #[serde(other)]
     Unknown,
 }
 
@@ -295,8 +315,12 @@ impl ArchitecturalTopology {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TemporalStability {
     #[default]
+    #[serde(alias = "ESTAVEL", alias = "ESTÁVEL")]
     Stable,
+    #[serde(alias = "EVOLUTIVO", alias = "EM_EVOLUCAO", alias = "EM_EVOLUÇÃO")]
     Evolving,
+    #[serde(other)]
+    Unknown,
 }
 
 impl TemporalStability {
@@ -304,6 +328,7 @@ impl TemporalStability {
         match self {
             Self::Stable => "STABLE",
             Self::Evolving => "EVOLVING",
+            Self::Unknown => "UNKNOWN",
         }
     }
 }
@@ -312,10 +337,16 @@ impl TemporalStability {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FitLevel4 {
     #[default]
+    #[serde(alias = "BAIXA", alias = "BAIXO")]
     Low,
+    #[serde(alias = "MEDIA", alias = "MÉDIA", alias = "MEDIO", alias = "MÉDIO")]
     Medium,
+    #[serde(alias = "ALTA", alias = "ALTO")]
     High,
+    #[serde(alias = "EXCELENTE")]
     Excellent,
+    #[serde(other)]
+    Unknown,
 }
 
 impl FitLevel4 {
@@ -325,6 +356,7 @@ impl FitLevel4 {
             Self::Medium => "MEDIUM",
             Self::High => "HIGH",
             Self::Excellent => "EXCELLENT",
+            Self::Unknown => "UNKNOWN",
         }
     }
 }
@@ -333,10 +365,16 @@ impl FitLevel4 {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RiskLevel4 {
     #[default]
+    #[serde(alias = "BAIXA", alias = "BAIXO")]
     Low,
+    #[serde(alias = "MEDIA", alias = "MÉDIA", alias = "MEDIO", alias = "MÉDIO")]
     Medium,
+    #[serde(alias = "ALTA", alias = "ALTO")]
     High,
+    #[serde(alias = "CRITICA", alias = "CRÍTICA", alias = "CRITICO", alias = "CRÍTICO")]
     Critical,
+    #[serde(other)]
+    Unknown,
 }
 
 impl RiskLevel4 {
@@ -346,6 +384,7 @@ impl RiskLevel4 {
             Self::Medium => "MEDIUM",
             Self::High => "HIGH",
             Self::Critical => "CRITICAL",
+            Self::Unknown => "UNKNOWN",
         }
     }
 }
@@ -353,16 +392,18 @@ impl RiskLevel4 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DisciplineDependency {
     #[default]
-    #[serde(rename = "NENHUMA")]
+    #[serde(rename = "NENHUMA", alias = "NONE")]
     Nenhuma,
-    #[serde(rename = "BAIXA")]
+    #[serde(rename = "BAIXA", alias = "LOW")]
     Baixa,
-    #[serde(rename = "MEDIA")]
+    #[serde(rename = "MEDIA", alias = "MEDIUM", alias = "MÉDIA")]
     Media,
-    #[serde(rename = "ALTA")]
+    #[serde(rename = "ALTA", alias = "HIGH")]
     Alta,
-    #[serde(rename = "CRITICA")]
+    #[serde(rename = "CRITICA", alias = "CRITICAL", alias = "CRÍTICA")]
     Critica,
+    #[serde(other)]
+    Unknown,
 }
 
 impl DisciplineDependency {
@@ -373,6 +414,7 @@ impl DisciplineDependency {
             Self::Media => "MEDIA",
             Self::Alta => "ALTA",
             Self::Critica => "CRITICA",
+            Self::Unknown => "UNKNOWN",
         }
     }
 }
@@ -381,10 +423,16 @@ impl DisciplineDependency {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DegradationBehavior {
     #[default]
+    #[serde(alias = "GRACIOSO", alias = "GRACIOSA")]
     Graceful,
+    #[serde(alias = "ACEITAVEL", alias = "ACEITÁVEL")]
     Acceptable,
+    #[serde(alias = "FRAGIL", alias = "FRÁGIL")]
     Fragile,
+    #[serde(alias = "CATASTROFICO", alias = "CATASTRÓFICO")]
     Catastrophic,
+    #[serde(other)]
+    Unknown,
 }
 
 impl DegradationBehavior {
@@ -394,6 +442,7 @@ impl DegradationBehavior {
             Self::Acceptable => "ACCEPTABLE",
             Self::Fragile => "FRAGILE",
             Self::Catastrophic => "CATASTROPHIC",
+            Self::Unknown => "UNKNOWN",
         }
     }
 }
@@ -402,11 +451,18 @@ impl DegradationBehavior {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Scale5 {
     #[default]
+    #[serde(alias = "MUITO_BAIXA", alias = "MUITO_BAIXO")]
     VeryLow,
+    #[serde(alias = "BAIXA", alias = "BAIXO")]
     Low,
+    #[serde(alias = "MEDIA", alias = "MÉDIA", alias = "MEDIO", alias = "MÉDIO")]
     Medium,
+    #[serde(alias = "ALTA", alias = "ALTO")]
     High,
+    #[serde(alias = "EXCELENTE")]
     Excellent,
+    #[serde(other)]
+    Unknown,
 }
 
 impl Scale5 {
@@ -417,6 +473,7 @@ impl Scale5 {
             Self::Medium => "MEDIUM",
             Self::High => "HIGH",
             Self::Excellent => "EXCELLENT",
+            Self::Unknown => "UNKNOWN",
         }
     }
 }
@@ -425,10 +482,16 @@ impl Scale5 {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum BurdenLevel {
     #[default]
+    #[serde(alias = "BAIXA", alias = "BAIXO")]
     Low,
+    #[serde(alias = "MEDIA", alias = "MÉDIA", alias = "MEDIO", alias = "MÉDIO")]
     Medium,
+    #[serde(alias = "ALTA", alias = "ALTO")]
     High,
+    #[serde(alias = "MUITO_ALTA", alias = "MUITO_ALTO")]
     VeryHigh,
+    #[serde(other)]
+    Unknown,
 }
 
 impl BurdenLevel {
@@ -438,6 +501,7 @@ impl BurdenLevel {
             Self::Medium => "MEDIUM",
             Self::High => "HIGH",
             Self::VeryHigh => "VERY_HIGH",
+            Self::Unknown => "UNKNOWN",
         }
     }
 }
@@ -446,11 +510,18 @@ impl BurdenLevel {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TimeHorizon {
     #[default]
+    #[serde(alias = "IMEDIATO", alias = "IMEDIATA")]
     Immediate,
+    #[serde(alias = "CURTO", alias = "CURTA")]
     Short,
+    #[serde(alias = "MEDIO", alias = "MÉDIO", alias = "MEDIA", alias = "MÉDIA")]
     Medium,
+    #[serde(alias = "LONGO", alias = "LONGA")]
     Long,
+    #[serde(alias = "MUITO_LONGO", alias = "MUITO_LONGA")]
     VeryLong,
+    #[serde(other)]
+    Unknown,
 }
 
 impl TimeHorizon {
@@ -461,28 +532,77 @@ impl TimeHorizon {
             Self::Medium => "MEDIUM",
             Self::Long => "LONG",
             Self::VeryLong => "VERY_LONG",
+            Self::Unknown => "UNKNOWN",
         }
+    }
+}
+
+fn deserialize_lossy_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Number(n) => n
+            .as_f64()
+            .ok_or_else(|| serde::de::Error::custom("numero float invalido")),
+        serde_json::Value::String(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                warn!(raw = %raw, "Score float vazio; degradando para 0.0");
+                return Ok(0.0);
+            }
+            let normalized = trimmed.replace(',', ".");
+            normalized.parse::<f64>().map_err(|err| {
+                serde::de::Error::custom(format!("float invalido '{}': {}", trimmed, err))
+            })
+        }
+        serde_json::Value::Null => {
+            warn!("Score float nulo; degradando para 0.0");
+            Ok(0.0)
+        }
+        other => Err(serde::de::Error::custom(format!(
+            "tipo invalido para float: {}",
+            other
+        ))),
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Block0Context {
+    #[serde(rename = "status_atualizacao")]
     pub status_atualizacao: String,
+    #[serde(rename = "status_fase")]
     pub status_fase: String,
+    #[serde(rename = "project_name")]
     pub project_name: String,
+    #[serde(rename = "repo_url")]
     pub repo_url: String,
+    #[serde(rename = "repo_analised_version")]
     pub repo_analised_version: String,
+    #[serde(rename = "ultima_versao_online")]
     pub ultima_versao_online: String,
+    #[serde(rename = "lote_id")]
     pub lote_id: String,
+    #[serde(rename = "data_ultima_analise")]
     pub data_ultima_analise: i64,
+    #[serde(rename = "analise_origem")]
     pub analise_origem: String,
+    #[serde(rename = "licenca")]
     pub licenca: String,
+    #[serde(rename = "stack_base")]
     pub stack_base: String,
+    #[serde(rename = "declared_description")]
     pub declared_description: String,
+    #[serde(rename = "proposta_original_resumo")]
     pub proposta_original_resumo: Option<String>,
+    #[serde(rename = "categoria_arquitetural")]
     pub categoria_arquitetural: Option<String>,
+    #[serde(rename = "lente_a_sentido_prod_ux")]
     pub lente_a_sentido_prod_ux: String,
+    #[serde(rename = "lente_b_estrutura_arq")]
     pub lente_b_estrutura_arq: String,
+    #[serde(rename = "lente_c_realidade_ops")]
     pub lente_c_realidade_ops: String,
 }
 
@@ -565,12 +685,19 @@ pub struct MasterSolutionsRow {
     pub score_model_logic_value: i64,
     pub score_ethics_safety: i64,
     pub score_intrinsic_risk: i64,
+    #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_final: f64,
+    #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_fit_geral_soda: f64,
+    #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_architectural_priority: f64,
+    #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_human_product_priority: f64,
+    #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_absorption_readiness: f64,
+    #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_operational_priority: f64,
+    #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_sustainability_adjusted_fit: f64,
     pub valid_from: i64,
     pub valid_to: Option<i64>,
@@ -750,55 +877,50 @@ impl MasterSolutionsRow {
         Vec::from([
             serde_json::json!(&self.status_atualizacao),
             serde_json::json!(&self.status_fase),
+            serde_json::json!(categoria_arquitetural),
             serde_json::json!(pretty_project_name),
             serde_json::json!(&self.repo_url),
-            serde_json::json!(&self.repo_analised_version),
-            serde_json::json!(&self.ultima_versao_online),
-            serde_json::json!(&self.indicacao_otimista_canibalizacao),
-            serde_json::json!(&self.lote_id),
-            serde_json::json!(data_ultima_analise),
-            serde_json::json!(&self.analise_origem),
             serde_json::json!(&self.licenca),
-            serde_json::json!(&self.stack_base),
+            serde_json::json!(&self.proposta_original_resumo),
+            serde_json::json!(&self.ultima_versao_online),
             serde_json::json!(declared_description),
+            serde_json::json!(&self.stack_base),
+            serde_json::json!(&self.indicacao_otimista_canibalizacao),
+            serde_json::json!(&self.repo_analised_version),
             serde_json::json!(&self.lente_a_sentido_prod_ux),
             serde_json::json!(&self.lente_b_estrutura_arq),
             serde_json::json!(&self.lente_c_realidade_ops),
-            serde_json::json!(&self.proposta_original_resumo),
             serde_json::json!(&self.visao_do_enxame),
             serde_json::json!(&self.justificativa_decisao),
             serde_json::json!(&self.executive_verdict),
-            serde_json::json!(&self.risco_principal),
-            serde_json::json!(&self.risco_linha_vermelha),
-            serde_json::json!(&self.observacoes),
             serde_json::json!(&self.ouro_a_extrair),
             serde_json::json!(&self.deep_pattern),
             serde_json::json!(&self.transplantable_core),
             serde_json::json!(&self.logic_math_heuristic),
             serde_json::json!(&self.real_structural_problem),
-            serde_json::json!(&self.categoria_nuance_tecnica),
+            serde_json::json!(classificacao_terminal),
             serde_json::json!(&self.integracao_papel_exato),
+            serde_json::json!(&self.categoria_nuance_tecnica),
+            serde_json::json!(capability_nature_primary),
             serde_json::json!(&self.must_components_prod_ux),
             serde_json::json!(&self.must_components_arq),
             serde_json::json!(&self.must_components_ops),
             serde_json::json!(&self.detected_toxic_deps),
             serde_json::json!(&self.do_not_absorb),
             serde_json::json!(&self.where_ai_should_not_enter),
-            serde_json::json!(classificacao_terminal),
             serde_json::json!(acao_de_canibalizacao),
-            serde_json::json!(categoria_arquitetural),
-            serde_json::json!(horizonte_extracao),
             serde_json::json!(tipo_integracao),
-            serde_json::json!(capability_nature_primary),
-            serde_json::json!(architectural_topology),
-            serde_json::json!(temporal_stability),
-            serde_json::json!(bare_metal_fit),
+            serde_json::json!(horizonte_extracao),
+            serde_json::json!(time_to_first_clear_value),
             serde_json::json!(extractability_level),
-            serde_json::json!(runtime_sovereignty_fit),
-            serde_json::json!(local_first_fit),
+            serde_json::json!(temporal_stability),
+            serde_json::json!(architectural_topology),
             serde_json::json!(adoptability_level),
-            serde_json::json!(longitudinal_sustainability),
+            serde_json::json!(bare_metal_fit),
             serde_json::json!(maintenance_burden),
+            serde_json::json!(runtime_sovereignty_fit),
+            serde_json::json!(longitudinal_sustainability),
+            serde_json::json!(local_first_fit),
             serde_json::json!(onboarding_friction),
             serde_json::json!(observability_operational),
             serde_json::json!(recoverability_level),
@@ -806,32 +928,37 @@ impl MasterSolutionsRow {
             serde_json::json!(curation_burden),
             serde_json::json!(evolution_cost),
             serde_json::json!(operability_level),
-            serde_json::json!(abandonment_risk),
-            serde_json::json!(time_to_first_clear_value),
             serde_json::json!(imperfection_tolerance),
-            serde_json::json!(entropy_risk),
+            serde_json::json!(discipline_dependency),
+            serde_json::json!(&self.risco_principal),
+            serde_json::json!(&self.risco_linha_vermelha),
+            serde_json::json!(&self.observacoes),
+            serde_json::json!(abandonment_risk),
             serde_json::json!(design_misuse_risk),
             serde_json::json!(intrinsic_ethics_risk),
-            serde_json::json!(discipline_dependency),
+            serde_json::json!(entropy_risk),
             serde_json::json!(regulatory_risk),
-            serde_json::json!(&self.score_philosophical_fit),
-            serde_json::json!(&self.score_bare_metal_fit),
-            serde_json::json!(&self.score_architectural_extractability),
-            serde_json::json!(&self.score_operability),
-            serde_json::json!(&self.score_creep_risk),
-            serde_json::json!(&self.score_runtime_sovereignty),
-            serde_json::json!(&self.score_model_logic_value),
-            serde_json::json!(&self.score_ethics_safety),
-            serde_json::json!(&self.score_intrinsic_risk),
             serde_json::json!(format_float_1(self.score_final)),
+            serde_json::json!(&self.score_philosophical_fit),
             serde_json::json!(format_float_1(self.score_fit_geral_soda)),
             serde_json::json!(format_float_1(self.score_architectural_priority)),
+            serde_json::json!(&self.score_architectural_extractability),
             serde_json::json!(format_float_1(self.score_human_product_priority)),
             serde_json::json!(format_float_1(self.score_absorption_readiness)),
             serde_json::json!(format_float_1(self.score_operational_priority)),
+            serde_json::json!(&self.score_bare_metal_fit),
+            serde_json::json!(&self.score_operability),
+            serde_json::json!(&self.score_runtime_sovereignty),
+            serde_json::json!(&self.score_model_logic_value),
+            serde_json::json!(&self.score_ethics_safety),
+            serde_json::json!(&self.score_creep_risk),
+            serde_json::json!(&self.score_intrinsic_risk),
             serde_json::json!(format_float_1(self.score_sustainability_adjusted_fit)),
             serde_json::json!(valid_from),
             serde_json::json!(valid_to),
+            serde_json::json!(&self.analise_origem),
+            serde_json::json!(data_ultima_analise),
+            serde_json::json!(&self.lote_id),
             serde_json::json!(embargo_status),
         ])
     }
@@ -1152,6 +1279,117 @@ const BLOCK_2B: u8 = 22;
 const BLOCK_3: u8 = 3;
 const BLOCK_4: u8 = 4;
 
+#[cfg(test)]
+const BLOCK0_CONTEXT_COLUMNS: &[&str] = &[
+    "status_atualizacao",
+    "status_fase",
+    "project_name",
+    "repo_url",
+    "repo_analised_version",
+    "ultima_versao_online",
+    "lote_id",
+    "data_ultima_analise",
+    "analise_origem",
+    "licenca",
+    "stack_base",
+    "declared_description",
+    "proposta_original_resumo",
+    "categoria_arquitetural",
+    "lente_a_sentido_prod_ux",
+    "lente_b_estrutura_arq",
+    "lente_c_realidade_ops",
+];
+
+const BLOCK1_FIELDS_COLUMNS: &[&str] = &[
+    "proposta_original_resumo",
+    "declared_description_ptbr",
+    "visao_do_enxame",
+    "justificativa_decisao",
+    "executive_verdict",
+    "risco_principal",
+    "risco_linha_vermelha",
+    "observacoes",
+];
+
+const BLOCK2A_FIELDS_COLUMNS: &[&str] = &[
+    "indicacao_otimista_canibalizacao",
+    "ouro_a_extrair",
+    "deep_pattern",
+    "transplantable_core",
+    "logic_math_heuristic",
+    "real_structural_problem",
+    "categoria_nuance_tecnica",
+    "integracao_papel_exato",
+];
+
+const BLOCK2B_FIELDS_COLUMNS: &[&str] = &[
+    "must_components_prod_ux",
+    "must_components_arq",
+    "must_components_ops",
+    "detected_toxic_deps",
+    "do_not_absorb",
+    "where_ai_should_not_enter",
+];
+
+const BLOCK3_FIELDS_COLUMNS: &[&str] = &[
+    "classificacao_terminal",
+    "acao_de_canibalizacao",
+    "categoria_arquitetural",
+    "horizonte_extracao",
+    "tipo_integracao",
+    "capability_nature_primary",
+    "architectural_topology",
+    "temporal_stability",
+    "bare_metal_fit",
+    "extractability_level",
+    "runtime_sovereignty_fit",
+    "local_first_fit",
+    "adoptability_level",
+    "longitudinal_sustainability",
+    "maintenance_burden",
+    "onboarding_friction",
+    "observability_operational",
+    "recoverability_level",
+    "degradation_behavior",
+    "curation_burden",
+    "evolution_cost",
+    "operability_level",
+    "abandonment_risk",
+    "time_to_first_clear_value",
+    "imperfection_tolerance",
+    "entropy_risk",
+    "design_misuse_risk",
+    "intrinsic_ethics_risk",
+    "discipline_dependency",
+    "regulatory_risk",
+];
+
+const BLOCK4_FIELDS_COLUMNS: &[&str] = &[
+    "score_philosophical_fit",
+    "score_bare_metal_fit",
+    "score_architectural_extractability",
+    "score_operability",
+    "score_creep_risk",
+    "score_runtime_sovereignty",
+    "score_model_logic_value",
+    "score_ethics_safety",
+    "score_intrinsic_risk",
+];
+
+#[cfg(test)]
+const PHASE4_DERIVED_COLUMNS: &[&str] = &[
+    "score_final",
+    "score_fit_geral_soda",
+    "score_architectural_priority",
+    "score_human_product_priority",
+    "score_absorption_readiness",
+    "score_operational_priority",
+    "score_sustainability_adjusted_fit",
+    "valid_from",
+    "valid_to",
+    "embargo_status",
+];
+
 fn block_prompt_tag(block: u8) -> &'static str {
     match block {
         BLOCK_1 => "1",
@@ -1192,37 +1430,59 @@ struct BlockResponse<T> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block1Fields {
+    #[serde(rename = "proposta_original_resumo")]
     proposta_original_resumo: Option<String>,
+    #[serde(rename = "declared_description_ptbr")]
     declared_description_ptbr: String,
+    #[serde(rename = "visao_do_enxame")]
     visao_do_enxame: String,
+    #[serde(rename = "justificativa_decisao")]
     justificativa_decisao: String,
+    #[serde(rename = "executive_verdict")]
     executive_verdict: String,
+    #[serde(rename = "risco_principal")]
     risco_principal: String,
+    #[serde(rename = "risco_linha_vermelha")]
     risco_linha_vermelha: String,
+    #[serde(rename = "observacoes")]
     observacoes: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block2NarrativeFields {
+    #[serde(rename = "indicacao_otimista_canibalizacao")]
     indicacao_otimista_canibalizacao: String,
+    #[serde(rename = "ouro_a_extrair")]
     ouro_a_extrair: String,
+    #[serde(rename = "deep_pattern")]
     deep_pattern: String,
+    #[serde(rename = "transplantable_core")]
     transplantable_core: String,
+    #[serde(rename = "logic_math_heuristic")]
     logic_math_heuristic: String,
+    #[serde(rename = "real_structural_problem")]
     real_structural_problem: String,
+    #[serde(rename = "categoria_nuance_tecnica")]
     categoria_nuance_tecnica: String,
+    #[serde(rename = "integracao_papel_exato")]
     integracao_papel_exato: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block2MatrixFields {
+    #[serde(rename = "must_components_prod_ux")]
     must_components_prod_ux: Vec<String>,
+    #[serde(rename = "must_components_arq")]
     must_components_arq: Vec<String>,
+    #[serde(rename = "must_components_ops")]
     must_components_ops: Vec<String>,
+    #[serde(rename = "detected_toxic_deps")]
     detected_toxic_deps: Vec<String>,
+    #[serde(rename = "do_not_absorb")]
     do_not_absorb: Vec<String>,
+    #[serde(rename = "where_ai_should_not_enter")]
     where_ai_should_not_enter: Vec<String>,
 }
 
@@ -1269,55 +1529,189 @@ impl Block2MatrixFields {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block3Fields {
+    #[serde(rename = "classificacao_terminal")]
     classificacao_terminal: TerminalClassification,
+    #[serde(rename = "acao_de_canibalizacao")]
     acao_de_canibalizacao: CannibalizationAction,
+    #[serde(rename = "categoria_arquitetural")]
     categoria_arquitetural: Option<ArchitecturalCategory>,
+    #[serde(rename = "horizonte_extracao")]
     horizonte_extracao: TimeHorizon,
+    #[serde(rename = "tipo_integracao")]
     tipo_integracao: IntegrationType,
+    #[serde(rename = "capability_nature_primary")]
     capability_nature_primary: CapabilityNaturePrimary,
+    #[serde(rename = "architectural_topology")]
     architectural_topology: ArchitecturalTopology,
+    #[serde(rename = "temporal_stability")]
     temporal_stability: TemporalStability,
+    #[serde(rename = "bare_metal_fit")]
     bare_metal_fit: FitLevel4,
+    #[serde(rename = "extractability_level")]
     extractability_level: FitLevel4,
+    #[serde(rename = "runtime_sovereignty_fit")]
     runtime_sovereignty_fit: FitLevel4,
+    #[serde(rename = "local_first_fit")]
     local_first_fit: FitLevel4,
+    #[serde(rename = "adoptability_level")]
     adoptability_level: Scale5,
+    #[serde(rename = "longitudinal_sustainability")]
     longitudinal_sustainability: Scale5,
+    #[serde(rename = "maintenance_burden")]
     maintenance_burden: BurdenLevel,
+    #[serde(rename = "onboarding_friction")]
     onboarding_friction: BurdenLevel,
+    #[serde(rename = "observability_operational")]
     observability_operational: Scale5,
+    #[serde(rename = "recoverability_level")]
     recoverability_level: Scale5,
+    #[serde(rename = "degradation_behavior")]
     degradation_behavior: DegradationBehavior,
+    #[serde(rename = "curation_burden")]
     curation_burden: BurdenLevel,
+    #[serde(rename = "evolution_cost")]
     evolution_cost: BurdenLevel,
+    #[serde(rename = "operability_level")]
     operability_level: FitLevel4,
+    #[serde(rename = "abandonment_risk")]
     abandonment_risk: RiskLevel4,
+    #[serde(rename = "time_to_first_clear_value")]
     time_to_first_clear_value: TimeHorizon,
+    #[serde(rename = "imperfection_tolerance")]
     imperfection_tolerance: Scale5,
+    #[serde(rename = "entropy_risk")]
     entropy_risk: RiskLevel4,
+    #[serde(rename = "design_misuse_risk")]
     design_misuse_risk: RiskLevel4,
+    #[serde(rename = "intrinsic_ethics_risk")]
     intrinsic_ethics_risk: RiskLevel4,
+    #[serde(rename = "discipline_dependency")]
     discipline_dependency: DisciplineDependency,
+    #[serde(rename = "regulatory_risk")]
     regulatory_risk: RiskLevel4,
 }
 
 impl Block3Fields {
     fn sanitize(self) -> Self {
-        self
+        let mut out = self;
+        if matches!(out.classificacao_terminal, TerminalClassification::Unknown) {
+            warn!("Bloco 3: `classificacao_terminal` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.acao_de_canibalizacao, CannibalizationAction::Unknown) {
+            warn!("Bloco 3: `acao_de_canibalizacao` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.categoria_arquitetural, Some(ArchitecturalCategory::Unknown)) {
+            warn!("Bloco 3: `categoria_arquitetural` fora do catalogo; preservando valor anterior");
+            out.categoria_arquitetural = None;
+        }
+        if matches!(out.categoria_arquitetural, Some(ArchitecturalCategory::Unspecified)) {
+            out.categoria_arquitetural = None;
+        }
+        if matches!(out.horizonte_extracao, TimeHorizon::Unknown) {
+            warn!("Bloco 3: `horizonte_extracao` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.tipo_integracao, IntegrationType::Unknown) {
+            warn!("Bloco 3: `tipo_integracao` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.capability_nature_primary, CapabilityNaturePrimary::Unknown) {
+            warn!("Bloco 3: `capability_nature_primary` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.architectural_topology, ArchitecturalTopology::Unknown) {
+            warn!("Bloco 3: `architectural_topology` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.temporal_stability, TemporalStability::Unknown) {
+            warn!("Bloco 3: `temporal_stability` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.bare_metal_fit, FitLevel4::Unknown) {
+            warn!("Bloco 3: `bare_metal_fit` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.extractability_level, FitLevel4::Unknown) {
+            warn!("Bloco 3: `extractability_level` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.runtime_sovereignty_fit, FitLevel4::Unknown) {
+            warn!("Bloco 3: `runtime_sovereignty_fit` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.local_first_fit, FitLevel4::Unknown) {
+            warn!("Bloco 3: `local_first_fit` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.adoptability_level, Scale5::Unknown) {
+            warn!("Bloco 3: `adoptability_level` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.longitudinal_sustainability, Scale5::Unknown) {
+            warn!("Bloco 3: `longitudinal_sustainability` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.maintenance_burden, BurdenLevel::Unknown) {
+            warn!("Bloco 3: `maintenance_burden` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.onboarding_friction, BurdenLevel::Unknown) {
+            warn!("Bloco 3: `onboarding_friction` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.observability_operational, Scale5::Unknown) {
+            warn!("Bloco 3: `observability_operational` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.recoverability_level, Scale5::Unknown) {
+            warn!("Bloco 3: `recoverability_level` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.degradation_behavior, DegradationBehavior::Unknown) {
+            warn!("Bloco 3: `degradation_behavior` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.curation_burden, BurdenLevel::Unknown) {
+            warn!("Bloco 3: `curation_burden` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.evolution_cost, BurdenLevel::Unknown) {
+            warn!("Bloco 3: `evolution_cost` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.operability_level, FitLevel4::Unknown) {
+            warn!("Bloco 3: `operability_level` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.abandonment_risk, RiskLevel4::Unknown) {
+            warn!("Bloco 3: `abandonment_risk` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.time_to_first_clear_value, TimeHorizon::Unknown) {
+            warn!("Bloco 3: `time_to_first_clear_value` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.imperfection_tolerance, Scale5::Unknown) {
+            warn!("Bloco 3: `imperfection_tolerance` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.entropy_risk, RiskLevel4::Unknown) {
+            warn!("Bloco 3: `entropy_risk` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.design_misuse_risk, RiskLevel4::Unknown) {
+            warn!("Bloco 3: `design_misuse_risk` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.intrinsic_ethics_risk, RiskLevel4::Unknown) {
+            warn!("Bloco 3: `intrinsic_ethics_risk` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.discipline_dependency, DisciplineDependency::Unknown) {
+            warn!("Bloco 3: `discipline_dependency` caiu em fallback UNKNOWN");
+        }
+        if matches!(out.regulatory_risk, RiskLevel4::Unknown) {
+            warn!("Bloco 3: `regulatory_risk` caiu em fallback UNKNOWN");
+        }
+        out
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Block4Fields {
+    #[serde(rename = "score_philosophical_fit")]
     score_philosophical_fit: i64,
+    #[serde(rename = "score_bare_metal_fit")]
     score_bare_metal_fit: i64,
+    #[serde(rename = "score_architectural_extractability")]
     score_architectural_extractability: i64,
+    #[serde(rename = "score_operability")]
     score_operability: i64,
+    #[serde(rename = "score_creep_risk")]
     score_creep_risk: i64,
+    #[serde(rename = "score_runtime_sovereignty")]
     score_runtime_sovereignty: i64,
+    #[serde(rename = "score_model_logic_value")]
     score_model_logic_value: i64,
+    #[serde(rename = "score_ethics_safety")]
     score_ethics_safety: i64,
+    #[serde(rename = "score_intrinsic_risk")]
     score_intrinsic_risk: i64,
 }
 
@@ -1390,56 +1784,16 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
 fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
     match block {
         BLOCK_1 => {
-            let mut keys = vec![
-                "proposta_original_resumo",
-                "declared_description_ptbr",
-                "visao_do_enxame",
-                "justificativa_decisao",
-                "executive_verdict",
-                "risco_principal",
-                "risco_linha_vermelha",
-                "observacoes",
-            ];
+            let mut keys = BLOCK1_FIELDS_COLUMNS.to_vec();
             if !prior.proposta_original_resumo.trim().is_empty() {
                 keys.retain(|k| *k != "proposta_original_resumo");
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
-        BLOCK_2A => r#"["indicacao_otimista_canibalizacao","ouro_a_extrair","deep_pattern","transplantable_core","logic_math_heuristic","real_structural_problem","categoria_nuance_tecnica","integracao_papel_exato"]"#.to_string(),
-        BLOCK_2B => r#"["must_components_prod_ux","must_components_arq","must_components_ops","detected_toxic_deps","do_not_absorb","where_ai_should_not_enter"]"#.to_string(),
+        BLOCK_2A => serde_json::to_string(BLOCK2A_FIELDS_COLUMNS).unwrap_or_else(|_| "[]".to_string()),
+        BLOCK_2B => serde_json::to_string(BLOCK2B_FIELDS_COLUMNS).unwrap_or_else(|_| "[]".to_string()),
         BLOCK_3 => {
-            let mut keys = vec![
-                "classificacao_terminal",
-                "acao_de_canibalizacao",
-                "categoria_arquitetural",
-                "horizonte_extracao",
-                "tipo_integracao",
-                "capability_nature_primary",
-                "architectural_topology",
-                "temporal_stability",
-                "bare_metal_fit",
-                "extractability_level",
-                "runtime_sovereignty_fit",
-                "local_first_fit",
-                "adoptability_level",
-                "longitudinal_sustainability",
-                "maintenance_burden",
-                "onboarding_friction",
-                "observability_operational",
-                "recoverability_level",
-                "degradation_behavior",
-                "curation_burden",
-                "evolution_cost",
-                "operability_level",
-                "abandonment_risk",
-                "time_to_first_clear_value",
-                "imperfection_tolerance",
-                "entropy_risk",
-                "design_misuse_risk",
-                "intrinsic_ethics_risk",
-                "discipline_dependency",
-                "regulatory_risk",
-            ];
+            let mut keys = BLOCK3_FIELDS_COLUMNS.to_vec();
             let categoria_is_present = !matches!(
                 prior.categoria_arquitetural,
                 ArchitecturalCategory::Unspecified | ArchitecturalCategory::Unknown
@@ -1449,7 +1803,7 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
-        BLOCK_4 => r#"["score_philosophical_fit","score_bare_metal_fit","score_architectural_extractability","score_operability","score_creep_risk","score_runtime_sovereignty","score_model_logic_value","score_ethics_safety","score_intrinsic_risk"]"#.to_string(),
+        BLOCK_4 => serde_json::to_string(BLOCK4_FIELDS_COLUMNS).unwrap_or_else(|_| "[]".to_string()),
         _ => "[]".to_string(),
     }
 }
@@ -2308,55 +2662,50 @@ pub fn master_solutions_header_range() -> String {
 pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 85] = [
     "status_atualizacao",
     "status_fase",
+    "categoria_arquitetural",
     "project_name",
     "repo_url",
-    "repo_analised_version",
-    "ultima_versao_online",
-    "indicacao_otimista_canibalizacao",
-    "lote_id",
-    "data_ultima_analise",
-    "analise_origem",
     "licenca",
-    "stack_base",
+    "proposta_original_resumo",
+    "ultima_versao_online",
     "declared_description",
+    "stack_base",
+    "indicacao_otimista_canibalizacao",
+    "repo_analised_version",
     "lente_a_sentido_prod_ux",
     "lente_b_estrutura_arq",
     "lente_c_realidade_ops",
-    "proposta_original_resumo",
     "visao_do_enxame",
     "justificativa_decisao",
     "executive_verdict",
-    "risco_principal",
-    "risco_linha_vermelha",
-    "observacoes",
     "ouro_a_extrair",
     "deep_pattern",
     "transplantable_core",
     "logic_math_heuristic",
     "real_structural_problem",
-    "categoria_nuance_tecnica",
+    "classificacao_terminal",
     "integracao_papel_exato",
+    "categoria_nuance_tecnica",
+    "capability_nature_primary",
     "must_components_prod_ux",
     "must_components_arq",
     "must_components_ops",
     "detected_toxic_deps",
     "do_not_absorb",
     "where_ai_should_not_enter",
-    "classificacao_terminal",
     "acao_de_canibalizacao",
-    "categoria_arquitetural",
-    "horizonte_extracao",
     "tipo_integracao",
-    "capability_nature_primary",
-    "architectural_topology",
-    "temporal_stability",
-    "bare_metal_fit",
+    "horizonte_extracao",
+    "time_to_first_clear_value",
     "extractability_level",
-    "runtime_sovereignty_fit",
-    "local_first_fit",
+    "temporal_stability",
+    "architectural_topology",
     "adoptability_level",
-    "longitudinal_sustainability",
+    "bare_metal_fit",
     "maintenance_burden",
+    "runtime_sovereignty_fit",
+    "longitudinal_sustainability",
+    "local_first_fit",
     "onboarding_friction",
     "observability_operational",
     "recoverability_level",
@@ -2364,32 +2713,37 @@ pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 85] = [
     "curation_burden",
     "evolution_cost",
     "operability_level",
-    "abandonment_risk",
-    "time_to_first_clear_value",
     "imperfection_tolerance",
-    "entropy_risk",
+    "discipline_dependency",
+    "risco_principal",
+    "risco_linha_vermelha",
+    "observacoes",
+    "abandonment_risk",
     "design_misuse_risk",
     "intrinsic_ethics_risk",
-    "discipline_dependency",
+    "entropy_risk",
     "regulatory_risk",
-    "score_philosophical_fit",
-    "score_bare_metal_fit",
-    "score_architectural_extractability",
-    "score_operability",
-    "score_creep_risk",
-    "score_runtime_sovereignty",
-    "score_model_logic_value",
-    "score_ethics_safety",
-    "score_intrinsic_risk",
     "score_final",
+    "score_philosophical_fit",
     "score_fit_geral_soda",
     "score_architectural_priority",
+    "score_architectural_extractability",
     "score_human_product_priority",
     "score_absorption_readiness",
     "score_operational_priority",
+    "score_bare_metal_fit",
+    "score_operability",
+    "score_runtime_sovereignty",
+    "score_model_logic_value",
+    "score_ethics_safety",
+    "score_creep_risk",
+    "score_intrinsic_risk",
     "score_sustainability_adjusted_fit",
     "valid_from",
     "valid_to",
+    "analise_origem",
+    "data_ultima_analise",
+    "lote_id",
     "embargo_status",
 ];
 
@@ -2483,6 +2837,7 @@ pub fn apply_phase4_block5(now_epoch: i64, row: &mut MasterSolutionsRow) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -2617,7 +2972,27 @@ mod tests {
         let rows = payload.get(&range).unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].len(), 85);
-        assert_eq!(rows[0][2], serde_json::json!("owner / repo"));
+        assert_eq!(rows[0][3], serde_json::json!("owner / repo"));
+    }
+
+    #[test]
+    fn canonical_85_columns_are_covered_by_block_contracts_or_phase4_derivation() {
+        let mut covered = BTreeSet::new();
+        for name in BLOCK0_CONTEXT_COLUMNS
+            .iter()
+            .chain(BLOCK1_FIELDS_COLUMNS.iter())
+            .chain(BLOCK2A_FIELDS_COLUMNS.iter())
+            .chain(BLOCK2B_FIELDS_COLUMNS.iter())
+            .chain(BLOCK3_FIELDS_COLUMNS.iter())
+            .chain(BLOCK4_FIELDS_COLUMNS.iter())
+            .chain(PHASE4_DERIVED_COLUMNS.iter())
+        {
+            covered.insert(*name);
+        }
+        covered.insert("declared_description");
+
+        let expected: BTreeSet<&str> = MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().copied().collect();
+        assert_eq!(covered, expected);
     }
 
     #[test]
@@ -2676,15 +3051,100 @@ mod tests {
         };
         let arr = row.to_sheet_row();
         assert_eq!(arr.len(), 85);
-        assert_eq!(arr[75], serde_json::json!("1.2"));
-        assert_eq!(arr[76], serde_json::json!("2.3"));
-        assert_eq!(arr[77], serde_json::json!("3.4"));
-        assert_eq!(arr[78], serde_json::json!("4.5"));
-        assert_eq!(arr[79], serde_json::json!("5.6"));
-        assert_eq!(arr[80], serde_json::json!("6.7"));
-        assert_eq!(arr[81], serde_json::json!("7.8"));
-        assert_eq!(arr[82], serde_json::json!(format_epoch_utc(1_700_000_000)));
-        assert_eq!(arr[83], serde_json::json!(""));
+        assert_eq!(arr[63], serde_json::json!("1.2"));
+        assert_eq!(arr[65], serde_json::json!("2.3"));
+        assert_eq!(arr[66], serde_json::json!("3.4"));
+        assert_eq!(arr[68], serde_json::json!("4.5"));
+        assert_eq!(arr[69], serde_json::json!("5.6"));
+        assert_eq!(arr[70], serde_json::json!("6.7"));
+        assert_eq!(arr[78], serde_json::json!("7.8"));
+        assert_eq!(arr[79], serde_json::json!(format_epoch_utc(1_700_000_000)));
+        assert_eq!(arr[80], serde_json::json!(""));
         assert_eq!(arr[84], serde_json::json!("LIVRE"));
+    }
+
+    #[test]
+    fn master_row_accepts_ptbr_enum_aliases_and_string_floats() {
+        let mut value = serde_json::to_value(MasterSolutionsRow::default()).unwrap();
+        let obj = value.as_object_mut().unwrap();
+        obj.insert("classificacao_terminal".to_string(), serde_json::json!("APPROVED_WITH_REMARKS"));
+        obj.insert("acao_de_canibalizacao".to_string(), serde_json::json!("ABSORB_LOGIC"));
+        obj.insert("bare_metal_fit".to_string(), serde_json::json!("MÉDIA"));
+        obj.insert("abandonment_risk".to_string(), serde_json::json!("CRÍTICO"));
+        obj.insert("discipline_dependency".to_string(), serde_json::json!("MEDIUM"));
+        obj.insert("score_final".to_string(), serde_json::json!("8,5"));
+        obj.insert("score_fit_geral_soda".to_string(), serde_json::json!("8.7"));
+        obj.insert("score_architectural_priority".to_string(), serde_json::json!(9));
+        obj.insert("score_human_product_priority".to_string(), serde_json::json!(null));
+        obj.insert("score_absorption_readiness".to_string(), serde_json::json!("7,1"));
+        obj.insert("score_operational_priority".to_string(), serde_json::json!("6.4"));
+        obj.insert("score_sustainability_adjusted_fit".to_string(), serde_json::json!("5,0"));
+
+        let row: MasterSolutionsRow = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            row.classificacao_terminal,
+            TerminalClassification::AprovadoComRessalvas
+        );
+        assert_eq!(row.acao_de_canibalizacao, CannibalizationAction::AbsorverLogica);
+        assert_eq!(row.bare_metal_fit, FitLevel4::Medium);
+        assert_eq!(row.abandonment_risk, RiskLevel4::Critical);
+        assert_eq!(row.discipline_dependency, DisciplineDependency::Media);
+        assert_eq!(row.score_final, 8.5);
+        assert_eq!(row.score_fit_geral_soda, 8.7);
+        assert_eq!(row.score_architectural_priority, 9.0);
+        assert_eq!(row.score_human_product_priority, 0.0);
+        assert_eq!(row.score_absorption_readiness, 7.1);
+        assert_eq!(row.score_operational_priority, 6.4);
+        assert_eq!(row.score_sustainability_adjusted_fit, 5.0);
+    }
+
+    #[test]
+    fn block3_invalid_enum_degrades_to_unknown_without_parse_failure() {
+        let payload = serde_json::json!({
+            "classificacao_terminal": "FORA_DO_CATALOGO",
+            "acao_de_canibalizacao": "FORA_DO_CATALOGO",
+            "categoria_arquitetural": "FORA_DO_CATALOGO",
+            "horizonte_extracao": "FORA_DO_CATALOGO",
+            "tipo_integracao": "FORA_DO_CATALOGO",
+            "capability_nature_primary": "FORA_DO_CATALOGO",
+            "architectural_topology": "FORA_DO_CATALOGO",
+            "temporal_stability": "FORA_DO_CATALOGO",
+            "bare_metal_fit": "FORA_DO_CATALOGO",
+            "extractability_level": "FORA_DO_CATALOGO",
+            "runtime_sovereignty_fit": "FORA_DO_CATALOGO",
+            "local_first_fit": "FORA_DO_CATALOGO",
+            "adoptability_level": "FORA_DO_CATALOGO",
+            "longitudinal_sustainability": "FORA_DO_CATALOGO",
+            "maintenance_burden": "FORA_DO_CATALOGO",
+            "onboarding_friction": "FORA_DO_CATALOGO",
+            "observability_operational": "FORA_DO_CATALOGO",
+            "recoverability_level": "FORA_DO_CATALOGO",
+            "degradation_behavior": "FORA_DO_CATALOGO",
+            "curation_burden": "FORA_DO_CATALOGO",
+            "evolution_cost": "FORA_DO_CATALOGO",
+            "operability_level": "FORA_DO_CATALOGO",
+            "abandonment_risk": "FORA_DO_CATALOGO",
+            "time_to_first_clear_value": "FORA_DO_CATALOGO",
+            "imperfection_tolerance": "FORA_DO_CATALOGO",
+            "entropy_risk": "FORA_DO_CATALOGO",
+            "design_misuse_risk": "FORA_DO_CATALOGO",
+            "intrinsic_ethics_risk": "FORA_DO_CATALOGO",
+            "discipline_dependency": "FORA_DO_CATALOGO",
+            "regulatory_risk": "FORA_DO_CATALOGO"
+        });
+
+        let parsed: Block3Fields = serde_json::from_value(payload).unwrap();
+        let sanitized = parsed.sanitize();
+        assert_eq!(sanitized.classificacao_terminal, TerminalClassification::Unknown);
+        assert_eq!(sanitized.acao_de_canibalizacao, CannibalizationAction::Unknown);
+        assert_eq!(sanitized.categoria_arquitetural, None);
+        assert_eq!(sanitized.horizonte_extracao, TimeHorizon::Unknown);
+        assert_eq!(sanitized.tipo_integracao, IntegrationType::Unknown);
+        assert_eq!(sanitized.capability_nature_primary, CapabilityNaturePrimary::Unknown);
+        assert_eq!(sanitized.architectural_topology, ArchitecturalTopology::Unknown);
+        assert_eq!(sanitized.temporal_stability, TemporalStability::Unknown);
+        assert_eq!(sanitized.bare_metal_fit, FitLevel4::Unknown);
+        assert_eq!(sanitized.abandonment_risk, RiskLevel4::Unknown);
+        assert_eq!(sanitized.discipline_dependency, DisciplineDependency::Unknown);
     }
 }

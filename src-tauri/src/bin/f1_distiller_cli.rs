@@ -8,6 +8,7 @@ use genesis_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination, Ro
 use genesis_mc_lib::finops::phase1_5::cloud_cascade::CloudCascade;
 use genesis_mc_lib::finops::phase1_5::local_distiller::{LocalDistiller, MockInferenceEngine};
 use genesis_mc_lib::finops::phase1_5::package_assembler::{DbReader as PackageDbReader, PackageAssembler};
+use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use rusqlite::{params, Connection};
 use tempfile::NamedTempFile;
 use tracing::{error, info};
@@ -368,14 +369,8 @@ fn write_f1_report(root_dir: &Path, conn: &Connection, repo_id: &str) -> io::Res
         }
     }
 
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&report_path)
-        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
-    file.write_all(report.as_bytes())
-        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
+    append_plaintext_report(&report_path, &report)
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL {}: {}", report_path.display(), e)))?;
 
     Ok(report_path)
 }
@@ -388,15 +383,11 @@ fn distillation_prompt(artifact_type: &str) -> String {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let started = Instant::now();
     let repo_id = parse_repo_id_from_args();

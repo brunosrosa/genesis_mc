@@ -14,6 +14,7 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use rusqlite::Connection;
 use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
+use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -682,18 +683,11 @@ fn col_idx_to_a1(idx_0based: usize) -> String {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt()
-        .with_max_level(level)
-        .with_ansi(std::io::stderr().is_terminal())
-        .init();
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;

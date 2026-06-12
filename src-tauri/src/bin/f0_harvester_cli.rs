@@ -8,6 +8,7 @@ use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
+use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use tracing::{error, info, warn};
@@ -198,14 +199,8 @@ fn write_f0_report(
         report.push_str(&format!("{}\t{}\n", artifact_type, payload_len));
     }
 
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&report_path)
-        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
-    file.write_all(report.as_bytes())
-        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
+    append_plaintext_report(&report_path, &report)
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL {}: {}", report_path.display(), e)))?;
 
     Ok(report_path)
 }
@@ -1194,16 +1189,12 @@ async fn update_status_atualizacao_e_fase(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
     dotenvy::dotenv().ok();
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let root_dir = workspace_root()?;
     let soda_data_dir = root_dir.join(".soda_data");

@@ -196,3 +196,120 @@ package_name	payload_bytes
 A	54524
 B	14636
 C	30571
+
+
+=== FASE 1.5: DESTILADOR @ 2026-06-11T21:12:36.690330700-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+== ESSENCES ==
+essence_name	routing_zone	token_count	destination	payload_bytes
+_essence_01_promessa_readme	Green	1428	PassThrough	5854
+_essence_02_dependency_manifest	Green	888	PassThrough	3000
+_essence_03_test_intent	Red	116356	CloudCascade	8875
+_essence_04_repo_outline	Green	632	PassThrough	2452
+_essence_05_architecture_map	Green	1089	PassThrough	4082
+_essence_06_unsafe_hotspots	Green	27	PassThrough	100
+_essence_07_ops_blueprint	Yellow	29737	LocalModel:Z:\genesis_mc\.soda_data\models\Qwen3.5-4B-Q4_K_M.gguf	22686
+_essence_08_health_report	Green	27	PassThrough	102
+_essence_09_community_meta	Green	202	PassThrough	523
+_essence_10_soda_canon_context	Green	2315	PassThrough	8000
+_essence_11_ux_contracts	Green	8398	PassThrough	33687
+== PACKAGES ==
+package_name	payload_bytes
+A	52573
+B	14636
+C	30571
+
+
+=== FASE 2: ENXAME @ 2026-06-11T21:13:48.477948400-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+elapsed_ms=71762
+phase_status=F2_OK
+persisted_in=debates_enxame
+model_used={
+  "lens_a": "google/gemini-3.5-flash",
+  "lens_b": "deepseek/deepseek-v4-pro",
+  "lens_c": "qwen/qwen3.6-plus"
+}
+prompt_tokens=29754
+completion_tokens=6421
+total_tokens=36175
+total_cost_usd=0.063451
+
+
+== LENS A ==
+{
+  "bullets": [
+    "O verdadeiro 'UAU moment' reside no loop de aprendizado fechado: o agente cria e refina suas próprias skills (padrão agentskills.io) e usa modelagem dialética (Honcho) para evoluir a percepção do usuário entre sessões, eliminando a amnésia típica de LLMs.",
+    "A UX do terminal (TUI) é altamente neuro-inclusiva; recursos como autocomplete de comandos slash, edição multilinha e interrupção ativa (/steer) mitigam o Flow-Debt e garantem Zero Layout Shift devido à natureza de grid fixo do terminal.",
+    "O 'Nous Portal' resolve com maestria a fadiga de chaves de API (UX Friction) ao unificar mais de 300 modelos e ferramentas sob um único gateway, um padrão que o SODA deve emular para simplificar o onboarding do usuário.",
+    "Alinhamento com SODA: Embora a dependência de Python/Node.js viole a ADR-001 (Core Rust), a arquitetura de subagentes e execução de ferramentas se encaixa perfeitamente na ADR-002, devendo rodar como sidecars efêmeros e isolados via Landlock/AppContainer."
+  ],
+  "completion_tokens": 2313,
+  "lens_id": "LensA_ProductUX",
+  "model_used": "google/gemini-3.5-flash",
+  "prompt_tokens": 15639,
+  "recommendation": "Incorpore o conceito de Tool Gateway e o protocolo de auto-melhoria de skills do Hermes, executando o agente como um sidecar isolado sob a ADR-002 do SODA.",
+  "repo_id": "nousresearch/hermes-agent",
+  "risk_level": "Medio",
+  "total_cost_usd": 0.043832745,
+  "total_tokens": 17952
+}
+
+== LENS B ==
+{
+  "bullets": [
+    "O repositório é um monorepo com múltiplos pacotes (web, desktop, tui, bootstrap) e forte acoplamento a contextos React, o que dificulta a extração de uma 'alma matemática' pura e independente de runtime.",
+    "A dependência de Node.js/Electron (hermes-agent) e a arquitetura de IPC baseada em Tauri/WebSocket violam as ADRs do SODA, que exigem Rust puro e bare-metal, tornando o código não diretamente transplantável sem reescrita substancial.",
+    "A lógica de negócio está profundamente entrelaçada com frameworks de UI (React, Svelte) e gerenciamento de estado, sem contratos de I/O claros ou isolamento em bibliotecas de habilidades extraíveis.",
+    "O risco de execução sob as restrições da RTX 2060m é alto, pois o código atual não foi projetado para zero-copy IPC, sandboxing híbrido ou limites rígidos de RAM/CPU, exigindo refatoração arquitetural completa."
+  ],
+  "completion_tokens": 296,
+  "lens_id": "LensB_Architecture",
+  "model_used": "deepseek/deepseek-v4-pro",
+  "prompt_tokens": 4781,
+  "recommendation": "Rejeitar o transplante direto; a lógica central deve ser reimplementada em Rust com isolamento estrito conforme as ADRs do SODA.",
+  "repo_id": "nousresearch/hermes-agent",
+  "risk_level": "Alto",
+  "total_cost_usd": 0.0092555298,
+  "total_tokens": 5077
+}
+
+== LENS C ==
+{
+  "bullets": [
+    "A stack atual (React, Node 22, Python 3.13, Playwright, Docusaurus) viola frontalmente o ADR-001, gerando um footprint de memória e CPU incompatível com o limite de <40MB RAM e <150MB VRAM, transformando o Tauri em um invólucro para bloat de daemon JS/Python.",
+    "O Dockerfile e os workflows de CI/CD acumulam camadas pesadas (compilação nativa, instalação de browsers Playwright, uv sync com extras múltiplos), elevando drasticamente o custo de build, o tamanho da imagem e a entropia de provisionamento em ambientes restritos.",
+    "A observabilidade depende de tracing e s6-overlay, mas a instalação lazy de dependências e a ausência de circuit breakers explícitos para provedores de IA criam pontos cegos de falha silenciosa e risco iminente de rate limits e custos de nuvem imprevisíveis.",
+    "A arquitetura de sidecars efêmeros e a ponte WhatsApp introduzem superfícies de ataque e vazamento de contexto não mitigados por sandboxing Wasmtime ou AppContainer conforme o ADR-002, comprometendo a garantia de falha graciosa e o isolamento zero-trust."
+  ],
+  "completion_tokens": 3812,
+  "lens_id": "FINOPS-HW-AUDIT-001",
+  "model_used": "qwen/qwen3.6-plus",
+  "prompt_tokens": 9334,
+  "recommendation": "Rejeite a stack atual e refatore o núcleo estritamente para Rust/Tauri v2 com sandboxing Wasmtime, eliminando todos os runtimes JS/Python persistentes para cumprir os limites de ha",
+  "repo_id": "nousresearch/hermes-agent",
+  "risk_level": "Alto",
+  "total_cost_usd": 0.0103622805,
+  "total_tokens": 13146
+}
+
+
+=== FASE 3-4: SGR + SSOT @ 2026-06-11T21:18:53.774856700-03:00 ===
+
+repo_id=nousresearch/hermes-agent
+row_number=369
+model_used=deepseek/deepseek-v4-flash
+lote_id=LOTE_01_ALPHA
+latency_f3_f4_ms=300759
+latency_total_ms=450658
+prompt_tokens=5601
+completion_tokens=2205
+total_tokens=7806
+total_cost_usd=0.064416
+cost_f2_usd=0.063451
+cost_f3_f4_usd=0.000965
+sheets_write_confirmed=true
+row_width_a_to_cf=85
+elapsed_total_wall_ms=458714

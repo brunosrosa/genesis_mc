@@ -8,6 +8,8 @@ param(
     [switch]$Yes,
     [string]$RepoId = ""
 )
+[console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+$PSStyle.OutputRendering = 'ANSI'
 try { Clear-Host } catch {}
 
 Write-Host "================================================================" -ForegroundColor Cyan
