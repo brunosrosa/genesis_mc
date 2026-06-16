@@ -9,7 +9,9 @@ use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
 use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use reqwest::Client;
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{error, info, warn};
 use url::Url;
@@ -376,6 +378,223 @@ fn looks_like_knowledge_repo(conn: &Connection, repo_id: &str) -> bool {
     let ux_skipped = ux.contains("package.json ausente") || ux.contains("foi pulada");
 
     stack_unknown && ux_skipped
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubReleaseTag {
+    tag_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubRepoMetadata {
+    default_branch: Option<String>,
+}
+
+fn is_invalid_version_seed(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case("main")
+        || trimmed.eq_ignore_ascii_case("master")
+        || trimmed.eq_ignore_ascii_case("unknown")
+}
+
+fn load_repo_versions(conn: &Connection, repo_id: &str) -> io::Result<(String, String, String)> {
+    conn.query_row(
+        "SELECT COALESCE(repo_analised_version, ''), COALESCE(repo_version, ''), COALESCE(ultima_versao_online, '')
+         FROM repositorios
+         WHERE project_name = ?1",
+        params![repo_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
+    .map_err(|e| io::Error::other(format!("Falha ao ler versões atuais em repositorios: {e}")))
+}
+
+async fn resolve_release_seed_for_repo_url(repo_url: &Url) -> io::Result<String> {
+    let mut segments = repo_url
+        .path_segments()
+        .map(|parts| parts.collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| segment.trim_end_matches(".git").to_string())
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return Err(io::Error::other("repo_url sem owner/repo para resolver versão"));
+    }
+    let repo = segments.pop().unwrap_or_default();
+    let owner = segments.pop().unwrap_or_default();
+    let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "https://api.github.com".to_string());
+    let base = github_api_base.trim_end_matches('/');
+    let repo_endpoint = format!("{base}/repos/{owner}/{repo}");
+    let release_endpoint = format!("{repo_endpoint}/releases/latest");
+    let tags_endpoint = format!("{repo_endpoint}/tags?per_page=1");
+    let client = Client::builder()
+        .user_agent("f0-harvester-cli/1.0")
+        .build()
+        .map_err(|e| io::Error::other(format!("Falha ao criar client HTTP do reparo de versão: {e}")))?;
+    let auth_token = std::env::var("GITHUB_PAT")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+
+    let with_auth = |req: reqwest::RequestBuilder| {
+        if let Some(token) = auth_token.as_deref() {
+            req.bearer_auth(token)
+        } else {
+            req
+        }
+    };
+
+    let release_resp = with_auth(client.get(&release_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar latest release: {e}")))?;
+    if release_resp.status().is_success() {
+        let parsed = release_resp
+            .json::<GithubReleaseTag>()
+            .await
+            .map_err(|e| io::Error::other(format!("Falha ao parsear latest release: {e}")))?;
+        if let Some(tag) = parsed
+            .tag_name
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .filter(|v| !is_invalid_version_seed(v))
+        {
+            return Ok(tag);
+        }
+    }
+
+    let tags_resp = with_auth(client.get(&tags_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar tags: {e}")))?;
+    if tags_resp.status().is_success() {
+        let tags = tags_resp
+            .json::<Vec<Value>>()
+            .await
+            .map_err(|e| io::Error::other(format!("Falha ao parsear tags: {e}")))?;
+        if let Some(tag) = tags
+            .iter()
+            .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
+            .map(|s| s.trim().to_string())
+            .find(|v| !v.is_empty() && !is_invalid_version_seed(v))
+        {
+            return Ok(tag);
+        }
+    }
+
+    let repo_resp = with_auth(client.get(&repo_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar metadata do repo: {e}")))?;
+    let repo_meta = repo_resp
+        .json::<GithubRepoMetadata>()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha ao parsear metadata do repo: {e}")))?;
+
+    if let Some(branch) = repo_meta
+        .default_branch
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        let commit_endpoint = format!("{repo_endpoint}/commits/{branch}");
+        let commit_resp = with_auth(client.get(&commit_endpoint))
+            .send()
+            .await
+            .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar commit do branch default: {e}")))?;
+        if commit_resp.status().is_success() {
+            let commit = commit_resp
+                .json::<Value>()
+                .await
+                .map_err(|e| io::Error::other(format!("Falha ao parsear commit do branch default: {e}")))?;
+            if let Some(short) = commit
+                .get("sha")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|sha| sha.chars().take(7).collect::<String>())
+                .filter(|v| !v.is_empty())
+            {
+                return Ok(short);
+            }
+        }
+    }
+
+    let commits_endpoint = format!("{repo_endpoint}/commits?per_page=1");
+    let commits_resp = with_auth(client.get(&commits_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar lista de commits: {e}")))?;
+    let commits = commits_resp
+        .json::<Vec<Value>>()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha ao parsear lista de commits: {e}")))?;
+    commits
+        .first()
+        .and_then(|c| c.get("sha"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|sha| sha.chars().take(7).collect::<String>())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| io::Error::other("Falha ao resolver versão por release/tag/SHA curto"))
+}
+
+async fn repair_repo_versions_if_needed(
+    conn: Arc<Mutex<Connection>>,
+    repo_id: &str,
+    repo_url: &Url,
+) -> io::Result<()> {
+    let current = {
+        let conn_lock = conn
+            .lock()
+            .map_err(|e| io::Error::other(format!("Falha ao adquirir lock do banco para validar versões: {e}")))?;
+        load_repo_versions(&conn_lock, repo_id)?
+    };
+    let (repo_analised_version, repo_version, ultima_versao_online) = current;
+    if !is_invalid_version_seed(&repo_analised_version)
+        && !is_invalid_version_seed(&repo_version)
+        && !is_invalid_version_seed(&ultima_versao_online)
+    {
+        return Ok(());
+    }
+
+    let resolved = resolve_release_seed_for_repo_url(repo_url).await?;
+    if is_invalid_version_seed(&resolved) {
+        return Err(io::Error::other(format!(
+            "Reparo F0(direct): resolvedor retornou versão inválida: {resolved}"
+        )));
+    }
+
+    let conn_lock = conn
+        .lock()
+        .map_err(|e| io::Error::other(format!("Falha ao adquirir lock do banco para reparar versões: {e}")))?;
+    let updated_rows = conn_lock
+        .execute(
+            "UPDATE repositorios
+             SET repo_analised_version = ?1,
+                 repo_version = ?1,
+                 ultima_versao_online = ?1
+             WHERE project_name = ?2",
+            params![resolved, repo_id],
+        )
+        .map_err(|e| io::Error::other(format!("Falha ao reparar versões no SQLite após F0(direct): {e}")))?;
+    if updated_rows == 0 {
+        return Err(io::Error::other(format!(
+            "Reparo F0(direct): nenhuma linha atualizada em repositorios para {repo_id}"
+        )));
+    }
+    info!(
+        repo_id = %repo_id,
+        resolved_version = %resolved,
+        updated_rows,
+        "F0(direct): reparo de versões no SQLite concluído"
+    );
+    Ok(())
 }
 
 fn detect_degraded_blobs(conn: &Connection, repo_id: &str) -> io::Result<Vec<String>> {
@@ -979,6 +1198,18 @@ async fn process_one_repo_f0_direct(
 
     match res {
         Ok(_) => {
+            if let Err(e) = repair_repo_versions_if_needed(Arc::clone(&conn_arc), repo_id, &repo_url).await {
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based: 0,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: std::mem::take(&mut blobs_present),
+                    blobs_missing: std::mem::take(&mut blobs_missing),
+                    report_path: None,
+                    error: Some(e.to_string()),
+                };
+            }
             if let Ok(conn_lock) = conn_arc.lock() {
                 if let Ok(now) = now_epoch_secs() {
                     let _ = conn_lock.execute(

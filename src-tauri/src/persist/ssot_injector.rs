@@ -861,13 +861,13 @@ impl SsotInjector {
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
-        let row_number_1based =
-            Self::resolve_row_number_by_repo_url(
-                &spreadsheet_id,
-                sheet,
-                &validated.repo_url,
-            )
-            .await?;
+        let row_number_1based = Self::resolve_row_number_by_repo_url_and_lote_id(
+            &spreadsheet_id,
+            sheet,
+            &validated.repo_url,
+            &validated.lote_id,
+        )
+        .await?;
 
         let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
@@ -992,8 +992,13 @@ impl SsotInjector {
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
-        let row_number_1based =
-            Self::resolve_row_number_by_repo_url(&spreadsheet_id, sheet, &validated.repo_url).await?;
+        let row_number_1based = Self::resolve_row_number_by_repo_url_and_lote_id(
+            &spreadsheet_id,
+            sheet,
+            &validated.repo_url,
+            &validated.lote_id,
+        )
+        .await?;
 
         let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
@@ -1123,8 +1128,13 @@ impl SsotInjector {
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
-        let row_number_1based =
-            Self::resolve_row_number_by_repo_url(&spreadsheet_id, sheet, &validated.repo_url).await?;
+        let row_number_1based = Self::resolve_row_number_by_repo_url_and_lote_id(
+            &spreadsheet_id,
+            sheet,
+            &validated.repo_url,
+            &validated.lote_id,
+        )
+        .await?;
 
         let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
@@ -1283,10 +1293,11 @@ impl SsotInjector {
         }
     }
 
-    async fn resolve_row_number_by_repo_url(
+    async fn resolve_row_number_by_repo_url_and_lote_id(
         spreadsheet_id: &str,
         sheet: &str,
         repo_url: &str,
+        lote_id: &str,
     ) -> Result<u32, SsotError> {
         let client = McpGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, spreadsheet_id).await?;
@@ -1300,51 +1311,159 @@ impl SsotInjector {
                     header_row.len()
                 ))
             })?;
-        let col = Self::col_idx_to_a1(repo_url_idx);
-        let range = format!("{col}2:{col}");
+        let lote_id_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
+            .ok_or_else(|| {
+                SsotError::CloudFailure(format!(
+                    "Header missing lote_id (headers_len={})",
+                    header_row.len()
+                ))
+            })?;
+        let min_idx = repo_url_idx.min(lote_id_idx);
+        let max_idx = repo_url_idx.max(lote_id_idx);
+        let start_col = Self::col_idx_to_a1(min_idx);
+        let end_col = Self::col_idx_to_a1(max_idx);
+        let range = format!("{start_col}2:{end_col}");
         let values = client
             .get_sheet_data(spreadsheet_id, sheet, range)
             .await
             .map_err(SsotError::CloudFailure)?;
 
-        let needle = repo_url.trim_end_matches('/').to_string();
-        if let Some(found) = Self::resolve_row_number_from_repo_url_column(&values, &needle) {
+        if let Some(found) = Self::resolve_row_number_from_repo_locator_columns(
+            &values,
+            repo_url_idx.saturating_sub(min_idx),
+            lote_id_idx.saturating_sub(min_idx),
+            repo_url,
+            lote_id,
+        ) {
             return Ok(found);
         }
 
         let mut non_empty_examples: Vec<String> = Vec::new();
         for row in values.iter().take(500) {
-            let v = row.first().map(|s| s.trim()).unwrap_or("");
-            if v.is_empty() {
+            let repo_v = row
+                .get(repo_url_idx.saturating_sub(min_idx))
+                .map(|s| s.trim())
+                .unwrap_or("");
+            let lote_v = row
+                .get(lote_id_idx.saturating_sub(min_idx))
+                .map(|s| s.trim())
+                .unwrap_or("");
+            if repo_v.is_empty() && lote_v.is_empty() {
                 continue;
             }
-            non_empty_examples.push(v.to_string());
+            non_empty_examples.push(format!("{repo_v} | lote={lote_v}"));
             if non_empty_examples.len() >= 5 {
                 break;
             }
         }
         Err(SsotError::CloudFailure(format!(
-            "Linha SSOT não encontrada por match perfeito repo_url='{}' (repo_url_col={} idx0={} headers_len={} examples={:?}). Append é proibido; abortando.",
+            "Linha SSOT não encontrada por match robusto repo_url='{}' lote_id='{}' (repo_url_col={} lote_id_col={} repo_url_idx0={} headers_len={} examples={:?}). Append é proibido; abortando.",
             repo_url,
-            col,
+            lote_id,
+            Self::col_idx_to_a1(repo_url_idx),
+            Self::col_idx_to_a1(lote_id_idx),
             repo_url_idx,
             header_row.len(),
             non_empty_examples
         )))
     }
 
-    fn resolve_row_number_from_repo_url_column(
+    fn try_extract_repo_id_from_repo_url(repo_url: &str) -> Option<String> {
+        let url = Url::parse(repo_url).ok()?;
+        let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+        if url.host_str() != Some("github.com") && !allow_host_override {
+            return None;
+        }
+        let mut segments = url
+            .path_segments()?
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim_end_matches(".git"))
+            .collect::<Vec<_>>();
+        if segments.len() < 2 {
+            return None;
+        }
+        let repo = segments.pop()?;
+        let owner = segments.pop()?;
+        Some(format!("{owner}/{repo}"))
+    }
+
+    fn normalize_repo_locator(raw: &str) -> String {
+        raw.trim().trim_end_matches('/').to_ascii_lowercase()
+    }
+
+    fn try_extract_repo_id_loose(raw: &str) -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Some(repo_id) = Self::try_extract_repo_id_from_repo_url(trimmed) {
+            return Some(repo_id.to_ascii_lowercase());
+        }
+        if trimmed.contains("://") {
+            return None;
+        }
+        let candidate = trimmed.replace(' ', "");
+        let parts: Vec<&str> = candidate.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.len() == 2 {
+            return Some(format!("{}/{}", parts[0], parts[1]).to_ascii_lowercase());
+        }
+        None
+    }
+
+    fn resolve_row_number_from_repo_locator_columns(
         values: &[Vec<String>],
+        repo_url_idx: usize,
+        lote_id_idx: usize,
         repo_url_needle: &str,
+        lote_id_needle: &str,
     ) -> Option<u32> {
+        let repo_url_needle = Self::normalize_repo_locator(repo_url_needle);
+        let lote_id_needle = lote_id_needle.trim();
+        let repo_id_needle = Self::try_extract_repo_id_loose(repo_url_needle.as_str()).unwrap_or_default();
+
         for (idx, row) in values.iter().enumerate() {
-            let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
-            let repo_hay = repo_cell.trim_end_matches('/').to_string();
-            if !repo_hay.is_empty() && repo_hay == repo_url_needle {
+            let repo_cell = row.get(repo_url_idx).map(|s| s.as_str()).unwrap_or("");
+            let lote_cell = row.get(lote_id_idx).map(|s| s.trim()).unwrap_or("");
+            let repo_hay = Self::normalize_repo_locator(repo_cell);
+            let repo_id_hay = Self::try_extract_repo_id_loose(repo_cell);
+            let repo_matches = (!repo_hay.is_empty() && repo_hay == repo_url_needle)
+                || (!repo_id_needle.is_empty()
+                    && repo_id_hay
+                        .as_deref()
+                        .map(|value| value == repo_id_needle)
+                        .unwrap_or(false));
+            if repo_matches && !lote_cell.is_empty() && lote_cell == lote_id_needle {
                 return Some((idx as u32) + 2);
             }
         }
+
+        for (idx, row) in values.iter().enumerate() {
+            let repo_cell = row.get(repo_url_idx).map(|s| s.as_str()).unwrap_or("");
+            let repo_hay = Self::normalize_repo_locator(repo_cell);
+            let repo_id_hay = Self::try_extract_repo_id_loose(repo_cell);
+            let repo_matches = (!repo_hay.is_empty() && repo_hay == repo_url_needle)
+                || (!repo_id_needle.is_empty()
+                    && repo_id_hay
+                        .as_deref()
+                        .map(|value| value == repo_id_needle)
+                        .unwrap_or(false));
+            if repo_matches {
+                return Some((idx as u32) + 2);
+            }
+        }
+
         None
+    }
+
+    fn is_invalid_repo_analised_version_seed(raw: &str) -> bool {
+        let normalized = raw.trim().to_ascii_lowercase();
+        normalized.is_empty()
+            || normalized == "main"
+            || normalized == "master"
+            || normalized == "unknown"
     }
 
     async fn google_workspace_access_token() -> Result<String, SsotError> {
@@ -1443,10 +1562,9 @@ impl SsotInjector {
             "repo_analised_version",
             &payload.repo_analised_version,
         )?;
-        let repo_analised_version_lower = repo_analised_version.to_ascii_lowercase();
-        if repo_analised_version_lower == "main" || repo_analised_version_lower == "master" {
+        if Self::is_invalid_repo_analised_version_seed(&repo_analised_version) {
             return Err(SsotError::ValidationFailure(format!(
-                "repo_analised_version invalido (branch): '{}'",
+                "repo_analised_version invalido (branch/seed): '{}'",
                 repo_analised_version
             )));
         }
@@ -2229,10 +2347,18 @@ mod tests {
 
     #[test]
     fn resolve_row_number_never_returns_row_1() {
-        let values = vec![vec!["https://github.com/acme/widget".to_string()]];
-        let needle = "https://github.com/acme/widget".to_string();
-        let row =
-            SsotInjector::resolve_row_number_from_repo_url_column(&values, &needle).unwrap();
+        let values = vec![vec![
+            "https://github.com/acme/widget".to_string(),
+            "LOTE_01".to_string(),
+        ]];
+        let row = SsotInjector::resolve_row_number_from_repo_locator_columns(
+            &values,
+            0,
+            1,
+            "https://github.com/acme/widget",
+            "LOTE_01",
+        )
+        .unwrap();
         assert!(row >= 2);
         assert_eq!(row, 2);
     }
@@ -2240,11 +2366,69 @@ mod tests {
     #[test]
     fn resolve_row_number_returns_none_when_repo_url_not_found() {
         let values = vec![
-            vec!["https://github.com/acme/a".to_string()],
-            vec!["".to_string()],
+            vec!["https://github.com/acme/a".to_string(), "LOTE_A".to_string()],
+            vec!["".to_string(), "".to_string()],
         ];
-        let needle = "https://github.com/acme/unknown".to_string();
-        assert!(SsotInjector::resolve_row_number_from_repo_url_column(&values, &needle).is_none());
+        assert!(
+            SsotInjector::resolve_row_number_from_repo_locator_columns(
+                &values,
+                0,
+                1,
+                "https://github.com/acme/unknown",
+                "LOTE_A",
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn resolve_row_number_accepts_case_whitespace_and_slash_with_lote_priority() {
+        let values = vec![
+            vec![
+                " https://github.com/Other/Repo/ ".to_string(),
+                "LOTE_X".to_string(),
+            ],
+            vec![
+                " ACME/Widget ".to_string(),
+                "LOTE_01".to_string(),
+            ],
+        ];
+        let row = SsotInjector::resolve_row_number_from_repo_locator_columns(
+            &values,
+            0,
+            1,
+            "https://github.com/acme/widget/",
+            "LOTE_01",
+        )
+        .unwrap();
+        assert_eq!(row, 3);
+    }
+
+    #[test]
+    fn validate_payload_rejects_main_master_and_unknown_repo_analised_version() {
+        for seed in ["main", " Master ", "unknown"] {
+            let row = MasterSolutionsRow {
+                status_atualizacao: "CONCLUIDO_AGUARDANDO".to_string(),
+                status_fase: "FASE_3_SYNTHESIZER_OK".to_string(),
+                project_name: "owner/repo".to_string(),
+                repo_url: "https://github.com/owner/repo".to_string(),
+                repo_analised_version: seed.to_string(),
+                ultima_versao_online: "v1.0.1".to_string(),
+                lote_id: "LOTE_01".to_string(),
+                data_ultima_analise: 1_715_000_000,
+                analise_origem: "SGR".to_string(),
+                declared_description: "Descricao".to_string(),
+                proposta_original_resumo: "Resumo".to_string(),
+                stack_base: "Rust".to_string(),
+                licenca: "MIT".to_string(),
+                valid_from: 1_700_000_000,
+                valid_to: None,
+                embargo_status: 0,
+                ..Default::default()
+            };
+            let err = SsotInjector::validate_payload("owner/repo", &row).unwrap_err();
+            assert!(matches!(err, SsotError::ValidationFailure(_)));
+        }
     }
 
     #[test]

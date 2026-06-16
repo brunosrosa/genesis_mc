@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::Client;
+use rusqlite::{params, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{info, warn};
@@ -25,6 +26,8 @@ type SheetsDataFuture<'a> =
 type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 type GithubTagFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send + 'a>>;
+type RepoStoreFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 
 const GOOGLE_MCP_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -67,6 +70,15 @@ trait GithubClient: Send + Sync {
     ) -> GithubTagFuture<'a>;
 }
 
+trait RepoStore: Send + Sync {
+    fn persist_release_resolution<'a>(
+        &'a self,
+        project_name: &'a str,
+        repo_url: &'a str,
+        latest: &'a str,
+    ) -> RepoStoreFuture<'a>;
+}
+
 fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
     let values = if let Some(values) = result.get("values").and_then(|v| v.as_array()) {
         values
@@ -92,6 +104,82 @@ fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
 }
 
 struct SheetsMcpClient;
+struct SqliteRepoStore {
+    db_path: PathBuf,
+}
+
+impl SqliteRepoStore {
+    fn new(db_path: PathBuf) -> Self {
+        Self { db_path }
+    }
+}
+
+fn is_invalid_version_seed(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case("main")
+        || trimmed.eq_ignore_ascii_case("master")
+        || trimmed.eq_ignore_ascii_case("unknown")
+}
+
+impl RepoStore for SqliteRepoStore {
+    fn persist_release_resolution<'a>(
+        &'a self,
+        project_name: &'a str,
+        repo_url: &'a str,
+        latest: &'a str,
+    ) -> RepoStoreFuture<'a> {
+        let db_path = self.db_path.clone();
+        let project_name = project_name.trim().to_string();
+        let repo_url = repo_url.trim().to_string();
+        let latest = latest.trim().to_string();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || -> Result<(), String> {
+                if is_invalid_version_seed(&latest) {
+                    return Err(format!(
+                        "Guardião: versão resolvida inválida para persistência no SQLite: '{}'",
+                        latest
+                    ));
+                }
+                let conn = Connection::open(&db_path)
+                    .map_err(|e| format!("Guardião: falha ao abrir SQLite em {}: {}", db_path.display(), e))?;
+                let repo_key = if !project_name.is_empty() {
+                    project_name
+                } else {
+                    try_extract_project_name_from_repo_url(&repo_url).unwrap_or_default()
+                };
+                if repo_key.is_empty() {
+                    return Err(format!(
+                        "Guardião: não foi possível derivar project_name para persistir versão (repo_url={repo_url})"
+                    ));
+                }
+                let updated_rows = conn
+                .execute(
+                    "UPDATE repositorios
+                     SET ultima_versao_online = ?1,
+                         repo_version = ?1,
+                         repo_analised_version = CASE
+                             WHEN repo_analised_version IS NULL THEN ''
+                             WHEN lower(trim(repo_analised_version)) IN ('main','master','unknown') THEN ''
+                             ELSE trim(repo_analised_version)
+                         END
+                     WHERE project_name = ?2 OR repo_url = ?3",
+                    params![latest, repo_key, repo_url],
+                )
+                .map_err(|e| format!("Guardião: falha ao persistir versões em repositorios: {e}"))?;
+                if updated_rows == 0 {
+                    return Err(format!(
+                        "Guardião: nenhuma linha em repositorios foi atualizada para project_name='{}' repo_url='{}'",
+                        repo_key, repo_url
+                    ));
+                }
+                Ok(())
+            })
+            .await
+            .map_err(|e| format!("Guardião: join error ao persistir versão no SQLite: {e}"))?
+        })
+    }
+}
 
 impl SheetsMcpClient {
     #[cfg(test)]
@@ -585,12 +673,13 @@ fn try_build_repo_url_from_project_name(project_name: &str) -> Option<String> {
     Some(format!("https://github.com/{owner}/{repo}"))
 }
 
-struct Guardian<S: SheetsClient, G: GithubClient> {
+struct Guardian<S: SheetsClient, G: GithubClient, R: RepoStore> {
     sheets: Arc<S>,
     github: Arc<G>,
+    repo_store: Arc<R>,
 }
 
-impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
+impl<S: SheetsClient + 'static, G: GithubClient + 'static, R: RepoStore + 'static> Guardian<S, G, R> {
     async fn run_once(&self, spreadsheet_id: &str) -> Result<(), String> {
         let header_range = master_solutions_header_range();
         let header = self
@@ -827,6 +916,13 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
             };
             let Some(latest) = latest else { continue };
             let latest = latest.trim().to_string();
+            if latest.is_empty() {
+                continue;
+            }
+
+            self.repo_store
+                .persist_release_resolution(&ctx.project_name, &ctx.repo_url, &latest)
+                .await?;
 
             let drift = drift_candidate && has_drift(&ctx.repo_analised_version, &latest);
             let should_write_latest = (is_new_link || drift) && ctx.ultima_versao_online.trim() != latest;
@@ -970,6 +1066,9 @@ async fn main() -> io::Result<()> {
     let guardian = Guardian {
         sheets: Arc::new(SheetsMcpClient),
         github: Arc::new(ReqwestGithubClient::new().map_err(io::Error::other)?),
+        repo_store: Arc::new(SqliteRepoStore::new(
+            root_dir.join(".soda_data").join("soda_heuristic_vault.db"),
+        )),
     };
     guardian
         .run_once(&spreadsheet_id)
@@ -983,6 +1082,7 @@ async fn main() -> io::Result<()> {
 mod tests {
     use super::*;
     use mockito::Server;
+    use tempfile::NamedTempFile;
     use std::sync::OnceLock;
     use tokio::sync::Mutex;
     use tokio::io::{duplex, AsyncWriteExt, BufReader};
@@ -1054,6 +1154,44 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct MockRepoStore {
+        persisted: Mutex<Vec<(String, String, String)>>,
+        fail_with: Option<String>,
+    }
+
+    impl RepoStore for MockRepoStore {
+        fn persist_release_resolution<'a>(
+            &'a self,
+            project_name: &'a str,
+            repo_url: &'a str,
+            latest: &'a str,
+        ) -> RepoStoreFuture<'a> {
+            Box::pin(async move {
+                if let Some(err) = &self.fail_with {
+                    return Err(err.clone());
+                }
+                self.persisted.lock().await.push((
+                    project_name.to_string(),
+                    repo_url.to_string(),
+                    latest.to_string(),
+                ));
+                Ok(())
+            })
+        }
+    }
+
+    fn build_mock_guardian(
+        sheets: Arc<MockSheets>,
+        github: MockGithub,
+    ) -> Guardian<MockSheets, MockGithub, MockRepoStore> {
+        Guardian {
+            sheets,
+            github: Arc::new(github),
+            repo_store: Arc::new(MockRepoStore::default()),
+        }
+    }
+
     #[test]
     fn plan_update_is_idempotent_when_versions_match() {
         assert!(!has_drift("v1.2.3", "1.2.3"));
@@ -1064,6 +1202,14 @@ mod tests {
     #[test]
     fn plan_update_detects_drift_and_returns_remote_normalized() {
         assert!(has_drift("1.2.2", "v1.2.3"));
+    }
+
+    #[test]
+    fn invalid_version_seed_rejects_main_master_unknown() {
+        assert!(is_invalid_version_seed("main"));
+        assert!(is_invalid_version_seed(" master "));
+        assert!(is_invalid_version_seed("UNKNOWN"));
+        assert!(!is_invalid_version_seed("v1.2.3"));
     }
 
     #[test]
@@ -1169,10 +1315,7 @@ mod tests {
             tag: Some("v1.2.3".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 0);
@@ -1203,10 +1346,7 @@ mod tests {
             tag: Some("v1.2.3".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
@@ -1251,10 +1391,7 @@ mod tests {
             tag: Some("v1.2.3".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
@@ -1281,10 +1418,7 @@ mod tests {
             tag: Some("v2.0.0".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
@@ -1337,10 +1471,7 @@ mod tests {
             tag: Some("v2.0.0".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
@@ -1377,6 +1508,7 @@ mod tests {
         let guardian = Guardian {
             sheets,
             github: github.clone(),
+            repo_store: Arc::new(MockRepoStore::default()),
         };
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
@@ -1418,6 +1550,7 @@ mod tests {
         let guardian = Guardian {
             sheets,
             github: github.clone(),
+            repo_store: Arc::new(MockRepoStore::default()),
         };
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
@@ -1664,10 +1797,7 @@ mod tests {
             tag: Some("v2.0.0".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
 
         let updates = guardian.sheets.updates.lock().await;
@@ -1676,5 +1806,131 @@ mod tests {
         assert!(ranges.get("D2:D2").is_some());
         assert!(ranges.get("F2:F2").is_some());
         assert!(ranges.get("C2:C2").is_some());
+    }
+
+    #[tokio::test]
+    async fn sqlite_repo_store_persists_latest_and_clears_branch_seed() {
+        let tmp = NamedTempFile::new().unwrap();
+        let conn = Connection::open(tmp.path()).unwrap();
+        conn.execute(
+            "CREATE TABLE repositorios (
+                project_name TEXT PRIMARY KEY,
+                lote_id TEXT NOT NULL,
+                repo_url TEXT NOT NULL UNIQUE,
+                repo_analised_version TEXT,
+                repo_version TEXT,
+                ultima_versao_online TEXT,
+                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                status_processamento TEXT NOT NULL,
+                timestamp_fase_1 INTEGER,
+                timestamp_fase_3 INTEGER,
+                retry_count INTEGER NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (
+                project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
+                soda_universal_uuid, status_processamento, timestamp_fase_1, timestamp_fase_3, retry_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                "soxoj/maigret",
+                "LOTE_01_ALPHA",
+                "https://github.com/soxoj/maigret",
+                "main",
+                "master",
+                "main",
+                "UUID-soxoj/maigret",
+                "F2_OK",
+                1_i64,
+                1_i64,
+                0_i64
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = SqliteRepoStore::new(tmp.path().to_path_buf());
+        store
+            .persist_release_resolution("soxoj/maigret", "https://github.com/soxoj/maigret", "abc1234")
+            .await
+            .unwrap();
+
+        let conn = Connection::open(tmp.path()).unwrap();
+        let row: (String, String, String) = conn
+            .query_row(
+                "SELECT COALESCE(repo_analised_version, ''), COALESCE(repo_version, ''), COALESCE(ultima_versao_online, '')
+                 FROM repositorios WHERE project_name = 'soxoj/maigret'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "");
+        assert_eq!(row.1, "abc1234");
+        assert_eq!(row.2, "abc1234");
+    }
+
+    #[tokio::test]
+    async fn sqlite_repo_store_updates_by_repo_url_when_project_name_is_missing() {
+        let tmp = NamedTempFile::new().unwrap();
+        let conn = Connection::open(tmp.path()).unwrap();
+        conn.execute(
+            "CREATE TABLE repositorios (
+                project_name TEXT PRIMARY KEY,
+                lote_id TEXT NOT NULL,
+                repo_url TEXT NOT NULL UNIQUE,
+                repo_analised_version TEXT,
+                repo_version TEXT,
+                ultima_versao_online TEXT,
+                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                status_processamento TEXT NOT NULL,
+                timestamp_fase_1 INTEGER,
+                timestamp_fase_3 INTEGER,
+                retry_count INTEGER NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (
+                project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
+                soda_universal_uuid, status_processamento, timestamp_fase_1, timestamp_fase_3, retry_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                "yamadashy/repomix",
+                "LOTE_02",
+                "https://github.com/yamadashy/repomix",
+                "unknown",
+                "main",
+                "main",
+                "UUID-yamadashy/repomix",
+                "F2_OK",
+                1_i64,
+                1_i64,
+                0_i64
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = SqliteRepoStore::new(tmp.path().to_path_buf());
+        store
+            .persist_release_resolution("", "https://github.com/yamadashy/repomix", "v0.3.0")
+            .await
+            .unwrap();
+
+        let conn = Connection::open(tmp.path()).unwrap();
+        let row: (String, String, String) = conn
+            .query_row(
+                "SELECT COALESCE(repo_analised_version, ''), COALESCE(repo_version, ''), COALESCE(ultima_versao_online, '')
+                 FROM repositorios WHERE repo_url = 'https://github.com/yamadashy/repomix'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "");
+        assert_eq!(row.1, "v0.3.0");
+        assert_eq!(row.2, "v0.3.0");
     }
 }

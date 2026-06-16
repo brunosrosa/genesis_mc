@@ -12,7 +12,7 @@ use tracing::{error, info, warn};
 
 use rand::rngs::OsRng;
 use rand::RngCore;
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
 use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
@@ -128,6 +128,51 @@ async fn short_circuit_mark_sheet<S: SheetsClient>(
         .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", Value::Object(ranges))
         .await
         .map_err(|e| format!("Falha ao atualizar status_fase=SHORT-CIRCUIT no Sheets: {e}"))
+}
+
+async fn mark_new_link_ok_sheet<S: SheetsClient>(
+    sheets: &S,
+    spreadsheet_id: &str,
+    status_atualizacao_idx: usize,
+    row_number_1based: u32,
+) -> Result<(), String> {
+    let col = col_idx_to_a1(status_atualizacao_idx);
+    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+    let mut ranges = serde_json::Map::new();
+    ranges.insert(range, json!([["NOVO_LINK_OK"]]));
+    sheets
+        .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", Value::Object(ranges))
+        .await
+        .map_err(|e| format!("Falha ao atualizar status_atualizacao=NOVO_LINK_OK no Sheets: {e}"))
+}
+
+fn default_lote_id() -> String {
+    std::env::var("SODA_LOTE_ID_OVERRIDE")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "LOTE_01_ALPHA".to_string())
+}
+
+fn ensure_repositorios_schema(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS repositorios (
+            project_name TEXT PRIMARY KEY,
+            lote_id TEXT NOT NULL,
+            repo_url TEXT NOT NULL UNIQUE,
+            repo_analised_version TEXT,
+            repo_version TEXT,
+            ultima_versao_online TEXT,
+            soda_universal_uuid TEXT NOT NULL UNIQUE,
+            status_processamento TEXT NOT NULL,
+            timestamp_fase_1 INTEGER,
+            timestamp_fase_3 INTEGER,
+            retry_count INTEGER NOT NULL
+        )",
+        [],
+    )
+    .map_err(|e| format!("Falha ao garantir tabela repositorios: {e}"))?;
+    Ok(())
 }
 
 impl SheetsClient for SheetsMcpClient {
@@ -290,7 +335,7 @@ enum RouteDecision {
 
 fn route_for_status_atualizacao(raw: &str) -> RouteDecision {
     let s = raw.trim();
-    if s.is_empty() {
+    if s.is_empty() || s.eq_ignore_ascii_case("NOVO_LINK_OK") {
         return RouteDecision::N1;
     }
     if s.starts_with("REJEITADO_") {
@@ -313,11 +358,77 @@ trait Dispatcher: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<(), DispatchError>> + Send + 'a>>;
 }
 
+struct SqliteBootstrapDispatcher {
+    db_path: PathBuf,
+}
+
+impl SqliteBootstrapDispatcher {
+    fn new(db_path: PathBuf) -> Self {
+        Self { db_path }
+    }
+
+    fn upsert_new_link(&self, ctx: &RowCtx) -> Result<(), String> {
+        let db_path = self.db_path.clone();
+        let repo_url = ctx.repo_url.trim().to_string();
+        let project_name = if !ctx.project_name.trim().is_empty() {
+            ctx.project_name.trim().to_string()
+        } else {
+            try_extract_project_name_from_repo_url(&repo_url).ok_or_else(|| {
+                format!("N0: repo_url inválida para derivar project_name: '{}'", ctx.repo_url)
+            })?
+        };
+        let lote_id = ctx
+            .lote_id
+            .trim()
+            .to_string()
+            .chars()
+            .collect::<String>();
+        let lote_id = if lote_id.is_empty() {
+            default_lote_id()
+        } else {
+            lote_id
+        };
+        let uuid = format!("UUID-{project_name}");
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Falha ao abrir vault {}: {e}", db_path.display()))?;
+        ensure_repositorios_schema(&conn)?;
+        conn.execute(
+            "INSERT INTO repositorios (
+                project_name, lote_id, repo_url, soda_universal_uuid, status_processamento,
+                timestamp_fase_1, timestamp_fase_3, retry_count
+             ) VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, 0)
+             ON CONFLICT(project_name) DO UPDATE SET
+                lote_id = excluded.lote_id,
+                repo_url = excluded.repo_url,
+                status_processamento = excluded.status_processamento",
+            params![project_name, lote_id, repo_url, uuid, "PENDENTE"],
+        )
+        .map_err(|e| format!("Falha ao materializar repositorio no SQLite: {e}"))?;
+        Ok(())
+    }
+}
+
+impl Dispatcher for SqliteBootstrapDispatcher {
+    fn dispatch<'a>(
+        &'a self,
+        route: RouteDecision,
+        ctx: RowCtx,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DispatchError>> + Send + 'a>> {
+        Box::pin(async move {
+            match route {
+                RouteDecision::N1 => self.upsert_new_link(&ctx).map_err(DispatchError::Other),
+                _ => Ok(()),
+            }
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 struct RowCtx {
     row_number_1based: u32,
     repo_url: String,
     project_name: String,
+    lote_id: String,
     status_atualizacao: String,
     status_fase: String,
 }
@@ -536,13 +647,33 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
             let permit = sem.clone().acquire_owned().await.unwrap();
             let dispatcher = self.dispatcher.clone();
             let guard = self.guard.clone();
+            let sheets = self.sheets.clone();
+            let spreadsheet_id = spreadsheet_id.to_string();
+            let status_atualizacao_idx = cols.status_atualizacao_idx;
             let max_attempts = self.config.max_attempts_per_line.max(1);
             tasks.push(tokio::spawn(async move {
                 let _permit = permit;
                 for attempt in 1..=max_attempts {
                     let res = dispatcher.dispatch(route, ctx.clone()).await;
                     match res {
-                        Ok(()) => return Ok::<(), DispatchError>(()),
+                        Ok(()) => {
+                            if route == RouteDecision::N1
+                                && !ctx
+                                    .status_atualizacao
+                                    .trim()
+                                    .eq_ignore_ascii_case("NOVO_LINK_OK")
+                            {
+                                mark_new_link_ok_sheet(
+                                    sheets.as_ref(),
+                                    &spreadsheet_id,
+                                    status_atualizacao_idx,
+                                    ctx.row_number_1based,
+                                )
+                                .await
+                                .map_err(DispatchError::Other)?;
+                            }
+                            return Ok::<(), DispatchError>(());
+                        }
                         Err(DispatchError::RateLimited) => {
                             warn!(
                                 row_number_1based = ctx.row_number_1based,
@@ -605,6 +736,7 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
 struct MasterColumns {
     repo_url_idx: usize,
     project_name_idx: usize,
+    lote_id_idx: Option<usize>,
     status_atualizacao_idx: usize,
     status_fase_idx: usize,
 }
@@ -632,6 +764,7 @@ impl MasterColumns {
             row_number_1based,
             repo_url,
             project_name: get(self.project_name_idx),
+            lote_id: self.lote_id_idx.map(get).unwrap_or_default(),
             status_atualizacao: get(self.status_atualizacao_idx),
             status_fase: get(self.status_fase_idx),
         })
@@ -656,6 +789,7 @@ fn resolve_column_map(header_row: &[String]) -> Result<MasterColumns, String> {
     let project_name_idx = *map
         .get("project_name")
         .ok_or_else(|| "Header missing project_name".to_string())?;
+    let lote_id_idx = map.get("lote_id").copied();
     let status_atualizacao_idx = *map
         .get("status_atualizacao")
         .ok_or_else(|| "Header missing status_atualizacao".to_string())?;
@@ -665,6 +799,7 @@ fn resolve_column_map(header_row: &[String]) -> Result<MasterColumns, String> {
     Ok(MasterColumns {
         repo_url_idx,
         project_name_idx,
+        lote_id_idx,
         status_atualizacao_idx,
         status_fase_idx,
     })
@@ -695,7 +830,9 @@ async fn main() -> io::Result<()> {
 
     let watcher = DaemonWatcher {
         sheets: Arc::new(SheetsMcpClient),
-        dispatcher: Arc::new(NoopDispatcher),
+        dispatcher: Arc::new(SqliteBootstrapDispatcher::new(
+            workspace_root()?.join(".soda_data").join("soda_heuristic_vault.db"),
+        )),
         guard: BackoffGuard {
             policy: RetryPolicy {
                 backoff_base_ms: 1000,
@@ -733,18 +870,6 @@ async fn main() -> io::Result<()> {
 
     watcher.run_daemon(&spreadsheet_id).await;
     Ok(())
-}
-
-struct NoopDispatcher;
-
-impl Dispatcher for NoopDispatcher {
-    fn dispatch<'a>(
-        &'a self,
-        _route: RouteDecision,
-        _ctx: RowCtx,
-    ) -> Pin<Box<dyn Future<Output = Result<(), DispatchError>> + Send + 'a>> {
-        Box::pin(async move { Ok(()) })
-    }
 }
 
 #[cfg(test)]
@@ -828,6 +953,7 @@ mod tests {
     #[test]
     fn routing_catalog_is_deterministic_and_strict() {
         assert_eq!(route_for_status_atualizacao(""), RouteDecision::N1);
+        assert_eq!(route_for_status_atualizacao("NOVO_LINK_OK"), RouteDecision::N1);
         assert_eq!(
             route_for_status_atualizacao("INICIAR_TRIAGEM"),
             RouteDecision::N2
