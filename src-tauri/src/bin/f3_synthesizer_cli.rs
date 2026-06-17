@@ -5,7 +5,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::cognition::synthesizer::{
-    run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, OFFICIAL_FORMATTER_MODEL,
+    run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, DEFAULT_BLOCK3_MODEL_CANDIDATES,
+    OFFICIAL_FORMATTER_MODEL,
 };
 use genesis_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination};
 use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
@@ -89,6 +90,19 @@ fn now_epoch_secs() -> io::Result<i64> {
         .duration_since(UNIX_EPOCH)
         .map_err(|e| io::Error::other(format!("Falha ao calcular timestamp atual: {}", e)))?
         .as_secs() as i64)
+}
+
+fn parse_model_list_env(key: &str) -> Vec<String> {
+    std::env::var(key)
+        .ok()
+        .map(|raw| {
+            raw.split(|ch: char| matches!(ch, ',' | ';' | '\n' | '\r'))
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usize> {
@@ -3257,8 +3271,18 @@ async fn main() -> io::Result<()> {
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| OFFICIAL_FORMATTER_MODEL.to_string());
+    let mut formatter_model_block3_candidates = parse_model_list_env("OPENROUTER_FORMATTER_MODEL_BLOCK3");
+    formatter_model_block3_candidates.extend(parse_model_list_env(
+        "OPENROUTER_FORMATTER_MODEL_BLOCK3_FALLBACKS",
+    ));
+    formatter_model_block3_candidates.extend(
+        DEFAULT_BLOCK3_MODEL_CANDIDATES
+            .iter()
+            .map(|value| (*value).to_string()),
+    );
     let cfg = Phase3Config {
         model: formatter_model.clone(),
+        model_block3_candidates: formatter_model_block3_candidates,
         max_attempts_per_block: 3,
     };
 
@@ -3346,7 +3370,7 @@ async fn main() -> io::Result<()> {
     ));
     report.push_str(&format!("repo_id={}\n", repo_id));
     report.push_str(&format!("row_number={}\n", row_number));
-    report.push_str(&format!("model_used={}\n", formatter_model));
+    report.push_str(&format!("model_used={}\n", phase3_out.model_used));
     report.push_str(&format!("lote_id={}\n", lote_id));
     report.push_str(&format!("latency_f3_f4_ms={}\n", elapsed_phase3_4_ms));
     report.push_str(&format!(

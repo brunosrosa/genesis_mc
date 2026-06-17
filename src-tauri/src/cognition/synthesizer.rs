@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -13,6 +13,11 @@ use thiserror::Error;
 use tracing::{info, warn};
 
 pub const OFFICIAL_FORMATTER_MODEL: &str = "deepseek/deepseek-chat";
+pub const DEFAULT_BLOCK3_MODEL_CANDIDATES: &[&str] = &[
+    "qwen/qwen3.7-plus",
+    "moonshotai/kimi-k2.5",
+    "openai/gpt-5.4-mini",
+];
 
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
 
@@ -1255,7 +1260,33 @@ fn scrub_json_syntax_to_text(raw: &str) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phase3Config {
     pub model: String,
+    pub model_block3_candidates: Vec<String>,
     pub max_attempts_per_block: usize,
+}
+
+impl Phase3Config {
+    fn block3_models(&self) -> Vec<String> {
+        let mut seen = HashSet::new();
+        let mut ordered = Vec::new();
+        for candidate in self
+            .model_block3_candidates
+            .iter()
+            .map(String::as_str)
+            .chain(DEFAULT_BLOCK3_MODEL_CANDIDATES.iter().copied())
+        {
+            let trimmed = candidate.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if seen.insert(trimmed.to_ascii_lowercase()) {
+                ordered.push(trimmed.to_string());
+            }
+        }
+        if ordered.is_empty() {
+            ordered.push(self.model.clone());
+        }
+        ordered
+    }
 }
 
 pub trait FormatterClient: Send + Sync {
@@ -1271,6 +1302,121 @@ pub struct Phase3Output {
     pub model_used: String,
     pub row: MasterSolutionsRow,
     pub block3_justifications: HashMap<String, String>,
+}
+
+fn block3_looks_homogeneous(payload: &serde_json::Value) -> bool {
+    let fields = match payload.get("fields").and_then(|v| v.as_object()) {
+        Some(v) => v,
+        None => return false,
+    };
+    let get = |k: &str| -> Option<&str> { fields.get(k).and_then(|v| v.as_str()).map(str::trim) };
+    let eq = |k: &str, expected: &str| -> bool {
+        get(k)
+            .map(|v| v.eq_ignore_ascii_case(expected))
+            .unwrap_or(false)
+    };
+    eq("adoptability_level", "MEDIUM")
+        && eq("bare_metal_fit", "MEDIUM")
+        && eq("maintenance_burden", "MEDIUM")
+        && eq("runtime_sovereignty_fit", "MEDIUM")
+        && eq("longitudinal_sustainability", "MEDIUM")
+        && eq("local_first_fit", "MEDIUM")
+        && eq("onboarding_friction", "MEDIUM")
+        && eq("observability_operational", "MEDIUM")
+        && eq("recoverability_level", "MEDIUM")
+        && eq("degradation_behavior", "ACCEPTABLE")
+        && eq("curation_burden", "MEDIUM")
+        && eq("evolution_cost", "MEDIUM")
+        && eq("operability_level", "MEDIUM")
+        && eq("imperfection_tolerance", "MEDIUM")
+        && eq("discipline_dependency", "MEDIA")
+        && eq("abandonment_risk", "MEDIUM")
+        && eq("design_misuse_risk", "MEDIUM")
+        && eq("intrinsic_ethics_risk", "MEDIUM")
+        && eq("entropy_risk", "MEDIUM")
+        && eq("regulatory_risk", "MEDIUM")
+}
+
+fn block3_row_looks_homogeneous(row: &MasterSolutionsRow) -> bool {
+    let eq = |value: &str, expected: &str| value.trim().eq_ignore_ascii_case(expected);
+    eq(row.adoptability_level.as_str(), "MEDIUM")
+        && eq(row.bare_metal_fit.as_str(), "MEDIUM")
+        && eq(row.maintenance_burden.as_str(), "MEDIUM")
+        && eq(row.runtime_sovereignty_fit.as_str(), "MEDIUM")
+        && eq(row.longitudinal_sustainability.as_str(), "MEDIUM")
+        && eq(row.local_first_fit.as_str(), "MEDIUM")
+        && eq(row.onboarding_friction.as_str(), "MEDIUM")
+        && eq(row.observability_operational.as_str(), "MEDIUM")
+        && eq(row.recoverability_level.as_str(), "MEDIUM")
+        && eq(row.degradation_behavior.as_str(), "ACCEPTABLE")
+        && eq(row.curation_burden.as_str(), "MEDIUM")
+        && eq(row.evolution_cost.as_str(), "MEDIUM")
+        && eq(row.operability_level.as_str(), "MEDIUM")
+        && eq(row.imperfection_tolerance.as_str(), "MEDIUM")
+        && eq(row.discipline_dependency.as_str(), "MEDIA")
+        && eq(row.abandonment_risk.as_str(), "MEDIUM")
+        && eq(row.design_misuse_risk.as_str(), "MEDIUM")
+        && eq(row.intrinsic_ethics_risk.as_str(), "MEDIUM")
+        && eq(row.entropy_risk.as_str(), "MEDIUM")
+        && eq(row.regulatory_risk.as_str(), "MEDIUM")
+}
+
+fn normalize_justification_text(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch.is_ascii_whitespace() {
+                ch.to_ascii_lowercase()
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn block3_justifications_show_discrimination(justifications: &HashMap<String, String>) -> bool {
+    let normalized: Vec<String> = justifications
+        .values()
+        .map(|value| normalize_justification_text(value))
+        .filter(|value| !value.is_empty())
+        .collect();
+    if normalized.len() < 8 {
+        return false;
+    }
+    let unique = normalized.iter().collect::<HashSet<_>>().len();
+    let substantive = normalized.iter().filter(|value| value.len() >= 18).count();
+    unique >= 5 && substantive >= 8
+}
+
+fn homogeneous_medium_conflicts_with_block4(block4: &Block4Fields) -> bool {
+    let mapped_scores = [
+        block4.score_bare_metal_fit,
+        block4.score_runtime_sovereignty,
+        block4.score_operability,
+        block4.score_architectural_extractability,
+    ];
+    let outside_middle_band = mapped_scores
+        .iter()
+        .filter(|score| !(4..=6).contains(*score))
+        .count();
+    let strong_signals = mapped_scores
+        .iter()
+        .filter(|score| **score <= 2 || **score >= 8)
+        .count();
+    outside_middle_band >= 2 && strong_signals >= 1
+}
+
+fn block3_score_conflict_feedback(block4: &Block4Fields) -> String {
+    format!(
+        "BLOCK_3 anterior achatou MEDIUM, mas o bloco 4 mostrou sinais fortes: score_bare_metal_fit={}, score_runtime_sovereignty={}, score_operability={}, score_architectural_extractability={}. Reclassifique com discriminacao fina. MEDIUM so eh valido quando o eixo realmente cair no miolo; nao homogenize por default.",
+        block4.score_bare_metal_fit,
+        block4.score_runtime_sovereignty,
+        block4.score_operability,
+        block4.score_architectural_extractability
+    )
 }
 
 const BLOCK_1: u8 = 1;
@@ -1425,6 +1571,14 @@ struct BlockResponse<T> {
     fields: T,
     #[serde(default)]
     justifications: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+struct Block3Execution {
+    envelope: BlockResponse<Block3Fields>,
+    model_used: String,
+    model_index: usize,
+    homogeneous_medium: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1732,13 +1886,8 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
     prompt.push_str(&format!("project_name={}\n", block0.project_name));
     prompt.push_str(&format!("repo_url={}\n", block0.repo_url));
     prompt.push_str("OUTPUT: responda com um bloco Markdown ```json ... ``` contendo um objeto JSON.\n");
-    if block == BLOCK_3 {
-        prompt.push_str("O JSON deve conter: {\"fields\":{...}}.\n");
-        prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
-    } else {
-        prompt.push_str("O JSON deve conter: {\"fields\":{...},\"justifications\":{...}}.\n");
-        prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields/justifications. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
-    }
+    prompt.push_str("O JSON deve conter: {\"fields\":{...},\"justifications\":{...}}.\n");
+    prompt.push_str("STRICTNESS: nenhum texto fora do code-fence. Nenhuma chave extra fora de fields/justifications. Em fields, use SOMENTE as chaves listadas para este bloco (todas obrigatórias).\n");
     prompt.push_str("FIELDS_KEYS_EXATAS:\n");
     prompt.push_str(&fields_keys_for_block(block, prior));
     prompt.push('\n');
@@ -1763,6 +1912,9 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
             prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
             prompt.push_str("MODO_ROBOTICO_ENUMS_BLOCK3: para TODOS os campos ENUM do Bloco 3, fields deve conter APENAS o valor do catálogo (1 token).\n");
             prompt.push_str("PROIBIDO: hífens, ':' , parênteses, frases, ou duas opções no mesmo campo.\n");
+            prompt.push_str("ANTI_HOMOGENEIZACAO_BLOCK3: PROIBIDO responder tudo como MEDIUM/ACCEPTABLE/MEDIA por default. Distribua os valores conforme as 3 lentes e o contexto concreto do repo. Se a maioria dos campos sair igual, revise antes de responder.\n");
+            prompt.push_str("MEDIUM_LEGITIMO_BLOCK3: use MEDIUM apenas quando o eixo estiver realmente no meio-termo. Se houver sinais fortes de aptidao ou fragilidade, use LOW/HIGH/EXCELLENT/VERY_LOW/VERY_HIGH/CRITICAL conforme o catalogo.\n");
+            prompt.push_str("JUSTIFICATIONS_BLOCK3: além de fields, DEVEM vir justifications com 1 frase curta por campo crítico do bloco 3, explicando por que o valor categórico foi escolhido.\n");
             prompt.push_str("KNOWLEDGE_MODE_BLOCK3: se project.stack_base == \"UNKNOWN\" (ou context_alert presente), trate como repositorio de Conhecimento/Metodologia. Nesse caso, bare_metal_fit, runtime_sovereignty_fit e local_first_fit DEVEM ser HIGH ou EXCELLENT (nunca LOW/VERY_LOW), pois não há runtime externo.\n");
             prompt.push_str(enum_catalog_block3());
         }
@@ -1978,6 +2130,7 @@ async fn run_block_envelope<T: for<'de> Deserialize<'de> + Send>(
 ) -> Result<BlockResponse<T>, Phase3Error> {
     let mut last_error: Option<String> = None;
     let attempts = cfg.max_attempts_per_block.max(1);
+    let model = &cfg.model;
     for attempt in 1..=attempts {
         if attempt == 1 {
             info!(block, attempts, "F3 (Sintetizador SGR): iniciando sub-chamada do bloco");
@@ -1986,7 +2139,7 @@ async fn run_block_envelope<T: for<'de> Deserialize<'de> + Send>(
         }
         let prompt = build_prompt(block, block0, row, last_error.as_deref());
         let formatted = client
-            .format(&cfg.model, &prompt)
+            .format(model, &prompt)
             .await
             .map_err(Phase3Error::Transport)?;
         let json_text = match extract_json_fence(&formatted) {
@@ -2030,6 +2183,287 @@ async fn run_block_envelope<T: for<'de> Deserialize<'de> + Send>(
         attempts: cfg.max_attempts_per_block.max(1),
         message: last_error.unwrap_or_else(|| "unknown".to_string()),
     })
+}
+
+async fn run_block3_with_fallback(
+    client: &dyn FormatterClient,
+    cfg: &Phase3Config,
+    block0: &Block0Context,
+    row: &MasterSolutionsRow,
+    start_model_index: usize,
+    feedback_seed: Option<&str>,
+) -> Result<Block3Execution, Phase3Error> {
+    let models = cfg.block3_models();
+    if start_model_index >= models.len() {
+        return Err(Phase3Error::SchemaFailure {
+            block: BLOCK_3,
+            message: "BLOCK_3 ficou sem modelos de fallback disponiveis".to_string(),
+        });
+    }
+
+    let attempts = cfg.max_attempts_per_block.max(1);
+    let mut model_errors: Vec<String> = Vec::new();
+    for (model_index, model) in models.iter().enumerate().skip(start_model_index) {
+        let mut last_error = feedback_seed.map(|value| value.to_string());
+        for attempt in 1..=attempts {
+            if attempt == 1 {
+                info!(
+                    block = BLOCK_3,
+                    attempt,
+                    model = %model,
+                    "F3 (Sintetizador SGR): iniciando bloco 3 com candidato atual"
+                );
+            } else {
+                warn!(
+                    block = BLOCK_3,
+                    attempt,
+                    model = %model,
+                    "F3 (Sintetizador SGR): retry do bloco 3 no mesmo modelo"
+                );
+            }
+            let prompt = build_prompt(BLOCK_3, block0, row, last_error.as_deref());
+            let formatted = match client.format(model, &prompt).await {
+                Ok(value) => value,
+                Err(err) => {
+                    last_error = Some(err.clone());
+                    warn!(
+                        block = BLOCK_3,
+                        attempt,
+                        model = %model,
+                        error = %err,
+                        "F3 (Sintetizador SGR): falha de transporte no bloco 3"
+                    );
+                    if attempt == attempts {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            let json_text = match extract_json_fence(&formatted) {
+                Ok(json) => json,
+                Err(err) => {
+                    last_error = Some(err.to_string());
+                    warn!(
+                        block = BLOCK_3,
+                        attempt,
+                        model = %model,
+                        error = %err,
+                        "F3 (Sintetizador SGR): falha ao extrair JSON do bloco 3"
+                    );
+                    if attempt == attempts {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            let payload: serde_json::Value =
+                serde_json::from_str(&json_text).unwrap_or(serde_json::Value::Null);
+            let parsed: Result<BlockResponse<Block3Fields>, _> = serde_json::from_str(&json_text);
+            let envelope = match parsed {
+                Ok(envelope) => envelope,
+                Err(err) => {
+                    last_error = Some(err.to_string());
+                    warn!(
+                        block = BLOCK_3,
+                        attempt,
+                        model = %model,
+                        error = %err,
+                        "F3 (Sintetizador SGR): falha de schema/serde no bloco 3"
+                    );
+                    if attempt == attempts {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            if envelope.justifications.is_empty() {
+                last_error =
+                    Some("BLOCK_3 requires non-empty justifications; model returned empty".to_string());
+                warn!(
+                    block = BLOCK_3,
+                    attempt,
+                    model = %model,
+                    "F3 (Sintetizador SGR): bloco 3 rejeitado por justifications vazias"
+                );
+                if attempt == attempts {
+                    break;
+                }
+                continue;
+            }
+            let homogeneous_medium = block3_looks_homogeneous(&payload);
+            if homogeneous_medium && !block3_justifications_show_discrimination(&envelope.justifications) {
+                last_error = Some(
+                    "BLOCK_3 homogeneous output detected with weak justifications; regenerate with finer discrimination"
+                        .to_string(),
+                );
+                warn!(
+                    block = BLOCK_3,
+                    attempt,
+                    model = %model,
+                    "F3 (Sintetizador SGR): bloco 3 rejeitado por homogeneização sem lastro"
+                );
+                if attempt == attempts {
+                    break;
+                }
+                continue;
+            }
+            info!(
+                block = BLOCK_3,
+                attempt,
+                model = %model,
+                homogeneous_medium,
+                "F3 (Sintetizador SGR): bloco 3 concluído"
+            );
+            return Ok(Block3Execution {
+                envelope,
+                model_used: model.clone(),
+                model_index,
+                homogeneous_medium,
+            });
+        }
+        let model_error = last_error.unwrap_or_else(|| "unknown".to_string());
+        model_errors.push(format!("{model}: {model_error}"));
+        warn!(
+            block = BLOCK_3,
+            model = %model,
+            error = %model_error,
+            "F3 (Sintetizador SGR): modelo do bloco 3 esgotado; tentando fallback"
+        );
+    }
+    Err(Phase3Error::RetryExhausted {
+        block: BLOCK_3,
+        attempts: attempts * (models.len() - start_model_index),
+        message: model_errors.join(" | "),
+    })
+}
+
+fn apply_block3_fields_to_row(row: &mut MasterSolutionsRow, block3: &Block3Fields) {
+    row.classificacao_terminal = block3.classificacao_terminal;
+    row.acao_de_canibalizacao = block3.acao_de_canibalizacao;
+    if let Some(value) = block3.categoria_arquitetural {
+        row.categoria_arquitetural = value;
+    }
+    row.horizonte_extracao = block3.horizonte_extracao;
+    row.tipo_integracao = block3.tipo_integracao;
+    row.capability_nature_primary = block3.capability_nature_primary;
+    row.architectural_topology = block3.architectural_topology;
+    row.temporal_stability = block3.temporal_stability;
+    row.bare_metal_fit = block3.bare_metal_fit;
+    row.extractability_level = block3.extractability_level;
+    row.runtime_sovereignty_fit = block3.runtime_sovereignty_fit;
+    row.local_first_fit = block3.local_first_fit;
+    row.adoptability_level = block3.adoptability_level;
+    row.longitudinal_sustainability = block3.longitudinal_sustainability;
+    row.maintenance_burden = block3.maintenance_burden;
+    row.onboarding_friction = block3.onboarding_friction;
+    row.observability_operational = block3.observability_operational;
+    row.recoverability_level = block3.recoverability_level;
+    row.degradation_behavior = block3.degradation_behavior;
+    row.curation_burden = block3.curation_burden;
+    row.evolution_cost = block3.evolution_cost;
+    row.operability_level = block3.operability_level;
+    row.abandonment_risk = block3.abandonment_risk;
+    row.time_to_first_clear_value = block3.time_to_first_clear_value;
+    row.imperfection_tolerance = block3.imperfection_tolerance;
+    row.entropy_risk = block3.entropy_risk;
+    row.design_misuse_risk = block3.design_misuse_risk;
+    row.intrinsic_ethics_risk = block3.intrinsic_ethics_risk;
+    row.discipline_dependency = block3.discipline_dependency;
+    row.regulatory_risk = block3.regulatory_risk;
+}
+
+fn persist_block3_checkpoint(
+    repo_id: &str,
+    row: &mut MasterSolutionsRow,
+    block3_justifications: &HashMap<String, String>,
+    now_epoch: i64,
+) -> Result<(), Phase3Error> {
+    let conn = SsotInjector::open_vault_connection().map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+    SsotInjector::ensure_repo_heuristics_schema(&conn).map_err(Phase3Error::L2Failure)?;
+    SsotInjector::ensure_repo_heuristics_justifications_schema(&conn).map_err(Phase3Error::L2Failure)?;
+    let _ = conn.execute(
+        "UPDATE repo_heuristics
+         SET classificacao_terminal = ?2,
+             acao_de_canibalizacao = ?3,
+             categoria_arquitetural = ?4,
+             horizonte_extracao = ?5,
+             tipo_integracao = ?6,
+             capability_nature_primary = ?7,
+             architectural_topology = ?8,
+             temporal_stability = ?9,
+             bare_metal_fit = ?10,
+             extractability_level = ?11,
+             runtime_sovereignty_fit = ?12,
+             local_first_fit = ?13,
+             adoptability_level = ?14,
+             longitudinal_sustainability = ?15,
+             maintenance_burden = ?16,
+             onboarding_friction = ?17,
+             observability_operational = ?18,
+             recoverability_level = ?19,
+             degradation_behavior = ?20,
+             curation_burden = ?21,
+             evolution_cost = ?22,
+             operability_level = ?23,
+             abandonment_risk = ?24,
+             time_to_first_clear_value = ?25,
+             imperfection_tolerance = ?26,
+             entropy_risk = ?27,
+             design_misuse_risk = ?28,
+             intrinsic_ethics_risk = ?29,
+             discipline_dependency = ?30,
+             regulatory_risk = ?31,
+             status_fase = ?32
+         WHERE project_name = ?1",
+        params![
+            repo_id,
+            row.classificacao_terminal.as_str(),
+            row.acao_de_canibalizacao.as_str(),
+            row.categoria_arquitetural.as_str(),
+            row.horizonte_extracao.as_str(),
+            row.tipo_integracao.as_str(),
+            row.capability_nature_primary.as_str(),
+            row.architectural_topology.as_str(),
+            row.temporal_stability.as_str(),
+            row.bare_metal_fit.as_str(),
+            row.extractability_level.as_str(),
+            row.runtime_sovereignty_fit.as_str(),
+            row.local_first_fit.as_str(),
+            row.adoptability_level.as_str(),
+            row.longitudinal_sustainability.as_str(),
+            row.maintenance_burden.as_str(),
+            row.onboarding_friction.as_str(),
+            row.observability_operational.as_str(),
+            row.recoverability_level.as_str(),
+            row.degradation_behavior.as_str(),
+            row.curation_burden.as_str(),
+            row.evolution_cost.as_str(),
+            row.operability_level.as_str(),
+            row.abandonment_risk.as_str(),
+            row.time_to_first_clear_value.as_str(),
+            row.imperfection_tolerance.as_str(),
+            row.entropy_risk.as_str(),
+            row.design_misuse_risk.as_str(),
+            row.intrinsic_ethics_risk.as_str(),
+            row.discipline_dependency.as_str(),
+            row.regulatory_risk.as_str(),
+            "FASE_3_BLOCK_3_OK"
+        ],
+    )
+    .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
+    if !block3_justifications.is_empty() {
+        let json_text = serde_json::to_string(block3_justifications).unwrap_or_else(|_| "{}".to_string());
+        let _ = conn.execute(
+            "INSERT INTO repo_heuristics_justifications (project_name, block, justifications_json, created_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(project_name, block) DO UPDATE SET
+                justifications_json = excluded.justifications_json,
+                created_at = excluded.created_at",
+            params![repo_id, 3_i64, json_text, now_epoch],
+        );
+    }
+    row.status_fase = "FASE_3_BLOCK_3_OK".to_string();
+    Ok(())
 }
 
 async fn run_block4_validated(
@@ -2142,6 +2576,25 @@ async fn run_block4_validated(
     })
 }
 
+fn reconcile_checkpoint_stage(status_stage: u8, content_stage: u8) -> u8 {
+    if status_stage >= 5 && content_stage < 5 {
+        content_stage
+    } else {
+        status_stage.max(content_stage)
+    }
+}
+
+fn is_block2a_complete(row: &MasterSolutionsRow) -> bool {
+    !row.indicacao_otimista_canibalizacao.trim().is_empty()
+        && !row.ouro_a_extrair.trim().is_empty()
+        && !row.deep_pattern.trim().is_empty()
+        && !row.transplantable_core.trim().is_empty()
+        && !row.logic_math_heuristic.trim().is_empty()
+        && !row.real_structural_problem.trim().is_empty()
+        && !row.categoria_nuance_tecnica.trim().is_empty()
+        && !row.integracao_papel_exato.trim().is_empty()
+}
+
 pub async fn run_phase3_sgr(
     client: &dyn FormatterClient,
     cfg: &Phase3Config,
@@ -2166,11 +2619,24 @@ pub async fn run_phase3_sgr(
         if block1_ok {
             stage = 1;
         }
-        let block2a_ok = stage >= 1
-            && !row.ouro_a_extrair.trim().is_empty()
-            && !row.deep_pattern.trim().is_empty()
-            && !row.transplantable_core.trim().is_empty()
-            && !row.logic_math_heuristic.trim().is_empty();
+        let block2a_ok = stage >= 1 && is_block2a_complete(row);
+        // region debug-point phase3-block2a-completeness
+        if stage >= 1 && block2a_ok && row.indicacao_otimista_canibalizacao.trim().is_empty() {
+            warn!(
+                repo_id = %row.project_name,
+                block2a_ok,
+                indicacao_empty = row.indicacao_otimista_canibalizacao.trim().is_empty(),
+                ouro_empty = row.ouro_a_extrair.trim().is_empty(),
+                deep_pattern_empty = row.deep_pattern.trim().is_empty(),
+                transplantable_core_empty = row.transplantable_core.trim().is_empty(),
+                logic_math_heuristic_empty = row.logic_math_heuristic.trim().is_empty(),
+                real_structural_problem_empty = row.real_structural_problem.trim().is_empty(),
+                categoria_nuance_tecnica_empty = row.categoria_nuance_tecnica.trim().is_empty(),
+                integracao_papel_exato_empty = row.integracao_papel_exato.trim().is_empty(),
+                "F3 debug: bloco 2A considerado completo com indicacao_otimista_canibalizacao vazia"
+            );
+        }
+        // endregion debug-point phase3-block2a-completeness
         if block2a_ok {
             stage = 2;
         }
@@ -2187,6 +2653,7 @@ pub async fn run_phase3_sgr(
     info!(
         repo_id = %block0.project_name,
         model = %cfg.model,
+        block3_models = ?cfg.block3_models(),
         "F3 (Sintetizador SGR): iniciando SGR em cascata (Blocos 1 -> 2A -> 2B -> 3 -> 4)"
     );
     let started_total = Instant::now();
@@ -2200,19 +2667,38 @@ pub async fn run_phase3_sgr(
     let now_epoch = block0.data_ultima_analise;
     let mut row = MasterSolutionsRow::from_block0(block0.clone());
     let mut block3_justifications: HashMap<String, String> = HashMap::new();
+    let mut block3_model_used = cfg
+        .block3_models()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| cfg.model.clone());
+    let mut block3_model_index = 0usize;
     let mut stage: u8 = 0;
 
     if let Some(existing) = SsotInjector::try_load_repo_heuristics_row(&repo_id)
         .map_err(|e| Phase3Error::L2Failure(e.to_string()))?
     {
-        stage = stage_from_status_fase(existing.status_fase.as_str());
-        stage = stage.max(infer_stage_from_row(&existing));
+        let stage_from_status = stage_from_status_fase(existing.status_fase.as_str());
+        let stage_from_content = infer_stage_from_row(&existing);
+        stage = if stage_from_status >= 5 && stage_from_content < 5 {
+            warn!(
+                repo_id = %repo_id,
+                status_fase = %existing.status_fase,
+                stage_from_status,
+                stage_from_content,
+                "F3: checkpoint terminal invalidado; payload persistido incompleto"
+            );
+            reconcile_checkpoint_stage(stage_from_status, stage_from_content)
+        } else {
+            reconcile_checkpoint_stage(stage_from_status, stage_from_content)
+        };
         if stage > 0 {
             row = existing;
             block3_justifications = SsotInjector::load_block3_justifications(&repo_id)
                 .unwrap_or_default();
         }
     }
+    let mut block3_homogeneous_medium = stage >= 4 && block3_row_looks_homogeneous(&row);
 
     if stage >= 5 {
         info!(
@@ -2371,134 +2857,32 @@ pub async fn run_phase3_sgr(
         set_phase3_block(&state, 3, "Bloco 3 (ENUMs)").await;
         let _telemetry_block3 =
             spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-        let block3_env = run_block_envelope::<Block3Fields>(client, cfg, BLOCK_3, &block0, &row).await?;
+        let block3_exec = run_block3_with_fallback(client, cfg, &block0, &row, 0, None).await?;
         drop(_telemetry_block3);
-        block3_justifications = block3_env.justifications;
-        let block3 = block3_env.fields.sanitize();
-        row.classificacao_terminal = block3.classificacao_terminal;
-        row.acao_de_canibalizacao = block3.acao_de_canibalizacao;
-        if let Some(value) = block3.categoria_arquitetural {
-            row.categoria_arquitetural = value;
-        }
-        row.horizonte_extracao = block3.horizonte_extracao;
-        row.tipo_integracao = block3.tipo_integracao;
-        row.capability_nature_primary = block3.capability_nature_primary;
-        row.architectural_topology = block3.architectural_topology;
-        row.temporal_stability = block3.temporal_stability;
-        row.bare_metal_fit = block3.bare_metal_fit;
-        row.extractability_level = block3.extractability_level;
-        row.runtime_sovereignty_fit = block3.runtime_sovereignty_fit;
-        row.local_first_fit = block3.local_first_fit;
-        row.adoptability_level = block3.adoptability_level;
-        row.longitudinal_sustainability = block3.longitudinal_sustainability;
-        row.maintenance_burden = block3.maintenance_burden;
-        row.onboarding_friction = block3.onboarding_friction;
-        row.observability_operational = block3.observability_operational;
-        row.recoverability_level = block3.recoverability_level;
-        row.degradation_behavior = block3.degradation_behavior;
-        row.curation_burden = block3.curation_burden;
-        row.evolution_cost = block3.evolution_cost;
-        row.operability_level = block3.operability_level;
-        row.abandonment_risk = block3.abandonment_risk;
-        row.time_to_first_clear_value = block3.time_to_first_clear_value;
-        row.imperfection_tolerance = block3.imperfection_tolerance;
-        row.entropy_risk = block3.entropy_risk;
-        row.design_misuse_risk = block3.design_misuse_risk;
-        row.intrinsic_ethics_risk = block3.intrinsic_ethics_risk;
-        row.discipline_dependency = block3.discipline_dependency;
-        row.regulatory_risk = block3.regulatory_risk;
-
-        {
-            let conn = SsotInjector::open_vault_connection()
-                .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
-            SsotInjector::ensure_repo_heuristics_schema(&conn)
-                .map_err(Phase3Error::L2Failure)?;
-            SsotInjector::ensure_repo_heuristics_justifications_schema(&conn)
-                .map_err(Phase3Error::L2Failure)?;
-            let _ = conn.execute(
-                "UPDATE repo_heuristics
-                 SET classificacao_terminal = ?2,
-                     acao_de_canibalizacao = ?3,
-                     categoria_arquitetural = ?4,
-                     horizonte_extracao = ?5,
-                     tipo_integracao = ?6,
-                     capability_nature_primary = ?7,
-                     architectural_topology = ?8,
-                     temporal_stability = ?9,
-                     bare_metal_fit = ?10,
-                     extractability_level = ?11,
-                     runtime_sovereignty_fit = ?12,
-                     local_first_fit = ?13,
-                     adoptability_level = ?14,
-                     longitudinal_sustainability = ?15,
-                     maintenance_burden = ?16,
-                     onboarding_friction = ?17,
-                     observability_operational = ?18,
-                     recoverability_level = ?19,
-                     degradation_behavior = ?20,
-                     curation_burden = ?21,
-                     evolution_cost = ?22,
-                     operability_level = ?23,
-                     abandonment_risk = ?24,
-                     time_to_first_clear_value = ?25,
-                     imperfection_tolerance = ?26,
-                     entropy_risk = ?27,
-                     design_misuse_risk = ?28,
-                     intrinsic_ethics_risk = ?29,
-                     discipline_dependency = ?30,
-                     regulatory_risk = ?31,
-                     status_fase = ?32
-                 WHERE project_name = ?1",
-                params![
-                    repo_id.as_str(),
-                    row.classificacao_terminal.as_str(),
-                    row.acao_de_canibalizacao.as_str(),
-                    row.categoria_arquitetural.as_str(),
-                    row.horizonte_extracao.as_str(),
-                    row.tipo_integracao.as_str(),
-                    row.capability_nature_primary.as_str(),
-                    row.architectural_topology.as_str(),
-                    row.temporal_stability.as_str(),
-                    row.bare_metal_fit.as_str(),
-                    row.extractability_level.as_str(),
-                    row.runtime_sovereignty_fit.as_str(),
-                    row.local_first_fit.as_str(),
-                    row.adoptability_level.as_str(),
-                    row.longitudinal_sustainability.as_str(),
-                    row.maintenance_burden.as_str(),
-                    row.onboarding_friction.as_str(),
-                    row.observability_operational.as_str(),
-                    row.recoverability_level.as_str(),
-                    row.degradation_behavior.as_str(),
-                    row.curation_burden.as_str(),
-                    row.evolution_cost.as_str(),
-                    row.operability_level.as_str(),
-                    row.abandonment_risk.as_str(),
-                    row.time_to_first_clear_value.as_str(),
-                    row.imperfection_tolerance.as_str(),
-                    row.entropy_risk.as_str(),
-                    row.design_misuse_risk.as_str(),
-                    row.intrinsic_ethics_risk.as_str(),
-                    row.discipline_dependency.as_str(),
-                    row.regulatory_risk.as_str(),
-                    "FASE_3_BLOCK_3_OK"
-                ],
-            )
-            .map_err(|e| Phase3Error::L2Failure(e.to_string()))?;
-            if !block3_justifications.is_empty() {
-                let json_text =
-                    serde_json::to_string(&block3_justifications).unwrap_or_else(|_| "{}".to_string());
-                let _ = conn.execute(
-                    "INSERT INTO repo_heuristics_justifications (project_name, block, justifications_json, created_at)
-                     VALUES (?1, ?2, ?3, ?4)
-                     ON CONFLICT(project_name, block) DO UPDATE SET
-                        justifications_json = excluded.justifications_json,
-                        created_at = excluded.created_at",
-                    params![repo_id.as_str(), 3_i64, json_text, now_epoch],
-                );
-            }
-        }
-        row.status_fase = "FASE_3_BLOCK_3_OK".to_string();
+        block3_model_used = block3_exec.model_used.clone();
+        block3_model_index = block3_exec.model_index;
+        block3_homogeneous_medium = block3_exec.homogeneous_medium;
+        block3_justifications = block3_exec.envelope.justifications;
+        // region debug-point phase3-block3-raw-fields
+        info!(
+            repo_id = %repo_id,
+            block3_model_used = %block3_model_used,
+            raw_adoptability_level = %format!("{:?}", block3_exec.envelope.fields.adoptability_level),
+            raw_bare_metal_fit = %format!("{:?}", block3_exec.envelope.fields.bare_metal_fit),
+            raw_maintenance_burden = %format!("{:?}", block3_exec.envelope.fields.maintenance_burden),
+            raw_runtime_sovereignty_fit = %format!("{:?}", block3_exec.envelope.fields.runtime_sovereignty_fit),
+            raw_observability_operational = %format!("{:?}", block3_exec.envelope.fields.observability_operational),
+            raw_recoverability_level = %format!("{:?}", block3_exec.envelope.fields.recoverability_level),
+            raw_degradation_behavior = %format!("{:?}", block3_exec.envelope.fields.degradation_behavior),
+            raw_entropy_risk = %format!("{:?}", block3_exec.envelope.fields.entropy_risk),
+            raw_regulatory_risk = %format!("{:?}", block3_exec.envelope.fields.regulatory_risk),
+            justifications_keys = block3_justifications.len(),
+            "F3 debug: bloco 3 fields brutos antes de sanitize/persist"
+        );
+        // endregion debug-point phase3-block3-raw-fields
+        let block3 = block3_exec.envelope.fields.sanitize();
+        apply_block3_fields_to_row(&mut row, &block3);
+        persist_block3_checkpoint(&repo_id, &mut row, &block3_justifications, now_epoch)?;
         stage = 4;
         info!("F3 (Sintetizador SGR): Bloco 3 concluído (checkpoint OK)");
     } else {
@@ -2511,7 +2895,33 @@ pub async fn run_phase3_sgr(
         set_phase3_block(&state, 4, "Bloco 4 (Scores)").await;
         let _telemetry_block4 =
             spawn_phase3_block_telemetry(block0.project_name.clone(), started_total, state.clone());
-        let block4: Block4Fields = run_block4_validated(client, cfg, &block0, &row).await?;
+        let mut block4: Block4Fields = run_block4_validated(client, cfg, &block0, &row).await?;
+        while block3_homogeneous_medium && homogeneous_medium_conflicts_with_block4(&block4) {
+            let feedback = block3_score_conflict_feedback(&block4);
+            warn!(
+                repo_id = %repo_id,
+                block3_model_used = %block3_model_used,
+                feedback = %feedback,
+                "F3 (Sintetizador SGR): bloco 3 homogeneo conflitou com os scores do bloco 4; acionando fallback"
+            );
+            let block3_exec = run_block3_with_fallback(
+                client,
+                cfg,
+                &block0,
+                &row,
+                block3_model_index + 1,
+                Some(feedback.as_str()),
+            )
+            .await?;
+            block3_model_used = block3_exec.model_used.clone();
+            block3_model_index = block3_exec.model_index;
+            block3_homogeneous_medium = block3_exec.homogeneous_medium;
+            block3_justifications = block3_exec.envelope.justifications;
+            let block3 = block3_exec.envelope.fields.sanitize();
+            apply_block3_fields_to_row(&mut row, &block3);
+            persist_block3_checkpoint(&repo_id, &mut row, &block3_justifications, now_epoch)?;
+            block4 = run_block4_validated(client, cfg, &block0, &row).await?;
+        }
         drop(_telemetry_block4);
 
         row.score_philosophical_fit = block4.score_philosophical_fit;
@@ -2570,7 +2980,7 @@ pub async fn run_phase3_sgr(
     }
 
     Ok(Phase3Output {
-        model_used: cfg.model.clone(),
+        model_used: block3_model_used,
         row,
         block3_justifications,
     })
@@ -2843,6 +3253,7 @@ mod tests {
 
     struct MockFormatterClient {
         calls: Arc<Mutex<Vec<String>>>,
+        models: Arc<Mutex<Vec<String>>>,
         responses: Arc<Mutex<Vec<Result<String, String>>>>,
     }
 
@@ -2850,6 +3261,7 @@ mod tests {
         fn new(responses: Vec<Result<String, String>>) -> Self {
             Self {
                 calls: Arc::new(Mutex::new(Vec::new())),
+                models: Arc::new(Mutex::new(Vec::new())),
                 responses: Arc::new(Mutex::new(responses)),
             }
         }
@@ -2858,11 +3270,12 @@ mod tests {
     impl FormatterClient for MockFormatterClient {
         fn format<'a>(
             &'a self,
-            _model: &'a str,
+            model: &'a str,
             prompt: &'a str,
         ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
             Box::pin(async move {
                 self.calls.lock().await.push(prompt.to_string());
+                self.models.lock().await.push(model.to_string());
                 let mut guard = self.responses.lock().await;
                 if guard.is_empty() {
                     return Err("no more responses".to_string());
@@ -2894,6 +3307,97 @@ mod tests {
         }
     }
 
+    fn phase3_cfg() -> Phase3Config {
+        Phase3Config {
+            model: OFFICIAL_FORMATTER_MODEL.to_string(),
+            model_block3_candidates: Vec::new(),
+            max_attempts_per_block: 3,
+        }
+    }
+
+    fn block3_payload_json(
+        fields: serde_json::Value,
+        justifications: serde_json::Value,
+    ) -> String {
+        format!(
+            "```json\n{}\n```",
+            serde_json::json!({
+                "fields": fields,
+                "justifications": justifications
+            })
+        )
+    }
+
+    fn block3_homogeneous_fields_json() -> serde_json::Value {
+        serde_json::json!({
+            "classificacao_terminal": "APROVADO_PARA_PRODUCAO",
+            "acao_de_canibalizacao":"NENHUMA",
+            "categoria_arquitetural":"UILibrary",
+            "horizonte_extracao":"MEDIUM",
+            "tipo_integracao":"INTEGRATE_AS_COMPONENT",
+            "capability_nature_primary":"LIBRARY",
+            "architectural_topology":"MODULAR",
+            "temporal_stability":"STABLE",
+            "bare_metal_fit":"MEDIUM",
+            "extractability_level":"MEDIUM",
+            "runtime_sovereignty_fit":"MEDIUM",
+            "local_first_fit":"MEDIUM",
+            "adoptability_level":"MEDIUM",
+            "longitudinal_sustainability":"MEDIUM",
+            "maintenance_burden":"MEDIUM",
+            "onboarding_friction":"MEDIUM",
+            "observability_operational":"MEDIUM",
+            "recoverability_level":"MEDIUM",
+            "degradation_behavior":"ACCEPTABLE",
+            "curation_burden":"MEDIUM",
+            "evolution_cost":"MEDIUM",
+            "operability_level":"MEDIUM",
+            "abandonment_risk":"MEDIUM",
+            "time_to_first_clear_value":"MEDIUM",
+            "imperfection_tolerance":"MEDIUM",
+            "entropy_risk":"MEDIUM",
+            "design_misuse_risk":"MEDIUM",
+            "intrinsic_ethics_risk":"MEDIUM",
+            "discipline_dependency":"MEDIA",
+            "regulatory_risk":"MEDIUM"
+        })
+    }
+
+    fn block3_discriminated_fields_json() -> serde_json::Value {
+        serde_json::json!({
+            "classificacao_terminal": "APROVADO_COM_RESSALVAS",
+            "acao_de_canibalizacao":"ABSORVER_LOGICA",
+            "categoria_arquitetural":"UILibrary",
+            "horizonte_extracao":"SHORT",
+            "tipo_integracao":"INTEGRATE_AS_COMPONENT",
+            "capability_nature_primary":"LIBRARY",
+            "architectural_topology":"MODULAR",
+            "temporal_stability":"STABLE",
+            "bare_metal_fit":"HIGH",
+            "extractability_level":"HIGH",
+            "runtime_sovereignty_fit":"HIGH",
+            "local_first_fit":"MEDIUM",
+            "adoptability_level":"HIGH",
+            "longitudinal_sustainability":"MEDIUM",
+            "maintenance_burden":"LOW",
+            "onboarding_friction":"MEDIUM",
+            "observability_operational":"HIGH",
+            "recoverability_level":"HIGH",
+            "degradation_behavior":"GRACEFUL",
+            "curation_burden":"LOW",
+            "evolution_cost":"LOW",
+            "operability_level":"HIGH",
+            "abandonment_risk":"LOW",
+            "time_to_first_clear_value":"SHORT",
+            "imperfection_tolerance":"HIGH",
+            "entropy_risk":"LOW",
+            "design_misuse_risk":"LOW",
+            "intrinsic_ethics_risk":"LOW",
+            "discipline_dependency":"BAIXA",
+            "regulatory_risk":"LOW"
+        })
+    }
+
     #[test]
     fn extracts_json_code_fence_strictly() {
         let text = "aaa\n```json\n{\"ok\":true}\n```\nbbb";
@@ -2908,27 +3412,196 @@ mod tests {
         assert_eq!(extracted, "{\"ok\":true}");
     }
 
+    #[test]
+    fn terminal_checkpoint_does_not_override_incomplete_payload_stage() {
+        assert_eq!(reconcile_checkpoint_stage(5, 0), 0);
+        assert_eq!(reconcile_checkpoint_stage(5, 1), 1);
+        assert_eq!(reconcile_checkpoint_stage(5, 4), 4);
+        assert_eq!(reconcile_checkpoint_stage(5, 5), 5);
+        assert_eq!(reconcile_checkpoint_stage(2, 3), 3);
+    }
+
+    #[test]
+    fn block2a_requires_indicacao_and_all_narrative_fields() {
+        let mut row = MasterSolutionsRow::default();
+        row.indicacao_otimista_canibalizacao = String::new();
+        row.ouro_a_extrair = "ouro".into();
+        row.deep_pattern = "pattern".into();
+        row.transplantable_core = "core".into();
+        row.logic_math_heuristic = "heuristic".into();
+        row.real_structural_problem = "problem".into();
+        row.categoria_nuance_tecnica = "nuance".into();
+        row.integracao_papel_exato = "integracao".into();
+        assert!(!is_block2a_complete(&row));
+
+        row.indicacao_otimista_canibalizacao = "canibalizar".into();
+        assert!(is_block2a_complete(&row));
+    }
+
+    #[test]
+    fn detects_homogeneous_block3_payload() {
+        let payload = serde_json::json!({
+            "fields": {
+                "adoptability_level":"MEDIUM",
+                "bare_metal_fit":"MEDIUM",
+                "maintenance_burden":"MEDIUM",
+                "runtime_sovereignty_fit":"MEDIUM",
+                "longitudinal_sustainability":"MEDIUM",
+                "local_first_fit":"MEDIUM",
+                "onboarding_friction":"MEDIUM",
+                "observability_operational":"MEDIUM",
+                "recoverability_level":"MEDIUM",
+                "degradation_behavior":"ACCEPTABLE",
+                "curation_burden":"MEDIUM",
+                "evolution_cost":"MEDIUM",
+                "operability_level":"MEDIUM",
+                "imperfection_tolerance":"MEDIUM",
+                "discipline_dependency":"MEDIA",
+                "abandonment_risk":"MEDIUM",
+                "design_misuse_risk":"MEDIUM",
+                "intrinsic_ethics_risk":"MEDIUM",
+                "entropy_risk":"MEDIUM",
+                "regulatory_risk":"MEDIUM"
+            }
+        });
+        assert!(block3_looks_homogeneous(&payload));
+
+        let payload_non_homogeneous = serde_json::json!({
+            "fields": {
+                "adoptability_level":"LOW",
+                "bare_metal_fit":"HIGH",
+                "maintenance_burden":"VERY_HIGH",
+                "runtime_sovereignty_fit":"HIGH",
+                "longitudinal_sustainability":"LOW",
+                "local_first_fit":"HIGH",
+                "onboarding_friction":"HIGH",
+                "observability_operational":"VERY_LOW",
+                "recoverability_level":"VERY_LOW",
+                "degradation_behavior":"CATASTROPHIC",
+                "curation_burden":"HIGH",
+                "evolution_cost":"HIGH",
+                "operability_level":"LOW",
+                "imperfection_tolerance":"LOW",
+                "discipline_dependency":"ALTA",
+                "abandonment_risk":"CRITICAL",
+                "design_misuse_risk":"CRITICAL",
+                "intrinsic_ethics_risk":"LOW",
+                "entropy_risk":"CRITICAL",
+                "regulatory_risk":"LOW"
+            }
+        });
+        assert!(!block3_looks_homogeneous(&payload_non_homogeneous));
+    }
+
+    #[test]
+    fn block3_models_default_to_preferred_order() {
+        let cfg = phase3_cfg();
+        assert_eq!(
+            cfg.block3_models(),
+            vec![
+                "qwen/qwen3.7-plus".to_string(),
+                "moonshotai/kimi-k2.5".to_string(),
+                "openai/gpt-5.4-mini".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn homogeneous_medium_only_conflicts_when_scores_leave_middle_band() {
+        let consistent = Block4Fields {
+            score_philosophical_fit: 5,
+            score_bare_metal_fit: 5,
+            score_architectural_extractability: 6,
+            score_operability: 4,
+            score_creep_risk: 5,
+            score_runtime_sovereignty: 5,
+            score_model_logic_value: 5,
+            score_ethics_safety: 5,
+            score_intrinsic_risk: 5,
+        };
+        assert!(!homogeneous_medium_conflicts_with_block4(&consistent));
+
+        let conflicting = Block4Fields {
+            score_philosophical_fit: 5,
+            score_bare_metal_fit: 9,
+            score_architectural_extractability: 8,
+            score_operability: 2,
+            score_creep_risk: 5,
+            score_runtime_sovereignty: 8,
+            score_model_logic_value: 5,
+            score_ethics_safety: 5,
+            score_intrinsic_risk: 5,
+        };
+        assert!(homogeneous_medium_conflicts_with_block4(&conflicting));
+    }
+
+    #[tokio::test]
+    async fn block3_fallback_tries_next_model_after_weak_homogeneous_medium() {
+        let weak_justifications = serde_json::json!({
+            "adoptability_level": "mesma justificativa para tudo",
+            "bare_metal_fit": "mesma justificativa para tudo",
+            "runtime_sovereignty_fit": "mesma justificativa para tudo",
+            "local_first_fit": "mesma justificativa para tudo",
+            "maintenance_burden": "mesma justificativa para tudo",
+            "observability_operational": "mesma justificativa para tudo",
+            "recoverability_level": "mesma justificativa para tudo",
+            "operability_level": "mesma justificativa para tudo"
+        });
+        let strong_justifications = serde_json::json!({
+            "adoptability_level": "A adocao fica alta porque a API central ja isola o fluxo principal.",
+            "bare_metal_fit": "O nucleo roda sem dependencia interpretada e respeita integracao local.",
+            "runtime_sovereignty_fit": "A execucao principal permanece sob controle local com pouca dependencia externa.",
+            "local_first_fit": "A proposta funciona offline em boa parte do fluxo e sincroniza depois.",
+            "maintenance_burden": "A manutencao e baixa porque o escopo da biblioteca e pequeno e previsivel.",
+            "observability_operational": "A instrumentacao e boa porque os eventos criticos sao claros e rastreaveis.",
+            "recoverability_level": "A recuperacao e alta porque o estado pode ser reconstruido sem cascata longa.",
+            "operability_level": "A operacao e alta porque o setup e objetivo e o caminho de suporte e curto."
+        });
+        let responses = vec![
+            Ok(block3_payload_json(
+                block3_homogeneous_fields_json(),
+                weak_justifications,
+            )),
+            Ok(block3_payload_json(
+                block3_discriminated_fields_json(),
+                strong_justifications,
+            )),
+        ];
+        let client = MockFormatterClient::new(responses);
+        let mut cfg = phase3_cfg();
+        cfg.max_attempts_per_block = 1;
+        let row = MasterSolutionsRow::from_block0(block0());
+
+        let result = run_block3_with_fallback(&client, &cfg, &block0(), &row, 0, None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.model_used, "moonshotai/kimi-k2.5");
+        let models = client.models.lock().await;
+        assert_eq!(
+            *models,
+            vec![
+                "qwen/qwen3.7-plus".to_string(),
+                "moonshotai/kimi-k2.5".to_string()
+            ]
+        );
+    }
+
     #[tokio::test]
     async fn retries_up_to_three_injecting_error() {
         let responses = vec![
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"x\"}\n```".to_string()),
-            Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"x\"}, \"justifications\": {}}\n```".to_string()),
             Ok("```json\n{\"fields\": {\"proposta_original_resumo\": \"r\",\"declared_description_ptbr\":\"Descricao\",\"visao_do_enxame\":\"v\",\"justificativa_decisao\":\"j\",\"executive_verdict\":\"t\",\"risco_principal\":\"rp\",\"risco_linha_vermelha\":\"rlv\",\"observacoes\":\"o\"}, \"justifications\": {\"proposta_original_resumo\":\"k\"}}\n```".to_string()),
-            Ok("```json\n{\"fields\": {\"ouro_a_extrair\": \"1\",\"deep_pattern\":\"2\",\"transplantable_core\":\"3\",\"logic_math_heuristic\":\"4\",\"real_structural_problem\":\"5\",\"categoria_nuance_tecnica\":\"6\",\"integracao_papel_exato\":\"7\",\"must_components_prod_ux\":\"8\",\"must_components_arq\":\"9\",\"must_components_ops\":\"10\",\"detected_toxic_deps\":\"11\",\"do_not_absorb\":\"12\",\"where_ai_should_not_enter\":\"13\"}, \"justifications\": {\"ouro_a_extrair\":\"k\"}}\n```".to_string()),
-            Ok("```json\n{\"fields\": {\"classificacao_terminal\": \"APROVADO_PARA_PRODUCAO\",\"acao_de_canibalizacao\":\"NENHUMA\",\"categoria_arquitetural\":\"LIBRARY\",\"horizonte_extracao\":\"SHORT\",\"tipo_integracao\":\"INTEGRATE_AS_COMPONENT\",\"capability_nature_primary\":\"LIBRARY\",\"architectural_topology\":\"MODULAR\",\"temporal_stability\":\"STABLE\",\"bare_metal_fit\":\"HIGH\",\"extractability_level\":\"HIGH\",\"runtime_sovereignty_fit\":\"HIGH\",\"local_first_fit\":\"HIGH\",\"adoptability_level\":\"HIGH\",\"longitudinal_sustainability\":\"HIGH\",\"maintenance_burden\":\"LOW\",\"onboarding_friction\":\"LOW\",\"observability_operational\":\"HIGH\",\"recoverability_level\":\"HIGH\",\"degradation_behavior\":\"GRACEFUL\",\"curation_burden\":\"LOW\",\"evolution_cost\":\"LOW\",\"operability_level\":\"HIGH\",\"abandonment_risk\":\"LOW\",\"time_to_first_clear_value\":\"SHORT\",\"imperfection_tolerance\":\"HIGH\",\"entropy_risk\":\"LOW\",\"design_misuse_risk\":\"LOW\",\"intrinsic_ethics_risk\":\"LOW\",\"discipline_dependency\":\"NENHUMA\",\"regulatory_risk\":\"LOW\"}}\n```".to_string()),
-            Ok("```json\n{\"fields\": {\"score_philosophical_fit\": 1,\"score_bare_metal_fit\":2,\"score_architectural_extractability\":3,\"score_operability\":4,\"score_creep_risk\":5,\"score_runtime_sovereignty\":6,\"score_model_logic_value\":7,\"score_ethics_safety\":8,\"score_intrinsic_risk\":9}, \"justifications\": {\"score_philosophical_fit\":\"k\"}}\n```".to_string()),
         ];
         let client = MockFormatterClient::new(responses);
-        let cfg = Phase3Config {
-            model: OFFICIAL_FORMATTER_MODEL.to_string(),
-            max_attempts_per_block: 3,
-        };
+        let cfg = phase3_cfg();
+        let initial_row = MasterSolutionsRow::from_block0(block0());
 
-        let res = run_phase3_sgr(&client, &cfg, block0()).await;
+        let res = run_block::<Block1Fields>(&client, &cfg, BLOCK_1, &block0(), &initial_row).await;
         assert!(res.is_ok());
 
         let calls = client.calls.lock().await;
-        assert_eq!(calls.len(), 6);
+        assert_eq!(calls.len(), 2);
         assert!(calls[1].contains("PREVIOUS_SCHEMA_ERROR"));
     }
 
@@ -2990,6 +3663,7 @@ mod tests {
             covered.insert(*name);
         }
         covered.insert("declared_description");
+        covered.remove("declared_description_ptbr");
 
         let expected: BTreeSet<&str> = MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().copied().collect();
         assert_eq!(covered, expected);
