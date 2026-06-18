@@ -39,9 +39,9 @@ const MCP_TIMEOUT: Duration = Duration::from_secs(180);
 const MCP_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[cfg(not(test))]
-const MCP_CHUNK_DELAY: Duration = Duration::from_secs(1);
+const POST_ATOMIC_ROW_WRITE_DELAY: Duration = Duration::from_millis(1_000);
 #[cfg(test)]
-const MCP_CHUNK_DELAY: Duration = Duration::from_millis(1);
+const POST_ATOMIC_ROW_WRITE_DELAY: Duration = Duration::from_millis(1);
 
 #[cfg(not(test))]
 const MCP_RELOAD_DELAY: Duration = Duration::from_secs(4);
@@ -121,6 +121,12 @@ impl SheetsClient for McpGoogleWorkspaceSheetsClient {
                 let map = chunk
                     .as_object()
                     .ok_or_else(|| "Chunk inválido para write_values".to_string())?;
+                if map.len() != 1 {
+                    return Err(format!(
+                        "Escrita no Sheets rejeitada: esperado 1 range atômico, recebeu {} ranges",
+                        map.len()
+                    ));
+                }
 
                 let entries: Vec<(&String, &Value)> = map.iter().collect();
                 let total = entries.len();
@@ -171,35 +177,7 @@ impl SheetsClient for McpGoogleWorkspaceSheetsClient {
 
             match ranges {
                 Value::Object(map) if map.len() > 30 => {
-                    let entries: Vec<(String, Value)> = map.into_iter().collect();
-                    let total = entries.len();
-                    let chunk_count = 3.min(total.max(1));
-                    let chunk_size = (total + chunk_count - 1) / chunk_count;
-
-                    for chunk_idx in 0..chunk_count {
-                        let start = chunk_idx * chunk_size;
-                        if start >= total {
-                            break;
-                        }
-                        let end = ((chunk_idx + 1) * chunk_size).min(total);
-                        let mut chunk_map = serde_json::Map::new();
-                        for (k, v) in entries[start..end].iter() {
-                            chunk_map.insert(k.clone(), v.clone());
-                        }
-                        info!(
-                            spreadsheet_id = spreadsheet_id,
-                            sheet = sheet,
-                            chunk_idx = chunk_idx,
-                            chunk_count = chunk_count,
-                            ranges = chunk_map.len(),
-                            "Despachando micro-lote para Google Sheets (chunking)"
-                        );
-                        call_with_reload(Value::Object(chunk_map)).await?;
-
-                        if chunk_idx + 1 < chunk_count {
-                            tokio::time::sleep(MCP_CHUNK_DELAY).await;
-                        }
-                    }
+                    return Err("Chunking de ranges desativado: use 1 range atômico por linha".to_string());
                 }
                 other => {
                     call_with_reload(other).await?;
@@ -929,6 +907,7 @@ impl SsotInjector {
             .unwrap_or_default();
         let mut dynamic_skip: Vec<&'static str> = Vec::new();
         if !lote_cell.is_empty() {
+            row.lote_id = lote_cell.clone();
             dynamic_skip.push("lote_id");
         }
         if !sheet_proposta.is_empty() {
@@ -1060,6 +1039,7 @@ impl SsotInjector {
             .unwrap_or_default();
         let mut merged_skip: Vec<&'static str> = skip_columns.iter().copied().collect();
         if !lote_cell.is_empty() && !merged_skip.contains(&"lote_id") {
+            row.lote_id = lote_cell.clone();
             merged_skip.push("lote_id");
         }
         if !sheet_proposta.is_empty() && !merged_skip.contains(&"proposta_original_resumo") {
@@ -1197,6 +1177,7 @@ impl SsotInjector {
             .unwrap_or_default();
         let mut dynamic_skip: Vec<&'static str> = Vec::new();
         if !lote_cell.is_empty() {
+            row.lote_id = lote_cell.clone();
             dynamic_skip.push("lote_id");
         }
         if !sheet_proposta.is_empty() {
@@ -2064,11 +2045,11 @@ impl SsotInjector {
             return Err(SsotError::CloudFailure(format!(
                 "Header MASTER_SOLUTIONS inválido: esperado {} colunas, recebeu {}",
                 SSOT_EXPECTED_COLUMNS,
-                header_row.len()
+                header_row.len(),
             )));
         }
         for (idx, expected) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
-            let actual = header_row.get(idx).map(|s| s.trim()).unwrap_or("");
+            let actual = header_row.get(idx).map(|s| s.trim()).unwrap_or_default();
             if actual != *expected {
                 return Err(SsotError::CloudFailure(format!(
                     "Header MASTER_SOLUTIONS divergente na coluna {}: esperado '{}', recebido '{}'",
@@ -2109,10 +2090,9 @@ impl SsotInjector {
         Ok(header_row)
     }
 
-    fn validate_sheet_row_values(row_values_by_name: &HashMap<&'static str, Value>) -> Result<(), SsotError> {
+    fn validate_sheet_row_values(row_values_by_name: &HashMap<&'static str, String>) -> Result<(), SsotError> {
         let valid_from_ok = row_values_by_name
             .get("valid_from")
-            .and_then(|v| v.as_str())
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false);
         if !valid_from_ok {
@@ -2122,7 +2102,6 @@ impl SsotInjector {
         }
         let valid_to_ok = row_values_by_name
             .get("valid_to")
-            .and_then(|v| v.as_str())
             .map(|s| s.trim().is_empty() || s.contains('-'))
             .unwrap_or(false);
         if !valid_to_ok {
@@ -2132,7 +2111,6 @@ impl SsotInjector {
         }
         let embargo_ok = row_values_by_name
             .get("embargo_status")
-            .and_then(|v| v.as_str())
             .map(|s| s == "LIVRE" || s == "EMBARGADO")
             .unwrap_or(false);
         if !embargo_ok {
@@ -2197,41 +2175,62 @@ impl SsotInjector {
             )));
         }
 
-        let mut by_name: HashMap<&'static str, Value> = HashMap::with_capacity(SSOT_EXPECTED_COLUMNS);
+        let mut by_name: HashMap<&'static str, String> =
+            HashMap::with_capacity(SSOT_EXPECTED_COLUMNS);
         for (idx, name) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
-            by_name.insert(*name, row_values[idx].clone());
+            by_name.insert(*name, Self::maybe_fix_mojibake(&row_values[idx]));
         }
         Self::validate_sheet_row_values(&by_name)?;
-        let mut map = serde_json::Map::new();
-        for (idx, canonical_name) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
-            if skip_columns.iter().any(|skip| skip == canonical_name) {
-                continue;
+        let write_columns = header_row.len();
+        if !skip_columns.is_empty() {
+            let unsupported: Vec<&str> = skip_columns
+                .iter()
+                .copied()
+                .filter(|name| {
+                    !matches!(
+                        *name,
+                        "lote_id" | "proposta_original_resumo" | "categoria_arquitetural"
+                    )
+                })
+                .collect();
+            if !unsupported.is_empty() {
+                return Err(SsotError::ValidationFailure(format!(
+                    "Skip de colunas não suportado para escrita atômica: {}",
+                    unsupported.join(", ")
+                )));
             }
-            let Some(value) = by_name.get(canonical_name) else { continue };
-            let value = match value {
-                Value::Number(n) => Value::String(n.to_string()),
-                Value::Null => Value::String(String::new()),
-                other => other.clone(),
-            };
-            let value = match value {
-                Value::String(s) => Value::String(Self::maybe_fix_mojibake(&s)),
-                other => other,
-            };
-            let col = Self::col_idx_to_a1(idx);
-            let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
-            map.insert(range, json!(vec![vec![value]]));
+        }
+        if write_columns > SSOT_EXPECTED_COLUMNS {
+            return Err(SsotError::ValidationFailure(format!(
+                "Header excede colunas suportadas para escrita: {} > {}",
+                write_columns, SSOT_EXPECTED_COLUMNS
+            )));
         }
 
-        if map.is_empty() {
-            return Err(SsotError::ValidationFailure(
-                "HeaderResolver não encontrou colunas conhecidas para escrita".to_string(),
-            ));
+        let mut row_out: Vec<String> = Vec::with_capacity(write_columns);
+        for idx in 0..write_columns {
+            let canonical_name = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+                .get(idx)
+                .copied()
+                .ok_or_else(|| {
+                    SsotError::ValidationFailure(format!(
+                        "Header aponta para coluna fora do catálogo canônico: idx={}",
+                        idx
+                    ))
+                })?;
+            let value = by_name.get(canonical_name).cloned().unwrap_or_default();
+            row_out.push(value);
         }
+
+        let end_col = Self::col_idx_to_a1(write_columns.saturating_sub(1));
+        let range = format!("A{}:{}{}", row_number_1based, end_col, row_number_1based);
+        let mut map = serde_json::Map::new();
+        map.insert(range, json!([row_out]));
 
         info!(
-            ranges = map.len(),
+            columns = write_columns,
             sheet_range = %sheet_range_for_row(row_number_1based),
-            "Payload dinâmico do Google Sheets montado (late-binding por header)"
+            "Payload do Google Sheets montado (1 range atômico por linha)"
         );
         Ok(Value::Object(map))
     }
@@ -2247,7 +2246,9 @@ impl SsotInjector {
         sheets
             .batch_update_cells(spreadsheet_id, MASTER_SOLUTIONS_SHEET, payload)
             .await
-            .map_err(SsotError::CloudFailure)
+            .map_err(SsotError::CloudFailure)?;
+        tokio::time::sleep(POST_ATOMIC_ROW_WRITE_DELAY).await;
+        Ok(())
     }
 
     pub async fn update_single_status_fase(
@@ -2288,20 +2289,16 @@ impl SsotInjector {
         client
             .batch_update_cells(&sheets_id, MASTER_SOLUTIONS_SHEET, payload)
             .await
-            .map_err(SsotError::CloudFailure)
+            .map_err(SsotError::CloudFailure)?;
+        tokio::time::sleep(POST_ATOMIC_ROW_WRITE_DELAY).await;
+        Ok(())
     }
 
     fn cell_text_for_confirmation(payload: &MasterSolutionsRow, canonical_col: &str) -> Option<String> {
         let idx = MASTER_SOLUTIONS_CANONICAL_COLUMNS
             .iter()
             .position(|col| *col == canonical_col)?;
-        let value = payload.to_sheet_row().get(idx)?.clone();
-        match value {
-            Value::String(s) => Some(Self::maybe_fix_mojibake(&s)),
-            Value::Number(n) => Some(n.to_string()),
-            Value::Null => Some(String::new()),
-            other => Some(other.to_string().trim_matches('"').to_string()),
-        }
+        payload.to_sheet_row().get(idx).map(|value| Self::maybe_fix_mojibake(value))
     }
 
     fn parse_confirmation_number(raw: &str) -> Option<f64> {
@@ -2496,42 +2493,25 @@ mod tests {
             .collect();
         let batch = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap();
         let obj = batch.as_object().unwrap();
-        let project_col =
-            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "project_name").unwrap());
-        let repo_url_col =
-            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "repo_url").unwrap());
-        let valid_from_col =
-            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "valid_from").unwrap());
-        let valid_to_col =
-            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "valid_to").unwrap());
-        let embargo_col =
-            SsotInjector::col_idx_to_a1(MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == "embargo_status").unwrap());
+        let values = obj
+            .get("A2:CG2")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap();
+        assert_eq!(values.len(), 85);
 
+        let idx = |name: &str| MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == name).unwrap();
+        assert_eq!(values[idx("project_name")], json!("owner / repo"));
         assert_eq!(
-            obj.get(&format!("{project_col}2:{project_col}2")).unwrap(),
-            &json!(vec![vec![json!("owner / repo")]])
+            values[idx("repo_url")],
+            json!("https://github.com/owner/repo")
         );
-        assert_eq!(
-            obj.get(&format!("{repo_url_col}2:{repo_url_col}2")).unwrap(),
-            &json!(vec![vec![json!("https://github.com/owner/repo")]])
-        );
-        assert!(obj
-            .get(&format!("{valid_from_col}2:{valid_from_col}2"))
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|v| v.as_str())
-            .map(|s| !s.trim().is_empty() && s.contains('-'))
-            .unwrap_or(false));
-        assert_eq!(
-            obj.get(&format!("{valid_to_col}2:{valid_to_col}2")).unwrap(),
-            &json!(vec![vec![json!("")]])
-        );
-        assert_eq!(
-            obj.get(&format!("{embargo_col}2:{embargo_col}2")).unwrap(),
-            &json!(vec![vec![json!("LIVRE")]])
-        );
+        let valid_from = values[idx("valid_from")].as_str().unwrap_or_default();
+        assert!(!valid_from.trim().is_empty() && valid_from.contains('-'));
+        assert_eq!(values[idx("valid_to")], json!(""));
+        assert_eq!(values[idx("embargo_status")], json!("LIVRE"));
         assert_eq!(validated.project_name, "owner/repo");
     }
 
@@ -2863,6 +2843,6 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "SHEET_ID");
         assert_eq!(calls[0].1, "MASTER_SOLUTIONS");
-        assert!(calls[0].2.get("D2:D2").is_some());
+        assert!(calls[0].2.get("A2:CG2").is_some());
     }
 }

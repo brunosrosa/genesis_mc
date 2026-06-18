@@ -629,17 +629,10 @@ fn build_dynamic_sheet_ranges_for_row(
         let v = canonical_values
             .get(idx)
             .cloned()
-            .unwrap_or_else(|| serde_json::Value::String(String::new()));
-        let cell = match v {
-            serde_json::Value::Null => String::new(),
-            serde_json::Value::Bool(b) => b.to_string(),
-            serde_json::Value::Number(n) => n.to_string(),
-            serde_json::Value::String(s) => s,
-            other => other.to_string(),
-        };
+            .unwrap_or_default();
         by_name.insert(
             genesis_mc_lib::persist::sheets_utils::normalize_header_cell(name),
-            cell,
+            v,
         );
     }
 

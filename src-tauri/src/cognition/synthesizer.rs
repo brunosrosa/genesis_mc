@@ -986,7 +986,7 @@ impl MasterSolutionsRow {
         }
     }
 
-    pub fn to_sheet_row(&self) -> Vec<serde_json::Value> {
+    pub fn to_sheet_row(&self) -> Vec<String> {
         let pretty_project_name = self.project_name.replace("/", " / ");
         let declared_description = if self.declared_description_ptbr.trim().is_empty() {
             self.declared_description.clone()
@@ -1031,91 +1031,91 @@ impl MasterSolutionsRow {
         let embargo_status = embargo_label(self.embargo_status).to_string();
 
         Vec::from([
-            serde_json::json!(&self.status_atualizacao),
-            serde_json::json!(&self.status_fase),
-            serde_json::json!(categoria_arquitetural),
-            serde_json::json!(pretty_project_name),
-            serde_json::json!(&self.repo_url),
-            serde_json::json!(&self.licenca),
-            serde_json::json!(&self.proposta_original_resumo),
-            serde_json::json!(&self.ultima_versao_online),
-            serde_json::json!(declared_description),
-            serde_json::json!(&self.stack_base),
-            serde_json::json!(&self.indicacao_otimista_canibalizacao),
-            serde_json::json!(&self.repo_analised_version),
-            serde_json::json!(&self.lente_a_sentido_prod_ux),
-            serde_json::json!(&self.lente_b_estrutura_arq),
-            serde_json::json!(&self.lente_c_realidade_ops),
-            serde_json::json!(&self.visao_do_enxame),
-            serde_json::json!(&self.justificativa_decisao),
-            serde_json::json!(&self.executive_verdict),
-            serde_json::json!(&self.ouro_a_extrair),
-            serde_json::json!(&self.deep_pattern),
-            serde_json::json!(&self.transplantable_core),
-            serde_json::json!(&self.logic_math_heuristic),
-            serde_json::json!(&self.real_structural_problem),
-            serde_json::json!(classificacao_terminal),
-            serde_json::json!(&self.integracao_papel_exato),
-            serde_json::json!(&self.categoria_nuance_tecnica),
-            serde_json::json!(capability_nature_primary),
-            serde_json::json!(&self.must_components_prod_ux),
-            serde_json::json!(&self.must_components_arq),
-            serde_json::json!(&self.must_components_ops),
-            serde_json::json!(&self.detected_toxic_deps),
-            serde_json::json!(&self.do_not_absorb),
-            serde_json::json!(&self.where_ai_should_not_enter),
-            serde_json::json!(acao_de_canibalizacao),
-            serde_json::json!(tipo_integracao),
-            serde_json::json!(horizonte_extracao),
-            serde_json::json!(time_to_first_clear_value),
-            serde_json::json!(extractability_level),
-            serde_json::json!(temporal_stability),
-            serde_json::json!(architectural_topology),
-            serde_json::json!(adoptability_level),
-            serde_json::json!(bare_metal_fit),
-            serde_json::json!(maintenance_burden),
-            serde_json::json!(runtime_sovereignty_fit),
-            serde_json::json!(longitudinal_sustainability),
-            serde_json::json!(local_first_fit),
-            serde_json::json!(onboarding_friction),
-            serde_json::json!(observability_operational),
-            serde_json::json!(recoverability_level),
-            serde_json::json!(degradation_behavior),
-            serde_json::json!(curation_burden),
-            serde_json::json!(evolution_cost),
-            serde_json::json!(operability_level),
-            serde_json::json!(imperfection_tolerance),
-            serde_json::json!(discipline_dependency),
-            serde_json::json!(&self.risco_principal),
-            serde_json::json!(&self.risco_linha_vermelha),
-            serde_json::json!(&self.observacoes),
-            serde_json::json!(abandonment_risk),
-            serde_json::json!(design_misuse_risk),
-            serde_json::json!(intrinsic_ethics_risk),
-            serde_json::json!(entropy_risk),
-            serde_json::json!(regulatory_risk),
-            serde_json::json!(format_float_1(self.score_final)),
-            serde_json::json!(&self.score_philosophical_fit),
-            serde_json::json!(format_float_1(self.score_fit_geral_soda)),
-            serde_json::json!(format_float_1(self.score_architectural_priority)),
-            serde_json::json!(&self.score_architectural_extractability),
-            serde_json::json!(format_float_1(self.score_human_product_priority)),
-            serde_json::json!(format_float_1(self.score_absorption_readiness)),
-            serde_json::json!(format_float_1(self.score_operational_priority)),
-            serde_json::json!(&self.score_bare_metal_fit),
-            serde_json::json!(&self.score_operability),
-            serde_json::json!(&self.score_runtime_sovereignty),
-            serde_json::json!(&self.score_model_logic_value),
-            serde_json::json!(&self.score_ethics_safety),
-            serde_json::json!(&self.score_creep_risk),
-            serde_json::json!(&self.score_intrinsic_risk),
-            serde_json::json!(format_float_1(self.score_sustainability_adjusted_fit)),
-            serde_json::json!(valid_from),
-            serde_json::json!(valid_to),
-            serde_json::json!(&self.analise_origem),
-            serde_json::json!(data_ultima_analise),
-            serde_json::json!(&self.lote_id),
-            serde_json::json!(embargo_status),
+            self.status_atualizacao.clone(),
+            self.status_fase.clone(),
+            categoria_arquitetural.to_string(),
+            pretty_project_name,
+            self.repo_url.clone(),
+            self.licenca.clone(),
+            self.proposta_original_resumo.clone(),
+            self.ultima_versao_online.clone(),
+            declared_description,
+            self.stack_base.clone(),
+            self.indicacao_otimista_canibalizacao.clone(),
+            self.repo_analised_version.clone(),
+            self.lente_a_sentido_prod_ux.clone(),
+            self.lente_b_estrutura_arq.clone(),
+            self.lente_c_realidade_ops.clone(),
+            self.visao_do_enxame.clone(),
+            self.justificativa_decisao.clone(),
+            self.executive_verdict.clone(),
+            self.ouro_a_extrair.clone(),
+            self.deep_pattern.clone(),
+            self.transplantable_core.clone(),
+            self.logic_math_heuristic.clone(),
+            self.real_structural_problem.clone(),
+            classificacao_terminal.to_string(),
+            self.integracao_papel_exato.clone(),
+            self.categoria_nuance_tecnica.clone(),
+            capability_nature_primary.to_string(),
+            self.must_components_prod_ux.clone(),
+            self.must_components_arq.clone(),
+            self.must_components_ops.clone(),
+            self.detected_toxic_deps.clone(),
+            self.do_not_absorb.clone(),
+            self.where_ai_should_not_enter.clone(),
+            acao_de_canibalizacao.to_string(),
+            tipo_integracao.to_string(),
+            horizonte_extracao.to_string(),
+            time_to_first_clear_value.to_string(),
+            extractability_level.to_string(),
+            temporal_stability.to_string(),
+            architectural_topology.to_string(),
+            adoptability_level.to_string(),
+            bare_metal_fit.to_string(),
+            maintenance_burden.to_string(),
+            runtime_sovereignty_fit.to_string(),
+            longitudinal_sustainability.to_string(),
+            local_first_fit.to_string(),
+            onboarding_friction.to_string(),
+            observability_operational.to_string(),
+            recoverability_level.to_string(),
+            degradation_behavior.to_string(),
+            curation_burden.to_string(),
+            evolution_cost.to_string(),
+            operability_level.to_string(),
+            imperfection_tolerance.to_string(),
+            discipline_dependency.to_string(),
+            self.risco_principal.clone(),
+            self.risco_linha_vermelha.clone(),
+            self.observacoes.clone(),
+            abandonment_risk.to_string(),
+            design_misuse_risk.to_string(),
+            intrinsic_ethics_risk.to_string(),
+            entropy_risk.to_string(),
+            regulatory_risk.to_string(),
+            format_float_1(self.score_final),
+            self.score_philosophical_fit.to_string(),
+            format_float_1(self.score_fit_geral_soda),
+            format_float_1(self.score_architectural_priority),
+            self.score_architectural_extractability.to_string(),
+            format_float_1(self.score_human_product_priority),
+            format_float_1(self.score_absorption_readiness),
+            format_float_1(self.score_operational_priority),
+            self.score_bare_metal_fit.to_string(),
+            self.score_operability.to_string(),
+            self.score_runtime_sovereignty.to_string(),
+            self.score_model_logic_value.to_string(),
+            self.score_ethics_safety.to_string(),
+            self.score_creep_risk.to_string(),
+            self.score_intrinsic_risk.to_string(),
+            format_float_1(self.score_sustainability_adjusted_fit),
+            valid_from,
+            valid_to,
+            self.analise_origem.clone(),
+            data_ultima_analise,
+            self.lote_id.clone(),
+            embargo_status,
         ])
     }
 }
@@ -1894,10 +1894,14 @@ struct Block3Fields {
     discipline_dependency: DisciplineDependency,
     #[serde(rename = "regulatory_risk")]
     regulatory_risk: RiskLevel4,
+    #[serde(rename = "stack_base", default)]
+    stack_base: Option<String>,
+    #[serde(rename = "licenca", default)]
+    licenca: Option<String>,
 }
 
 impl Block3Fields {
-    fn sanitize(self) -> Result<Self, String> {
+    fn sanitize(self, needs_stack_base_cure: bool, needs_licenca_cure: bool) -> Result<Self, String> {
         let mut out = self;
         let mut strict_errors: Vec<&'static str> = Vec::new();
         if matches!(out.classificacao_terminal, TerminalClassification::Unknown) {
@@ -1993,6 +1997,24 @@ impl Block3Fields {
         if matches!(out.regulatory_risk, RiskLevel4::Unknown) {
             warn!("Bloco 3: `regulatory_risk` caiu em fallback UNKNOWN");
         }
+        if needs_stack_base_cure {
+            let raw = out.stack_base.as_deref().unwrap_or_default();
+            let normalized = normalize_stack_base_cure_value(raw).ok_or_else(|| {
+                "Cura falhou: stack_base ausente/UNKNOWN ou fora da taxonomia permitida".to_string()
+            })?;
+            out.stack_base = Some(normalized.to_string());
+        } else {
+            out.stack_base = None;
+        }
+        if needs_licenca_cure {
+            let raw = out.licenca.as_deref().unwrap_or_default();
+            let normalized = normalize_licenca_cure_value(raw).ok_or_else(|| {
+                "Cura falhou: licenca ausente/UNKNOWN ou fora da taxonomia permitida".to_string()
+            })?;
+            out.licenca = Some(normalized);
+        } else {
+            out.licenca = None;
+        }
         if strict_errors.is_empty() {
             Ok(out)
         } else {
@@ -2078,6 +2100,14 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
             prompt.push_str("SGR_BLOCK3: preencha mentalmente justifications primeiro e só depois emita os ENUMs correspondentes em fields.\n");
             prompt.push_str("KNOWLEDGE_MODE_BLOCK3: se project.stack_base == \"UNKNOWN\" (ou context_alert presente), trate como repositorio de Conhecimento/Metodologia. Nesse caso, bare_metal_fit, runtime_sovereignty_fit e local_first_fit DEVEM ser HIGH ou EXCELLENT (nunca LOW/VERY_LOW), pois não há runtime externo.\n");
             prompt.push_str(enum_catalog_block3());
+            if needs_stack_base_cure_for_block3(prior) {
+                prompt.push_str("stack_base: Rust|Python|NodeJS|Go|JVM|DotNet|Mixed\n");
+                prompt.push_str("CURA_STACK_BASE: Se você precisar curar stack_base, deduza as linguagens primárias pela árvore de arquivos e sinais no README (extensões, manifests, pastas src/, package.json, Cargo.toml, go.mod, pom.xml, *.csproj). Responda com 1 valor do catálogo acima.\n");
+            }
+            if needs_licenca_cure_for_block3(prior) {
+                prompt.push_str("licenca: MIT|Apache-2.0|GPL-3.0|GPL-2.0|LGPL-3.0|AGPL-3.0|BSD-3-Clause|BSD-2-Clause|MPL-2.0|ISC|Unlicense|Copyrighted|NÃO ESPECIFICADO\n");
+                prompt.push_str("CURA_LICENCA: Se você precisar curar licenca, inferir do README/AST (spdx identifiers e padrões comuns). Se não houver evidência suficiente, use 'Copyrighted' ou 'NÃO ESPECIFICADO'. Responda com 1 valor do catálogo acima.\n");
+            }
         }
         _ => {}
     }
@@ -2113,6 +2143,12 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
             );
             if categoria_is_present {
                 keys.retain(|k| *k != "categoria_arquitetural");
+            }
+            if needs_stack_base_cure_for_block3(prior) {
+                keys.push("stack_base");
+            }
+            if needs_licenca_cure_for_block3(prior) {
+                keys.push("licenca");
             }
             serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
         }
@@ -2158,6 +2194,61 @@ curation_burden: LOW|MEDIUM|HIGH|VERY_HIGH\n\
 evolution_cost: LOW|MEDIUM|HIGH|VERY_HIGH\n\
 \n\
 time_to_first_clear_value: IMMEDIATE|SHORT|MEDIUM|LONG|VERY_LONG\n\n"
+}
+
+fn needs_stack_base_cure_for_block3(prior: &MasterSolutionsRow) -> bool {
+    let value = prior.stack_base.trim();
+    value.is_empty() || value.eq_ignore_ascii_case("unknown") || value.eq_ignore_ascii_case("n/a")
+}
+
+fn needs_licenca_cure_for_block3(prior: &MasterSolutionsRow) -> bool {
+    let value = prior.licenca.trim();
+    value.is_empty() || value.eq_ignore_ascii_case("unknown") || value.eq_ignore_ascii_case("n/a")
+}
+
+fn normalize_stack_base_cure_value(raw: &str) -> Option<&'static str> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") || trimmed.eq_ignore_ascii_case("n/a") {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    match lower.as_str() {
+        "rust" => Some("Rust"),
+        "python" => Some("Python"),
+        "nodejs" | "node.js" | "node" | "javascript" | "typescript" => Some("NodeJS"),
+        "go" | "golang" => Some("Go"),
+        "jvm" | "java" | "kotlin" | "scala" => Some("JVM"),
+        "dotnet" | ".net" | "c#" | "csharp" | "f#" | "fsharp" => Some("DotNet"),
+        "mixed" => Some("Mixed"),
+        _ => None,
+    }
+}
+
+fn normalize_licenca_cure_value(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") || trimmed.eq_ignore_ascii_case("n/a") {
+        return None;
+    }
+    let upper = trimmed.to_ascii_uppercase();
+    let normalized = match upper.as_str() {
+        "MIT" => "MIT",
+        "APACHE-2.0" | "APACHE 2.0" | "APACHE2.0" => "Apache-2.0",
+        "GPL" | "GPL-3.0" | "GPL-3" => "GPL-3.0",
+        "GPL-2.0" | "GPL-2" => "GPL-2.0",
+        "LGPL-3.0" | "LGPL-3" => "LGPL-3.0",
+        "AGPL-3.0" | "AGPL-3" => "AGPL-3.0",
+        "BSD-3-CLAUSE" | "BSD 3-CLAUSE" | "BSD-3" => "BSD-3-Clause",
+        "BSD-2-CLAUSE" | "BSD 2-CLAUSE" | "BSD-2" => "BSD-2-Clause",
+        "MPL-2.0" | "MPL 2.0" | "MPL2.0" => "MPL-2.0",
+        "ISC" => "ISC",
+        "UNLICENSE" => "Unlicense",
+        "COPYRIGHTED" | "COPYRIGHT" => "Copyrighted",
+        "NÃO ESPECIFICADO" | "NAO ESPECIFICADO" | "NAO_ESPECIFICADO" | "NÃO_ESPECIFICADO" => {
+            "NÃO ESPECIFICADO"
+        }
+        _ => return None,
+    };
+    Some(normalized.to_string())
 }
 
 fn compact_context_for_block(
@@ -2538,6 +2629,12 @@ fn apply_block3_fields_to_row(row: &mut MasterSolutionsRow, block3: &Block3Field
     row.intrinsic_ethics_risk = block3.intrinsic_ethics_risk;
     row.discipline_dependency = block3.discipline_dependency;
     row.regulatory_risk = block3.regulatory_risk;
+    if let Some(value) = block3.stack_base.as_deref() {
+        row.stack_base = value.to_string();
+    }
+    if let Some(value) = block3.licenca.as_deref() {
+        row.licenca = value.to_string();
+    }
 }
 
 fn persist_block3_checkpoint(
@@ -3051,7 +3148,10 @@ pub async fn run_phase3_sgr(
         let block3 = block3_exec
             .envelope
             .fields
-            .sanitize()
+            .sanitize(
+                needs_stack_base_cure_for_block3(&row),
+                needs_licenca_cure_for_block3(&row),
+            )
             .map_err(|message| Phase3Error::SchemaFailure { block: BLOCK_3, message })?;
         apply_block3_fields_to_row(&mut row, &block3);
         persist_block3_checkpoint(&repo_id, &mut row, &block3_justifications, now_epoch)?;
@@ -3092,7 +3192,10 @@ pub async fn run_phase3_sgr(
             let block3 = block3_exec
                 .envelope
                 .fields
-                .sanitize()
+                .sanitize(
+                    needs_stack_base_cure_for_block3(&row),
+                    needs_licenca_cure_for_block3(&row),
+                )
                 .map_err(|message| Phase3Error::SchemaFailure { block: BLOCK_3, message })?;
             apply_block3_fields_to_row(&mut row, &block3);
             persist_block3_checkpoint(&repo_id, &mut row, &block3_justifications, now_epoch)?;
@@ -3336,7 +3439,7 @@ pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 85] = [
 pub fn build_batch_update_payload(
     row_number_1based: u32,
     row: &MasterSolutionsRow,
-) -> HashMap<String, Vec<Vec<serde_json::Value>>> {
+) -> HashMap<String, Vec<Vec<String>>> {
     let mut map = HashMap::new();
     map.insert(sheet_range_for_row(row_number_1based), vec![row.to_sheet_row()]);
     map
@@ -3814,6 +3917,38 @@ mod tests {
     }
 
     #[test]
+    fn block3_injects_cure_fields_when_stack_base_or_licenca_are_unknown() {
+        let block0 = block0();
+        let mut prior = MasterSolutionsRow::from_block0(block0.clone());
+        prior.stack_base = "UNKNOWN".to_string();
+        prior.licenca = "UNKNOWN".to_string();
+
+        let prompt = build_prompt(3, &block0, &prior, None);
+        let marker = "FIELDS_KEYS_EXATAS:\n";
+        let start = prompt.find(marker).unwrap() + marker.len();
+        let end = prompt[start..].find('\n').unwrap() + start;
+        let json_list = &prompt[start..end];
+        let keys: Vec<String> = serde_json::from_str(json_list).unwrap();
+
+        assert!(keys.contains(&"stack_base".to_string()));
+        assert!(keys.contains(&"licenca".to_string()));
+        assert!(prompt.contains("CURA_STACK_BASE"));
+        assert!(prompt.contains("CURA_LICENCA"));
+    }
+
+    #[test]
+    fn cure_normalizers_accept_known_aliases_and_reject_unknown() {
+        assert_eq!(normalize_stack_base_cure_value("typescript"), Some("NodeJS"));
+        assert_eq!(normalize_stack_base_cure_value("UNKNOWN"), None);
+        assert_eq!(normalize_licenca_cure_value("Apache 2.0"), Some("Apache-2.0".to_string()));
+        assert_eq!(
+            normalize_licenca_cure_value("nao especificado"),
+            Some("NÃO ESPECIFICADO".to_string())
+        );
+        assert_eq!(normalize_licenca_cure_value("UNKNOWN"), None);
+    }
+
+    #[test]
     fn batch_payload_maps_dynamic_range_and_85_columns() {
         let row = MasterSolutionsRow::from_block0(block0());
         let payload = build_batch_update_payload(2, &row);
@@ -3821,7 +3956,7 @@ mod tests {
         let rows = payload.get(&range).unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].len(), 85);
-        assert_eq!(rows[0][3], serde_json::json!("owner / repo"));
+        assert_eq!(rows[0][3], "owner / repo");
     }
 
     #[test]
@@ -3901,16 +4036,16 @@ mod tests {
         };
         let arr = row.to_sheet_row();
         assert_eq!(arr.len(), 85);
-        assert_eq!(arr[63], serde_json::json!("1.2"));
-        assert_eq!(arr[65], serde_json::json!("2.3"));
-        assert_eq!(arr[66], serde_json::json!("3.4"));
-        assert_eq!(arr[68], serde_json::json!("4.5"));
-        assert_eq!(arr[69], serde_json::json!("5.6"));
-        assert_eq!(arr[70], serde_json::json!("6.7"));
-        assert_eq!(arr[78], serde_json::json!("7.8"));
-        assert_eq!(arr[79], serde_json::json!(format_epoch_utc(1_700_000_000)));
-        assert_eq!(arr[80], serde_json::json!(""));
-        assert_eq!(arr[84], serde_json::json!("LIVRE"));
+        assert_eq!(arr[63], "1.2");
+        assert_eq!(arr[65], "2.3");
+        assert_eq!(arr[66], "3.4");
+        assert_eq!(arr[68], "4.5");
+        assert_eq!(arr[69], "5.6");
+        assert_eq!(arr[70], "6.7");
+        assert_eq!(arr[78], "7.8");
+        assert_eq!(arr[79], format_epoch_utc(1_700_000_000));
+        assert_eq!(arr[80], "");
+        assert_eq!(arr[84], "LIVRE");
     }
 
     #[test]
