@@ -10,6 +10,9 @@ pub struct CommunityMetaPayload {
     pub open_issues_count: u32,
     pub open_prs_count: u32,
     pub licenca: String,
+    pub description: Option<String>,
+    pub full_name: Option<String>,
+    pub name: Option<String>,
     pub last_commit_sha: Option<String>,
     pub last_commit_date: Option<DateTime<Utc>>,
     pub recent_prs: Vec<CommunityPrMeta>,
@@ -135,6 +138,12 @@ impl CommunityMetaFetcher {
             default_branch: String,
             #[serde(default)]
             license: Option<GithubLicense>,
+            #[serde(default)]
+            description: Option<String>,
+            #[serde(default)]
+            full_name: Option<String>,
+            #[serde(default)]
+            name: Option<String>,
         }
 
         #[derive(Deserialize)]
@@ -224,6 +233,21 @@ impl CommunityMetaFetcher {
             open_issues_count: open_issues.total_count,
             open_prs_count: open_prs.total_count,
             licenca,
+            description: repo
+                .description
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            full_name: repo
+                .full_name
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            name: repo
+                .name
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
             last_commit_sha: last_commit.as_ref().map(|commit| commit.sha.clone()),
             last_commit_date: last_commit.map(|commit| commit.commit.author.date),
             recent_prs: recent_prs

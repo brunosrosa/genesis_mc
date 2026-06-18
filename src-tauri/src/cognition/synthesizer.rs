@@ -97,23 +97,41 @@ async fn set_phase3_block(state: &Arc<tokio::sync::Mutex<Phase3TelemetryState>>,
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TerminalClassification {
+    #[serde(rename = "STACK_CORE_PLANO_A1")]
+    StackCorePlanoA1,
+    #[serde(rename = "STACK_CORE_PLANO_A2")]
+    StackCorePlanoA2,
+    #[serde(rename = "STACK_CORE_PLANO_B")]
+    StackCorePlanoB,
+    #[serde(rename = "INTEGRATE_AS_COMPONENT")]
+    IntegrateAsComponent,
+    #[serde(rename = "ABSORB_PARTIALLY", alias = "APROVADO_COM_RESSALVAS", alias = "APPROVED_WITH_REMARKS")]
+    AbsorbPartially,
+    #[serde(rename = "ABSORB_CONCEPT")]
+    AbsorbConcept,
+    #[serde(rename = "USE_AS_INSPIRATION_ONLY")]
+    UseAsInspirationOnly,
+    #[serde(rename = "REJECT", alias = "REJEITADO_DESCARTE", alias = "REJECT_DISCARD", alias = "REJECTED_DISCARD")]
+    Reject,
+    #[serde(rename = "SHORT-CIRCUIT")]
+    ShortCircuit,
     #[default]
-    #[serde(rename = "APROVADO_PARA_PRODUCAO", alias = "APPROVED_FOR_PRODUCTION")]
-    AprovadoParaProducao,
-    #[serde(rename = "APROVADO_COM_RESSALVAS", alias = "APPROVED_WITH_REMARKS")]
-    AprovadoComRessalvas,
-    #[serde(rename = "REJEITADO_DESCARTE", alias = "REJECT_DISCARD", alias = "REJECTED_DISCARD")]
-    RejeitadoDescarte,
-    #[serde(other)]
+    #[serde(rename = "UNKNOWN", alias = "APROVADO_PARA_PRODUCAO", alias = "APPROVED_FOR_PRODUCTION")]
     Unknown,
 }
 
 impl TerminalClassification {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::AprovadoParaProducao => "APROVADO_PARA_PRODUCAO",
-            Self::AprovadoComRessalvas => "APROVADO_COM_RESSALVAS",
-            Self::RejeitadoDescarte => "REJEITADO_DESCARTE",
+            Self::StackCorePlanoA1 => "STACK_CORE_PLANO_A1",
+            Self::StackCorePlanoA2 => "STACK_CORE_PLANO_A2",
+            Self::StackCorePlanoB => "STACK_CORE_PLANO_B",
+            Self::IntegrateAsComponent => "INTEGRATE_AS_COMPONENT",
+            Self::AbsorbPartially => "ABSORB_PARTIALLY",
+            Self::AbsorbConcept => "ABSORB_CONCEPT",
+            Self::UseAsInspirationOnly => "USE_AS_INSPIRATION_ONLY",
+            Self::Reject => "REJECT",
+            Self::ShortCircuit => "SHORT-CIRCUIT",
             Self::Unknown => "UNKNOWN",
         }
     }
@@ -121,23 +139,56 @@ impl TerminalClassification {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CannibalizationAction {
+    #[serde(rename = "Data Model / Schema")]
+    DataModelSchema,
+    #[serde(rename = "Prompt / Heuristic Seed", alias = "EXTRAIR_SCRIPTS", alias = "EXTRACT_SCRIPTS")]
+    PromptHeuristicSeed,
+    #[serde(rename = "Protocol / Standard")]
+    ProtocolStandard,
+    #[serde(rename = "Concept", alias = "ABSORVER_LOGICA", alias = "ABSORB_LOGIC")]
+    Concept,
+    #[serde(rename = "UX Pattern")]
+    UxPattern,
+    #[serde(rename = "Canvas Refinement")]
+    CanvasRefinement,
+    #[serde(rename = "New Canvas")]
+    NewCanvas,
+    #[serde(rename = "Cognitive Layer")]
+    CognitiveLayer,
+    #[serde(rename = "Infra Capability")]
+    InfraCapability,
+    #[serde(rename = "Technical Runtime")]
+    TechnicalRuntime,
+    #[serde(rename = "Sandbox")]
+    Sandbox,
+    #[serde(rename = "Plugin")]
+    Plugin,
+    #[serde(rename = "External Contract")]
+    ExternalContract,
+    #[serde(rename = "No Absorption", alias = "NENHUMA", alias = "NONE")]
+    NoAbsorption,
     #[default]
-    #[serde(rename = "NENHUMA", alias = "NONE")]
-    Nenhuma,
-    #[serde(rename = "ABSORVER_LOGICA", alias = "ABSORB_LOGIC")]
-    AbsorverLogica,
-    #[serde(rename = "EXTRAIR_SCRIPTS", alias = "EXTRACT_SCRIPTS")]
-    ExtrairScripts,
-    #[serde(other)]
+    #[serde(rename = "UNKNOWN")]
     Unknown,
 }
 
 impl CannibalizationAction {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Nenhuma => "NENHUMA",
-            Self::AbsorverLogica => "ABSORVER_LOGICA",
-            Self::ExtrairScripts => "EXTRAIR_SCRIPTS",
+            Self::DataModelSchema => "Data Model / Schema",
+            Self::PromptHeuristicSeed => "Prompt / Heuristic Seed",
+            Self::ProtocolStandard => "Protocol / Standard",
+            Self::Concept => "Concept",
+            Self::UxPattern => "UX Pattern",
+            Self::CanvasRefinement => "Canvas Refinement",
+            Self::NewCanvas => "New Canvas",
+            Self::CognitiveLayer => "Cognitive Layer",
+            Self::InfraCapability => "Infra Capability",
+            Self::TechnicalRuntime => "Technical Runtime",
+            Self::Sandbox => "Sandbox",
+            Self::Plugin => "Plugin",
+            Self::ExternalContract => "External Contract",
+            Self::NoAbsorption => "No Absorption",
             Self::Unknown => "UNKNOWN",
         }
     }
@@ -152,23 +203,27 @@ pub enum ArchitecturalCategory {
     CanvasUi,
     #[serde(rename = "UILibrary")]
     UiLibrary,
-    #[serde(rename = "Memoria_RAG", alias = "MEMORIA_RAG")]
-    MemoriaRag,
-    #[serde(rename = "Roteamento_FinOps", alias = "ROTEAMENTO_FINOPS")]
-    RoteamentoFinOps,
-    #[serde(rename = "Orquestracao_Agentes", alias = "ORQUESTRACAO_AGENTES")]
-    OrquestracaoAgentes,
-    #[serde(rename = "Model_Serving", alias = "MODEL_SERVING")]
-    ModelServing,
-    #[serde(rename = "Knowledge_Extraction", alias = "KNOWLEDGE_EXTRACTION")]
-    KnowledgeExtraction,
-    #[serde(rename = "Seguranca_Sandbox", alias = "SEGURANCA_SANDBOX")]
-    SegurancaSandbox,
-    #[serde(rename = "Infraestrutura_Core", alias = "INFRAESTRUTURA_CORE")]
-    InfraestruturaCore,
-    #[serde(rename = "Tooling_Dev", alias = "TOOLING_DEV")]
-    ToolingDev,
-    #[serde(other)]
+    #[serde(rename = "Memoria", alias = "Memoria_RAG", alias = "MEMORIA_RAG")]
+    Memoria,
+    #[serde(rename = "Roteamento", alias = "Roteamento_FinOps", alias = "ROTEAMENTO_FINOPS")]
+    Roteamento,
+    #[serde(rename = "Orquestracao", alias = "Orquestracao_Agentes", alias = "ORQUESTRACAO_AGENTES")]
+    Orquestracao,
+    #[serde(rename = "Seguranca", alias = "Seguranca_Sandbox", alias = "SEGURANCA_SANDBOX")]
+    Seguranca,
+    #[serde(
+        rename = "Infraestrutura",
+        alias = "Infraestrutura_Core",
+        alias = "INFRAESTRUTURA_CORE",
+        alias = "Knowledge_Extraction",
+        alias = "KNOWLEDGE_EXTRACTION",
+        alias = "Model_Serving",
+        alias = "MODEL_SERVING"
+    )]
+    Infraestrutura,
+    #[serde(rename = "Tooling", alias = "Tooling_Dev", alias = "TOOLING_DEV")]
+    Tooling,
+    #[serde(rename = "UNKNOWN")]
     Unknown,
 }
 
@@ -181,17 +236,17 @@ impl ArchitecturalCategory {
         let out = match trimmed {
             "CanvasUI" => Self::CanvasUi,
             "UILibrary" => Self::UiLibrary,
-            "Memoria_RAG" => Self::MemoriaRag,
-            "Roteamento_FinOps" => Self::RoteamentoFinOps,
-            "Orquestracao_Agentes" => Self::OrquestracaoAgentes,
-            "Model_Serving" => Self::ModelServing,
-            "Knowledge_Extraction" => Self::KnowledgeExtraction,
-            "Seguranca_Sandbox" => Self::SegurancaSandbox,
-            "Infraestrutura_Core" => Self::InfraestruturaCore,
-            "Tooling_Dev" => Self::ToolingDev,
+            "Memoria" | "Memoria_RAG" => Self::Memoria,
+            "Roteamento" | "Roteamento_FinOps" => Self::Roteamento,
+            "Orquestracao" | "Orquestracao_Agentes" => Self::Orquestracao,
+            "Seguranca" | "Seguranca_Sandbox" => Self::Seguranca,
+            "Infraestrutura" | "Infraestrutura_Core" | "Knowledge_Extraction" | "Model_Serving" => {
+                Self::Infraestrutura
+            }
+            "Tooling" | "Tooling_Dev" => Self::Tooling,
             _ => {
                 return Err(format!(
-                    "categoria_arquitetural invalida: '{}'. Valores permitidos: CanvasUI, UILibrary, Memoria_RAG, Roteamento_FinOps, Orquestracao_Agentes, Model_Serving, Knowledge_Extraction, Seguranca_Sandbox, Infraestrutura_Core, Tooling_Dev",
+                    "categoria_arquitetural invalida: '{}'. Valores permitidos: CanvasUI, UILibrary, Memoria, Roteamento, Orquestracao, Seguranca, Infraestrutura, Tooling",
                     trimmed
                 ));
             }
@@ -204,113 +259,173 @@ impl ArchitecturalCategory {
             Self::Unspecified => "",
             Self::CanvasUi => "CanvasUI",
             Self::UiLibrary => "UILibrary",
-            Self::MemoriaRag => "Memoria_RAG",
-            Self::RoteamentoFinOps => "Roteamento_FinOps",
-            Self::OrquestracaoAgentes => "Orquestracao_Agentes",
-            Self::ModelServing => "Model_Serving",
-            Self::KnowledgeExtraction => "Knowledge_Extraction",
-            Self::SegurancaSandbox => "Seguranca_Sandbox",
-            Self::InfraestruturaCore => "Infraestrutura_Core",
-            Self::ToolingDev => "Tooling_Dev",
+            Self::Memoria => "Memoria",
+            Self::Roteamento => "Roteamento",
+            Self::Orquestracao => "Orquestracao",
+            Self::Seguranca => "Seguranca",
+            Self::Infraestrutura => "Infraestrutura",
+            Self::Tooling => "Tooling",
             Self::Unknown => "UNKNOWN",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum IntegrationType {
     #[default]
-    #[serde(alias = "INTEGRAR_COMO_COMPONENTE")]
-    IntegrateAsComponent,
-    #[serde(alias = "REIMPLEMENTAR_INTERNAMENTE")]
-    ReimplementInternally,
-    #[serde(alias = "REJEITAR")]
-    Reject,
-    #[serde(other)]
+    #[serde(rename = "UNKNOWN", alias = "REJECT", alias = "REJEITAR")]
     Unknown,
+    #[serde(
+        rename = "Biblioteca / Crate Nativa",
+        alias = "INTEGRATE_AS_COMPONENT",
+        alias = "INTEGRAR_COMO_COMPONENTE"
+    )]
+    BibliotecaCrateNativa,
+    #[serde(rename = "Sidecar Efêmero")]
+    SidecarEfemero,
+    #[serde(rename = "Daemon / Background Service")]
+    DaemonBackgroundService,
+    #[serde(
+        rename = "App Nativo / CLI Independente",
+        alias = "REIMPLEMENT_INTERNALLY",
+        alias = "REIMPLEMENTAR_INTERNAMENTE"
+    )]
+    AppNativoCliIndependente,
+    #[serde(rename = "Middleware / Proxy")]
+    MiddlewareProxy,
 }
 
 impl IntegrationType {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::IntegrateAsComponent => "INTEGRATE_AS_COMPONENT",
-            Self::ReimplementInternally => "REIMPLEMENT_INTERNALLY",
-            Self::Reject => "REJECT",
+            Self::BibliotecaCrateNativa => "Biblioteca / Crate Nativa",
+            Self::SidecarEfemero => "Sidecar Efêmero",
+            Self::DaemonBackgroundService => "Daemon / Background Service",
+            Self::AppNativoCliIndependente => "App Nativo / CLI Independente",
+            Self::MiddlewareProxy => "Middleware / Proxy",
             Self::Unknown => "UNKNOWN",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CapabilityNaturePrimary {
+    #[serde(rename = "Context")]
+    Context,
+    #[serde(rename = "Memory")]
+    Memory,
+    #[serde(rename = "Perception")]
+    Perception,
+    #[serde(rename = "Expression")]
+    Expression,
+    #[serde(rename = "Execution")]
+    Execution,
+    #[serde(rename = "Observation")]
+    Observation,
+    #[serde(rename = "Documentation")]
+    Documentation,
+    #[serde(rename = "Planning")]
+    Planning,
+    #[serde(rename = "Curation")]
+    Curation,
+    #[serde(rename = "Identity")]
+    Identity,
+    #[serde(rename = "Infrastructure")]
+    Infrastructure,
+    #[serde(rename = "Multimodal IO")]
+    MultimodalIo,
+    #[serde(rename = "Sandbox")]
+    Sandbox,
+    #[serde(rename = "Serving")]
+    Serving,
+    #[serde(rename = "Retrieval")]
+    Retrieval,
+    #[serde(rename = "Synchronization")]
+    Synchronization,
     #[default]
-    #[serde(alias = "BIBLIOTECA")]
-    Library,
-    #[serde(alias = "FERRAMENTA")]
-    Tooling,
-    #[serde(alias = "SERVICO", alias = "SERVIÇO")]
-    Service,
-    #[serde(alias = "APLICACAO", alias = "APLICAÇÃO")]
-    Application,
-    #[serde(alias = "SISTEMA")]
-    System,
-    #[serde(alias = "ALGORITMO")]
-    Algorithm,
-    #[serde(alias = "ESTRUTURA_DE_DADOS")]
-    DataStructure,
-    #[serde(other)]
+    #[serde(
+        rename = "UNKNOWN",
+        alias = "LIBRARY",
+        alias = "BIBLIOTECA",
+        alias = "TOOLING",
+        alias = "FERRAMENTA",
+        alias = "SERVICE",
+        alias = "SERVICO",
+        alias = "SERVIÇO",
+        alias = "APPLICATION",
+        alias = "APLICACAO",
+        alias = "APLICAÇÃO",
+        alias = "SYSTEM",
+        alias = "SISTEMA",
+        alias = "ALGORITHM",
+        alias = "ALGORITMO",
+        alias = "DATA_STRUCTURE",
+        alias = "ESTRUTURA_DE_DADOS"
+    )]
     Unknown,
 }
 
 impl CapabilityNaturePrimary {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Library => "LIBRARY",
-            Self::Tooling => "TOOLING",
-            Self::Service => "SERVICE",
-            Self::Application => "APPLICATION",
-            Self::System => "SYSTEM",
-            Self::Algorithm => "ALGORITHM",
-            Self::DataStructure => "DATA_STRUCTURE",
+            Self::Context => "Context",
+            Self::Memory => "Memory",
+            Self::Perception => "Perception",
+            Self::Expression => "Expression",
+            Self::Execution => "Execution",
+            Self::Observation => "Observation",
+            Self::Documentation => "Documentation",
+            Self::Planning => "Planning",
+            Self::Curation => "Curation",
+            Self::Identity => "Identity",
+            Self::Infrastructure => "Infrastructure",
+            Self::MultimodalIo => "Multimodal IO",
+            Self::Sandbox => "Sandbox",
+            Self::Serving => "Serving",
+            Self::Retrieval => "Retrieval",
+            Self::Synchronization => "Synchronization",
             Self::Unknown => "UNKNOWN",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ArchitecturalTopology {
-    #[default]
-    #[serde(alias = "MODULAR")]
-    Modular,
-    #[serde(alias = "MONOLITO")]
+    #[serde(rename = "Monolith", alias = "MONOLITH", alias = "MONOLITO")]
     Monolith,
-    #[serde(alias = "EM_CAMADAS", alias = "CAMADAS")]
+    #[serde(rename = "Modular", alias = "MODULAR", alias = "PLUGIN", alias = "PLUGAVEL", alias = "PLUGÁVEL")]
+    Modular,
+    #[serde(rename = "Layered", alias = "LAYERED", alias = "EM_CAMADAS", alias = "CAMADAS")]
     Layered,
-    #[serde(alias = "MICROSSERVICOS", alias = "MICROSSERVIÇOS")]
-    Microservices,
-    #[serde(alias = "DIRIGIDO_A_EVENTOS")]
+    #[serde(rename = "Contract-Driven")]
+    ContractDriven,
+    #[serde(rename = "Runtime-Centric", alias = "MICROSERVICES", alias = "MICROSSERVICOS", alias = "MICROSSERVIÇOS")]
+    RuntimeCentric,
+    #[serde(rename = "Event-Driven", alias = "EVENT_DRIVEN", alias = "DIRIGIDO_A_EVENTOS")]
     EventDriven,
-    #[serde(alias = "PIPELINE")]
-    Pipeline,
-    #[serde(alias = "PLUGAVEL", alias = "PLUGÁVEL")]
-    Plugin,
-    #[serde(other)]
+    #[serde(rename = "Graph-Centric")]
+    GraphCentric,
+    #[serde(rename = "Pipeline-Centric", alias = "PIPELINE")]
+    PipelineCentric,
+    #[serde(rename = "Hybrid")]
+    Hybrid,
+    #[default]
+    #[serde(rename = "UNKNOWN")]
     Unknown,
 }
 
 impl ArchitecturalTopology {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Modular => "MODULAR",
-            Self::Monolith => "MONOLITH",
-            Self::Layered => "LAYERED",
-            Self::Microservices => "MICROSERVICES",
-            Self::EventDriven => "EVENT_DRIVEN",
-            Self::Pipeline => "PIPELINE",
-            Self::Plugin => "PLUGIN",
+            Self::Monolith => "Monolith",
+            Self::Modular => "Modular",
+            Self::Layered => "Layered",
+            Self::ContractDriven => "Contract-Driven",
+            Self::RuntimeCentric => "Runtime-Centric",
+            Self::EventDriven => "Event-Driven",
+            Self::GraphCentric => "Graph-Centric",
+            Self::PipelineCentric => "Pipeline-Centric",
+            Self::Hybrid => "Hybrid",
             Self::Unknown => "UNKNOWN",
         }
     }
@@ -396,29 +511,29 @@ impl RiskLevel4 {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum DisciplineDependency {
-    #[default]
-    #[serde(rename = "NENHUMA", alias = "NONE")]
+    #[serde(rename = "Nenhuma", alias = "NENHUMA", alias = "NONE")]
     Nenhuma,
-    #[serde(rename = "BAIXA", alias = "LOW")]
+    #[serde(rename = "Baixa", alias = "BAIXA", alias = "LOW")]
     Baixa,
-    #[serde(rename = "MEDIA", alias = "MEDIUM", alias = "MÉDIA")]
+    #[serde(rename = "Média", alias = "MEDIA", alias = "MEDIUM", alias = "MÉDIA")]
     Media,
-    #[serde(rename = "ALTA", alias = "HIGH")]
+    #[serde(rename = "Alta", alias = "ALTA", alias = "HIGH")]
     Alta,
-    #[serde(rename = "CRITICA", alias = "CRITICAL", alias = "CRÍTICA")]
+    #[serde(rename = "Crítica", alias = "CRITICA", alias = "CRITICAL", alias = "CRÍTICA")]
     Critica,
-    #[serde(other)]
+    #[default]
+    #[serde(rename = "UNKNOWN")]
     Unknown,
 }
 
 impl DisciplineDependency {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Nenhuma => "NENHUMA",
-            Self::Baixa => "BAIXA",
-            Self::Media => "MEDIA",
-            Self::Alta => "ALTA",
-            Self::Critica => "CRITICA",
+            Self::Nenhuma => "Nenhuma",
+            Self::Baixa => "Baixa",
+            Self::Media => "Média",
+            Self::Alta => "Alta",
+            Self::Critica => "Crítica",
             Self::Unknown => "UNKNOWN",
         }
     }
@@ -512,6 +627,42 @@ impl BurdenLevel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ExtractionHorizon {
+    #[default]
+    #[serde(rename = "UNKNOWN")]
+    Unknown,
+    #[serde(rename = "IMEDIATO", alias = "IMMEDIATE", alias = "IMEDIATA")]
+    Imediato,
+    #[serde(rename = "CURTO_PRAZO", alias = "SHORT", alias = "CURTO", alias = "CURTA")]
+    CurtoPrazo,
+    #[serde(rename = "CURTO_MEDIO_PRAZO")]
+    CurtoMedioPrazo,
+    #[serde(rename = "MEDIO_PRAZO", alias = "MEDIUM", alias = "MEDIO", alias = "MÉDIO", alias = "MEDIA", alias = "MÉDIA")]
+    MedioPrazo,
+    #[serde(rename = "LONGO_PRAZO", alias = "LONG", alias = "LONGO", alias = "LONGA")]
+    LongoPrazo,
+    #[serde(rename = "REFERENCIAL_TEORICO")]
+    ReferencialTeorico,
+    #[serde(rename = "NUNCA", alias = "VERY_LONG", alias = "MUITO_LONGO", alias = "MUITO_LONGA")]
+    Nunca,
+}
+
+impl ExtractionHorizon {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Unknown => "UNKNOWN",
+            Self::Imediato => "IMEDIATO",
+            Self::CurtoPrazo => "CURTO_PRAZO",
+            Self::CurtoMedioPrazo => "CURTO_MEDIO_PRAZO",
+            Self::MedioPrazo => "MEDIO_PRAZO",
+            Self::LongoPrazo => "LONGO_PRAZO",
+            Self::ReferencialTeorico => "REFERENCIAL_TEORICO",
+            Self::Nunca => "NUNCA",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TimeHorizon {
     #[default]
@@ -525,7 +676,7 @@ pub enum TimeHorizon {
     Long,
     #[serde(alias = "MUITO_LONGO", alias = "MUITO_LONGA")]
     VeryLong,
-    #[serde(other)]
+    #[serde(rename = "UNKNOWN")]
     Unknown,
 }
 
@@ -654,7 +805,7 @@ pub struct MasterSolutionsRow {
     pub classificacao_terminal: TerminalClassification,
     pub acao_de_canibalizacao: CannibalizationAction,
     pub categoria_arquitetural: ArchitecturalCategory,
-    pub horizonte_extracao: TimeHorizon,
+    pub horizonte_extracao: ExtractionHorizon,
     pub tipo_integracao: IntegrationType,
     pub capability_nature_primary: CapabilityNaturePrimary,
     pub architectural_topology: ArchitecturalTopology,
@@ -752,7 +903,7 @@ impl Default for MasterSolutionsRow {
             classificacao_terminal: TerminalClassification::default(),
             acao_de_canibalizacao: CannibalizationAction::default(),
             categoria_arquitetural: ArchitecturalCategory::default(),
-            horizonte_extracao: TimeHorizon::default(),
+            horizonte_extracao: ExtractionHorizon::default(),
             tipo_integracao: IntegrationType::default(),
             capability_nature_primary: CapabilityNaturePrimary::default(),
             architectural_topology: ArchitecturalTopology::default(),
@@ -1690,7 +1841,7 @@ struct Block3Fields {
     #[serde(rename = "categoria_arquitetural")]
     categoria_arquitetural: Option<ArchitecturalCategory>,
     #[serde(rename = "horizonte_extracao")]
-    horizonte_extracao: TimeHorizon,
+    horizonte_extracao: ExtractionHorizon,
     #[serde(rename = "tipo_integracao")]
     tipo_integracao: IntegrationType,
     #[serde(rename = "capability_nature_primary")]
@@ -1746,32 +1897,32 @@ struct Block3Fields {
 }
 
 impl Block3Fields {
-    fn sanitize(self) -> Self {
+    fn sanitize(self) -> Result<Self, String> {
         let mut out = self;
+        let mut strict_errors: Vec<&'static str> = Vec::new();
         if matches!(out.classificacao_terminal, TerminalClassification::Unknown) {
-            warn!("Bloco 3: `classificacao_terminal` caiu em fallback UNKNOWN");
+            strict_errors.push("classificacao_terminal");
         }
         if matches!(out.acao_de_canibalizacao, CannibalizationAction::Unknown) {
-            warn!("Bloco 3: `acao_de_canibalizacao` caiu em fallback UNKNOWN");
+            strict_errors.push("acao_de_canibalizacao");
         }
         if matches!(out.categoria_arquitetural, Some(ArchitecturalCategory::Unknown)) {
-            warn!("Bloco 3: `categoria_arquitetural` fora do catalogo; preservando valor anterior");
-            out.categoria_arquitetural = None;
+            strict_errors.push("categoria_arquitetural");
         }
         if matches!(out.categoria_arquitetural, Some(ArchitecturalCategory::Unspecified)) {
             out.categoria_arquitetural = None;
         }
-        if matches!(out.horizonte_extracao, TimeHorizon::Unknown) {
-            warn!("Bloco 3: `horizonte_extracao` caiu em fallback UNKNOWN");
+        if matches!(out.horizonte_extracao, ExtractionHorizon::Unknown) {
+            strict_errors.push("horizonte_extracao");
         }
         if matches!(out.tipo_integracao, IntegrationType::Unknown) {
-            warn!("Bloco 3: `tipo_integracao` caiu em fallback UNKNOWN");
+            strict_errors.push("tipo_integracao");
         }
         if matches!(out.capability_nature_primary, CapabilityNaturePrimary::Unknown) {
-            warn!("Bloco 3: `capability_nature_primary` caiu em fallback UNKNOWN");
+            strict_errors.push("capability_nature_primary");
         }
         if matches!(out.architectural_topology, ArchitecturalTopology::Unknown) {
-            warn!("Bloco 3: `architectural_topology` caiu em fallback UNKNOWN");
+            strict_errors.push("architectural_topology");
         }
         if matches!(out.temporal_stability, TemporalStability::Unknown) {
             warn!("Bloco 3: `temporal_stability` caiu em fallback UNKNOWN");
@@ -1837,12 +1988,19 @@ impl Block3Fields {
             warn!("Bloco 3: `intrinsic_ethics_risk` caiu em fallback UNKNOWN");
         }
         if matches!(out.discipline_dependency, DisciplineDependency::Unknown) {
-            warn!("Bloco 3: `discipline_dependency` caiu em fallback UNKNOWN");
+            strict_errors.push("discipline_dependency");
         }
         if matches!(out.regulatory_risk, RiskLevel4::Unknown) {
             warn!("Bloco 3: `regulatory_risk` caiu em fallback UNKNOWN");
         }
-        out
+        if strict_errors.is_empty() {
+            Ok(out)
+        } else {
+            Err(format!(
+                "Bloco 3 recebeu enums fora do catálogo estrito: {}",
+                strict_errors.join(", ")
+            ))
+        }
     }
 }
 
@@ -1894,7 +2052,9 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
     match block {
         BLOCK_1 => {
             prompt.push_str("IDIOMA_BLOCK1: todos os textos descritivos devem estar em Português (PT-BR).\n");
-            prompt.push_str("STYLE_BLOCK1: seja conciso (5 a 8 linhas por campo), objetivo e sem jargão corporativo.\n");
+            prompt.push_str("STYLE_BLOCK1_BASE: proposta_original_resumo e declared_description_ptbr podem ser objetivos, mas sem amputar fatos relevantes.\n");
+            prompt.push_str("STYLE_BLOCK1_DIALETICO: visao_do_enxame, executive_verdict, risco_principal e risco_linha_vermelha DEVEM ter profundidade analitica, causalidade explicita, tensao entre ganhos e riscos e rigor dialetico. Nao use limite artificial de linhas.\n");
+            prompt.push_str("STYLE_BLOCK1_ARGUMENTACAO: justificativa_decisao e observacoes DEVEM conectar as 3 lentes do enxame, explicando trade-offs, pre-condicoes e por que a decisao faz sentido no SODA.\n");
             prompt.push_str("TRANSLATE_BLOCK1: gere declared_description_ptbr como tradução fiel para PT-BR de project.declared_description. Comece com letra maiúscula. Não adicione comentários sobre tradução.\n");
         }
         BLOCK_2A => {
@@ -1909,12 +2069,13 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
             prompt.push_str("ARRAYS_BLOCK2B_LIGHT: detected_toxic_deps, do_not_absorb e where_ai_should_not_enter DEVEM ser arrays JSON com NO MÍNIMO 1 item cada.\n");
         }
         BLOCK_3 => {
-            prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve ter no máximo 180 caracteres. Use termos curtos, 1 linha por campo (sem parágrafos).\n");
+            prompt.push_str("LIMITS_BLOCK3: cada valor string em fields deve conter apenas o label exato do catálogo. Nenhuma frase explicativa em fields.\n");
             prompt.push_str("MODO_ROBOTICO_ENUMS_BLOCK3: para TODOS os campos ENUM do Bloco 3, fields deve conter APENAS o valor do catálogo (1 token).\n");
             prompt.push_str("PROIBIDO: hífens, ':' , parênteses, frases, ou duas opções no mesmo campo.\n");
             prompt.push_str("ANTI_HOMOGENEIZACAO_BLOCK3: PROIBIDO responder tudo como MEDIUM/ACCEPTABLE/MEDIA por default. Distribua os valores conforme as 3 lentes e o contexto concreto do repo. Se a maioria dos campos sair igual, revise antes de responder.\n");
             prompt.push_str("MEDIUM_LEGITIMO_BLOCK3: use MEDIUM apenas quando o eixo estiver realmente no meio-termo. Se houver sinais fortes de aptidao ou fragilidade, use LOW/HIGH/EXCELLENT/VERY_LOW/VERY_HIGH/CRITICAL conforme o catalogo.\n");
             prompt.push_str("JUSTIFICATIONS_BLOCK3: além de fields, DEVEM vir justifications com 1 frase curta por campo crítico do bloco 3, explicando por que o valor categórico foi escolhido.\n");
+            prompt.push_str("SGR_BLOCK3: preencha mentalmente justifications primeiro e só depois emita os ENUMs correspondentes em fields.\n");
             prompt.push_str("KNOWLEDGE_MODE_BLOCK3: se project.stack_base == \"UNKNOWN\" (ou context_alert presente), trate como repositorio de Conhecimento/Metodologia. Nesse caso, bare_metal_fit, runtime_sovereignty_fit e local_first_fit DEVEM ser HIGH ou EXCELLENT (nunca LOW/VERY_LOW), pois não há runtime externo.\n");
             prompt.push_str(enum_catalog_block3());
         }
@@ -1962,6 +2123,13 @@ fn fields_keys_for_block(block: u8, prior: &MasterSolutionsRow) -> String {
 
 fn enum_catalog_block3() -> &'static str {
     "CATALOGO_ENUMS_BLOCK3:\n\
+classificacao_terminal: STACK_CORE_PLANO_A1|STACK_CORE_PLANO_A2|STACK_CORE_PLANO_B|INTEGRATE_AS_COMPONENT|ABSORB_PARTIALLY|ABSORB_CONCEPT|USE_AS_INSPIRATION_ONLY|REJECT|SHORT-CIRCUIT\n\
+acao_de_canibalizacao: Data Model / Schema|Prompt / Heuristic Seed|Protocol / Standard|Concept|UX Pattern|Canvas Refinement|New Canvas|Cognitive Layer|Infra Capability|Technical Runtime|Sandbox|Plugin|External Contract|No Absorption\n\
+categoria_arquitetural: CanvasUI|UILibrary|Memoria|Roteamento|Orquestracao|Seguranca|Infraestrutura|Tooling\n\
+horizonte_extracao: IMEDIATO|CURTO_PRAZO|CURTO_MEDIO_PRAZO|MEDIO_PRAZO|LONGO_PRAZO|REFERENCIAL_TEORICO|NUNCA\n\
+tipo_integracao: Biblioteca / Crate Nativa|Sidecar Efêmero|Daemon / Background Service|App Nativo / CLI Independente|Middleware / Proxy\n\
+capability_nature_primary: Context|Memory|Perception|Expression|Execution|Observation|Documentation|Planning|Curation|Identity|Infrastructure|Multimodal IO|Sandbox|Serving|Retrieval|Synchronization\n\
+architectural_topology: Monolith|Modular|Layered|Contract-Driven|Runtime-Centric|Event-Driven|Graph-Centric|Pipeline-Centric|Hybrid\n\
 temporal_stability: STABLE|EVOLVING\n\
 bare_metal_fit: LOW|MEDIUM|HIGH|EXCELLENT\n\
 extractability_level: LOW|MEDIUM|HIGH|EXCELLENT\n\
@@ -1975,7 +2143,7 @@ intrinsic_ethics_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
 regulatory_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
 abandonment_risk: LOW|MEDIUM|HIGH|CRITICAL\n\
 \n\
-discipline_dependency: NENHUMA|BAIXA|MEDIA|ALTA|CRITICA\n\
+discipline_dependency: Nenhuma|Baixa|Média|Alta|Crítica\n\
 degradation_behavior: GRACEFUL|ACCEPTABLE|FRAGILE|CATASTROPHIC\n\
 \n\
 adoptability_level: VERY_LOW|LOW|MEDIUM|HIGH|EXCELLENT\n\
@@ -2028,9 +2196,9 @@ fn compact_context_for_block(
     ctx.insert(
         "debates_enxame".to_string(),
         serde_json::json!({
-            "lente_a_sentido_prod_ux": truncate_chars_simple(&row.lente_a_sentido_prod_ux, 2200),
-            "lente_b_estrutura_arq": truncate_chars_simple(&row.lente_b_estrutura_arq, 2200),
-            "lente_c_realidade_ops": truncate_chars_simple(&row.lente_c_realidade_ops, 2200)
+            "lente_a_sentido_prod_ux": truncate_chars_simple(&row.lente_a_sentido_prod_ux, 4200),
+            "lente_b_estrutura_arq": truncate_chars_simple(&row.lente_b_estrutura_arq, 4200),
+            "lente_c_realidade_ops": truncate_chars_simple(&row.lente_c_realidade_ops, 4200)
         }),
     );
 
@@ -2038,7 +2206,7 @@ fn compact_context_for_block(
         ctx.insert(
             "curation".to_string(),
             serde_json::json!({
-                "proposta_original_resumo": truncate_chars_simple(&row.proposta_original_resumo, 1200)
+                "proposta_original_resumo": truncate_chars_simple(&row.proposta_original_resumo, 2200)
             }),
         );
     }
@@ -2046,7 +2214,7 @@ fn compact_context_for_block(
         ctx.insert(
             "block2a".to_string(),
             serde_json::json!({
-                "indicacao_otimista_canibalizacao": truncate_chars_simple(&row.indicacao_otimista_canibalizacao, 1800),
+                "indicacao_otimista_canibalizacao": truncate_chars_simple(&row.indicacao_otimista_canibalizacao, 3000),
                 "ouro_a_extrair": &row.ouro_a_extrair,
                 "deep_pattern": &row.deep_pattern,
                 "transplantable_core": &row.transplantable_core,
@@ -2880,7 +3048,11 @@ pub async fn run_phase3_sgr(
             "F3 debug: bloco 3 fields brutos antes de sanitize/persist"
         );
         // endregion debug-point phase3-block3-raw-fields
-        let block3 = block3_exec.envelope.fields.sanitize();
+        let block3 = block3_exec
+            .envelope
+            .fields
+            .sanitize()
+            .map_err(|message| Phase3Error::SchemaFailure { block: BLOCK_3, message })?;
         apply_block3_fields_to_row(&mut row, &block3);
         persist_block3_checkpoint(&repo_id, &mut row, &block3_justifications, now_epoch)?;
         stage = 4;
@@ -2917,7 +3089,11 @@ pub async fn run_phase3_sgr(
             block3_model_index = block3_exec.model_index;
             block3_homogeneous_medium = block3_exec.homogeneous_medium;
             block3_justifications = block3_exec.envelope.justifications;
-            let block3 = block3_exec.envelope.fields.sanitize();
+            let block3 = block3_exec
+                .envelope
+                .fields
+                .sanitize()
+                .map_err(|message| Phase3Error::SchemaFailure { block: BLOCK_3, message })?;
             apply_block3_fields_to_row(&mut row, &block3);
             persist_block3_checkpoint(&repo_id, &mut row, &block3_justifications, now_epoch)?;
             block4 = run_block4_validated(client, cfg, &block0, &row).await?;
@@ -3757,9 +3933,9 @@ mod tests {
         let row: MasterSolutionsRow = serde_json::from_value(value).unwrap();
         assert_eq!(
             row.classificacao_terminal,
-            TerminalClassification::AprovadoComRessalvas
+            TerminalClassification::AbsorbPartially
         );
-        assert_eq!(row.acao_de_canibalizacao, CannibalizationAction::AbsorverLogica);
+        assert_eq!(row.acao_de_canibalizacao, CannibalizationAction::Concept);
         assert_eq!(row.bare_metal_fit, FitLevel4::Medium);
         assert_eq!(row.abandonment_risk, RiskLevel4::Critical);
         assert_eq!(row.discipline_dependency, DisciplineDependency::Media);
@@ -3773,7 +3949,7 @@ mod tests {
     }
 
     #[test]
-    fn block3_invalid_enum_degrades_to_unknown_without_parse_failure() {
+    fn block3_invalid_enum_fails_parse_under_strict_catalog() {
         let payload = serde_json::json!({
             "classificacao_terminal": "FORA_DO_CATALOGO",
             "acao_de_canibalizacao": "FORA_DO_CATALOGO",
@@ -3807,18 +3983,7 @@ mod tests {
             "regulatory_risk": "FORA_DO_CATALOGO"
         });
 
-        let parsed: Block3Fields = serde_json::from_value(payload).unwrap();
-        let sanitized = parsed.sanitize();
-        assert_eq!(sanitized.classificacao_terminal, TerminalClassification::Unknown);
-        assert_eq!(sanitized.acao_de_canibalizacao, CannibalizationAction::Unknown);
-        assert_eq!(sanitized.categoria_arquitetural, None);
-        assert_eq!(sanitized.horizonte_extracao, TimeHorizon::Unknown);
-        assert_eq!(sanitized.tipo_integracao, IntegrationType::Unknown);
-        assert_eq!(sanitized.capability_nature_primary, CapabilityNaturePrimary::Unknown);
-        assert_eq!(sanitized.architectural_topology, ArchitecturalTopology::Unknown);
-        assert_eq!(sanitized.temporal_stability, TemporalStability::Unknown);
-        assert_eq!(sanitized.bare_metal_fit, FitLevel4::Unknown);
-        assert_eq!(sanitized.abandonment_risk, RiskLevel4::Unknown);
-        assert_eq!(sanitized.discipline_dependency, DisciplineDependency::Unknown);
+        let parsed = serde_json::from_value::<Block3Fields>(payload);
+        assert!(parsed.is_err());
     }
 }

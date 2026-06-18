@@ -9,7 +9,7 @@ G,data_ultima_analise,TEXT,NOT NULL,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:S
 H,analise_origem,TEXT,NOT NULL,Assinatura do motor/fluxo que gerou a linha.
 I,licenca,TEXT,NOT NULL,Licença SPDX (quando disponível).
 J,stack_base,TEXT,NOT NULL,Stack detectada (string/bullets) para auditoria.
-K,declared_description,TEXT,NOT NULL,"Descrição declarada (PT-BR quando disponível). Limite elástico: ~2000 caracteres."
+J,declared_description,TEXT,NOT NULL,"Descrição declarada do repositório. Heurística SSOT: prioridade 1 = seção ABOUT no topo da página GitHub; prioridade 2 = README; prioridade 3 = título/headline da página do repositório. Limite elástico: ~2000 caracteres."
 L,lente_a_sentido_prod_ux,TEXT,NOT NULL,Lente A normalizada (bullets).
 M,lente_b_estrutura_arq,TEXT,NOT NULL,Lente B normalizada (bullets).
 N,lente_c_realidade_ops,TEXT,NOT NULL,Lente C normalizada (bullets).
@@ -33,12 +33,12 @@ AE,must_components_ops,TEXT,NOT NULL,"Lista (bullets) de componentes de Operaç�
 AF,detected_toxic_deps,TEXT,NOT NULL,"Lista (bullets) de dependências tóxicas detectadas. Limite elástico: ~3000 caracteres."
 AG,do_not_absorb,TEXT,NOT NULL,"Lista (bullets) do que não absorver. Limite elástico: ~3000 caracteres."
 AH,where_ai_should_not_enter,TEXT,NOT NULL,"Restrições imperativas (zona proibida para IA). Limite elástico: ~3000 caracteres."
-AI,classificacao_terminal,TEXT,NOT NULL,Enum terminal humanizado.
-AJ,acao_de_canibalizacao,TEXT,NOT NULL,Enum humanizado da ação de canibalização.
+AI,classificacao_terminal,TEXT,NOT NULL,"Enum estrito do veredito final de adoção. Valores canônicos: STACK_CORE_PLANO_A1 | STACK_CORE_PLANO_A2 | STACK_CORE_PLANO_B | INTEGRATE_AS_COMPONENT | ABSORB_PARTIALLY | ABSORB_CONCEPT | USE_AS_INSPIRATION_ONLY | REJECT | SHORT-CIRCUIT."
+AJ,acao_de_canibalizacao,TEXT,NOT NULL,"Enum estrito da ação de canibalização. Valores canônicos: Data Model / Schema | Prompt / Heuristic Seed | Protocol / Standard | Concept | UX Pattern | Canvas Refinement | New Canvas | Cognitive Layer | Infra Capability | Technical Runtime | Sandbox | Plugin | External Contract | No Absorption."
 AK,categoria_arquitetural,TEXT,NOT NULL,Enum humanizado da categoria arquitetural.
-AL,horizonte_extracao,TEXT,NOT NULL,Enum humanizado do horizonte de extração.
+AL,horizonte_extracao,TEXT,NOT NULL,"Enum estrito do timing de extração. Valores canônicos: IMEDIATO | CURTO_PRAZO | CURTO_MEDIO_PRAZO | MEDIO_PRAZO | LONGO_PRAZO | REFERENCIAL_TEORICO | NUNCA."
 AM,tipo_integracao,TEXT,NOT NULL,Enum humanizado do tipo de integração.
-AN,capability_nature_primary,TEXT,NOT NULL,Enum humanizado da natureza primária da capacidade.
+AN,capability_nature_primary,TEXT,NOT NULL,"Enum estrito da natureza primária da capacidade. Valores canônicos: Context | Memory | Perception | Expression | Execution | Observation | Documentation | Planning | Curation | Identity | Infrastructure | Multimodal IO | Sandbox | Serving | Retrieval | Synchronization."
 AO,architectural_topology,TEXT,NOT NULL,Enum humanizado da topologia arquitetural.
 AP,temporal_stability,TEXT,NOT NULL,Enum humanizado da estabilidade temporal.
 AQ,bare_metal_fit,TEXT,NOT NULL,Enum humanizado do fit bare-metal.
@@ -61,7 +61,7 @@ BG,imperfection_tolerance,TEXT,NOT NULL,Enum humanizado de tolerância a imperfe
 BH,entropy_risk,TEXT,NOT NULL,Enum humanizado do risco de entropia.
 BI,design_misuse_risk,TEXT,NOT NULL,Enum humanizado do risco de mau uso.
 BJ,intrinsic_ethics_risk,TEXT,NOT NULL,Enum humanizado do risco ético intrínseco.
-BK,discipline_dependency,TEXT,NOT NULL,Enum humanizado de dependência de disciplina.
+BK,discipline_dependency,TEXT,NOT NULL,"Enum estrito de dependência disciplinar. Valores canônicos: Nenhuma | Baixa | Média | Alta | Crítica."
 BL,regulatory_risk,TEXT,NOT NULL,Enum humanizado do risco regulatório.
 BM,score_philosophical_fit,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
 BN,score_bare_metal_fit,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).

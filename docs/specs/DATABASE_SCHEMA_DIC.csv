@@ -38,7 +38,7 @@ repo_heuristics,indicacao_otimista_canibalizacao,TEXT,NOT NULL,-,"Lista otimista
 repo_heuristics,lote_id,TEXT,NOT NULL,-,Identificador do batch de ingestão (ex: LOTE_015_Infra).
 repo_heuristics,data_ultima_analise,INTEGER,NOT NULL,-,Timestamp em formato estrito ISO-8601 (YYYY-MM-DDTHH:MM:SSZ).
 repo_heuristics,analise_origem,TEXT,NOT NULL,-,"Assinatura do motor responsável pela inserção (ex: ""SODA ETL V3 Auto"")."
-repo_heuristics,declared_description,TEXT,NOT NULL,-,"A promessa de marketing original extraída do README, traduzida para PT-BR. Limite elástico: ~2000 caracteres."
+repo_heuristics,declared_description,TEXT,NOT NULL,-,"Descrição declarada do repositório. Heurística SSOT: prioridade 1 = seção ABOUT no topo da página GitHub; prioridade 2 = README; prioridade 3 = título/headline da página do repositório. Limite elástico: ~2000 caracteres."
 repo_heuristics,proposta_original_resumo,TEXT,NOT NULL,-,"Síntese técnica desidratada e neutra do que a ferramenta realmente faz (gerada pelo formatador na Fase 3). Limite elástico: ~3000 caracteres."
 repo_heuristics,stack_base,TEXT,NOT NULL,-,Array serializado em string com linguagens/frameworks originais. Vital para o Arquiteto auditar lixo tóxico (Node/Electron).
 repo_heuristics,licenca,TEXT,-,-,"Código SPDX (ex: MIT, AGPL-3.0) fornecido pela API. Fundamental para a blindagem legal do SODA contra copyleft."
@@ -48,10 +48,10 @@ repo_heuristics,lente_c_realidade_ops,TEXT,-,-,Salva a redação final da Visão
 repo_heuristics,visao_do_enxame,TEXT,NOT NULL,-,"Síntese dialética entre as Lentes processada e unificada na Fase 3. Limite elástico: ~3000 caracteres."
 repo_heuristics,justificativa_decisao,TEXT,NOT NULL,-,"Defesa lógico-matemática da decisão. Validada via JSON Schema estrito e salva como TEXT. Limite elástico: ~3000 caracteres."
 repo_heuristics,executive_verdict,TEXT,NOT NULL,-,"Veredito final do Arquiteto (Tese -> Antítese -> Síntese). Validado via JSON Schema estrito. Limite elástico: ~3000 caracteres."
-repo_heuristics,classificacao_terminal,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic (ex: 'INTEGRATE_AS_COMPONENT', 'REJECT'). Salvo como string de TEXTO."
-repo_heuristics,acao_de_canibalizacao,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic definindo o alvo da extração física (ex: 'Data Model', 'UX Pattern')."
+repo_heuristics,classificacao_terminal,TEXT,NOT NULL,-,"Enum estrito do veredito final de adoção. Valores canônicos: STACK_CORE_PLANO_A1 | STACK_CORE_PLANO_A2 | STACK_CORE_PLANO_B | INTEGRATE_AS_COMPONENT | ABSORB_PARTIALLY | ABSORB_CONCEPT | USE_AS_INSPIRATION_ONLY | REJECT | SHORT-CIRCUIT."
+repo_heuristics,acao_de_canibalizacao,TEXT,NOT NULL,-,"Enum estrito da ação de canibalização. Valores canônicos: Data Model / Schema | Prompt / Heuristic Seed | Protocol / Standard | Concept | UX Pattern | Canvas Refinement | New Canvas | Cognitive Layer | Infra Capability | Technical Runtime | Sandbox | Plugin | External Contract | No Absorption."
 repo_heuristics,categoria_arquitetural,TEXT,NOT NULL,-,"Enum estrito mapeando o grande domínio Épico do SODA (ex: 'Memória', 'Orquestração')."
-repo_heuristics,horizonte_extracao,TEXT,NOT NULL,-,"Enum cronológico indicando a posição no roadmap de desenvolvimento (ex: 'IMEDIATO', 'CURTO_PRAZO')."
+repo_heuristics,horizonte_extracao,TEXT,NOT NULL,-,"Enum estrito do timing de extração. Valores canônicos: IMEDIATO | CURTO_PRAZO | CURTO_MEDIO_PRAZO | MEDIO_PRAZO | LONGO_PRAZO | REFERENCIAL_TEORICO | NUNCA."
 repo_heuristics,tipo_integracao,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic (ex: 'Sidecar Efêmero', 'Crate Nativa'). Define a topologia de injeção física no SO."
 repo_heuristics,categoria_nuance_tecnica,TEXT,NOT NULL,-,"A especialidade hiper-técnica da solução (ex: 'Motor de busca híbrido BM25', 'Parser AST O(1)')."
 repo_heuristics,integracao_papel_exato,TEXT,NOT NULL,-,A missão tática e cirúrgica do componente após ser absorvido pelo SODA.
@@ -72,7 +72,7 @@ repo_heuristics,operability_level,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HI
 repo_heuristics,entropy_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Nível de risco de exfiltração de dados (telemetria obscura), lock-in de provedor de nuvem ou quebra de conformidade."
 repo_heuristics,design_misuse_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Avalia se a UX/UI original induz o humano à auto-sabotagem cognitiva, viés de automação ou fadiga de alertas."
 repo_heuristics,intrinsic_ethics_risk,TEXT,NOT NULL,-,"Enum estrito (LOW, MEDIUM, HIGH, CRITICAL). Mede o risco arquitetural de injeção de prompt, vulnerabilidades estruturais ou invasão de privacidade nativa do código."
-repo_heuristics,discipline_dependency,TEXT,NOT NULL,-,"Enum estrito (Nenhuma, Baixa, Média, Alta, Crítica). Trava de neuro-inclusão: avalia se a solução colapsa sob uso imperfeito de humanos com TDAH (esquecimentos)."
+repo_heuristics,discipline_dependency,TEXT,NOT NULL,-,"Enum estrito de dependência disciplinar. Valores canônicos: Nenhuma | Baixa | Média | Alta | Crítica. Trava de neuro-inclusão: avalia se a solução colapsa sob uso imperfeito de humanos com TDAH (esquecimentos)."
 repo_heuristics,risco_principal,TEXT,NOT NULL,-,"Idealmente 1 frase cortante expondo a maior fragilidade técnica, vulnerabilidade ou gargalo termodinâmico do projeto. Limite elástico: ~3000 caracteres."
 repo_heuristics,risco_linha_vermelha,TEXT,NOT NULL,-,"Restrição imperativa iniciando com ""NUNCA FAZER..."". A barreira arquitetural dogmática que não podemos cruzar ao absorver este código. Limite elástico: ~3000 caracteres."
 repo_heuristics,observacoes,TEXT,NOT NULL,-,"Notas/ressalvas de anomalias descobertas (ex: chaves hardcoded, variáveis ocultas) durante a varredura AST do Harvester. Limite elástico: ~3000 caracteres."
@@ -87,7 +87,7 @@ repo_heuristics,score_runtime_sovereignty,INTEGER,NOT NULL,-,Nota 0-10. Avalia a
 repo_heuristics,score_model_logic_value,INTEGER,NOT NULL,-,"Nota 0-10. O valor puro da lógica matemática/heurística, ignorando a UI."
 repo_heuristics,score_ethics_safety,INTEGER,NOT NULL,-,Nota 0-10. Nível de segurança e sanidade moral/regulatório do código.
 repo_heuristics,score_intrinsic_risk,INTEGER,NOT NULL,-,Nota 0-10. O perigo arquitetural embutido na própria natureza da solução.
-repo_heuristics,capability_nature_primary,TEXT,NOT NULL,-,"Enum estrito mapeando o papel funcional da capacidade (ex: Memory, Execution)."
+repo_heuristics,capability_nature_primary,TEXT,NOT NULL,-,"Enum estrito da natureza primária da capacidade. Valores canônicos: Context | Memory | Perception | Expression | Execution | Observation | Documentation | Planning | Curation | Identity | Infrastructure | Multimodal IO | Sandbox | Serving | Retrieval | Synchronization."
 repo_heuristics,architectural_topology,TEXT,NOT NULL,-,"Enum estrito da topologia física do projeto (ex: Monolith, Event-driven)."
 repo_heuristics,runtime_sovereignty_fit,TEXT,NOT NULL,-,Avaliação de soberania em tempo de execução sem chamadas externas a APIs de terceiros.
 repo_heuristics,local_first_fit,TEXT,NOT NULL,-,Avaliação de aderência ao modelo de armazenamento puramente local/offline.

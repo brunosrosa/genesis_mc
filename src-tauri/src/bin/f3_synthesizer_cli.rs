@@ -105,6 +105,18 @@ fn parse_model_list_env(key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn env_flag_enabled(key: &str) -> bool {
+    std::env::var(key)
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
 fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usize> {
     let mut stmt = conn
         .prepare("SELECT COUNT(DISTINCT artifact_type) FROM artefatos_brutos WHERE repo_id = ?1")
@@ -903,15 +915,8 @@ fn response_format_for_block(block: u8) -> Value {
         json!({ "type": "integer", "minimum": 0, "maximum": 10 })
     }
 
-    fn envelope_fields_only(fields_schema: Value) -> Value {
-        let mut props = serde_json::Map::new();
-        props.insert("fields".to_string(), fields_schema);
-        strict_object(props, vec!["fields"])
-    }
-
     fn envelope_with_justifications(fields_schema: Value) -> Value {
         let mut props = serde_json::Map::new();
-        props.insert("fields".to_string(), fields_schema);
         props.insert(
             "justifications".to_string(),
             json!({
@@ -919,7 +924,8 @@ fn response_format_for_block(block: u8) -> Value {
                 "additionalProperties": { "type": "string", "maxLength": 5000 }
             }),
         );
-        strict_object(props, vec!["fields", "justifications"])
+        props.insert("fields".to_string(), fields_schema);
+        strict_object(props, vec!["justifications", "fields"])
     }
 
     let fields_schema = match block {
@@ -1013,97 +1019,105 @@ fn response_format_for_block(block: u8) -> Value {
             props.insert(
                 "classificacao_terminal".to_string(),
                 with_description(enum_schema(&[
-                    "APROVADO_PARA_PRODUCAO",
-                    "APROVADO_COM_RESSALVAS",
-                    "REJEITADO_DESCARTE",
+                    "STACK_CORE_PLANO_A1",
+                    "STACK_CORE_PLANO_A2",
+                    "STACK_CORE_PLANO_B",
+                    "INTEGRATE_AS_COMPONENT",
+                    "ABSORB_PARTIALLY",
+                    "ABSORB_CONCEPT",
+                    "USE_AS_INSPIRATION_ONLY",
+                    "REJECT",
+                    "SHORT-CIRCUIT",
                 ]), "Classificacao terminal final do ativo."),
             );
             props.insert(
                 "acao_de_canibalizacao".to_string(),
-                with_description(enum_schema(&["NENHUMA", "ABSORVER_LOGICA", "EXTRAIR_SCRIPTS"]), "Acao principal de canibalizacao recomendada."),
+                with_description(enum_schema(&[
+                    "Data Model / Schema",
+                    "Prompt / Heuristic Seed",
+                    "Protocol / Standard",
+                    "Concept",
+                    "UX Pattern",
+                    "Canvas Refinement",
+                    "New Canvas",
+                    "Cognitive Layer",
+                    "Infra Capability",
+                    "Technical Runtime",
+                    "Sandbox",
+                    "Plugin",
+                    "External Contract",
+                    "No Absorption",
+                ]), "Acao principal de canibalizacao recomendada."),
             );
             props.insert(
                 "categoria_arquitetural".to_string(),
                 with_description(enum_schema(&[
                     "CanvasUI",
                     "UILibrary",
-                    "Memoria_RAG",
-                    "Roteamento_FinOps",
-                    "Orquestracao_Agentes",
-                    "Model_Serving",
-                    "Knowledge_Extraction",
-                    "Seguranca_Sandbox",
-                    "Infraestrutura_Core",
-                    "Tooling_Dev",
+                    "Memoria",
+                    "Roteamento",
+                    "Orquestracao",
+                    "Seguranca",
+                    "Infraestrutura",
+                    "Tooling",
                 ]), "Categoria arquitetural canonica do ativo."),
             );
             props.insert(
                 "horizonte_extracao".to_string(),
                 with_description(enum_schema(&[
-                    "IMMEDIATE",
-                    "SHORT",
-                    "MEDIUM",
-                    "LONG",
-                    "VERY_LONG",
                     "IMEDIATO",
-                    "CURTO",
-                    "MÉDIO",
-                    "MEDIO",
-                    "LONGO",
-                    "MUITO_LONGO",
+                    "CURTO_PRAZO",
+                    "CURTO_MEDIO_PRAZO",
+                    "MEDIO_PRAZO",
+                    "LONGO_PRAZO",
+                    "REFERENCIAL_TEORICO",
+                    "NUNCA",
                 ]), "Horizonte temporal para extrair valor claro."),
             );
             props.insert(
                 "tipo_integracao".to_string(),
                 with_description(enum_schema(&[
-                    "INTEGRATE_AS_COMPONENT",
-                    "REIMPLEMENT_INTERNALLY",
-                    "REJECT",
-                    "INTEGRAR_COMO_COMPONENTE",
-                    "REIMPLEMENTAR_INTERNAMENTE",
-                    "REJEITAR",
+                    "Biblioteca / Crate Nativa",
+                    "Sidecar Efêmero",
+                    "Daemon / Background Service",
+                    "App Nativo / CLI Independente",
+                    "Middleware / Proxy",
                 ]), "Modo de integracao recomendado para o SODA."),
             );
             props.insert(
                 "capability_nature_primary".to_string(),
                 with_description(enum_schema(&[
-                    "LIBRARY",
-                    "TOOLING",
-                    "SERVICE",
-                    "APPLICATION",
-                    "SYSTEM",
-                    "ALGORITHM",
-                    "DATA_STRUCTURE",
-                    "BIBLIOTECA",
-                    "FERRAMENTA",
-                    "SERVIÇO",
-                    "SERVICO",
-                    "APLICAÇÃO",
-                    "APLICACAO",
-                    "SISTEMA",
-                    "ALGORITMO",
-                    "ESTRUTURA_DE_DADOS",
+                    "Context",
+                    "Memory",
+                    "Perception",
+                    "Expression",
+                    "Execution",
+                    "Observation",
+                    "Documentation",
+                    "Planning",
+                    "Curation",
+                    "Identity",
+                    "Infrastructure",
+                    "Multimodal IO",
+                    "Sandbox",
+                    "Serving",
+                    "Retrieval",
+                    "Synchronization",
                 ]), "Natureza primaria da capacidade entregue pelo ativo."),
             );
             props.insert(
                 "architectural_topology".to_string(),
-                enum_schema(&[
-                    "MODULAR",
-                    "MONOLITH",
-                    "LAYERED",
-                    "MICROSERVICES",
-                    "EVENT_DRIVEN",
-                    "PIPELINE",
-                    "PLUGIN",
-                    "MONOLITO",
-                    "EM_CAMADAS",
-                    "CAMADAS",
-                    "MICROSSERVIÇOS",
-                    "MICROSSERVICOS",
-                    "DIRIGIDO_A_EVENTOS",
-                    "PLUGÁVEL",
-                    "PLUGAVEL",
-                ]),
+                with_description(enum_schema(&[
+                    "Monolith",
+                    "Modular",
+                    "Layered",
+                    "Contract-Driven",
+                    "Runtime-Centric",
+                    "Event-Driven",
+                    "Graph-Centric",
+                    "Pipeline-Centric",
+                    "Hybrid",
+                ]), "Topologia arquitetural dominante do ativo."),
             );
             props.insert(
                 "temporal_stability".to_string(),
@@ -1275,7 +1289,7 @@ fn response_format_for_block(block: u8) -> Value {
             );
             props.insert(
                 "discipline_dependency".to_string(),
-                enum_schema(&["NENHUMA", "BAIXA", "MEDIA", "ALTA", "CRITICA", "MÉDIA", "CRÍTICA"]),
+                with_description(enum_schema(&["Nenhuma", "Baixa", "Média", "Alta", "Crítica"]), "Dependencia de disciplina humana para operar sem colapso."),
             );
             props.insert(
                 "regulatory_risk".to_string(),
@@ -1350,11 +1364,7 @@ fn response_format_for_block(block: u8) -> Value {
         }
     };
 
-    let schema = if block == 3 {
-        envelope_fields_only(fields_schema)
-    } else {
-        envelope_with_justifications(fields_schema)
-    };
+    let schema = envelope_with_justifications(fields_schema);
     json!({
         "type": "json_schema",
         "json_schema": {
@@ -1396,13 +1406,13 @@ fn example_output_for_block(block: u8) -> Value {
             "where_ai_should_not_enter": ["item 1"]
         }),
         3 => json!({
-            "classificacao_terminal": "APROVADO_COM_RESSALVAS",
-            "acao_de_canibalizacao": "NENHUMA",
-            "categoria_arquitetural": "Tooling_Dev",
-            "horizonte_extracao": "SHORT",
-            "tipo_integracao": "INTEGRATE_AS_COMPONENT",
-            "capability_nature_primary": "TOOLING",
-            "architectural_topology": "MODULAR",
+            "classificacao_terminal": "ABSORB_PARTIALLY",
+            "acao_de_canibalizacao": "Prompt / Heuristic Seed",
+            "categoria_arquitetural": "Tooling",
+            "horizonte_extracao": "CURTO_PRAZO",
+            "tipo_integracao": "Biblioteca / Crate Nativa",
+            "capability_nature_primary": "Execution",
+            "architectural_topology": "Modular",
             "temporal_stability": "EVOLVING",
             "bare_metal_fit": "MEDIUM",
             "extractability_level": "MEDIUM",
@@ -1424,7 +1434,7 @@ fn example_output_for_block(block: u8) -> Value {
             "entropy_risk": "MEDIUM",
             "design_misuse_risk": "MEDIUM",
             "intrinsic_ethics_risk": "MEDIUM",
-            "discipline_dependency": "MEDIA",
+            "discipline_dependency": "Média",
             "regulatory_risk": "MEDIUM"
         }),
         4 => json!({
@@ -1441,14 +1451,10 @@ fn example_output_for_block(block: u8) -> Value {
         _ => json!({ "note": "" }),
     };
 
-    if block == 3 {
-        json!({ "fields": fields })
-    } else {
-        json!({
-            "fields": fields,
-            "justifications": {}
-        })
-    }
+    json!({
+        "justifications": {},
+        "fields": fields
+    })
 }
 
 #[cfg(test)]
@@ -1471,12 +1477,13 @@ mod tests {
             Some(false)
         );
         let required = schema.get("required").and_then(|v| v.as_array()).unwrap();
-        assert_eq!(required.len(), 1);
-        assert_eq!(required[0].as_str(), Some("fields"));
+        assert_eq!(required.len(), 2);
+        assert_eq!(required[0].as_str(), Some("justifications"));
+        assert_eq!(required[1].as_str(), Some("fields"));
         assert!(schema
             .get("properties")
             .and_then(|v| v.get("justifications"))
-            .is_none());
+            .is_some());
         let fields = schema
             .get("properties")
             .and_then(|v| v.get("fields"))
@@ -1485,10 +1492,35 @@ mod tests {
             .unwrap();
         let ct = fields.get("classificacao_terminal").unwrap();
         let opts = ct.get("enum").and_then(|v| v.as_array()).unwrap();
-        assert!(opts.iter().any(|v| v.as_str() == Some("APROVADO_PARA_PRODUCAO")));
-        let risk = fields.get("abandonment_risk").unwrap();
-        let risk_opts = risk.get("enum").and_then(|v| v.as_array()).unwrap();
-        assert!(risk_opts.iter().any(|v| v.as_str() == Some("CRÍTICA")));
+        assert!(opts.iter().any(|v| v.as_str() == Some("STACK_CORE_PLANO_A1")));
+        let action = fields.get("acao_de_canibalizacao").unwrap();
+        let action_opts = action.get("enum").and_then(|v| v.as_array()).unwrap();
+        assert!(action_opts
+            .iter()
+            .any(|v| v.as_str() == Some("Prompt / Heuristic Seed")));
+        let topo = fields.get("architectural_topology").unwrap();
+        let topo_opts = topo.get("enum").and_then(|v| v.as_array()).unwrap();
+        assert!(topo_opts
+            .iter()
+            .any(|v| v.as_str() == Some("Contract-Driven")));
+    }
+
+    #[test]
+    fn declared_description_prefers_about_then_readme_then_headline() {
+        let community = r#"{"description":"About do GitHub","full_name":"owner/repo"}"#;
+        assert_eq!(
+            derive_declared_description_about_from_community_meta_json(community).as_deref(),
+            Some("About do GitHub")
+        );
+        assert_eq!(
+            derive_declared_description_headline_from_community_meta_json(community).as_deref(),
+            Some("owner/repo")
+        );
+        let readme = "# repo\n\nPrimeira frase util do README.";
+        assert_eq!(
+            derive_declared_description_from_readme(readme).as_deref(),
+            Some("Primeira frase util do README.")
+        );
     }
 
     #[test]
@@ -1935,19 +1967,17 @@ fn normalize_categoria_arquitetural_seed(raw: &str) -> Option<String> {
         return None;
     }
     let mapped = match trimmed {
-        "Tooling_Dev"
-        | "Infraestrutura_Core"
-        | "Seguranca_Sandbox"
-        | "Knowledge_Extraction"
-        | "Model_Serving"
-        | "Orquestracao_Agentes"
-        | "Roteamento_FinOps"
-        | "Memoria_RAG"
-        | "UILibrary"
-        | "CanvasUI" => trimmed.to_string(),
-        "TOOLING" => "Tooling_Dev".to_string(),
-        "INFRASTRUCTURE" => "Infraestrutura_Core".to_string(),
-        "RUNTIME" => "Model_Serving".to_string(),
+        "Tooling_Dev" | "Tooling" | "UILibrary" | "CanvasUI" | "Seguranca" | "Infraestrutura"
+        | "Orquestracao" | "Roteamento" | "Memoria" => trimmed.to_string(),
+        "Infraestrutura_Core" | "Knowledge_Extraction" | "Model_Serving" => {
+            "Infraestrutura".to_string()
+        }
+        "Seguranca_Sandbox" => "Seguranca".to_string(),
+        "Orquestracao_Agentes" => "Orquestracao".to_string(),
+        "Roteamento_FinOps" => "Roteamento".to_string(),
+        "Memoria_RAG" => "Memoria".to_string(),
+        "TOOLING" => "Tooling".to_string(),
+        "INFRASTRUCTURE" | "RUNTIME" => "Infraestrutura".to_string(),
         "LIBRARY" => "UILibrary".to_string(),
         _ => return None,
     };
@@ -2028,6 +2058,34 @@ fn derive_license_from_readme(text: &str) -> Option<String> {
     }
     if lower.contains("gnu general public license") || lower.contains("gpl") {
         return Some("GPL".to_string());
+    }
+    None
+}
+
+fn derive_declared_description_about_from_community_meta_json(text: &str) -> Option<String> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return None;
+    };
+    value
+        .get("description")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && !is_unknown_like(s))
+}
+
+fn derive_declared_description_headline_from_community_meta_json(text: &str) -> Option<String> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return None;
+    };
+    for key in ["title", "headline", "full_name", "name"] {
+        if let Some(candidate) = value
+            .get(key)
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty() && !is_unknown_like(s))
+        {
+            return Some(candidate);
+        }
     }
     None
 }
@@ -2937,6 +2995,7 @@ async fn main() -> io::Result<()> {
 
     let mut n4_sheet_proposta: Option<String> = None;
     let mut n4_sheet_categoria: Option<String> = None;
+    let force_status_gate = env_flag_enabled("SODA_FORCE_F3_STATUS_GATE");
     if !dry_run && (skip_harvester || !e2e_full) {
         let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
@@ -2952,7 +3011,16 @@ async fn main() -> io::Result<()> {
         let status_ok = status_atualizacao.trim() == "APROVADO_PARA_ENXAME"
             || (status_atualizacao.trim() == "CONCLUIDO_AGUARDANDO"
                 && status_fase.trim() == "FASE_4_SHEETS_UPDATED");
-        if !status_ok {
+        if force_status_gate && !status_ok {
+            warn!(
+                repo_id = %repo_id,
+                row_number,
+                status_atualizacao = %status_atualizacao,
+                status_fase = %status_fase,
+                "N4/N5: bypass administrativo ativado via SODA_FORCE_F3_STATUS_GATE"
+            );
+        }
+        if !status_ok && !force_status_gate {
             info!(
                 repo_id = %repo_id,
                 row_number,
@@ -3180,8 +3248,22 @@ async fn main() -> io::Result<()> {
     }
 
     if is_unknown_like(&declared_description) {
+        if let Some(text) = fetch_raw_artifact_text(&conn, &repo_id, "blob_09_community_meta") {
+            if let Some(derived) = derive_declared_description_about_from_community_meta_json(&text) {
+                declared_description = derived;
+            }
+        }
+    }
+    if is_unknown_like(&declared_description) {
         if let Some(text) = fetch_raw_artifact_text(&conn, &repo_id, "blob_01_promessa_readme") {
             if let Some(derived) = derive_declared_description_from_readme(&text) {
+                declared_description = derived;
+            }
+        }
+    }
+    if is_unknown_like(&declared_description) {
+        if let Some(text) = fetch_raw_artifact_text(&conn, &repo_id, "blob_09_community_meta") {
+            if let Some(derived) = derive_declared_description_headline_from_community_meta_json(&text) {
                 declared_description = derived;
             }
         }

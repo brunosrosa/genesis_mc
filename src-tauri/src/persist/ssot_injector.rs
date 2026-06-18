@@ -2304,6 +2304,25 @@ impl SsotInjector {
         }
     }
 
+    fn parse_confirmation_number(raw: &str) -> Option<f64> {
+        raw.trim().replace(',', ".").parse::<f64>().ok()
+    }
+
+    fn confirmation_matches(canonical_col: &str, expected: &str, actual: &str) -> bool {
+        if expected == actual {
+            return true;
+        }
+        if canonical_col.starts_with("score_") {
+            if let (Some(lhs), Some(rhs)) = (
+                Self::parse_confirmation_number(expected),
+                Self::parse_confirmation_number(actual),
+            ) {
+                return (lhs - rhs).abs() < 0.000_001;
+            }
+        }
+        false
+    }
+
     async fn confirm_cloud_write_projection(
         client: &dyn SheetsClient,
         spreadsheet_id: &str,
@@ -2324,7 +2343,7 @@ impl SsotInjector {
                 canonical,
             )
             .await?;
-            if actual != expected {
+            if !Self::confirmation_matches(canonical, &expected, &actual) {
                 return Err(SsotError::CloudFailure(format!(
                     "Confirmação de escrita falhou para '{}': esperado '{}', recebido '{}'",
                     canonical,
@@ -2564,6 +2583,16 @@ mod tests {
         assert_eq!(SsotInjector::header_idx(&headers, "status_fase"), Some(1));
         assert_eq!(SsotInjector::header_idx(&headers, "lote_id"), Some(83));
         assert_eq!(SsotInjector::header_idx(&headers, "repo_url"), Some(4));
+    }
+
+    #[test]
+    fn confirmation_accepts_decimal_comma_for_scores() {
+        assert!(SsotInjector::confirmation_matches("score_final", "4.3", "4,30"));
+        assert!(!SsotInjector::confirmation_matches(
+            "project_name",
+            "aaif-goose/goose",
+            "aaif-goose / goose"
+        ));
     }
 
     #[test]
