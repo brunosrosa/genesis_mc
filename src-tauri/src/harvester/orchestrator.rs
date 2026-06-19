@@ -191,7 +191,7 @@ impl HarvesterOrchestrator {
                 }),
             };
             let native_ast_started = Instant::now();
-            info!(repo_id = %repo_id, timeout_secs = input.timeout_secs, "N6: Invocando parser AST nativo");
+            debug!(repo_id = %repo_id, timeout_secs = input.timeout_secs, "N6: Invocando parser AST nativo");
             let payload = NativeAstParser::extract(input).await.map_err(|e| {
                 error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blob_04_repo_outline");
                 OrchestratorError::ExtractionError(e.to_string())
@@ -252,9 +252,9 @@ impl HarvesterOrchestrator {
                         log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
                     }
                     Err(e) => {
-                        warn!(
+                        info!(
                             repo_id = %repo_id,
-                            error = %e,
+                            reason = %e,
                             "Falha ao extrair blob_07_ops_blueprint; seguindo com fail-soft"
                         );
                         blobs.push(ArtifactBlob {
@@ -336,7 +336,7 @@ impl HarvesterOrchestrator {
                     let reason = e.to_string();
                     warn!(
                         repo_id = %repo_id,
-                        error = %reason,
+                        reason = %reason,
                         "Falha ao extrair blobs 06/08 via semgrep; seguindo com fail-soft"
                     );
                     let (unsafe_blob, health_blob) = if is_unknown_stack {
@@ -398,7 +398,7 @@ impl HarvesterOrchestrator {
         let community_payload = match community_fut.await {
             Ok(payload) => payload,
             Err(e) => {
-                warn!(repo_id = %repo_id, error = %e, "Falha ao coletar metrica comunitaria; seguindo com fail-soft");
+                warn!(repo_id = %repo_id, reason = %e, "Falha ao coletar metrica comunitaria; seguindo com fail-soft");
                 super::community::CommunityMetaPayload::empty()
             }
         };

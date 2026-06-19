@@ -1,7 +1,7 @@
 use std::env;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -137,6 +137,10 @@ struct ResolvedCommand {
     env: BTreeMap<String, String>,
 }
 
+const IDLE_TIMEOUT_SECS: u64 = 45;
+const ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 15 * 60;
+const PROCESS_WAIT_POLL_INTERVAL_MS: u64 = 250;
+
 pub(crate) fn truncated_args_preview<S: AsRef<str>>(args: &[S]) -> Vec<String> {
     const MAX_ARGS_PREVIEW: usize = 3;
     let mut preview = args
@@ -148,6 +152,27 @@ pub(crate) fn truncated_args_preview<S: AsRef<str>>(args: &[S]) -> Vec<String> {
         preview.push("<...args omitidos>".to_string());
     }
     preview
+}
+
+fn mark_process_activity(last_activity: &Arc<Mutex<Instant>>) {
+    let mut guard = last_activity
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *guard = Instant::now();
+}
+
+fn idle_elapsed(last_activity: &Arc<Mutex<Instant>>) -> Duration {
+    last_activity
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .elapsed()
+}
+
+enum ProcessWaitOutcome {
+    Exited(std::process::ExitStatus),
+    WaitError(std::io::Error),
+    IdleTimeout,
+    AbsoluteTimeout,
 }
 
 fn truncated_env_preview(env: &BTreeMap<String, String>) -> Vec<String> {
@@ -459,6 +484,7 @@ async fn drain_pipe_with_telemetry<R>(
     repo_path: PathBuf,
     pid: u32,
     pipe_name: &'static str,
+    last_activity: Arc<Mutex<Instant>>,
 ) -> Vec<u8>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
@@ -485,6 +511,7 @@ where
             }
             Ok(bytes_read) => {
                 buffer.extend_from_slice(&chunk[..bytes_read]);
+                mark_process_activity(&last_activity);
                 trace!(
                     command = %command,
                     pid,
@@ -663,32 +690,54 @@ impl SandboxHandle {
 
         self.lock_pids().insert(pid);
 
-        let stdout_stream = child.stdout.take().ok_or_else(|| {
-            SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
-        })?;
-        let stderr_stream = child.stderr.take().ok_or_else(|| {
-            SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
-        })?;
+        let last_activity = Arc::new(Mutex::new(Instant::now()));
+        let stdout_task = {
+            let last_activity = Arc::clone(&last_activity);
+            tokio::spawn(drain_pipe_with_telemetry(
+                child.stdout.take().ok_or_else(|| {
+                    SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
+                })?,
+                requested_command.clone(),
+                self.repo_path.clone(),
+                pid,
+                "stdout",
+                last_activity,
+            ))
+        };
+        let stderr_task = {
+            let last_activity = Arc::clone(&last_activity);
+            tokio::spawn(drain_pipe_with_telemetry(
+                child.stderr.take().ok_or_else(|| {
+                    SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
+                })?,
+                requested_command.clone(),
+                self.repo_path.clone(),
+                pid,
+                "stderr",
+                last_activity,
+            ))
+        };
+        let absolute_timeout_secs = timeout_secs.max(ABSOLUTE_TIMEOUT_FLOOR_SECS);
+        let started_at = Instant::now();
 
-        let stdout_task = tokio::spawn(drain_pipe_with_telemetry(
-            stdout_stream,
-            requested_command.clone(),
-            self.repo_path.clone(),
-            pid,
-            "stdout",
-        ));
-        let stderr_task = tokio::spawn(drain_pipe_with_telemetry(
-            stderr_stream,
-            requested_command.clone(),
-            self.repo_path.clone(),
-            pid,
-            "stderr",
-        ));
+        let wait_outcome = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break ProcessWaitOutcome::Exited(status),
+                Ok(None) => {
+                    if idle_elapsed(&last_activity) >= Duration::from_secs(IDLE_TIMEOUT_SECS) {
+                        break ProcessWaitOutcome::IdleTimeout;
+                    }
+                    if started_at.elapsed() >= Duration::from_secs(absolute_timeout_secs) {
+                        break ProcessWaitOutcome::AbsoluteTimeout;
+                    }
+                    tokio::time::sleep(Duration::from_millis(PROCESS_WAIT_POLL_INTERVAL_MS)).await;
+                }
+                Err(e) => break ProcessWaitOutcome::WaitError(e),
+            }
+        };
 
-        let wait_result = timeout(Duration::from_secs(timeout_secs), child.wait()).await;
-
-        match wait_result {
-            Ok(Ok(status)) => {
+        match wait_outcome {
+            ProcessWaitOutcome::Exited(status) => {
                 let _ = job_guard;
                 reap_command_orphans(&requested_command, &self.repo_path).await;
                 let stdout_buffer = collect_output_task(stdout_task).await;
@@ -730,7 +779,7 @@ impl SandboxHandle {
                     })
                 }
             }
-            Ok(Err(e)) => {
+            ProcessWaitOutcome::WaitError(e) => {
                 let _ = job_guard;
                 stdout_task.abort();
                 stderr_task.abort();
@@ -744,13 +793,14 @@ impl SandboxHandle {
                 );
                 Err(SandboxError::ProcessSpawnFailed { reason: e.to_string() })
             }
-            Err(_) => {
+            ProcessWaitOutcome::IdleTimeout => {
                 warn!(
                     command = %requested_command,
                     pid,
                     repo_path = %self.repo_path.display(),
-                    timeout_secs,
-                    "Sandbox: timeout atingido; aniquilando sidecar"
+                    idle_timeout_secs = IDLE_TIMEOUT_SECS,
+                    absolute_timeout_secs,
+                    "Sandbox: idle timeout atingido; aniquilando sidecar"
                 );
                 let _ = child.kill().await;
                 let _ = job_guard;
@@ -765,6 +815,34 @@ impl SandboxHandle {
                     stdout_bytes = stdout_buffer.len(),
                     stderr_bytes = stderr_buffer.len(),
                     repo_path = %self.repo_path.display(),
+                    timeout_kind = "idle",
+                    "Sandbox: sidecar aniquilado apos timeout"
+                );
+                Err(SandboxError::Timeout)
+            }
+            ProcessWaitOutcome::AbsoluteTimeout => {
+                warn!(
+                    command = %requested_command,
+                    pid,
+                    repo_path = %self.repo_path.display(),
+                    idle_timeout_secs = IDLE_TIMEOUT_SECS,
+                    absolute_timeout_secs,
+                    "Sandbox: absolute timeout atingido; aniquilando sidecar"
+                );
+                let _ = child.kill().await;
+                let _ = job_guard;
+                kill_process_tree_by_pid(pid).await;
+                reap_command_orphans(&requested_command, &self.repo_path).await;
+                let stdout_buffer = collect_output_task(stdout_task).await;
+                let stderr_buffer = collect_output_task(stderr_task).await;
+                self.lock_pids().remove(&pid);
+                warn!(
+                    command = %requested_command,
+                    pid,
+                    stdout_bytes = stdout_buffer.len(),
+                    stderr_bytes = stderr_buffer.len(),
+                    repo_path = %self.repo_path.display(),
+                    timeout_kind = "absolute",
                     "Sandbox: sidecar aniquilado apos timeout"
                 );
                 Err(SandboxError::Timeout)
