@@ -137,9 +137,13 @@ struct ResolvedCommand {
     env: BTreeMap<String, String>,
 }
 
-fn truncated_args_preview(args: &[String]) -> Vec<String> {
+pub(crate) fn truncated_args_preview<S: AsRef<str>>(args: &[S]) -> Vec<String> {
     const MAX_ARGS_PREVIEW: usize = 3;
-    let mut preview = args.iter().take(MAX_ARGS_PREVIEW).cloned().collect::<Vec<_>>();
+    let mut preview = args
+        .iter()
+        .take(MAX_ARGS_PREVIEW)
+        .map(|arg| arg.as_ref().to_string())
+        .collect::<Vec<_>>();
     if args.len() > MAX_ARGS_PREVIEW {
         preview.push("<...args omitidos>".to_string());
     }

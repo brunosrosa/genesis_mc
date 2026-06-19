@@ -10,7 +10,7 @@ use tracing::error;
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::detect::{SingleStack, StackProfile};
-use crate::harvester::sandbox::SandboxError;
+use crate::harvester::sandbox::{SandboxError, truncated_args_preview};
 use crate::harvester::web_scraper;
 
 /// Trait para abstrair a execução no sandbox, permitindo mocks nos testes.
@@ -934,21 +934,9 @@ async fn execute_sidecar<E: SandboxExecutor>(
     timeout_secs: u64,
     exit_policy: SidecarExitPolicy,
 ) -> Result<Vec<u8>, SidecarError> {
-    let args_preview = args
-        .iter()
-        .take(3)
-        .map(|arg| (*arg).to_string())
-        .collect::<Vec<_>>();
-    let args_preview = if args.len() > 3 {
-        let mut preview = args_preview;
-        preview.push("<...args omitidos>".to_string());
-        preview
-    } else {
-        args_preview
-    };
     tracing::debug!(
         binary = %binary,
-        args = ?args_preview,
+        args = ?truncated_args_preview(args),
         repo_path = %executor.repo_path().display(),
         timeout_secs,
         "Invocando sidecar"
