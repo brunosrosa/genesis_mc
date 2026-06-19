@@ -1491,7 +1491,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!(
             total_candidates = total,
             ok = ok_count,
-            error = error_count,
+            error_count,
             skipped = skipped_count,
             total_elapsed_ms,
             avg_ms,

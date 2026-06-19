@@ -3,7 +3,7 @@ use std::time::Instant;
 use url::Url;
 use rusqlite::Connection;
 use thiserror::Error;
-use tracing::{info, error, warn};
+use tracing::{debug, info, error, warn};
 
 use super::ramdisk::{RamdiskAllocator, RamdiskHandle};
 use super::git::{BloblessCloner};
@@ -306,7 +306,7 @@ impl HarvesterOrchestrator {
                 OrchestratorError::InfraError("SandboxHandle indisponivel para executar semgrep".to_string())
             })?;
             let semgrep_started = Instant::now();
-            info!(repo_id = %repo_id, "N11: Invocando sidecar semgrep");
+            debug!(repo_id = %repo_id, "N11: Invocando sidecar semgrep");
             match SemgrepSidecar::extract(SemgrepInput {
                 executor: sandbox_ref,
                 timeout_secs: 600,

@@ -907,7 +907,7 @@ fn normalize_repo_outline_markdown(text: &str) -> String {
 #[cfg(test)]
 fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     if stdout_is_blank(bytes) {
-        error!(binary = "native-ast-parser", "Sidecar claude-md retornou stdout vazio");
+        debug!(binary = "native-ast-parser", "Sidecar claude-md retornou stdout vazio");
         return Err(SidecarError::ExecutionFailed {
             reason: "native-ast-parser claude-md returned empty stdout".to_string(),
         });
@@ -934,9 +934,21 @@ async fn execute_sidecar<E: SandboxExecutor>(
     timeout_secs: u64,
     exit_policy: SidecarExitPolicy,
 ) -> Result<Vec<u8>, SidecarError> {
-    tracing::info!(
+    let args_preview = args
+        .iter()
+        .take(3)
+        .map(|arg| (*arg).to_string())
+        .collect::<Vec<_>>();
+    let args_preview = if args.len() > 3 {
+        let mut preview = args_preview;
+        preview.push("<...args omitidos>".to_string());
+        preview
+    } else {
+        args_preview
+    };
+    tracing::debug!(
         binary = %binary,
-        args = ?args,
+        args = ?args_preview,
         repo_path = %executor.repo_path().display(),
         timeout_secs,
         "Invocando sidecar"
@@ -944,7 +956,7 @@ async fn execute_sidecar<E: SandboxExecutor>(
     match executor.execute(binary, args, timeout_secs).await {
         Ok(bytes) => {
             let sanitized_bytes = sanitize_sidecar_output(executor.repo_path(), &bytes);
-            tracing::info!(
+            tracing::debug!(
                 binary = %binary,
                 stdout_bytes = sanitized_bytes.len(),
                 repo_path = %executor.repo_path().display(),
@@ -1113,7 +1125,7 @@ impl OxcSidecar {
     pub async fn extract<E: SandboxExecutor>(
         input: OxcInput<'_, E>,
     ) -> Result<UxContractsPayload, SidecarError> {
-        tracing::info!(
+        tracing::debug!(
             repo_path = %input.executor.repo_path().display(),
             "Invocando sidecar oxc/oxlint para contratos UX"
         );

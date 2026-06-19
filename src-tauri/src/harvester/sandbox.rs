@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use tokio::time::timeout;
-use tracing::{info, warn};
+use tracing::{debug, info, trace, warn};
 use super::git::RepoPath;
 #[cfg(target_os = "windows")]
 use std::mem::size_of;
@@ -135,6 +135,28 @@ struct ResolvedCommand {
     program: PathBuf,
     args: Vec<String>,
     env: BTreeMap<String, String>,
+}
+
+fn truncated_args_preview(args: &[String]) -> Vec<String> {
+    const MAX_ARGS_PREVIEW: usize = 3;
+    let mut preview = args.iter().take(MAX_ARGS_PREVIEW).cloned().collect::<Vec<_>>();
+    if args.len() > MAX_ARGS_PREVIEW {
+        preview.push("<...args omitidos>".to_string());
+    }
+    preview
+}
+
+fn truncated_env_preview(env: &BTreeMap<String, String>) -> Vec<String> {
+    const MAX_ENV_PREVIEW: usize = 3;
+    let mut preview = env
+        .keys()
+        .take(MAX_ENV_PREVIEW)
+        .map(|key| format!("{key}=<redacted>"))
+        .collect::<Vec<_>>();
+    if env.len() > MAX_ENV_PREVIEW {
+        preview.push("<...env omitido>".to_string());
+    }
+    preview
 }
 
 fn workspace_root() -> PathBuf {
@@ -447,7 +469,7 @@ where
     loop {
         match stream.read(&mut chunk).await {
             Ok(0) => {
-                info!(
+                debug!(
                     command = %command,
                     pid,
                     pipe = pipe_name,
@@ -459,7 +481,7 @@ where
             }
             Ok(bytes_read) => {
                 buffer.extend_from_slice(&chunk[..bytes_read]);
-                info!(
+                trace!(
                     command = %command,
                     pid,
                     pipe = pipe_name,
@@ -600,14 +622,13 @@ impl SandboxHandle {
         let resolved = resolve_command(command, args, &self.repo_path)?;
         self.enforce_host_path_policy(&resolved)?;
         let requested_command = command.to_string();
-        info!(
+        debug!(
             command = %requested_command,
             program = %resolved.program.display(),
-            args = ?resolved.args,
-            env = ?resolved.env,
+            args = ?truncated_args_preview(&resolved.args),
+            env = ?truncated_env_preview(&resolved.env),
             repo_path = %self.repo_path.display(),
             policy = ?self.policy,
-            host_write_roots = ?self.host_write_roots,
             timeout_secs,
             "Sandbox: iniciando processo efemero"
         );
