@@ -12,7 +12,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 use url::Url;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum SsotError {
@@ -34,19 +34,16 @@ const SSOT_EXPECTED_COLUMNS: usize = 85;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
 #[cfg(not(test))]
-const MCP_TIMEOUT: Duration = Duration::from_secs(180);
+const GOOGLE_SHEETS_HTTP_TIMEOUT: Duration = Duration::from_secs(180);
 #[cfg(test)]
-const MCP_TIMEOUT: Duration = Duration::from_millis(250);
+const GOOGLE_SHEETS_HTTP_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[cfg(not(test))]
 const POST_ATOMIC_ROW_WRITE_DELAY: Duration = Duration::from_millis(1_000);
 #[cfg(test)]
 const POST_ATOMIC_ROW_WRITE_DELAY: Duration = Duration::from_millis(1);
 
-#[cfg(not(test))]
-const MCP_RELOAD_DELAY: Duration = Duration::from_secs(4);
-#[cfg(test)]
-const MCP_RELOAD_DELAY: Duration = Duration::from_millis(10);
+const GOOGLE_SHEETS_API_BASE_URL: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 
 pub type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -76,9 +73,9 @@ pub trait SheetsClient: Send + Sync {
     ) -> SheetsFuture<'a>;
 }
 
-pub struct McpGoogleWorkspaceSheetsClient;
+pub struct ReqwestGoogleWorkspaceSheetsClient;
 
-impl SheetsClient for McpGoogleWorkspaceSheetsClient {
+impl SheetsClient for ReqwestGoogleWorkspaceSheetsClient {
     fn get_sheet_data<'a>(
         &'a self,
         spreadsheet_id: &'a str,
@@ -89,20 +86,16 @@ impl SheetsClient for McpGoogleWorkspaceSheetsClient {
             let access_token = SsotInjector::google_workspace_access_token()
                 .await
                 .map_err(|e| e.to_string())?;
-            let result = SsotInjector::call_mcp_google_workspace_sheets_tool(
+            let a1_range = format!("{sheet}!{range}");
+            let url = SsotInjector::build_google_sheets_values_url(spreadsheet_id, &a1_range)?;
+            let client = SsotInjector::build_google_sheets_http_client()?;
+            let result = SsotInjector::send_google_sheets_json_request(
+                client
+                    .get(url)
+                    .bearer_auth(access_token),
                 "read_values",
-                json!({
-                    "sheet": sheet,
-                    "range": range,
-                    "major_dimension": "ROWS"
-                }),
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "access_token": access_token
-                }),
             )
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
             Ok(SsotInjector::extract_values_2d(&result).unwrap_or_default())
         })
     }
@@ -114,75 +107,24 @@ impl SheetsClient for McpGoogleWorkspaceSheetsClient {
         ranges: Value,
     ) -> SheetsFuture<'a> {
         Box::pin(async move {
-            let call_once = |chunk: Value| async move {
-                let access_token = SsotInjector::google_workspace_access_token()
-                    .await
-                    .map_err(|e| e.to_string())?;
-                let map = chunk
-                    .as_object()
-                    .ok_or_else(|| "Chunk inválido para write_values".to_string())?;
-                if map.len() != 1 {
-                    return Err(format!(
-                        "Escrita no Sheets rejeitada: esperado 1 range atômico, recebeu {} ranges",
-                        map.len()
-                    ));
-                }
-
-                let entries: Vec<(&String, &Value)> = map.iter().collect();
-                let total = entries.len();
-                for (idx, (range, values)) in entries.into_iter().enumerate() {
-                    let result = SsotInjector::call_mcp_google_workspace_sheets_tool(
-                        "write_values",
-                        json!({
-                            "sheet": sheet,
-                            "range": range,
-                            "values": values,
-                            "major_dimension": "ROWS"
-                        }),
-                        json!({
-                            "spreadsheet_id": spreadsheet_id,
-                            "access_token": access_token
-                        }),
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
-                    SsotInjector::validate_write_values_result(range, &result)?;
-                    if idx + 1 < total {
-                        info!(
-                            seconds = 2u64,
-                            range = %range,
-                            "Resfriamento de API (Jitter): aguardando antes do próximo chunk/range"
-                        );
-                        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                    }
-                }
-                Ok::<(), String>(())
-            };
-
-            let call_with_reload = |chunk: Value| async move {
-                match call_once(chunk.clone()).await {
-                    Ok(()) => Ok(()),
-                    Err(err1) => {
-                        warn!(
-                            spreadsheet_id = spreadsheet_id,
-                            sheet = sheet,
-                            error = %err1,
-                            "Falha no MCP Sheets; reiniciando sessão (cold-start) antes do retry"
-                        );
-                        tokio::time::sleep(MCP_RELOAD_DELAY).await;
-                        call_once(chunk).await
-                    }
-                }
-            };
-
-            match ranges {
-                Value::Object(map) if map.len() > 30 => {
-                    return Err("Chunking de ranges desativado: use 1 range atômico por linha".to_string());
-                }
-                other => {
-                    call_with_reload(other).await?;
-                }
-            }
+            let access_token = SsotInjector::google_workspace_access_token()
+                .await
+                .map_err(|e| e.to_string())?;
+            let map = ranges
+                .as_object()
+                .ok_or_else(|| "Chunk inválido para values:batchUpdate".to_string())?;
+            let url = SsotInjector::build_google_sheets_batch_update_url(spreadsheet_id)?;
+            let body = SsotInjector::build_google_sheets_batch_update_body(sheet, map)?;
+            let client = SsotInjector::build_google_sheets_http_client()?;
+            let result = SsotInjector::send_google_sheets_json_request(
+                client
+                    .post(url)
+                    .bearer_auth(access_token)
+                    .json(&body),
+                "values:batchUpdate",
+            )
+            .await?;
+            SsotInjector::validate_batch_update_result(map, &result)?;
             Ok(())
         })
     }
@@ -847,7 +789,7 @@ impl SsotInjector {
         )
         .await?;
 
-        let client = McpGoogleWorkspaceSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
         let sheet_proposta = Self::read_sheet_cell(
@@ -979,7 +921,7 @@ impl SsotInjector {
         )
         .await?;
 
-        let client = McpGoogleWorkspaceSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
         let sheet_proposta = Self::read_sheet_cell(
@@ -1116,7 +1058,7 @@ impl SsotInjector {
         )
         .await?;
 
-        let client = McpGoogleWorkspaceSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
         let sheet_proposta = Self::read_sheet_cell(
@@ -1280,7 +1222,7 @@ impl SsotInjector {
         repo_url: &str,
         lote_id: &str,
     ) -> Result<u32, SsotError> {
-        let client = McpGoogleWorkspaceSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, spreadsheet_id).await?;
         let repo_url_idx = header_row
             .iter()
@@ -1453,20 +1395,137 @@ impl SsotInjector {
             .map_err(SsotError::NetworkFailure)
     }
 
-    async fn call_mcp_google_workspace_sheets_tool(
-        tool_name: &str,
-        arguments: Value,
-        meta: Value,
-    ) -> Result<Value, SsotError> {
-        google_workspace_mcp::call_google_workspace_tool_async(
-            tool_name,
-            arguments,
-            meta,
-            "genesis-mc",
-            MCP_TIMEOUT,
+    fn google_sheets_api_base_url() -> String {
+        env::var("SODA_GOOGLE_SHEETS_API_BASE_URL")
+            .ok()
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| GOOGLE_SHEETS_API_BASE_URL.to_string())
+    }
+
+    fn build_google_sheets_http_client() -> Result<reqwest::Client, String> {
+        reqwest::Client::builder()
+            .timeout(GOOGLE_SHEETS_HTTP_TIMEOUT)
+            .user_agent("genesis-mc-sheets/1.0")
+            .build()
+            .map_err(|e| format!("Falha ao construir cliente HTTP do Google Sheets: {e}"))
+    }
+
+    fn build_google_sheets_values_url_with_base(
+        base_url: &str,
+        spreadsheet_id: &str,
+        a1_range: &str,
+    ) -> Result<String, String> {
+        let mut url = Url::parse(&format!("{}/", base_url.trim_end_matches('/')))
+            .map_err(|e| format!("Base URL inválida do Google Sheets: {e}"))?;
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .map_err(|_| "Base URL do Google Sheets não suporta path segments".to_string())?;
+            segments.pop_if_empty();
+            segments.push(spreadsheet_id);
+            segments.push("values");
+            segments.push(a1_range);
+        }
+        url.query_pairs_mut().append_pair("majorDimension", "ROWS");
+        Ok(url.to_string())
+    }
+
+    fn build_google_sheets_values_url(
+        spreadsheet_id: &str,
+        a1_range: &str,
+    ) -> Result<String, String> {
+        Self::build_google_sheets_values_url_with_base(
+            &Self::google_sheets_api_base_url(),
+            spreadsheet_id,
+            a1_range,
         )
-        .await
-        .map_err(SsotError::NetworkFailure)
+    }
+
+    fn build_google_sheets_batch_update_url(spreadsheet_id: &str) -> Result<String, String> {
+        let mut url = Url::parse(&format!("{}/", Self::google_sheets_api_base_url()))
+            .map_err(|e| format!("Base URL inválida do Google Sheets: {e}"))?;
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .map_err(|_| "Base URL do Google Sheets não suporta path segments".to_string())?;
+            segments.pop_if_empty();
+            segments.push(spreadsheet_id);
+            segments.push("values:batchUpdate");
+        }
+        Ok(url.to_string())
+    }
+
+    fn build_google_sheets_batch_update_body(
+        sheet: &str,
+        ranges: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        if ranges.len() != 1 {
+            return Err(format!(
+                "Escrita no Sheets rejeitada: esperado 1 range atômico, recebeu {} ranges",
+                ranges.len()
+            ));
+        }
+        let (range, values) = ranges
+            .iter()
+            .next()
+            .ok_or_else(|| "Payload de ranges vazio para values:batchUpdate".to_string())?;
+        Ok(json!({
+            "valueInputOption": "RAW",
+            "data": [{
+                "range": format!("{sheet}!{range}"),
+                "majorDimension": "ROWS",
+                "values": values
+            }]
+        }))
+    }
+
+    async fn send_google_sheets_json_request(
+        request: reqwest::RequestBuilder,
+        operation: &str,
+    ) -> Result<Value, String> {
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("Falha HTTP no Google Sheets ({operation}): {e}"))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("Falha ao ler body do Google Sheets ({operation}): {e}"))?;
+        if !status.is_success() {
+            return Err(format!(
+                "Google Sheets ({operation}) respondeu HTTP {}: {}",
+                status,
+                body.trim()
+            ));
+        }
+        serde_json::from_str::<Value>(&body)
+            .map_err(|e| format!("Google Sheets ({operation}) retornou JSON inválido: {e}; body={body}"))
+    }
+
+    fn validate_batch_update_result(
+        ranges: &serde_json::Map<String, Value>,
+        result: &Value,
+    ) -> Result<(), String> {
+        if let Some(err) = result.get("error") {
+            return Err(format!("values:batchUpdate retornou erro: {}", err));
+        }
+        let responses = result
+            .get("responses")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| format!("values:batchUpdate sem responses: {}", result))?;
+        if responses.len() != ranges.len() {
+            return Err(format!(
+                "values:batchUpdate retornou {} responses, esperado {}",
+                responses.len(),
+                ranges.len()
+            ));
+        }
+        for ((range, _), response) in ranges.iter().zip(responses.iter()) {
+            Self::validate_write_values_result(range, response)?;
+        }
+        Ok(())
     }
 
     fn extract_values_2d(value: &Value) -> Option<Vec<Vec<String>>> {
@@ -2257,7 +2316,7 @@ impl SsotInjector {
     ) -> Result<(), SsotError> {
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
-        let client = McpGoogleWorkspaceSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let status_idx = Self::header_idx(&header_row, "status_fase").ok_or_else(|| {
             SsotError::CloudFailure("Header missing status_fase".to_string())
@@ -2285,7 +2344,7 @@ impl SsotInjector {
     async fn dispatch_to_cloud(payload: Value) -> Result<(), SsotError> {
         let sheets_id = env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_SHEETS_ID".to_string()))?;
-        let client = McpGoogleWorkspaceSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         client
             .batch_update_cells(&sheets_id, MASTER_SOLUTIONS_SHEET, payload)
             .await
@@ -2607,6 +2666,45 @@ mod tests {
             &json!({"updatedRange":"MASTER_SOLUTIONS!A2:A2","updatedCells":1})
         )
         .is_ok());
+    }
+
+    #[test]
+    fn google_sheets_values_url_encodes_a1_notation() {
+        let url = SsotInjector::build_google_sheets_values_url_with_base(
+            "https://example.test/v4/spreadsheets",
+            "sheet_123",
+            "MASTER_SOLUTIONS!A1:CG1",
+        )
+        .unwrap();
+        assert_eq!(
+            url,
+            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CG1?majorDimension=ROWS"
+        );
+    }
+
+    #[test]
+    fn google_sheets_batch_update_body_preserves_single_atomic_range() {
+        let mut ranges = serde_json::Map::new();
+        ranges.insert("A2:CG2".to_string(), json!([["owner / repo", "https://github.com/owner/repo"]]));
+        let body =
+            SsotInjector::build_google_sheets_batch_update_body(MASTER_SOLUTIONS_SHEET, &ranges).unwrap();
+        assert_eq!(body["valueInputOption"], json!("RAW"));
+        assert_eq!(body["data"][0]["range"], json!("MASTER_SOLUTIONS!A2:CG2"));
+        assert_eq!(body["data"][0]["majorDimension"], json!("ROWS"));
+        assert_eq!(
+            body["data"][0]["values"],
+            json!([["owner / repo", "https://github.com/owner/repo"]])
+        );
+    }
+
+    #[test]
+    fn google_sheets_batch_update_body_rejects_non_atomic_multi_range_payload() {
+        let mut ranges = serde_json::Map::new();
+        ranges.insert("A2:B2".to_string(), json!([["a", "b"]]));
+        ranges.insert("C2:D2".to_string(), json!([["c", "d"]]));
+        let err =
+            SsotInjector::build_google_sheets_batch_update_body(MASTER_SOLUTIONS_SHEET, &ranges).unwrap_err();
+        assert!(err.contains("1 range atômico"));
     }
 
     #[test]

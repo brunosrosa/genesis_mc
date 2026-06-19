@@ -1,14 +1,21 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(test)]
+use std::io::{BufRead, BufReader, Write};
+#[cfg(test)]
+use std::process::{Command, Stdio};
 use rusqlite::params;
 use thiserror::Error;
 use serde::Deserialize;
 use tracing::error;
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
+use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::detect::{SingleStack, StackProfile};
 use crate::harvester::sandbox::SandboxError;
+use crate::harvester::web_scraper;
 
 /// Trait para abstrair a execução no sandbox, permitindo mocks nos testes.
 #[allow(async_fn_in_trait)]
@@ -64,6 +71,7 @@ fn stdout_is_blank(bytes: &[u8]) -> bool {
     bytes.iter().all(|byte| byte.is_ascii_whitespace())
 }
 
+#[cfg(test)]
 fn digest_json_is_empty(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Null => true,
@@ -74,6 +82,7 @@ fn digest_json_is_empty(value: &serde_json::Value) -> bool {
     }
 }
 
+#[cfg(test)]
 fn jcodemunch_exit_code_one_is_retryable_success(args: &[&str], stdout_bytes: &[u8]) -> bool {
     let Some(subcommand) = args.first().copied() else {
         return false;
@@ -102,6 +111,7 @@ fn stdout_preview(bytes: &[u8], max_chars: usize) -> String {
     truncate_chars(&text.replace(['\r', '\n'], " "), max_chars)
 }
 
+#[cfg(test)]
 fn fallback_jcodemunch_repo_outline(repo_path: &Path, reason: &str) -> Vec<u8> {
     let mut entries = Vec::new();
     if let Ok(read_dir) = std::fs::read_dir(repo_path) {
@@ -136,6 +146,7 @@ fn fallback_jcodemunch_repo_outline(repo_path: &Path, reason: &str) -> Vec<u8> {
     out.into_bytes()
 }
 
+#[cfg(test)]
 fn fallback_jcodemunch_health_report(reason: &str) -> Vec<u8> {
     serde_json::to_string(&serde_json::json!({
         "fallback": true,
@@ -146,6 +157,7 @@ fn fallback_jcodemunch_health_report(reason: &str) -> Vec<u8> {
     .into_bytes()
 }
 
+#[cfg(test)]
 fn fallback_jcodemunch_architecture_map(reason: &str) -> Vec<u8> {
     format!(
         "# Architecture Map\n\nFallback: {}\n",
@@ -154,6 +166,7 @@ fn fallback_jcodemunch_architecture_map(reason: &str) -> Vec<u8> {
     .into_bytes()
 }
 
+#[cfg(test)]
 fn is_no_source_files_found(reason: &str) -> bool {
     let lower = reason.to_ascii_lowercase();
     lower.contains("no source files found")
@@ -224,6 +237,61 @@ fn extract_github_repo_ids(urls: &[String], max_repos: usize) -> Vec<String> {
     out.into_iter().take(max_repos).collect()
 }
 
+fn score_external_doc_url(url: &str) -> i32 {
+    let lower = url.to_ascii_lowercase();
+    let mut score = 0i32;
+    for (needle, weight) in [
+        ("codewiki", 30),
+        ("deepwiki", 24),
+        ("readthedocs", 20),
+        ("docs.", 18),
+        ("/docs", 18),
+        ("documentation", 16),
+        ("/wiki", 16),
+        ("guide", 12),
+        ("manual", 12),
+        ("reference", 10),
+        ("api", 8),
+        ("tutorial", 8),
+    ] {
+        if lower.contains(needle) {
+            score += weight;
+        }
+    }
+    score
+}
+
+fn prioritized_external_doc_urls(urls: &BTreeSet<String>, max_urls: usize) -> Vec<String> {
+    let mut ranked = urls
+        .iter()
+        .map(|url| (score_external_doc_url(url), url.clone()))
+        .filter(|(score, _)| *score > 0)
+        .collect::<Vec<_>>();
+    ranked.sort_by(|(score_l, url_l), (score_r, url_r)| {
+        score_r.cmp(score_l).then_with(|| url_l.cmp(url_r))
+    });
+    ranked
+        .into_iter()
+        .map(|(_, url)| url)
+        .take(max_urls)
+        .collect()
+}
+
+fn remote_block_label(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .map(|parsed| {
+            let host = parsed.host_str().unwrap_or("remote");
+            let path = parsed.path().trim_matches('/');
+            if path.is_empty() {
+                format!("remote::{host}")
+            } else {
+                format!("remote::{host}/{}", truncate_chars(path, 80))
+            }
+        })
+        .unwrap_or_else(|| format!("remote::{}", truncate_chars(url, 96)))
+}
+
 fn collect_markdown_files(repo_path: &Path, max_files: usize) -> Vec<PathBuf> {
     fn should_skip_dir(name: &str) -> bool {
         matches!(name, ".git" | "node_modules" | "target" | "vendor" | ".jj" | ".svn")
@@ -271,7 +339,7 @@ fn collect_markdown_files(repo_path: &Path, max_files: usize) -> Vec<PathBuf> {
     out
 }
 
-fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
+async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<JCodemunchArtifacts, SidecarError> {
     let md_files = collect_markdown_files(repo_path, 24);
     let mut blocks: Vec<(i32, ScopedTextBlock)> = Vec::new();
     let mut all_text = String::new();
@@ -354,6 +422,40 @@ fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
         }
         external.insert(url);
     }
+    let prioritized_remote_docs = prioritized_external_doc_urls(&external, 4);
+    let mut remote_blocks = Vec::<ScopedTextBlock>::new();
+    let mut remote_fetch_failures = Vec::<String>::new();
+    for url in &prioritized_remote_docs {
+        match web_scraper::fetch_markdown_with_guarantee(url).await {
+            Ok(markdown) => {
+                if markdown.trim().is_empty() {
+                    remote_fetch_failures.push(format!("{url} => markdown vazio"));
+                } else {
+                    remote_blocks.push(ScopedTextBlock {
+                        file_path: remote_block_label(url),
+                        items: vec![truncate_chars(&markdown, 6000)],
+                        omitted_count: 0,
+                    });
+                }
+            }
+            Err(err) => {
+                remote_fetch_failures.push(format!(
+                    "{} => {}",
+                    url,
+                    truncate_chars(&err.to_string(), 400)
+                ));
+            }
+        }
+    }
+    if !prioritized_remote_docs.is_empty() && remote_blocks.is_empty() {
+        return Err(SidecarError::ExecutionFailed {
+            reason: format!(
+                "Falha ao garantir scraping remoto para documentação externa. urls={} falhas={}",
+                prioritized_remote_docs.join(", "),
+                remote_fetch_failures.join(" | ")
+            ),
+        });
+    }
 
     let mut link_map = String::new();
     link_map.push_str("# Link Map\n\n");
@@ -362,7 +464,10 @@ fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
     link_map.push('\n');
     link_map.push_str(&format!("markdown_files: {}\n", md_files.len()));
     link_map.push_str(&format!("github_repo_links: {}\n", gh_repos.len()));
-    link_map.push_str(&format!("external_links: {}\n\n", external.len()));
+    link_map.push_str(&format!("external_links: {}\n", external.len()));
+    link_map.push_str(&format!("remote_doc_candidates: {}\n", prioritized_remote_docs.len()));
+    link_map.push_str(&format!("remote_doc_fetched: {}\n", remote_blocks.len()));
+    link_map.push_str(&format!("remote_doc_failed: {}\n\n", remote_fetch_failures.len()));
     link_map.push_str("## GitHub Repos\n");
     if gh_repos.is_empty() {
         link_map.push_str("- <nenhum>\n");
@@ -383,6 +488,26 @@ fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
             link_map.push('\n');
         }
     }
+    if !prioritized_remote_docs.is_empty() {
+        link_map.push_str("\n## Remote Docs Scraped\n");
+        if remote_blocks.is_empty() {
+            link_map.push_str("- <nenhum>\n");
+        } else {
+            for url in &prioritized_remote_docs {
+                link_map.push_str("- ");
+                link_map.push_str(url);
+                link_map.push('\n');
+            }
+        }
+    }
+    if !remote_fetch_failures.is_empty() {
+        link_map.push_str("\n## Remote Docs Failures\n");
+        for failure in &remote_fetch_failures {
+            link_map.push_str("- ");
+            link_map.push_str(failure);
+            link_map.push('\n');
+        }
+    }
 
     let health = serde_json::to_string(&serde_json::json!({
         "kind": kind,
@@ -390,15 +515,26 @@ fn content_repo_artifacts(repo_path: &Path, why: &str) -> JCodemunchArtifacts {
         "markdown_files": md_files.len(),
         "github_repo_links": gh_repos.len(),
         "external_links": external.len(),
+        "remote_doc_candidates": prioritized_remote_docs.len(),
+        "remote_doc_fetched": remote_blocks.len(),
+        "remote_doc_failed": remote_fetch_failures.len(),
         "skill_signal": skill_signal,
     }))
     .unwrap_or_else(|_| "{\"kind\":\"ContentRepo\"}".to_string());
 
-    JCodemunchArtifacts {
+    if !remote_blocks.is_empty() {
+        outline.push_str("\n\n## Remote Documentation (Guaranteed)\n\n");
+        outline.push_str(&pack_scoped_text_blocks(
+            &remote_blocks,
+            BLOB_04_REPO_OUTLINE_MAX_CHARS / 2,
+        ));
+    }
+
+    Ok(JCodemunchArtifacts {
         repo_outline_blob: truncate_chars(&outline, BLOB_04_REPO_OUTLINE_MAX_CHARS).into_bytes(),
         architecture_map_blob: truncate_chars(&link_map, BLOB_05_ARCHITECTURE_MAP_MAX_CHARS).into_bytes(),
         health_report_blob: truncate_chars(&health, BLOB_08_HEALTH_REPORT_MAX_CHARS).into_bytes(),
-    }
+    })
 }
 
 fn stdout_contains_json_payload(bytes: &[u8]) -> bool {
@@ -526,11 +662,29 @@ fn code_index_path_for_repo(repo_path: &Path) -> String {
         .to_string()
 }
 
+#[cfg(test)]
+fn code_index_global_storage_dir() -> Option<PathBuf> {
+    if let Ok(configured) = env::var("JCODEMUNCH_STORAGE_PATH") {
+        let trimmed = configured.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+
+    let home = env::var_os("USERPROFILE").or_else(|| env::var_os("HOME"))?;
+    Some(PathBuf::from(home).join(".code-index"))
+}
+
+#[cfg(test)]
 fn code_index_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, SidecarError> {
-    let storage_path = repo_path
-        .parent()
-        .unwrap_or(repo_path)
-        .join(".jcodemunch_index");
+    code_index_db_path_for_repo_id(repo_path, None)
+}
+
+#[cfg(test)]
+fn code_index_db_path_for_repo_id(
+    repo_path: &Path,
+    index_repo_id: Option<&str>,
+) -> Result<std::path::PathBuf, SidecarError> {
     let owner = repo_path
         .parent()
         .and_then(|path| path.file_name())
@@ -544,27 +698,44 @@ fn code_index_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, S
         .ok_or_else(|| SidecarError::ExecutionFailed {
             reason: "Nao foi possivel resolver o nome do repositório para localizar o banco do jcodemunch".to_string(),
         })?;
-    let canonical = storage_path.join(format!("{}-{}.db", owner, repo));
-    if canonical.is_file() {
-        return Ok(canonical);
+    let mut roots = vec![repo_path.parent().unwrap_or(repo_path).join(".jcodemunch_index")];
+    if let Some(global_root) = code_index_global_storage_dir() {
+        roots.push(global_root);
     }
 
-    let mut candidates = std::fs::read_dir(&storage_path)
-        .map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!(
-                "Falha ao listar diretório do índice do jcodemunch '{}': {}",
-                storage_path.display(),
-                e
-            ),
-        })?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("db"))
-        .collect::<Vec<_>>();
+    let mut exact_stems = Vec::new();
+    if let Some(repo_id) = index_repo_id {
+        let sanitized = repo_id
+            .trim()
+            .replace(['\\', '/'], "-")
+            .replace(':', "-");
+        if !sanitized.is_empty() {
+            exact_stems.push(sanitized);
+        }
+    }
+    exact_stems.push(format!("{}-{}", owner, repo));
 
-    candidates.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    let mut all_candidates = Vec::new();
+    for root in roots {
+        for stem in &exact_stems {
+            let candidate = root.join(format!("{stem}.db"));
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+
+        if let Ok(entries) = std::fs::read_dir(&root) {
+            let mut candidates = entries
+                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("db"))
+                .collect::<Vec<_>>();
+            candidates.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+            all_candidates.extend(candidates);
+        }
+    }
 
     let repo_lower = repo.to_ascii_lowercase();
-    if let Some(path) = candidates.iter().find(|path| {
+    if let Some(path) = all_candidates.iter().find(|path| {
         path.file_stem()
             .and_then(|stem| stem.to_str())
             .map(|stem| stem.to_ascii_lowercase().contains(&repo_lower))
@@ -573,16 +744,16 @@ fn code_index_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, S
         return Ok(path.clone());
     }
 
-    if let [single] = candidates.as_slice() {
+    if let [single] = all_candidates.as_slice() {
         return Ok(single.clone());
     }
 
     Err(SidecarError::ExecutionFailed {
         reason: format!(
-            "Nao foi possivel localizar o banco SQLite do jcodemunch em '{}'; esperado='{}', candidatos={:?}",
-            storage_path.display(),
-            canonical.display(),
-            candidates
+            "Nao foi possivel localizar o banco SQLite do jcodemunch para '{}'; repo_id={:?}; candidatos={:?}",
+            repo_path.display(),
+            index_repo_id,
+            all_candidates
         ),
     })
 }
@@ -682,14 +853,89 @@ fn sanitize_repo_relative_path(repo_path: &Path, value: &str) -> Option<String> 
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg(test)]
 struct IndexedImport {
     specifier: String,
     #[serde(default)]
     names: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[cfg(test)]
+struct JcodemunchIndexResponse {
+    success: bool,
+    #[serde(default)]
+    repo: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg(test)]
+struct McpJsonRpcEnvelope {
+    #[serde(default)]
+    result: Option<McpToolCallResult>,
+    #[serde(default)]
+    error: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg(test)]
+struct McpToolCallResult {
+    #[serde(default)]
+    content: Vec<McpContentItem>,
+    #[serde(default, rename = "isError")]
+    is_error: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg(test)]
+struct McpContentItem {
+    #[serde(rename = "type")]
+    item_type: String,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    json: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg(test)]
+struct FileTreeResponse {
+    repo: String,
+    #[serde(default)]
+    tree: Vec<FileTreeNode>,
+    #[serde(default)]
+    truncated: bool,
+    #[serde(default)]
+    total_file_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg(test)]
+struct FileTreeNode {
+    path: String,
+    #[serde(rename = "type")]
+    node_type: String,
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
+    symbol_count: usize,
+    #[serde(default)]
+    children: Vec<FileTreeNode>,
+}
+
+#[derive(Debug, Clone)]
+#[cfg(test)]
+struct IndexedSourceFile {
+    path: String,
+    language: String,
+    symbol_count: usize,
+}
+
+#[cfg(test)]
 const VISUAL_ASSET_EXTENSIONS: &[&str] = &[".svg", ".css", ".scss", ".png", ".jpg", ".ico"];
+#[cfg(test)]
 const VISUAL_ONLY_DIRS: &[&str] = &["icons", "assets", "styles", "fonts"];
+#[cfg(test)]
 const NON_CORE_PATH_SEGMENTS: &[&str] = &[
     "tests",
     "test",
@@ -710,7 +956,9 @@ const NON_CORE_PATH_SEGMENTS: &[&str] = &[
     "benchmarks",
     "playground",
 ];
+#[cfg(test)]
 const NON_CORE_FILE_PATTERNS: &[&str] = &["tests.rs", ".test.", ".spec.", "mock_"];
+#[cfg(test)]
 const BACKEND_PRIORITY_PREFIXES: &[(&str, u8)] = &[
     ("src/core/", 0),
     ("src/backend/", 1),
@@ -721,10 +969,12 @@ const BACKEND_PRIORITY_PREFIXES: &[(&str, u8)] = &[
     ("services/", 6),
 ];
 
+#[cfg(test)]
 fn normalize_topology_key(value: &str) -> String {
     super::normalize_repo_path_key(value)
 }
 
+#[cfg(test)]
 fn has_visual_extension(value: &str) -> bool {
     let normalized = normalize_topology_key(value);
     VISUAL_ASSET_EXTENSIONS
@@ -732,6 +982,7 @@ fn has_visual_extension(value: &str) -> bool {
         .any(|extension| normalized.ends_with(extension))
 }
 
+#[cfg(test)]
 fn has_visual_only_dir(value: &str) -> bool {
     let normalized = normalize_topology_key(value);
     normalized
@@ -739,10 +990,12 @@ fn has_visual_only_dir(value: &str) -> bool {
         .any(|segment| VISUAL_ONLY_DIRS.contains(&segment))
 }
 
+#[cfg(test)]
 fn should_skip_visual_topology(value: &str) -> bool {
     has_visual_extension(value) || has_visual_only_dir(value)
 }
 
+#[cfg(test)]
 fn should_skip_non_core_topology(value: &str) -> bool {
     let normalized = normalize_topology_key(value);
     super::normalized_path_has_any_segment(&normalized, NON_CORE_PATH_SEGMENTS)
@@ -751,10 +1004,12 @@ fn should_skip_non_core_topology(value: &str) -> bool {
         .any(|pattern| normalized.contains(pattern))
 }
 
+#[cfg(test)]
 fn should_skip_topology_entry(value: &str) -> bool {
     should_skip_visual_topology(value) || should_skip_non_core_topology(value)
 }
 
+#[cfg(test)]
 fn topology_priority_score(path: &str) -> u8 {
     let normalized = normalize_topology_key(path);
     for (prefix, score) in BACKEND_PRIORITY_PREFIXES {
@@ -782,8 +1037,12 @@ fn topology_priority_score(path: &str) -> u8 {
     20
 }
 
-fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError> {
-    let db_path = code_index_db_path_for_repo(repo_path)?;
+#[cfg(test)]
+fn normalize_architecture_map_with_repo(
+    repo_path: &Path,
+    index_repo_id: Option<&str>,
+) -> Result<Vec<u8>, SidecarError> {
+    let db_path = code_index_db_path_for_repo_id(repo_path, index_repo_id)?;
     let project_prefixes = collect_project_prefixes(repo_path)?;
     tracing::info!(
         repo_path = %repo_path.display(),
@@ -895,6 +1154,7 @@ fn normalize_architecture_map(repo_path: &Path) -> Result<Vec<u8>, SidecarError>
     Ok(truncated.into_bytes())
 }
 
+#[cfg(test)]
 fn collect_project_prefixes(repo_path: &Path) -> Result<Vec<String>, SidecarError> {
     let mut prefixes = vec![
         "crate::".to_string(),
@@ -927,12 +1187,14 @@ fn collect_project_prefixes(repo_path: &Path) -> Result<Vec<String>, SidecarErro
     Ok(prefixes)
 }
 
+#[cfg(test)]
 fn is_project_specifier(specifier: &str, project_prefixes: &[String]) -> bool {
     project_prefixes
         .iter()
         .any(|prefix| specifier.starts_with(prefix))
 }
 
+#[cfg(test)]
 fn validate_index_response(bytes: &[u8]) -> Result<(), SidecarError> {
     if stdout_is_blank(bytes) {
         return Err(SidecarError::ExecutionFailed {
@@ -1022,6 +1284,7 @@ fn truncate_utf8(content: &str, max_chars: usize, max_bytes: usize) -> String {
     out
 }
 
+#[cfg(test)]
 fn normalize_health_report(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     if stdout_is_blank(bytes) {
         error!(binary = "jcodemunch-mcp", "Sidecar digest retornou stdout vazio");
@@ -1052,6 +1315,7 @@ fn normalize_health_report(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     Ok(truncated.into_bytes())
 }
 
+#[cfg(test)]
 fn looks_like_repo_outline_path(value: &str) -> bool {
     let normalized = value.trim().trim_start_matches("- ").trim();
     if normalized.is_empty() {
@@ -1071,6 +1335,7 @@ fn looks_like_repo_outline_path(value: &str) -> bool {
         || normalized.ends_with(".swift")
 }
 
+#[cfg(test)]
 fn normalize_repo_outline_markdown(text: &str) -> String {
     let mut leading = Vec::new();
     let mut blocks = Vec::new();
@@ -1143,6 +1408,7 @@ fn normalize_repo_outline_markdown(text: &str) -> String {
     normalized
 }
 
+#[cfg(test)]
 fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     if stdout_is_blank(bytes) {
         error!(binary = "jcodemunch-mcp", "Sidecar claude-md retornou stdout vazio");
@@ -1161,6 +1427,442 @@ fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     }
 
     Ok(truncated.into_bytes())
+}
+
+#[cfg(test)]
+fn parse_index_repo_id(bytes: &[u8]) -> Option<String> {
+    serde_json::from_slice::<JcodemunchIndexResponse>(bytes)
+        .ok()
+        .filter(|payload| payload.success)
+        .and_then(|payload| payload.repo)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+fn mcp_wait_for_response(
+    lines: &std::sync::mpsc::Receiver<String>,
+    expected_id: u64,
+    timeout: Duration,
+) -> Result<serde_json::Value, SidecarError> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(SidecarError::Timeout {
+                timeout_secs: timeout.as_secs(),
+            });
+        }
+
+        let line = lines.recv_timeout(remaining).map_err(|_| SidecarError::Timeout {
+            timeout_secs: timeout.as_secs(),
+        })?;
+        let parsed =
+            serde_json::from_str::<serde_json::Value>(&line).map_err(|e| SidecarError::ParseError {
+                reason: format!("Resposta MCP inválida: {}", e),
+            })?;
+        if parsed.get("id").and_then(|value| value.as_u64()) == Some(expected_id) {
+            return Ok(parsed);
+        }
+    }
+}
+
+#[cfg(test)]
+fn mcp_send_json(
+    stdin: &mut std::process::ChildStdin,
+    value: &serde_json::Value,
+) -> Result<(), SidecarError> {
+    let serialized =
+        serde_json::to_string(value).map_err(|e| SidecarError::ParseError { reason: e.to_string() })?;
+    stdin
+        .write_all(serialized.as_bytes())
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao escrever stdin do jcodemunch MCP: {}", e),
+        })?;
+    stdin.write_all(b"\n").map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao finalizar linha JSON-RPC do jcodemunch MCP: {}", e),
+    })?;
+    stdin.flush().map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao flush stdin do jcodemunch MCP: {}", e),
+    })
+}
+
+#[cfg(test)]
+fn extract_text_from_mcp_tool_response(value: serde_json::Value) -> Result<String, SidecarError> {
+    let envelope = serde_json::from_value::<McpJsonRpcEnvelope>(value).map_err(|e| {
+        SidecarError::ParseError {
+            reason: format!("Envelope MCP inválido: {}", e),
+        }
+    })?;
+
+    if let Some(error) = envelope.error {
+        return Err(SidecarError::ExecutionFailed {
+            reason: format!("Ferramenta MCP respondeu com erro JSON-RPC: {}", error),
+        });
+    }
+
+    let result = envelope.result.ok_or_else(|| SidecarError::ParseError {
+        reason: "Ferramenta MCP respondeu sem campo result".to_string(),
+    })?;
+    if result.is_error {
+        return Err(SidecarError::ExecutionFailed {
+            reason: format!("Ferramenta MCP retornou isError=true: {:?}", result.content),
+        });
+    }
+
+    for item in result.content {
+        if item.item_type == "text" {
+            if let Some(text) = item.text {
+                let trimmed = text.trim().to_string();
+                if !trimmed.is_empty() {
+                    return Ok(trimmed);
+                }
+            }
+        }
+        if let Some(json_value) = item.json {
+            let serialized = serde_json::to_string_pretty(&json_value).map_err(|e| {
+                SidecarError::ParseError {
+                    reason: format!("Falha ao serializar payload JSON do MCP: {}", e),
+                }
+            })?;
+            if !serialized.trim().is_empty() {
+                return Ok(serialized);
+            }
+        }
+    }
+
+    Err(SidecarError::ParseError {
+        reason: "Ferramenta MCP retornou content vazio".to_string(),
+    })
+}
+
+#[cfg(test)]
+fn call_jcodemunch_mcp_tool_text(
+    stdin: &mut std::process::ChildStdin,
+    lines: &std::sync::mpsc::Receiver<String>,
+    next_id: &mut u64,
+    timeout: Duration,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> Result<String, SidecarError> {
+    let request_id = *next_id;
+    *next_id += 1;
+    mcp_send_json(
+        stdin,
+        &serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments,
+            }
+        }),
+    )?;
+    let response = mcp_wait_for_response(lines, request_id, timeout)?;
+    extract_text_from_mcp_tool_response(response)
+}
+
+#[cfg(test)]
+fn is_outline_candidate_language(language: &str) -> bool {
+    !matches!(language, "json" | "yaml" | "xml" | "toml" | "openapi")
+}
+
+#[cfg(test)]
+fn collect_indexed_source_files(nodes: &[FileTreeNode], out: &mut Vec<IndexedSourceFile>) {
+    for node in nodes {
+        if node.node_type == "file" {
+            let language = node.language.clone().unwrap_or_else(|| "unknown".to_string());
+            if node.symbol_count > 0 && is_outline_candidate_language(&language) {
+                out.push(IndexedSourceFile {
+                    path: node.path.clone(),
+                    language,
+                    symbol_count: node.symbol_count,
+                });
+            }
+        }
+        if !node.children.is_empty() {
+            collect_indexed_source_files(&node.children, out);
+        }
+    }
+}
+
+#[cfg(test)]
+fn build_repo_outline_blob(
+    repo_id: &str,
+    file_tree: &FileTreeResponse,
+    source_files: &[IndexedSourceFile],
+    outline_chunks: &[String],
+) -> Vec<u8> {
+    let mut outline = String::new();
+    outline.push_str("# Repository Outline\n\n");
+    outline.push_str(&format!("repo: {}\n", repo_id));
+    outline.push_str(&format!(
+        "indexed_files: {}\n",
+        if file_tree.total_file_count == 0 {
+            source_files.len()
+        } else {
+            file_tree.total_file_count
+        }
+    ));
+    outline.push_str(&format!("symbol_files: {}\n", source_files.len()));
+    if file_tree.truncated {
+        outline.push_str("file_tree_truncated: true\n");
+    }
+    outline.push_str("source: jcodemunch-mcp serve + get_file_tree/get_file_outline\n\n");
+    outline.push_str("## Indexed Symbol Files\n");
+    for file in source_files {
+        outline.push_str(&format!(
+            "- {} [{}; {} symbols]\n",
+            file.path, file.language, file.symbol_count
+        ));
+        if outline.len() >= BLOB_04_REPO_OUTLINE_MAX_CHARS / 3 {
+            outline.push_str("- ... (lista truncada para preservar orcamento do blob)\n");
+            break;
+        }
+    }
+    outline.push_str("\n## AST Blueprint\n\n");
+    for chunk in outline_chunks {
+        outline.push_str(chunk);
+        outline.push_str("\n\n");
+        if outline.len() >= BLOB_04_REPO_OUTLINE_MAX_CHARS.saturating_mul(2) {
+            break;
+        }
+    }
+    truncate_chars(&outline, BLOB_04_REPO_OUTLINE_MAX_CHARS).into_bytes()
+}
+
+#[cfg(test)]
+fn build_repo_outline_from_index_db(
+    repo_path: &Path,
+    index_repo_id: Option<&str>,
+) -> Result<Vec<u8>, SidecarError> {
+    let db_path = code_index_db_path_for_repo_id(repo_path, index_repo_id)?;
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao abrir banco SQLite do jcodemunch '{}': {}", db_path.display(), e),
+    })?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT path, COALESCE(language, '') AS language, COALESCE(size_bytes, 0) AS size_bytes
+             FROM files
+             ORDER BY path ASC",
+        )
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao preparar leitura do índice SQLite do jcodemunch: {}", e),
+        })?;
+    let rows = stmt
+        .query_map([], |row| {
+            let path: String = row.get(0)?;
+            let language: String = row.get(1)?;
+            let size_bytes: i64 = row.get(2)?;
+            Ok((path, language, size_bytes))
+        })
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao ler paths do índice SQLite do jcodemunch: {}", e),
+        })?;
+
+    let mut outline = String::from("# Repository Outline\n\n");
+    let mut count = 0usize;
+    for row in rows {
+        let (path, language, size_bytes) = row.map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao iterar linhas do índice SQLite do jcodemunch: {}", e),
+        })?;
+        outline.push_str(&format!(
+            "[{}]{}{}\n",
+            path,
+            if language.is_empty() { "" } else { " " },
+            if language.is_empty() {
+                String::new()
+            } else {
+                format!("{{{language}, {size_bytes} bytes}}")
+            }
+        ));
+        count += 1;
+    }
+
+    if count == 0 {
+        return Err(SidecarError::ExecutionFailed {
+            reason: "Índice SQLite do jcodemunch nao possui arquivos para compor o blob_04".to_string(),
+        });
+    }
+
+    Ok(truncate_chars(&outline, BLOB_04_REPO_OUTLINE_MAX_CHARS).into_bytes())
+}
+
+#[cfg(test)]
+fn extract_repo_outline_via_mcp_blocking(
+    repo_path: &Path,
+    repo_id: &str,
+    timeout_secs: u64,
+) -> Result<Vec<u8>, SidecarError> {
+    let mut child = Command::new("jcodemunch-mcp")
+        .arg("serve")
+        .current_dir(repo_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SidecarError::BinaryNotFound {
+                    binary: "jcodemunch-mcp".to_string(),
+                }
+            } else {
+                SidecarError::ExecutionFailed {
+                    reason: format!("Falha ao iniciar jcodemunch-mcp serve: {}", e),
+                }
+            }
+        })?;
+
+    let cleanup = |child: &mut std::process::Child| {
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+
+    let timeout = Duration::from_secs(timeout_secs.max(1));
+    let mut stdin = child.stdin.take().ok_or_else(|| SidecarError::ExecutionFailed {
+        reason: "jcodemunch-mcp serve iniciou sem stdin".to_string(),
+    })?;
+    let stdout = child.stdout.take().ok_or_else(|| SidecarError::ExecutionFailed {
+        reason: "jcodemunch-mcp serve iniciou sem stdout".to_string(),
+    })?;
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    let reader_handle = std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let payload = line.trim_end_matches(['\r', '\n']).to_string();
+                    if tx.send(payload).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let mut next_id = 1u64;
+    let initialize_id = next_id;
+    next_id += 1;
+    if let Err(err) = mcp_send_json(
+        &mut stdin,
+        &serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": initialize_id,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "soda-harvester",
+                    "version": env!("CARGO_PKG_VERSION"),
+                }
+            }
+        }),
+    ) {
+        cleanup(&mut child);
+        let _ = reader_handle.join();
+        return Err(err);
+    }
+    if let Err(err) = mcp_wait_for_response(&rx, initialize_id, timeout) {
+        cleanup(&mut child);
+        let _ = reader_handle.join();
+        return Err(err);
+    }
+
+    if let Err(err) = mcp_send_json(
+        &mut stdin,
+        &serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }),
+    ) {
+        cleanup(&mut child);
+        let _ = reader_handle.join();
+        return Err(err);
+    }
+
+    let outcome = (|| {
+        let file_tree_text = call_jcodemunch_mcp_tool_text(
+            &mut stdin,
+            &rx,
+            &mut next_id,
+            timeout,
+            "get_file_tree",
+            serde_json::json!({
+                "repo": repo_id,
+                "max_files": 5000,
+            }),
+        )?;
+        let file_tree =
+            serde_json::from_str::<FileTreeResponse>(&file_tree_text).map_err(|e| SidecarError::ParseError {
+                reason: format!("get_file_tree retornou JSON inválido: {}", e),
+            })?;
+        let mut source_files = Vec::new();
+        collect_indexed_source_files(&file_tree.tree, &mut source_files);
+        source_files.sort_by(|left, right| {
+            right
+                .symbol_count
+                .cmp(&left.symbol_count)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+
+        if source_files.is_empty() {
+            return Err(SidecarError::ExecutionFailed {
+                reason: "get_file_tree nao retornou nenhum arquivo com simbolos para compor o blob_04".to_string(),
+            });
+        }
+
+        let mut outline_chunks = Vec::new();
+        for chunk in source_files.chunks(50) {
+            let file_paths = chunk.iter().map(|file| file.path.clone()).collect::<Vec<_>>();
+            let chunk_text = call_jcodemunch_mcp_tool_text(
+                &mut stdin,
+                &rx,
+                &mut next_id,
+                timeout,
+                "get_file_outline",
+                serde_json::json!({
+                    "repo": &file_tree.repo,
+                    "file_paths": file_paths,
+                }),
+            )?;
+            outline_chunks.push(chunk_text);
+        }
+
+        Ok(build_repo_outline_blob(
+            &file_tree.repo,
+            &file_tree,
+            &source_files,
+            &outline_chunks,
+        ))
+    })();
+
+    cleanup(&mut child);
+    let _ = reader_handle.join();
+    outcome
+}
+
+#[cfg(test)]
+async fn extract_repo_outline_via_mcp(
+    repo_path: &Path,
+    repo_id: &str,
+    timeout_secs: u64,
+) -> Result<Vec<u8>, SidecarError> {
+    let repo_path = repo_path.to_path_buf();
+    let repo_id = repo_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        extract_repo_outline_via_mcp_blocking(&repo_path, &repo_id, timeout_secs)
+    })
+    .await
+    .map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao aguardar extração MCP do blob_04: {}", e),
+    })?
 }
 
 /// Executa um binário sidecar no sandbox e retorna os bytes brutos do stdout.
@@ -1211,18 +1913,8 @@ async fn execute_sidecar<E: SandboxExecutor>(
             let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
             let sanitized_stderr = sanitize_host_paths_in_text(executor.repo_path(), &stderr);
             if (binary == "semgrep" && !stdout_is_blank(&sanitized_stdout) && stdout_contains_json_payload(&sanitized_stdout))
-                || (binary == "jcodemunch-mcp"
-                    && exit_code == 1
-                    && jcodemunch_exit_code_one_is_retryable_success(args, &sanitized_stdout))
                 || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
             {
-                if binary == "jcodemunch-mcp" && exit_code == 1 {
-                    tracing::warn!(
-                        binary = %binary,
-                        args = ?args,
-                        "Sidecar retornou exit code 1, mas stdout indica sucesso; tolerando"
-                    );
-                }
                 Ok(sanitized_stdout)
             } else {
                 let stdout_hint = stdout_preview(&sanitized_stdout, 400);
@@ -1254,169 +1946,52 @@ async fn execute_sidecar<E: SandboxExecutor>(
 pub struct JCodemunchSidecar;
 
 impl JCodemunchSidecar {
-    /// Extrai o health report e o repo outline usando o jcodemunch no sandbox.
+    /// Extrai os artefatos estruturais de código usando parser AST nativo em Rust.
     pub async fn extract<E: SandboxExecutor>(
         input: JCodemunchInput<'_, E>,
     ) -> Result<JCodemunchArtifacts, SidecarError> {
         tracing::info!(
             repo_path = %input.executor.repo_path().display(),
-            "jcodemunch: iniciando indexacao e digest"
+            "ast-native: iniciando extração estrutural"
         );
-        let storage_path = code_index_path_for_repo(input.executor.repo_path());
-        if let Err(e) = tokio::fs::create_dir_all(&storage_path).await {
-            tracing::warn!(
-                repo_path = %input.executor.repo_path().display(),
-                error = %e,
-                "jcodemunch: falha ao preparar diretório de índice; seguindo"
-            );
-        }
-        let repo_path_arg = if input.executor.repo_path().is_absolute() {
-            input.executor.repo_path().display().to_string()
-        } else {
-            std::fs::canonicalize(input.executor.repo_path())
-                .unwrap_or_else(|_| input.executor.repo_path().to_path_buf())
-                .display()
-                .to_string()
-        };
-        let index_args = vec![
-            "index".to_string(),
-            repo_path_arg,
-            "--no-ai-summaries".to_string(),
-            "--extra-ignore".to_string(),
-            "documentation".to_string(),
-            "docs".to_string(),
-            "examples".to_string(),
-            "evals".to_string(),
-            "vendor".to_string(),
-            "node_modules".to_string(),
-            "target".to_string(),
-            ".git".to_string(),
-        ];
-        let index_arg_refs: Vec<&str> = index_args.iter().map(String::as_str).collect();
-        let _index_bytes = match execute_sidecar(
-            input.executor,
-            "jcodemunch-mcp",
-            &index_arg_refs,
-            input.timeout_secs,
-            SidecarExitPolicy::StrictZeroOnly,
-        )
+        let repo_path = input.executor.repo_path().to_path_buf();
+        let native_artifacts = tokio::task::spawn_blocking(move || {
+            ast_parser::extract_repository_outline_native(
+                &repo_path,
+                BLOB_04_REPO_OUTLINE_MAX_CHARS,
+                BLOB_05_ARCHITECTURE_MAP_MAX_CHARS,
+                BLOB_08_HEALTH_REPORT_MAX_CHARS,
+            )
+        })
         .await
-        {
-            Ok(bytes) => {
-                if let Err(e) = validate_index_response(&bytes) {
-                    let reason = format!("index inválido: {}", e);
-                    if is_no_source_files_found(&reason) {
-                        return Ok(content_repo_artifacts(input.executor.repo_path(), &reason));
-                    }
-                    tracing::warn!(
-                        repo_path = %input.executor.repo_path().display(),
-                        error = %reason,
-                        "jcodemunch: index falhou; aplicando fallback (fail-soft)"
-                    );
-                    return Ok(JCodemunchArtifacts {
-                        repo_outline_blob: fallback_jcodemunch_repo_outline(input.executor.repo_path(), &reason),
-                        health_report_blob: fallback_jcodemunch_health_report(&reason),
-                        architecture_map_blob: fallback_jcodemunch_architecture_map(&reason),
-                    });
-                }
-                bytes
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao aguardar parser AST nativo: {}", e),
+        })?;
+        let native_artifacts = match native_artifacts {
+            Ok(artifacts) => artifacts,
+            Err(AstParserError::EmptyRepository { path }) => {
+                return content_repo_artifacts(
+                    input.executor.repo_path(),
+                    &format!("no source files found in {}", path),
+                )
+                .await;
             }
-            Err(e) => {
-                let reason = e.to_string();
-                if is_no_source_files_found(&reason) {
-                    return Ok(content_repo_artifacts(input.executor.repo_path(), &reason));
-                }
-                tracing::warn!(
-                    repo_path = %input.executor.repo_path().display(),
-                    error = %reason,
-                    "jcodemunch: index falhou; aplicando fallback (fail-soft)"
-                );
-                return Ok(JCodemunchArtifacts {
-                    repo_outline_blob: fallback_jcodemunch_repo_outline(input.executor.repo_path(), &reason),
-                    health_report_blob: fallback_jcodemunch_health_report(&reason),
-                    architecture_map_blob: fallback_jcodemunch_architecture_map(&reason),
+            Err(other) => {
+                return Err(SidecarError::ExecutionFailed {
+                    reason: other.to_string(),
                 });
             }
         };
 
-        let digest_args: Vec<&str> = vec![
-            "digest",
-            "--json",
-            "--storage-path",
-            &storage_path,
-        ];
-        let digest_arg_refs: Vec<&str> = digest_args;
-        let bytes = match execute_sidecar(
-            input.executor,
-            "jcodemunch-mcp",
-            &digest_arg_refs,
-            input.timeout_secs,
-            SidecarExitPolicy::StrictZeroOnly,
-        )
-        .await
-        {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                let reason = format!("digest falhou: {}", e);
-                tracing::warn!(
-                    repo_path = %input.executor.repo_path().display(),
-                    error = %reason,
-                    "jcodemunch: digest falhou; seguindo com fallback do health report"
-                );
-                Vec::new()
-            }
-        };
-        let health_report_blob = match normalize_health_report(&bytes) {
-            Ok(blob) => blob,
-            Err(e) => fallback_jcodemunch_health_report(&format!("health report inválido: {}", e)),
-        };
-
-        let claude_md_args: Vec<&str> = ["claude-md", "--generate"].to_vec();
-        let claude_md_arg_refs: Vec<&str> = claude_md_args;
-        let claude_md_bytes = match execute_sidecar(
-            input.executor,
-            "jcodemunch-mcp",
-            &claude_md_arg_refs,
-            input.timeout_secs,
-            SidecarExitPolicy::StrictZeroOnly,
-        )
-        .await
-        {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                let reason = format!("claude-md falhou: {}", e);
-                tracing::warn!(
-                    repo_path = %input.executor.repo_path().display(),
-                    error = %reason,
-                    "jcodemunch: repo outline indisponível; usando fallback"
-                );
-                Vec::new()
-            }
-        };
-        let repo_outline_blob = match normalize_repo_outline(&claude_md_bytes) {
-            Ok(blob) => blob,
-            Err(e) => fallback_jcodemunch_repo_outline(
-                input.executor.repo_path(),
-                &format!("repo outline inválido: {}", e),
-            ),
-        };
-        let architecture_map_blob = match normalize_architecture_map(input.executor.repo_path()) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                tracing::warn!(
-                    repo_path = %input.executor.repo_path().display(),
-                    error = %e,
-                    "jcodemunch: blob_05_architecture_map falhou; aplicando fallback (fail-soft)"
-                );
-                fallback_jcodemunch_architecture_map(&e.to_string())
-            }
-        };
+        let repo_outline_blob = native_artifacts.repo_outline_blob;
+        let health_report_blob = native_artifacts.health_report_blob;
+        let architecture_map_blob = native_artifacts.architecture_map_blob;
         tracing::info!(
             repo_path = %input.executor.repo_path().display(),
             repo_outline_bytes = repo_outline_blob.len(),
             architecture_map_bytes = architecture_map_blob.len(),
             health_report_bytes = health_report_blob.len(),
-            "jcodemunch: artefatos normalizados"
+            "ast-native: artefatos normalizados"
         );
 
         if let Some(config) = input.persist_artifacts {
@@ -1671,6 +2246,17 @@ fn compact_signature_text(signature: &str) -> Option<String> {
     }
 }
 
+fn normalize_rust_test_signature(signature: &str) -> Option<String> {
+    let head = signature.split('{').next().unwrap_or(signature).trim();
+    let compact = compact_signature_text(head)?;
+    let compact = compact.strip_suffix("()").unwrap_or(&compact).trim().to_string();
+    if compact.is_empty() {
+        None
+    } else {
+        Some(compact)
+    }
+}
+
 fn extract_python_test_entries_shallow(content: &str) -> Vec<String> {
     let mut entries = BTreeSet::new();
     for line in content.lines().take(2_000) {
@@ -1703,12 +2289,8 @@ fn extract_rust_test_entries_shallow(content: &str) -> Vec<String> {
             let is_test_name = trimmed.contains(" fn test_") || trimmed.starts_with("fn test_") || trimmed.starts_with("async fn test_");
             if saw_test_attr || is_test_name {
                 saw_test_attr = false;
-                let normalized = trimmed
-                    .trim_end_matches('{')
-                    .trim()
-                    .trim_end_matches(';')
-                    .trim();
-                if let Some(signature) = compact_signature_text(normalized) {
+                let normalized = trimmed.trim().trim_end_matches(';').trim();
+                if let Some(signature) = normalize_rust_test_signature(normalized) {
                     out.insert(signature);
                 }
                 continue;
@@ -2432,12 +3014,10 @@ mod tests {
     async fn test_extract_success() {
         let index_json = r#"{"success": true}"#;
         let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
-        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
 
         let executor = MockExecutor::new(vec![
             Ok(index_json.as_bytes().to_vec()),
             Ok(digest_json.as_bytes().to_vec()),
-            Ok(claude_md.as_bytes().to_vec()),
         ]);
         let input = JCodemunchInput {
             executor: &executor,
@@ -2452,10 +3032,10 @@ mod tests {
             String::from_utf8(payload.health_report_blob).unwrap(),
             r#"{"hotspots":[{"complexity":12,"path":"src/main.rs"}]}"#
         );
-        assert_eq!(
-            String::from_utf8(payload.repo_outline_blob).unwrap(),
-            "# Repository Outline\n\n[src/main.rs]"
-        );
+        let repo_outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        assert!(repo_outline.contains("# Repository Outline"));
+        assert!(repo_outline.contains("[src/lib.rs]"));
+        assert!(repo_outline.contains("[src/main.rs]"));
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
         assert!(architecture_map.contains("[src/main.rs]"));
         assert!(architecture_map.contains("- crate::config (AppConfig)"));
@@ -2476,12 +3056,10 @@ mod tests {
     async fn test_architecture_map_skips_visual_noise_and_prioritizes_backend() {
         let index_json = r#"{"success": true}"#;
         let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
-        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
 
         let executor = MockExecutor::new(vec![
             Ok(index_json.as_bytes().to_vec()),
             Ok(digest_json.as_bytes().to_vec()),
-            Ok(claude_md.as_bytes().to_vec()),
         ]);
 
         let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
@@ -2531,12 +3109,10 @@ mod tests {
     async fn test_architecture_map_skips_tests_examples_and_fixtures() {
         let index_json = r#"{"success": true}"#;
         let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
-        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
 
         let executor = MockExecutor::new(vec![
             Ok(index_json.as_bytes().to_vec()),
             Ok(digest_json.as_bytes().to_vec()),
-            Ok(claude_md.as_bytes().to_vec()),
         ]);
 
         let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
@@ -2588,12 +3164,10 @@ mod tests {
     async fn test_architecture_map_skips_scenarios_docs_ui_and_bench_noise() {
         let index_json = r#"{"success": true}"#;
         let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
-        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
 
         let executor = MockExecutor::new(vec![
             Ok(index_json.as_bytes().to_vec()),
             Ok(digest_json.as_bytes().to_vec()),
-            Ok(claude_md.as_bytes().to_vec()),
         ]);
 
         let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
@@ -2802,7 +3376,6 @@ mod tests {
     async fn test_jcodemunch_index_exit_code_1_with_success_json_is_allowed() {
         let index_json = r#"{"success": true}"#;
         let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
-        let claude_md = "# Repository Outline\n\n- src/main.rs\n";
         let run_err = SandboxError::ProcessNonZeroExit {
             exit_code: 1,
             stderr: "".to_string(),
@@ -2811,7 +3384,6 @@ mod tests {
         let executor = MockExecutor::new(vec![
             Err(run_err),
             Ok(digest_json.as_bytes().to_vec()),
-            Ok(claude_md.as_bytes().to_vec()),
         ]);
         let input = JCodemunchInput {
             executor: &executor,
@@ -3012,7 +3584,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(payload.runner_name, "static-ast");
+        assert_eq!(payload.runner_name, "static-ast-bfs");
         assert!(payload
             .blocks
             .iter()

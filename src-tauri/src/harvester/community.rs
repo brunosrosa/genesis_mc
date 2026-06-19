@@ -3,10 +3,13 @@ use chrono::{DateTime, Utc};
 use url::Url;
 use thiserror::Error;
 use std::time::Duration;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+
+use super::github_tracker;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
 pub struct CommunityMetaPayload {
+    pub stars_count: u64,
+    pub forks_count: u64,
     pub open_issues_count: u32,
     pub open_prs_count: u32,
     pub licenca: String,
@@ -62,204 +65,15 @@ impl RateLimiter {
 pub struct CommunityMetaFetcher;
 
 impl CommunityMetaFetcher {
-    fn github_auth_header_value() -> Option<HeaderValue> {
-        let token = std::env::var("GITHUB_TOKEN")
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .or_else(|| {
-                std::env::var("GITHUB_PAT")
-                    .ok()
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-            })?;
-        HeaderValue::from_str(&format!("Bearer {}", token)).ok()
-    }
-
-    async fn fetch_json<T: for<'de> Deserialize<'de>>(
-        client: &reqwest::Client,
-        limiter: &RateLimiter,
-        url: &str,
-    ) -> Result<T, FetchError> {
-        limiter.check().await;
-        let resp = client.get(url).send().await.map_err(|e| {
-            if e.is_timeout() {
-                FetchError::Timeout
-            } else {
-                FetchError::Network(e.to_string())
-            }
-        })?;
-
-        let status = resp.status();
-        if status.is_success() {
-            resp.json::<T>()
-                .await
-                .map_err(|e| FetchError::InvalidResponse(e.to_string()))
-        } else if status.as_u16() == 404 {
-            Err(FetchError::NotFound)
-        } else if status.as_u16() == 403 {
-            Err(FetchError::RateLimit)
-        } else {
-            Err(FetchError::Network(format!(
-                "GitHub API retornou HTTP {}",
-                status
-            )))
-        }
-    }
-
     /// Versão interna que permite injetar a URL base da API para testes.
     async fn fetch_internal(
         repo_url: &Url,
         limiter: &RateLimiter,
         api_base: Option<&str>,
     ) -> Result<CommunityMetaPayload, FetchError> {
-        let mut headers = HeaderMap::new();
-        if let Some(value) = Self::github_auth_header_value() {
-            headers.insert(AUTHORIZATION, value);
-        }
-        let client_result = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .user_agent("SODA-Harvester/1.0")
-            .default_headers(headers)
-            .build();
-        let client = client_result.map_err(|e| FetchError::Network(e.to_string()))?;
-
-        // Mapeamento de URL GitHub para API
-        let api_url = if repo_url.host_str() == Some("github.com") {
-            let path = repo_url.path().trim_start_matches('/');
-            let base = api_base.unwrap_or("https://api.github.com");
-            format!("{}/repos/{}", base, path)
-        } else {
-            return Err(FetchError::UnsupportedSource(repo_url.to_string()));
-        };
-
-        #[derive(Deserialize)]
-        struct GithubRepo {
-            default_branch: String,
-            #[serde(default)]
-            license: Option<GithubLicense>,
-            #[serde(default)]
-            description: Option<String>,
-            #[serde(default)]
-            full_name: Option<String>,
-            #[serde(default)]
-            name: Option<String>,
-        }
-
-        #[derive(Deserialize)]
-        struct GithubLicense {
-            spdx_id: Option<String>,
-            name: Option<String>,
-        }
-
-        #[derive(Deserialize)]
-        struct SearchIssueResponse {
-            total_count: u32,
-            #[serde(default)]
-            items: Vec<GithubPullRequest>,
-        }
-
-        #[derive(Deserialize)]
-        struct GithubCommit {
-            sha: String,
-            commit: GithubCommitInner,
-        }
-
-        #[derive(Deserialize)]
-        struct GithubCommitInner {
-            author: GithubCommitAuthor,
-        }
-
-        #[derive(Deserialize)]
-        struct GithubCommitAuthor {
-            date: DateTime<Utc>,
-        }
-
-        #[derive(Deserialize)]
-        struct GithubPullRequest {
-            number: u64,
-            state: String,
-            updated_at: DateTime<Utc>,
-        }
-
-        let repo = Self::fetch_json::<GithubRepo>(&client, limiter, &api_url).await?;
-        let licenca = repo
-            .license
-            .as_ref()
-            .and_then(|license| {
-                license
-                    .spdx_id
-                    .as_ref()
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("NOASSERTION"))
-                    .or_else(|| {
-                        license
-                            .name
-                            .as_ref()
-                            .map(|s| s.trim().to_string())
-                            .filter(|s| !s.is_empty())
-                    })
-            })
-            .unwrap_or_else(|| "UNKNOWN".to_string());
-        let issues_url = format!(
-            "{}/search/issues?q=repo:{}+is:issue+is:open&per_page=1",
-            api_base.unwrap_or("https://api.github.com"),
-            repo_url.path().trim_start_matches('/')
-        );
-        let open_prs_url = format!(
-            "{}/search/issues?q=repo:{}+is:pr+is:open&per_page=1",
-            api_base.unwrap_or("https://api.github.com"),
-            repo_url.path().trim_start_matches('/')
-        );
-        let recent_prs_url = format!(
-            "{}/search/issues?q=repo:{}+is:pr&sort=updated&order=desc&per_page=5",
-            api_base.unwrap_or("https://api.github.com"),
-            repo_url.path().trim_start_matches('/')
-        );
-        let commits_url = format!(
-            "{}/repos/{}/commits?sha={}&per_page=1",
-            api_base.unwrap_or("https://api.github.com"),
-            repo_url.path().trim_start_matches('/'),
-            repo.default_branch
-        );
-
-        let open_issues = Self::fetch_json::<SearchIssueResponse>(&client, limiter, &issues_url).await?;
-        let open_prs = Self::fetch_json::<SearchIssueResponse>(&client, limiter, &open_prs_url).await?;
-        let recent_prs = Self::fetch_json::<SearchIssueResponse>(&client, limiter, &recent_prs_url).await?;
-        let commits = Self::fetch_json::<Vec<GithubCommit>>(&client, limiter, &commits_url).await?;
-        let last_commit = commits.into_iter().next();
-
-        Ok(CommunityMetaPayload {
-            open_issues_count: open_issues.total_count,
-            open_prs_count: open_prs.total_count,
-            licenca,
-            description: repo
-                .description
-                .as_ref()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-            full_name: repo
-                .full_name
-                .as_ref()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-            name: repo
-                .name
-                .as_ref()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-            last_commit_sha: last_commit.as_ref().map(|commit| commit.sha.clone()),
-            last_commit_date: last_commit.map(|commit| commit.commit.author.date),
-            recent_prs: recent_prs
-                .items
-                .into_iter()
-                .map(|pr| CommunityPrMeta {
-                    number: pr.number,
-                    state: pr.state,
-                    updated_at: pr.updated_at,
-                })
-                .collect(),
-        })
+        github_tracker::fetch_community_meta(repo_url, limiter, api_base)
+            .await
+            .map_err(github_tracker::map_tracker_to_fetch_error)
     }
 
     pub async fn fetch(repo_url: &Url, limiter: &RateLimiter) -> Result<CommunityMetaPayload, FetchError> {

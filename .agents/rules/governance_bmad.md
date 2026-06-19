@@ -55,6 +55,6 @@ Em impasses arquiteturais ou falhas de TDD:
 
 ###### 7. A DOUTRINA DE CANIBALIZAÇÃO E GIT SUBREPO
 *   **Expurgo Absoluto:** USO OBRIGATÓRIO do `git-subrepo` para internalizar bibliotecas (`git submodule` banido).
-*   **Extração AST $\mathcal{O}(1)$:** OBRIGATÓRIO usar `jcodemunch` (Byte-Offset) para extrair a "alma matemática". NUNCA leia repositórios inteiros por força bruta.
+*   **Extração AST $\mathcal{O}(1)$:** OBRIGATÓRIO priorizar `soda_get_ast` para extrair a "alma matemática" de repositórios e diretórios. NUNCA leia repositórios inteiros por força bruta.
 *   **Descarte do Monólito:** Após sugar a lógica, DESTRUA arquivos Node.js, Python e Docker pesados da biblioteca original. O *Rebase* absorve estritamente o código Rust purificado.
  acompanharem o repositório original. O SODA consome a lógica estrutural em Rust/Wasm e descarta o lixo.

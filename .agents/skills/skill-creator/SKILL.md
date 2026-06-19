@@ -18,7 +18,7 @@ Sempre que for instruído a criar uma skill ou canibalizar uma solução, execut
 
 2. **Ingestão $\mathcal{O}(1)$ e Paradigma NextPlaid (Zero Força Bruta):**
    * Utilize `lean-ctx` (`ctx_tree`, `ctx_search`) para o mapeamento e NÃO leia repositórios inteiros por força bruta.
-   * Acione o MCP `@mcp-jcodemunch-master` para rasgar a Árvore de Sintaxe Abstrata (AST) do alvo. 
+   * Acione `soda_get_ast` para rasgar a Árvore de Sintaxe Abstrata (AST) do alvo.
    * Aplique o **Paradigma NextPlaid**: fatie a lógica extraída em vetores menores e atômicos, proibindo a criação de monolitos de código inavegáveis na memória.
 
 3. **CSDD, Poda Tóxica e a Guilhotina (`SIGKILL`):**
@@ -47,7 +47,7 @@ Sempre que for instruído a criar uma skill ou canibalizar uma solução, execut
 **Entrada do Usuário:** "Canibaliza o repositório `TrackArr` para criarmos a skill `@soda-tracker`. Extrai só a lógica temporal e expurga todo o backend Express deles."
 **Ação do Agente:**
 1. Roda a triagem de Creep: Aprova a "alma matemática" de observabilidade contínua (Must), descarta o backend web (Não).
-2. Isola a lógica via `jcodemunch` (AST) fatiando em *NextPlaid*. 
+2. Isola a lógica via `soda_get_ast` (AST) fatiando em *NextPlaid*. 
 3. Desenha um script nativo Rust (CSDD) envelopado em `_run_ephemeral_cli` para garantir a aniquilação via `SIGKILL` pós-execução.
 4. Usa o *Ralph Loop* no *Shadow Workspace* até o `cargo check` dar Exit Code 0.
 5. Gera o `SKILL.md` iniciando com o YAML `--- name: soda-tracker ... ---`.

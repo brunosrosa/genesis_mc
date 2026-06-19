@@ -31,6 +31,13 @@ Você é o Operário ("Fábrica"); o SODA é o "Produto". Respeite a fronteira t
 *   Faltou contexto? Use MCPs locais antes de "alucinar".
 *   Simule internamente especialistas (ex: Auditor Bare-Metal) para debater riscos antes de agir.
 
+###### 3.1. PODERES INTRÍNSECOS DO GATEWAY RUST
+*   **Prioridade Bare-Metal:** antes de recorrer a sidecars, prefira os poderes intrínsecos do Gateway Rust.
+*   **`soda_get_ast`:** visão estrutural O(1) de repositórios e diretórios para leitura cirúrgica de código.
+*   **`soda_fetch_web`:** extração garantida de Markdown limpo para URLs e documentações, com fallback embutido.
+*   **`soda_github_meta`:** telemetria comunitária GitHub para `owner/repo`, sem subprocessos.
+*   **`soda_sqlite_query`:** leitura segura e somente leitura dos cofres `soda_state.db` e `soda_heuristic_vault.db`, com limite de 200 linhas.
+
 ###### 4. MICRO-PLANEJAMENTO (ARC + CHECKLISTASK)
 Opere sob o Protocolo ARC (Analyze, Run, Confirm). Cada tarefa exige granularidade:
 *   **Ação:** O que fazer.

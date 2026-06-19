@@ -18,7 +18,7 @@ Sempre que precisar compreender uma nova dependência, ler documentações do *c
    * Injete essa versão estritamente na sua requisição ao Docfork (ex: `target: "lancedb rust version 0.5.0"`).
 
 2. **A Morte do Scraping Genérico e Bypass L7:**
-   * É SUMARIAMENTE PROIBIDO invocar o `webcrawl-mcp` para ler manuais oficiais.
+   * É SUMARIAMENTE PROIBIDO invocar raspadores web genéricos para ler manuais oficiais.
    * Utilize ESTRITAMENTE as ferramentas liberadas do Docfork: `docfork_search_docs` (para buscar) e `fetch_doc` (para extrair a URL resultante). (Ignore prefixos do multiplexador, caso existam).
 
 3. **Blindagem de VRAM e Compressão (Anti-OOM):**

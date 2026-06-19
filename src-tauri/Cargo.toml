@@ -29,12 +29,16 @@ rand = "0.8"
 tokio = { version = "1", features = ["full"] }
 sysinfo = "0.30"
 thiserror = "1"
+ignore = "0.4"
 tracing = "0.1"
 url = "2"
 sha2 = "0.10"
 toml = "0.8"
 tiktoken-rs = "0.5"
 reqwest = { version = "0.12", features = ["json", "blocking"] }
+octocrab = "0.53.1"
+gix = { version = "0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
+axum = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 tracing-subscriber = "0.3"
@@ -42,6 +46,8 @@ tempfile = "3"
 dotenvy = "0.15"
 quote = "1"
 syn = { version = "2", features = ["full", "visit"] }
+tree-sitter-language-pack = "1.9.1"
+html-to-markdown-rs = "2.19.6"
 enable-ansi-support = "0.2.1"
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",

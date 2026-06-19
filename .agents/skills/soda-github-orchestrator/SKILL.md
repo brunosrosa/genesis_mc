@@ -1,7 +1,7 @@
 ---
 name: soda-github-orchestrator
 description: O Ditador GitOps e Mestre do Fluxo SODA. Impõe 'No Ticket, No Code' e Shadow Workspaces O(1). Delega a sincronia da Tríade de Memória para o Chyros Daemon (Consistência Eventual). Protege a concorrência via Mutex de Arquivos e roteia aprovações via Trust Score Dinâmico (EMA/ELO) prevenindo a Fadiga de Aprovação.
-triggers: ["soda-github-orchestrator", "gerenciar fluxo", "gitops", "atualizar kanban", "github mcp", "issue", "pull request", "fechar tarefa", "submeter pr"]
+triggers: ["soda-github-orchestrator", "gerenciar fluxo", "gitops", "atualizar kanban", "issue", "pull request", "fechar tarefa", "submeter pr", "soda_github_meta"]
 ---
 
 ### skill: SODA GitHub Orchestrator (O Ditador GitOps V4.0 Supremo)
@@ -13,7 +13,7 @@ Garantir a governança técnica, a imutabilidade do estado e a rastreabilidade a
 Sempre que for invocado para planejar código, gerenciar fluxo de versionamento ou preparar o encerramento de *features*, OBRIGATORIAMENTE obedeça a esta máquina de estados:
 
 1. **A Lei 'No Ticket, No Code' e Proteção de V8:**
-   * Encontre a *Issue* correspondente via `search_issues` (github_mcp) ANTES de escrever qualquer lógica.
+   * Encontre a *Issue* correspondente via telemetria GitHub nativa ou busca oficial ANTES de escrever qualquer lógica. A ponte JavaScript legada foi aposentada.
    * Aplique limites rígidos de paginação na busca (ex: `limit: 3`) para evitar *Out-Of-Memory* (OOM) na engine V8 do Svelte [8].
 
 2. **Shadow Workspaces e Blindagem Concorrente (Mutex):**
@@ -41,7 +41,7 @@ Sempre que for invocado para planejar código, gerenciar fluxo de versionamento 
 #### Examples
 **Entrada do Usuário:** "A feature de IPC foi validada. Transfere pro sistema, atualiza a Board e encerra."
 **Ação do Agente:**
-1. Valida o Ticket via GitHub MCP com `limit: 3`.
+1. Valida o Ticket via telemetria GitHub nativa e busca oficial com paginação curta.
 2. O agente processa as edições no *Shadow Workspace* (`snapsafe`). Ele detecta uma chamada concorrente em `main.rs` e a bloqueia via Mutex do Tokio.
 3. Gera o commit via `gitoxide` e achata a branch via *Rebase Semântico*.
 4. Move o Kanban no SQLite e enfileira a carga vetorial para o *Chyros Daemon* trabalhar em background.
