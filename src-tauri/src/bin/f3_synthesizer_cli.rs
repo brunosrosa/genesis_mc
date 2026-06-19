@@ -1605,7 +1605,7 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
                     RoutingDestination::PassThrough | RoutingDestination::CloudCascade => {}
                     RoutingDestination::LocalModel { .. } => {
                         return Err(
-                            "FinOpsRouter exigiu LocalModel para SGR, mas este caminho é cloud-only. Ajuste SODA_FACTORY_CLOUD_ONLY=true ou implemente SGR local.".to_string()
+                            "FinOpsRouter exigiu LocalModel para SGR, mas este caminho agora opera apenas com CloudCascade.".to_string()
                         );
                     }
                 }

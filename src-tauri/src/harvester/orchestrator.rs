@@ -17,7 +17,7 @@ use super::extract::{
     TestIntentExtractor, UxContractsExtractor,
 };
 use super::guard::PurgeGuard;
-use super::sidecar::{JCodemunchInput, JCodemunchSidecar, PersistArtifactConfig, SemgrepInput, SemgrepSidecar};
+use super::sidecar::{NativeAstInput, NativeAstParser, PersistArtifactConfig, SemgrepInput, SemgrepSidecar};
 use super::canon::SodaCanonExtractor;
 
 #[derive(Error, Debug)]
@@ -179,29 +179,29 @@ impl HarvesterOrchestrator {
         
         let mut blobs = Vec::new();
 
-        if tasks.contains(&ExtractionTask::RunJCodemunch) {
+        if tasks.contains(&ExtractionTask::RunNativeAstParser) {
             let sandbox_ref = sandbox_out.as_ref().ok_or_else(|| {
-                OrchestratorError::InfraError("SandboxHandle indisponivel para executar jcodemunch".to_string())
+                OrchestratorError::InfraError("SandboxHandle indisponivel para executar native ast parser".to_string())
             })?;
-            let input = JCodemunchInput {
+            let input = NativeAstInput {
                 executor: sandbox_ref,
                 timeout_secs: 600,
                 persist_artifacts: Some(PersistArtifactConfig {
                     repo_id,
                 }),
             };
-            let jcodemunch_started = Instant::now();
-            info!(repo_id = %repo_id, timeout_secs = input.timeout_secs, "N6: Invocando sidecar jcodemunch");
-            let payload = JCodemunchSidecar::extract(input).await.map_err(|e| {
+            let native_ast_started = Instant::now();
+            info!(repo_id = %repo_id, timeout_secs = input.timeout_secs, "N6: Invocando parser AST nativo");
+            let payload = NativeAstParser::extract(input).await.map_err(|e| {
                 error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blob_04_repo_outline");
                 OrchestratorError::ExtractionError(e.to_string())
             })?;
             info!(
                 repo_id = %repo_id,
-                elapsed_ms = jcodemunch_started.elapsed().as_millis(),
+                elapsed_ms = native_ast_started.elapsed().as_millis(),
                 repo_outline_bytes = payload.repo_outline_blob.len(),
                 architecture_map_bytes = payload.architecture_map_blob.len(),
-                "N6: jcodemunch concluido"
+                "N6: parser AST nativo concluido"
             );
             blobs.push(ArtifactBlob {
                 artifact_type: "blob_04_repo_outline".to_string(),

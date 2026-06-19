@@ -1031,52 +1031,54 @@ impl MasterSolutionsRow {
         let embargo_status = embargo_label(self.embargo_status).to_string();
 
         Vec::from([
-            self.status_atualizacao.clone(),
-            self.status_fase.clone(),
-            categoria_arquitetural.to_string(),
             pretty_project_name,
             self.repo_url.clone(),
-            self.licenca.clone(),
-            self.proposta_original_resumo.clone(),
-            self.ultima_versao_online.clone(),
-            declared_description,
-            self.stack_base.clone(),
-            self.indicacao_otimista_canibalizacao.clone(),
             self.repo_analised_version.clone(),
+            self.ultima_versao_online.clone(),
+            self.lote_id.clone(),
+            data_ultima_analise,
+            self.analise_origem.clone(),
+            self.licenca.clone(),
+            self.stack_base.clone(),
+            declared_description,
             self.lente_a_sentido_prod_ux.clone(),
             self.lente_b_estrutura_arq.clone(),
             self.lente_c_realidade_ops.clone(),
+            self.proposta_original_resumo.clone(),
             self.visao_do_enxame.clone(),
             self.justificativa_decisao.clone(),
             self.executive_verdict.clone(),
+            self.risco_principal.clone(),
+            self.risco_linha_vermelha.clone(),
+            self.observacoes.clone(),
             self.ouro_a_extrair.clone(),
             self.deep_pattern.clone(),
             self.transplantable_core.clone(),
             self.logic_math_heuristic.clone(),
             self.real_structural_problem.clone(),
-            classificacao_terminal.to_string(),
-            self.integracao_papel_exato.clone(),
             self.categoria_nuance_tecnica.clone(),
-            capability_nature_primary.to_string(),
+            self.integracao_papel_exato.clone(),
             self.must_components_prod_ux.clone(),
             self.must_components_arq.clone(),
             self.must_components_ops.clone(),
             self.detected_toxic_deps.clone(),
             self.do_not_absorb.clone(),
             self.where_ai_should_not_enter.clone(),
+            classificacao_terminal.to_string(),
             acao_de_canibalizacao.to_string(),
-            tipo_integracao.to_string(),
+            categoria_arquitetural.to_string(),
             horizonte_extracao.to_string(),
-            time_to_first_clear_value.to_string(),
-            extractability_level.to_string(),
-            temporal_stability.to_string(),
+            tipo_integracao.to_string(),
+            capability_nature_primary.to_string(),
             architectural_topology.to_string(),
-            adoptability_level.to_string(),
+            temporal_stability.to_string(),
             bare_metal_fit.to_string(),
-            maintenance_burden.to_string(),
+            extractability_level.to_string(),
             runtime_sovereignty_fit.to_string(),
-            longitudinal_sustainability.to_string(),
             local_first_fit.to_string(),
+            adoptability_level.to_string(),
+            longitudinal_sustainability.to_string(),
+            maintenance_burden.to_string(),
             onboarding_friction.to_string(),
             observability_operational.to_string(),
             recoverability_level.to_string(),
@@ -1084,37 +1086,32 @@ impl MasterSolutionsRow {
             curation_burden.to_string(),
             evolution_cost.to_string(),
             operability_level.to_string(),
-            imperfection_tolerance.to_string(),
-            discipline_dependency.to_string(),
-            self.risco_principal.clone(),
-            self.risco_linha_vermelha.clone(),
-            self.observacoes.clone(),
             abandonment_risk.to_string(),
+            time_to_first_clear_value.to_string(),
+            imperfection_tolerance.to_string(),
+            entropy_risk.to_string(),
             design_misuse_risk.to_string(),
             intrinsic_ethics_risk.to_string(),
-            entropy_risk.to_string(),
+            discipline_dependency.to_string(),
             regulatory_risk.to_string(),
-            format_float_1(self.score_final),
             self.score_philosophical_fit.to_string(),
-            format_float_1(self.score_fit_geral_soda),
-            format_float_1(self.score_architectural_priority),
-            self.score_architectural_extractability.to_string(),
-            format_float_1(self.score_human_product_priority),
-            format_float_1(self.score_absorption_readiness),
-            format_float_1(self.score_operational_priority),
             self.score_bare_metal_fit.to_string(),
+            self.score_architectural_extractability.to_string(),
             self.score_operability.to_string(),
+            self.score_creep_risk.to_string(),
             self.score_runtime_sovereignty.to_string(),
             self.score_model_logic_value.to_string(),
             self.score_ethics_safety.to_string(),
-            self.score_creep_risk.to_string(),
             self.score_intrinsic_risk.to_string(),
+            format_float_1(self.score_final),
+            format_float_1(self.score_fit_geral_soda),
+            format_float_1(self.score_architectural_priority),
+            format_float_1(self.score_human_product_priority),
+            format_float_1(self.score_absorption_readiness),
+            format_float_1(self.score_operational_priority),
             format_float_1(self.score_sustainability_adjusted_fit),
             valid_from,
             valid_to,
-            self.analise_origem.clone(),
-            data_ultima_analise,
-            self.lote_id.clone(),
             embargo_status,
         ])
     }
@@ -3348,53 +3345,55 @@ pub fn master_solutions_header_range() -> String {
     format!("A1:{}1", end_col)
 }
 
-pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 85] = [
-    "status_atualizacao",
-    "status_fase",
-    "categoria_arquitetural",
+pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 82] = [
     "project_name",
     "repo_url",
-    "licenca",
-    "proposta_original_resumo",
+    "repo_version",
     "ultima_versao_online",
-    "declared_description",
+    "lote_id",
+    "data_ultima_analise",
+    "analise_origem",
+    "licenca",
     "stack_base",
-    "indicacao_otimista_canibalizacao",
-    "repo_analised_version",
+    "declared_description",
     "lente_a_sentido_prod_ux",
     "lente_b_estrutura_arq",
     "lente_c_realidade_ops",
+    "proposta_original_resumo",
     "visao_do_enxame",
     "justificativa_decisao",
     "executive_verdict",
+    "risco_principal",
+    "risco_linha_vermelha",
+    "observacoes",
     "ouro_a_extrair",
     "deep_pattern",
     "transplantable_core",
     "logic_math_heuristic",
     "real_structural_problem",
-    "classificacao_terminal",
-    "integracao_papel_exato",
     "categoria_nuance_tecnica",
-    "capability_nature_primary",
+    "integracao_papel_exato",
     "must_components_prod_ux",
     "must_components_arq",
     "must_components_ops",
     "detected_toxic_deps",
     "do_not_absorb",
     "where_ai_should_not_enter",
+    "classificacao_terminal",
     "acao_de_canibalizacao",
-    "tipo_integracao",
+    "categoria_arquitetural",
     "horizonte_extracao",
-    "time_to_first_clear_value",
-    "extractability_level",
-    "temporal_stability",
+    "tipo_integracao",
+    "capability_nature_primary",
     "architectural_topology",
-    "adoptability_level",
+    "temporal_stability",
     "bare_metal_fit",
-    "maintenance_burden",
+    "extractability_level",
     "runtime_sovereignty_fit",
-    "longitudinal_sustainability",
     "local_first_fit",
+    "adoptability_level",
+    "longitudinal_sustainability",
+    "maintenance_burden",
     "onboarding_friction",
     "observability_operational",
     "recoverability_level",
@@ -3402,37 +3401,32 @@ pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 85] = [
     "curation_burden",
     "evolution_cost",
     "operability_level",
+    "abandonment_risk",
+    "time_to_first_clear_value",
     "imperfection_tolerance",
     "discipline_dependency",
-    "risco_principal",
-    "risco_linha_vermelha",
-    "observacoes",
-    "abandonment_risk",
+    "entropy_risk",
     "design_misuse_risk",
     "intrinsic_ethics_risk",
-    "entropy_risk",
     "regulatory_risk",
-    "score_final",
     "score_philosophical_fit",
-    "score_fit_geral_soda",
-    "score_architectural_priority",
-    "score_architectural_extractability",
-    "score_human_product_priority",
-    "score_absorption_readiness",
-    "score_operational_priority",
     "score_bare_metal_fit",
+    "score_architectural_extractability",
     "score_operability",
     "score_runtime_sovereignty",
     "score_model_logic_value",
     "score_ethics_safety",
     "score_creep_risk",
     "score_intrinsic_risk",
+    "score_final",
+    "score_fit_geral_soda",
+    "score_architectural_priority",
+    "score_human_product_priority",
+    "score_absorption_readiness",
+    "score_operational_priority",
     "score_sustainability_adjusted_fit",
     "valid_from",
     "valid_to",
-    "analise_origem",
-    "data_ultima_analise",
-    "lote_id",
     "embargo_status",
 ];
 
@@ -3949,18 +3943,18 @@ mod tests {
     }
 
     #[test]
-    fn batch_payload_maps_dynamic_range_and_85_columns() {
+    fn batch_payload_maps_dynamic_range_and_82_columns() {
         let row = MasterSolutionsRow::from_block0(block0());
         let payload = build_batch_update_payload(2, &row);
         let range = sheet_range_for_row(2);
         let rows = payload.get(&range).unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].len(), 85);
-        assert_eq!(rows[0][3], "owner / repo");
+        assert_eq!(rows[0].len(), 82);
+        assert_eq!(rows[0][0], "owner / repo");
     }
 
     #[test]
-    fn canonical_85_columns_are_covered_by_block_contracts_or_phase4_derivation() {
+    fn canonical_82_columns_are_covered_by_block_contracts_or_phase4_derivation() {
         let mut covered = BTreeSet::new();
         for name in BLOCK0_CONTEXT_COLUMNS
             .iter()
@@ -4035,17 +4029,23 @@ mod tests {
             ..Default::default()
         };
         let arr = row.to_sheet_row();
-        assert_eq!(arr.len(), 85);
-        assert_eq!(arr[63], "1.2");
-        assert_eq!(arr[65], "2.3");
-        assert_eq!(arr[66], "3.4");
-        assert_eq!(arr[68], "4.5");
-        assert_eq!(arr[69], "5.6");
-        assert_eq!(arr[70], "6.7");
-        assert_eq!(arr[78], "7.8");
-        assert_eq!(arr[79], format_epoch_utc(1_700_000_000));
-        assert_eq!(arr[80], "");
-        assert_eq!(arr[84], "LIVRE");
+        let idx = |name: &str| {
+            MASTER_SOLUTIONS_CANONICAL_COLUMNS
+                .iter()
+                .position(|col| *col == name)
+                .unwrap()
+        };
+        assert_eq!(arr.len(), 82);
+        assert_eq!(arr[idx("score_final")], "1.2");
+        assert_eq!(arr[idx("score_fit_geral_soda")], "2.3");
+        assert_eq!(arr[idx("score_architectural_priority")], "3.4");
+        assert_eq!(arr[idx("score_human_product_priority")], "4.5");
+        assert_eq!(arr[idx("score_absorption_readiness")], "5.6");
+        assert_eq!(arr[idx("score_operational_priority")], "6.7");
+        assert_eq!(arr[idx("score_sustainability_adjusted_fit")], "7.8");
+        assert_eq!(arr[idx("valid_from")], format_epoch_utc(1_700_000_000));
+        assert_eq!(arr[idx("valid_to")], "");
+        assert_eq!(arr[idx("embargo_status")], "LIVRE");
     }
 
     #[test]

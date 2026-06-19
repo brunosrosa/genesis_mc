@@ -18,7 +18,7 @@ pub struct GitoxideCloneOutcome {
 
 #[derive(Debug, Error)]
 pub enum GithubTrackerError {
-    #[error("GITHUB_TOKEN ausente no ambiente local/.env")]
+    #[error("GITHUB_PAT ausente no ambiente local/.env")]
     MissingGithubToken,
 
     #[error("URL GitHub inválida: {0}")]
@@ -217,7 +217,7 @@ pub async fn clone_or_fetch_to_workspace(
 pub fn map_tracker_to_fetch_error(err: GithubTrackerError) -> FetchError {
     match err {
         GithubTrackerError::MissingGithubToken => {
-            FetchError::Network("Missing GITHUB_TOKEN in .env".to_string())
+            FetchError::Network("Missing GITHUB_PAT in .env".to_string())
         }
         GithubTrackerError::InvalidGithubUrl(reason) => FetchError::UnsupportedSource(reason),
         GithubTrackerError::NotFound => FetchError::NotFound,
@@ -244,7 +244,7 @@ fn map_tracker_to_clone_error(err: GithubTrackerError) -> CloneError {
             reason: "GitHub rate limit/bloqueio".to_string(),
         },
         GithubTrackerError::MissingGithubToken => CloneError::NetworkError {
-            reason: "Missing GITHUB_TOKEN in .env".to_string(),
+            reason: "Missing GITHUB_PAT in .env".to_string(),
         },
         GithubTrackerError::InvalidResponse(reason) => CloneError::NetworkError { reason },
     }
@@ -440,11 +440,11 @@ pub fn normalize_owner_repo(owner_repo: &str) -> Result<String, GithubTrackerErr
 }
 
 fn required_github_token() -> Result<String, GithubTrackerError> {
-    std::env::var("GITHUB_TOKEN")
+    std::env::var("GITHUB_PAT")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .or_else(|| read_local_env_var("GITHUB_TOKEN"))
+        .or_else(|| read_local_env_var("GITHUB_PAT"))
         .ok_or(GithubTrackerError::MissingGithubToken)
 }
 

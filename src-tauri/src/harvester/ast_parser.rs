@@ -201,7 +201,7 @@ fn should_skip_dir(name: &str) -> bool {
             | "build"
             | "coverage"
             | "vendor"
-            | ".jcodemunch_index"
+            | ".native_ast_cache"
             | "__pycache__"
             | ".venv"
             | "venv"
@@ -224,7 +224,7 @@ fn should_skip_file(path: &Path) -> bool {
         || normalized.contains("/dist/")
         || normalized.contains("/build/")
         || normalized.contains("/.git/")
-        || normalized.contains("/.jcodemunch_index/")
+        || normalized.contains("/.native_ast_cache/")
     {
         return true;
     }

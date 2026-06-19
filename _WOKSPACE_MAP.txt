@@ -9,7 +9,7 @@
 - .agents/ -> Armazenamento global das engrenagens da IA.
 - .agents/rules/ -> Diretrizes e manifestos de contexto (DESIGN, tech-stack).
 - .agents/sidecars/ -> Dockerfiles e isolamentos efêmeros de desenvolvimento.
-- .agents/skills/ -> Servidores MCP locais e customizados (jcodemunch, sheets).
+- .agents/skills/ -> Servidores MCP locais e customizados (native-ast-parser, sheets).
 - .trae/ -> Habilidades e configurações exclusivas da IDE Trae PRO+.
 - .antigravitycli/ -> Logs de execução e sessões do Antigravity CLI.
 - .vscode/ -> Perfis de workspace, tarefas e debugger local.

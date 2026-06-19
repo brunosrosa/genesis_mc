@@ -30,7 +30,7 @@ pub enum SsotError {
 
 pub struct SsotInjector;
 
-const SSOT_EXPECTED_COLUMNS: usize = 85;
+const SSOT_EXPECTED_COLUMNS: usize = 82;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
 #[cfg(not(test))]
@@ -2524,7 +2524,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_batch_payload_is_85_columns_a_to_cg() {
+    fn test_prepare_batch_payload_is_82_columns_a_to_cd() {
         let row = MasterSolutionsRow {
             status_atualizacao: "CONCLUIDO".to_string(),
             status_fase: "F4".to_string(),
@@ -2553,13 +2553,13 @@ mod tests {
         let batch = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap();
         let obj = batch.as_object().unwrap();
         let values = obj
-            .get("A2:CG2")
+            .get("A2:CD2")
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first())
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap();
-        assert_eq!(values.len(), 85);
+        assert_eq!(values.len(), 82);
 
         let idx = |name: &str| MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == name).unwrap();
         assert_eq!(values[idx("project_name")], json!("owner / repo"));
@@ -2617,11 +2617,11 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        assert_eq!(SsotInjector::header_idx(&headers, "declared_description"), Some(8));
-        assert_eq!(SsotInjector::header_idx(&headers, "score_final"), Some(63));
-        assert_eq!(SsotInjector::header_idx(&headers, "status_fase"), Some(1));
-        assert_eq!(SsotInjector::header_idx(&headers, "lote_id"), Some(83));
-        assert_eq!(SsotInjector::header_idx(&headers, "repo_url"), Some(4));
+        assert_eq!(SsotInjector::header_idx(&headers, "declared_description"), Some(9));
+        assert_eq!(SsotInjector::header_idx(&headers, "score_final"), Some(72));
+        assert_eq!(SsotInjector::header_idx(&headers, "lote_id"), Some(4));
+        assert_eq!(SsotInjector::header_idx(&headers, "repo_url"), Some(1));
+        assert_eq!(SsotInjector::header_idx(&headers, "categoria_arquitetural"), Some(35));
     }
 
     #[test]
@@ -2673,23 +2673,23 @@ mod tests {
         let url = SsotInjector::build_google_sheets_values_url_with_base(
             "https://example.test/v4/spreadsheets",
             "sheet_123",
-            "MASTER_SOLUTIONS!A1:CG1",
+            "MASTER_SOLUTIONS!A1:CD1",
         )
         .unwrap();
         assert_eq!(
             url,
-            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CG1?majorDimension=ROWS"
+            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CD1?majorDimension=ROWS"
         );
     }
 
     #[test]
     fn google_sheets_batch_update_body_preserves_single_atomic_range() {
         let mut ranges = serde_json::Map::new();
-        ranges.insert("A2:CG2".to_string(), json!([["owner / repo", "https://github.com/owner/repo"]]));
+        ranges.insert("A2:CD2".to_string(), json!([["owner / repo", "https://github.com/owner/repo"]]));
         let body =
             SsotInjector::build_google_sheets_batch_update_body(MASTER_SOLUTIONS_SHEET, &ranges).unwrap();
         assert_eq!(body["valueInputOption"], json!("RAW"));
-        assert_eq!(body["data"][0]["range"], json!("MASTER_SOLUTIONS!A2:CG2"));
+        assert_eq!(body["data"][0]["range"], json!("MASTER_SOLUTIONS!A2:CD2"));
         assert_eq!(body["data"][0]["majorDimension"], json!("ROWS"));
         assert_eq!(
             body["data"][0]["values"],
@@ -2941,6 +2941,6 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "SHEET_ID");
         assert_eq!(calls[0].1, "MASTER_SOLUTIONS");
-        assert!(calls[0].2.get("A2:CG2").is_some());
+        assert!(calls[0].2.get("A2:CD2").is_some());
     }
 }

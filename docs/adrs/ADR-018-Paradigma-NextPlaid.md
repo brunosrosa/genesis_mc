@@ -8,7 +8,7 @@ O fatiamento (chunking) de código-fonte baseado em delimitadores cegos de carac
 
 ## Decisão
 Adotar rigidamente o **Paradigma NextPlaid** para o fatiamento e representação vetorial de códigos-fonte e arquivos de desenvolvimento no SODA:
-1. **Fatiamento Orientado a AST:** É expressamente proibida a indexação de trechos brutos de caracteres fixos em arquivos de código. O chunking do código é executado cirurgicamente com base na sua **Árvore de Sintaxe Abstrata (AST)** utilizando a engine nativa `jcodemunch`.
+1. **Fatiamento Orientado a AST:** É expressamente proibida a indexação de trechos brutos de caracteres fixos em arquivos de código. O chunking do código é executado cirurgicamente com base na sua **Árvore de Sintaxe Abstrata (AST)** utilizando o parser AST nativo.
 2. **Ponto de Extração O(1):** A indexação decompõe o código-fonte em estruturas e símbolos semânticos explícitos (métodos, structs, enums, assinaturas de funções e blocos lógicos associados) mapeados por offsets geográficos exatos. Cada símbolo de código torna-se um vetor independente em L3 (LanceDB/LadybugDB) ancorado ao seu caminho lógico no repositório.
 3. **Amarração Tarde de Relações:** O LadybugDB costura a teia causal conectando os nós de código fatiados por dependências de importação e chamadas de métodos, garantindo que o agente recupere a cadeia lógica inteira da assinatura ao buscar uma função correlata.
 
@@ -18,6 +18,6 @@ Adotar rigidamente o **Paradigma NextPlaid** para o fatiamento e representação
 - **Rigor de Navegação:** A navegação por AST fornece uma trilha de dependências inquebrável para auditorias dinâmicas e varreduras rápidas em $\mathcal{O}(1)$.
 
 ## Restrições Bare-Metal
-- **Latência de Parsing AST:** A extração sintática O(1) de contornos de arquivos e assinaturas pelo motor `jcodemunch` deve rodar em no máximo **15ms** por arquivo normal em Rust.
+- **Latência de Parsing AST:** A extração sintática O(1) de contornos de arquivos e assinaturas pelo parser AST nativo deve rodar em no máximo **15ms** por arquivo normal em Rust.
 - **Higiene Semântica:** Arquivos contendo lixo de desenvolvimento ou códigos temporários ignorados no Git principal estão sumariamente excluídos do fatiamento AST para prevenir contaminação da L3.
 - **Consistência:** A atualização e re-indexação de nós de AST no LanceDB ocorre de forma incremental ativada em background assincronamente a cada salvamento bem-sucedido (Exit Code 0).

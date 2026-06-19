@@ -570,7 +570,7 @@ fn should_skip_dir(name: &str) -> bool {
             | "target"
             | "dist"
             | "build"
-            | ".jcodemunch_index"
+            | ".native_ast_cache"
             | "docs"
             | "documentation"
             | "examples"

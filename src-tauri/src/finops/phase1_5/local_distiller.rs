@@ -23,34 +23,32 @@ pub trait InferenceEngine: Send + Sync {
     fn clear_cache(&mut self);
 }
 
-pub struct MockInferenceEngine {
+pub struct TruncatingInferenceEngine {
     loaded: AtomicBool,
 }
 
-impl MockInferenceEngine {
+impl TruncatingInferenceEngine {
     pub fn new() -> Self {
-        MockInferenceEngine {
+        TruncatingInferenceEngine {
             loaded: AtomicBool::new(true),
         }
     }
 }
 
-impl Default for MockInferenceEngine {
+impl Default for TruncatingInferenceEngine {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl InferenceEngine for MockInferenceEngine {
+impl InferenceEngine for TruncatingInferenceEngine {
     fn infer(&self, prompt: &str, max_tokens: usize) -> Result<String, DistillationError> {
         if prompt.is_empty() {
             return Err(DistillationError::InvalidInput);
         }
-        let word_count = prompt.split_whitespace().count();
-        let estimated_tokens = word_count * 2;
-        let output_tokens = estimated_tokens.min(max_tokens).min(MAX_OUTPUT_TOKENS);
-        let summary_words: Vec<&str> = prompt.split_whitespace().take(output_tokens / 2).collect();
-        Ok(summary_words.join(" ") + " [MOCK_ESSENCE]")
+        let output_tokens = max_tokens.min(MAX_OUTPUT_TOKENS);
+        let summary_words: Vec<&str> = prompt.split_whitespace().take(output_tokens).collect();
+        Ok(summary_words.join(" "))
     }
 
     fn is_loaded(&self) -> bool {
@@ -144,7 +142,7 @@ mod tests {
     #[test]
     fn test_chunks_15k_tokens_into_6k_blocks() {
         let distiller = LocalDistiller {
-            engine: MockInferenceEngine::new(),
+            engine: TruncatingInferenceEngine::new(),
         };
 
         let dummy_15k = "word ".repeat(15_000);
@@ -161,7 +159,7 @@ mod tests {
     #[test]
     fn test_output_respects_3k_token_ceiling() {
         let distiller = LocalDistiller {
-            engine: MockInferenceEngine::new(),
+            engine: TruncatingInferenceEngine::new(),
         };
 
         let dummy_15k = "word ".repeat(15_000);
@@ -172,19 +170,19 @@ mod tests {
     }
 
     #[test]
-    fn test_mock_inference_returns_essence() {
-        let engine = MockInferenceEngine::new();
+    fn test_truncating_inference_returns_real_payload_without_mock_marker() {
+        let engine = TruncatingInferenceEngine::new();
         let result = engine.infer("word ".repeat(20_000).as_str(), 3_000)
-            .expect("Mock should succeed");
+            .expect("Truncating engine should succeed");
 
-        assert!(result.contains("[MOCK_ESSENCE]"));
         assert!(!result.is_empty());
+        assert!(!result.contains("[MOCK_ESSENCE]"));
     }
 
     #[test]
     fn test_invalid_input_returns_error() {
         let distiller = LocalDistiller {
-            engine: MockInferenceEngine::new(),
+            engine: TruncatingInferenceEngine::new(),
         };
 
         let result = distiller.distill("", "Distil this");
@@ -195,7 +193,7 @@ mod tests {
     #[test]
     fn test_chunking_with_overlap() {
         let distiller = LocalDistiller {
-            engine: MockInferenceEngine::new(),
+            engine: TruncatingInferenceEngine::new(),
         };
 
         let large_text = "token ".repeat(12_000);
@@ -218,7 +216,7 @@ mod tests {
     #[test]
     fn test_drop_logs_cleanup() {
         let distiller = LocalDistiller {
-            engine: MockInferenceEngine::new(),
+            engine: TruncatingInferenceEngine::new(),
         };
 
         let _ = distiller.allocated_memory();
@@ -227,7 +225,7 @@ mod tests {
     #[test]
     fn test_small_input_does_not_chunk() {
         let distiller = LocalDistiller {
-            engine: MockInferenceEngine::new(),
+            engine: TruncatingInferenceEngine::new(),
         };
 
         let small_text = "word ".repeat(100);
@@ -239,7 +237,7 @@ mod tests {
     #[test]
     fn test_exact_boundary_chunking() {
         let distiller = LocalDistiller {
-            engine: MockInferenceEngine::new(),
+            engine: TruncatingInferenceEngine::new(),
         };
 
         let exact_size = "token ".repeat(CHUNK_SIZE);

@@ -434,7 +434,7 @@ async fn run_soda_github_meta(params: &serde_json::Map<String, Value>) -> Result
     .map_err(|e| {
         let (code, message) = match e {
             github_tracker::GithubTrackerError::MissingGithubToken => {
-                (-32030, "GITHUB_TOKEN ausente para consulta GitHub")
+                (-32030, "GITHUB_PAT ausente para consulta GitHub")
             }
             github_tracker::GithubTrackerError::NotFound => {
                 (-32031, "Repositório GitHub não encontrado")

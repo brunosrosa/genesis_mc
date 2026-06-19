@@ -15,9 +15,6 @@ pub enum CascadeError {
     NetworkError(String),
 }
 
-const FREE_MODEL: &str = "qwen/qwen3-coder:free";
-const PAID_MODEL: &str = "deepseek/deepseek-v4-flash";
-const DEFAULT_OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_OUTPUT_TOKENS: usize = 3_000;
 
 #[derive(Debug, Serialize)]
@@ -71,7 +68,7 @@ impl CloudCascade {
         Ok(CloudCascade {
             api_key,
             client: reqwest::Client::new(),
-            base_url: DEFAULT_OPENROUTER_URL.to_string(),
+            base_url: openrouter_chat_completions_url(),
         })
     }
 
@@ -94,7 +91,7 @@ impl CloudCascade {
         }
 
         let result = self
-            .call_openrouter(payload, system_prompt, FREE_MODEL)
+            .call_openrouter(payload, system_prompt, &free_model_name())
             .await;
 
         match result {
@@ -104,7 +101,7 @@ impl CloudCascade {
                     "CloudCascade: Free tier unavailable ({}), switching to paid",
                     status
                 );
-                self.call_openrouter(payload, system_prompt, PAID_MODEL).await
+                self.call_openrouter(payload, system_prompt, &paid_model_name()).await
             }
             Err(e) => Err(e),
         }
@@ -166,12 +163,29 @@ impl CloudCascade {
     }
 }
 
-impl Default for CloudCascade {
-    fn default() -> Self {
-        Self::new().expect(
-            "CloudCascade requires OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY",
-        )
-    }
+fn openrouter_chat_completions_url() -> String {
+    let base = std::env::var("OPENAI_BASE_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
+    format!("{base}/chat/completions")
+}
+
+fn free_model_name() -> String {
+    std::env::var("OPENROUTER_FREE_MODEL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "openrouter/free".to_string())
+}
+
+fn paid_model_name() -> String {
+    std::env::var("OPENROUTER_DEFAULT_MODEL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "deepseek/deepseek-v4-flash".to_string())
 }
 
 #[cfg(test)]
@@ -183,7 +197,7 @@ mod tests {
         let response_body = serde_json::json!({
             "choices": [{
                 "message": {
-                    "content": "Distilled essence: test summary [MOCK_ESSENCE]"
+                    "content": "Distilled essence: test summary"
                 }
             }]
         });
@@ -227,7 +241,7 @@ mod tests {
             eprintln!("ERROR: {:?}", result.as_ref().err());
         }
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("[MOCK_ESSENCE]"));
+        assert!(result.unwrap().contains("Distilled essence"));
     }
 
     #[tokio::test]
@@ -249,7 +263,7 @@ mod tests {
             eprintln!("ERROR: {:?}", result.as_ref().err());
         }
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("[MOCK_ESSENCE]"));
+        assert!(result.unwrap().contains("Distilled essence"));
     }
 
     #[tokio::test]

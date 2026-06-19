@@ -60,17 +60,46 @@ pub enum CloneError {
 
 #[cfg(target_os = "windows")]
 fn github_auth_header_value() -> Option<HeaderValue> {
-    let token = std::env::var("GITHUB_TOKEN")
+    let token = std::env::var("GITHUB_PAT")
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            std::env::var("GITHUB_PAT")
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-        })?;
+        .or_else(|| read_local_env_var("GITHUB_PAT"))
+        .filter(|s| !s.is_empty())?;
     HeaderValue::from_str(&format!("Bearer {}", token)).ok()
+}
+
+#[cfg(target_os = "windows")]
+fn read_local_env_var(key: &str) -> Option<String> {
+    let candidates = [
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent()?.join(".env"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"),
+    ];
+    for candidate in candidates {
+        let Ok(content) = std::fs::read_to_string(candidate) else {
+            continue;
+        };
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let Some((name, value)) = trimmed.split_once('=') else {
+                continue;
+            };
+            if name.trim() == key {
+                return Some(
+                    value
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string(),
+                )
+                .filter(|value| !value.is_empty());
+            }
+        }
+    }
+    None
 }
 
 pub struct BloblessCloner;

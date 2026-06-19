@@ -46,7 +46,7 @@ pub enum SidecarError {
     ParseError { reason: String },
 }
 
-pub struct JCodemunchInput<'a, E: SandboxExecutor> {
+pub struct NativeAstInput<'a, E: SandboxExecutor> {
     pub executor: &'a E,
     pub timeout_secs: u64,
     pub persist_artifacts: Option<PersistArtifactConfig<'a>>,
@@ -237,7 +237,7 @@ fn collect_markdown_files(repo_path: &Path, max_files: usize) -> Vec<PathBuf> {
     out
 }
 
-async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<JCodemunchArtifacts, SidecarError> {
+async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAstArtifacts, SidecarError> {
     let md_files = collect_markdown_files(repo_path, 24);
     let mut blocks: Vec<(i32, ScopedTextBlock)> = Vec::new();
     let mut all_text = String::new();
@@ -428,7 +428,7 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<JCodemunc
         ));
     }
 
-    Ok(JCodemunchArtifacts {
+    Ok(NativeAstArtifacts {
         repo_outline_blob: truncate_chars(&outline, BLOB_04_REPO_OUTLINE_MAX_CHARS).into_bytes(),
         architecture_map_blob: truncate_chars(&link_map, BLOB_05_ARCHITECTURE_MAP_MAX_CHARS).into_bytes(),
         health_report_blob: truncate_chars(&health, BLOB_08_HEALTH_REPORT_MAX_CHARS).into_bytes(),
@@ -449,7 +449,7 @@ const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../semgrep/blob_06_s
 const SEMGREP_HEALTH_RULE_SOURCE: &str = include_str!("../../semgrep/blob_08_health.yml");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct JCodemunchArtifacts {
+pub struct NativeAstArtifacts {
     pub repo_outline_blob: Vec<u8>,
     pub health_report_blob: Vec<u8>,
     pub architecture_map_blob: Vec<u8>,
@@ -551,17 +551,17 @@ impl SemgrepRuleSet {
     }
 }
 
-fn code_index_path_for_repo(repo_path: &Path) -> String {
+fn native_ast_cache_path_for_repo(repo_path: &Path) -> String {
     repo_path
         .parent()
         .unwrap_or(repo_path)
-        .join(".jcodemunch_index")
+        .join(".native_ast_cache")
         .display()
         .to_string()
 }
 
 #[cfg(test)]
-fn code_index_global_storage_dir() -> Option<PathBuf> {
+fn native_ast_cache_global_storage_dir() -> Option<PathBuf> {
     if let Ok(configured) = env::var("JCODEMUNCH_STORAGE_PATH") {
         let trimmed = configured.trim();
         if !trimmed.is_empty() {
@@ -574,12 +574,12 @@ fn code_index_global_storage_dir() -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-fn code_index_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, SidecarError> {
-    code_index_db_path_for_repo_id(repo_path, None)
+fn native_ast_cache_db_path_for_repo(repo_path: &Path) -> Result<std::path::PathBuf, SidecarError> {
+    native_ast_cache_db_path_for_repo_id(repo_path, None)
 }
 
 #[cfg(test)]
-fn code_index_db_path_for_repo_id(
+fn native_ast_cache_db_path_for_repo_id(
     repo_path: &Path,
     index_repo_id: Option<&str>,
 ) -> Result<std::path::PathBuf, SidecarError> {
@@ -588,16 +588,16 @@ fn code_index_db_path_for_repo_id(
         .and_then(|path| path.file_name())
         .and_then(|name| name.to_str())
         .ok_or_else(|| SidecarError::ExecutionFailed {
-            reason: "Nao foi possivel resolver o owner do repositório para localizar o banco do jcodemunch".to_string(),
+            reason: "Nao foi possivel resolver o owner do repositório para localizar o cache AST nativo".to_string(),
         })?;
     let repo = repo_path
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| SidecarError::ExecutionFailed {
-            reason: "Nao foi possivel resolver o nome do repositório para localizar o banco do jcodemunch".to_string(),
+            reason: "Nao foi possivel resolver o nome do repositório para localizar o cache AST nativo".to_string(),
         })?;
-    let mut roots = vec![repo_path.parent().unwrap_or(repo_path).join(".jcodemunch_index")];
-    if let Some(global_root) = code_index_global_storage_dir() {
+    let mut roots = vec![repo_path.parent().unwrap_or(repo_path).join(".native_ast_cache")];
+    if let Some(global_root) = native_ast_cache_global_storage_dir() {
         roots.push(global_root);
     }
 
@@ -648,7 +648,7 @@ fn code_index_db_path_for_repo_id(
 
     Err(SidecarError::ExecutionFailed {
         reason: format!(
-            "Nao foi possivel localizar o banco SQLite do jcodemunch para '{}'; repo_id={:?}; candidatos={:?}",
+            "Nao foi possivel localizar o cache SQLite do AST nativo para '{}'; repo_id={:?}; candidatos={:?}",
             repo_path.display(),
             index_repo_id,
             all_candidates
@@ -702,8 +702,8 @@ fn sanitize_host_paths_in_text(repo_path: &Path, text: &str) -> String {
 
     sanitized = replace_host_prefix_variants(
         sanitized,
-        &code_index_path_for_repo(repo_path),
-        ".jcodemunch_index/",
+        &native_ast_cache_path_for_repo(repo_path),
+        ".native_ast_cache/",
     );
 
     sanitized
@@ -738,7 +738,7 @@ fn sanitize_repo_relative_path(repo_path: &Path, value: &str) -> Option<String> 
     let lower = normalized.to_ascii_lowercase();
     let host_drive = lower.as_bytes().get(1) == Some(&b':');
     let internal = lower.starts_with(".soda_semgrep/")
-        || lower.starts_with(".jcodemunch_index/")
+        || lower.starts_with(".native_ast_cache/")
         || lower.starts_with(".soda_scratchpad/")
         || lower.starts_with("sandbox/")
         || lower.starts_with("diagnostics/")
@@ -907,9 +907,9 @@ fn normalize_repo_outline_markdown(text: &str) -> String {
 #[cfg(test)]
 fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     if stdout_is_blank(bytes) {
-        error!(binary = "jcodemunch-mcp", "Sidecar claude-md retornou stdout vazio");
+        error!(binary = "native-ast-parser", "Sidecar claude-md retornou stdout vazio");
         return Err(SidecarError::ExecutionFailed {
-            reason: "jcodemunch-mcp claude-md returned empty stdout".to_string(),
+            reason: "native-ast-parser claude-md returned empty stdout".to_string(),
         });
     }
 
@@ -918,7 +918,7 @@ fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     let truncated = truncate_chars(&normalized, BLOB_04_REPO_OUTLINE_MAX_CHARS);
     if truncated.trim().is_empty() {
         return Err(SidecarError::ExecutionFailed {
-            reason: "jcodemunch-mcp claude-md returned an empty repo outline".to_string(),
+            reason: "native-ast-parser claude-md returned an empty repo outline".to_string(),
         });
     }
 
@@ -1003,13 +1003,13 @@ async fn execute_sidecar<E: SandboxExecutor>(
     }
 }
 
-pub struct JCodemunchSidecar;
+pub struct NativeAstParser;
 
-impl JCodemunchSidecar {
+impl NativeAstParser {
     /// Extrai os artefatos estruturais de código usando parser AST nativo em Rust.
     pub async fn extract<E: SandboxExecutor>(
-        input: JCodemunchInput<'_, E>,
-    ) -> Result<JCodemunchArtifacts, SidecarError> {
+        input: NativeAstInput<'_, E>,
+    ) -> Result<NativeAstArtifacts, SidecarError> {
         tracing::info!(
             repo_path = %input.executor.repo_path().display(),
             "ast-native: iniciando extração estrutural"
@@ -1069,7 +1069,7 @@ impl JCodemunchSidecar {
             .await?;
         }
 
-        Ok(JCodemunchArtifacts {
+        Ok(NativeAstArtifacts {
             repo_outline_blob,
             health_report_blob,
             architecture_map_blob,
@@ -1237,7 +1237,7 @@ fn should_skip_test_dir(name: &str) -> bool {
             | "target"
             | "dist"
             | "build"
-            | ".jcodemunch_index"
+            | ".native_ast_cache"
             | "docs"
             | "documentation"
             | "examples"
@@ -1985,7 +1985,7 @@ mod tests {
             let repo_path = owner_dir.join("repo");
             std::fs::create_dir_all(&repo_path).unwrap();
 
-            let index_dir = owner_dir.join(".jcodemunch_index");
+            let index_dir = owner_dir.join(".native_ast_cache");
             std::fs::create_dir_all(&index_dir).unwrap();
             let db_path = index_dir.join("owner-repo.db");
             let conn = rusqlite::Connection::open(&db_path).unwrap();
@@ -2039,14 +2039,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let owner_dir = temp_dir.path().join("aaif-goose");
         let repo_path = owner_dir.join("goose");
-        let index_dir = owner_dir.join(".jcodemunch_index");
+        let index_dir = owner_dir.join(".native_ast_cache");
         std::fs::create_dir_all(&repo_path).unwrap();
         std::fs::create_dir_all(&index_dir).unwrap();
 
         let expected = index_dir.join("local-goose-0a8be5b6.db");
         std::fs::write(&expected, b"").unwrap();
 
-        let resolved = code_index_db_path_for_repo(&repo_path).unwrap();
+        let resolved = native_ast_cache_db_path_for_repo(&repo_path).unwrap();
         assert_eq!(resolved, expected);
     }
 
@@ -2079,13 +2079,13 @@ mod tests {
             Ok(index_json.as_bytes().to_vec()),
             Ok(digest_json.as_bytes().to_vec()),
         ]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ter sucesso: {:?}", result);
         let payload = result.unwrap();
         assert_eq!(
@@ -2122,7 +2122,7 @@ mod tests {
             Ok(digest_json.as_bytes().to_vec()),
         ]);
 
-        let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
+        let db_path = native_ast_cache_db_path_for_repo(executor.repo_path()).unwrap();
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         conn.execute(
             "INSERT INTO files (path, imports) VALUES (?1, ?2)",
@@ -2149,12 +2149,12 @@ mod tests {
         )
         .unwrap();
 
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
-        let payload = JCodemunchSidecar::extract(input).await.unwrap();
+        let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
 
         assert!(!architecture_map.contains("icons/logo.svg"));
@@ -2175,7 +2175,7 @@ mod tests {
             Ok(digest_json.as_bytes().to_vec()),
         ]);
 
-        let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
+        let db_path = native_ast_cache_db_path_for_repo(executor.repo_path()).unwrap();
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         conn.execute(
             "INSERT INTO files (path, imports) VALUES (?1, ?2)",
@@ -2202,12 +2202,12 @@ mod tests {
         )
         .unwrap();
 
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
-        let payload = JCodemunchSidecar::extract(input).await.unwrap();
+        let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
 
         assert!(!architecture_map.contains("/tests/"));
@@ -2230,7 +2230,7 @@ mod tests {
             Ok(digest_json.as_bytes().to_vec()),
         ]);
 
-        let db_path = code_index_db_path_for_repo(executor.repo_path()).unwrap();
+        let db_path = native_ast_cache_db_path_for_repo(executor.repo_path()).unwrap();
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         conn.execute(
             "INSERT INTO files (path, imports) VALUES (?1, ?2)",
@@ -2289,12 +2289,12 @@ mod tests {
         )
         .unwrap();
 
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
-        let payload = JCodemunchSidecar::extract(input).await.unwrap();
+        let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
 
         assert!(!architecture_map.contains("scenario_tests"));
@@ -2314,13 +2314,13 @@ mod tests {
             reason: "program not found (os error 2)".to_string(),
         };
         let executor = MockExecutor::new(vec![Err(spawn_err)]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
         let payload = result.unwrap();
         let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
@@ -2335,13 +2335,13 @@ mod tests {
             stdout: Vec::new(),
         };
         let executor = MockExecutor::new(vec![Err(run_err)]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
         let payload = result.unwrap();
         let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
@@ -2351,13 +2351,13 @@ mod tests {
     #[tokio::test]
     async fn test_timeout_propagation() {
         let executor = MockExecutor::new(vec![Err(SandboxError::Timeout)]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 45,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
@@ -2369,13 +2369,13 @@ mod tests {
             Ok(index_json.as_bytes().to_vec()),
             Ok(corrup_bytes),
         ]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
@@ -2387,13 +2387,13 @@ mod tests {
             Ok(index_json.as_bytes().to_vec()),
             Ok(empty_json.as_bytes().to_vec()),
         ]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
@@ -2404,36 +2404,36 @@ mod tests {
             Ok(index_json.as_bytes().to_vec()),
             Ok(Vec::new()),
         ]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
     #[tokio::test]
-    async fn test_exit_code_1_fails_for_jcodemunch() {
+    async fn test_exit_code_1_fails_soft_for_native_ast_parser() {
         let run_err = SandboxError::ProcessNonZeroExit {
             exit_code: 1,
             stderr: "usage error".to_string(),
             stdout: Vec::new(),
         };
         let executor = MockExecutor::new(vec![Err(run_err)]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 
     #[tokio::test]
-    async fn test_jcodemunch_index_exit_code_1_with_success_json_is_allowed() {
+    async fn test_native_ast_cache_exit_code_1_with_success_json_is_allowed() {
         let index_json = r#"{"success": true}"#;
         let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
         let run_err = SandboxError::ProcessNonZeroExit {
@@ -2445,13 +2445,13 @@ mod tests {
             Err(run_err),
             Ok(digest_json.as_bytes().to_vec()),
         ]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria tolerar exit 1 no index: {:?}", result);
     }
 
@@ -2464,13 +2464,13 @@ mod tests {
             Ok(digest_json.as_bytes().to_vec()),
             Ok(Vec::new()),
         ]);
-        let input = JCodemunchInput {
+        let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
         };
 
-        let result = JCodemunchSidecar::extract(input).await;
+        let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
     }
 

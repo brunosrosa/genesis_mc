@@ -137,141 +137,11 @@ struct ResolvedCommand {
     env: BTreeMap<String, String>,
 }
 
-fn resolve_code_index_path(repo_path: &Path) -> PathBuf {
-    repo_path
-        .parent()
-        .unwrap_or(repo_path)
-        .join(".jcodemunch_index")
-}
-
-fn parse_env_assignment(line: &str, key: &str) -> Option<String> {
-    let trimmed = line.trim();
-    if trimmed.is_empty() || trimmed.starts_with('#') {
-        return None;
-    }
-
-    let trimmed = trimmed.strip_prefix("export ").unwrap_or(trimmed);
-    let (name, value) = trimmed.split_once('=')?;
-    if name.trim() != key {
-        return None;
-    }
-
-    let value = value.trim();
-    let unquoted = value
-        .strip_prefix('"')
-        .and_then(|inner| inner.strip_suffix('"'))
-        .or_else(|| value.strip_prefix('\'').and_then(|inner| inner.strip_suffix('\'')))
-        .unwrap_or(value);
-
-    Some(unquoted.trim().to_string())
-}
-
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-}
-
-fn read_local_env_var(key: &str) -> Option<String> {
-    let candidates = [
-        workspace_root().join(".env"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"),
-    ];
-
-    for candidate in candidates {
-        let Ok(content) = std::fs::read_to_string(candidate) else {
-            continue;
-        };
-        for line in content.lines() {
-            if let Some(value) = parse_env_assignment(line, key) {
-                return Some(value);
-            }
-        }
-    }
-
-    None
-}
-
-fn resolve_configured_path(raw: &str) -> Option<PathBuf> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let candidate = PathBuf::from(trimmed);
-    if candidate.is_absolute() {
-        Some(candidate)
-    } else {
-        Some(workspace_root().join(candidate))
-    }
-}
-
-fn resolve_uvx_path() -> Option<PathBuf> {
-    if let Some(value) = env::var_os("SODA_UV_PATH") {
-        if let Some(candidate) = resolve_configured_path(&value.to_string_lossy()) {
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    if let Some(value) = read_local_env_var("SODA_UV_PATH") {
-        if let Some(candidate) = resolve_configured_path(&value) {
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    let executable_names = if cfg!(target_os = "windows") {
-        vec!["uvx.exe", "uvx.cmd", "uvx.bat", "uvx"]
-    } else {
-        vec!["uvx"]
-    };
-
-    if let Some(path_var) = env::var_os("PATH") {
-        for path_entry in env::split_paths(&path_var) {
-            for executable_name in &executable_names {
-                let candidate = path_entry.join(executable_name);
-                if candidate.is_file() {
-                    return Some(candidate);
-                }
-            }
-        }
-    }
-
-    if cfg!(target_os = "windows") {
-        let mut well_known = Vec::new();
-
-        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-            let base = PathBuf::from(local_app_data);
-            well_known.push(
-                base.join("Microsoft")
-                    .join("WinGet")
-                    .join("Packages")
-                    .join("astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe")
-                    .join("uvx.exe"),
-            );
-            well_known.push(base.join("Programs").join("uv").join("uvx.exe"));
-        }
-
-        if let Some(app_data) = env::var_os("APPDATA") {
-            well_known.push(PathBuf::from(app_data).join("uv").join("uvx.exe"));
-        }
-
-        if let Some(user_profile) = env::var_os("USERPROFILE") {
-            well_known.push(PathBuf::from(user_profile).join(".local").join("bin").join("uvx.exe"));
-        }
-
-        for candidate in well_known {
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
 }
 
 fn executable_names(base_name: &str) -> Vec<String> {
@@ -381,7 +251,6 @@ fn build_host_write_roots(repo_path: &Path, policy: SandboxPolicy) -> Result<Vec
     let mut roots = match policy {
         SandboxPolicy::ReadOnly => Vec::new(),
         SandboxPolicy::ReadWrite => vec![
-            resolve_code_index_path(repo_path),
             semgrep_support_root(repo_path),
             workspace_root().join(".soda_sandbox"),
         ],
@@ -459,32 +328,6 @@ fn persist_semgrep_diagnostics(
 
 fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<ResolvedCommand, SandboxError> {
     match command {
-        "jcodemunch" | "jcodemunch-mcp" => {
-            let uvx_path = resolve_uvx_path().ok_or_else(|| SandboxError::ProcessSpawnFailed {
-                reason: "uvx not found; configure SODA_UV_PATH in .env or install uv/uvx in PATH".to_string(),
-            })?;
-
-            let mut resolved_args = vec![
-                "--from".to_string(),
-                "jcodemunch-mcp".to_string(),
-                "jcodemunch-mcp".to_string(),
-            ];
-            resolved_args.extend(args.iter().map(|arg| (*arg).to_string()));
-
-            let mut resolved_env = BTreeMap::new();
-            resolved_env.insert("UV_NO_PROGRESS".to_string(), "1".to_string());
-            resolved_env.insert("UV_QUIET".to_string(), "1".to_string());
-            resolved_env.insert(
-                "CODE_INDEX_PATH".to_string(),
-                resolve_code_index_path(repo_path).display().to_string(),
-            );
-
-            Ok(ResolvedCommand {
-                program: uvx_path,
-                args: resolved_args,
-                env: resolved_env,
-            })
-        }
         "pytest" => {
             let program = resolve_local_python_bin(repo_path, "pytest")
                 .or_else(|| resolve_from_path("pytest"))
@@ -574,7 +417,7 @@ pub(crate) async fn kill_process_tree_by_pid(pid: u32) {
 }
 
 fn command_requires_orphan_reap(command: &str) -> bool {
-    matches!(command, "jcodemunch" | "jcodemunch-mcp" | "semgrep")
+    matches!(command, "semgrep")
 }
 
 async fn collect_output_task(task: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> {
@@ -656,7 +499,6 @@ async fn reap_command_orphans(command: &str, repo_path: &Path) {
     #[cfg(target_os = "windows")]
     {
         let executable_names = match command {
-            "jcodemunch" | "jcodemunch-mcp" => vec!["uvx.exe", "uvx", "jcodemunch-mcp.exe", "jcodemunch-mcp"],
             "semgrep" => vec!["semgrep.exe", "semgrep", "semgrep-core.exe", "semgrep-core"],
             _ => Vec::new(),
         };
@@ -671,15 +513,13 @@ async fn reap_command_orphans(command: &str, repo_path: &Path) {
             .join(", ");
         let repo_hint = format!("*{}*", repo_path.display()).replace('\'', "''");
         let sandbox_hint = format!("*{}*", semgrep_support_root(repo_path).join("sandbox").display()).replace('\'', "''");
-        let code_index_hint = format!("*{}*", resolve_code_index_path(repo_path).display()).replace('\'', "''");
         let script = format!(
             "$ErrorActionPreference = 'SilentlyContinue'; \
              $names = @({names_literal}); \
              Get-CimInstance Win32_Process | Where-Object {{ \
                 $names -contains $_.Name -and $_.CommandLine -and ( \
                     $_.CommandLine -like '{repo_hint}' -or \
-                    $_.CommandLine -like '{sandbox_hint}' -or \
-                    $_.CommandLine -like '{code_index_hint}' \
+                    $_.CommandLine -like '{sandbox_hint}' \
                 ) \
              }} | ForEach-Object {{ \
                 & taskkill.exe /T /F /PID $_.ProcessId 1>$null 2>$null; \
@@ -687,7 +527,6 @@ async fn reap_command_orphans(command: &str, repo_path: &Path) {
             names_literal = names_literal,
             repo_hint = repo_hint,
             sandbox_hint = sandbox_hint,
-            code_index_hint = code_index_hint,
         );
 
         let _ = tokio::task::spawn_blocking(move || {
@@ -1034,46 +873,6 @@ mod tests {
             .expect("sandbox read-write deve ser criado");
 
         assert_eq!(sandbox.policy(), SandboxPolicy::ReadWrite);
-        assert!(repo_dir.parent().unwrap().join(".jcodemunch_index").exists());
         assert!(repo_dir.parent().unwrap().join(".soda_semgrep").join("repo").exists());
-    }
-
-    #[test]
-    fn test_parse_env_assignment_reads_soda_uv_path() {
-        let parsed = parse_env_assignment(
-            r#"SODA_UV_PATH="C:\Tools\uvx.exe""#,
-            "SODA_UV_PATH",
-        );
-        assert_eq!(parsed.as_deref(), Some(r"C:\Tools\uvx.exe"));
-    }
-
-    #[test]
-    fn test_resolve_configured_path_relative_to_workspace_root() {
-        let raw = if cfg!(target_os = "windows") {
-            r".soda_scratchpad\bin\uvx.exe"
-        } else {
-            ".soda_scratchpad/bin/uvx"
-        };
-        let path = resolve_configured_path(raw)
-            .expect("path relativo deve ser resolvido");
-        let expected = if cfg!(target_os = "windows") {
-            Path::new(".soda_scratchpad").join("bin").join("uvx.exe")
-        } else {
-            Path::new(".soda_scratchpad").join("bin").join("uvx")
-        };
-        assert!(path.ends_with(expected));
-    }
-
-    #[test]
-    fn test_resolve_uvx_path_prefers_process_env() {
-        let temp_dir = TempDir::new().unwrap();
-        let uvx_path = temp_dir.path().join("uvx.exe");
-        std::fs::write(&uvx_path, b"").unwrap();
-
-        std::env::set_var("SODA_UV_PATH", &uvx_path);
-        let resolved = resolve_uvx_path();
-        std::env::remove_var("SODA_UV_PATH");
-
-        assert_eq!(resolved, Some(uvx_path));
     }
 }

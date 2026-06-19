@@ -3,7 +3,7 @@ use super::git::RepoPath;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExtractionTask {
-    RunJCodemunch,
+    RunNativeAstParser,
     RunOxc,
     /// Descoberta estatica de testes por AST/estrutura, sem executar runners nativos.
     DiscoverTests,
@@ -19,7 +19,7 @@ impl ExtractionTask {
     pub fn enforces_topology_compression(&self) -> bool {
         matches!(
             self,
-            Self::RunJCodemunch | Self::RunOxc | Self::DiscoverTests
+            Self::RunNativeAstParser | Self::RunOxc | Self::DiscoverTests
         )
     }
 }
@@ -36,7 +36,7 @@ pub struct ExtractionRouter;
 fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
     match stack {
         SingleStack::Rust => vec![
-            ExtractionTask::RunJCodemunch,
+            ExtractionTask::RunNativeAstParser,
             ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
@@ -44,7 +44,7 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
             ExtractionTask::ExtractOpsBlueprint,
         ],
         SingleStack::NodeJS => vec![
-            ExtractionTask::RunJCodemunch,
+            ExtractionTask::RunNativeAstParser,
             ExtractionTask::RunOxc,
             ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
@@ -53,14 +53,14 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
             ExtractionTask::ExtractOpsBlueprint,
         ],
         SingleStack::Go => vec![
-            ExtractionTask::RunJCodemunch,
+            ExtractionTask::RunNativeAstParser,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
             ExtractionTask::ExtractOpsBlueprint,
         ],
         SingleStack::Python => vec![
-            ExtractionTask::RunJCodemunch,
+            ExtractionTask::RunNativeAstParser,
             ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
@@ -68,14 +68,14 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
             ExtractionTask::ExtractOpsBlueprint,
         ],
         SingleStack::JVM => vec![
-            ExtractionTask::RunJCodemunch,
+            ExtractionTask::RunNativeAstParser,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
             ExtractionTask::ExtractOpsBlueprint,
         ],
         SingleStack::DotNet => vec![
-            ExtractionTask::RunJCodemunch,
+            ExtractionTask::RunNativeAstParser,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
@@ -87,7 +87,7 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
 /// Fallback mínimo de 3 tarefas genéricas para perfis sem stack conhecida.
 fn unknown_fallback() -> Vec<ExtractionTask> {
     vec![
-        ExtractionTask::RunJCodemunch,
+        ExtractionTask::RunNativeAstParser,
         ExtractionTask::ExtractManifests,
         ExtractionTask::FetchCommunityMeta,
         ExtractionTask::ExtractOpsBlueprint,
@@ -166,7 +166,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::RunOxc,
                 ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
@@ -209,7 +209,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -229,7 +229,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -270,7 +270,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -290,7 +290,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::FetchCommunityMeta,
                 ExtractionTask::ExtractOpsBlueprint,
@@ -311,7 +311,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
@@ -335,7 +335,7 @@ mod tests {
         assert_eq!(
             tasks,
             vec![
-                ExtractionTask::RunJCodemunch,
+                ExtractionTask::RunNativeAstParser,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,

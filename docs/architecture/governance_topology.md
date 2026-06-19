@@ -18,7 +18,7 @@ Este artefato é a Constituição do ecossistema SODA (Sistema Operacional Agên
 
 A linha do tempo do SODA repudia o "Context Rot" dividindo a construção da ferramenta e a construção do produto final.
 
-* **Fase 0 (A Fábrica / ETL Cognitivo):** O motor de ingestão $\mathcal{O}(1)$ (via MCPs e `jcodemunch`) que mastiga repositórios e extrai o "ouro matemático" para a matriz de dados. Ambiente pragmático onde scripts temporários (Python/Bash) habitam o `.soda_scratchpad`.
+* **Fase 0 (A Fábrica / ETL Cognitivo):** O motor de ingestão $\mathcal{O}(1)$ (via MCPs e parser AST nativo) que mastiga repositórios e extrai o "ouro matemático" para a matriz de dados. Ambiente pragmático onde scripts temporários (Python/Bash) habitam o `.soda_scratchpad`.
 * **Fases A, B, C... (O Produto / Genesis MC):** O código de produção final. Intolerância absoluta a runtimes interpretados. Backend 100% Rust assíncrono (Tokio). Frontend 100% Svelte 5 (Runes).
 
 ---

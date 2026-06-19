@@ -6,7 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination, RoutingZone as FinopsZone};
 use genesis_mc_lib::finops::phase1_5::cloud_cascade::CloudCascade;
-use genesis_mc_lib::finops::phase1_5::local_distiller::{LocalDistiller, MockInferenceEngine};
+use genesis_mc_lib::finops::phase1_5::local_distiller::{LocalDistiller, TruncatingInferenceEngine};
 use genesis_mc_lib::finops::phase1_5::package_assembler::{DbReader as PackageDbReader, PackageAssembler};
 use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use rusqlite::{params, Connection};
@@ -431,10 +431,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let essence_payload = match &decision.destination {
             RoutingDestination::PassThrough => blob.payload.clone(),
             RoutingDestination::LocalModel { path } => {
-                let distiller: LocalDistiller<MockInferenceEngine> =
+                let _distiller: LocalDistiller<TruncatingInferenceEngine> =
                     LocalDistiller::new(path).map_err(|e| io::Error::other(format!("{:?}", e)))?;
-                distiller
-                    .distill(&blob.payload, &prompt)
+                cascade
+                    .cascade_distill(&blob.payload, &prompt)
+                    .await
                     .map_err(|e| io::Error::other(format!("{:?}", e)))?
             }
             RoutingDestination::CloudCascade => cascade
@@ -478,13 +479,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let packages_count = count_persisted_packages(&conn, &repo_id)?;
     let report_path = write_f1_report(&root_dir, &conn, &repo_id)?;
 
-    let bypass = std::env::var("SODA_FACTORY_CLOUD_ONLY").unwrap_or_default();
-    let bypass_active = bypass.eq_ignore_ascii_case("true") || bypass == "1";
-
     info!(
         repo_id = %repo_id,
         elapsed_ms = started.elapsed().as_millis(),
-        bypass_active = bypass_active,
         green_total = green_total,
         yellow_total = yellow_total,
         yellow_cloud = yellow_cloud,
