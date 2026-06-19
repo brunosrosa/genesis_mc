@@ -3,7 +3,7 @@
 
 use std::env;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -35,8 +35,11 @@ fn main() {
             };
 
             let project_root = resolve_project_root();
+            let soda_mcp_program = ProgramSpec::path(bin_dir.join("soda_mcp_server.exe"));
+            ensure_program_path_exists(&soda_mcp_program)
+                .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
             let soda_mcp_server = spawn_supervised(
-                ProgramSpec::path(bin_dir.join("soda_mcp_server.exe")),
+                soda_mcp_program,
                 vec![
                     "--listen".to_string(),
                     "127.0.0.1:3002".to_string(),
@@ -136,6 +139,7 @@ fn resolve_running_bin_dir() -> Result<PathBuf, String> {
 struct ProgramSpec {
     command: OsString,
     label: String,
+    required_path: Option<PathBuf>,
 }
 
 impl ProgramSpec {
@@ -143,6 +147,7 @@ impl ProgramSpec {
         Self {
             command: path.clone().into_os_string(),
             label: path.display().to_string(),
+            required_path: Some(path),
         }
     }
 
@@ -150,8 +155,28 @@ impl ProgramSpec {
         Self {
             command: OsString::from(name),
             label: name.to_string(),
+            required_path: None,
         }
     }
+}
+
+fn ensure_program_path_exists(program: &ProgramSpec) -> Result<(), std::io::Error> {
+    let Some(path) = program.required_path.as_deref() else {
+        return Ok(());
+    };
+
+    if path.is_file() {
+        return Ok(());
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!(
+            "Binário supervisionado ausente: {}. Verifique a build em `{}` antes de iniciar a UI.",
+            program.label,
+            path.parent().unwrap_or(Path::new(".")).display()
+        ),
+    ))
 }
 
 #[derive(Clone)]

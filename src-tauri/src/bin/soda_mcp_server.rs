@@ -15,6 +15,9 @@ use genesis_mc_lib::harvester::web_scraper;
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
+use sqlparser::ast::Statement as SqlStatement;
+use sqlparser::dialect::SQLiteDialect;
+use sqlparser::parser::Parser;
 
 const MCP_SESSION_ID_HEADER: &str = "Mcp-Session-Id";
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -225,6 +228,7 @@ async fn handle_mcp(
     }
 }
 
+#[derive(Debug)]
 struct RpcError {
     code: i64,
     message: String,
@@ -799,8 +803,15 @@ fn validate_sqlite_query(query: &str) -> Result<(), RpcError> {
         });
     }
 
-    let normalized = trimmed.trim_end_matches(';').trim();
-    if normalized.contains(';') {
+    let statements = Parser::parse_sql(&SQLiteDialect {}, trimmed).map_err(|e| RpcError {
+        code: -32602,
+        message: "Query SQLite inválida ou não suportada".to_string(),
+        data: Some(json!({
+            "query": query,
+            "reason": e.to_string()
+        })),
+    })?;
+    if statements.len() != 1 {
         return Err(RpcError {
             code: -32602,
             message: "Apenas uma única query é permitida".to_string(),
@@ -808,6 +819,21 @@ fn validate_sqlite_query(query: &str) -> Result<(), RpcError> {
         });
     }
 
+    let statement = statements.into_iter().next().ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Query SQLite vazia após parsing".to_string(),
+        data: Some(json!({ "query": query })),
+    })?;
+
+    if !matches!(statement, SqlStatement::Query(_) | SqlStatement::Pragma { .. }) {
+        return Err(RpcError {
+            code: -32602,
+            message: "Somente SELECT, WITH e PRAGMA informacional são permitidos".to_string(),
+            data: Some(json!({ "query": query })),
+        });
+    }
+
+    let normalized = trimmed.trim_end_matches(';').trim();
     let lower = normalized.to_ascii_lowercase();
     for forbidden in [
         "insert",
@@ -838,20 +864,7 @@ fn validate_sqlite_query(query: &str) -> Result<(), RpcError> {
         }
     }
 
-    let first_token = lower
-        .split_whitespace()
-        .next()
-        .unwrap_or_default();
-    let is_allowed = matches!(first_token, "select" | "with" | "pragma");
-    if !is_allowed {
-        return Err(RpcError {
-            code: -32602,
-            message: "Somente SELECT, WITH e PRAGMA informacional são permitidos".to_string(),
-            data: Some(json!({ "first_token": first_token })),
-        });
-    }
-
-    if first_token == "pragma" && lower.contains('=') {
+    if matches!(statement, SqlStatement::Pragma { .. }) && lower.contains('=') {
         return Err(RpcError {
             code: -32602,
             message: "PRAGMA mutável bloqueado; apenas PRAGMA informacional é permitido".to_string(),
@@ -860,6 +873,28 @@ fn validate_sqlite_query(query: &str) -> Result<(), RpcError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_sqlite_query;
+
+    #[test]
+    fn sqlite_query_rejects_multi_statement_payload() {
+        let err = validate_sqlite_query("SELECT 1; DROP TABLE users;").expect_err("multi-statement deve falhar");
+        assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn sqlite_query_accepts_single_select_with_trailing_semicolon() {
+        validate_sqlite_query("SELECT 1;").expect("select simples deve ser permitido");
+    }
+
+    #[test]
+    fn sqlite_query_rejects_mutating_pragma() {
+        let err = validate_sqlite_query("PRAGMA cache_size = 10;").expect_err("pragma mutavel deve falhar");
+        assert_eq!(err.code, -32602);
+    }
 }
 
 fn workspace_root() -> PathBuf {

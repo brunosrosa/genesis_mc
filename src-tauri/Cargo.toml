@@ -41,6 +41,7 @@ gix = { version = "0.84.0", features = ["blocking-network-client", "worktree-mut
 axum = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
+sqlparser = "0.62"
 tracing-subscriber = "0.3"
 tempfile = "3"
 dotenvy = "0.15"
