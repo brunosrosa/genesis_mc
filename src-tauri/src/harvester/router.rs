@@ -127,6 +127,12 @@ fn static_analysis_blades_for_stack(stack: &SingleStack) -> Vec<StaticAnalysisBl
     }
 }
 
+fn append_global_fallback(blades: &mut Vec<StaticAnalysisBlade>) {
+    if !blades.contains(&StaticAnalysisBlade::Opengrep) {
+        blades.push(StaticAnalysisBlade::Opengrep);
+    }
+}
+
 /// Converte um `StackProfile` em `SingleStack` para delegar ao mapeamento canônico.
 /// Retorna `None` para `Unknown` e `Mixed` (tratados separadamente).
 fn profile_to_single(profile: &StackProfile) -> Option<SingleStack> {
@@ -181,7 +187,9 @@ pub fn route(input: ExtractionInput<'_>) -> Vec<ExtractionTask> {
 
 pub fn route_static_analysis_blades(profile: &StackProfile) -> Vec<StaticAnalysisBlade> {
     if let Some(single) = profile_to_single(profile) {
-        return static_analysis_blades_for_stack(&single);
+        let mut blades = static_analysis_blades_for_stack(&single);
+        append_global_fallback(&mut blades);
+        return blades;
     }
 
     match profile {
@@ -198,6 +206,7 @@ pub fn route_static_analysis_blades(profile: &StackProfile) -> Vec<StaticAnalysi
             if blades.is_empty() {
                 vec![StaticAnalysisBlade::Opengrep]
             } else {
+                append_global_fallback(&mut blades);
                 blades
             }
         }
@@ -445,7 +454,11 @@ mod tests {
 
         assert_eq!(
             blades,
-            vec![StaticAnalysisBlade::RustClippy, StaticAnalysisBlade::Cppcheck]
+            vec![
+                StaticAnalysisBlade::RustClippy,
+                StaticAnalysisBlade::Cppcheck,
+                StaticAnalysisBlade::Opengrep,
+            ]
         );
     }
 
@@ -455,7 +468,11 @@ mod tests {
 
         assert_eq!(
             blades,
-            vec![StaticAnalysisBlade::Biome, StaticAnalysisBlade::Oxc]
+            vec![
+                StaticAnalysisBlade::Biome,
+                StaticAnalysisBlade::Oxc,
+                StaticAnalysisBlade::Opengrep,
+            ]
         );
     }
 
@@ -463,5 +480,14 @@ mod tests {
     fn test_static_analysis_blades_route_unknown_to_opengrep() {
         let blades = route_static_analysis_blades(&StackProfile::Unknown);
         assert_eq!(blades, vec![StaticAnalysisBlade::Opengrep]);
+    }
+
+    #[test]
+    fn test_static_analysis_blades_route_go_adds_opengrep_fallback() {
+        let blades = route_static_analysis_blades(&StackProfile::Go);
+        assert_eq!(
+            blades,
+            vec![StaticAnalysisBlade::Govulncheck, StaticAnalysisBlade::Opengrep]
+        );
     }
 }

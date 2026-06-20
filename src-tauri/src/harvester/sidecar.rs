@@ -533,6 +533,13 @@ enum SemgrepRuleSet {
 }
 
 impl SemgrepRuleSet {
+    fn config_dir_name(self) -> &'static str {
+        match self {
+            Self::Security => "security",
+            Self::Health => "health",
+        }
+    }
+
     fn artifact_title(self) -> &'static str {
         match self {
             Self::Security => "# Unsafe Hotspots",
@@ -1919,12 +1926,53 @@ fn govulncheck_args() -> Vec<String> {
     ]
 }
 
-fn opengrep_args() -> Vec<String> {
-    vec![
-        "scan".to_string(),
-        "--json".to_string(),
-        ".".to_string(),
-    ]
+async fn run_opengrep_scan<E: SandboxExecutor>(
+    executor: &E,
+    timeout_secs: u64,
+) -> Result<Vec<u8>, SidecarError> {
+    let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), SemgrepRuleSet::Health).await?;
+    let rule_arg = rule_path.to_string_lossy().to_string();
+    let args = [
+        "scan",
+        "--config",
+        rule_arg.as_str(),
+        "--json",
+        "--jobs",
+        "1",
+        "--disable-version-check",
+        "--taint-intrafile",
+        "--exclude",
+        rule_arg.as_str(),
+        "--exclude",
+        SEMGREP_SECURITY_RULE_FILE,
+        "--exclude",
+        SEMGREP_HEALTH_RULE_FILE,
+        "--exclude",
+        "docs",
+        "--exclude",
+        "documentation",
+        "--exclude",
+        "examples",
+        "--exclude",
+        "mock",
+        "--exclude",
+        "mocks",
+        "--exclude",
+        "fixtures",
+        "--exclude",
+        "test_support",
+        "--exclude",
+        "e2e",
+        ".",
+    ];
+    execute_sidecar(
+        executor,
+        "opengrep",
+        &args,
+        timeout_secs,
+        SidecarExitPolicy::AllowFindingsExitOne,
+    )
+    .await
 }
 
 fn blade_name(blade: StaticAnalysisBlade) -> &'static str {
@@ -1951,7 +1999,7 @@ fn blade_command(blade: StaticAnalysisBlade) -> (&'static str, Vec<String>) {
         StaticAnalysisBlade::Ruff => ("ruff", ruff_args()),
         StaticAnalysisBlade::Bandit => ("bandit", bandit_args()),
         StaticAnalysisBlade::Govulncheck => ("govulncheck", govulncheck_args()),
-        StaticAnalysisBlade::Opengrep => ("opengrep", opengrep_args()),
+        StaticAnalysisBlade::Opengrep => ("opengrep", Vec::new()),
     }
 }
 
@@ -1960,6 +2008,9 @@ async fn run_sast_blade<E: SandboxExecutor>(
     blade: StaticAnalysisBlade,
     timeout_secs: u64,
 ) -> Result<Vec<u8>, SidecarError> {
+    if blade == StaticAnalysisBlade::Opengrep {
+        return run_opengrep_scan(executor, timeout_secs).await;
+    }
     let (binary, args) = blade_command(blade);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     execute_sidecar(
@@ -2537,20 +2588,106 @@ fn semgrep_support_dir(repo_path: &Path) -> Result<PathBuf, SidecarError> {
     )
 }
 
-async fn ensure_semgrep_rule_file(repo_path: &Path, rule_set: SemgrepRuleSet) -> Result<PathBuf, SidecarError> {
-    let support_dir = semgrep_support_dir(repo_path)?;
+fn workspace_semgrep_rules_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("semgrep")
+        .join("rules")
+}
+
+fn copy_semgrep_rule_tree(source_root: &Path, current: &Path, target_root: &Path) -> Result<usize, SidecarError> {
+    if !current.exists() {
+        return Ok(0);
+    }
+
+    let mut copied = 0_usize;
+    let entries = std::fs::read_dir(current).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao listar árvore de regras '{}': {}", current.display(), e),
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao ler entrada da árvore de regras '{}': {}", current.display(), e),
+        })?;
+        let path = entry.path();
+        let file_type = entry.file_type().map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Falha ao inspecionar item '{}' da árvore de regras: {}", path.display(), e),
+        })?;
+
+        if file_type.is_dir() {
+            copied += copy_semgrep_rule_tree(source_root, &path, target_root)?;
+            continue;
+        }
+
+        let is_rule = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| matches!(ext, "yml" | "yaml"))
+            .unwrap_or(false);
+        if !is_rule {
+            continue;
+        }
+
+        let relative = path.strip_prefix(source_root).map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!(
+                "Falha ao relativizar regra '{}' contra '{}': {}",
+                path.display(),
+                source_root.display(),
+                e
+            ),
+        })?;
+        let target = target_root.join(relative);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| SidecarError::ExecutionFailed {
+                reason: format!("Falha ao preparar diretório de regra '{}': {}", parent.display(), e),
+            })?;
+        }
+        std::fs::copy(&path, &target).map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!(
+                "Falha ao copiar regra '{}' para '{}': {}",
+                path.display(),
+                target.display(),
+                e
+            ),
+        })?;
+        copied += 1;
+    }
+
+    Ok(copied)
+}
+
+async fn ensure_semgrep_rule_bundle(repo_path: &Path, rule_set: SemgrepRuleSet) -> Result<PathBuf, SidecarError> {
+    let support_dir = semgrep_support_dir(repo_path)?.join(rule_set.config_dir_name());
+    let _ = tokio::fs::remove_dir_all(&support_dir).await;
     tokio::fs::create_dir_all(&support_dir)
         .await
         .map_err(|e| SidecarError::ExecutionFailed {
             reason: format!("Falha ao preparar diretório auxiliar do semgrep '{}': {}", support_dir.display(), e),
         })?;
-    let path = support_dir.join(rule_set.rule_file_name());
-    tokio::fs::write(&path, rule_set.rule_source())
+    let built_in_rule_path = support_dir.join(rule_set.rule_file_name());
+    tokio::fs::write(&built_in_rule_path, rule_set.rule_source())
         .await
         .map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!("Falha ao materializar regra do semgrep '{}': {}", path.display(), e),
+            reason: format!(
+                "Falha ao materializar regra base do semgrep '{}': {}",
+                built_in_rule_path.display(),
+                e
+            ),
         })?;
-    Ok(path)
+
+    let workspace_rules_dir = workspace_semgrep_rules_dir();
+    if workspace_rules_dir.exists() {
+        let copied = copy_semgrep_rule_tree(&workspace_rules_dir, &workspace_rules_dir, &support_dir)?;
+        tracing::info!(
+            repo_path = %repo_path.display(),
+            rule_set = ?rule_set,
+            copied_rule_files = copied,
+            workspace_rules_dir = %workspace_rules_dir.display(),
+            support_dir = %support_dir.display(),
+            "Semgrep: ruleset air-gapped materializado"
+        );
+    }
+
+    Ok(support_dir)
 }
 
 async fn run_semgrep_scan<E: SandboxExecutor>(
@@ -2558,7 +2695,7 @@ async fn run_semgrep_scan<E: SandboxExecutor>(
     rule_set: SemgrepRuleSet,
     timeout_secs: u64,
 ) -> Result<Vec<u8>, SidecarError> {
-    let rule_path = ensure_semgrep_rule_file(executor.repo_path(), rule_set).await?;
+    let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), rule_set).await?;
     tracing::info!(
         repo_path = %executor.repo_path().display(),
         rule_set = ?rule_set,
@@ -3604,6 +3741,7 @@ mod tests {
     async fn test_polyglot_sast_sidecar_routes_rust_and_cpp_and_emits_soda_json() {
         let clippy_payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"manual memcpy can be replaced with copy_from_slice","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}"#;
         let cppcheck_payload = r#"<results><errors><error id="memleak" severity="warning" msg="Memory leak: ptr"><location file="native/bridge.cpp" line="42"/></error></errors></results>"#;
+        let opengrep_payload = r#"{"results":[{"check_id":"soda.tech-debt.todo-fixme","path":"README.md","extra":{"message":"Marcador de divida tecnica encontrado","severity":"INFO"}}]}"#;
 
         let executor = MockExecutor::new(vec![
             Err(SandboxError::ProcessNonZeroExit {
@@ -3616,6 +3754,7 @@ mod tests {
                 stderr: cppcheck_payload.to_string(),
                 stdout: Vec::new(),
             }),
+            Ok(opengrep_payload.as_bytes().to_vec()),
         ]);
 
         let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
@@ -3631,10 +3770,18 @@ mod tests {
 
         assert!(executor.calls().iter().any(|call| call.starts_with("cargo clippy")));
         assert!(executor.calls().iter().any(|call| call.starts_with("cppcheck ")));
+        assert!(executor.calls().iter().any(|call| {
+            call.starts_with("opengrep scan --config")
+                && call.contains("--json")
+                && call.contains("--disable-version-check")
+                && call.contains("--taint-intrafile")
+        }));
         assert!(unsafe_blob.contains("\"issues\""));
         assert!(unsafe_blob.contains("src/lib.rs"));
         assert!(unsafe_blob.contains("native/bridge.cpp"));
         assert!(health_blob.contains("\"router\""));
+        assert!(health_blob.contains("\"opengrep\""));
+        assert!(health_blob.contains(r#""blade": "opengrep""#));
     }
 
     #[test]

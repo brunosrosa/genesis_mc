@@ -22,7 +22,6 @@ $rootCandidate = Join-Path $PSScriptRoot ".."
 $rootResolved = $rootCandidate
 try { $rootResolved = (Resolve-Path -LiteralPath $rootCandidate -ErrorAction Stop).Path } catch {}
 $envPath = Join-Path $rootResolved ".env"
-$sastBootstrapPath = Join-Path $rootResolved "scripts\install_sast_blades.ps1"
 if (Test-Path $envPath) {
     Get-Content $envPath | ForEach-Object {
         if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)\s*$') {
@@ -54,88 +53,6 @@ if (Test-Path $envPath) {
 } else {
     Write-Host "[ERRO] Arquivo .env não encontrado na raiz!" -ForegroundColor Red
     exit
-}
-
-if (Test-Path $sastBootstrapPath) {
-    . $sastBootstrapPath
-} else {
-    Write-Host "[ERRO] Script de bootstrap SAST não encontrado em: $sastBootstrapPath" -ForegroundColor Red
-    exit 1
-}
-
-$packagedBinDir = Join-Path $PSScriptRoot "bin"
-$packagedExe = Join-Path $packagedBinDir "mcp-google.exe"
-if (Test-Path $packagedExe) {
-    $env:MCP_GOOGLE_WORKSPACE_BIN = $packagedExe
-} else {
-    $repoRoot = $rootResolved
-    try {
-        Push-Location $PSScriptRoot
-        try {
-            $gitRootCandidate = (git rev-parse --show-toplevel 2>$null | Select-Object -First 1)
-            if ($gitRootCandidate) {
-                $repoRoot = $gitRootCandidate.Trim()
-            }
-        } finally {
-            Pop-Location
-        }
-    } catch {}
-    $vendorRoot = Join-Path $PSScriptRoot "vendor"
-    $vendorRepo = Join-Path $vendorRoot "mcp-google-workspace"
-    $vendorRepoRelative = "src-tauri/vendor/mcp-google-workspace"
-    if (-not (Test-Path $vendorRepo)) {
-        New-Item -ItemType Directory -Path $vendorRoot -Force | Out-Null
-        Write-Host "`n[+] Canibalizando mcp-google-workspace (Rust) para vendor/..." -ForegroundColor DarkGray
-        $subrepoOk = $false
-        try {
-            $null = (git subrepo --version 2>$null)
-            $subrepoOk = $true
-        } catch {}
-        if ($subrepoOk) {
-            Push-Location $repoRoot
-            try {
-                git subrepo clone https://github.com/distrihub/mcp-google-workspace $vendorRepoRelative
-            } finally {
-                Pop-Location
-            }
-        } else {
-            Push-Location $repoRoot
-            try {
-                git clone --depth 1 https://github.com/distrihub/mcp-google-workspace $vendorRepoRelative
-            } finally {
-                Pop-Location
-            }
-        }
-    }
-
-    $shadowRoot = Join-Path ([System.IO.Path]::GetTempPath()) ".souls_workspaces"
-    New-Item -ItemType Directory -Path $shadowRoot -Force | Out-Null
-    $shadowBuild = Join-Path $shadowRoot ("mcp-google-workspace-build_" + [guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Directory -Path $shadowBuild -Force | Out-Null
-
-    Write-Host "`n[+] Build isolado (Shadow Workspace) do mcp-google-workspace..." -ForegroundColor DarkGray
-    try {
-        robocopy $vendorRepo $shadowBuild /MIR /XD ".git" "target" | Out-Null
-        $env:CARGO_TARGET_DIR = Join-Path $shadowBuild "target"
-        Push-Location $shadowBuild
-        try {
-            cargo build --release --locked --bin mcp-google
-        } finally {
-            Pop-Location
-        }
-        $builtExe = Join-Path $env:CARGO_TARGET_DIR "release\\mcp-google.exe"
-        if (-not (Test-Path $builtExe)) {
-            Write-Host "[ERRO] mcp-google.exe não foi gerado em: $builtExe" -ForegroundColor Red
-            exit 1
-        }
-        New-Item -ItemType Directory -Path $packagedBinDir -Force | Out-Null
-        Copy-Item -LiteralPath $builtExe -Destination $packagedExe -Force
-        $env:MCP_GOOGLE_WORKSPACE_BIN = $packagedExe
-        Write-Host "[OK] mcp-google-workspace empacotado em src-tauri/bin/." -ForegroundColor Green
-    } finally {
-        try { Remove-Item -LiteralPath $shadowBuild -Recurse -Force -ErrorAction SilentlyContinue } catch {}
-        Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
-    }
 }
 
 $cargoManifest = Join-Path $PSScriptRoot "Cargo.toml"
@@ -286,20 +203,6 @@ Push-Location $PSScriptRoot
 
 try {
     $env:CARGO_INCREMENTAL = "0"
-    if (@('3', '4', '5') -contains $choice) {
-        Write-Host "[+] Garantindo lâminas SAST no host para o ETL..." -ForegroundColor DarkGray
-        Ensure-SastBladePaths
-        $sastResults = @(Ensure-SastBladesInstalled)
-        $failedBlades = @($sastResults | Where-Object { $_.Status -ne "ok" })
-        if ($failedBlades.Count -gt 0) {
-            Write-Host "[WARN] Nem todas as lâminas ficaram prontas para esta sessão:" -ForegroundColor Yellow
-            foreach ($failed in $failedBlades) {
-                Write-Host ("   - {0}: {1}" -f $failed.Command, $failed.Error) -ForegroundColor Yellow
-            }
-        } else {
-            Write-Host "[OK] Lâminas SAST prontas para o roteador poliglota." -ForegroundColor Green
-        }
-    }
     if ($binArgs.Count -gt 0) {
         & cargo run --manifest-path $cargoManifest --bin $bin -- @binArgs
     } else {
