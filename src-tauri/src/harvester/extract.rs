@@ -5,6 +5,8 @@ use oxc::{
     parser::{ParseOptions, Parser},
     span::{GetSpan, SourceType, Span},
 };
+use html_to_markdown_rs::{convert, CodeBlockStyle, ConversionOptions, HeadingStyle};
+use pulldown_cmark::{html, Options as MarkdownOptions, Parser as MarkdownParser};
 use regex::Regex;
 use tokio::fs;
 use thiserror::Error;
@@ -105,7 +107,9 @@ pub struct OpsInput<'a> {
 pub struct OpsBlueprintExtractor;
 pub struct LocalStaticExtractor;
 
-const README_MAX_CHARS: usize = 8_000;
+/// Fase 0 deve persistir artefatos textuais praticamente completos.
+/// O limite elastico existe apenas para evitar estouro de memoria em READMEs patologicos.
+const README_ELASTIC_SAFETY_MAX_CHARS: usize = 150_000;
 const README_MISSING_COGNITIVE_DIRECTIVE: &str = "[DIRETIVA SODA COGNITIVA: DOCUMENTAÇÃO RAIZ NÃO ENCONTRADA. O repositório não possui um arquivo README padrão na raiz (.md, .rst, .txt). Lentes de Avaliação: penalizem a experiência de onboarding e documentação (Lente A e Lente C), mas prossigam com a análise arquitetural utilizando apenas a AST e os manifestos.]";
 const MANIFEST_BLOB_MAX_CHARS: usize = 3_000;
 const OPS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
@@ -115,7 +119,6 @@ const UNSAFE_HOTSPOTS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
 const UX_CONTRACTS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
 const MAX_SCAN_FILE_BYTES: u64 = 262_144;
 const STATE_CALL_NAMES: [&str; 5] = ["useState", "createSignal", "writable", "useReducer", "$state"];
-const README_MAX_ALLOWED_SECTIONS: usize = 3;
 const MANIFEST_MAX_DEPENDENCIES_PER_FILE: usize = 24;
 const MANIFEST_DEPENDENCY_CHUNK_SIZE: usize = 8;
 
@@ -192,6 +195,11 @@ impl<'a> Visit<'a> for UxAstCollector<'a> {
 }
 
 impl LocalStaticExtractor {
+    /// Lei arquitetural da Fase 0:
+    /// arquivos textuais devem entrar no SQLite sem hard-truncation semantico.
+    /// O Harvester limpa apenas ruído visual nativo/estrutural; a destilação cognitiva
+    /// e os cortes semânticos pertencem à Fase 1.5. O guard rail de 150k caracteres
+    /// é apenas uma trava elastica anti-OOM para documentos anormalmente grandes.
     pub async fn extract_all(repo_path: &Path) -> Result<Vec<ArtifactBlob>, ExtractionError> {
         let mut blobs = Vec::new();
 
@@ -208,7 +216,7 @@ impl LocalStaticExtractor {
                 "readme",
             ],
             "blob_01_promessa_readme",
-            README_MAX_CHARS,
+            README_ELASTIC_SAFETY_MAX_CHARS,
             README_MISSING_COGNITIVE_DIRECTIVE,
         )
         .await);
@@ -276,15 +284,14 @@ impl LocalStaticExtractor {
                             file: path.display().to_string(),
                         });
                     }
-                    let sanitized = if artifact_type == "blob_01_promessa_readme" {
-                        sanitize_readme_blob(&content)
+                    let payload_text = if artifact_type == "blob_01_promessa_readme" {
+                        finalize_readme_blob(&content, max_chars, &path.display().to_string())?
                     } else {
-                        content
+                        truncate_chars(&content, max_chars)
                     };
-                    let truncated = truncate_chars(&sanitized, max_chars);
                     return Ok(ArtifactBlob {
                         artifact_type: artifact_type.to_string(),
-                        payload_blob: truncated.into_bytes(),
+                        payload_blob: payload_text.into_bytes(),
                     });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -348,20 +355,6 @@ fn truncate_chars(content: &str, max_chars: usize) -> String {
     content.chars().take(max_chars).collect()
 }
 
-fn html_anchor_image_regex() -> Option<&'static Regex> {
-    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
-    REGEX
-        .get_or_init(|| Regex::new(r#"(?is)<a\b[^>]*>\s*<img\b[^>]*>\s*</a>"#).ok())
-        .as_ref()
-}
-
-fn html_image_regex() -> Option<&'static Regex> {
-    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
-    REGEX
-        .get_or_init(|| Regex::new(r#"(?is)<img\b[^>]*>"#).ok())
-        .as_ref()
-}
-
 fn markdown_badge_link_regex() -> Option<&'static Regex> {
     static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
     REGEX
@@ -376,15 +369,11 @@ fn markdown_image_regex() -> Option<&'static Regex> {
         .as_ref()
 }
 
-fn strip_html_badge_links(content: &str) -> String {
-    let Some(anchor_re) = html_anchor_image_regex() else {
-        return content.to_string();
-    };
-    let Some(img_re) = html_image_regex() else {
-        return content.to_string();
-    };
-    let no_anchor_images = anchor_re.replace_all(content, "");
-    img_re.replace_all(&no_anchor_images, "").into_owned()
+fn empty_markdown_link_regex() -> Option<&'static Regex> {
+    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    REGEX
+        .get_or_init(|| Regex::new(r#"\[\s*\]\([^)]+\)"#).ok())
+        .as_ref()
 }
 
 fn strip_markdown_badges(content: &str) -> String {
@@ -401,14 +390,71 @@ fn strip_markdown_images(content: &str) -> String {
     re.replace_all(content, "").into_owned()
 }
 
-fn normalize_blank_lines(content: &str) -> String {
+fn strip_empty_markdown_links(content: &str) -> String {
+    let Some(re) = empty_markdown_link_regex() else {
+        return content.to_string();
+    };
+    re.replace_all(content, "").into_owned()
+}
+
+fn readme_markdown_render_options() -> MarkdownOptions {
+    let mut options = MarkdownOptions::empty();
+    options.insert(MarkdownOptions::ENABLE_TABLES);
+    options.insert(MarkdownOptions::ENABLE_TASKLISTS);
+    options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
+    options.insert(MarkdownOptions::ENABLE_FOOTNOTES);
+    options
+}
+
+fn render_markdown_document_to_html(content: &str) -> String {
+    let parser = MarkdownParser::new_ext(content, readme_markdown_render_options());
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
+}
+
+fn readme_html_to_markdown_options() -> ConversionOptions {
+    ConversionOptions {
+        heading_style: HeadingStyle::Atx,
+        code_block_style: CodeBlockStyle::Backticks,
+        bullets: "-".to_string(),
+        wrap: false,
+        skip_images: true,
+        strip_tags: vec![
+            "script".to_string(),
+            "style".to_string(),
+            "meta".to_string(),
+            "link".to_string(),
+            "svg".to_string(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn normalize_markdown_document(content: &str) -> String {
+    let normalized = content.replace("\r\n", "\n");
     let mut lines = Vec::new();
     let mut previous_blank = false;
+    let mut in_fenced_code_block = false;
 
-    for line in content.lines() {
+    for line in normalized.lines() {
         let trimmed_end = line.trim_end();
-        let is_blank = trimmed_end.trim().is_empty();
+        let trimmed_start = trimmed_end.trim_start();
+        let is_fence = trimmed_start.starts_with("```") || trimmed_start.starts_with("~~~");
 
+        if is_fence {
+            lines.push(trimmed_end.to_string());
+            previous_blank = false;
+            in_fenced_code_block = !in_fenced_code_block;
+            continue;
+        }
+
+        if in_fenced_code_block {
+            lines.push(trimmed_end.to_string());
+            continue;
+        }
+
+        let is_blank = trimmed_end.trim().is_empty();
         if is_blank {
             if !previous_blank {
                 lines.push(String::new());
@@ -416,117 +462,44 @@ fn normalize_blank_lines(content: &str) -> String {
         } else {
             lines.push(trimmed_end.to_string());
         }
-
         previous_blank = is_blank;
     }
 
     lines.join("\n").trim().to_string()
 }
 
-fn markdown_heading_parts(line: &str) -> Option<(usize, &str)> {
-    let trimmed = line.trim();
-    let level = trimmed.chars().take_while(|ch| *ch == '#').count();
-    if level == 0 || level > 6 {
-        return None;
-    }
+fn sanitize_readme_blob(content: &str, source_name: &str) -> Result<String, ExtractionError> {
+    let rendered_html = render_markdown_document_to_html(content);
+    let converted = convert(&rendered_html, Some(readme_html_to_markdown_options())).map_err(|err| {
+        ExtractionError::ParseError {
+            file: source_name.to_string(),
+            reason: format!("Falha ao converter README HTML->Markdown: {err}"),
+        }
+    })?;
+    let without_badges = strip_markdown_badges(&converted);
+    let without_images = strip_markdown_images(&without_badges);
+    let without_empty_links = strip_empty_markdown_links(&without_images);
+    Ok(normalize_markdown_document(&without_empty_links))
+}
 
-    let title = trimmed.get(level..)?.trim();
-    if title.is_empty() {
-        None
+fn finalize_readme_blob(
+    content: &str,
+    elastic_max_chars: usize,
+    source_name: &str,
+) -> Result<String, ExtractionError> {
+    let sanitized = sanitize_readme_blob(content, source_name)?;
+    let total_chars = sanitized.chars().count();
+    if total_chars > elastic_max_chars {
+        warn!(
+            artifact_type = "blob_01_promessa_readme",
+            actual_chars = total_chars,
+            elastic_limit = elastic_max_chars,
+            "README excedeu a trava elastica anti-OOM; aplicando corte excepcional"
+        );
+        Ok(truncate_chars(&sanitized, elastic_max_chars))
     } else {
-        Some((level, title))
+        Ok(sanitized)
     }
-}
-
-fn should_drop_readme_section(title: &str) -> bool {
-    let normalized = title.to_ascii_lowercase();
-    let denied = [
-        "installation",
-        "install",
-        "getting started",
-        "setup",
-        "contributing",
-        "contribution",
-        "development",
-        "license",
-        "licence",
-        "security",
-        "release",
-        "deployment",
-        "docker",
-        "build",
-        "testing",
-        "test",
-    ];
-
-    denied.iter().any(|needle| normalized.contains(needle))
-}
-
-fn prune_readme_sections(content: &str) -> String {
-    let mut intro_lines = Vec::new();
-    let mut sections: Vec<(String, Vec<String>)> = Vec::new();
-    let mut current_heading: Option<String> = None;
-    let mut current_body: Vec<String> = Vec::new();
-
-    for raw_line in content.lines() {
-        let line = raw_line.trim_end().to_string();
-        let trimmed = line.trim();
-
-        if let Some((level, _)) = markdown_heading_parts(trimmed) {
-            if level == 1 && current_heading.is_none() && current_body.is_empty() {
-                intro_lines.push(line);
-                continue;
-            }
-
-            if let Some(heading) = current_heading.take() {
-                sections.push((heading, std::mem::take(&mut current_body)));
-            }
-            current_heading = Some(line);
-        } else if current_heading.is_some() {
-            current_body.push(line);
-        } else {
-            intro_lines.push(line);
-        }
-    }
-
-    if let Some(heading) = current_heading {
-        sections.push((heading, current_body));
-    }
-
-    let mut kept_chunks = Vec::new();
-    let intro = normalize_blank_lines(&intro_lines.join("\n"));
-    if !intro.is_empty() {
-        kept_chunks.push(intro);
-    }
-
-    for (heading, body_lines) in sections.into_iter().take(README_MAX_ALLOWED_SECTIONS + 8) {
-        let Some((_, title)) = markdown_heading_parts(heading.trim()) else {
-            continue;
-        };
-        if should_drop_readme_section(title) {
-            continue;
-        }
-
-        let body = normalize_blank_lines(&body_lines.join("\n"));
-        if body.is_empty() {
-            continue;
-        }
-
-        kept_chunks.push(format!("{}\n\n{}", heading.trim(), body));
-        if kept_chunks.len().saturating_sub(1) >= README_MAX_ALLOWED_SECTIONS {
-            break;
-        }
-    }
-
-    kept_chunks.join("\n\n")
-}
-
-fn sanitize_readme_blob(content: &str) -> String {
-    let without_html_badges = strip_html_badge_links(content);
-    let without_markdown_badges = strip_markdown_badges(&without_html_badges);
-    let without_markdown_images = strip_markdown_images(&without_markdown_badges);
-    let pruned = prune_readme_sections(&without_markdown_images);
-    normalize_blank_lines(&pruned)
 }
 
 fn truncate_utf8(content: &str, max_chars: usize, max_bytes: usize) -> String {
@@ -1958,9 +1931,9 @@ tempfile = "3"
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_truncates_readme() {
+    async fn test_local_static_extractor_preserves_full_readme_below_elastic_limit() {
         let dir = TempDir::new().unwrap();
-        let oversized = "a".repeat(README_MAX_CHARS + 25);
+        let oversized = "a".repeat(12_500);
         fs::write(dir.path().join("README.md"), oversized).await.unwrap();
 
         let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
@@ -1968,7 +1941,24 @@ tempfile = "3"
             .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
             .expect("README blob deve existir");
 
-        assert_eq!(String::from_utf8_lossy(&readme_blob.payload_blob).chars().count(), README_MAX_CHARS);
+        assert_eq!(String::from_utf8_lossy(&readme_blob.payload_blob).chars().count(), 12_500);
+    }
+
+    #[tokio::test]
+    async fn test_local_static_extractor_caps_only_pathological_readme_sizes() {
+        let dir = TempDir::new().unwrap();
+        let oversized = "a".repeat(README_ELASTIC_SAFETY_MAX_CHARS + 25);
+        fs::write(dir.path().join("README.md"), oversized).await.unwrap();
+
+        let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
+        let readme_blob = blobs.iter()
+            .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
+            .expect("README blob deve existir");
+
+        assert_eq!(
+            String::from_utf8_lossy(&readme_blob.payload_blob).chars().count(),
+            README_ELASTIC_SAFETY_MAX_CHARS
+        );
     }
 
     #[tokio::test]
@@ -1996,7 +1986,7 @@ Backend orchestration engine.
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_prunes_infra_readme_sections() {
+    async fn test_local_static_extractor_preserves_readme_narrative_sections() {
         let dir = TempDir::new().unwrap();
         let readme = r#"# Goose
 
@@ -2027,8 +2017,39 @@ Please open a PR.
         assert!(text.contains("Goose is an orchestration engine for local-first coding."));
         assert!(text.contains("It accelerates repository harvesting with deterministic blobs."));
         assert!(text.contains("## Features"));
-        assert!(!text.contains("## Installation"));
-        assert!(!text.contains("## Contributing"));
+        assert!(text.contains("## Installation"));
+        assert!(text.contains("## Contributing"));
+    }
+
+    #[tokio::test]
+    async fn test_local_static_extractor_removes_visual_html_but_keeps_text_and_code_fences() {
+        let dir = TempDir::new().unwrap();
+        let readme = r#"<div align="center"><h1>Goose</h1><p><strong>Fast</strong> harvesting <sup>v2</sup></p></div>
+
+<p>Deterministic extraction with <a href="https://example.com">official docs</a>.</p>
+
+```html
+<div class="demo">must stay raw inside code fence</div>
+```
+"#;
+        fs::write(dir.path().join("README.md"), readme).await.unwrap();
+
+        let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
+        let readme_blob = blobs.iter()
+            .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
+            .expect("README blob deve existir");
+        let text = String::from_utf8_lossy(&readme_blob.payload_blob);
+
+        assert!(text.contains("Goose"));
+        assert!(text.contains("harvesting"));
+        assert!(text.contains("v2"));
+        assert!(text.contains("Deterministic extraction"));
+        assert!(text.contains("official docs"));
+        assert!(text.contains("```html"));
+        assert!(text.contains(r#"<div class="demo">must stay raw inside code fence</div>"#));
+        assert!(!text.contains("<h1>"));
+        assert!(!text.contains("<strong>"));
+        assert!(!text.contains("<sup>"));
     }
 
     #[tokio::test]
@@ -2426,19 +2447,18 @@ require (
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_missing_required_blob_aborts() {
+    async fn test_local_static_extractor_missing_readme_uses_cognitive_fallback() {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"demo\"").await.unwrap();
         fs::write(dir.path().join("Dockerfile"), "FROM rust:1.80").await.unwrap();
 
-        let result = LocalStaticExtractor::extract_all(dir.path()).await;
+        let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
+        let readme_blob = blobs.iter()
+            .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
+            .expect("README blob deve existir mesmo em fallback");
+        let text = String::from_utf8_lossy(&readme_blob.payload_blob);
 
-        match result {
-            Err(ExtractionError::RequiredArtifactMissing { artifact_type, .. }) => {
-                assert_eq!(artifact_type, "blob_01_promessa_readme");
-            }
-            _ => panic!("Deveria ter falhado quando o README obrigatorio nao existe"),
-        }
+        assert_eq!(text, README_MISSING_COGNITIVE_DIRECTIVE);
     }
 
     #[tokio::test]

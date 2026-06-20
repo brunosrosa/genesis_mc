@@ -3,13 +3,15 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use quick_xml::de::from_str as xml_from_str;
 use rusqlite::params;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use serde::Deserialize;
 use tracing::error;
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::detect::{SingleStack, StackProfile};
+use crate::harvester::router::{route_static_analysis_blades, StaticAnalysisBlade};
 use crate::harvester::sandbox::{SandboxError, truncated_args_preview};
 use crate::harvester::web_scraper;
 
@@ -437,6 +439,17 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
 
 fn stdout_contains_json_payload(bytes: &[u8]) -> bool {
     serde_json::from_slice::<serde_json::Value>(bytes).is_ok()
+}
+
+fn extract_cppcheck_xml_payload(text: &str) -> Option<&str> {
+    let trimmed = text.trim_start();
+    if trimmed.starts_with("<?xml") || trimmed.starts_with("<results>") {
+        return Some(trimmed);
+    }
+
+    text.find("<?xml")
+        .or_else(|| text.find("<results>"))
+        .map(|index| &text[index..])
 }
 
 const BLOB_06_UNSAFE_HOTSPOTS_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
@@ -907,7 +920,7 @@ fn normalize_repo_outline_markdown(text: &str) -> String {
 #[cfg(test)]
 fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     if stdout_is_blank(bytes) {
-        debug!(binary = "native-ast-parser", "Sidecar claude-md retornou stdout vazio");
+        tracing::debug!(binary = "native-ast-parser", "Sidecar claude-md retornou stdout vazio");
         return Err(SidecarError::ExecutionFailed {
             reason: "native-ast-parser claude-md returned empty stdout".to_string(),
         });
@@ -972,10 +985,24 @@ async fn execute_sidecar<E: SandboxExecutor>(
         Err(SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout }) => {
             let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
             let sanitized_stderr = sanitize_host_paths_in_text(executor.repo_path(), &stderr);
-            if (binary == "semgrep" && !stdout_is_blank(&sanitized_stdout) && stdout_contains_json_payload(&sanitized_stdout))
+            if ((binary == "semgrep" || binary == "opengrep")
+                && !stdout_is_blank(&sanitized_stdout)
+                && stdout_contains_json_payload(&sanitized_stdout))
                 || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
             {
-                Ok(sanitized_stdout)
+                if binary == "cppcheck" {
+                    if let Some(xml_payload) = extract_cppcheck_xml_payload(&sanitized_stderr) {
+                        Ok(xml_payload.as_bytes().to_vec())
+                    } else if let Some(xml_payload) =
+                        extract_cppcheck_xml_payload(&String::from_utf8_lossy(&sanitized_stdout))
+                    {
+                        Ok(xml_payload.as_bytes().to_vec())
+                    } else {
+                        Ok(sanitized_stdout)
+                    }
+                } else {
+                    Ok(sanitized_stdout)
+                }
             } else {
                 let stdout_hint = stdout_preview(&sanitized_stdout, 400);
                 error!(
@@ -1159,6 +1186,8 @@ const STATIC_TEST_DISCOVERY_READ_BYTES: usize = 50 * 1024;
 fn primary_stack(profile: &StackProfile) -> Option<SingleStack> {
     match profile {
         StackProfile::Rust => Some(SingleStack::Rust),
+        StackProfile::CCpp => Some(SingleStack::CCpp),
+        StackProfile::Elixir => Some(SingleStack::Elixir),
         StackProfile::NodeJS => Some(SingleStack::NodeJS),
         StackProfile::Python => Some(SingleStack::Python),
         StackProfile::Go => Some(SingleStack::Go),
@@ -1690,6 +1719,595 @@ impl StaticAnalysisSidecar {
         .await?;
         serde_json::from_slice::<StaticAnalysisPayload>(&bytes).map_err(|e| SidecarError::ParseError {
             reason: e.to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SodaHealthIssue {
+    pub level: String,
+    pub file: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct SodaHealthToolResult {
+    blade: String,
+    status: String,
+    issue_count: usize,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct SodaHealthReport {
+    schema: String,
+    focus: String,
+    router: Vec<String>,
+    tool_results: Vec<SodaHealthToolResult>,
+    issues: Vec<SodaHealthIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolyglotSastArtifacts {
+    pub unsafe_hotspots_blob: Vec<u8>,
+    pub health_report_blob: Vec<u8>,
+}
+
+pub struct PolyglotSastInput<'a, E: SandboxExecutor> {
+    pub executor: &'a E,
+    pub timeout_secs: u64,
+    pub profile: &'a StackProfile,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppcheckResults {
+    #[serde(default)]
+    errors: Option<CppcheckErrors>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppcheckErrors {
+    #[serde(rename = "error", default)]
+    items: Vec<CppcheckError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppcheckError {
+    #[serde(rename = "@id", default)]
+    id: Option<String>,
+    #[serde(rename = "@severity", default)]
+    severity: Option<String>,
+    #[serde(rename = "@msg", default)]
+    msg: Option<String>,
+    #[serde(rename = "location", default)]
+    locations: Vec<CppcheckLocation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppcheckLocation {
+    #[serde(rename = "@file", default)]
+    file: Option<String>,
+    #[serde(rename = "@line", default)]
+    line: Option<u32>,
+}
+
+fn collapse_inline_whitespace(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn sanitize_issue_level(level: &str) -> String {
+    let lower = level.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "error" | "critical" | "high" => "error".to_string(),
+        "warning" | "warn" | "medium" => "warning".to_string(),
+        _ => "info".to_string(),
+    }
+}
+
+fn sanitize_issue_file(repo_path: &Path, value: &str) -> String {
+    sanitize_repo_relative_path(repo_path, value)
+        .unwrap_or_else(|| sanitize_host_paths_in_text(repo_path, value).replace('\\', "/"))
+}
+
+fn sanitize_issue_message(repo_path: &Path, value: &str) -> String {
+    collapse_inline_whitespace(&sanitize_host_paths_in_text(repo_path, value))
+}
+
+fn push_issue(
+    issues: &mut Vec<SodaHealthIssue>,
+    repo_path: &Path,
+    level: &str,
+    file: &str,
+    message: &str,
+) {
+    let message = sanitize_issue_message(repo_path, message);
+    if message.trim().is_empty() {
+        return;
+    }
+    issues.push(SodaHealthIssue {
+        level: sanitize_issue_level(level),
+        file: sanitize_issue_file(repo_path, file),
+        message,
+    });
+}
+
+fn sort_and_dedup_issues(issues: &mut Vec<SodaHealthIssue>) {
+    issues.sort_by(|left, right| {
+        left.file
+            .cmp(&right.file)
+            .then_with(|| left.level.cmp(&right.level))
+            .then_with(|| left.message.cmp(&right.message))
+    });
+    issues.dedup();
+}
+
+fn clippy_args() -> Vec<String> {
+    vec![
+        "clippy".to_string(),
+        "--message-format=json".to_string(),
+    ]
+}
+
+fn cppcheck_args() -> Vec<String> {
+    vec![
+        "--xml".to_string(),
+        "--xml-version=2".to_string(),
+        "--enable=warning,style,performance,portability,information".to_string(),
+        "--error-exitcode=1".to_string(),
+        ".".to_string(),
+    ]
+}
+
+fn sobelow_args() -> Vec<String> {
+    vec!["--format".to_string(), "json".to_string()]
+}
+
+fn biome_args() -> Vec<String> {
+    vec![
+        "check".to_string(),
+        "--reporter=json".to_string(),
+        ".".to_string(),
+    ]
+}
+
+fn oxc_args() -> Vec<String> {
+    vec![
+        "-f".to_string(),
+        "json".to_string(),
+        ".".to_string(),
+    ]
+}
+
+fn ruff_args() -> Vec<String> {
+    vec![
+        "check".to_string(),
+        ".".to_string(),
+        "--output-format".to_string(),
+        "json".to_string(),
+    ]
+}
+
+fn bandit_args() -> Vec<String> {
+    vec![
+        "-r".to_string(),
+        ".".to_string(),
+        "-f".to_string(),
+        "json".to_string(),
+    ]
+}
+
+fn govulncheck_args() -> Vec<String> {
+    vec![
+        "-format".to_string(),
+        "json".to_string(),
+        "./...".to_string(),
+    ]
+}
+
+fn opengrep_args() -> Vec<String> {
+    vec![
+        "scan".to_string(),
+        "--json".to_string(),
+        ".".to_string(),
+    ]
+}
+
+fn blade_name(blade: StaticAnalysisBlade) -> &'static str {
+    match blade {
+        StaticAnalysisBlade::RustClippy => "rust-clippy",
+        StaticAnalysisBlade::Cppcheck => "cppcheck",
+        StaticAnalysisBlade::Sobelow => "sobelow",
+        StaticAnalysisBlade::Biome => "biome",
+        StaticAnalysisBlade::Oxc => "oxc",
+        StaticAnalysisBlade::Ruff => "ruff",
+        StaticAnalysisBlade::Bandit => "bandit",
+        StaticAnalysisBlade::Govulncheck => "govulncheck",
+        StaticAnalysisBlade::Opengrep => "opengrep",
+    }
+}
+
+fn blade_command(blade: StaticAnalysisBlade) -> (&'static str, Vec<String>) {
+    match blade {
+        StaticAnalysisBlade::RustClippy => ("cargo", clippy_args()),
+        StaticAnalysisBlade::Cppcheck => ("cppcheck", cppcheck_args()),
+        StaticAnalysisBlade::Sobelow => ("sobelow", sobelow_args()),
+        StaticAnalysisBlade::Biome => ("biome", biome_args()),
+        StaticAnalysisBlade::Oxc => ("oxlint", oxc_args()),
+        StaticAnalysisBlade::Ruff => ("ruff", ruff_args()),
+        StaticAnalysisBlade::Bandit => ("bandit", bandit_args()),
+        StaticAnalysisBlade::Govulncheck => ("govulncheck", govulncheck_args()),
+        StaticAnalysisBlade::Opengrep => ("opengrep", opengrep_args()),
+    }
+}
+
+async fn run_sast_blade<E: SandboxExecutor>(
+    executor: &E,
+    blade: StaticAnalysisBlade,
+    timeout_secs: u64,
+) -> Result<Vec<u8>, SidecarError> {
+    let (binary, args) = blade_command(blade);
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    execute_sidecar(
+        executor,
+        binary,
+        &arg_refs,
+        timeout_secs,
+        SidecarExitPolicy::AllowFindingsExitOne,
+    )
+    .await
+}
+
+fn normalize_clippy_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+    let text = String::from_utf8_lossy(bytes);
+    let mut issues = Vec::new();
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let value = match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if value.get("reason").and_then(|v| v.as_str()) != Some("compiler-message") {
+            continue;
+        }
+        let message_obj = match value.get("message") {
+            Some(value) => value,
+            None => continue,
+        };
+        let level = message_obj
+            .get("level")
+            .and_then(|value| value.as_str())
+            .unwrap_or("warning");
+        let message = message_obj
+            .get("message")
+            .and_then(|value| value.as_str())
+            .unwrap_or("clippy finding");
+        let file = message_obj
+            .get("spans")
+            .and_then(|value| value.as_array())
+            .and_then(|spans| {
+                spans
+                    .iter()
+                    .find(|span| span.get("is_primary").and_then(|value| value.as_bool()).unwrap_or(false))
+                    .or_else(|| spans.first())
+            })
+            .and_then(|span| span.get("file_name"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        push_issue(&mut issues, repo_path, level, file, message);
+    }
+    sort_and_dedup_issues(&mut issues);
+    Ok(issues)
+}
+
+fn normalize_cppcheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+    let text = String::from_utf8_lossy(bytes);
+    let xml_payload = extract_cppcheck_xml_payload(&text).ok_or_else(|| SidecarError::ParseError {
+        reason: "Falha ao localizar payload XML do cppcheck".to_string(),
+    })?;
+    let parsed: CppcheckResults = xml_from_str(xml_payload).map_err(|err| SidecarError::ParseError {
+        reason: format!("Falha ao parsear XML do cppcheck: {err}"),
+    })?;
+    let mut issues = Vec::new();
+    for error in parsed.errors.map(|value| value.items).unwrap_or_default() {
+        let file = error
+            .locations
+            .first()
+            .and_then(|location| location.file.as_deref())
+            .unwrap_or("");
+        let line = error
+            .locations
+            .first()
+            .and_then(|location| location.line)
+            .map(|line| format!(" (line {line})"))
+            .unwrap_or_default();
+        let rule = error.id.unwrap_or_else(|| "cppcheck".to_string());
+        let msg = error.msg.unwrap_or_else(|| "cppcheck finding".to_string());
+        push_issue(
+            &mut issues,
+            repo_path,
+            error.severity.as_deref().unwrap_or("warning"),
+            file,
+            &format!("{rule}: {msg}{line}"),
+        );
+    }
+    sort_and_dedup_issues(&mut issues);
+    Ok(issues)
+}
+
+fn normalize_semgrep_like_json(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+    let payload = serde_json::from_slice::<SemgrepJsonPayload>(bytes).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })?;
+    let mut issues = Vec::new();
+    for result in payload.results {
+        push_issue(
+            &mut issues,
+            repo_path,
+            result.extra.severity.as_deref().unwrap_or("warning"),
+            &result.path,
+            &format!("{}: {}", result.check_id, result.extra.message),
+        );
+    }
+    sort_and_dedup_issues(&mut issues);
+    Ok(issues)
+}
+
+fn value_as_u32(value: Option<&serde_json::Value>) -> Option<u32> {
+    value.and_then(|value| value.as_u64()).and_then(|value| u32::try_from(value).ok())
+}
+
+fn json_value_at_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    let mut current = value;
+    for segment in path.split('.') {
+        current = current.get(segment)?;
+    }
+    Some(current)
+}
+
+fn normalize_json_array_issues(
+    repo_path: &Path,
+    items: &[serde_json::Value],
+    file_keys: &[&str],
+    level_keys: &[&str],
+    message_keys: &[&str],
+    line_keys: &[&str],
+) -> Vec<SodaHealthIssue> {
+    let mut issues = Vec::new();
+    for item in items {
+        let file = file_keys
+            .iter()
+            .find_map(|key| json_value_at_path(item, key).and_then(|value| value.as_str()))
+            .unwrap_or("");
+        let level = level_keys
+            .iter()
+            .find_map(|key| json_value_at_path(item, key).and_then(|value| value.as_str()))
+            .unwrap_or("warning");
+        let message = message_keys
+            .iter()
+            .find_map(|key| json_value_at_path(item, key).and_then(|value| value.as_str()))
+            .unwrap_or("diagnostic");
+        let line_suffix = line_keys
+            .iter()
+            .find_map(|key| value_as_u32(json_value_at_path(item, key)))
+            .map(|line| format!(" (line {line})"))
+            .unwrap_or_default();
+        push_issue(&mut issues, repo_path, level, file, &format!("{message}{line_suffix}"));
+    }
+    sort_and_dedup_issues(&mut issues);
+    issues
+}
+
+fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+    let value = serde_json::from_slice::<serde_json::Value>(bytes).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })?;
+    let issues = match blade {
+        StaticAnalysisBlade::Ruff => value
+            .as_array()
+            .map(|items| {
+                normalize_json_array_issues(
+                    repo_path,
+                    items,
+                    &["filename", "file"],
+                    &["level", "severity"],
+                    &["message"],
+                    &["location.row", "line"],
+                )
+            })
+            .unwrap_or_default(),
+        StaticAnalysisBlade::Bandit => value
+            .get("results")
+            .and_then(|value| value.as_array())
+            .map(|items| {
+                normalize_json_array_issues(
+                    repo_path,
+                    items,
+                    &["filename", "file"],
+                    &["issue_severity", "severity"],
+                    &["issue_text", "message"],
+                    &["line_number", "line"],
+                )
+            })
+            .unwrap_or_default(),
+        StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc | StaticAnalysisBlade::Sobelow => {
+            let items = value
+                .get("diagnostics")
+                .and_then(|value| value.as_array())
+                .or_else(|| value.get("findings").and_then(|value| value.as_array()))
+                .or_else(|| value.as_array());
+            items.map(|items| {
+                normalize_json_array_issues(
+                    repo_path,
+                    items,
+                    &["file", "path", "filename"],
+                    &["severity", "level", "confidence"],
+                    &["message", "description", "title", "type"],
+                    &["line", "line_number"],
+                )
+            })
+            .unwrap_or_default()
+        }
+        _ => Vec::new(),
+    };
+    Ok(issues)
+}
+
+fn normalize_govulncheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+    let text = String::from_utf8_lossy(bytes);
+    let mut issues = Vec::new();
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let value = match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let Some(finding) = value.get("finding") else {
+            continue;
+        };
+        let osv = finding.get("osv").and_then(|value| value.as_str()).unwrap_or("govulncheck");
+        let trace = finding
+            .get("trace")
+            .and_then(|value| value.as_array())
+            .and_then(|trace| trace.first());
+        let file = trace
+            .and_then(|frame| frame.get("position"))
+            .and_then(|position| position.get("filename"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let package = trace
+            .and_then(|frame| frame.get("module"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let symbol = trace
+            .and_then(|frame| frame.get("function"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let message = if package.is_empty() && symbol.is_empty() {
+            format!("{osv}: vulnerabilidade detectada")
+        } else {
+            format!("{osv}: {}", format!("{package} {symbol}").trim())
+        };
+        push_issue(&mut issues, repo_path, "error", file, &message);
+    }
+    sort_and_dedup_issues(&mut issues);
+    Ok(issues)
+}
+
+fn normalize_sast_output(
+    repo_path: &Path,
+    blade: StaticAnalysisBlade,
+    bytes: &[u8],
+) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+    match blade {
+        StaticAnalysisBlade::RustClippy => normalize_clippy_output(repo_path, bytes),
+        StaticAnalysisBlade::Cppcheck => normalize_cppcheck_output(repo_path, bytes),
+        StaticAnalysisBlade::Opengrep => normalize_semgrep_like_json(repo_path, bytes),
+        StaticAnalysisBlade::Govulncheck => normalize_govulncheck_output(repo_path, bytes),
+        StaticAnalysisBlade::Ruff
+        | StaticAnalysisBlade::Bandit
+        | StaticAnalysisBlade::Biome
+        | StaticAnalysisBlade::Oxc
+        | StaticAnalysisBlade::Sobelow => normalize_json_object_issues(repo_path, blade, bytes),
+    }
+}
+
+fn build_tool_result(
+    blade: StaticAnalysisBlade,
+    status: &str,
+    issue_count: usize,
+    error: Option<String>,
+) -> SodaHealthToolResult {
+    SodaHealthToolResult {
+        blade: blade_name(blade).to_string(),
+        status: status.to_string(),
+        issue_count,
+        error,
+    }
+}
+
+fn render_soda_health_report(
+    focus: &str,
+    blades: &[StaticAnalysisBlade],
+    tool_results: Vec<SodaHealthToolResult>,
+    issues: Vec<SodaHealthIssue>,
+) -> Vec<u8> {
+    let report = SodaHealthReport {
+        schema: "soda.health.v1".to_string(),
+        focus: focus.to_string(),
+        router: blades.iter().map(|blade| blade_name(*blade).to_string()).collect(),
+        tool_results,
+        issues,
+    };
+    serde_json::to_vec_pretty(&report).unwrap_or_else(|_| {
+        format!(
+            r#"{{"schema":"soda.health.v1","focus":"{focus}","router":[],"tool_results":[],"issues":[]}}"#
+        )
+        .into_bytes()
+    })
+}
+
+pub struct PolyglotSastSidecar;
+
+impl PolyglotSastSidecar {
+    pub async fn extract<E: SandboxExecutor>(
+        input: PolyglotSastInput<'_, E>,
+    ) -> Result<PolyglotSastArtifacts, SidecarError> {
+        let blades = route_static_analysis_blades(input.profile);
+        let mut all_issues = Vec::<SodaHealthIssue>::new();
+        let mut tool_results = Vec::<SodaHealthToolResult>::new();
+
+        for blade in &blades {
+            match run_sast_blade(input.executor, *blade, input.timeout_secs).await {
+                Ok(bytes) => match normalize_sast_output(input.executor.repo_path(), *blade, &bytes) {
+                    Ok(mut issues) => {
+                        let issue_count = issues.len();
+                        all_issues.append(&mut issues);
+                        tool_results.push(build_tool_result(*blade, "ok", issue_count, None));
+                    }
+                    Err(err) => {
+                        let reason = err.to_string();
+                        push_issue(
+                            &mut all_issues,
+                            input.executor.repo_path(),
+                            "warning",
+                            "",
+                            &format!("{} normalization failed: {reason}", blade_name(*blade)),
+                        );
+                        tool_results.push(build_tool_result(*blade, "parse_error", 0, Some(reason)));
+                    }
+                },
+                Err(err) => {
+                    let reason = err.to_string();
+                    push_issue(
+                        &mut all_issues,
+                        input.executor.repo_path(),
+                        "warning",
+                        "",
+                        &format!("{} execution failed: {reason}", blade_name(*blade)),
+                    );
+                    tool_results.push(build_tool_result(*blade, "exec_error", 0, Some(reason)));
+                }
+            }
+        }
+
+        sort_and_dedup_issues(&mut all_issues);
+        let unsafe_issues = all_issues
+            .iter()
+            .filter(|issue| issue.level != "info")
+            .cloned()
+            .collect::<Vec<_>>();
+
+        Ok(PolyglotSastArtifacts {
+            unsafe_hotspots_blob: render_soda_health_report(
+                "unsafe_hotspots",
+                &blades,
+                tool_results.clone(),
+                unsafe_issues,
+            ),
+            health_report_blob: render_soda_health_report(
+                "health_report",
+                &blades,
+                tool_results,
+                all_issues,
+            ),
         })
     }
 }
@@ -2903,5 +3521,80 @@ mod tests {
         assert_eq!(normalized.blocks.len(), 1);
         assert_eq!(normalized.blocks[0].file_path, "src/main.rs");
         assert!(!normalized.blocks[0].items[0].contains("C:/host"));
+    }
+
+    #[test]
+    fn test_normalize_clippy_messages_to_soda_health_issue() {
+        let repo_path = Path::new(r"C:\host\projfs\owner\repo");
+        let payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"manual memcpy can be replaced with copy_from_slice","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}
+{"reason":"compiler-message","message":{"level":"error","message":"called `Result::unwrap()` on an `Err` value","spans":[{"file_name":"src\\main.rs","is_primary":true}]}}"#;
+
+        let normalized = normalize_sast_output(
+            repo_path,
+            StaticAnalysisBlade::RustClippy,
+            payload.as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(normalized.len(), 2);
+        assert_eq!(normalized[0].level, "warning");
+        assert_eq!(normalized[0].file, "src/lib.rs");
+        assert!(normalized[0].message.contains("copy_from_slice"));
+        assert_eq!(normalized[1].level, "error");
+        assert_eq!(normalized[1].file, "src/main.rs");
+        assert!(normalized[1].message.contains("unwrap"));
+    }
+
+    #[tokio::test]
+    async fn test_polyglot_sast_sidecar_routes_rust_and_cpp_and_emits_soda_json() {
+        let clippy_payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"manual memcpy can be replaced with copy_from_slice","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}"#;
+        let cppcheck_payload = r#"<results><errors><error id="memleak" severity="warning" msg="Memory leak: ptr"><location file="native/bridge.cpp" line="42"/></error></errors></results>"#;
+
+        let executor = MockExecutor::new(vec![
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 1,
+                stderr: "findings".to_string(),
+                stdout: clippy_payload.as_bytes().to_vec(),
+            }),
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 1,
+                stderr: cppcheck_payload.to_string(),
+                stdout: Vec::new(),
+            }),
+        ]);
+
+        let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
+            executor: &executor,
+            timeout_secs: 60,
+            profile: &StackProfile::Mixed(vec![SingleStack::Rust, SingleStack::CCpp]),
+        })
+        .await
+        .unwrap();
+
+        let unsafe_blob = String::from_utf8(artifacts.unsafe_hotspots_blob).unwrap();
+        let health_blob = String::from_utf8(artifacts.health_report_blob).unwrap();
+
+        assert!(executor.calls().iter().any(|call| call.starts_with("cargo clippy")));
+        assert!(executor.calls().iter().any(|call| call.starts_with("cppcheck ")));
+        assert!(unsafe_blob.contains("\"issues\""));
+        assert!(unsafe_blob.contains("src/lib.rs"));
+        assert!(unsafe_blob.contains("native/bridge.cpp"));
+        assert!(health_blob.contains("\"router\""));
+    }
+
+    #[test]
+    fn test_normalize_cppcheck_output_ignores_progress_prefix() {
+        let repo_path = Path::new("C:/repos/example");
+        let payload = concat!(
+            "Checking src\\\\main.c ...\r\n",
+            "1/1 files checked 100% done\r\n",
+            "<results><errors><error id=\"memleak\" severity=\"warning\" msg=\"Memory leak: ptr\">",
+            "<location file=\"src/main.c\" line=\"42\"/></error></errors></results>"
+        );
+
+        let issues = normalize_cppcheck_output(repo_path, payload.as_bytes()).unwrap();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].file, "src/main.c");
+        assert!(issues[0].message.contains("memleak"));
     }
 }

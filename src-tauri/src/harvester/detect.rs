@@ -1,10 +1,13 @@
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use super::git::RepoPath;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SingleStack {
     Rust,
+    CCpp,
+    Elixir,
     NodeJS,
     Go,
     Python,
@@ -15,6 +18,8 @@ pub enum SingleStack {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StackProfile {
     Rust,
+    CCpp,
+    Elixir,
     NodeJS,
     Go,
     Python,
@@ -35,89 +40,172 @@ pub enum DetectionError {
 
 pub struct LanguageDetector;
 
+fn stack_priority(stack: &SingleStack) -> usize {
+    match stack {
+        SingleStack::Rust => 1,
+        SingleStack::CCpp => 2,
+        SingleStack::Elixir => 3,
+        SingleStack::NodeJS => 4,
+        SingleStack::Go => 5,
+        SingleStack::Python => 6,
+        SingleStack::JVM => 7,
+        SingleStack::DotNet => 8,
+    }
+}
+
+fn root_marker_stack(file_name: &str) -> Option<SingleStack> {
+    match file_name {
+        "Cargo.toml" | "rust-toolchain.toml" => Some(SingleStack::Rust),
+        "CMakeLists.txt" | "compile_commands.json" | "meson.build" | "Makefile" => {
+            Some(SingleStack::CCpp)
+        }
+        "mix.exs" | "mix.lock" => Some(SingleStack::Elixir),
+        "package.json"
+        | "pnpm-workspace.yaml"
+        | "package-lock.json"
+        | "yarn.lock"
+        | "bun.lockb"
+        | "svelte.config.js"
+        | "svelte.config.ts"
+        | "vite.config.js"
+        | "vite.config.ts" => Some(SingleStack::NodeJS),
+        "go.mod" => Some(SingleStack::Go),
+        "requirements.txt" | "pyproject.toml" | "setup.py" | "Pipfile" => Some(SingleStack::Python),
+        "pom.xml" | "build.gradle" | "build.gradle.kts" => Some(SingleStack::JVM),
+        value if value.ends_with(".sln") || value.ends_with(".csproj") => Some(SingleStack::DotNet),
+        _ => None,
+    }
+}
+
+fn extension_stack(path: &Path) -> Option<SingleStack> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+    match extension.as_deref() {
+        Some("rs") => Some(SingleStack::Rust),
+        Some("c" | "cc" | "cpp" | "cxx" | "h" | "hh" | "hpp" | "hxx") => Some(SingleStack::CCpp),
+        Some("ex" | "exs") => Some(SingleStack::Elixir),
+        Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts" | "svelte") => {
+            Some(SingleStack::NodeJS)
+        }
+        Some("go") => Some(SingleStack::Go),
+        Some("py") => Some(SingleStack::Python),
+        Some("java" | "kt" | "kts" | "scala") => Some(SingleStack::JVM),
+        Some("cs") => Some(SingleStack::DotNet),
+        _ => None,
+    }
+}
+
+fn should_skip_walk_dir(name: &str) -> bool {
+    matches!(
+        name,
+        ".git"
+            | ".jj"
+            | ".svn"
+            | "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+            | "vendor"
+            | ".venv"
+            | "venv"
+    )
+}
+
+fn profile_from_sorted_stacks(mut stacks: Vec<SingleStack>) -> StackProfile {
+    stacks.sort_by(|left, right| stack_priority(left).cmp(&stack_priority(right)));
+    stacks.dedup();
+    match stacks.as_slice() {
+        [] => StackProfile::Unknown,
+        [SingleStack::Rust] => StackProfile::Rust,
+        [SingleStack::CCpp] => StackProfile::CCpp,
+        [SingleStack::Elixir] => StackProfile::Elixir,
+        [SingleStack::NodeJS] => StackProfile::NodeJS,
+        [SingleStack::Go] => StackProfile::Go,
+        [SingleStack::Python] => StackProfile::Python,
+        [SingleStack::JVM] => StackProfile::JVM,
+        [SingleStack::DotNet] => StackProfile::DotNet,
+        _ => StackProfile::Mixed(stacks),
+    }
+}
+
 impl LanguageDetector {
     pub async fn detect(repo_path: &RepoPath) -> Result<StackProfile, DetectionError> {
-        let mut entries = match tokio::fs::read_dir(repo_path.as_ref()).await {
-            Ok(entries) => entries,
-            Err(e) => return Err(DetectionError::FilesystemError { reason: e.to_string() }),
-        };
+        let repo_root = repo_path.as_ref().to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            let root_entries = std::fs::read_dir(&repo_root).map_err(|e| DetectionError::FilesystemError {
+                reason: e.to_string(),
+            })?;
+            let mut has_entries = false;
+            let mut scores = HashMap::<SingleStack, usize>::new();
 
-        let mut has_entries = false;
-        let mut detected_stacks = std::collections::HashSet::new();
-
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            has_entries = true;
-            
-            // Verifica o tipo de arquivo
-            let file_type = match entry.file_type().await {
-                Ok(ft) => ft,
-                Err(e) => return Err(DetectionError::FilesystemError { reason: e.to_string() }),
-            };
-
-            if file_type.is_file() || file_type.is_symlink() {
-                if let Some(name_str) = entry.file_name().to_str() {
-                    match name_str {
-                        "Cargo.toml" => {
-                            detected_stacks.insert(SingleStack::Rust);
-                        }
-                        "package.json" => {
-                            detected_stacks.insert(SingleStack::NodeJS);
-                        }
-                        "go.mod" => {
-                            detected_stacks.insert(SingleStack::Go);
-                        }
-                        "requirements.txt" | "pyproject.toml" | "setup.py" | "Pipfile" => {
-                            detected_stacks.insert(SingleStack::Python);
-                        }
-                        "pom.xml" | "build.gradle" | "build.gradle.kts" => {
-                            detected_stacks.insert(SingleStack::JVM);
-                        }
-                        _ => {
-                            if name_str.ends_with(".sln") || name_str.ends_with(".csproj") {
-                                detected_stacks.insert(SingleStack::DotNet);
-                            }
+            for entry in root_entries {
+                let entry = entry.map_err(|e| DetectionError::FilesystemError {
+                    reason: e.to_string(),
+                })?;
+                has_entries = true;
+                let file_name = entry.file_name();
+                let file_name = match file_name.to_str() {
+                    Some(value) => value,
+                    None => continue,
+                };
+                if let Some(stack) = root_marker_stack(file_name) {
+                    *scores.entry(stack).or_default() += 100;
+                }
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() || file_type.is_symlink() {
+                        if let Some(stack) = extension_stack(&entry.path()) {
+                            *scores.entry(stack).or_default() += 6;
                         }
                     }
                 }
             }
-        }
 
-        if !has_entries {
-            return Err(DetectionError::EmptyRepository { path: repo_path.as_ref().to_path_buf() });
-        }
+            if !has_entries {
+                return Err(DetectionError::EmptyRepository { path: repo_root.clone() });
+            }
 
-        match detected_stacks.len() {
-            0 => Ok(StackProfile::Unknown),
-            1 => {
-                let mut detected = detected_stacks.into_iter();
-                let Some(single) = detected.next() else {
-                    return Err(DetectionError::FilesystemError {
-                        reason: "Invariante violada: len()==1 mas nenhum stack foi retornado".to_string(),
-                    });
-                };
-                Ok(match single {
-                    SingleStack::Rust => StackProfile::Rust,
-                    SingleStack::NodeJS => StackProfile::NodeJS,
-                    SingleStack::Go => StackProfile::Go,
-                    SingleStack::Python => StackProfile::Python,
-                    SingleStack::JVM => StackProfile::JVM,
-                    SingleStack::DotNet => StackProfile::DotNet,
+            let walk = ignore::WalkBuilder::new(&repo_root)
+                .hidden(false)
+                .filter_entry(|entry| {
+                    entry
+                        .file_name()
+                        .to_str()
+                        .map(|name| !should_skip_walk_dir(name))
+                        .unwrap_or(true)
                 })
+                .build();
+            for entry in walk.take(4_000) {
+                let entry = match entry {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                if !entry
+                    .file_type()
+                    .map(|file_type| file_type.is_file())
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                if let Some(stack) = extension_stack(entry.path()) {
+                    *scores.entry(stack).or_default() += 2;
+                }
             }
-            _ => {
-                // Coleta em um vetor ordenado de forma determinística
-                let mut vec_stacks: Vec<SingleStack> = detected_stacks.into_iter().collect();
-                vec_stacks.sort_by_key(|s| match s {
-                    SingleStack::Rust => 1,
-                    SingleStack::NodeJS => 2,
-                    SingleStack::Go => 3,
-                    SingleStack::Python => 4,
-                    SingleStack::JVM => 5,
-                    SingleStack::DotNet => 6,
-                });
-                Ok(StackProfile::Mixed(vec_stacks))
-            }
-        }
+
+            let mut ranked = scores.into_iter().collect::<Vec<_>>();
+            ranked.sort_by(|(stack_left, score_left), (stack_right, score_right)| {
+                score_right
+                    .cmp(score_left)
+                    .then_with(|| stack_priority(stack_left).cmp(&stack_priority(stack_right)))
+            });
+            let stacks = ranked.into_iter().map(|(stack, _)| stack).collect::<Vec<_>>();
+            Ok(profile_from_sorted_stacks(stacks))
+        })
+        .await
+        .map_err(|e| DetectionError::FilesystemError {
+            reason: format!("Falha ao aguardar lang_detect: {}", e),
+        })?
     }
 }
 
@@ -256,6 +344,63 @@ mod tests {
         } else {
             panic!("Deveria retornar StackProfile::Mixed");
         }
+
+        let _ = tokio::fs::remove_dir_all(&temp).await;
+    }
+
+    #[tokio::test]
+    async fn test_detect_mixed_rust_and_cpp_prefers_root_stack_order() {
+        let _guard = get_test_mutex().await.lock().await;
+        let temp = create_temp_test_dir().await;
+
+        tokio::fs::write(temp.join("Cargo.toml"), b"[package]\nname='demo'\nversion='0.1.0'\n").await.unwrap();
+        tokio::fs::write(temp.join("CMakeLists.txt"), b"cmake_minimum_required(VERSION 3.10)\nproject(demo)\n").await.unwrap();
+        tokio::fs::create_dir_all(temp.join("native")).await.unwrap();
+        tokio::fs::write(temp.join("native").join("bridge.cpp"), b"int main() { return 0; }\n").await.unwrap();
+
+        let repo_path = RepoPath(temp.clone());
+        let profile = LanguageDetector::detect(&repo_path).await.unwrap();
+
+        assert_eq!(
+            profile,
+            StackProfile::Mixed(vec![SingleStack::Rust, SingleStack::CCpp])
+        );
+
+        let _ = tokio::fs::remove_dir_all(&temp).await;
+    }
+
+    #[tokio::test]
+    async fn test_detect_elixir_from_root_mix_file() {
+        let _guard = get_test_mutex().await.lock().await;
+        let temp = create_temp_test_dir().await;
+
+        tokio::fs::write(
+            temp.join("mix.exs"),
+            b"defmodule Demo.MixProject do\nend\n",
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(temp.clone());
+        let profile = LanguageDetector::detect(&repo_path).await.unwrap();
+
+        assert_eq!(profile, StackProfile::Elixir);
+
+        let _ = tokio::fs::remove_dir_all(&temp).await;
+    }
+
+    #[tokio::test]
+    async fn test_detect_svelte_without_package_json_still_maps_to_nodejs_family() {
+        let _guard = get_test_mutex().await.lock().await;
+        let temp = create_temp_test_dir().await;
+
+        tokio::fs::write(temp.join("App.svelte"), b"<script>export let name;</script>\n").await.unwrap();
+        tokio::fs::write(temp.join("svelte.config.js"), b"export default {};\n").await.unwrap();
+
+        let repo_path = RepoPath(temp.clone());
+        let profile = LanguageDetector::detect(&repo_path).await.unwrap();
+
+        assert_eq!(profile, StackProfile::NodeJS);
 
         let _ = tokio::fs::remove_dir_all(&temp).await;
     }

@@ -1,7 +1,7 @@
 # ============================================================================
 # SODA CANON V5: BOOTSTRAP DO SOULS MC (SYSTEM TRAY DAEMON)
-# Objetivo: Evitar corrupção, garantir injeção efêmera de variáveis na RAM,
-# forçar atualização de pacotes MCP e ancorar o Fantasma na bandeja.
+# Objetivo: Evitar corrupção, garantir injeção efêmera de variáveis na RAM
+# e ancorar o Fantasma na bandeja sem validações lentas de ferramentas ETL.
 # ============================================================================
 try { Clear-Host } catch {}
 Write-Host "=======================================================" -ForegroundColor Cyan
@@ -9,7 +9,7 @@ Write-Host " 👻 SOULS MC BOOTSTRAP: Inicializando a Máquina Silenciosa " -For
 Write-Host "=======================================================" -ForegroundColor Cyan
 
 # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
-Write-Host "`n[1/5] Expurgando processos órfãos (node, uvx, python, agentgateway)..." -ForegroundColor Yellow
+Write-Host "`n[1/4] Expurgando processos órfãos (node, uvx, python, agentgateway)..." -ForegroundColor Yellow
 $zombies = @("node", "uvx", "python", "agentgateway", "agentgateway_tcp_proxy", "genesis_mc", "mcp_stdio_guard")
 foreach ($z in $zombies) {
     Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
@@ -17,44 +17,15 @@ foreach ($z in $zombies) {
 Start-Sleep -Seconds 2
 Write-Host "[OK] Memória higienizada e portas TCP liberadas." -ForegroundColor Green
 
-# 2. ATUALIZAÇÃO FORÇADA DE FERRAMENTAS (UV / NPX)
-Write-Host "`n[2/5] Sincronizando ferramentas MCP (uv / npx)..." -ForegroundColor Yellow
-uv tool upgrade --all *>&1 | Out-Null
+# 2. LIMPEZA LEVE DE CACHE TRANSIENTE
+Write-Host "`n[2/4] Limpando caches transitórios da sessão..." -ForegroundColor Yellow
 if (Test-Path "$env:APPDATA\npm-cache\_npx") { 
     Remove-Item -Path "$env:APPDATA\npm-cache\_npx" -Recurse -Force -ErrorAction SilentlyContinue 
 }
-Write-Host "[OK] Ecossistema limpo e atualizado." -ForegroundColor Green
+Write-Host "[OK] Cache transitório higienizado." -ForegroundColor Green
 
-# 3. VALIDAÇÃO ATIVA DO NOTEBOOKLM (Filtro Inteligente Anti-Falso Positivo)
-Write-Host "`n[3/5] Validando integridade da Sessão do Oráculo (NotebookLM)..." -ForegroundColor Yellow
-
-# Executa o comando e captura a saída
-$nlmCheck = uvx --from notebooklm-mcp-cli nlm list *>&1
-$requireLogin = $false
-
-# Filtro cirúrgico: Avalia linha por linha, ignorando logs de download/warnings do uvx
-foreach ($line in $nlmCheck) {
-    if ($line -match "login" -or $line -match "unauthorized" -or $line -match "expired") {
-        # Garante que a palavra não veio de um log de download acidental
-        if ($line -notmatch "uvx" -and $line -notmatch "downloading") {
-            $requireLogin = $true
-            break
-        }
-    }
-}
-
-# Só pede login se o filtro pegou a falha real ou se a execução de fato estourou erro (Exit Code)
-if ($requireLogin -or $LASTEXITCODE -ne 0) {
-    Write-Host "[!] Sessão caducou. Interceptando antes do Gateway subir..." -ForegroundColor Red
-    Write-Host " -> Autentique-se na janela do navegador que irá abrir agora." -ForegroundColor Cyan
-    uvx --from notebooklm-mcp-cli nlm login
-    Write-Host "[OK] Nova chave de sessão ancorada com sucesso." -ForegroundColor Green
-} else {
-    Write-Host "[OK] Sessão do Oráculo validada e ativa." -ForegroundColor Green
-}
-
-# 4. INJEÇÃO EFÊMERA DE AMBIENTE (Parser Robusto Anti-Quebra)
-Write-Host "`n[4/5] Injetando chaves do .env na RAM da sessão..." -ForegroundColor Yellow
+# 3. INJEÇÃO EFÊMERA DE AMBIENTE (Parser Robusto Anti-Quebra)
+Write-Host "`n[3/4] Injetando chaves do .env na RAM da sessão..." -ForegroundColor Yellow
 $envPath = Join-Path $PSScriptRoot ".env"
 if (Test-Path $envPath) {
     Get-Content $envPath | ForEach-Object {
@@ -81,8 +52,8 @@ if (Test-Path $envPath) {
     Write-Host "[!] Arquivo .env não encontrado em: $envPath" -ForegroundColor Red
 }
 
-# 5. WARM-UP DELAY E IGNIÇÃO DO DAEMON
-Write-Host "`n[5/5] Preparando Ignição Bare-Metal..." -ForegroundColor Yellow
+# 4. WARM-UP DELAY E IGNIÇÃO DO DAEMON
+Write-Host "`n[4/4] Preparando Ignição Bare-Metal..." -ForegroundColor Yellow
 Write-Host "ATENÇÃO: O Souls MC ancorará silenciosamente na bandeja do sistema." -ForegroundColor Cyan
 Start-Sleep -Seconds 3
 

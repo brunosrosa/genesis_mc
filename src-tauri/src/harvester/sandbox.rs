@@ -272,6 +272,17 @@ fn semgrep_support_root(repo_path: &Path) -> PathBuf {
         .join(repo_name)
 }
 
+fn sandbox_tool_state_root(repo_path: &Path, tool_name: &str) -> PathBuf {
+    let repo_name = repo_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("repo");
+    workspace_root()
+        .join(".soda_sandbox")
+        .join(tool_name)
+        .join(repo_name)
+}
+
 fn normalize_path_key(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
 }
@@ -395,10 +406,7 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
             env.insert("CARGO_INCREMENTAL".to_string(), "0".to_string());
             env.insert(
                 "CARGO_TARGET_DIR".to_string(),
-                workspace_root()
-                    .join("src-tauri")
-                    .join("target")
-                    .join("native-test-list-cache")
+                sandbox_tool_state_root(repo_path, "cargo-target")
                     .display()
                     .to_string(),
             );
@@ -418,8 +426,28 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
                 env: BTreeMap::new(),
             })
         }
-        "semgrep" | "gh" => {
-            let env = if command == "semgrep" {
+        "biome" | "oxlint" => {
+            let program = resolve_local_node_bin(repo_path, command)
+                .or_else(|| resolve_from_path(command))
+                .unwrap_or_else(|| PathBuf::from(command));
+            Ok(ResolvedCommand {
+                program,
+                args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                env: BTreeMap::new(),
+            })
+        }
+        "ruff" | "bandit" => {
+            let program = resolve_local_python_bin(repo_path, command)
+                .or_else(|| resolve_from_path(command))
+                .unwrap_or_else(|| PathBuf::from(command));
+            Ok(ResolvedCommand {
+                program,
+                args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                env: BTreeMap::new(),
+            })
+        }
+        "semgrep" | "opengrep" | "gh" | "cppcheck" | "sobelow" | "govulncheck" => {
+            let env = if command == "semgrep" || command == "opengrep" {
                 build_semgrep_env(repo_path)
             } else {
                 BTreeMap::new()
@@ -468,7 +496,7 @@ pub(crate) async fn kill_process_tree_by_pid(pid: u32) {
 }
 
 fn command_requires_orphan_reap(command: &str) -> bool {
-    matches!(command, "semgrep")
+    matches!(command, "semgrep" | "opengrep")
 }
 
 async fn collect_output_task(task: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> {

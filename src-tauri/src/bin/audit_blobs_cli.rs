@@ -73,7 +73,12 @@ fn load_raw_blobs(conn: &Connection, repo_id: &str) -> io::Result<Vec<RawBlobRow
     Ok(blobs)
 }
 
-fn render_report(repo_id: &str, db_path: &Path, blobs: &[RawBlobRow], generated_at: u64) -> String {
+fn render_report(
+    repo_id: &str,
+    db_path: &Path,
+    blobs: &[RawBlobRow],
+    generated_at: u64,
+) -> (String, Vec<&'static str>) {
     let found = blobs
         .iter()
         .map(|row| row.artifact_type.as_str())
@@ -113,12 +118,12 @@ fn render_report(repo_id: &str, db_path: &Path, blobs: &[RawBlobRow], generated_
 
     if !missing.is_empty() {
         output.push_str("## Missing Blobs\n\n");
-        for artifact in missing {
+        for artifact in &missing {
             output.push_str(&format!("- `{artifact}`\n"));
         }
     }
 
-    output
+    (output, missing)
 }
 
 fn main() -> io::Result<()> {
@@ -135,22 +140,12 @@ fn main() -> io::Result<()> {
     let conn = Connection::open(&db_path)
         .map_err(|err| io::Error::other(format!("Falha ao abrir SQLite de auditoria: {err}")))?;
     let blobs = load_raw_blobs(&conn, &repo_id)?;
-    let report = render_report(&repo_id, &db_path, &blobs, generated_at);
+    let (report, missing) = render_report(&repo_id, &db_path, &blobs, generated_at);
 
     if let Some(parent) = report_path.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(&report_path, report)?;
-
-    let found = blobs
-        .iter()
-        .map(|row| row.artifact_type.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
-    let missing = EXPECTED_BLOBS
-        .iter()
-        .copied()
-        .filter(|artifact| !found.contains(artifact))
-        .collect::<Vec<_>>();
 
     println!("RAW audit report written to {}", report_path.display());
     println!("repo_id={repo_id} blob_count={}", blobs.len());

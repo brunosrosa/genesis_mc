@@ -22,6 +22,7 @@ $rootCandidate = Join-Path $PSScriptRoot ".."
 $rootResolved = $rootCandidate
 try { $rootResolved = (Resolve-Path -LiteralPath $rootCandidate -ErrorAction Stop).Path } catch {}
 $envPath = Join-Path $rootResolved ".env"
+$sastBootstrapPath = Join-Path $rootResolved "scripts\install_sast_blades.ps1"
 if (Test-Path $envPath) {
     Get-Content $envPath | ForEach-Object {
         if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)\s*$') {
@@ -53,6 +54,13 @@ if (Test-Path $envPath) {
 } else {
     Write-Host "[ERRO] Arquivo .env não encontrado na raiz!" -ForegroundColor Red
     exit
+}
+
+if (Test-Path $sastBootstrapPath) {
+    . $sastBootstrapPath
+} else {
+    Write-Host "[ERRO] Script de bootstrap SAST não encontrado em: $sastBootstrapPath" -ForegroundColor Red
+    exit 1
 }
 
 $packagedBinDir = Join-Path $PSScriptRoot "bin"
@@ -278,6 +286,20 @@ Push-Location $PSScriptRoot
 
 try {
     $env:CARGO_INCREMENTAL = "0"
+    if (@('3', '4', '5') -contains $choice) {
+        Write-Host "[+] Garantindo lâminas SAST no host para o ETL..." -ForegroundColor DarkGray
+        Ensure-SastBladePaths
+        $sastResults = @(Ensure-SastBladesInstalled)
+        $failedBlades = @($sastResults | Where-Object { $_.Status -ne "ok" })
+        if ($failedBlades.Count -gt 0) {
+            Write-Host "[WARN] Nem todas as lâminas ficaram prontas para esta sessão:" -ForegroundColor Yellow
+            foreach ($failed in $failedBlades) {
+                Write-Host ("   - {0}: {1}" -f $failed.Command, $failed.Error) -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "[OK] Lâminas SAST prontas para o roteador poliglota." -ForegroundColor Green
+        }
+    }
     if ($binArgs.Count -gt 0) {
         & cargo run --manifest-path $cargoManifest --bin $bin -- @binArgs
     } else {

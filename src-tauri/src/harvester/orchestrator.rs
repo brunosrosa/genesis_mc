@@ -17,7 +17,7 @@ use super::extract::{
     TestIntentExtractor, UxContractsExtractor,
 };
 use super::guard::PurgeGuard;
-use super::sidecar::{NativeAstInput, NativeAstParser, PersistArtifactConfig, SemgrepInput, SemgrepSidecar};
+use super::sidecar::{NativeAstInput, NativeAstParser, PersistArtifactConfig, PolyglotSastInput, PolyglotSastSidecar};
 use super::canon::SodaCanonExtractor;
 
 #[derive(Error, Debug)]
@@ -303,23 +303,24 @@ impl HarvesterOrchestrator {
 
         if tasks.contains(&ExtractionTask::RunStaticAnalysis) {
             let sandbox_ref = sandbox_out.as_ref().ok_or_else(|| {
-                OrchestratorError::InfraError("SandboxHandle indisponivel para executar semgrep".to_string())
+                OrchestratorError::InfraError("SandboxHandle indisponivel para executar roteador poliglota de SAST".to_string())
             })?;
-            let semgrep_started = Instant::now();
-            debug!(repo_id = %repo_id, "N11: Invocando sidecar semgrep");
-            match SemgrepSidecar::extract(SemgrepInput {
+            let sast_started = Instant::now();
+            debug!(repo_id = %repo_id, "N11: Invocando roteador poliglota de SAST");
+            match PolyglotSastSidecar::extract(PolyglotSastInput {
                 executor: sandbox_ref,
                 timeout_secs: 600,
+                profile: &profile,
             })
             .await
             {
                 Ok(payload) => {
                     info!(
                         repo_id = %repo_id,
-                        elapsed_ms = semgrep_started.elapsed().as_millis(),
+                        elapsed_ms = sast_started.elapsed().as_millis(),
                         unsafe_hotspots_bytes = payload.unsafe_hotspots_blob.len(),
                         health_report_bytes = payload.health_report_blob.len(),
-                        "N11: semgrep concluido"
+                        "N11: roteador poliglota de SAST concluido"
                     );
                     blobs.push(ArtifactBlob {
                         artifact_type: "blob_06_unsafe_hotspots".to_string(),
@@ -337,21 +338,26 @@ impl HarvesterOrchestrator {
                     warn!(
                         repo_id = %repo_id,
                         reason = %reason,
-                        "Falha ao extrair blobs 06/08 via semgrep; seguindo com fail-soft"
+                        "Falha ao extrair blobs 06/08 via roteador poliglota de SAST; seguindo com fail-soft"
                     );
                     let (unsafe_blob, health_blob) = if is_unknown_stack {
                         let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
                         (bytes.clone(), bytes)
                     } else {
-                        let unsafe_blob = format!(
-                            "# Unsafe Hotspots\n\nFallback: semgrep falhou.\nreason: {}\n",
-                            reason
-                        )
-                        .into_bytes();
+                        let unsafe_blob = serde_json::to_vec(&serde_json::json!({
+                            "schema": "soda.health.v1",
+                            "focus": "unsafe_hotspots",
+                            "fallback": true,
+                            "source": "polyglot-sast-router",
+                            "reason": reason,
+                            "issues": [],
+                        }))
+                        .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
                         let health_blob = serde_json::to_vec(&serde_json::json!({
                             "fallback": true,
-                            "source": "semgrep",
+                            "source": "polyglot-sast-router",
                             "reason": reason,
+                            "issues": [],
                         }))
                         .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
                         (unsafe_blob, health_blob)
@@ -373,11 +379,20 @@ impl HarvesterOrchestrator {
                 let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
                 (bytes.clone(), bytes)
             } else {
-                let unsafe_blob = b"# Unsafe Hotspots\n\nFallback: static analysis (semgrep) foi pulado pelo roteamento de tarefas.\n".to_vec();
+                let unsafe_blob = serde_json::to_vec(&serde_json::json!({
+                    "schema": "soda.health.v1",
+                    "focus": "unsafe_hotspots",
+                    "fallback": true,
+                    "source": "polyglot-sast-router",
+                    "reason": "static analysis foi pulada pelo roteamento de tarefas",
+                    "issues": [],
+                }))
+                .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
                 let health_blob = serde_json::to_vec(&serde_json::json!({
                     "fallback": true,
-                    "source": "semgrep",
-                    "reason": "static analysis (semgrep) foi pulado pelo roteamento de tarefas",
+                    "source": "polyglot-sast-router",
+                    "reason": "static analysis foi pulada pelo roteamento de tarefas",
+                    "issues": [],
                 }))
                 .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
                 (unsafe_blob, health_blob)

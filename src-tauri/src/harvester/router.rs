@@ -13,6 +13,19 @@ pub enum ExtractionTask {
     ExtractOpsBlueprint,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StaticAnalysisBlade {
+    RustClippy,
+    Cppcheck,
+    Sobelow,
+    Biome,
+    Oxc,
+    Ruff,
+    Bandit,
+    Govulncheck,
+    Opengrep,
+}
+
 impl ExtractionTask {
     /// Lei da Compressao Topologica: sidecars e extratores estruturais devem emitir blocos
     /// hierarquicos por arquivo, com poda de granularidade interna, ao inves de saida plana.
@@ -38,6 +51,13 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
         SingleStack::Rust => vec![
             ExtractionTask::RunNativeAstParser,
             ExtractionTask::DiscoverTests,
+            ExtractionTask::ExtractManifests,
+            ExtractionTask::RunStaticAnalysis,
+            ExtractionTask::FetchCommunityMeta,
+            ExtractionTask::ExtractOpsBlueprint,
+        ],
+        SingleStack::CCpp | SingleStack::Elixir => vec![
+            ExtractionTask::RunNativeAstParser,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
@@ -89,9 +109,22 @@ fn unknown_fallback() -> Vec<ExtractionTask> {
     vec![
         ExtractionTask::RunNativeAstParser,
         ExtractionTask::ExtractManifests,
+        ExtractionTask::RunStaticAnalysis,
         ExtractionTask::FetchCommunityMeta,
         ExtractionTask::ExtractOpsBlueprint,
     ]
+}
+
+fn static_analysis_blades_for_stack(stack: &SingleStack) -> Vec<StaticAnalysisBlade> {
+    match stack {
+        SingleStack::Rust => vec![StaticAnalysisBlade::RustClippy],
+        SingleStack::CCpp => vec![StaticAnalysisBlade::Cppcheck],
+        SingleStack::Elixir => vec![StaticAnalysisBlade::Sobelow],
+        SingleStack::NodeJS => vec![StaticAnalysisBlade::Biome, StaticAnalysisBlade::Oxc],
+        SingleStack::Python => vec![StaticAnalysisBlade::Ruff, StaticAnalysisBlade::Bandit],
+        SingleStack::Go => vec![StaticAnalysisBlade::Govulncheck],
+        SingleStack::JVM | SingleStack::DotNet => vec![StaticAnalysisBlade::Opengrep],
+    }
 }
 
 /// Converte um `StackProfile` em `SingleStack` para delegar ao mapeamento canônico.
@@ -99,6 +132,8 @@ fn unknown_fallback() -> Vec<ExtractionTask> {
 fn profile_to_single(profile: &StackProfile) -> Option<SingleStack> {
     match profile {
         StackProfile::Rust => Some(SingleStack::Rust),
+        StackProfile::CCpp => Some(SingleStack::CCpp),
+        StackProfile::Elixir => Some(SingleStack::Elixir),
         StackProfile::NodeJS => Some(SingleStack::NodeJS),
         StackProfile::Go => Some(SingleStack::Go),
         StackProfile::Python => Some(SingleStack::Python),
@@ -142,6 +177,32 @@ impl ExtractionRouter {
 
 pub fn route(input: ExtractionInput<'_>) -> Vec<ExtractionTask> {
     ExtractionRouter::route(input)
+}
+
+pub fn route_static_analysis_blades(profile: &StackProfile) -> Vec<StaticAnalysisBlade> {
+    if let Some(single) = profile_to_single(profile) {
+        return static_analysis_blades_for_stack(&single);
+    }
+
+    match profile {
+        StackProfile::Unknown => vec![StaticAnalysisBlade::Opengrep],
+        StackProfile::Mixed(stacks) => {
+            let mut blades = Vec::new();
+            for stack in stacks {
+                for blade in static_analysis_blades_for_stack(stack) {
+                    if !blades.contains(&blade) {
+                        blades.push(blade);
+                    }
+                }
+            }
+            if blades.is_empty() {
+                vec![StaticAnalysisBlade::Opengrep]
+            } else {
+                blades
+            }
+        }
+        _ => vec![StaticAnalysisBlade::Opengrep],
+    }
 }
 
 #[cfg(test)]
@@ -292,6 +353,7 @@ mod tests {
             vec![
                 ExtractionTask::RunNativeAstParser,
                 ExtractionTask::ExtractManifests,
+                ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
                 ExtractionTask::ExtractOpsBlueprint,
             ]
@@ -352,6 +414,8 @@ mod tests {
         // Testa todos os perfis possíveis, garantindo que nenhum retorna vetor vazio
         let profiles = vec![
             StackProfile::Rust,
+            StackProfile::CCpp,
+            StackProfile::Elixir,
             StackProfile::NodeJS,
             StackProfile::Go,
             StackProfile::Python,
@@ -370,5 +434,34 @@ mod tests {
             let tasks = route(input);
             assert!(!tasks.is_empty(), "Retorno vazio para o perfil!");
         }
+    }
+
+    #[test]
+    fn test_static_analysis_blades_route_mixed_rust_and_cpp() {
+        let blades = route_static_analysis_blades(&StackProfile::Mixed(vec![
+            SingleStack::Rust,
+            SingleStack::CCpp,
+        ]));
+
+        assert_eq!(
+            blades,
+            vec![StaticAnalysisBlade::RustClippy, StaticAnalysisBlade::Cppcheck]
+        );
+    }
+
+    #[test]
+    fn test_static_analysis_blades_route_nodejs_family_to_biome_and_oxc() {
+        let blades = route_static_analysis_blades(&StackProfile::NodeJS);
+
+        assert_eq!(
+            blades,
+            vec![StaticAnalysisBlade::Biome, StaticAnalysisBlade::Oxc]
+        );
+    }
+
+    #[test]
+    fn test_static_analysis_blades_route_unknown_to_opengrep() {
+        let blades = route_static_analysis_blades(&StackProfile::Unknown);
+        assert_eq!(blades, vec![StaticAnalysisBlade::Opengrep]);
     }
 }
