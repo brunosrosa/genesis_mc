@@ -446,6 +446,29 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
                 env: BTreeMap::new(),
             })
         }
+        "mix" => {
+            #[cfg(target_os = "windows")]
+            {
+                let program = resolve_from_path("cmd").unwrap_or_else(|| PathBuf::from("cmd"));
+                let mut resolved_args = vec!["/C".to_string(), "mix".to_string()];
+                resolved_args.extend(args.iter().map(|arg| (*arg).to_string()));
+                Ok(ResolvedCommand {
+                    program,
+                    args: resolved_args,
+                    env: BTreeMap::new(),
+                })
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                let program = resolve_from_path("mix").unwrap_or_else(|| PathBuf::from("mix"));
+                Ok(ResolvedCommand {
+                    program,
+                    args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                    env: BTreeMap::new(),
+                })
+            }
+        }
         "semgrep" | "opengrep" | "gh" | "cppcheck" | "sobelow" | "govulncheck" => {
             let env = if command == "semgrep" || command == "opengrep" {
                 build_semgrep_env(repo_path)
@@ -1005,5 +1028,26 @@ mod tests {
 
         assert_eq!(sandbox.policy(), SandboxPolicy::ReadWrite);
         assert!(repo_dir.parent().unwrap().join(".soda_semgrep").join("repo").exists());
+    }
+
+    #[test]
+    fn test_resolve_mix_wraps_shell_on_windows() {
+        let repo_dir = std::env::temp_dir().join("soda-mix-repo");
+        let resolved = resolve_command("mix", &["sobelow", "--format", "json", "--private"], &repo_dir)
+            .expect("mix deve ser resolvido");
+
+        #[cfg(target_os = "windows")]
+        {
+            let program = resolved.program.to_string_lossy().to_ascii_lowercase();
+            assert!(program.ends_with("cmd.exe") || program == "cmd");
+            assert_eq!(resolved.args, vec!["/C", "mix", "sobelow", "--format", "json", "--private"]);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let program = resolved.program.to_string_lossy().to_ascii_lowercase();
+            assert!(program.ends_with("/mix") || program == "mix");
+            assert_eq!(resolved.args, vec!["sobelow", "--format", "json", "--private"]);
+        }
     }
 }

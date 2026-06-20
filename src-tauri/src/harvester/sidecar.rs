@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use quick_xml::de::from_str as xml_from_str;
+use regex::Regex;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -439,6 +440,10 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
 
 fn stdout_contains_json_payload(bytes: &[u8]) -> bool {
     serde_json::from_slice::<serde_json::Value>(bytes).is_ok()
+}
+
+fn is_sobelow_mix_invocation<S: AsRef<str>>(binary: &str, args: &[S]) -> bool {
+    binary == "mix" && args.first().map(|arg| arg.as_ref()) == Some("sobelow")
 }
 
 fn extract_cppcheck_xml_payload(text: &str) -> Option<&str> {
@@ -1000,6 +1005,11 @@ async fn execute_sidecar<E: SandboxExecutor>(
                     } else {
                         Ok(sanitized_stdout)
                     }
+                } else if is_sobelow_mix_invocation(binary, &args)
+                    && stdout_is_blank(&sanitized_stdout)
+                    && sanitized_stderr.contains("total_findings:")
+                {
+                    Ok(sanitized_stderr.into_bytes())
                 } else {
                     Ok(sanitized_stdout)
                 }
@@ -1859,7 +1869,12 @@ fn cppcheck_args() -> Vec<String> {
 }
 
 fn sobelow_args() -> Vec<String> {
-    vec!["--format".to_string(), "json".to_string()]
+    vec![
+        "sobelow".to_string(),
+        "--format".to_string(),
+        "json".to_string(),
+        "--private".to_string(),
+    ]
 }
 
 fn biome_args() -> Vec<String> {
@@ -1930,7 +1945,7 @@ fn blade_command(blade: StaticAnalysisBlade) -> (&'static str, Vec<String>) {
     match blade {
         StaticAnalysisBlade::RustClippy => ("cargo", clippy_args()),
         StaticAnalysisBlade::Cppcheck => ("cppcheck", cppcheck_args()),
-        StaticAnalysisBlade::Sobelow => ("sobelow", sobelow_args()),
+        StaticAnalysisBlade::Sobelow => ("mix", sobelow_args()),
         StaticAnalysisBlade::Biome => ("biome", biome_args()),
         StaticAnalysisBlade::Oxc => ("oxlint", oxc_args()),
         StaticAnalysisBlade::Ruff => ("ruff", ruff_args()),
@@ -2097,9 +2112,23 @@ fn normalize_json_array_issues(
 }
 
 fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
-    let value = serde_json::from_slice::<serde_json::Value>(bytes).map_err(|e| SidecarError::ParseError {
-        reason: e.to_string(),
-    })?;
+    let value = match serde_json::from_slice::<serde_json::Value>(bytes) {
+        Ok(value) => value,
+        Err(err) if blade == StaticAnalysisBlade::Sobelow => {
+            let fallback = normalize_sobelow_text_issues(repo_path, &String::from_utf8_lossy(bytes));
+            if fallback.is_empty() {
+                return Err(SidecarError::ParseError {
+                    reason: err.to_string(),
+                });
+            }
+            return Ok(fallback);
+        }
+        Err(err) => {
+            return Err(SidecarError::ParseError {
+                reason: err.to_string(),
+            });
+        }
+    };
     let issues = match blade {
         StaticAnalysisBlade::Ruff => value
             .as_array()
@@ -2149,6 +2178,32 @@ fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, by
         _ => Vec::new(),
     };
     Ok(issues)
+}
+
+fn normalize_sobelow_text_issues(repo_path: &Path, text: &str) -> Vec<SodaHealthIssue> {
+    let finding_re = Regex::new(
+        r#"%\{file: "(?P<file>[^"]+)", line: (?P<line>\d+), type: "(?P<kind>[^"]+)"(?:, variable: (?P<variable>"[^"]+"|:[^,}]+|[A-Za-z_][A-Za-z0-9_]*))?\}"#,
+    )
+    .expect("regex sobelow invalida");
+
+    let mut issues = Vec::new();
+    for captures in finding_re.captures_iter(text) {
+        let file = captures.name("file").map(|value| value.as_str()).unwrap_or("");
+        let line = captures.name("line").map(|value| value.as_str()).unwrap_or("0");
+        let kind = captures.name("kind").map(|value| value.as_str()).unwrap_or("Sobelow finding");
+        let variable = captures
+            .name("variable")
+            .map(|value| value.as_str().trim_matches('"'))
+            .unwrap_or("");
+        let message = if variable.is_empty() {
+            format!("{kind} (line {line})")
+        } else {
+            format!("{kind}: {variable} (line {line})")
+        };
+        push_issue(&mut issues, repo_path, "warning", file, &message);
+    }
+    sort_and_dedup_issues(&mut issues);
+    issues
 }
 
 fn normalize_govulncheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
@@ -3596,5 +3651,26 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].file, "src/main.c");
         assert!(issues[0].message.contains("memleak"));
+    }
+
+    #[test]
+    fn test_sobelow_blade_uses_mix_with_private_json_flags() {
+        let (binary, args) = blade_command(StaticAnalysisBlade::Sobelow);
+        assert_eq!(binary, "mix");
+        assert_eq!(args, vec!["sobelow", "--format", "json", "--private"]);
+    }
+
+    #[test]
+    fn test_normalize_sobelow_text_fallback_extracts_findings() {
+        let repo_path = Path::new("C:/repos/jido");
+        let payload = r#"** (UndefinedFunctionError) function Jason.encode!/2 is undefined (module Jason is not available)
+    Jason.encode!(%{findings: %{high_confidence: [%{file: "C:/repos/jido/lib/jido/storage/redis.ex", line: 337, type: "Misc.BinToTerm: Unsafe `binary_to_term`", variable: :binary}], low_confidence: [%{file: "C:/repos/jido/lib/jido/plugin/instance.ex", line: 123, type: "DOS.StringToAtom: Unsafe `String.to_atom`", variable: "base_key and as_alias"}], medium_confidence: []}, sobelow_version: "0.14.1", total_findings: 2}, [pretty: true])"#;
+
+        let issues = normalize_sobelow_text_issues(repo_path, payload);
+        assert_eq!(issues.len(), 2);
+        assert_eq!(issues[0].file, "lib/jido/plugin/instance.ex");
+        assert!(issues[0].message.contains("String.to_atom"));
+        assert_eq!(issues[1].file, "lib/jido/storage/redis.ex");
+        assert!(issues[1].message.contains("binary_to_term"));
     }
 }

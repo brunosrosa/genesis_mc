@@ -406,6 +406,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_detect_nested_source_file_via_recursive_walk() {
+        let _guard = get_test_mutex().await.lock().await;
+        let temp = create_temp_test_dir().await;
+
+        tokio::fs::create_dir_all(temp.join("src").join("deep")).await.unwrap();
+        tokio::fs::write(
+            temp.join("src").join("deep").join("main.go"),
+            b"package main\nfunc main() {}\n",
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(temp.clone());
+        let profile = LanguageDetector::detect(&repo_path).await.unwrap();
+
+        assert_eq!(profile, StackProfile::Go);
+
+        let _ = tokio::fs::remove_dir_all(&temp).await;
+    }
+
+    #[tokio::test]
+    async fn test_detect_skips_ignored_dirs_during_recursive_walk() {
+        let _guard = get_test_mutex().await.lock().await;
+        let temp = create_temp_test_dir().await;
+
+        tokio::fs::create_dir_all(temp.join("node_modules").join("pkg")).await.unwrap();
+        tokio::fs::write(
+            temp.join("node_modules").join("pkg").join("main.go"),
+            b"package main\nfunc main() {}\n",
+        )
+        .await
+        .unwrap();
+        tokio::fs::write(temp.join("README.md"), b"root only\n").await.unwrap();
+
+        let repo_path = RepoPath(temp.clone());
+        let profile = LanguageDetector::detect(&repo_path).await.unwrap();
+
+        assert_eq!(profile, StackProfile::Unknown);
+
+        let _ = tokio::fs::remove_dir_all(&temp).await;
+    }
+
+    #[tokio::test]
     async fn test_detect_unknown() {
         let _guard = get_test_mutex().await.lock().await;
         let temp = create_temp_test_dir().await;
