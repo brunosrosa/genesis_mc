@@ -2143,6 +2143,20 @@ fn clippy_args() -> Vec<String> {
     ]
 }
 
+const OPENGREP_EXCLUDES: &[&str] = &[
+    "tests",
+    "**/tests/**",
+    "mock",
+    "mocks",
+    "**/mocks/**",
+    "fixtures",
+    "test_support",
+    "e2e",
+    "docs",
+    "documentation",
+    "examples",
+];
+
 fn cppcheck_args() -> Vec<String> {
     vec![
         "--xml".to_string(),
@@ -2204,51 +2218,71 @@ fn govulncheck_args() -> Vec<String> {
     ]
 }
 
+fn opengrep_args(rule_arg: &str) -> Vec<String> {
+    let mut args = vec![
+        "scan".to_string(),
+        "--config".to_string(),
+        rule_arg.to_string(),
+        "--json".to_string(),
+        "--jobs".to_string(),
+        "1".to_string(),
+        "--disable-version-check".to_string(),
+        "--taint-intrafile".to_string(),
+        "--allow-rule-timeout-control".to_string(),
+        "--exclude-minified-files".to_string(),
+        "--exclude".to_string(),
+        rule_arg.to_string(),
+        "--exclude".to_string(),
+        SEMGREP_SECURITY_RULE_FILE.to_string(),
+        "--exclude".to_string(),
+        SEMGREP_HEALTH_RULE_FILE.to_string(),
+    ];
+
+    for exclude in OPENGREP_EXCLUDES {
+        args.push("--exclude".to_string());
+        args.push((*exclude).to_string());
+    }
+
+    args.push(".".to_string());
+    args
+}
+
+async fn cleanup_clippy_target_dir(execution_root: &Path) {
+    let target_dir = execution_root.join("target");
+    if !target_dir.exists() {
+        return;
+    }
+
+    match tokio::fs::remove_dir_all(&target_dir).await {
+        Ok(_) => {
+            info!(target_dir = %target_dir.display(), "clippy: target/ efemero removido");
+        }
+        Err(err) => {
+            warn!(
+                target_dir = %target_dir.display(),
+                error = %err,
+                "clippy: falha ao remover target/ efemero"
+            );
+        }
+    }
+}
+
 async fn run_opengrep_scan<E: SandboxExecutor>(
     executor: &E,
     timeout_secs: u64,
+    execution_root: &Path,
 ) -> Result<Vec<u8>, SidecarError> {
     let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), SemgrepRuleSet::Health).await?;
     let rule_arg = rule_path.to_string_lossy().to_string();
-    let args = [
-        "scan",
-        "--config",
-        rule_arg.as_str(),
-        "--json",
-        "--jobs",
-        "1",
-        "--disable-version-check",
-        "--taint-intrafile",
-        "--exclude",
-        rule_arg.as_str(),
-        "--exclude",
-        SEMGREP_SECURITY_RULE_FILE,
-        "--exclude",
-        SEMGREP_HEALTH_RULE_FILE,
-        "--exclude",
-        "docs",
-        "--exclude",
-        "documentation",
-        "--exclude",
-        "examples",
-        "--exclude",
-        "mock",
-        "--exclude",
-        "mocks",
-        "--exclude",
-        "fixtures",
-        "--exclude",
-        "test_support",
-        "--exclude",
-        "e2e",
-        ".",
-    ];
-    execute_sidecar(
+    let args = opengrep_args(&rule_arg);
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    execute_sidecar_in_dir(
         executor,
         "opengrep",
-        &args,
+        &arg_refs,
         timeout_secs,
         SidecarExitPolicy::AllowFindingsExitOne,
+        execution_root,
     )
     .await
 }
@@ -2288,11 +2322,11 @@ async fn run_sast_blade<E: SandboxExecutor>(
     execution_root: &Path,
 ) -> Result<Vec<u8>, SidecarError> {
     if blade == StaticAnalysisBlade::Opengrep {
-        return run_opengrep_scan(executor, timeout_secs).await;
+        return run_opengrep_scan(executor, timeout_secs, execution_root).await;
     }
     let (binary, args) = blade_command(blade);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-    execute_sidecar_in_dir(
+    let result = execute_sidecar_in_dir(
         executor,
         binary,
         &arg_refs,
@@ -2300,7 +2334,11 @@ async fn run_sast_blade<E: SandboxExecutor>(
         SidecarExitPolicy::AllowFindingsExitOne,
         execution_root,
     )
-    .await
+    .await;
+    if blade == StaticAnalysisBlade::RustClippy {
+        cleanup_clippy_target_dir(execution_root).await;
+    }
+    result
 }
 
 fn normalize_clippy_output(
@@ -4286,6 +4324,25 @@ mod tests {
     }
 
     #[test]
+    fn test_cppcheck_blade_enforces_xml_v2_args() {
+        let (binary, args) = blade_command(StaticAnalysisBlade::Cppcheck);
+        assert_eq!(binary, "cppcheck");
+        assert!(args.iter().any(|arg| arg == "--xml"));
+        assert!(args.iter().any(|arg| arg == "--xml-version=2"));
+    }
+
+    #[test]
+    fn test_opengrep_args_include_timeout_minified_and_test_excludes() {
+        let args = opengrep_args("C:/rules");
+        assert!(args.iter().any(|arg| arg == "--allow-rule-timeout-control"));
+        assert!(args.iter().any(|arg| arg == "--exclude-minified-files"));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/mocks/**"]));
+        assert!(!args.iter().any(|arg| arg.contains("Cargo.lock")));
+        assert!(!args.iter().any(|arg| arg.contains("package-lock.json")));
+    }
+
+    #[test]
     fn test_normalize_cppcheck_output_ignores_progress_prefix() {
         let repo_path = Path::new("C:/repos/example");
         let payload = concat!(
@@ -4410,5 +4467,30 @@ Done in 1.23s"#;
         }));
         assert!(health_blob.contains("apps/rust-sdk/src/lib.rs"));
         assert!(health_blob.contains(r#""scope": "apps/rust-sdk""#));
+    }
+
+    #[tokio::test]
+    async fn test_run_sast_blade_cleans_clippy_target_dir_after_execution() {
+        let clippy_payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"lint in workspace member","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}"#;
+        let executor = MockExecutor::new(vec![Err(SandboxError::ProcessNonZeroExit {
+            exit_code: 1,
+            stderr: "findings".to_string(),
+            stdout: clippy_payload.as_bytes().to_vec(),
+        })]);
+        executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
+        executor.write_repo_file("apps/rust-sdk/target/debug/.keep", "temp");
+        let execution_root = executor.repo_path().join("apps").join("rust-sdk");
+
+        let payload = run_sast_blade(
+            &executor,
+            StaticAnalysisBlade::RustClippy,
+            60,
+            &execution_root,
+        )
+        .await
+        .unwrap();
+
+        assert!(!payload.is_empty());
+        assert!(!execution_root.join("target").exists());
     }
 }

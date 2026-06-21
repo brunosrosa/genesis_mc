@@ -25,6 +25,13 @@ O repositório e o estado durável podem residir na Dev Drive (ReFS, ex: Z:), ma
 6. **Gatekeeper Paranoico:** JAMAIS execute exclusões em massa, mutações na Tríade de Memória ou comandos críticos sem exibir o *Blast Radius* para aprovação explícita.
 7. **Roteamento FinOps (ParetoBandit):** A decisão entre RTX 2060m (Local) e Nuvem Premium é exclusiva do algoritmo ParetoBandit ($E^3$), medindo Custo vs Qualidade vs Latência. Confie no roteamento imposto pelo Gateway e não alucine infraestruturas paralelas.
 
+###### 1.2. LEIS DE PERFORMANCE SAST E SANDBOXING
+Toda futura CLI, sidecar ou ferramenta de análise estática criada no SODA deve obedecer às 4 leis abaixo:
+1. **O Fim do Timeout Cego:** Ative `--allow-rule-timeout-control` sempre que a ferramenta suportar controle de timeout por regra/arquivo. Timeout cego global não pode ser a estratégia primária.
+2. **Escudo de Supply Chain:** É permitido excluir `tests/` e `**/mocks/*`, mas é estritamente proibido ignorar manifestos e lockfiles como `Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock` e `mix.lock`.
+3. **Fobia de Código Minificado:** Use `--exclude-minified-files` quando disponível. Sem suporte nativo, descarte arquivos com menos de 7% de espaço em branco antes de AST, regex scanning ou leitura massiva.
+4. **Higiene de I/O em Tempo Real:** Sidecars que disparem compilações agressivas ou materializem `target/` e caches equivalentes devem limpar esse lixo imediatamente após o uso para blindar sandbox, Ramdisk e SSD contra saturação de espaço.
+
 ###### 1.1. PODERES INTRÍNSECOS DO GATEWAY RUST (LATÊNCIA ZERO)
 O Gateway nativo em Rust agora serve ferramentas críticas intra-processo. Ao precisar destas capacidades, priorize-as antes de cogitar MCPs legados, sidecars ou runtimes externos:
 1. **`soda_get_ast`:** visão raio-X instantânea do esqueleto estrutural de repositórios/diretórios. Use para AST e topologia O(1) sem sidecar AST legado.

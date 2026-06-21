@@ -23,6 +23,7 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
    * **Lei do Scaffold:** Cada tarefa deve ter uma *Definition of Done (DoD)* rigorosa, exigindo infraestrutura executável (testes vazios de falha) antes da lógica real.
 4. **Fase 4: Mutação Atômica e Delegação (Mutate):**
    * A escrita em disco é sagrada. Utilize **OBRIGATORIAMENTE** `atomic-write-file` ou edição por *offset* protegida por Mutex assíncrono do Tokio.
+   * **LEIS DE PERFORMANCE SAST E SANDBOXING:** Ao criar qualquer CLI, sidecar ou rotina de análise estática, injete desde o design as 4 leis duras: `--allow-rule-timeout-control` ou equivalente adaptativo, exclusão permitida de `tests/` e `**/mocks/*` sem jamais amputar manifestos/lockfiles, exclusão de minificados via `--exclude-minified-files` ou heurística de 7% de espaço em branco, e limpeza imediata de `target/` ou caches de build após o uso.
    * Escreva o teste (Red), escreva o código, e rode `cargo check`.
    * Se o compilador quebrar, NÃO alucine uma resposta. Delegue IMEDIATAMENTE o erro invocando a skill mecânica `@soda-ralph-loop` para aplicar a correção sob o teto de 3 tentativas (*Fail-Closed*).
 5. **Fase 5: Anti-Consenso e Rebase Semântico (Approve & Diff):**

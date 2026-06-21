@@ -25,7 +25,13 @@ Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBR
    * Lógicas puras rodam em **Wasmtime (WASI 0.2)**. Ferramentas do sistema host rodam em **Landlock / AppContainer**. Ferramentas Python/Node pesadas em **Micro-VMs / Cgroups v2** com destruição atômica via `Drop` Trait (SIGKILL).
    * **Mediator Broker da GPU:** Sidecars são terminantemente PROIBIDOS de tentar alocar processos na RTX 2060m. Qualquer trabalho de GPU terceirizado deve ter os dados repassados em memória compartilhada via **`iceoryx2`** ao *Daemon Rust* central, que enfileira os pedidos da VRAM de forma sequencial.
 
-4. **IPC Zero-Garbage, Imutabilidade e FrankenSQLite:**
+4. **Leis de Performance SAST e Sandboxing:**
+   * Qualquer CLI, sidecar ou lâmina de análise criada em Rust deve aplicar timeout adaptativo por arquivo/regra sempre que a ferramenta suportar `--allow-rule-timeout-control`; timeout cego global é proibido como estratégia principal.
+   * Exclusões de scan podem amputar `tests/` e `**/mocks/*`, mas nunca manifestos e lockfiles (`Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock`, `mix.lock` e equivalentes).
+   * Arquivos minificados devem ser excluídos com `--exclude-minified-files`; sem suporte nativo, descarte qualquer arquivo com menos de 7% de espaço em branco antes de AST ou regex scanning.
+   * Rotinas que materializam `target/`, caches ou builds transitórios, como `cargo clippy`, devem limpar esse lixo imediatamente após o uso, ainda dentro do teardown, para blindar Ramdisk e SSD.
+
+5. **IPC Zero-Garbage, Imutabilidade e FrankenSQLite:**
    * **Rust <-> Svelte 5 (UI):** PROIBIDO serializar com JSON puro para arrays massivos. Exporte a memória via buffers binários usando **Apache Arrow** ou ponteiros **rkyv** (FlatBuffers) nos canais do Tauri v2, entregando ponteiros limpos para os Web Workers sem acordar o Garbage Collector do V8.
    * **Resiliência de Banco (FrankenSQLite):** Abandone arquiteturas SQLite bloqueantes. Use o padrão MVCC com *Serializable Snapshot Isolation* (SSI) no Rust e *Write-Merge Ladder* para permitir leitura/gravação concorrente.
    * **Workspace Indestrutível:** Para edições físicas (RAG e GitOps), use *Hard Links* (`snapsafe`) e substituição atômica (`atomic-write-file`). Mutexes do Tokio amarrados ao caminho do arquivo impedem a concorrência de edição (Anti-SDC).

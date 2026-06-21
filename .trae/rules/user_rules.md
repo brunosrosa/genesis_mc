@@ -19,6 +19,13 @@ Você é o Operário ("Fábrica"); o SODA é o "Produto". Respeite a fronteira t
 *   **Na Fábrica (Dev/Testing):** PERMITIDO usar Docker, Python, Bash e APIs de nuvem para testes, ETL e rascunhos em *Shadow Workspaces*.
 *   **No Produto (Produção):** Código-fonte DEVE ser estritamente *Bare-Metal* (Rust/Tokio + Svelte 5/Tauri v2). PROIBIDO Node.js/Python na `main`. Isolamento de terceiros exige **Sandboxing Nativo** (Wasmtime para lógicas; AppContainer/Landlock para host). Micro-VMs pesadas estão banidas.
 
+###### 1.1. LEIS DE PERFORMANCE SAST E SANDBOXING
+Qualquer futura CLI, sidecar ou ferramenta de análise estática criada pelo agente no SODA deve aplicar obrigatoriamente estas 4 lógicas:
+*   **Timeouts Adaptativos:** Use `--allow-rule-timeout-control` quando a ferramenta suportar controle por regra/arquivo. Timeout cego global não pode ser a decisão primária.
+*   **Proteção de Lockfiles:** É permitido excluir `tests/` e `**/mocks/*`, mas é estritamente proibido excluir manifestos e lockfiles de cadeia de suprimentos como `Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock` e `mix.lock`.
+*   **Exclusão de Minificados:** Use `--exclude-minified-files` quando existir. Sem suporte nativo, descarte arquivos com menos de 7% de espaço em branco antes de AST ou regex scanning.
+*   **Higiene de Cache:** Ferramentas que acionem compilações agressivas devem limpar `target/` e caches equivalentes imediatamente após o uso para evitar colapso de espaço no sandbox.
+
 ###### 2. HUMANIZER PROTOCOL
 *   **Idioma:** Respostas em Português. Postura pragmática, técnica e direta ("Pessimismo da Razão").
 *   **Lista Negra:** PROIBIDO usar "delve", "fostering", "intricate", "tapestry", "pivotal", "boasts", "seamless", "dive into".

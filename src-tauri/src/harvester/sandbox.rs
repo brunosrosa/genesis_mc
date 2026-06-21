@@ -372,6 +372,23 @@ fn build_semgrep_env(repo_path: &Path) -> BTreeMap<String, String> {
     ])
 }
 
+fn is_cargo_clippy_invocation<S: AsRef<str>>(args: &[S]) -> bool {
+    args.first().map(|arg| arg.as_ref()) == Some("clippy")
+}
+
+fn merge_tool_streams(command: &str, stdout: Vec<u8>, stderr: &[u8]) -> Vec<u8> {
+    if command != "cppcheck" || stderr.is_empty() {
+        return stdout;
+    }
+
+    let mut merged = stderr.to_vec();
+    if !stdout.is_empty() {
+        merged.push(b'\n');
+        merged.extend_from_slice(&stdout);
+    }
+    merged
+}
+
 fn persist_semgrep_diagnostics(
     repo_path: &Path,
     resolved: &ResolvedCommand,
@@ -428,11 +445,14 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
             let program = resolve_from_path("cargo").unwrap_or_else(|| PathBuf::from(command));
             let mut env = BTreeMap::new();
             env.insert("CARGO_INCREMENTAL".to_string(), "0".to_string());
+            let cargo_target_dir = if is_cargo_clippy_invocation(args) {
+                repo_path.join("target")
+            } else {
+                sandbox_tool_state_root(repo_path, "cargo-target")
+            };
             env.insert(
                 "CARGO_TARGET_DIR".to_string(),
-                sandbox_tool_state_root(repo_path, "cargo-target")
-                    .display()
-                    .to_string(),
+                cargo_target_dir.display().to_string(),
             );
             Ok(ResolvedCommand {
                 program,
@@ -849,8 +869,9 @@ impl SandboxHandle {
                     cwd = %execution_root.display(),
                     "Sandbox: processo efemero concluido"
                 );
+                let merged_stdout = merge_tool_streams(&requested_command, stdout_buffer, &stderr_buffer);
                 if status.success() {
-                    Ok(stdout_buffer)
+                    Ok(merged_stdout)
                 } else {
                     let mut stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
                     let exit_code = status.code().unwrap_or(-1);
@@ -858,7 +879,7 @@ impl SandboxHandle {
                         if let Some(diagnostics_path) = persist_semgrep_diagnostics(
                             execution_root,
                             &resolved,
-                            &stdout_buffer,
+                            &merged_stdout,
                             &stderr_buffer,
                             exit_code,
                         ) {
@@ -872,7 +893,7 @@ impl SandboxHandle {
                     Err(SandboxError::ProcessNonZeroExit {
                         exit_code,
                         stderr: stderr_msg,
-                        stdout: stdout_buffer,
+                        stdout: merged_stdout,
                     })
                 }
             }

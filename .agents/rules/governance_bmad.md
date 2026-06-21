@@ -53,6 +53,13 @@ Em impasses arquiteturais ou falhas de TDD:
 *   **Decodificação Restrita:** Em rotinas de ETL Cognitivo, FORCE o uso da *crate* `llguidance`. A IA atua como transpilador determinístico contra o Schema em 50µs.
 *   **Lei Anti-SDC:** PROIBIDA alteração de arquivos *in-place*. Use sempre escrita atômica (`atomic-write-file`) combinada com `snapsafe`.
 
+###### 6.1. LEIS DE PERFORMANCE SAST E SANDBOXING
+Qualquer futura CLI, sidecar ou ferramenta de análise estática criada sob o protocolo BMAD deve aplicar obrigatoriamente:
+*   **Timeout Adaptativo:** Use `--allow-rule-timeout-control` quando houver suporte por regra/arquivo. Timeout cego global é proibido como estratégia principal.
+*   **Proteção de Lockfiles:** É permitido excluir `tests/` e `**/mocks/*`, mas é estritamente proibido amputar manifestos e lockfiles (`Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock`, `mix.lock` e equivalentes).
+*   **Exclusão de Minificados:** Use `--exclude-minified-files` quando existir. Sem suporte nativo, descarte arquivos com menos de 7% de espaço em branco antes do parsing/scan.
+*   **Higiene de Cache e Build:** Rotinas que materializam `target/` ou caches equivalentes devem limpá-los imediatamente após o uso para evitar colapso de espaço em sandbox e workspace efêmero.
+
 ###### 7. A DOUTRINA DE CANIBALIZAÇÃO E GIT SUBREPO
 *   **Expurgo Absoluto:** USO OBRIGATÓRIO do `git-subrepo` para internalizar bibliotecas (`git submodule` banido).
 *   **Extração AST $\mathcal{O}(1)$:** OBRIGATÓRIO priorizar `soda_get_ast` para extrair a "alma matemática" de repositórios e diretórios. NUNCA leia repositórios inteiros por força bruta.

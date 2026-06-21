@@ -1,8 +1,7 @@
-# Tasks Monorepo SAST
+# Tasks ADR-024 Performance SAST
 
-- [ ] Adicionar descoberta rapida de manifestos com exclusao de `.git`, `node_modules`, `target`, `venv` e `dist`.
-- [ ] Estender o executor do sandbox para aceitar `cwd` por subprojeto sem perder os timeouts adaptativos.
-- [ ] Mapear cada lamina para manifestos compativeis e consolidar resultados por repositorio.
-- [ ] Governar subexecucoes com `tokio::sync::Semaphore::new(3)`.
-- [ ] Cobrir com testes focados de descoberta, `cwd`, agregacao e limite de concorrencia.
-- [ ] Validar com `cargo check` e `cargo run --bin f0_harvester_cli -- --repo mendableai/firecrawl --direct`.
+- [ ] Injetar no `opengrep` as flags `--allow-rule-timeout-control`, `--exclude-minified-files` e exclusoes de `tests`/`mocks` sem amputar lockfiles.
+- [ ] Garantir `cppcheck` com `--xml` e `--xml-version=2` e normalizacao tolerante a payload vindo de `stderr`.
+- [ ] Limpar `target/` do `cwd` do subprojeto imediatamente apos `cargo clippy`.
+- [ ] Cobrir com testes focados das novas flags, cleanup e fusao XML.
+- [ ] Validar com `cargo check`.

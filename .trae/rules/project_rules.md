@@ -167,6 +167,13 @@ A infraestrutura repudia o *overengineering* de hipervisores pesados e máquinas
 *   **Ferramentas de Host e Binários:** Interações que exijam acesso físico aos recursos da máquina devem ser enjauladas através de Sandboxing Nativo do Kernel. Uso rigoroso do **AppContainer e LPAC (Low Privilege AppContainer)** no Windows (via crate `rappct`) e **Landlock** no Linux.
 *   **Process Pool Guard (A Guilhotina Atômica):** Qualquer *Sidecar* possui um limite de memória via `Cgroups v2`. O SODA usa o paradigma `Drop trait` do Rust para emitir um `SIGKILL` atômico assim que a tarefa finaliza ou aborta. Processos zumbis estão banidos.
 
+###### 5.1. LEIS DE PERFORMANCE SAST E SANDBOXING
+Toda futura ferramenta de linha de comando, varredura estática ou sidecar de análise criada no SODA DEVE obedecer às 4 leis abaixo:
+*   **Timeout Adaptativo Obrigatório:** Quando a ferramenta suportar, ative `--allow-rule-timeout-control` e delegue o tempo ao custo matemático do arquivo e da regra. Timeout cego e uniforme é proibido como estratégia primária.
+*   **Escudo de Supply Chain:** Exclusões como `tests/` e `**/mocks/*` são permitidas para reduzir ruído, mas é estritamente proibido ignorar manifestos e lockfiles (`Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock`, `mix.lock` e equivalentes).
+*   **Fobia de Código Minificado:** Use `--exclude-minified-files` sempre que disponível. Sem suporte nativo, replique a heurística local: arquivos com menos de 7% de espaço em branco não entram no pipeline de parsing ou scan.
+*   **Higiene de Cache e Build:** Sidecars que disparem compilações agressivas ou materializem `target/` e caches equivalentes DEVEM limpar estes diretórios imediatamente após o uso para proteger Ramdisk, sandbox e SSD contra `os error 112`.
+
 ###### 6. FINOPS, ROTEAMENTO HÍBRIDO E PARETOBANDIT
 *   **O Cofre (ParetoBandit e E³):** A decisão autônoma de onde a tarefa roda não é estática. O algoritmo matemático `ParetoBandit` no Gateway Rust aplica a métrica $E^3$ (Efficiency-aware Effectiveness Evaluation) avaliando Custo vs. Qualidade vs. Latência antes do despacho.
 *   **O Padrão Orchestrator-Worker:** Modelos Premium em nuvem (Claude Opus 4.7, GPT-5.4) são estritamente restritos a atuar como "Cloud Brain", lendo intenções e gerando Grafos Acíclicos Dirigidos (DAGs). O "Trabalho Braçal" resultante é despachado compulsoriamente para o Local Worker (RTX 2060m - Custo Zero) ou para Batch APIs asiáticas (DeepSeek V4, Gemini Flash).
