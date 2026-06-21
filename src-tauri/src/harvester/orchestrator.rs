@@ -308,7 +308,7 @@ impl HarvesterOrchestrator {
             let sast_started = Instant::now();
             debug!(repo_id = %repo_id, "N11: Invocando roteador poliglota de SAST");
             match PolyglotSastSidecar::extract(PolyglotSastInput {
-                executor: sandbox_ref,
+                executor: Arc::new(sandbox_ref.clone()),
                 timeout_secs: 600,
                 profile: &profile,
             })

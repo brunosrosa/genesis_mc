@@ -52,7 +52,7 @@ pub enum SandboxError {
 
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SandboxHandle {
     repo_path: PathBuf,
     policy: SandboxPolicy,
@@ -65,6 +65,9 @@ pub struct SandboxHandle {
 struct WindowsKillOnCloseJob {
     handle: HANDLE,
 }
+
+#[cfg(target_os = "windows")]
+unsafe impl Send for WindowsKillOnCloseJob {}
 
 #[cfg(target_os = "windows")]
 impl Drop for WindowsKillOnCloseJob {
@@ -716,13 +719,29 @@ impl SandboxHandle {
         Ok(())
     }
 
-    pub async fn execute(
+    fn validate_execution_root(&self, execution_root: &Path) -> Result<(), SandboxError> {
+        if path_is_within_root(execution_root, &self.repo_path) {
+            Ok(())
+        } else {
+            Err(SandboxError::PolicyViolation {
+                detail: format!(
+                    "cwd fora da cerca do sandbox: '{}' (repo='{}')",
+                    execution_root.display(),
+                    self.repo_path.display()
+                ),
+            })
+        }
+    }
+
+    async fn execute_with_root(
         &self,
         command: &str,
         args: &[&str],
         timeout_secs: u64,
+        execution_root: &Path,
     ) -> Result<Vec<u8>, SandboxError> {
-        let resolved = resolve_command(command, args, &self.repo_path)?;
+        self.validate_execution_root(execution_root)?;
+        let resolved = resolve_command(command, args, execution_root)?;
         self.enforce_host_path_policy(&resolved)?;
         let requested_command = command.to_string();
         debug!(
@@ -731,6 +750,7 @@ impl SandboxHandle {
             args = ?truncated_args_preview(&resolved.args),
             env = ?truncated_env_preview(&resolved.env),
             repo_path = %self.repo_path.display(),
+            cwd = %execution_root.display(),
             policy = ?self.policy,
             timeout_secs,
             "Sandbox: iniciando processo efemero"
@@ -739,7 +759,7 @@ impl SandboxHandle {
         let mut process = tokio::process::Command::new(&resolved.program);
         process
             .args(&resolved.args)
-            .current_dir(&self.repo_path)
+            .current_dir(execution_root)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .stdin(std::process::Stdio::null())
@@ -770,7 +790,7 @@ impl SandboxHandle {
                     SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
                 })?,
                 requested_command.clone(),
-                self.repo_path.clone(),
+                execution_root.to_path_buf(),
                 pid,
                 "stdout",
                 last_activity,
@@ -783,7 +803,7 @@ impl SandboxHandle {
                     SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
                 })?,
                 requested_command.clone(),
-                self.repo_path.clone(),
+                execution_root.to_path_buf(),
                 pid,
                 "stderr",
                 last_activity,
@@ -815,7 +835,7 @@ impl SandboxHandle {
         match wait_outcome {
             ProcessWaitOutcome::Exited(status) => {
                 let _ = job_guard;
-                reap_command_orphans(&requested_command, &self.repo_path).await;
+                reap_command_orphans(&requested_command, execution_root).await;
                 let stdout_buffer = collect_output_task(stdout_task).await;
                 let stderr_buffer = collect_output_task(stderr_task).await;
                 self.lock_pids().remove(&pid);
@@ -826,6 +846,7 @@ impl SandboxHandle {
                     stdout_bytes = stdout_buffer.len(),
                     stderr_bytes = stderr_buffer.len(),
                     repo_path = %self.repo_path.display(),
+                    cwd = %execution_root.display(),
                     "Sandbox: processo efemero concluido"
                 );
                 if status.success() {
@@ -835,7 +856,7 @@ impl SandboxHandle {
                     let exit_code = status.code().unwrap_or(-1);
                     if requested_command == "semgrep" {
                         if let Some(diagnostics_path) = persist_semgrep_diagnostics(
-                            &self.repo_path,
+                            execution_root,
                             &resolved,
                             &stdout_buffer,
                             &stderr_buffer,
@@ -864,6 +885,7 @@ impl SandboxHandle {
                     command = %requested_command,
                     pid,
                     repo_path = %self.repo_path.display(),
+                    cwd = %execution_root.display(),
                     error = %e,
                     "Sandbox: erro ao aguardar termino do processo efemero"
                 );
@@ -874,6 +896,7 @@ impl SandboxHandle {
                     command = %requested_command,
                     pid,
                     repo_path = %self.repo_path.display(),
+                    cwd = %execution_root.display(),
                     idle_timeout_secs = timeout_profile.idle_timeout_secs,
                     absolute_timeout_secs = timeout_profile.absolute_timeout_secs,
                     "Sandbox: idle timeout atingido; aniquilando sidecar"
@@ -881,7 +904,7 @@ impl SandboxHandle {
                 let _ = child.kill().await;
                 let _ = job_guard;
                 kill_process_tree_by_pid(pid).await;
-                reap_command_orphans(&requested_command, &self.repo_path).await;
+                reap_command_orphans(&requested_command, execution_root).await;
                 let stdout_buffer = collect_output_task(stdout_task).await;
                 let stderr_buffer = collect_output_task(stderr_task).await;
                 self.lock_pids().remove(&pid);
@@ -891,6 +914,7 @@ impl SandboxHandle {
                     stdout_bytes = stdout_buffer.len(),
                     stderr_bytes = stderr_buffer.len(),
                     repo_path = %self.repo_path.display(),
+                    cwd = %execution_root.display(),
                     timeout_kind = "idle",
                     "Sandbox: sidecar aniquilado apos timeout"
                 );
@@ -901,6 +925,7 @@ impl SandboxHandle {
                     command = %requested_command,
                     pid,
                     repo_path = %self.repo_path.display(),
+                    cwd = %execution_root.display(),
                     idle_timeout_secs = timeout_profile.idle_timeout_secs,
                     absolute_timeout_secs = timeout_profile.absolute_timeout_secs,
                     "Sandbox: absolute timeout atingido; aniquilando sidecar"
@@ -908,7 +933,7 @@ impl SandboxHandle {
                 let _ = child.kill().await;
                 let _ = job_guard;
                 kill_process_tree_by_pid(pid).await;
-                reap_command_orphans(&requested_command, &self.repo_path).await;
+                reap_command_orphans(&requested_command, execution_root).await;
                 let stdout_buffer = collect_output_task(stdout_task).await;
                 let stderr_buffer = collect_output_task(stderr_task).await;
                 self.lock_pids().remove(&pid);
@@ -918,12 +943,34 @@ impl SandboxHandle {
                     stdout_bytes = stdout_buffer.len(),
                     stderr_bytes = stderr_buffer.len(),
                     repo_path = %self.repo_path.display(),
+                    cwd = %execution_root.display(),
                     timeout_kind = "absolute",
                     "Sandbox: sidecar aniquilado apos timeout"
                 );
                 Err(SandboxError::Timeout)
             }
         }
+    }
+
+    pub async fn execute(
+        &self,
+        command: &str,
+        args: &[&str],
+        timeout_secs: u64,
+    ) -> Result<Vec<u8>, SandboxError> {
+        self.execute_with_root(command, args, timeout_secs, &self.repo_path)
+            .await
+    }
+
+    pub async fn execute_in_dir(
+        &self,
+        command: &str,
+        args: &[&str],
+        timeout_secs: u64,
+        execution_root: &Path,
+    ) -> Result<Vec<u8>, SandboxError> {
+        self.execute_with_root(command, args, timeout_secs, execution_root)
+            .await
     }
 
     pub fn repo_path(&self) -> &Path {

@@ -1,15 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::env;
-use std::path::{Path, PathBuf};
+use std::future::Future;
+use std::path::{Component, Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use ignore::WalkBuilder;
 use quick_xml::de::from_str as xml_from_str;
 use regex::Regex;
 use rusqlite::params;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::error;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
+use tracing::{error, info, warn};
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::detect::{SingleStack, StackProfile};
@@ -18,16 +23,54 @@ use crate::harvester::sandbox::{SandboxError, truncated_args_preview};
 use crate::harvester::web_scraper;
 
 /// Trait para abstrair a execução no sandbox, permitindo mocks nos testes.
-#[allow(async_fn_in_trait)]
 pub trait SandboxExecutor {
-    async fn execute(&self, command: &str, args: &[&str], timeout_secs: u64) -> Result<Vec<u8>, SandboxError>;
+    fn execute<'a>(
+        &'a self,
+        command: &'a str,
+        args: &'a [&'a str],
+        timeout_secs: u64,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, SandboxError>> + Send + 'a>>;
+    fn execute_in_dir<'a>(
+        &'a self,
+        command: &'a str,
+        args: &'a [&'a str],
+        timeout_secs: u64,
+        execution_root: &'a Path,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, SandboxError>> + Send + 'a>>;
     fn repo_path(&self) -> &Path;
 }
 
 /// Implementação da trait SandboxExecutor para o SandboxHandle concreto.
 impl SandboxExecutor for crate::harvester::sandbox::SandboxHandle {
-    async fn execute(&self, command: &str, args: &[&str], timeout_secs: u64) -> Result<Vec<u8>, SandboxError> {
-        self.execute(command, args, timeout_secs).await
+    fn execute<'a>(
+        &'a self,
+        command: &'a str,
+        args: &'a [&'a str],
+        timeout_secs: u64,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, SandboxError>> + Send + 'a>> {
+        Box::pin(async move {
+            crate::harvester::sandbox::SandboxHandle::execute(self, command, args, timeout_secs)
+                .await
+        })
+    }
+
+    fn execute_in_dir<'a>(
+        &'a self,
+        command: &'a str,
+        args: &'a [&'a str],
+        timeout_secs: u64,
+        execution_root: &'a Path,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, SandboxError>> + Send + 'a>> {
+        Box::pin(async move {
+            crate::harvester::sandbox::SandboxHandle::execute_in_dir(
+                self,
+                command,
+                args,
+                timeout_secs,
+                execution_root,
+            )
+            .await
+        })
     }
 
     fn repo_path(&self) -> &Path {
@@ -998,20 +1041,44 @@ async fn execute_sidecar<E: SandboxExecutor>(
     timeout_secs: u64,
     exit_policy: SidecarExitPolicy,
 ) -> Result<Vec<u8>, SidecarError> {
+    execute_sidecar_in_dir(
+        executor,
+        binary,
+        args,
+        timeout_secs,
+        exit_policy,
+        executor.repo_path(),
+    )
+    .await
+}
+
+async fn execute_sidecar_in_dir<E: SandboxExecutor>(
+    executor: &E,
+    binary: &str,
+    args: &[&str],
+    timeout_secs: u64,
+    exit_policy: SidecarExitPolicy,
+    execution_root: &Path,
+) -> Result<Vec<u8>, SidecarError> {
     tracing::debug!(
         binary = %binary,
         args = ?truncated_args_preview(args),
         repo_path = %executor.repo_path().display(),
+        cwd = %execution_root.display(),
         timeout_secs,
         "Invocando sidecar"
     );
-    match executor.execute(binary, args, timeout_secs).await {
+    match executor
+        .execute_in_dir(binary, args, timeout_secs, execution_root)
+        .await
+    {
         Ok(bytes) => {
             let sanitized_bytes = sanitize_sidecar_output(executor.repo_path(), &bytes);
             tracing::debug!(
                 binary = %binary,
                 stdout_bytes = sanitized_bytes.len(),
                 repo_path = %executor.repo_path().display(),
+                cwd = %execution_root.display(),
                 "Sidecar concluido"
             );
             Ok(sanitized_bytes)
@@ -1785,6 +1852,8 @@ pub struct SodaHealthIssue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct SodaHealthToolResult {
     blade: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<String>,
     status: String,
     issue_count: usize,
     error: Option<String>,
@@ -1806,9 +1875,42 @@ pub struct PolyglotSastArtifacts {
 }
 
 pub struct PolyglotSastInput<'a, E: SandboxExecutor> {
-    pub executor: &'a E,
+    pub executor: Arc<E>,
     pub timeout_secs: u64,
     pub profile: &'a StackProfile,
+}
+
+const MONOREPO_SAST_MAX_PARALLEL: usize = 3;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ManifestKind {
+    CargoToml,
+    PackageJson,
+    MixExs,
+    GoMod,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct DiscoveredManifest {
+    kind: ManifestKind,
+    manifest_path: PathBuf,
+    execution_root: PathBuf,
+    scope: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SastExecutionTarget {
+    blade: StaticAnalysisBlade,
+    execution_root: PathBuf,
+    scope: String,
+}
+
+#[derive(Debug)]
+struct SastExecutionOutcome {
+    blade: StaticAnalysisBlade,
+    execution_root: PathBuf,
+    scope: String,
+    result: Result<Vec<u8>, SidecarError>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1843,6 +1945,119 @@ struct CppcheckLocation {
     line: Option<u32>,
 }
 
+fn monorepo_manifest_kind_for_name(file_name: &str) -> Option<ManifestKind> {
+    match file_name {
+        "Cargo.toml" => Some(ManifestKind::CargoToml),
+        "package.json" => Some(ManifestKind::PackageJson),
+        "mix.exs" => Some(ManifestKind::MixExs),
+        "go.mod" => Some(ManifestKind::GoMod),
+        _ => None,
+    }
+}
+
+fn should_skip_monorepo_dir(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .map(|name| matches!(name, ".git" | "node_modules" | "target" | "venv" | "dist"))
+        .unwrap_or(false)
+}
+
+fn scope_label_for_path(repo_path: &Path, execution_root: &Path) -> String {
+    execution_root
+        .strip_prefix(repo_path)
+        .ok()
+        .map(|value| value.to_string_lossy().replace('\\', "/"))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| ".".to_string())
+}
+
+fn discover_monorepo_manifests(repo_path: &Path) -> Vec<DiscoveredManifest> {
+    let mut builder = WalkBuilder::new(repo_path);
+    builder.hidden(false);
+    builder.git_ignore(false);
+    builder.git_global(false);
+    builder.git_exclude(false);
+    builder.parents(false);
+    builder.threads(1);
+    builder.filter_entry(|entry| !should_skip_monorepo_dir(entry.path()));
+
+    let mut manifests = Vec::new();
+    for entry in builder.build() {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        if !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let Some(file_name) = entry.path().file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let Some(kind) = monorepo_manifest_kind_for_name(file_name) else {
+            continue;
+        };
+        let execution_root = entry
+            .path()
+            .parent()
+            .unwrap_or(repo_path)
+            .to_path_buf();
+        manifests.push(DiscoveredManifest {
+            kind,
+            manifest_path: entry.path().to_path_buf(),
+            scope: scope_label_for_path(repo_path, &execution_root),
+            execution_root,
+        });
+    }
+    manifests.sort_by(|left, right| {
+        left.scope
+            .cmp(&right.scope)
+            .then_with(|| left.manifest_path.cmp(&right.manifest_path))
+    });
+    manifests.dedup_by(|left, right| left.kind == right.kind && left.execution_root == right.execution_root);
+    manifests
+}
+
+fn manifest_kind_for_blade(blade: StaticAnalysisBlade) -> Option<ManifestKind> {
+    match blade {
+        StaticAnalysisBlade::RustClippy => Some(ManifestKind::CargoToml),
+        StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc => Some(ManifestKind::PackageJson),
+        StaticAnalysisBlade::Sobelow => Some(ManifestKind::MixExs),
+        StaticAnalysisBlade::Govulncheck => Some(ManifestKind::GoMod),
+        _ => None,
+    }
+}
+
+fn execution_targets_for_blade(
+    repo_path: &Path,
+    manifests: &[DiscoveredManifest],
+    blade: StaticAnalysisBlade,
+) -> Vec<SastExecutionTarget> {
+    if let Some(kind) = manifest_kind_for_blade(blade) {
+        return manifests
+            .iter()
+            .filter(|manifest| manifest.kind == kind)
+            .map(|manifest| SastExecutionTarget {
+                blade,
+                execution_root: manifest.execution_root.clone(),
+                scope: manifest.scope.clone(),
+            })
+            .collect();
+    }
+
+    vec![SastExecutionTarget {
+        blade,
+        execution_root: repo_path.to_path_buf(),
+        scope: ".".to_string(),
+    }]
+}
+
+fn scoped_blade_label(blade: StaticAnalysisBlade, scope: &str) -> String {
+    if scope == "." {
+        blade_name(blade).to_string()
+    } else {
+        format!("{}@{scope}", blade_name(blade))
+    }
+}
+
 fn collapse_inline_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -1856,9 +2071,36 @@ fn sanitize_issue_level(level: &str) -> String {
     }
 }
 
-fn sanitize_issue_file(repo_path: &Path, value: &str) -> String {
-    sanitize_repo_relative_path(repo_path, value)
-        .unwrap_or_else(|| sanitize_host_paths_in_text(repo_path, value).replace('\\', "/"))
+fn normalize_relative_issue_file(repo_path: &Path, execution_root: &Path, value: &str) -> String {
+    let raw = value.trim().trim_matches('"');
+    if raw.is_empty() {
+        return String::new();
+    }
+
+    let candidate = Path::new(raw);
+    if candidate.is_absolute() {
+        return sanitize_repo_relative_path(repo_path, raw)
+            .unwrap_or_else(|| sanitize_host_paths_in_text(repo_path, raw).replace('\\', "/"));
+    }
+
+    let mut joined = PathBuf::new();
+    if let Ok(relative_root) = execution_root.strip_prefix(repo_path) {
+        joined.push(relative_root);
+    }
+    for component in candidate.components() {
+        match component {
+            Component::Normal(value) => joined.push(value),
+            Component::ParentDir => {
+                joined.pop();
+            }
+            Component::CurDir | Component::RootDir | Component::Prefix(_) => {}
+        }
+    }
+    joined.to_string_lossy().replace('\\', "/")
+}
+
+fn sanitize_issue_file(repo_path: &Path, execution_root: &Path, value: &str) -> String {
+    normalize_relative_issue_file(repo_path, execution_root, value)
 }
 
 fn sanitize_issue_message(repo_path: &Path, value: &str) -> String {
@@ -1868,6 +2110,7 @@ fn sanitize_issue_message(repo_path: &Path, value: &str) -> String {
 fn push_issue(
     issues: &mut Vec<SodaHealthIssue>,
     repo_path: &Path,
+    execution_root: &Path,
     level: &str,
     file: &str,
     message: &str,
@@ -1878,7 +2121,7 @@ fn push_issue(
     }
     issues.push(SodaHealthIssue {
         level: sanitize_issue_level(level),
-        file: sanitize_issue_file(repo_path, file),
+        file: sanitize_issue_file(repo_path, execution_root, file),
         message,
     });
 }
@@ -2042,23 +2285,29 @@ async fn run_sast_blade<E: SandboxExecutor>(
     executor: &E,
     blade: StaticAnalysisBlade,
     timeout_secs: u64,
+    execution_root: &Path,
 ) -> Result<Vec<u8>, SidecarError> {
     if blade == StaticAnalysisBlade::Opengrep {
         return run_opengrep_scan(executor, timeout_secs).await;
     }
     let (binary, args) = blade_command(blade);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-    execute_sidecar(
+    execute_sidecar_in_dir(
         executor,
         binary,
         &arg_refs,
         timeout_secs,
         SidecarExitPolicy::AllowFindingsExitOne,
+        execution_root,
     )
     .await
 }
 
-fn normalize_clippy_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+fn normalize_clippy_output(
+    repo_path: &Path,
+    execution_root: &Path,
+    bytes: &[u8],
+) -> Result<Vec<SodaHealthIssue>, SidecarError> {
     let text = String::from_utf8_lossy(bytes);
     let mut issues = Vec::new();
     for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
@@ -2093,13 +2342,17 @@ fn normalize_clippy_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHea
             .and_then(|span| span.get("file_name"))
             .and_then(|value| value.as_str())
             .unwrap_or("");
-        push_issue(&mut issues, repo_path, level, file, message);
+        push_issue(&mut issues, repo_path, execution_root, level, file, message);
     }
     sort_and_dedup_issues(&mut issues);
     Ok(issues)
 }
 
-fn normalize_cppcheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+fn normalize_cppcheck_output(
+    repo_path: &Path,
+    execution_root: &Path,
+    bytes: &[u8],
+) -> Result<Vec<SodaHealthIssue>, SidecarError> {
     let text = String::from_utf8_lossy(bytes);
     let xml_payload = extract_cppcheck_xml_payload(&text).ok_or_else(|| SidecarError::ParseError {
         reason: "Falha ao localizar payload XML do cppcheck".to_string(),
@@ -2125,6 +2378,7 @@ fn normalize_cppcheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaH
         push_issue(
             &mut issues,
             repo_path,
+            execution_root,
             error.severity.as_deref().unwrap_or("warning"),
             file,
             &format!("{rule}: {msg}{line}"),
@@ -2134,13 +2388,18 @@ fn normalize_cppcheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaH
     Ok(issues)
 }
 
-fn normalize_semgrep_like_json(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+fn normalize_semgrep_like_json(
+    repo_path: &Path,
+    execution_root: &Path,
+    bytes: &[u8],
+) -> Result<Vec<SodaHealthIssue>, SidecarError> {
     let payload = parse_json_payload::<SemgrepJsonPayload>(bytes)?;
     let mut issues = Vec::new();
     for result in payload.results {
         push_issue(
             &mut issues,
             repo_path,
+            execution_root,
             result.extra.severity.as_deref().unwrap_or("warning"),
             &result.path,
             &format!("{}: {}", result.check_id, result.extra.message),
@@ -2164,6 +2423,7 @@ fn json_value_at_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'
 
 fn normalize_json_array_issues(
     repo_path: &Path,
+    execution_root: &Path,
     items: &[serde_json::Value],
     file_keys: &[&str],
     level_keys: &[&str],
@@ -2189,20 +2449,33 @@ fn normalize_json_array_issues(
             .find_map(|key| value_as_u32(json_value_at_path(item, key)))
             .map(|line| format!(" (line {line})"))
             .unwrap_or_default();
-        push_issue(&mut issues, repo_path, level, file, &format!("{message}{line_suffix}"));
+        push_issue(
+            &mut issues,
+            repo_path,
+            execution_root,
+            level,
+            file,
+            &format!("{message}{line_suffix}"),
+        );
     }
     sort_and_dedup_issues(&mut issues);
     issues
 }
 
-fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+fn normalize_json_object_issues(
+    repo_path: &Path,
+    execution_root: &Path,
+    blade: StaticAnalysisBlade,
+    bytes: &[u8],
+) -> Result<Vec<SodaHealthIssue>, SidecarError> {
     if blade == StaticAnalysisBlade::Sobelow && stdout_is_blank(bytes) {
         return Ok(Vec::new());
     }
     let value = match parse_json_payload::<serde_json::Value>(bytes) {
         Ok(value) => value,
         Err(err) if blade == StaticAnalysisBlade::Sobelow => {
-            let fallback = normalize_sobelow_text_issues(repo_path, &String::from_utf8_lossy(bytes));
+            let fallback =
+                normalize_sobelow_text_issues(repo_path, execution_root, &String::from_utf8_lossy(bytes));
             if fallback.is_empty() {
                 return Err(SidecarError::ParseError {
                     reason: err.to_string(),
@@ -2222,6 +2495,7 @@ fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, by
             .map(|items| {
                 normalize_json_array_issues(
                     repo_path,
+                    execution_root,
                     items,
                     &["filename", "file"],
                     &["level", "severity"],
@@ -2236,6 +2510,7 @@ fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, by
             .map(|items| {
                 normalize_json_array_issues(
                     repo_path,
+                    execution_root,
                     items,
                     &["filename", "file"],
                     &["issue_severity", "severity"],
@@ -2253,6 +2528,7 @@ fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, by
             items.map(|items| {
                 normalize_json_array_issues(
                     repo_path,
+                    execution_root,
                     items,
                     &["file", "path", "filename"],
                     &["severity", "level", "confidence"],
@@ -2267,7 +2543,11 @@ fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, by
     Ok(issues)
 }
 
-fn normalize_sobelow_text_issues(repo_path: &Path, text: &str) -> Vec<SodaHealthIssue> {
+fn normalize_sobelow_text_issues(
+    repo_path: &Path,
+    execution_root: &Path,
+    text: &str,
+) -> Vec<SodaHealthIssue> {
     let finding_re = Regex::new(
         r#"%\{file: "(?P<file>[^"]+)", line: (?P<line>\d+), type: "(?P<kind>[^"]+)"(?:, variable: (?P<variable>"[^"]+"|:[^,}]+|[A-Za-z_][A-Za-z0-9_]*))?\}"#,
     )
@@ -2287,13 +2567,17 @@ fn normalize_sobelow_text_issues(repo_path: &Path, text: &str) -> Vec<SodaHealth
         } else {
             format!("{kind}: {variable} (line {line})")
         };
-        push_issue(&mut issues, repo_path, "warning", file, &message);
+        push_issue(&mut issues, repo_path, execution_root, "warning", file, &message);
     }
     sort_and_dedup_issues(&mut issues);
     issues
 }
 
-fn normalize_govulncheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+fn normalize_govulncheck_output(
+    repo_path: &Path,
+    execution_root: &Path,
+    bytes: &[u8],
+) -> Result<Vec<SodaHealthIssue>, SidecarError> {
     let text = String::from_utf8_lossy(bytes);
     let mut issues = Vec::new();
     for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
@@ -2327,7 +2611,7 @@ fn normalize_govulncheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<So
         } else {
             format!("{osv}: {}", format!("{package} {symbol}").trim())
         };
-        push_issue(&mut issues, repo_path, "error", file, &message);
+        push_issue(&mut issues, repo_path, execution_root, "error", file, &message);
     }
     sort_and_dedup_issues(&mut issues);
     Ok(issues)
@@ -2335,30 +2619,35 @@ fn normalize_govulncheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<So
 
 fn normalize_sast_output(
     repo_path: &Path,
+    execution_root: &Path,
     blade: StaticAnalysisBlade,
     bytes: &[u8],
 ) -> Result<Vec<SodaHealthIssue>, SidecarError> {
     match blade {
-        StaticAnalysisBlade::RustClippy => normalize_clippy_output(repo_path, bytes),
-        StaticAnalysisBlade::Cppcheck => normalize_cppcheck_output(repo_path, bytes),
-        StaticAnalysisBlade::Opengrep => normalize_semgrep_like_json(repo_path, bytes),
-        StaticAnalysisBlade::Govulncheck => normalize_govulncheck_output(repo_path, bytes),
+        StaticAnalysisBlade::RustClippy => normalize_clippy_output(repo_path, execution_root, bytes),
+        StaticAnalysisBlade::Cppcheck => normalize_cppcheck_output(repo_path, execution_root, bytes),
+        StaticAnalysisBlade::Opengrep => normalize_semgrep_like_json(repo_path, execution_root, bytes),
+        StaticAnalysisBlade::Govulncheck => normalize_govulncheck_output(repo_path, execution_root, bytes),
         StaticAnalysisBlade::Ruff
         | StaticAnalysisBlade::Bandit
         | StaticAnalysisBlade::Biome
         | StaticAnalysisBlade::Oxc
-        | StaticAnalysisBlade::Sobelow => normalize_json_object_issues(repo_path, blade, bytes),
+        | StaticAnalysisBlade::Sobelow => {
+            normalize_json_object_issues(repo_path, execution_root, blade, bytes)
+        }
     }
 }
 
 fn build_tool_result(
     blade: StaticAnalysisBlade,
+    scope: Option<String>,
     status: &str,
     issue_count: usize,
     error: Option<String>,
 ) -> SodaHealthToolResult {
     SodaHealthToolResult {
         blade: blade_name(blade).to_string(),
+        scope,
         status: status.to_string(),
         issue_count,
         error,
@@ -2389,48 +2678,184 @@ fn render_soda_health_report(
 pub struct PolyglotSastSidecar;
 
 impl PolyglotSastSidecar {
-    pub async fn extract<E: SandboxExecutor>(
+    pub async fn extract<E: SandboxExecutor + Send + Sync + 'static>(
         input: PolyglotSastInput<'_, E>,
     ) -> Result<PolyglotSastArtifacts, SidecarError> {
         let blades = route_static_analysis_blades(input.profile);
+        let repo_path = input.executor.repo_path().to_path_buf();
+        let manifests = discover_monorepo_manifests(&repo_path);
+        let manifest_summary = manifests
+            .iter()
+            .map(|manifest| format!("{}:{}", manifest.scope, manifest.manifest_path.display()))
+            .collect::<Vec<_>>();
+        info!(
+            repo_path = %repo_path.display(),
+            manifest_count = manifests.len(),
+            manifests = ?manifest_summary,
+            concurrency_limit = MONOREPO_SAST_MAX_PARALLEL,
+            "SAST monorepo: manifestos detectados"
+        );
+
         let mut all_issues = Vec::<SodaHealthIssue>::new();
         let mut tool_results = Vec::<SodaHealthToolResult>::new();
+        let semaphore = Arc::new(Semaphore::new(MONOREPO_SAST_MAX_PARALLEL));
+        let mut join_set = JoinSet::new();
 
         for blade in &blades {
-            match run_sast_blade(input.executor, *blade, input.timeout_secs).await {
-                Ok(bytes) => match normalize_sast_output(input.executor.repo_path(), *blade, &bytes) {
+            let targets = execution_targets_for_blade(&repo_path, &manifests, *blade);
+            if targets.is_empty() {
+                let reason = format!(
+                    "nenhum manifesto compatível foi encontrado para {}",
+                    blade_name(*blade)
+                );
+                warn!(
+                    blade = blade_name(*blade),
+                    repo_path = %repo_path.display(),
+                    reason = %reason,
+                    "SAST monorepo: lâmina sem manifesto compatível"
+                );
+                tool_results.push(build_tool_result(*blade, None, "skipped", 0, Some(reason)));
+                continue;
+            }
+
+            for target in targets {
+                let executor = Arc::clone(&input.executor);
+                let semaphore = Arc::clone(&semaphore);
+                let scope = target.scope.clone();
+                let execution_root = target.execution_root.clone();
+                join_set.spawn(async move {
+                    let permit = Arc::clone(&semaphore)
+                        .acquire_owned()
+                        .await
+                        .map_err(|e| SidecarError::ExecutionFailed {
+                            reason: format!("falha ao adquirir permissão do semáforo SAST: {e}"),
+                        })?;
+                    info!(
+                        blade = blade_name(target.blade),
+                        scope = %scope,
+                        cwd = %execution_root.display(),
+                        concurrency_limit = MONOREPO_SAST_MAX_PARALLEL,
+                        in_flight = MONOREPO_SAST_MAX_PARALLEL.saturating_sub(semaphore.available_permits()),
+                        "SAST monorepo: permissão adquirida"
+                    );
+                    let result = run_sast_blade(
+                        executor.as_ref(),
+                        target.blade,
+                        input.timeout_secs,
+                        &execution_root,
+                    )
+                    .await;
+                    drop(permit);
+                    info!(
+                        blade = blade_name(target.blade),
+                        scope = %scope,
+                        cwd = %execution_root.display(),
+                        available_permits = semaphore.available_permits(),
+                        "SAST monorepo: sub-scan concluído"
+                    );
+                    Ok::<SastExecutionOutcome, SidecarError>(SastExecutionOutcome {
+                        blade: target.blade,
+                        execution_root,
+                        scope,
+                        result,
+                    })
+                });
+            }
+        }
+
+        while let Some(joined) = join_set.join_next().await {
+            let outcome = match joined {
+                Ok(Ok(outcome)) => outcome,
+                Ok(Err(err)) => {
+                    push_issue(
+                        &mut all_issues,
+                        &repo_path,
+                        &repo_path,
+                        "warning",
+                        "",
+                        &format!("sast worker execution failed: {err}"),
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    push_issue(
+                        &mut all_issues,
+                        &repo_path,
+                        &repo_path,
+                        "warning",
+                        "",
+                        &format!("sast worker join failed: {err}"),
+                    );
+                    continue;
+                }
+            };
+
+            let scoped_blade = scoped_blade_label(outcome.blade, &outcome.scope);
+            match outcome.result {
+                Ok(bytes) => match normalize_sast_output(
+                    &repo_path,
+                    &outcome.execution_root,
+                    outcome.blade,
+                    &bytes,
+                ) {
                     Ok(mut issues) => {
                         let issue_count = issues.len();
                         all_issues.append(&mut issues);
-                        tool_results.push(build_tool_result(*blade, "ok", issue_count, None));
+                        tool_results.push(build_tool_result(
+                            outcome.blade,
+                            Some(outcome.scope),
+                            "ok",
+                            issue_count,
+                            None,
+                        ));
                     }
                     Err(err) => {
                         let reason = err.to_string();
                         push_issue(
                             &mut all_issues,
-                            input.executor.repo_path(),
+                            &repo_path,
+                            &outcome.execution_root,
                             "warning",
                             "",
-                            &format!("{} normalization failed: {reason}", blade_name(*blade)),
+                            &format!("{scoped_blade} normalization failed: {reason}"),
                         );
-                        tool_results.push(build_tool_result(*blade, "parse_error", 0, Some(reason)));
+                        tool_results.push(build_tool_result(
+                            outcome.blade,
+                            Some(outcome.scope),
+                            "parse_error",
+                            0,
+                            Some(reason),
+                        ));
                     }
                 },
                 Err(err) => {
                     let reason = err.to_string();
                     push_issue(
                         &mut all_issues,
-                        input.executor.repo_path(),
+                        &repo_path,
+                        &outcome.execution_root,
                         "warning",
                         "",
-                        &format!("{} execution failed: {reason}", blade_name(*blade)),
+                        &format!("{scoped_blade} execution failed: {reason}"),
                     );
-                    tool_results.push(build_tool_result(*blade, "exec_error", 0, Some(reason)));
+                    tool_results.push(build_tool_result(
+                        outcome.blade,
+                        Some(outcome.scope),
+                        "exec_error",
+                        0,
+                        Some(reason),
+                    ));
                 }
             }
         }
 
         sort_and_dedup_issues(&mut all_issues);
+        tool_results.sort_by(|left, right| {
+            left.blade
+                .cmp(&right.blade)
+                .then_with(|| left.scope.cmp(&right.scope))
+                .then_with(|| left.status.cmp(&right.status))
+        });
         let unsafe_issues = all_issues
             .iter()
             .filter(|issue| issue.level != "info")
@@ -2876,6 +3301,14 @@ mod tests {
             self.calls.lock().unwrap().clone()
         }
 
+        fn write_repo_file(&self, relative_path: &str, contents: &str) {
+            let path = self.repo_path.join(relative_path);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(path, contents).unwrap();
+        }
+
     }
 
     #[test]
@@ -2895,15 +3328,45 @@ mod tests {
     }
 
     impl SandboxExecutor for MockExecutor {
-        async fn execute(&self, command: &str, args: &[&str], _timeout_secs: u64) -> Result<Vec<u8>, SandboxError> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("{} {}", command, args.join(" ")).trim().to_string());
-            let mut guard = self.responses.lock().unwrap();
-            guard.pop_front().unwrap_or_else(|| {
-                Err(SandboxError::ProcessSpawnFailed {
-                    reason: "no mock response configured".to_string(),
+        fn execute<'a>(
+            &'a self,
+            command: &'a str,
+            args: &'a [&'a str],
+            _timeout_secs: u64,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, SandboxError>> + Send + 'a>> {
+            Box::pin(async move {
+                self.calls
+                    .lock()
+                    .unwrap()
+                    .push(format!("{} {}", command, args.join(" ")).trim().to_string());
+                let mut guard = self.responses.lock().unwrap();
+                guard.pop_front().unwrap_or_else(|| {
+                    Err(SandboxError::ProcessSpawnFailed {
+                        reason: "no mock response configured".to_string(),
+                    })
+                })
+            })
+        }
+
+        fn execute_in_dir<'a>(
+            &'a self,
+            command: &'a str,
+            args: &'a [&'a str],
+            _timeout_secs: u64,
+            execution_root: &'a Path,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, SandboxError>> + Send + 'a>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(format!(
+                    "{} {} [cwd={}]",
+                    command,
+                    args.join(" "),
+                    execution_root.display()
+                ).trim().to_string());
+                let mut guard = self.responses.lock().unwrap();
+                guard.pop_front().unwrap_or_else(|| {
+                    Err(SandboxError::ProcessSpawnFailed {
+                        reason: "no mock response configured".to_string(),
+                    })
                 })
             })
         }
@@ -3757,6 +4220,7 @@ mod tests {
 
         let normalized = normalize_sast_output(
             repo_path,
+            repo_path,
             StaticAnalysisBlade::RustClippy,
             payload.as_bytes(),
         )
@@ -3777,7 +4241,7 @@ mod tests {
         let cppcheck_payload = r#"<results><errors><error id="memleak" severity="warning" msg="Memory leak: ptr"><location file="native/bridge.cpp" line="42"/></error></errors></results>"#;
         let opengrep_payload = r#"{"results":[{"check_id":"soda.tech-debt.todo-fixme","path":"README.md","extra":{"message":"Marcador de divida tecnica encontrado","severity":"INFO"}}]}"#;
 
-        let executor = MockExecutor::new(vec![
+        let executor = Arc::new(MockExecutor::new(vec![
             Err(SandboxError::ProcessNonZeroExit {
                 exit_code: 1,
                 stderr: "findings".to_string(),
@@ -3789,10 +4253,11 @@ mod tests {
                 stdout: Vec::new(),
             }),
             Ok(opengrep_payload.as_bytes().to_vec()),
-        ]);
+        ]));
+        executor.write_repo_file("Cargo.toml", "[package]\nname='repo'\nversion='0.1.0'\n");
 
         let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
-            executor: &executor,
+            executor: Arc::clone(&executor),
             timeout_secs: 60,
             profile: &StackProfile::Mixed(vec![SingleStack::Rust, SingleStack::CCpp]),
         })
@@ -3809,6 +4274,7 @@ mod tests {
                 && call.contains("--json")
                 && call.contains("--disable-version-check")
                 && call.contains("--taint-intrafile")
+                && call.contains("[cwd=")
         }));
         assert!(unsafe_blob.contains("\"issues\""));
         assert!(unsafe_blob.contains("src/lib.rs"));
@@ -3816,6 +4282,7 @@ mod tests {
         assert!(health_blob.contains("\"router\""));
         assert!(health_blob.contains("\"opengrep\""));
         assert!(health_blob.contains(r#""blade": "opengrep""#));
+        assert!(health_blob.contains(r#""scope": ".""#));
     }
 
     #[test]
@@ -3828,7 +4295,7 @@ mod tests {
             "<location file=\"src/main.c\" line=\"42\"/></error></errors></results>"
         );
 
-        let issues = normalize_cppcheck_output(repo_path, payload.as_bytes()).unwrap();
+        let issues = normalize_cppcheck_output(repo_path, repo_path, payload.as_bytes()).unwrap();
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].file, "src/main.c");
         assert!(issues[0].message.contains("memleak"));
@@ -3872,7 +4339,7 @@ Done in 1.23s"#;
     fn test_sobelow_empty_payload_degrades_without_parse_error() {
         let repo_path = Path::new("C:/repos/example");
         let issues =
-            normalize_sast_output(repo_path, StaticAnalysisBlade::Sobelow, b"").unwrap();
+            normalize_sast_output(repo_path, repo_path, StaticAnalysisBlade::Sobelow, b"").unwrap();
         assert!(issues.is_empty());
     }
 
@@ -3882,11 +4349,66 @@ Done in 1.23s"#;
         let payload = r#"** (UndefinedFunctionError) function Jason.encode!/2 is undefined (module Jason is not available)
     Jason.encode!(%{findings: %{high_confidence: [%{file: "C:/repos/jido/lib/jido/storage/redis.ex", line: 337, type: "Misc.BinToTerm: Unsafe `binary_to_term`", variable: :binary}], low_confidence: [%{file: "C:/repos/jido/lib/jido/plugin/instance.ex", line: 123, type: "DOS.StringToAtom: Unsafe `String.to_atom`", variable: "base_key and as_alias"}], medium_confidence: []}, sobelow_version: "0.14.1", total_findings: 2}, [pretty: true])"#;
 
-        let issues = normalize_sobelow_text_issues(repo_path, payload);
+        let issues = normalize_sobelow_text_issues(repo_path, repo_path, payload);
         assert_eq!(issues.len(), 2);
         assert_eq!(issues[0].file, "lib/jido/plugin/instance.ex");
         assert!(issues[0].message.contains("String.to_atom"));
         assert_eq!(issues[1].file, "lib/jido/storage/redis.ex");
         assert!(issues[1].message.contains("binary_to_term"));
+    }
+
+    #[test]
+    fn test_discover_monorepo_manifests_ignores_heavy_directories() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("Cargo.toml", "[package]\nname='root'\nversion='0.1.0'\n");
+        executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
+        executor.write_repo_file("node_modules/ignored/package.json", "{}");
+        executor.write_repo_file("target/ignored/Cargo.toml", "[package]\nname='ignored'\nversion='0.1.0'\n");
+
+        let manifests = discover_monorepo_manifests(executor.repo_path());
+        let scopes = manifests.iter().map(|manifest| manifest.scope.clone()).collect::<Vec<_>>();
+
+        assert!(scopes.contains(&".".to_string()));
+        assert!(scopes.contains(&"apps/rust-sdk".to_string()));
+        assert!(!scopes.iter().any(|scope| scope.contains("node_modules")));
+        assert!(!scopes.iter().any(|scope| scope.contains("target")));
+    }
+
+    #[test]
+    fn test_normalize_relative_issue_file_prefixes_subproject_scope() {
+        let repo_path = Path::new("C:/repos/firecrawl");
+        let execution_root = Path::new("C:/repos/firecrawl/apps/rust-sdk");
+        let normalized = normalize_relative_issue_file(repo_path, execution_root, "src/lib.rs");
+        assert_eq!(normalized, "apps/rust-sdk/src/lib.rs");
+    }
+
+    #[tokio::test]
+    async fn test_polyglot_sast_sidecar_executes_rust_subprojects_with_scoped_cwd() {
+        let clippy_payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"lint in workspace member","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}"#;
+        let executor = Arc::new(MockExecutor::new(vec![
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 1,
+                stderr: "findings".to_string(),
+                stdout: clippy_payload.as_bytes().to_vec(),
+            }),
+            Ok(br#"{"results":[]}"#.to_vec()),
+        ]));
+        executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
+
+        let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
+            executor: Arc::clone(&executor),
+            timeout_secs: 60,
+            profile: &StackProfile::Rust,
+        })
+        .await
+        .unwrap();
+        let health_blob = String::from_utf8(artifacts.health_report_blob).unwrap();
+
+        assert!(executor.calls().iter().any(|call| {
+            call.starts_with("cargo clippy")
+                && (call.contains("apps\\rust-sdk") || call.contains("apps/rust-sdk"))
+        }));
+        assert!(health_blob.contains("apps/rust-sdk/src/lib.rs"));
+        assert!(health_blob.contains(r#""scope": "apps/rust-sdk""#));
     }
 }
