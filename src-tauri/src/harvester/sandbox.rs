@@ -138,8 +138,16 @@ struct ResolvedCommand {
 }
 
 const IDLE_TIMEOUT_SECS: u64 = 45;
-const ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 15 * 60;
+const DEEP_FLOW_IDLE_TIMEOUT_SECS: u64 = 180;
+const ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 5 * 60;
+const DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 10 * 60;
 const PROCESS_WAIT_POLL_INTERVAL_MS: u64 = 250;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TimeoutProfile {
+    idle_timeout_secs: u64,
+    absolute_timeout_secs: u64,
+}
 
 pub(crate) fn truncated_args_preview<S: AsRef<str>>(args: &[S]) -> Vec<String> {
     const MAX_ARGS_PREVIEW: usize = 3;
@@ -173,6 +181,19 @@ enum ProcessWaitOutcome {
     WaitError(std::io::Error),
     IdleTimeout,
     AbsoluteTimeout,
+}
+
+fn timeout_profile(command: &str, requested_timeout_secs: u64) -> TimeoutProfile {
+    match command {
+        "opengrep" | "govulncheck" => TimeoutProfile {
+            idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
+            absolute_timeout_secs: requested_timeout_secs.max(DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS),
+        },
+        _ => TimeoutProfile {
+            idle_timeout_secs: IDLE_TIMEOUT_SECS,
+            absolute_timeout_secs: requested_timeout_secs.max(ABSOLUTE_TIMEOUT_FLOOR_SECS),
+        },
+    }
 }
 
 fn truncated_env_preview(env: &BTreeMap<String, String>) -> Vec<String> {
@@ -768,17 +789,21 @@ impl SandboxHandle {
                 last_activity,
             ))
         };
-        let absolute_timeout_secs = timeout_secs.max(ABSOLUTE_TIMEOUT_FLOOR_SECS);
+        let timeout_profile = timeout_profile(command, timeout_secs);
         let started_at = Instant::now();
 
         let wait_outcome = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break ProcessWaitOutcome::Exited(status),
                 Ok(None) => {
-                    if idle_elapsed(&last_activity) >= Duration::from_secs(IDLE_TIMEOUT_SECS) {
+                    if idle_elapsed(&last_activity)
+                        >= Duration::from_secs(timeout_profile.idle_timeout_secs)
+                    {
                         break ProcessWaitOutcome::IdleTimeout;
                     }
-                    if started_at.elapsed() >= Duration::from_secs(absolute_timeout_secs) {
+                    if started_at.elapsed()
+                        >= Duration::from_secs(timeout_profile.absolute_timeout_secs)
+                    {
                         break ProcessWaitOutcome::AbsoluteTimeout;
                     }
                     tokio::time::sleep(Duration::from_millis(PROCESS_WAIT_POLL_INTERVAL_MS)).await;
@@ -849,8 +874,8 @@ impl SandboxHandle {
                     command = %requested_command,
                     pid,
                     repo_path = %self.repo_path.display(),
-                    idle_timeout_secs = IDLE_TIMEOUT_SECS,
-                    absolute_timeout_secs,
+                    idle_timeout_secs = timeout_profile.idle_timeout_secs,
+                    absolute_timeout_secs = timeout_profile.absolute_timeout_secs,
                     "Sandbox: idle timeout atingido; aniquilando sidecar"
                 );
                 let _ = child.kill().await;
@@ -876,8 +901,8 @@ impl SandboxHandle {
                     command = %requested_command,
                     pid,
                     repo_path = %self.repo_path.display(),
-                    idle_timeout_secs = IDLE_TIMEOUT_SECS,
-                    absolute_timeout_secs,
+                    idle_timeout_secs = timeout_profile.idle_timeout_secs,
+                    absolute_timeout_secs = timeout_profile.absolute_timeout_secs,
                     "Sandbox: absolute timeout atingido; aniquilando sidecar"
                 );
                 let _ = child.kill().await;
@@ -1049,5 +1074,46 @@ mod tests {
             assert!(program.ends_with("/mix") || program == "mix");
             assert_eq!(resolved.args, vec!["sobelow", "--format", "json", "--private"]);
         }
+    }
+
+    #[test]
+    fn test_timeout_profile_promotes_deep_flow_tools() {
+        let normal = timeout_profile("cppcheck", 30);
+        assert_eq!(normal.idle_timeout_secs, IDLE_TIMEOUT_SECS);
+        assert_eq!(normal.absolute_timeout_secs, ABSOLUTE_TIMEOUT_FLOOR_SECS);
+
+        let heavy = timeout_profile("opengrep", 30);
+        assert_eq!(heavy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
+        assert_eq!(
+            heavy.absolute_timeout_secs,
+            DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_uses_repo_root_as_cwd() {
+        let _guard = get_test_mutex().await.lock().await;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_dir = temp_dir.path().join("cwd-check");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+        let repo_path = RepoPath(repo_dir.clone());
+
+        let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly)
+            .await
+            .unwrap();
+
+        #[cfg(target_os = "windows")]
+        let output = sandbox
+            .execute("cmd", &["/C", "cd"], 30)
+            .await
+            .unwrap();
+
+        #[cfg(not(target_os = "windows"))]
+        let output = sandbox.execute("pwd", &[], 30).await.unwrap();
+
+        let output_str = String::from_utf8_lossy(&output).trim().replace('\\', "/");
+        let expected = repo_dir.to_string_lossy().replace('\\', "/");
+        assert_eq!(output_str, expected);
     }
 }

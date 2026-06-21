@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use quick_xml::de::from_str as xml_from_str;
 use regex::Regex;
 use rusqlite::params;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::error;
@@ -439,7 +440,7 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
 }
 
 fn stdout_contains_json_payload(bytes: &[u8]) -> bool {
-    serde_json::from_slice::<serde_json::Value>(bytes).is_ok()
+    extract_json_payload(bytes).is_some()
 }
 
 fn is_sobelow_mix_invocation<S: AsRef<str>>(binary: &str, args: &[S]) -> bool {
@@ -447,14 +448,52 @@ fn is_sobelow_mix_invocation<S: AsRef<str>>(binary: &str, args: &[S]) -> bool {
 }
 
 fn extract_cppcheck_xml_payload(text: &str) -> Option<&str> {
-    let trimmed = text.trim_start();
-    if trimmed.starts_with("<?xml") || trimmed.starts_with("<results>") {
-        return Some(trimmed);
+    extract_xml_payload(text.as_bytes())
+        .and_then(|bytes| std::str::from_utf8(bytes).ok())
+}
+
+fn extract_json_payload(bytes: &[u8]) -> Option<&[u8]> {
+    let first_candidate = bytes
+        .iter()
+        .enumerate()
+        .filter(|(_, byte)| matches!(**byte, b'{' | b'['))
+        .map(|(index, _)| index)
+        .next()?;
+
+    for index in bytes
+        .iter()
+        .enumerate()
+        .filter(|(_, byte)| matches!(**byte, b'{' | b'['))
+        .map(|(index, _)| index)
+    {
+        let candidate = &bytes[index..];
+        let mut stream = serde_json::Deserializer::from_slice(candidate).into_iter::<serde_json::Value>();
+        if stream.next().and_then(Result::ok).is_some() {
+            return Some(&candidate[..stream.byte_offset()]);
+        }
     }
 
-    text.find("<?xml")
-        .or_else(|| text.find("<results>"))
-        .map(|index| &text[index..])
+    Some(&bytes[first_candidate..])
+}
+
+fn extract_xml_payload(bytes: &[u8]) -> Option<&[u8]> {
+    let first_candidate = bytes.iter().position(|byte| *byte == b'<')?;
+    let text = std::str::from_utf8(bytes).ok()?;
+
+    if let Some(index) = text.find("<?xml").or_else(|| text.find("<results")) {
+        return Some(&bytes[index..]);
+    }
+
+    Some(&bytes[first_candidate..])
+}
+
+fn parse_json_payload<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, SidecarError> {
+    let payload = extract_json_payload(bytes).ok_or_else(|| SidecarError::ParseError {
+        reason: "Falha ao localizar payload JSON no stdout do sidecar".to_string(),
+    })?;
+    serde_json::from_slice::<T>(payload).map_err(|e| SidecarError::ParseError {
+        reason: e.to_string(),
+    })
 }
 
 const BLOB_06_UNSAFE_HOTSPOTS_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
@@ -1170,9 +1209,7 @@ impl OxcSidecar {
             SidecarExitPolicy::StrictZeroOnly,
         )
         .await?;
-        serde_json::from_slice::<UxContractsPayload>(&bytes).map_err(|e| SidecarError::ParseError {
-            reason: e.to_string(),
-        })
+        parse_json_payload::<UxContractsPayload>(&bytes)
     }
 }
 
@@ -1734,9 +1771,7 @@ impl StaticAnalysisSidecar {
             SidecarExitPolicy::AllowFindingsExitOne,
         )
         .await?;
-        serde_json::from_slice::<StaticAnalysisPayload>(&bytes).map_err(|e| SidecarError::ParseError {
-            reason: e.to_string(),
-        })
+        parse_json_payload::<StaticAnalysisPayload>(&bytes)
     }
 }
 
@@ -2100,9 +2135,7 @@ fn normalize_cppcheck_output(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaH
 }
 
 fn normalize_semgrep_like_json(repo_path: &Path, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
-    let payload = serde_json::from_slice::<SemgrepJsonPayload>(bytes).map_err(|e| SidecarError::ParseError {
-        reason: e.to_string(),
-    })?;
+    let payload = parse_json_payload::<SemgrepJsonPayload>(bytes)?;
     let mut issues = Vec::new();
     for result in payload.results {
         push_issue(
@@ -2163,7 +2196,10 @@ fn normalize_json_array_issues(
 }
 
 fn normalize_json_object_issues(repo_path: &Path, blade: StaticAnalysisBlade, bytes: &[u8]) -> Result<Vec<SodaHealthIssue>, SidecarError> {
-    let value = match serde_json::from_slice::<serde_json::Value>(bytes) {
+    if blade == StaticAnalysisBlade::Sobelow && stdout_is_blank(bytes) {
+        return Ok(Vec::new());
+    }
+    let value = match parse_json_payload::<serde_json::Value>(bytes) {
         Ok(value) => value,
         Err(err) if blade == StaticAnalysisBlade::Sobelow => {
             let fallback = normalize_sobelow_text_issues(repo_path, &String::from_utf8_lossy(bytes));
@@ -2516,9 +2552,7 @@ fn normalize_semgrep_payload(
     repo_path: &Path,
     bytes: &[u8],
 ) -> Result<SemgrepNormalizedPayload, SidecarError> {
-    let payload = serde_json::from_slice::<SemgrepJsonPayload>(bytes).map_err(|e| SidecarError::ParseError {
-        reason: e.to_string(),
-    })?;
+    let payload = parse_json_payload::<SemgrepJsonPayload>(bytes)?;
 
     let files_analyzed = payload
         .paths
@@ -3801,10 +3835,45 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_json_payload_discards_terminal_noise_prefix() {
+        let bytes = br#"warning: compiling helper
+progress 10%
+{"results":[{"ok":true}]}"#;
+        let payload = extract_json_payload(bytes).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(payload).unwrap();
+        assert_eq!(value["results"][0]["ok"], true);
+    }
+
+    #[test]
+    fn test_extract_json_payload_discards_terminal_noise_suffix() {
+        let bytes = br#"{"results":[{"ok":true}]}
+Done in 1.23s"#;
+        let payload = extract_json_payload(bytes).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(payload).unwrap();
+        assert_eq!(value["results"][0]["ok"], true);
+    }
+
+    #[test]
+    fn test_extract_xml_payload_discards_terminal_noise_prefix() {
+        let text = "Checking src/main.c ...\n<results><errors></errors></results>";
+        let payload = extract_xml_payload(text.as_bytes()).unwrap();
+        let payload = std::str::from_utf8(payload).unwrap();
+        assert!(payload.starts_with("<results>"));
+    }
+
+    #[test]
     fn test_sobelow_blade_uses_mix_with_private_json_flags() {
         let (binary, args) = blade_command(StaticAnalysisBlade::Sobelow);
         assert_eq!(binary, "mix");
         assert_eq!(args, vec!["sobelow", "--format", "json", "--private"]);
+    }
+
+    #[test]
+    fn test_sobelow_empty_payload_degrades_without_parse_error() {
+        let repo_path = Path::new("C:/repos/example");
+        let issues =
+            normalize_sast_output(repo_path, StaticAnalysisBlade::Sobelow, b"").unwrap();
+        assert!(issues.is_empty());
     }
 
     #[test]

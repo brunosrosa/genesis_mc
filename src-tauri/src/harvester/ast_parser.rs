@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
 use thiserror::Error;
+use tree_sitter::{Language, Node, Parser};
 use tree_sitter_language_pack::{process, ProcessConfig};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,32 +78,14 @@ pub fn extract_repository_outline_native(
             reason: e.to_string(),
         })?;
 
-        let mut config = ProcessConfig::new(&language);
-        config.structure = true;
-        config.imports = true;
-        config.exports = false;
-        config.comments = false;
-        config.docstrings = false;
-        config.symbols = false;
-        config.diagnostics = true;
-
-        let processed = process(&source, &config).map_err(|e| AstParserError::ParseFailure {
-            file: relative_path.clone(),
-            language: language.clone(),
-            reason: e.to_string(),
-        })?;
-
-        let signatures = processed
-            .structure
-            .iter()
-            .flat_map(flatten_structure_signatures)
-            .collect::<Vec<_>>();
+        let (signatures, import_edges) =
+            extract_structural_signatures(&source, &language, &relative_path)?;
 
         if signatures.is_empty() {
             continue;
         }
 
-        total_import_edges += processed.imports.len();
+        total_import_edges += import_edges;
         total_signatures += signatures.len();
         *languages.entry(language.clone()).or_insert(0) += 1;
 
@@ -246,6 +229,7 @@ fn detect_language(path: &Path) -> Option<String> {
         "cc" | "cpp" | "cxx" | "hpp" | "hh" | "hxx" => "cpp",
         "swift" => "swift",
         "cs" => "c_sharp",
+        "yaml" | "yml" => "yaml",
         "rb" => "ruby",
         "php" => "php",
         "scala" => "scala",
@@ -258,6 +242,171 @@ fn detect_language(path: &Path) -> Option<String> {
         _ => return None,
     };
     Some(language.to_string())
+}
+
+fn extract_structural_signatures(
+    source: &str,
+    language: &str,
+    relative_path: &str,
+) -> Result<(Vec<String>, usize), AstParserError> {
+    match language {
+        "c_sharp" | "yaml" => extract_with_tree_sitter_fallback(source, language, relative_path),
+        _ => extract_with_language_pack(source, language, relative_path),
+    }
+}
+
+fn extract_with_language_pack(
+    source: &str,
+    language: &str,
+    relative_path: &str,
+) -> Result<(Vec<String>, usize), AstParserError> {
+    let mut config = ProcessConfig::new(language);
+    config.structure = true;
+    config.imports = true;
+    config.exports = false;
+    config.comments = false;
+    config.docstrings = false;
+    config.symbols = false;
+    config.diagnostics = true;
+
+    let processed = process(source, &config).map_err(|e| AstParserError::ParseFailure {
+        file: relative_path.to_string(),
+        language: language.to_string(),
+        reason: e.to_string(),
+    })?;
+
+    let signatures = processed
+        .structure
+        .iter()
+        .flat_map(flatten_structure_signatures)
+        .collect::<Vec<_>>();
+
+    Ok((signatures, processed.imports.len()))
+}
+
+fn extract_with_tree_sitter_fallback(
+    source: &str,
+    language: &str,
+    relative_path: &str,
+) -> Result<(Vec<String>, usize), AstParserError> {
+    let ts_language = fallback_tree_sitter_language(language).ok_or_else(|| AstParserError::ParseFailure {
+        file: relative_path.to_string(),
+        language: language.to_string(),
+        reason: "grammar tree-sitter nativa indisponivel".to_string(),
+    })?;
+
+    let mut parser = Parser::new();
+    parser
+        .set_language(&ts_language)
+        .map_err(|e| AstParserError::ParseFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            reason: format!("falha ao registrar grammar nativa: {e}"),
+        })?;
+
+    let tree = parser.parse(source, None).ok_or_else(|| AstParserError::ParseFailure {
+        file: relative_path.to_string(),
+        language: language.to_string(),
+        reason: "parser nativo retornou arvore vazia".to_string(),
+    })?;
+
+    let mut signatures = Vec::new();
+    collect_fallback_signatures(language, source.as_bytes(), tree.root_node(), &mut signatures);
+    signatures.sort();
+    signatures.dedup();
+    if signatures.is_empty() {
+        signatures.push(match language {
+            "yaml" => "yaml document <root>".to_string(),
+            "c_sharp" => "c# compilation_unit <root>".to_string(),
+            _ => format!("{language} <root>"),
+        });
+    }
+
+    Ok((signatures, 0))
+}
+
+fn fallback_tree_sitter_language(language: &str) -> Option<Language> {
+    match language {
+        "c_sharp" => Some(tree_sitter_c_sharp::LANGUAGE.into()),
+        "yaml" => Some(tree_sitter_yaml::LANGUAGE.into()),
+        _ => None,
+    }
+}
+
+fn collect_fallback_signatures(
+    language: &str,
+    source: &[u8],
+    node: Node<'_>,
+    out: &mut Vec<String>,
+) {
+    if let Some(signature) = fallback_signature_for_node(language, source, node) {
+        out.push(signature);
+    }
+
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        collect_fallback_signatures(language, source, child, out);
+    }
+}
+
+fn fallback_signature_for_node(language: &str, source: &[u8], node: Node<'_>) -> Option<String> {
+    match language {
+        "c_sharp" => csharp_signature_for_node(source, node),
+        "yaml" => yaml_signature_for_node(source, node),
+        _ => None,
+    }
+}
+
+fn csharp_signature_for_node(source: &[u8], node: Node<'_>) -> Option<String> {
+    let label = match node.kind() {
+        "namespace_declaration" => "namespace",
+        "class_declaration" => "class",
+        "interface_declaration" => "interface",
+        "struct_declaration" => "struct",
+        "enum_declaration" => "enum",
+        "record_declaration" => "record",
+        "method_declaration" => "method",
+        "constructor_declaration" => "constructor",
+        "property_declaration" => "property",
+        "field_declaration" => "field",
+        _ => return None,
+    };
+
+    let name = node_text_by_field(node, source, &["name", "identifier"])
+        .unwrap_or_else(|| compact_node_text(node, source, 80));
+    Some(format!("c# {label} {name}"))
+}
+
+fn yaml_signature_for_node(source: &[u8], node: Node<'_>) -> Option<String> {
+    match node.kind() {
+        "stream" => Some("yaml stream <root>".to_string()),
+        "document" => Some("yaml document <document>".to_string()),
+        "block_mapping_pair" | "flow_pair" => {
+            let key = node_text_by_field(node, source, &["key"])
+                .or_else(|| node.named_child(0).map(|child| compact_node_text(child, source, 80)))
+                .unwrap_or_else(|| "<pair>".to_string());
+            Some(format!("yaml key {key}"))
+        }
+        "block_sequence_item" => Some(format!(
+            "yaml sequence-item {}",
+            compact_node_text(node, source, 80)
+        )),
+        _ => None,
+    }
+}
+
+fn node_text_by_field(node: Node<'_>, source: &[u8], fields: &[&str]) -> Option<String> {
+    fields
+        .iter()
+        .find_map(|field| node.child_by_field_name(field))
+        .map(|child| compact_node_text(child, source, 80))
+        .filter(|value| !value.is_empty())
+}
+
+fn compact_node_text(node: Node<'_>, source: &[u8], max_chars: usize) -> String {
+    let raw = node.utf8_text(source).unwrap_or("").replace('\n', " ");
+    let compact = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    truncate_chars(compact.trim(), max_chars)
 }
 
 fn flatten_structure_signatures(
@@ -410,6 +559,41 @@ mod tests {
         assert_eq!(detect_language(Path::new("src/lib.rs")).as_deref(), Some("rust"));
         assert_eq!(detect_language(Path::new("src/app.ts")).as_deref(), Some("typescript"));
         assert_eq!(detect_language(Path::new("main.py")).as_deref(), Some("python"));
+        assert_eq!(detect_language(Path::new("Program.cs")).as_deref(), Some("c_sharp"));
+        assert_eq!(detect_language(Path::new("config.yaml")).as_deref(), Some("yaml"));
+        assert_eq!(detect_language(Path::new("config.yml")).as_deref(), Some("yaml"));
         assert_eq!(detect_language(Path::new("notes.md")), None);
+    }
+
+    #[test]
+    fn fallback_parser_extracts_csharp_signatures() {
+        let source = r#"
+namespace Demo;
+public class Greeter {
+    public string Name { get; set; }
+    public void Run() {}
+}
+"#;
+        let (signatures, imports) =
+            extract_with_tree_sitter_fallback(source, "c_sharp", "Program.cs").unwrap();
+        assert_eq!(imports, 0);
+        assert!(signatures.iter().any(|item| item.contains("c# class Greeter")));
+        assert!(signatures.iter().any(|item| item.contains("c# method Run")));
+    }
+
+    #[test]
+    fn fallback_parser_extracts_yaml_signatures() {
+        let source = r#"
+name: ci
+jobs:
+  build:
+    steps:
+      - run: cargo test
+"#;
+        let (signatures, imports) =
+            extract_with_tree_sitter_fallback(source, "yaml", ".github/workflows/ci.yml").unwrap();
+        assert_eq!(imports, 0);
+        assert!(signatures.iter().any(|item| item.contains("yaml key name")));
+        assert!(signatures.iter().any(|item| item.contains("yaml key jobs")));
     }
 }
