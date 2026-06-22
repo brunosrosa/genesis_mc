@@ -100,6 +100,3 @@ binds:
                         env:
                           UV_NO_PROGRESS: '1'
                           UV_QUIET: '1'
-                    - name: docfork
-                      mcp:
-                        host: 'https://mcp.docfork.com/mcp'

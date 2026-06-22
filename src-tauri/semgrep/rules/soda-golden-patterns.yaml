@@ -1,0 +1,63 @@
+rules:
+  - id: soda.golden-pattern.state-machine
+    languages: [generic]
+    severity: INFO
+    message: "OURO SODA: Padrão arquitetural profundo ou Dívida de Fluxo detectada. Analisar a heurística e extrair a alma matemática para canibalização."
+    metadata:
+      soda_lens: golden-pattern
+      category: state-machine
+    pattern-regex: '(?s)(switch\s*\([^)]*\)\s*\{.*?\bcase\b.*?\bcase\b.*?\bcase\b)|(match\s+[^\{]+\{.*?=>.*?=>.*?=>)'
+
+  - id: soda.golden-pattern.explicit-state-transition
+    languages: [generic]
+    severity: INFO
+    message: "OURO SODA: Padrão arquitetural profundo ou Dívida de Fluxo detectada. Analisar a heurística e extrair a alma matemática para canibalização."
+    metadata:
+      soda_lens: golden-pattern
+      category: state-machine
+    pattern-regex: '(?i)(transition_to|set_state|next_state|state_transition|fsm|state\s*=\s*[A-Z_][A-Za-z0-9_:]+)'
+
+  - id: soda.golden-pattern.promise-chain
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "OURO SODA: Padrão arquitetural profundo ou Dívida de Fluxo detectada. Analisar a heurística e extrair a alma matemática para canibalização."
+    metadata:
+      soda_lens: flow-debt
+      category: async-chain
+    pattern-regex: '(?s)\.then\([^)]*\)\s*\.then\([^)]*\)\s*\.then\('
+
+  - id: soda.golden-pattern.async-waterfall
+    languages: [generic]
+    severity: WARNING
+    message: "OURO SODA: Padrão arquitetural profundo ou Dívida de Fluxo detectada. Analisar a heurística e extrair a alma matemática para canibalização."
+    metadata:
+      soda_lens: flow-debt
+      category: async-chain
+    pattern-regex: '(?s)(await\s+[^\n;]+[\n\r\s]+){3,}await\s+'
+
+  - id: soda.flow-debt.nested-ternary
+    languages: [generic]
+    severity: WARNING
+    message: "OURO SODA: Padrão arquitetural profundo ou Dívida de Fluxo detectada. Analisar a heurística e extrair a alma matemática para canibalização."
+    metadata:
+      soda_lens: flow-debt
+      category: conditional-complexity
+    pattern-regex: '(?s)\?[^:\n]+\:[^?\n]+\?'
+
+  - id: soda.flow-debt.boolean-chain
+    languages: [generic]
+    severity: WARNING
+    message: "OURO SODA: Padrão arquitetural profundo ou Dívida de Fluxo detectada. Analisar a heurística e extrair a alma matemática para canibalização."
+    metadata:
+      soda_lens: flow-debt
+      category: boolean-complexity
+    pattern-regex: '(?s)(\&\&|\|\|).*(\&\&|\|\|).*(\&\&|\|\|)'
+
+  - id: soda.flow-debt.if-else-depth
+    languages: [generic]
+    severity: WARNING
+    message: "OURO SODA: Padrão arquitetural profundo ou Dívida de Fluxo detectada. Analisar a heurística e extrair a alma matemática para canibalização."
+    metadata:
+      soda_lens: flow-debt
+      category: conditional-complexity
+    pattern-regex: '(?s)\bif\b[^{\n]*\{.*?\bif\b[^{\n]*\{.*?\bif\b[^{\n]*\{.*?\bif\b'

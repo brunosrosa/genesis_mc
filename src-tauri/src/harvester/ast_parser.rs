@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
@@ -136,6 +136,186 @@ pub fn extract_repository_outline_native(
         architecture_map_blob: architecture_map.into_bytes(),
         health_report_blob: health_report.into_bytes(),
     })
+}
+
+pub fn derive_scannable_roots_native(
+    repo_path: &Path,
+    max_roots: usize,
+) -> Result<Vec<PathBuf>, AstParserError> {
+    let repo_root = repo_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_path.to_path_buf());
+    let source_files = collect_source_files(&repo_root)?;
+    if source_files.is_empty() {
+        return Err(AstParserError::EmptyRepository {
+            path: repo_root.display().to_string(),
+        });
+    }
+
+    let relative_paths = source_files
+        .iter()
+        .map(|path| sanitize_relative_path(&repo_root, path))
+        .collect::<Vec<_>>();
+    let roots = derive_scannable_roots_from_relative_paths(&relative_paths, max_roots);
+    Ok(roots
+        .into_iter()
+        .map(|root| repo_root.join(root))
+        .collect::<Vec<_>>())
+}
+
+const SCANNABLE_ROOT_FILE_THRESHOLD: usize = 80;
+const SCANNABLE_ROOT_MAX_SPLIT_DEPTH: usize = 3;
+
+fn derive_scannable_roots_from_relative_paths(
+    relative_paths: &[String],
+    max_roots: usize,
+) -> Vec<String> {
+    let mut grouped = BTreeMap::<String, Vec<Vec<String>>>::new();
+
+    for relative_path in relative_paths {
+        if should_skip_scannable_relative_path(relative_path) {
+            continue;
+        }
+        let segments = split_relative_segments(relative_path);
+        let Some(anchor_idx) = scannable_anchor_index(&segments) else {
+            continue;
+        };
+        let anchor_root = segments[..=anchor_idx].join("/");
+        let tail_dirs = if segments.len() > anchor_idx + 1 {
+            segments[anchor_idx + 1..segments.len().saturating_sub(1)].to_vec()
+        } else {
+            Vec::new()
+        };
+        grouped.entry(anchor_root).or_default().push(tail_dirs);
+    }
+
+    let mut selected = BTreeSet::new();
+    for (anchor_root, tails) in grouped {
+        collect_scannable_roots(
+            &anchor_root,
+            &tails,
+            0,
+            &mut selected,
+        );
+    }
+
+    selected.into_iter().take(max_roots).collect()
+}
+
+fn collect_scannable_roots(
+    prefix: &str,
+    tails: &[Vec<String>],
+    depth: usize,
+    out: &mut BTreeSet<String>,
+) {
+    if tails.len() <= SCANNABLE_ROOT_FILE_THRESHOLD || depth >= SCANNABLE_ROOT_MAX_SPLIT_DEPTH {
+        out.insert(prefix.to_string());
+        return;
+    }
+
+    let mut by_child = BTreeMap::<String, Vec<Vec<String>>>::new();
+    let mut direct_files = 0usize;
+    for tail in tails {
+        if let Some((head, rest)) = tail.split_first() {
+            by_child
+                .entry(head.clone())
+                .or_default()
+                .push(rest.to_vec());
+        } else {
+            direct_files += 1;
+        }
+    }
+
+    if by_child.is_empty() {
+        out.insert(prefix.to_string());
+        return;
+    }
+
+    if by_child.len() == 1 && direct_files == 0 {
+        let (child, child_tails) = by_child.into_iter().next().unwrap();
+        let child_prefix = format!("{prefix}/{child}");
+        collect_scannable_roots(&child_prefix, &child_tails, depth + 1, out);
+        return;
+    }
+
+    if by_child.len() < 2 {
+        out.insert(prefix.to_string());
+        return;
+    }
+
+    if direct_files > 0 {
+        out.insert(prefix.to_string());
+    }
+
+    for (child, child_tails) in by_child {
+        let child_prefix = format!("{prefix}/{child}");
+        collect_scannable_roots(&child_prefix, &child_tails, depth + 1, out);
+    }
+}
+
+fn split_relative_segments(relative_path: &str) -> Vec<String> {
+    relative_path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| segment.to_string())
+        .collect::<Vec<_>>()
+}
+
+fn scannable_anchor_index(segments: &[String]) -> Option<usize> {
+    segments.iter().position(|segment| {
+        let lower = segment.to_ascii_lowercase();
+        matches!(
+            lower.as_str(),
+            "src" | "lib" | "app" | "cmd" | "internal" | "server" | "client" | "scripts" | "script"
+        )
+    })
+}
+
+fn should_skip_scannable_relative_path(relative_path: &str) -> bool {
+    let normalized = relative_path.replace('\\', "/").to_ascii_lowercase();
+    let segments = normalized
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.iter().any(|segment| {
+        matches!(
+            *segment,
+            "test"
+                | "tests"
+                | "__tests__"
+                | "mock"
+                | "mocks"
+                | "__mocks__"
+                | "fixture"
+                | "fixtures"
+                | "__fixtures__"
+                | "snapshot"
+                | "snapshots"
+                | "__snapshots__"
+                | "sample"
+                | "samples"
+                | "playground"
+                | "playgrounds"
+                | "benchmark"
+                | "benchmarking"
+                | "coverage"
+                | "generated"
+                | ".svelte-kit"
+                | ".next"
+                | ".nuxt"
+                | ".storybook"
+                | "storybook-static"
+        )
+    }) {
+        return true;
+    }
+
+    normalized.ends_with("/output.json")
+        || normalized.ends_with(".min.js")
+        || normalized.ends_with(".min.cjs")
+        || normalized.ends_with(".min.mjs")
+        || normalized.ends_with(".bundle.js")
+        || normalized.contains(".generated.")
 }
 
 fn collect_source_files(repo_root: &Path) -> Result<Vec<PathBuf>, AstParserError> {
@@ -595,5 +775,37 @@ jobs:
         assert_eq!(imports, 0);
         assert!(signatures.iter().any(|item| item.contains("yaml key name")));
         assert!(signatures.iter().any(|item| item.contains("yaml key jobs")));
+    }
+
+    #[test]
+    fn derive_scannable_roots_skips_toxic_js_fixture_paths() {
+        let paths = vec![
+            "packages/web/src/lib/index.ts".to_string(),
+            "packages/web/tests/runtime/sample.spec.ts".to_string(),
+            "packages/web/__mocks__/browser.ts".to_string(),
+            "playgrounds/sandbox/src/main.ts".to_string(),
+            "packages/web/src/generated/client.generated.ts".to_string(),
+        ];
+
+        let roots = derive_scannable_roots_from_relative_paths(&paths, 16);
+
+        assert_eq!(roots, vec!["packages/web/src".to_string()]);
+    }
+
+    #[test]
+    fn derive_scannable_roots_splits_large_anchor_subtrees_recursively() {
+        let mut paths = Vec::new();
+        for idx in 0..90 {
+            paths.push(format!("packages/svelte/src/compiler/phases/1-parse/file_{idx}.js"));
+            paths.push(format!("packages/svelte/src/compiler/phases/2-analyze/file_{idx}.js"));
+            paths.push(format!("packages/svelte/src/internal/runtime/file_{idx}.js"));
+        }
+
+        let roots = derive_scannable_roots_from_relative_paths(&paths, 16);
+
+        assert!(roots.contains(&"packages/svelte/src/compiler/phases/1-parse".to_string()));
+        assert!(roots.contains(&"packages/svelte/src/compiler/phases/2-analyze".to_string()));
+        assert!(roots.contains(&"packages/svelte/src/internal/runtime".to_string()));
+        assert!(!roots.contains(&"packages/svelte/src".to_string()));
     }
 }

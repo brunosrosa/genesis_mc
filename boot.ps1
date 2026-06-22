@@ -47,7 +47,7 @@ if (Test-Path $envPath) {
             if ($name) { Set-Item -Path ("Env:{0}" -f $name) -Value $value }
         }
     }
-    Write-Host "[OK] Segredos e DOCFORK_API_KEY injetados com segurança (Set-Item)." -ForegroundColor Green
+    Write-Host "[OK] Segredos injetados com segurança (Set-Item)." -ForegroundColor Green
 } else {
     Write-Host "[!] Arquivo .env não encontrado em: $envPath" -ForegroundColor Red
 }
@@ -61,12 +61,26 @@ Write-Host "`n[🚀] Forjando Sidecars e Iniciando o Daemon (genesis_mc)..." -Fo
 Push-Location (Join-Path $PSScriptRoot "src-tauri")
 
 $env:CARGO_INCREMENTAL = "0"
-# Compilamos os sidecars essenciais primeiro silenciosamente
-cargo build --quiet --bin agentgateway_tcp_proxy
-cargo build --quiet --bin mcp_stdio_guard
+
+function Invoke-CargoChecked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Args
+    )
+
+    & cargo @Args
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao executar: cargo $($Args -join ' ')"
+    }
+}
+
+# Compilamos os sidecars supervisionados exigidos pela UI antes da ignição do daemon.
+Invoke-CargoChecked -Args @("build", "--quiet", "--bin", "soda_mcp_server")
+Invoke-CargoChecked -Args @("build", "--quiet", "--bin", "agentgateway_tcp_proxy")
+Invoke-CargoChecked -Args @("build", "--quiet", "--bin", "mcp_stdio_guard")
 
 # Ligamos a entidade principal. Ela travará este terminal para vermos a telemetria, 
 # mas a UI estará silenciosa perto do relógio.
-cargo run --features tauri-app --bin genesis_mc
+Invoke-CargoChecked -Args @("run", "--features", "tauri-app", "--bin", "genesis_mc")
 
 Pop-Location

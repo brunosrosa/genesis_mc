@@ -1,7 +1,7 @@
-# Tasks ADR-024 Performance SAST
+# Tasks Timeout Opengrep
 
-- [ ] Injetar no `opengrep` as flags `--allow-rule-timeout-control`, `--exclude-minified-files` e exclusoes de `tests`/`mocks` sem amputar lockfiles.
-- [ ] Garantir `cppcheck` com `--xml` e `--xml-version=2` e normalizacao tolerante a payload vindo de `stderr`.
-- [ ] Limpar `target/` do `cwd` do subprojeto imediatamente apos `cargo clippy`.
-- [ ] Cobrir com testes focados das novas flags, cleanup e fusao XML.
-- [ ] Validar com `cargo check`.
+- [ ] Autopsiar `opengrep` no `svelte` em shadow workspace local e registrar o padrao estrutural toxico real.
+- [ ] Implementar a Camada A no `sidecar.rs` com `--exclude` organicos para lixo recorrente de monorepos JS.
+- [ ] Implementar a Camada B com scoping dinamico nativo a partir das raizes uteis derivadas do AST/caminhos-fonte.
+- [ ] Cobrir a logica nova com testes focados do builder/selecionador de raizes.
+- [ ] Rodar Ralph Loop: `cargo check` e teste seco contra `sveltejs/svelte` ate `exit code 0`.

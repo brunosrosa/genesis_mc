@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use url::Url;
 
 const TARGET_REPO_ID: &str = "bytedance/Lance";
@@ -58,12 +59,14 @@ async fn main() -> io::Result<()> {
     let profile = LanguageDetector::detect(&repo_path)
         .await
         .map_err(|err| to_io_error("Falha ao detectar stack base", err))?;
-    let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite)
+    let sandbox = Arc::new(
+        SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite)
         .await
-        .map_err(|err| to_io_error("Falha ao criar sandbox efemero", err))?;
+        .map_err(|err| to_io_error("Falha ao criar sandbox efemero", err))?
+    );
 
     let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
-        executor: &sandbox,
+        executor: Arc::clone(&sandbox),
         timeout_secs: 120,
         profile: &profile,
     })

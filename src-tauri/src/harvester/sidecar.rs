@@ -1118,7 +1118,7 @@ async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                     } else {
                         Ok(sanitized_stdout)
                     }
-                } else if is_sobelow_mix_invocation(binary, &args)
+                } else if is_sobelow_mix_invocation(binary, args)
                     && stdout_is_blank(&sanitized_stdout)
                     && sanitized_stderr.contains("total_findings:")
                 {
@@ -2031,6 +2031,10 @@ fn execution_targets_for_blade(
     manifests: &[DiscoveredManifest],
     blade: StaticAnalysisBlade,
 ) -> Vec<SastExecutionTarget> {
+    if blade == StaticAnalysisBlade::Opengrep {
+        return derive_opengrep_execution_targets(repo_path);
+    }
+
     if let Some(kind) = manifest_kind_for_blade(blade) {
         return manifests
             .iter()
@@ -2048,6 +2052,47 @@ fn execution_targets_for_blade(
         execution_root: repo_path.to_path_buf(),
         scope: ".".to_string(),
     }]
+}
+
+const OPENGREP_DYNAMIC_ROOT_LIMIT: usize = 24;
+
+fn derive_opengrep_execution_targets(repo_path: &Path) -> Vec<SastExecutionTarget> {
+    let repo_root = repo_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_path.to_path_buf());
+    match ast_parser::derive_scannable_roots_native(&repo_root, OPENGREP_DYNAMIC_ROOT_LIMIT) {
+        Ok(roots) if !roots.is_empty() => {
+            let mut targets = roots
+                .into_iter()
+                .filter(|root| root.exists())
+                .map(|execution_root| {
+                    let scope = execution_root
+                        .strip_prefix(&repo_root)
+                        .ok()
+                        .map(|value| value.to_string_lossy().replace('\\', "/"))
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or_else(|| ".".to_string());
+                    SastExecutionTarget {
+                        blade: StaticAnalysisBlade::Opengrep,
+                        execution_root,
+                        scope,
+                    }
+                })
+                .collect::<Vec<_>>();
+            targets.sort_by(|left, right| {
+                left.scope
+                    .cmp(&right.scope)
+                    .then_with(|| left.execution_root.cmp(&right.execution_root))
+            });
+            targets.dedup_by(|left, right| left.execution_root == right.execution_root);
+            targets
+        }
+        Ok(_) | Err(_) => vec![SastExecutionTarget {
+            blade: StaticAnalysisBlade::Opengrep,
+            execution_root: repo_root,
+            scope: ".".to_string(),
+        }],
+    }
 }
 
 fn scoped_blade_label(blade: StaticAnalysisBlade, scope: &str) -> String {
@@ -2143,19 +2188,96 @@ fn clippy_args() -> Vec<String> {
     ]
 }
 
-const OPENGREP_EXCLUDES: &[&str] = &[
+const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "tests",
     "**/tests/**",
+    "__tests__",
+    "**/__tests__/**",
+    "test",
+    "**/test/**",
     "mock",
     "mocks",
+    "__mocks__",
     "**/mocks/**",
+    "**/__mocks__/**",
+    "fixture",
     "fixtures",
+    "__fixtures__",
+    "**/fixtures/**",
+    "**/__fixtures__/**",
+    "snapshot",
+    "snapshots",
+    "__snapshots__",
+    "**/snapshots/**",
+    "**/__snapshots__/**",
+    "sample",
+    "samples",
+    "**/samples/**",
+    "playground",
+    "playgrounds",
+    "**/playgrounds/**",
+    "benchmark",
+    "benchmarking",
+    "**/benchmarking/**",
+    "generated",
+    "**/generated/**",
+    "**/output.json",
+    "**/*.generated.*",
+    "**/*.min.js",
+    "**/*.min.cjs",
+    "**/*.min.mjs",
+    "**/*.bundle.js",
     "test_support",
     "e2e",
     "docs",
     "documentation",
     "examples",
 ];
+
+#[derive(Debug, Clone, Copy)]
+struct SemgrepScanOptions {
+    disable_version_check: bool,
+    metrics_off: bool,
+    taint_intrafile: bool,
+    allow_rule_timeout_control: bool,
+    exclude_minified_files: bool,
+}
+
+fn build_semgrep_like_scan_args(rule_arg: &str, options: SemgrepScanOptions) -> Vec<String> {
+    let mut args = vec![
+        "scan".to_string(),
+        "--config".to_string(),
+        rule_arg.to_string(),
+        "--json".to_string(),
+        "--jobs".to_string(),
+        "1".to_string(),
+    ];
+
+    if options.disable_version_check {
+        args.push("--disable-version-check".to_string());
+    }
+    if options.metrics_off {
+        args.push("--metrics".to_string());
+        args.push("off".to_string());
+    }
+    if options.taint_intrafile {
+        args.push("--taint-intrafile".to_string());
+    }
+    if options.allow_rule_timeout_control {
+        args.push("--allow-rule-timeout-control".to_string());
+    }
+    if options.exclude_minified_files {
+        args.push("--exclude-minified-files".to_string());
+    }
+
+    for exclude in SEMGREP_SCAN_EXCLUDES {
+        args.push("--exclude".to_string());
+        args.push((*exclude).to_string());
+    }
+
+    args.push(".".to_string());
+    args
+}
 
 fn cppcheck_args() -> Vec<String> {
     vec![
@@ -2219,32 +2341,31 @@ fn govulncheck_args() -> Vec<String> {
 }
 
 fn opengrep_args(rule_arg: &str) -> Vec<String> {
-    let mut args = vec![
-        "scan".to_string(),
-        "--config".to_string(),
-        rule_arg.to_string(),
-        "--json".to_string(),
-        "--jobs".to_string(),
-        "1".to_string(),
-        "--disable-version-check".to_string(),
-        "--taint-intrafile".to_string(),
-        "--allow-rule-timeout-control".to_string(),
-        "--exclude-minified-files".to_string(),
-        "--exclude".to_string(),
-        rule_arg.to_string(),
-        "--exclude".to_string(),
-        SEMGREP_SECURITY_RULE_FILE.to_string(),
-        "--exclude".to_string(),
-        SEMGREP_HEALTH_RULE_FILE.to_string(),
-    ];
+    build_semgrep_like_scan_args(
+        rule_arg,
+        SemgrepScanOptions {
+            disable_version_check: true,
+            metrics_off: false,
+            taint_intrafile: true,
+            allow_rule_timeout_control: true,
+            // Compat mode: o opengrep 1.23.0 no Windows anuncia esta flag no --help,
+            // mas a rejeita em runtime durante `scan`.
+            exclude_minified_files: false,
+        },
+    )
+}
 
-    for exclude in OPENGREP_EXCLUDES {
-        args.push("--exclude".to_string());
-        args.push((*exclude).to_string());
-    }
-
-    args.push(".".to_string());
-    args
+fn semgrep_args(rule_arg: &str) -> Vec<String> {
+    build_semgrep_like_scan_args(
+        rule_arg,
+        SemgrepScanOptions {
+            disable_version_check: true,
+            metrics_off: true,
+            taint_intrafile: false,
+            allow_rule_timeout_control: true,
+            exclude_minified_files: true,
+        },
+    )
 }
 
 async fn cleanup_clippy_target_dir(execution_root: &Path) {
@@ -3200,44 +3321,12 @@ async fn run_semgrep_scan<E: SandboxExecutor>(
         "Semgrep: iniciando scan"
     );
     let rule_arg = rule_path.to_string_lossy().to_string();
-    let args = [
-        "scan",
-        "--config",
-        rule_arg.as_str(),
-        "--json",
-        "--jobs",
-        "1",
-        "--disable-version-check",
-        "--metrics",
-        "off",
-        "--exclude",
-        rule_arg.as_str(),
-        "--exclude",
-        SEMGREP_SECURITY_RULE_FILE,
-        "--exclude",
-        SEMGREP_HEALTH_RULE_FILE,
-        "--exclude",
-        "docs",
-        "--exclude",
-        "documentation",
-        "--exclude",
-        "examples",
-        "--exclude",
-        "mock",
-        "--exclude",
-        "mocks",
-        "--exclude",
-        "fixtures",
-        "--exclude",
-        "test_support",
-        "--exclude",
-        "e2e",
-        ".",
-    ];
+    let args = semgrep_args(&rule_arg);
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     execute_sidecar(
         executor,
         "semgrep",
-        &args,
+        &arg_refs,
         timeout_secs,
         SidecarExitPolicy::AllowFindingsExitOne,
     )
@@ -4332,14 +4421,30 @@ mod tests {
     }
 
     #[test]
-    fn test_opengrep_args_include_timeout_minified_and_test_excludes() {
+    fn test_opengrep_args_use_runtime_compatible_flags_and_test_excludes() {
         let args = opengrep_args("C:/rules");
         assert!(args.iter().any(|arg| arg == "--allow-rule-timeout-control"));
-        assert!(args.iter().any(|arg| arg == "--exclude-minified-files"));
+        assert!(!args.iter().any(|arg| arg == "--exclude-minified-files"));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/mocks/**"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/samples/**"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/output.json"]));
+        assert!(!args.windows(2).any(|pair| pair == ["--exclude", "C:/rules"]));
+        assert!(!args.windows(2).any(|pair| pair == ["--exclude", SEMGREP_SECURITY_RULE_FILE]));
+        assert!(!args.windows(2).any(|pair| pair == ["--exclude", SEMGREP_HEALTH_RULE_FILE]));
         assert!(!args.iter().any(|arg| arg.contains("Cargo.lock")));
         assert!(!args.iter().any(|arg| arg.contains("package-lock.json")));
+    }
+
+    #[test]
+    fn test_semgrep_args_share_common_sast_performance_flags() {
+        let args = semgrep_args("C:/rules");
+        assert!(args.iter().any(|arg| arg == "--allow-rule-timeout-control"));
+        assert!(args.iter().any(|arg| arg == "--exclude-minified-files"));
+        assert!(args.iter().any(|arg| arg == "--disable-version-check"));
+        assert!(args.windows(2).any(|pair| pair == ["--metrics", "off"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
+        assert!(!args.iter().any(|arg| arg == "--taint-intrafile"));
     }
 
     #[test]
@@ -4429,6 +4534,44 @@ Done in 1.23s"#;
         assert!(scopes.contains(&"apps/rust-sdk".to_string()));
         assert!(!scopes.iter().any(|scope| scope.contains("node_modules")));
         assert!(!scopes.iter().any(|scope| scope.contains("target")));
+    }
+
+    #[test]
+    fn test_derive_opengrep_execution_targets_uses_scoped_ast_roots() {
+        let executor = MockExecutor::new(Vec::new());
+        for idx in 0..90 {
+            executor.write_repo_file(
+                &format!("packages/web/src/compiler/phases/1-parse/file_{idx}.ts"),
+                "export const alpha = 1;\n",
+            );
+            executor.write_repo_file(
+                &format!("packages/web/src/compiler/phases/2-analyze/file_{idx}.ts"),
+                "export const beta = 2;\n",
+            );
+        }
+        executor.write_repo_file("packages/web/tests/samples/case.ts", "export const noisy = 1;\n");
+        executor.write_repo_file("playgrounds/sandbox/src/main.ts", "export const preview = 1;\n");
+
+        let targets = derive_opengrep_execution_targets(executor.repo_path());
+        let scopes = targets
+            .iter()
+            .map(|target| target.scope.clone())
+            .collect::<Vec<_>>();
+
+        assert!(
+            scopes.contains(&"packages/web/src/compiler/phases/1-parse".to_string()),
+            "scopes={scopes:?}"
+        );
+        assert!(
+            scopes.contains(&"packages/web/src/compiler/phases/2-analyze".to_string()),
+            "scopes={scopes:?}"
+        );
+        assert!(!scopes.iter().any(|scope| scope.contains("tests")), "scopes={scopes:?}");
+        assert!(
+            !scopes.iter().any(|scope| scope.contains("playgrounds")),
+            "scopes={scopes:?}"
+        );
+        assert!(!scopes.iter().any(|scope| scope == "."), "scopes={scopes:?}");
     }
 
     #[test]

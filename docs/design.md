@@ -1,52 +1,56 @@
-# ADR-024 Performance SAST
+# Resolucao Organica Do Timeout Do Opengrep
 
 ## Contexto
 
-O Harvester F0 ja possui escudo de parsing, guilhotina inteligente e suporte a monorepos, mas a ADR-024 exige endurecimento adicional de performance e higiene operacional. O fluxo atual ainda precisa transformar o canone em codigo real para `opengrep`, `cppcheck` e `cargo clippy`.
+O `opengrep` esta morrendo por `idle timeout` em monorepos JS grandes, com destaque para `sveltejs/svelte` e `mendableai/firecrawl`. A autopsia no `svelte` mostrou que o custo nao vem de um unico `node_modules`, mas de leitura cega demais sobre uma arvore heterogenea: muita periferia de testes e amostras, somada a subarvores estruturais densas como `packages/svelte/src/compiler`.
 
 ## Objetivo
 
-Aplicar as 3 mutacoes mandatarias da ADR-024 sem regredir as defesas recentes:
-- Bisturi adaptativo e escudo de supply chain no `opengrep`
-- Higiene de I/O com limpeza imediata de `target/` apos `cargo clippy`
-- Cura do `cppcheck` para XML em `stderr` ou `stdout` sob o escudo de parsing
+Construir uma vacina universal em profundidade para o invocador do `opengrep`, combinando exclusoes organicas de lixo estrutural e scoping dinamico nativo baseado no AST, de modo que o scan do `svelte` feche com `exit code 0` sem hardcodes por repo.
 
 ## Linhas Vermelhas
 
-- Nao remover o escudo de parsing JSON/XML ja existente.
-- Nao remover a guilhotina inteligente de timeouts adaptativos no sandbox.
-- Nao amputar lockfiles e manifestos de supply chain com filtros agressivos.
-- Nao quebrar o suporte a monorepos e `cwd` por subprojeto ja consolidado.
+- Nao introduzir hardcode por repositorio (`if repo == svelte`).
+- Nao mandar o `opengrep` continuar lendo `.` de forma cega quando o Rust ja consegue derivar escopo.
+- Nao amputar manifestos e lockfiles.
+- Nao degradar a qualidade de achados do `opengrep` ao ponto de varrer apenas arquivos triviais.
 
 ## Design
 
 ```mermaid
 flowchart TD
-    A[PolyglotSastSidecar::extract] --> B[Despacho de lamina]
-    B --> C[OpenGrep com flags ADR-024]
-    B --> D[Cppcheck com XML v2 e fusao stderr/stdout]
-    B --> E[Clippy no cwd correto]
-    E --> F[Cleanup nao bloqueante de target]
-    C --> G[Escudo de parsing JSON]
-    D --> H[Escudo de parsing XML]
-    G --> I[Normalizacao]
-    H --> I
-    F --> I
+    A[Shadow Workspace svelte] --> B[Autopsia opengrep debug]
+    B --> C[Padroes toxicos JS]
+    C --> D[Camada A: excludes universais]
+    C --> E[Camada B: allowlist AST nativa]
+    D --> F[sidecar.rs]
+    E --> F
+    F --> G[cargo check e teste seco svelte]
 ```
 
 ## Orchestrator-Worker
 
-- Orchestrator: `run_sast_blade` e `execute_sidecar_in_dir`
-- Workers: `run_opengrep_scan`, `cppcheck`, `cargo clippy`
-- Governanca: manter semaforo Tokio e `cwd` por subprojeto ja introduzidos
-- Teardown: limpeza de cache compilatorio apos `clippy`
+- Orchestrator: `PolyglotSastSidecar::extract(...)`
+- Worker de autopsia: `opengrep scan --debug` em shadow workspace local
+- Worker estrutural: `ast_parser::extract_repository_outline_native(...)` como base para inferir raizes uteis
+- Worker de sandbox: `SandboxHandle::execute_in_dir(...)` com `idle timeout` profundo para `opengrep`
+
+## Diagnostico Atual
+
+- O `svelte` dispara `opengrep` sobre uma arvore com cerca de `8941` arquivos e `829` regras no bundle local.
+- A periferia de `packages/svelte/tests/**` e `samples/**` domina o volume do repo, com milhares de arquivos de fixture.
+- O gargalo estrutural mais caro no codigo util apareceu em `packages/svelte/src/compiler`, especialmente quando a arvore inteira e passada como um unico alvo cego.
+- Subarvores menores como `packages/svelte/src/internal`, `reactivity` e `store` fecham; o problema piora quando o escopo mistura codigo util profundo com massa periferica de monorepo.
+
+## Estrategia
+
+- Camada A: ampliar os `--exclude` para padroes toxicos recorrentes em monorepos JS, como `__tests__`, `__mocks__`, `__fixtures__`, `samples`, `snapshots`, `playground`, `benchmarking`, `generated` e artefatos como `output.json`.
+- Camada B: substituir o alvo cego `.` por uma lista de raizes uteis derivadas nativamente do AST/caminhos-fonte, priorizando ancoras como `src`, `lib`, `app`, `packages/*/src` e equivalentes.
+- Refinamento: quando uma raiz ancorada for larga demais, quebrar em sub-raizes organicas do proximo nivel para reduzir a janela de silencio do processo.
 
 ## DoD
 
-- Injeta `--allow-rule-timeout-control`, `--exclude-minified-files` e ignores de mocks/tests no `opengrep`.
-- Preserva lockfiles e manifestos de supply chain fora das exclusoes.
-- Garante `cppcheck` com `--xml` e `--xml-version=2` e tolera XML vindo de `stderr`.
-- Limpa `target/` do subprojeto logo apos `cargo clippy`.
-- Compila com `cargo check`.
-- Passa em testes focados.
-- Entrega diff claro das 3 protecoes cirurgicas.
+- O codigo Rust compila com `cargo check`.
+- O invocador do `opengrep` passa a usar dupla defesa sem hardcode por repo.
+- O teste seco contra `sveltejs/svelte` fecha com `exit code 0` e sem `idle timeout`.
+- O relatorio final identifica o padrao toxico real e mostra o diff da protecao no Rust.
