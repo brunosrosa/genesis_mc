@@ -186,8 +186,12 @@ enum ProcessWaitOutcome {
     AbsoluteTimeout,
 }
 
-fn timeout_profile(command: &str, requested_timeout_secs: u64) -> TimeoutProfile {
+fn timeout_profile<S: AsRef<str>>(command: &str, args: &[S], requested_timeout_secs: u64) -> TimeoutProfile {
     match command {
+        "cargo" if is_cargo_clippy_invocation(args) => TimeoutProfile {
+            idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
+            absolute_timeout_secs: requested_timeout_secs.max(DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS),
+        },
         "opengrep" | "govulncheck" => TimeoutProfile {
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
             absolute_timeout_secs: requested_timeout_secs.max(DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS),
@@ -296,7 +300,7 @@ fn semgrep_support_root(repo_path: &Path) -> PathBuf {
         .join(repo_name)
 }
 
-fn sandbox_tool_state_root(repo_path: &Path, tool_name: &str) -> PathBuf {
+pub(crate) fn sandbox_tool_state_root(repo_path: &Path, tool_name: &str) -> PathBuf {
     let repo_name = repo_path
         .file_name()
         .and_then(|value| value.to_str())
@@ -308,7 +312,14 @@ fn sandbox_tool_state_root(repo_path: &Path, tool_name: &str) -> PathBuf {
 }
 
 fn normalize_path_key(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
+    let mut value = path.to_string_lossy().replace('\\', "/");
+    if let Some(stripped) = value.strip_prefix("//?/") {
+        value = stripped.to_string();
+        if let Some(unc_stripped) = value.strip_prefix("UNC/") {
+            value = format!("//{unc_stripped}");
+        }
+    }
+    value.to_ascii_lowercase()
 }
 
 fn path_is_within_root(candidate: &Path, root: &Path) -> bool {
@@ -446,7 +457,7 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
             let mut env = BTreeMap::new();
             env.insert("CARGO_INCREMENTAL".to_string(), "0".to_string());
             let cargo_target_dir = if is_cargo_clippy_invocation(args) {
-                repo_path.join("target")
+                sandbox_tool_state_root(repo_path, "cargo-clippy-target")
             } else {
                 sandbox_tool_state_root(repo_path, "cargo-target")
             };
@@ -829,7 +840,7 @@ impl SandboxHandle {
                 last_activity,
             ))
         };
-        let timeout_profile = timeout_profile(command, timeout_secs);
+        let timeout_profile = timeout_profile(command, args, timeout_secs);
         let started_at = Instant::now();
 
         let wait_outcome = loop {
@@ -1146,14 +1157,21 @@ mod tests {
 
     #[test]
     fn test_timeout_profile_promotes_deep_flow_tools() {
-        let normal = timeout_profile("cppcheck", 30);
+        let normal = timeout_profile("cppcheck", &["."], 30);
         assert_eq!(normal.idle_timeout_secs, IDLE_TIMEOUT_SECS);
         assert_eq!(normal.absolute_timeout_secs, ABSOLUTE_TIMEOUT_FLOOR_SECS);
 
-        let heavy = timeout_profile("opengrep", 30);
+        let heavy = timeout_profile("opengrep", &["scan"], 30);
         assert_eq!(heavy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
         assert_eq!(
             heavy.absolute_timeout_secs,
+            DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS
+        );
+
+        let cargo_clippy = timeout_profile("cargo", &["clippy", "--message-format=json"], 30);
+        assert_eq!(cargo_clippy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
+        assert_eq!(
+            cargo_clippy.absolute_timeout_secs,
             DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS
         );
     }

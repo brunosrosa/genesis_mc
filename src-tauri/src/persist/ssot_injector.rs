@@ -979,7 +979,7 @@ impl SsotInjector {
             .and_then(|r| r.first())
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let mut merged_skip: Vec<&'static str> = skip_columns.iter().copied().collect();
+        let mut merged_skip: Vec<&'static str> = skip_columns.to_vec();
         if !lote_cell.is_empty() && !merged_skip.contains(&"lote_id") {
             row.lote_id = lote_cell.clone();
             merged_skip.push("lote_id");
@@ -1722,6 +1722,7 @@ impl SsotInjector {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn upsert_repo_heuristics_row_internal(
         conn: &Connection,
         repo_id: &str,
@@ -1871,7 +1872,7 @@ impl SsotInjector {
                 max_delay_ms: 400,
                 jitter_ms: 50,
             };
-            if let Err(err) = Self::cleanup_artefatos_brutos_for_repo_id(&conn, repo_id, policy) {
+            if let Err(err) = Self::cleanup_artefatos_brutos_for_repo_id(conn, repo_id, policy) {
                 info!(repo_id = %repo_id, error = %err, "SHORT-CIRCUIT: cleanup de blobs falhou (fail-soft)");
             }
         }

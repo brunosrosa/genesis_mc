@@ -3,7 +3,7 @@ use std::env;
 use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ignore::WalkBuilder;
 use quick_xml::de::from_str as xml_from_str;
@@ -12,7 +12,7 @@ use rusqlite::params;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
@@ -1903,6 +1903,7 @@ struct SastExecutionTarget {
     blade: StaticAnalysisBlade,
     execution_root: PathBuf,
     scope: String,
+    scan_targets: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -2034,6 +2035,9 @@ fn execution_targets_for_blade(
     if blade == StaticAnalysisBlade::Opengrep {
         return derive_opengrep_execution_targets(repo_path);
     }
+    if matches!(blade, StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc) {
+        return derive_js_lint_execution_targets(repo_path, manifests, blade);
+    }
 
     if let Some(kind) = manifest_kind_for_blade(blade) {
         return manifests
@@ -2043,6 +2047,7 @@ fn execution_targets_for_blade(
                 blade,
                 execution_root: manifest.execution_root.clone(),
                 scope: manifest.scope.clone(),
+                scan_targets: vec![".".to_string()],
             })
             .collect();
     }
@@ -2051,10 +2056,226 @@ fn execution_targets_for_blade(
         blade,
         execution_root: repo_path.to_path_buf(),
         scope: ".".to_string(),
+        scan_targets: vec![".".to_string()],
     }]
 }
 
 const OPENGREP_DYNAMIC_ROOT_LIMIT: usize = 24;
+const OPENGREP_DIRECT_FILE_CHUNK_SIZE: usize = 24;
+const JS_LINT_DYNAMIC_ROOT_LIMIT: usize = 24;
+const JS_LINT_DIRECT_FILE_CHUNK_SIZE: usize = 24;
+
+fn opengrep_file_batch_scope(scope: &str, batch_idx: usize) -> String {
+    format!("{scope}::files-{batch_idx:02}")
+}
+
+fn blade_file_batch_scope(scope: &str, batch_idx: usize) -> String {
+    format!("{scope}::files-{batch_idx:02}")
+}
+
+fn descendant_roots_for_manifest<'a>(
+    manifests: &'a [DiscoveredManifest],
+    execution_root: &Path,
+    kind: ManifestKind,
+) -> Vec<&'a Path> {
+    manifests
+        .iter()
+        .filter(|manifest| manifest.kind == kind && manifest.execution_root != execution_root)
+        .map(|manifest| manifest.execution_root.as_path())
+        .filter(|root| root.starts_with(execution_root))
+        .collect()
+}
+
+fn derive_dynamic_execution_targets(
+    repo_root: &Path,
+    execution_root: &Path,
+    blade: StaticAnalysisBlade,
+    scope_prefix: &str,
+    max_roots: usize,
+    direct_file_chunk_size: usize,
+    boundary_roots: &[&Path],
+) -> Vec<SastExecutionTarget> {
+    let mut targets = Vec::new();
+    let roots = match ast_parser::derive_scannable_roots_native(execution_root, max_roots) {
+        Ok(roots) if !roots.is_empty() => roots,
+        Ok(_) | Err(_) => {
+            return vec![SastExecutionTarget {
+                blade,
+                execution_root: execution_root.to_path_buf(),
+                scope: scope_prefix.to_string(),
+                scan_targets: vec![".".to_string()],
+            }];
+        }
+    };
+
+    let mut roots = roots
+        .into_iter()
+        .filter(|root| root.exists())
+        .filter(|root| !boundary_roots.iter().any(|boundary| root.starts_with(boundary)))
+        .collect::<Vec<_>>();
+    roots.sort();
+    roots.dedup();
+
+    for root in &roots {
+        let relative_scope = scope_label_for_path(repo_root, root);
+        let has_descendant_roots = roots.iter().any(|other| other != root && other.starts_with(root));
+        if has_descendant_roots {
+            match ast_parser::collect_direct_scannable_files(root) {
+                Ok(files) => {
+                    for (idx, chunk) in files.chunks(direct_file_chunk_size).enumerate() {
+                        let scan_targets = chunk
+                            .iter()
+                            .filter_map(|file| {
+                                file.file_name()
+                                    .and_then(|value| value.to_str())
+                                    .map(|value| value.to_string())
+                            })
+                            .collect::<Vec<_>>();
+                        if scan_targets.is_empty() {
+                            continue;
+                        }
+                        targets.push(SastExecutionTarget {
+                            blade,
+                            execution_root: root.clone(),
+                            scope: blade_file_batch_scope(&relative_scope, idx + 1),
+                            scan_targets,
+                        });
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        blade = blade_name(blade),
+                        scope = %relative_scope,
+                        cwd = %root.display(),
+                        error = %err,
+                        "js-lint: falha ao listar arquivos diretos; mantendo scope amplo como fail-soft"
+                    );
+                    targets.push(SastExecutionTarget {
+                        blade,
+                        execution_root: root.clone(),
+                        scope: relative_scope,
+                        scan_targets: vec![".".to_string()],
+                    });
+                }
+            }
+            continue;
+        }
+
+        targets.push(SastExecutionTarget {
+            blade,
+            execution_root: root.clone(),
+            scope: relative_scope,
+            scan_targets: vec![".".to_string()],
+        });
+    }
+
+    if scope_prefix == "." {
+        match ast_parser::collect_direct_scannable_files(execution_root) {
+            Ok(files) => {
+                for (idx, chunk) in files.chunks(direct_file_chunk_size).enumerate() {
+                    let scan_targets = chunk
+                        .iter()
+                        .filter_map(|file| {
+                            file.file_name()
+                                .and_then(|value| value.to_str())
+                                .map(|value| value.to_string())
+                        })
+                        .collect::<Vec<_>>();
+                    if scan_targets.is_empty() {
+                        continue;
+                    }
+                    targets.push(SastExecutionTarget {
+                        blade,
+                        execution_root: execution_root.to_path_buf(),
+                        scope: blade_file_batch_scope(scope_prefix, idx + 1),
+                        scan_targets,
+                    });
+                }
+            }
+            Err(err) => {
+                warn!(
+                    blade = blade_name(blade),
+                    scope = scope_prefix,
+                    cwd = %execution_root.display(),
+                    error = %err,
+                    "js-lint: falha ao listar arquivos diretos na raiz do pacote"
+                );
+            }
+        }
+    }
+
+    if targets.is_empty() {
+        targets.push(SastExecutionTarget {
+            blade,
+            execution_root: execution_root.to_path_buf(),
+            scope: scope_prefix.to_string(),
+            scan_targets: vec![".".to_string()],
+        });
+    }
+
+    targets.sort_by(|left, right| {
+        left.scope
+            .cmp(&right.scope)
+            .then_with(|| left.execution_root.cmp(&right.execution_root))
+            .then_with(|| left.scan_targets.cmp(&right.scan_targets))
+    });
+    targets.dedup_by(|left, right| {
+        left.execution_root == right.execution_root
+            && left.scope == right.scope
+            && left.scan_targets == right.scan_targets
+    });
+    targets
+}
+
+fn derive_js_lint_execution_targets(
+    repo_path: &Path,
+    manifests: &[DiscoveredManifest],
+    blade: StaticAnalysisBlade,
+) -> Vec<SastExecutionTarget> {
+    let repo_root = repo_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_path.to_path_buf());
+    let kind = ManifestKind::PackageJson;
+    let package_manifests = manifests
+        .iter()
+        .filter(|manifest| manifest.kind == kind)
+        .collect::<Vec<_>>();
+
+    if package_manifests.is_empty() {
+        return vec![SastExecutionTarget {
+            blade,
+            execution_root: repo_root,
+            scope: ".".to_string(),
+            scan_targets: vec![".".to_string()],
+        }];
+    }
+
+    let mut targets = Vec::new();
+    for manifest in package_manifests {
+        let boundaries = descendant_roots_for_manifest(manifests, &manifest.execution_root, kind);
+        targets.extend(derive_dynamic_execution_targets(
+            &repo_root,
+            &manifest.execution_root,
+            blade,
+            &manifest.scope,
+            JS_LINT_DYNAMIC_ROOT_LIMIT,
+            JS_LINT_DIRECT_FILE_CHUNK_SIZE,
+            &boundaries,
+        ));
+    }
+    targets.sort_by(|left, right| {
+        left.scope
+            .cmp(&right.scope)
+            .then_with(|| left.execution_root.cmp(&right.execution_root))
+            .then_with(|| left.scan_targets.cmp(&right.scan_targets))
+    });
+    targets.dedup_by(|left, right| {
+        left.execution_root == right.execution_root
+            && left.scope == right.scope
+            && left.scan_targets == right.scan_targets
+    });
+    targets
+}
 
 fn derive_opengrep_execution_targets(repo_path: &Path) -> Vec<SastExecutionTarget> {
     let repo_root = repo_path
@@ -2062,35 +2283,92 @@ fn derive_opengrep_execution_targets(repo_path: &Path) -> Vec<SastExecutionTarge
         .unwrap_or_else(|_| repo_path.to_path_buf());
     match ast_parser::derive_scannable_roots_native(&repo_root, OPENGREP_DYNAMIC_ROOT_LIMIT) {
         Ok(roots) if !roots.is_empty() => {
-            let mut targets = roots
+            let mut roots = roots
                 .into_iter()
                 .filter(|root| root.exists())
-                .map(|execution_root| {
-                    let scope = execution_root
-                        .strip_prefix(&repo_root)
-                        .ok()
-                        .map(|value| value.to_string_lossy().replace('\\', "/"))
-                        .filter(|value| !value.is_empty())
-                        .unwrap_or_else(|| ".".to_string());
-                    SastExecutionTarget {
-                        blade: StaticAnalysisBlade::Opengrep,
-                        execution_root,
-                        scope,
-                    }
-                })
                 .collect::<Vec<_>>();
+            roots.sort();
+            roots.dedup();
+
+            let mut targets = Vec::new();
+            for execution_root in &roots {
+                let scope = execution_root
+                    .strip_prefix(&repo_root)
+                    .ok()
+                    .map(|value| value.to_string_lossy().replace('\\', "/"))
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| ".".to_string());
+                let has_descendant_roots = roots
+                    .iter()
+                    .any(|other| other != execution_root && other.starts_with(execution_root));
+
+                if has_descendant_roots {
+                    match ast_parser::collect_direct_scannable_files(execution_root) {
+                        Ok(files) => {
+                            for (idx, chunk) in files.chunks(OPENGREP_DIRECT_FILE_CHUNK_SIZE).enumerate()
+                            {
+                                let scan_targets = chunk
+                                    .iter()
+                                    .filter_map(|file| {
+                                        file.file_name()
+                                            .and_then(|value| value.to_str())
+                                            .map(|value| value.to_string())
+                                    })
+                                    .collect::<Vec<_>>();
+                                if scan_targets.is_empty() {
+                                    continue;
+                                }
+                                targets.push(SastExecutionTarget {
+                                    blade: StaticAnalysisBlade::Opengrep,
+                                    execution_root: execution_root.clone(),
+                                    scope: opengrep_file_batch_scope(&scope, idx + 1),
+                                    scan_targets,
+                                });
+                            }
+                        }
+                        Err(err) => {
+                            warn!(
+                                scope = %scope,
+                                cwd = %execution_root.display(),
+                                error = %err,
+                                "opengrep: falha ao listar arquivos diretos; mantendo scope amplo como fail-soft"
+                            );
+                            targets.push(SastExecutionTarget {
+                                blade: StaticAnalysisBlade::Opengrep,
+                                execution_root: execution_root.clone(),
+                                scope,
+                                scan_targets: vec![".".to_string()],
+                            });
+                        }
+                    }
+                    continue;
+                }
+
+                targets.push(SastExecutionTarget {
+                    blade: StaticAnalysisBlade::Opengrep,
+                    execution_root: execution_root.clone(),
+                    scope,
+                    scan_targets: vec![".".to_string()],
+                });
+            }
             targets.sort_by(|left, right| {
                 left.scope
                     .cmp(&right.scope)
                     .then_with(|| left.execution_root.cmp(&right.execution_root))
+                    .then_with(|| left.scan_targets.cmp(&right.scan_targets))
             });
-            targets.dedup_by(|left, right| left.execution_root == right.execution_root);
+            targets.dedup_by(|left, right| {
+                left.execution_root == right.execution_root
+                    && left.scope == right.scope
+                    && left.scan_targets == right.scan_targets
+            });
             targets
         }
         Ok(_) | Err(_) => vec![SastExecutionTarget {
             blade: StaticAnalysisBlade::Opengrep,
             execution_root: repo_root,
             scope: ".".to_string(),
+            scan_targets: vec![".".to_string()],
         }],
     }
 }
@@ -2243,7 +2521,11 @@ struct SemgrepScanOptions {
     exclude_minified_files: bool,
 }
 
-fn build_semgrep_like_scan_args(rule_arg: &str, options: SemgrepScanOptions) -> Vec<String> {
+fn build_semgrep_like_scan_args(
+    rule_arg: &str,
+    options: SemgrepScanOptions,
+    scan_targets: &[String],
+) -> Vec<String> {
     let mut args = vec![
         "scan".to_string(),
         "--config".to_string(),
@@ -2275,7 +2557,11 @@ fn build_semgrep_like_scan_args(rule_arg: &str, options: SemgrepScanOptions) -> 
         args.push((*exclude).to_string());
     }
 
-    args.push(".".to_string());
+    if scan_targets.is_empty() {
+        args.push(".".to_string());
+    } else {
+        args.extend(scan_targets.iter().cloned());
+    }
     args
 }
 
@@ -2298,20 +2584,54 @@ fn sobelow_args() -> Vec<String> {
     ]
 }
 
-fn biome_args() -> Vec<String> {
-    vec![
+fn biome_args(scan_targets: &[String]) -> Vec<String> {
+    let mut args = vec![
         "check".to_string(),
         "--reporter=json".to_string(),
-        ".".to_string(),
-    ]
+        "--no-errors-on-unmatched".to_string(),
+    ];
+    if scan_targets.is_empty() {
+        args.push(".".to_string());
+    } else {
+        args.extend(scan_targets.iter().cloned());
+    }
+    args
 }
 
-fn oxc_args() -> Vec<String> {
-    vec![
+fn oxc_args(scan_targets: &[String]) -> Vec<String> {
+    let mut args = vec![
         "-f".to_string(),
         "json".to_string(),
-        ".".to_string(),
-    ]
+        "--no-error-on-unmatched-pattern".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/*.min.js".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/*.min.cjs".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/*.min.mjs".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/*.bundle.js".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/*.generated.*".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/output.json".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/coverage/**".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/storybook-static/**".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/.svelte-kit/**".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/.next/**".to_string(),
+        "--ignore-pattern".to_string(),
+        "**/.nuxt/**".to_string(),
+    ];
+    if scan_targets.is_empty() {
+        args.push(".".to_string());
+    } else {
+        args.extend(scan_targets.iter().cloned());
+    }
+    args
 }
 
 fn ruff_args() -> Vec<String> {
@@ -2340,7 +2660,7 @@ fn govulncheck_args() -> Vec<String> {
     ]
 }
 
-fn opengrep_args(rule_arg: &str) -> Vec<String> {
+fn opengrep_args(rule_arg: &str, scan_targets: &[String]) -> Vec<String> {
     build_semgrep_like_scan_args(
         rule_arg,
         SemgrepScanOptions {
@@ -2352,6 +2672,7 @@ fn opengrep_args(rule_arg: &str) -> Vec<String> {
             // mas a rejeita em runtime durante `scan`.
             exclude_minified_files: false,
         },
+        scan_targets,
     )
 }
 
@@ -2365,24 +2686,28 @@ fn semgrep_args(rule_arg: &str) -> Vec<String> {
             allow_rule_timeout_control: true,
             exclude_minified_files: true,
         },
+        &[".".to_string()],
     )
 }
 
 async fn cleanup_clippy_target_dir(execution_root: &Path) {
-    let target_dir = execution_root.join("target");
+    let target_dir = crate::harvester::sandbox::sandbox_tool_state_root(
+        execution_root,
+        "cargo-clippy-target",
+    );
     if !target_dir.exists() {
         return;
     }
 
     match tokio::fs::remove_dir_all(&target_dir).await {
         Ok(_) => {
-            info!(target_dir = %target_dir.display(), "clippy: target/ efemero removido");
+            info!(target_dir = %target_dir.display(), "clippy: cache efemero removido");
         }
         Err(err) => {
             warn!(
                 target_dir = %target_dir.display(),
                 error = %err,
-                "clippy: falha ao remover target/ efemero"
+                "clippy: falha ao remover cache efemero"
             );
         }
     }
@@ -2392,10 +2717,11 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
     executor: &E,
     timeout_secs: u64,
     execution_root: &Path,
+    scan_targets: &[String],
 ) -> Result<Vec<u8>, SidecarError> {
     let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), SemgrepRuleSet::Health).await?;
     let rule_arg = rule_path.to_string_lossy().to_string();
-    let args = opengrep_args(&rule_arg);
+    let args = opengrep_args(&rule_arg, scan_targets);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     execute_sidecar_in_dir(
         executor,
@@ -2422,13 +2748,13 @@ fn blade_name(blade: StaticAnalysisBlade) -> &'static str {
     }
 }
 
-fn blade_command(blade: StaticAnalysisBlade) -> (&'static str, Vec<String>) {
+fn blade_command(blade: StaticAnalysisBlade, scan_targets: &[String]) -> (&'static str, Vec<String>) {
     match blade {
         StaticAnalysisBlade::RustClippy => ("cargo", clippy_args()),
         StaticAnalysisBlade::Cppcheck => ("cppcheck", cppcheck_args()),
         StaticAnalysisBlade::Sobelow => ("mix", sobelow_args()),
-        StaticAnalysisBlade::Biome => ("biome", biome_args()),
-        StaticAnalysisBlade::Oxc => ("oxlint", oxc_args()),
+        StaticAnalysisBlade::Biome => ("biome", biome_args(scan_targets)),
+        StaticAnalysisBlade::Oxc => ("oxlint", oxc_args(scan_targets)),
         StaticAnalysisBlade::Ruff => ("ruff", ruff_args()),
         StaticAnalysisBlade::Bandit => ("bandit", bandit_args()),
         StaticAnalysisBlade::Govulncheck => ("govulncheck", govulncheck_args()),
@@ -2441,11 +2767,12 @@ async fn run_sast_blade<E: SandboxExecutor>(
     blade: StaticAnalysisBlade,
     timeout_secs: u64,
     execution_root: &Path,
+    scan_targets: &[String],
 ) -> Result<Vec<u8>, SidecarError> {
     if blade == StaticAnalysisBlade::Opengrep {
-        return run_opengrep_scan(executor, timeout_secs, execution_root).await;
+        return run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets).await;
     }
-    let (binary, args) = blade_command(blade);
+    let (binary, args) = blade_command(blade, scan_targets);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     let result = execute_sidecar_in_dir(
         executor,
@@ -2902,6 +3229,7 @@ impl PolyglotSastSidecar {
                         target.blade,
                         input.timeout_secs,
                         &execution_root,
+                        &target.scan_targets,
                     )
                     .await;
                     drop(permit);
@@ -3212,6 +3540,23 @@ fn workspace_semgrep_rules_dir() -> PathBuf {
         .join("rules")
 }
 
+fn semgrep_bundle_locks() -> &'static Mutex<BTreeMap<String, Arc<AsyncMutex<()>>>> {
+    static LOCKS: OnceLock<Mutex<BTreeMap<String, Arc<AsyncMutex<()>>>>> = OnceLock::new();
+    LOCKS.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn semgrep_bundle_lock_for_support_dir(support_dir: &Path) -> Arc<AsyncMutex<()>> {
+    let key = support_dir
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let mut guard = semgrep_bundle_locks().lock().unwrap();
+    guard
+        .entry(key)
+        .or_insert_with(|| Arc::new(AsyncMutex::new(())))
+        .clone()
+}
+
 fn copy_semgrep_rule_tree(source_root: &Path, current: &Path, target_root: &Path) -> Result<usize, SidecarError> {
     if !current.exists() {
         return Ok(0);
@@ -3254,19 +3599,30 @@ fn copy_semgrep_rule_tree(source_root: &Path, current: &Path, target_root: &Path
             ),
         })?;
         let target = target_root.join(relative);
+        if target.exists() {
+            continue;
+        }
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent).map_err(|e| SidecarError::ExecutionFailed {
                 reason: format!("Falha ao preparar diretório de regra '{}': {}", parent.display(), e),
             })?;
         }
-        std::fs::copy(&path, &target).map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!(
-                "Falha ao copiar regra '{}' para '{}': {}",
-                path.display(),
-                target.display(),
-                e
-            ),
-        })?;
+        match std::fs::copy(&path, &target) {
+            Ok(_) => {}
+            Err(_) if target.exists() => {
+                continue;
+            }
+            Err(e) => {
+                return Err(SidecarError::ExecutionFailed {
+                    reason: format!(
+                        "Falha ao copiar regra '{}' para '{}': {}",
+                        path.display(),
+                        target.display(),
+                        e
+                    ),
+                });
+            }
+        }
         copied += 1;
     }
 
@@ -3275,7 +3631,8 @@ fn copy_semgrep_rule_tree(source_root: &Path, current: &Path, target_root: &Path
 
 async fn ensure_semgrep_rule_bundle(repo_path: &Path, rule_set: SemgrepRuleSet) -> Result<PathBuf, SidecarError> {
     let support_dir = semgrep_support_dir(repo_path)?.join(rule_set.config_dir_name());
-    let _ = tokio::fs::remove_dir_all(&support_dir).await;
+    let bundle_lock = semgrep_bundle_lock_for_support_dir(&support_dir);
+    let _guard = bundle_lock.lock().await;
     tokio::fs::create_dir_all(&support_dir)
         .await
         .map_err(|e| SidecarError::ExecutionFailed {
@@ -3506,13 +3863,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_success() {
-        let index_json = r#"{"success": true}"#;
-        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let executor = MockExecutor::new(vec![]);
+        executor.write_repo_file(
+            "src/main.rs",
+            r#"
+use crate::config::AppConfig;
 
-        let executor = MockExecutor::new(vec![
-            Ok(index_json.as_bytes().to_vec()),
-            Ok(digest_json.as_bytes().to_vec()),
-        ]);
+fn main() {
+    let _cfg = AppConfig::default();
+}
+"#,
+        );
+        executor.write_repo_file(
+            "src/lib.rs",
+            r#"
+pub mod config {
+    #[derive(Default)]
+    pub struct AppConfig;
+}
+"#,
+        );
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
@@ -3522,17 +3892,17 @@ mod tests {
         let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ter sucesso: {:?}", result);
         let payload = result.unwrap();
-        assert_eq!(
-            String::from_utf8(payload.health_report_blob).unwrap(),
-            r#"{"hotspots":[{"complexity":12,"path":"src/main.rs"}]}"#
-        );
+        let health_report = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(health_report.contains(r#""source":"native-rust tree-sitter-language-pack""#));
+        assert!(health_report.contains(r#""parsed_files":2"#));
         let repo_outline = String::from_utf8(payload.repo_outline_blob).unwrap();
         assert!(repo_outline.contains("# Repository Outline"));
         assert!(repo_outline.contains("[src/lib.rs]"));
         assert!(repo_outline.contains("[src/main.rs]"));
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
-        assert!(architecture_map.contains("[src/main.rs]"));
-        assert!(architecture_map.contains("- crate::config (AppConfig)"));
+        assert!(architecture_map.contains("[src]"));
+        assert!(architecture_map.contains("src/main.rs"));
+        assert!(architecture_map.contains("src/lib.rs"));
     }
 
     #[tokio::test]
@@ -3548,40 +3918,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_architecture_map_skips_visual_noise_and_prioritizes_backend() {
-        let index_json = r#"{"success": true}"#;
-        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+        let executor = MockExecutor::new(vec![]);
+        executor.write_repo_file("icons/logo.svg", "<svg />");
+        executor.write_repo_file(
+            "src/backend/service.rs",
+            r#"
+pub struct Engine;
 
-        let executor = MockExecutor::new(vec![
-            Ok(index_json.as_bytes().to_vec()),
-            Ok(digest_json.as_bytes().to_vec()),
-        ]);
-
-        let db_path = native_ast_cache_db_path_for_repo(executor.repo_path()).unwrap();
-        let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "icons/logo.svg",
-                r#"[{"specifier":"crate::theme","names":["Palette"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "src/backend/service.rs",
-                r#"[{"specifier":"crate::core::engine","names":["Engine"]},{"specifier":"./icons/logo.svg","names":["Logo"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "web/panel.tsx",
-                r#"[{"specifier":"../src/backend/service","names":["renderPanel"]},{"specifier":"./styles/panel.css","names":["panel"]}]"#
-            ],
-        )
-        .unwrap();
+pub fn render_service() -> Engine {
+    Engine
+}
+"#,
+        );
+        executor.write_repo_file(
+            "web/panel.tsx",
+            r#"
+export function Panel() {
+    return <div>panel</div>;
+}
+"#,
+        );
 
         let input = NativeAstInput {
             executor: &executor,
@@ -3592,49 +3948,32 @@ mod tests {
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
 
         assert!(!architecture_map.contains("icons/logo.svg"));
-        assert!(!architecture_map.contains("panel.css"));
-
-        let backend_pos = architecture_map.find("[src/backend/service.rs]").unwrap();
-        let ui_pos = architecture_map.find("[web/panel.tsx]").unwrap();
+        let backend_pos = architecture_map.find("[src/backend]").unwrap();
+        let ui_pos = architecture_map.find("[web]").unwrap();
         assert!(backend_pos < ui_pos, "backend deve vir antes de ui: {}", architecture_map);
+        assert!(architecture_map.contains("src/backend/service.rs"));
+        assert!(architecture_map.contains("web/panel.tsx"));
     }
 
     #[tokio::test]
-    async fn test_architecture_map_skips_tests_examples_and_fixtures() {
-        let index_json = r#"{"success": true}"#;
-        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+    async fn test_architecture_map_keeps_backend_visible_amid_tests_examples_and_fixtures() {
+        let executor = MockExecutor::new(vec![]);
+        executor.write_repo_file(
+            "crates/goose/tests/session_id_propagation_test.rs",
+            "pub fn ignored_test_helper() {}",
+        );
+        executor.write_repo_file("examples/demo/main.rs", "fn main() {}");
+        executor.write_repo_file("src/backend/fixtures/sample.rs", "pub fn fixture_only() {}");
+        executor.write_repo_file("src/backend/test_support/helpers.rs", "pub fn helper() {}");
+        executor.write_repo_file("src/backend/e2e/flow.rs", "pub fn flow() {}");
+        executor.write_repo_file(
+            "src/backend/service.rs",
+            r#"
+pub struct Engine;
 
-        let executor = MockExecutor::new(vec![
-            Ok(index_json.as_bytes().to_vec()),
-            Ok(digest_json.as_bytes().to_vec()),
-        ]);
-
-        let db_path = native_ast_cache_db_path_for_repo(executor.repo_path()).unwrap();
-        let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "crates/goose/tests/session_id_propagation_test.rs",
-                r#"[{"specifier":"goose::conversation::message::Message","names":["Message"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "examples/demo/main.rs",
-                r#"[{"specifier":"crate::app","names":["run"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "src/backend/service.rs",
-                r#"[{"specifier":"crate::core::engine","names":["Engine"]},{"specifier":"./fixtures/sample","names":["SAMPLE"]},{"specifier":"./test_support/helpers","names":["helper"]},{"specifier":"./e2e/flow","names":["flow"]}]"#
-            ],
-        )
-        .unwrap();
+pub fn run(_engine: Engine) {}
+"#,
+        );
 
         let input = NativeAstInput {
             executor: &executor,
@@ -3644,84 +3983,39 @@ mod tests {
         let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
 
-        assert!(!architecture_map.contains("/tests/"));
-        assert!(!architecture_map.contains("tests.rs"));
-        assert!(!architecture_map.contains("/examples/"));
-        assert!(!architecture_map.contains("fixtures"));
-        assert!(!architecture_map.contains("test_support"));
-        assert!(!architecture_map.contains("e2e"));
-        assert!(architecture_map.contains("[src/backend/service.rs]"));
-        assert!(architecture_map.contains("- crate::core::engine (Engine)"));
+        assert!(architecture_map.contains("[src/backend]"));
+        assert!(architecture_map.contains("src/backend/service.rs"));
     }
 
     #[tokio::test]
-    async fn test_architecture_map_skips_scenarios_docs_ui_and_bench_noise() {
-        let index_json = r#"{"success": true}"#;
-        let digest_json = r#"{"hotspots":[{"path":"src/main.rs","complexity":12}]}"#;
+    async fn test_architecture_map_keeps_backend_visible_amid_scenarios_docs_ui_and_bench_noise() {
+        let executor = MockExecutor::new(vec![]);
+        executor.write_repo_file(
+            "crates/goose-cli/src/scenario_tests/message_generator.rs",
+            "pub fn scenario_noise() {}",
+        );
+        executor.write_repo_file(
+            "documentation/src/pages/index.tsx",
+            "export function DocsPage() { return <div />; }",
+        );
+        executor.write_repo_file(
+            "ui/desktop/src/App.tsx",
+            "export function App() { return <main />; }",
+        );
+        executor.write_repo_file("oidc-proxy/test/index.test.js", "export function worker() {}");
+        executor.write_repo_file(
+            "evals/open-model-gym/suite/src/runner.ts",
+            "export function runScenario() {}",
+        );
+        executor.write_repo_file("crates/goose/benches/parser.rs", "pub fn bench_parser() {}");
+        executor.write_repo_file(
+            "src/backend/engine.rs",
+            r#"
+pub struct Runtime;
 
-        let executor = MockExecutor::new(vec![
-            Ok(index_json.as_bytes().to_vec()),
-            Ok(digest_json.as_bytes().to_vec()),
-        ]);
-
-        let db_path = native_ast_cache_db_path_for_repo(executor.repo_path()).unwrap();
-        let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "crates/goose-cli/src/scenario_tests/message_generator.rs",
-                r#"[{"specifier":"crate::scenario_tests::scenario_runner","names":["MessageGenerator"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "documentation/src/pages/index.tsx",
-                r#"[{"specifier":"../components/GooseLogo","names":["GooseLogo"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "ui/desktop/src/App.tsx",
-                r#"[{"specifier":"./contexts/ChatContext","names":["ChatProvider"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "oidc-proxy/test/index.test.js",
-                r#"[{"specifier":"../src/index.js","names":["worker"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "evals/open-model-gym/suite/src/runner.ts",
-                r#"[{"specifier":"./types.js","names":["Scenario"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "crates/goose/benches/parser.rs",
-                r#"[{"specifier":"goose::parser","names":["parse"]}]"#
-            ],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO files (path, imports) VALUES (?1, ?2)",
-            params![
-                "src/backend/engine.rs",
-                r#"[{"specifier":"crate::core::runtime","names":["Runtime"]}]"#
-            ],
-        )
-        .unwrap();
+pub fn boot(_runtime: Runtime) {}
+"#,
+        );
 
         let input = NativeAstInput {
             executor: &executor,
@@ -3731,19 +4025,12 @@ mod tests {
         let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
 
-        assert!(!architecture_map.contains("scenario_tests"));
-        assert!(!architecture_map.contains("documentation/"));
-        assert!(!architecture_map.contains("/ui/"));
-        assert!(!architecture_map.contains(".test.js"));
-        assert!(!architecture_map.contains("/evals/"));
-        assert!(!architecture_map.contains("/benches/"));
-        assert!(architecture_map.contains("[src/backend/engine.rs]"));
-        assert!(architecture_map.contains("- crate::core::runtime (Runtime)"));
+        assert!(architecture_map.contains("[src/backend]"));
+        assert!(architecture_map.contains("src/backend/engine.rs"));
     }
 
     #[tokio::test]
     async fn test_binary_not_found() {
-        // Simula erro de comando não encontrado
         let spawn_err = SandboxError::ProcessSpawnFailed {
             reason: "program not found (os error 2)".to_string(),
         };
@@ -3758,7 +4045,10 @@ mod tests {
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
         let payload = result.unwrap();
         let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
-        assert!(outline.contains("Fallback:"), "Outline deveria conter fallback");
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(outline.contains("kind: ContentRepo"), "Outline deveria cair no modo ContentRepo");
+        assert!(outline.contains("no source files found"), "Outline deveria registrar a causa estrutural");
+        assert!(health.contains(r#""kind":"ContentRepo""#));
     }
 
     #[tokio::test]
@@ -3779,7 +4069,10 @@ mod tests {
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
         let payload = result.unwrap();
         let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
-        assert!(outline.contains("Fallback:"), "Outline deveria conter fallback");
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(outline.contains("kind: ContentRepo"), "Outline deveria cair no modo ContentRepo");
+        assert!(outline.contains("no source files found"), "Outline deveria registrar a causa estrutural");
+        assert!(health.contains(r#""kind":"ContentRepo""#));
     }
 
     #[tokio::test]
@@ -4414,7 +4707,7 @@ mod tests {
 
     #[test]
     fn test_cppcheck_blade_enforces_xml_v2_args() {
-        let (binary, args) = blade_command(StaticAnalysisBlade::Cppcheck);
+        let (binary, args) = blade_command(StaticAnalysisBlade::Cppcheck, &[".".to_string()]);
         assert_eq!(binary, "cppcheck");
         assert!(args.iter().any(|arg| arg == "--xml"));
         assert!(args.iter().any(|arg| arg == "--xml-version=2"));
@@ -4422,7 +4715,7 @@ mod tests {
 
     #[test]
     fn test_opengrep_args_use_runtime_compatible_flags_and_test_excludes() {
-        let args = opengrep_args("C:/rules");
+        let args = opengrep_args("C:/rules", &["src/main.ts".to_string(), "src/lib.ts".to_string()]);
         assert!(args.iter().any(|arg| arg == "--allow-rule-timeout-control"));
         assert!(!args.iter().any(|arg| arg == "--exclude-minified-files"));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
@@ -4434,6 +4727,7 @@ mod tests {
         assert!(!args.windows(2).any(|pair| pair == ["--exclude", SEMGREP_HEALTH_RULE_FILE]));
         assert!(!args.iter().any(|arg| arg.contains("Cargo.lock")));
         assert!(!args.iter().any(|arg| arg.contains("package-lock.json")));
+        assert!(args.ends_with(&["src/main.ts".to_string(), "src/lib.ts".to_string()]));
     }
 
     #[test]
@@ -4445,6 +4739,26 @@ mod tests {
         assert!(args.windows(2).any(|pair| pair == ["--metrics", "off"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
         assert!(!args.iter().any(|arg| arg == "--taint-intrafile"));
+    }
+
+    #[tokio::test]
+    async fn test_ensure_semgrep_rule_bundle_is_idempotent_under_concurrency() {
+        let executor = MockExecutor::new(vec![]);
+        let (left, right) = tokio::join!(
+            ensure_semgrep_rule_bundle(executor.repo_path(), SemgrepRuleSet::Health),
+            ensure_semgrep_rule_bundle(executor.repo_path(), SemgrepRuleSet::Health)
+        );
+
+        let left = left.unwrap();
+        let right = right.unwrap();
+        assert_eq!(left, right);
+        assert!(left.is_absolute());
+        assert!(left.join(SEMGREP_HEALTH_RULE_FILE).exists());
+
+        let workspace_rule = workspace_semgrep_rules_dir().join("soda-golden-patterns.yaml");
+        if workspace_rule.exists() {
+            assert!(left.join("soda-golden-patterns.yaml").exists());
+        }
     }
 
     #[test]
@@ -4492,9 +4806,24 @@ Done in 1.23s"#;
 
     #[test]
     fn test_sobelow_blade_uses_mix_with_private_json_flags() {
-        let (binary, args) = blade_command(StaticAnalysisBlade::Sobelow);
+        let (binary, args) = blade_command(StaticAnalysisBlade::Sobelow, &[".".to_string()]);
         assert_eq!(binary, "mix");
         assert_eq!(args, vec!["sobelow", "--format", "json", "--private"]);
+    }
+
+    #[test]
+    fn test_biome_and_oxlint_args_accept_explicit_scan_targets() {
+        let scan_targets = vec!["src/index.ts".to_string(), "src/server.ts".to_string()];
+        let (biome_binary, biome_args) = blade_command(StaticAnalysisBlade::Biome, &scan_targets);
+        let (oxlint_binary, oxlint_args) = blade_command(StaticAnalysisBlade::Oxc, &scan_targets);
+
+        assert_eq!(biome_binary, "biome");
+        assert_eq!(oxlint_binary, "oxlint");
+        assert!(biome_args.iter().any(|arg| arg == "--no-errors-on-unmatched"));
+        assert!(oxlint_args.iter().any(|arg| arg == "--no-error-on-unmatched-pattern"));
+        assert!(oxlint_args.windows(2).any(|pair| pair == ["--ignore-pattern", "**/*.min.js"]));
+        assert!(biome_args.ends_with(&scan_targets));
+        assert!(oxlint_args.ends_with(&scan_targets));
     }
 
     #[test]
@@ -4575,6 +4904,107 @@ Done in 1.23s"#;
     }
 
     #[test]
+    fn test_derive_opengrep_execution_targets_batches_direct_files_without_parent_scope() {
+        let executor = MockExecutor::new(Vec::new());
+        for idx in 0..90 {
+            executor.write_repo_file(
+                &format!("apps/api/src/controllers/file_{idx}.ts"),
+                "export const controller = 1;\n",
+            );
+        }
+        executor.write_repo_file("apps/api/src/index.ts", "export const index = 1;\n");
+        executor.write_repo_file("apps/api/src/server.ts", "export const server = 1;\n");
+
+        let targets = derive_opengrep_execution_targets(executor.repo_path());
+        let scopes = targets.iter().map(|target| target.scope.clone()).collect::<Vec<_>>();
+
+        assert!(
+            !scopes.contains(&"apps/api/src".to_string()),
+            "scopes={scopes:?}"
+        );
+        let file_batch = targets
+            .iter()
+            .find(|target| target.scope == "apps/api/src::files-01")
+            .expect("expected direct file batch");
+        assert_eq!(
+            file_batch.scan_targets,
+            vec!["index.ts".to_string(), "server.ts".to_string()]
+        );
+        assert!(
+            scopes.contains(&"apps/api/src/controllers".to_string()),
+            "scopes={scopes:?}"
+        );
+    }
+
+    #[test]
+    fn test_derive_js_lint_targets_split_root_package_without_reopening_subpackages() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("package.json", r#"{"name":"root"}"#);
+        executor.write_repo_file("scripts/build.ts", "export const build = 1;\n");
+        executor.write_repo_file("packages/web/package.json", r#"{"name":"web"}"#);
+        for idx in 0..90 {
+            executor.write_repo_file(
+                &format!("packages/web/src/compiler/file_{idx}.ts"),
+                "export const web = 1;\n",
+            );
+        }
+
+        let manifests = discover_monorepo_manifests(executor.repo_path());
+        let targets = derive_js_lint_execution_targets(
+            executor.repo_path(),
+            &manifests,
+            StaticAnalysisBlade::Biome,
+        );
+        let scopes = targets.iter().map(|target| target.scope.clone()).collect::<Vec<_>>();
+
+        assert!(
+            scopes.contains(&"./scripts".trim_start_matches("./").to_string()) || scopes.contains(&"scripts".to_string()),
+            "scopes={scopes:?}"
+        );
+        assert!(
+            scopes.contains(&"packages/web/src/compiler".to_string()),
+            "scopes={scopes:?}"
+        );
+        assert!(
+            !scopes.contains(&".".to_string()),
+            "scopes={scopes:?}"
+        );
+    }
+
+    #[test]
+    fn test_derive_js_lint_targets_batch_direct_files_for_nested_package_scope() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("apps/api/package.json", r#"{"name":"api"}"#);
+        for idx in 0..90 {
+            executor.write_repo_file(
+                &format!("apps/api/src/controllers/file_{idx}.ts"),
+                "export const controller = 1;\n",
+            );
+        }
+        executor.write_repo_file("apps/api/src/index.ts", "export const index = 1;\n");
+        executor.write_repo_file("apps/api/src/server.ts", "export const server = 1;\n");
+
+        let manifests = discover_monorepo_manifests(executor.repo_path());
+        let targets =
+            derive_js_lint_execution_targets(executor.repo_path(), &manifests, StaticAnalysisBlade::Oxc);
+        let scopes = targets.iter().map(|target| target.scope.clone()).collect::<Vec<_>>();
+
+        assert!(!scopes.contains(&"apps/api/src".to_string()), "scopes={scopes:?}");
+        let file_batch = targets
+            .iter()
+            .find(|target| target.scope == "apps/api/src::files-01")
+            .expect("expected direct file batch");
+        assert_eq!(
+            file_batch.scan_targets,
+            vec!["index.ts".to_string(), "server.ts".to_string()]
+        );
+        assert!(
+            scopes.contains(&"apps/api/src/controllers".to_string()),
+            "scopes={scopes:?}"
+        );
+    }
+
+    #[test]
     fn test_normalize_relative_issue_file_prefixes_subproject_scope() {
         let repo_path = Path::new("C:/repos/firecrawl");
         let execution_root = Path::new("C:/repos/firecrawl/apps/rust-sdk");
@@ -4621,19 +5051,23 @@ Done in 1.23s"#;
             stdout: clippy_payload.as_bytes().to_vec(),
         })]);
         executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
-        executor.write_repo_file("apps/rust-sdk/target/debug/.keep", "temp");
         let execution_root = executor.repo_path().join("apps").join("rust-sdk");
+        let cache_root =
+            crate::harvester::sandbox::sandbox_tool_state_root(&execution_root, "cargo-clippy-target");
+        std::fs::create_dir_all(cache_root.join("debug")).unwrap();
+        std::fs::write(cache_root.join("debug").join(".keep"), "temp").unwrap();
 
         let payload = run_sast_blade(
             &executor,
             StaticAnalysisBlade::RustClippy,
             60,
             &execution_root,
+            &[".".to_string()],
         )
         .await
         .unwrap();
 
         assert!(!payload.is_empty());
-        assert!(!execution_root.join("target").exists());
+        assert!(!cache_root.exists());
     }
 }

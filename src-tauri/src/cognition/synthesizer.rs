@@ -72,7 +72,7 @@ fn spawn_phase3_block_telemetry(
             tick.tick().await;
             let snapshot = state.lock().await.clone();
             let total_s = started_total.elapsed().as_secs();
-            if total_s > 0 && total_s % 60 == 0 {
+            if total_s > 0 && total_s.is_multiple_of(60) {
                 continue;
             }
             info!(
@@ -1823,7 +1823,6 @@ impl Block2MatrixFields {
             detected_toxic_deps,
             do_not_absorb,
             where_ai_should_not_enter,
-            ..self
         }
     }
 }

@@ -93,14 +93,18 @@ mod tests {
         let _repo = server.mock("GET", "/repos/owner/repo")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"default_branch":"main"}"#)
-            .create_async().await;
-        let _issues = server.mock("GET", "/search/issues")
-            .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:owner/repo+is:issue+is:open".into()))
-            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "1".into()))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(r#"{"total_count":42,"items":[]}"#)
+            .with_body(
+                r#"{
+                    "default_branch":"main",
+                    "full_name":"owner/repo",
+                    "open_issues_count":42,
+                    "stargazers_count":99,
+                    "forks_count":13,
+                    "license":{"spdx_id":"MIT"},
+                    "description":"demo repo",
+                    "name":"repo"
+                }"#,
+            )
             .create_async().await;
         let _open_prs = server.mock("GET", "/search/issues")
             .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:owner/repo+is:pr+is:open".into()))
@@ -134,6 +138,11 @@ mod tests {
         let payload = result.unwrap();
         assert_eq!(payload.open_issues_count, 42);
         assert_eq!(payload.open_prs_count, 7);
+        assert_eq!(payload.stars_count, 99);
+        assert_eq!(payload.forks_count, 13);
+        assert_eq!(payload.licenca, "MIT");
+        assert_eq!(payload.description.as_deref(), Some("demo repo"));
+        assert_eq!(payload.name.as_deref(), Some("repo"));
         assert_eq!(payload.last_commit_sha.as_deref(), Some("abc123"));
         assert!(payload.last_commit_date.is_some());
         assert_eq!(payload.recent_prs.len(), 1);
@@ -141,31 +150,57 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_fetch_404_fails_closed() {
+    async fn test_fetch_uses_canonical_full_name_for_search_routes() {
         let mut server = Server::new_async().await;
-        let _m = server.mock("GET", "/repos/owner/repo")
-            .with_status(404)
+        let _repo = server.mock("GET", "/repos/owner/repo")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"default_branch":"main","full_name":"firecrawl/firecrawl"}"#)
+            .create_async().await;
+        let _open_prs = server.mock("GET", "/search/issues")
+            .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:firecrawl/firecrawl+is:pr+is:open".into()))
+            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "1".into()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"total_count":5,"items":[]}"#)
+            .create_async().await;
+        let _recent_prs = server.mock("GET", "/search/issues")
+            .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:firecrawl/firecrawl+is:pr".into()))
+            .match_query(mockito::Matcher::UrlEncoded("sort".into(), "updated".into()))
+            .match_query(mockito::Matcher::UrlEncoded("order".into(), "desc".into()))
+            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "5".into()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"total_count":5,"items":[]}"#)
+            .create_async().await;
+        let _commits = server.mock("GET", "/repos/owner/repo/commits")
+            .match_query(mockito::Matcher::UrlEncoded("sha".into(), "main".into()))
+            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "1".into()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"[{"sha":"abc123","commit":{"author":{"date":"2023-10-27T10:00:00Z"}}}]"#)
             .create_async().await;
 
         let url = Url::parse("https://github.com/owner/repo").unwrap();
         let limiter = RateLimiter;
-        
+
         let result = CommunityMetaFetcher::fetch_internal(&url, &limiter, Some(&server.url())).await;
-        assert_eq!(result, Err(FetchError::NotFound));
+        assert!(result.is_ok());
+        let payload = result.unwrap();
+        assert_eq!(payload.open_prs_count, 5);
+        assert_eq!(payload.full_name.as_deref(), Some("firecrawl/firecrawl"));
     }
 
-    #[tokio::test]
-    async fn test_fetch_rate_limit_fails_closed() {
-        let mut server = Server::new_async().await;
-        let _m = server.mock("GET", "/repos/owner/repo")
-            .with_status(403)
-            .create_async().await;
+    #[test]
+    fn test_map_tracker_not_found_to_fetch_error() {
+        let result = github_tracker::map_tracker_to_fetch_error(github_tracker::GithubTrackerError::NotFound);
+        assert_eq!(result, FetchError::NotFound);
+    }
 
-        let url = Url::parse("https://github.com/owner/repo").unwrap();
-        let limiter = RateLimiter;
-        
-        let result = CommunityMetaFetcher::fetch_internal(&url, &limiter, Some(&server.url())).await;
-        assert_eq!(result, Err(FetchError::RateLimit));
+    #[test]
+    fn test_map_tracker_rate_limit_to_fetch_error() {
+        let result = github_tracker::map_tracker_to_fetch_error(github_tracker::GithubTrackerError::RateLimit);
+        assert_eq!(result, FetchError::RateLimit);
     }
 
     #[tokio::test]

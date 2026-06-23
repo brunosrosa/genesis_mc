@@ -114,7 +114,7 @@ fn should_skip_walk_dir(name: &str) -> bool {
 }
 
 fn profile_from_sorted_stacks(mut stacks: Vec<SingleStack>) -> StackProfile {
-    stacks.sort_by(|left, right| stack_priority(left).cmp(&stack_priority(right)));
+    stacks.sort_by_key(stack_priority);
     stacks.dedup();
     match stacks.as_slice() {
         [] => StackProfile::Unknown,

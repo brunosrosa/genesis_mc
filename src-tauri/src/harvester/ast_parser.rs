@@ -163,6 +163,42 @@ pub fn derive_scannable_roots_native(
         .collect::<Vec<_>>())
 }
 
+pub fn collect_direct_scannable_files(root: &Path) -> Result<Vec<PathBuf>, AstParserError> {
+    let mut files = Vec::new();
+    let entries = std::fs::read_dir(root).map_err(|err| AstParserError::WalkFailure {
+        path: root.display().to_string(),
+        reason: err.to_string(),
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|err| AstParserError::WalkFailure {
+            path: root.display().to_string(),
+            reason: err.to_string(),
+        })?;
+        let file_type = entry.file_type().map_err(|err| AstParserError::WalkFailure {
+            path: root.display().to_string(),
+            reason: err.to_string(),
+        })?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if should_skip_file(&path) {
+            continue;
+        }
+        let relative_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_string();
+        if should_skip_scannable_relative_path(&relative_name) {
+            continue;
+        }
+        files.push(path);
+    }
+    files.sort();
+    Ok(files)
+}
+
 const SCANNABLE_ROOT_FILE_THRESHOLD: usize = 80;
 const SCANNABLE_ROOT_MAX_SPLIT_DEPTH: usize = 3;
 
@@ -231,10 +267,13 @@ fn collect_scannable_roots(
         return;
     }
 
-    if by_child.len() == 1 && direct_files == 0 {
+    if by_child.len() == 1 {
         let (child, child_tails) = by_child.into_iter().next().unwrap();
         let child_prefix = format!("{prefix}/{child}");
         collect_scannable_roots(&child_prefix, &child_tails, depth + 1, out);
+        if direct_files > 0 {
+            out.insert(prefix.to_string());
+        }
         return;
     }
 

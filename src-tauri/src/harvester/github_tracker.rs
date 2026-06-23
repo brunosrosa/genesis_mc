@@ -116,6 +116,11 @@ pub async fn fetch_community_meta(
 
     let repo_route = format!("/repos/{owner}/{repo}");
     let repo_payload: GithubRepoPayload = github_get(&crab, &repo_route).await?;
+    let canonical_owner_repo = repo_payload
+        .full_name
+        .as_deref()
+        .and_then(canonical_owner_repo_from_full_name)
+        .unwrap_or_else(|| format!("{owner}/{repo}"));
 
     let default_branch = if repo_payload.default_branch.trim().is_empty() {
         "main".to_string()
@@ -123,9 +128,10 @@ pub async fn fetch_community_meta(
         repo_payload.default_branch.trim().to_string()
     };
 
-    let open_prs_route = format!("/search/issues?q=repo:{owner}/{repo}+is:pr+is:open&per_page=1");
+    let open_prs_route =
+        format!("/search/issues?q=repo:{canonical_owner_repo}+is:pr+is:open&per_page=1");
     let recent_prs_route =
-        format!("/search/issues?q=repo:{owner}/{repo}+is:pr&sort=updated&order=desc&per_page=5");
+        format!("/search/issues?q=repo:{canonical_owner_repo}+is:pr&sort=updated&order=desc&per_page=5");
     let commits_route = format!("/repos/{owner}/{repo}/commits?sha={default_branch}&per_page=1");
 
     let open_prs: SearchIssueResponse = github_get(&crab, &open_prs_route).await?;
@@ -410,11 +416,27 @@ fn map_octocrab_error(err: octocrab::Error) -> GithubTrackerError {
     let message = err.to_string();
     if message.contains("404") {
         GithubTrackerError::NotFound
+    } else if message.contains("422") {
+        GithubTrackerError::InvalidResponse(message)
     } else if message.contains("403") || message.to_ascii_lowercase().contains("rate") {
         GithubTrackerError::RateLimit
     } else {
         GithubTrackerError::Network(message)
     }
+}
+
+fn canonical_owner_repo_from_full_name(full_name: &str) -> Option<String> {
+    let trimmed = full_name.trim().trim_matches('/');
+    let mut segments = trimmed
+        .split('/')
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty());
+    let owner = segments.next()?;
+    let repo = segments.next()?;
+    if segments.next().is_some() {
+        return None;
+    }
+    Some(format!("{owner}/{repo}"))
 }
 
 fn workspace_root() -> PathBuf {
