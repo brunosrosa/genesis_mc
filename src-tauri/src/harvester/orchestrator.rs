@@ -13,7 +13,7 @@ use super::router::{ExtractionInput, ExtractionRouter, ExtractionTask};
 use super::community::{CommunityMetaFetcher, RateLimiter};
 use super::persist::{BlobNormalizer, ArtifactBlob};
 use super::extract::{
-    truncate_community_meta_json, LocalStaticExtractor, ManifestInput, OpsInput, TestIntentInput,
+    render_community_meta_dossier, LocalStaticExtractor, ManifestInput, OpsInput, TestIntentInput,
     TestIntentExtractor, UxContractsExtractor,
 };
 use super::guard::PurgeGuard;
@@ -344,22 +344,10 @@ impl HarvesterOrchestrator {
                         let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
                         (bytes.clone(), bytes)
                     } else {
-                        let unsafe_blob = serde_json::to_vec(&serde_json::json!({
-                            "schema": "soda.health.v1",
-                            "focus": "unsafe_hotspots",
-                            "fallback": true,
-                            "source": "polyglot-sast-router",
-                            "reason": reason,
-                            "issues": [],
-                        }))
-                        .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
-                        let health_blob = serde_json::to_vec(&serde_json::json!({
-                            "fallback": true,
-                            "source": "polyglot-sast-router",
-                            "reason": reason,
-                            "issues": [],
-                        }))
-                        .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
+                        let unsafe_blob =
+                            render_unsafe_hotspots_fallback("polyglot-sast-router", &reason);
+                        let health_blob =
+                            render_health_report_fallback("polyglot-sast-router", &reason);
                         (unsafe_blob, health_blob)
                     };
                     blobs.push(ArtifactBlob {
@@ -379,22 +367,14 @@ impl HarvesterOrchestrator {
                 let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
                 (bytes.clone(), bytes)
             } else {
-                let unsafe_blob = serde_json::to_vec(&serde_json::json!({
-                    "schema": "soda.health.v1",
-                    "focus": "unsafe_hotspots",
-                    "fallback": true,
-                    "source": "polyglot-sast-router",
-                    "reason": "static analysis foi pulada pelo roteamento de tarefas",
-                    "issues": [],
-                }))
-                .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
-                let health_blob = serde_json::to_vec(&serde_json::json!({
-                    "fallback": true,
-                    "source": "polyglot-sast-router",
-                    "reason": "static analysis foi pulada pelo roteamento de tarefas",
-                    "issues": [],
-                }))
-                .unwrap_or_else(|_| b"{\"fallback\":true}".to_vec());
+                let unsafe_blob = render_unsafe_hotspots_fallback(
+                    "polyglot-sast-router",
+                    "static analysis foi pulada pelo roteamento de tarefas",
+                );
+                let health_blob = render_health_report_fallback(
+                    "polyglot-sast-router",
+                    "static analysis foi pulada pelo roteamento de tarefas",
+                );
                 (unsafe_blob, health_blob)
             };
             blobs.push(ArtifactBlob {
@@ -410,17 +390,14 @@ impl HarvesterOrchestrator {
         }
 
         info!(repo_id = %repo_id, "N10: Finalizando coleta de metadados comunitarios");
-        let community_payload = match community_fut.await {
-            Ok(payload) => payload,
+        let (community_payload, community_error) = match community_fut.await {
+            Ok(payload) => (payload, None),
             Err(e) => {
                 warn!(repo_id = %repo_id, reason = %e, "Falha ao coletar metrica comunitaria; seguindo com fail-soft");
-                super::community::CommunityMetaPayload::empty()
+                (super::community::CommunityMetaPayload::empty(), Some(e.to_string()))
             }
         };
-        let community_blob = truncate_community_meta_json(&community_payload).map_err(|e| {
-            error!(repo_id = %repo_id, error = %e, "Falha ao truncar blob_09_community_meta");
-            OrchestratorError::PersistenceError(format!("Falha ao truncar CommunityMeta: {}", e))
-        })?;
+        let community_blob = render_community_meta_dossier(&community_payload, community_error.as_deref());
         blobs.push(ArtifactBlob {
             artifact_type: "blob_09_community_meta".to_string(),
             payload_blob: community_blob,
@@ -513,6 +490,20 @@ fn log_blob_generated(repo_id: &str, blob: &ArtifactBlob) {
         payload_bytes = blob.payload_blob.len(),
         "Blob gerado"
     );
+}
+
+fn render_unsafe_hotspots_fallback(source: &str, reason: &str) -> Vec<u8> {
+    format!(
+        "# Unsafe Hotspots\nsummary: findings=0\n\nfallback: true\nsource: {source}\nreason: {reason}\n"
+    )
+    .into_bytes()
+}
+
+fn render_health_report_fallback(source: &str, reason: &str) -> Vec<u8> {
+    format!(
+        "# Health Report\nsummary: findings=0\n\nfallback: true\nsource: {source}\nreason: {reason}\n"
+    )
+    .into_bytes()
 }
 
 #[cfg(test)]

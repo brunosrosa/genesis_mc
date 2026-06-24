@@ -84,19 +84,3 @@ binds:
                         env:
                           UV_NO_PROGRESS: '1'
                           UV_QUIET: '1'
-                    - name: notebooklm
-                      stdio:
-                        cmd: 'Z:/genesis_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
-                        args:
-                          [
-                            '--timeout-ms',
-                            '30000',
-                            '--',
-                            'uvx.exe',
-                            '--from',
-                            'notebooklm-mcp-cli',
-                            'notebooklm-mcp',
-                          ]
-                        env:
-                          UV_NO_PROGRESS: '1'
-                          UV_QUIET: '1'

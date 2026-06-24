@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
-use genesis_mc_lib::harvester::extract::truncate_community_meta_json;
+use genesis_mc_lib::harvester::extract::render_community_meta_dossier;
 use rusqlite::{params, Connection, OptionalExtension};
 use url::Url;
 
@@ -113,8 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let payload = CommunityMetaFetcher::fetch(&repo_url, &limiter)
         .await
         .map_err(|e| io::Error::other(format!("Falha ao recapturar {TARGET_ARTIFACT} para {repo_id}: {e}")))?;
-    let payload_blob = truncate_community_meta_json(&payload)
-        .map_err(|e| io::Error::other(format!("Falha ao serializar {TARGET_ARTIFACT}: {e}")))?;
+    let payload_blob = render_community_meta_dossier(&payload, None);
     let payload_bytes = payload_blob.len();
     let timestamp = now_epoch_secs()?;
 
@@ -134,6 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("full_name={}", payload.full_name.as_deref().unwrap_or("N/A"));
     println!("stars_count={}", payload.stars_count);
     println!("open_prs_count={}", payload.open_prs_count);
+    println!("extracted_at={}", payload.extracted_at.to_rfc3339());
 
     Ok(())
 }

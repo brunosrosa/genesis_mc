@@ -1,0 +1,80 @@
+# SODA_CANON_V5_ADRS_ALL
+
+# SODA Canon Manifest (V5)
+
+Este arquivo é o Manifesto Estático do SODA/Genesis MC. Ele existe para ser lido em O(1) pelo `blob_10_soda_canon_context`, sem dependência de rede, sem sidecars e sem truncamento.
+
+---
+
+## 1) Identidade: Exoesqueleto Cognitivo
+
+O **Genesis Mission Control (SODA)** é um **Sistema Operacional Agêntico Soberano** e um **Exoesqueleto Cognitivo**. Ele existe para forjar simbiose humano-máquina, servindo como Prótese de Função Executiva para operadores neurodivergentes (2e/TDAH), absorvendo caos logístico para liberar hiperfoco criativo.
+
+---
+
+## 2) Lei da Física: Hardware é a Jurisdição
+
+A arquitetura deve sobreviver sob restrição severa. A nuvem é ambiente hostil e subordinado; o local é o Rei.
+
+- CPU (AVX2): roteamento, orquestração assíncrona, estado, parsing e GC semântico.
+- RAM: expansão elástica e buffers de trabalho; evitar lixo transiente.
+- dGPU: teto estrito de VRAM; modelos devem ser efêmeros, quantizados e roteados.
+
+---
+
+## 3) Pessimismo da Razão: Linhas Vermelhas Bare-Metal
+
+- Núcleo do produto em Rust/Tokio. `panic!` e `unwrap()` não são “estilo”; são risco de estabilidade quando escapam do lugar certo.
+- Frontend (Svelte 5) é lente passiva: não carrega lógica de negócio, não faz computação pesada, não engasga a UI com JSON obeso.
+- IPC e telemetria: preferir buffers binários e transporte previsível; evitar serialização volumosa e GC desnecessário.
+- Fábrica vs Produto: ferramentas (Python/Node/Docker) são efêmeras e confinadas; o produto final é bare-metal.
+- Fail-closed: quando a garantia mecânica não existe, falhar fechado é correto.
+
+---
+
+## 4) Os 4 Pilares Arquiteturais
+
+### I. Córtex Motor (Rust & Tauri v2)
+
+- Zero interpretadores em background: Node/Python/Electron como daemon são proibidos.
+- Tokio: não bloquear o runtime; CPU-bound e I/O síncrono devem ser isolados.
+- Backpressure e limites explícitos (Semáforos/JoinSet): sem fan-out ilimitado.
+
+### II. Hipocampo: Tríade de Memória Local
+
+- L1: RAM e índices transientes.
+- L2: SQLite (WAL/FTS5) como SSOT episódica e trilha auditável.
+- L3: LanceDB para semântica vetorial + LadybugDB para relações causais.
+
+### III. Sistema Nervoso: Zero-Trust
+
+- Sandboxing: Wasmtime para scripts/automação; AppContainer/Landlock para ferramentas host.
+- Roteamento híbrido: ParetoBandit decide custo/qualidade/latência antes de escalar para cloud.
+
+### IV. Lente Cognitiva: Cyber‑Neuro Synthesis
+
+- Interface como instrumento clínico: estabilidade espacial, Focus Rack, zero layout shift.
+- Telemetria fantasma e ausência de spinners.
+- Nada de vidro pesado e blur no background primário.
+
+---
+
+## 5) Otimismo da Vontade: Souls MC (A Alma)
+
+O SODA é uma máquina de continuidade: ele preserva intenção, reduz “Flow-Debt”, e transforma a energia dispersa do operador em trilhas de execução estáveis. O objetivo não é “gerar texto”; é manter soberania cognitiva e operacional, com rigor, gentileza e precisão.
+
+---
+
+## 6) Contrato do Agente (SDD)
+
+- Planejar antes de codificar.
+- Mudanças estruturais passam por prova no compilador + testes.
+- Alterações destrutivas exigem Human‑In‑The‑Loop.
+
+## O MANDATO DA TRIAGEM (A TRÍADE SODA)
+
+Quando este cânone for utilizado para auditoria de repositórios ou ideação, os agentes devem incorporar três perspectivas complementares que formam o nosso Materialismo Dialético:
+
+- Lente A (Sentido/Produto - A Visionária): Foca no "Otimismo da Vontade". Busca o UAU moment, a neuro-inclusão e a mitigação de Flow-Debt. Sua missão principal é enxergar como o núcleo genial da ideia pode ampliar o SODA, facilitar o domínio do usuário e combinar-se com outras features para gerar ou refinar os nossos Canvas Espaciais.
+- Lente B (Estrutura/Arquitetura - O Cirurgião): O guardião da "Alma Matemática". Exige agnosticismo e extraibilidade atômica. Embora use o limite termodinâmico (INTEL i9 9th - 32GB RAM - RTX 2060m 6GB VRAM) como seu "Treino de Gravidade", sabe que o SODA escala via CubeCL/Burn. Sua missão é analisar lógicas abomináveis ou engessadas e propor como transmutá-las cirurgicamente para a nossa infraestrutura em Rust.
+- Lente C (Realidade/Operação - O Arquiteto de Trade-offs): Foca no "Pessimismo da Razão". Audita a fricção 24/7, os custos ocultos (FinOps) e o lixo tóxico (Node/Electron). Contudo, nunca descarta uma ideia genial: sua missão é identificar a ameaça e propor a contenção imediata (ex: Sandboxing via Wasmtime/Landlock, Fail-Closed, reescrita), garantindo sustentação sem matar a inovação.

@@ -63,7 +63,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
         params![
             CANON_GLOBAL_REPO_ID,
             "CANON_CACHE",
-            "https://notebooklm.google.com/",
+            "file://local/docs/SODA_CANON_MANIFEST.md",
             "UUID-SODA-CANON-GLOBAL",
             "CACHE_GLOBAL",
             0_i64,
@@ -134,10 +134,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", line);
     }
     println!("----------------------\n");
-
-    if char_count > 8_000 {
-        return Err(format!("blob_10 excedeu 8000 chars: {}", char_count).into());
-    }
 
     Ok(())
 }

@@ -7,7 +7,7 @@ use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
 
-use super::community::{CommunityMetaPayload, CommunityPrMeta, FetchError, RateLimiter};
+use super::community::{CommunityIssueMeta, CommunityMetaPayload, CommunityPrMeta, FetchError, RateLimiter};
 use super::git::CloneError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,15 +77,53 @@ struct GithubLicensePayload {
 #[derive(Debug, Deserialize)]
 struct SearchIssueResponse {
     total_count: u32,
-    #[serde(default)]
-    items: Vec<GithubPullRequestPayload>,
 }
 
 #[derive(Debug, Deserialize)]
-struct GithubPullRequestPayload {
+struct GithubSearchIssueResponse {
+    #[serde(default)]
+    items: Vec<GithubSearchIssueItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubSearchIssueItem {
     number: u64,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    comments: u64,
+    #[serde(default)]
+    labels: Vec<GithubLabelPayload>,
+    #[serde(default)]
+    reactions: GithubReactionsPayload,
+    #[serde(default)]
+    updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct GithubReactionsPayload {
+    #[serde(default)]
+    total_count: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubLabelPayload {
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubPullPayload {
+    number: u64,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
     state: String,
     updated_at: DateTime<Utc>,
+    #[serde(default)]
+    merged_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    draft: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,6 +159,10 @@ pub async fn fetch_community_meta(
         .as_deref()
         .and_then(canonical_owner_repo_from_full_name)
         .unwrap_or_else(|| format!("{owner}/{repo}"));
+    let (canonical_owner, canonical_repo) = canonical_owner_repo
+        .split_once('/')
+        .map(|(left, right)| (left.to_string(), right.to_string()))
+        .unwrap_or_else(|| (owner.to_string(), repo.to_string()));
 
     let default_branch = if repo_payload.default_branch.trim().is_empty() {
         "main".to_string()
@@ -130,12 +172,18 @@ pub async fn fetch_community_meta(
 
     let open_prs_route =
         format!("/search/issues?q=repo:{canonical_owner_repo}+is:pr+is:open&per_page=1");
-    let recent_prs_route =
-        format!("/search/issues?q=repo:{canonical_owner_repo}+is:pr&sort=updated&order=desc&per_page=5");
-    let commits_route = format!("/repos/{owner}/{repo}/commits?sha={default_branch}&per_page=1");
+    let top_issues_route = format!(
+        "/search/issues?q=repo:{canonical_owner_repo}+is:issue+is:open+sort:interactions-desc&per_page=7"
+    );
+    let pulls_route =
+        format!("/repos/{canonical_owner}/{canonical_repo}/pulls?state=all&sort=updated&direction=desc&per_page=5");
+    let commits_route = format!(
+        "/repos/{canonical_owner}/{canonical_repo}/commits?sha={default_branch}&per_page=1"
+    );
 
     let open_prs: SearchIssueResponse = github_get(&crab, &open_prs_route).await?;
-    let recent_prs: SearchIssueResponse = github_get(&crab, &recent_prs_route).await?;
+    let top_issues: GithubSearchIssueResponse = github_get(&crab, &top_issues_route).await?;
+    let recent_prs: Vec<GithubPullPayload> = github_get(&crab, &pulls_route).await?;
     let commits: Vec<GithubCommitPayload> = github_get(&crab, &commits_route).await?;
     let last_commit = commits.into_iter().next();
 
@@ -159,6 +207,7 @@ pub async fn fetch_community_meta(
         .unwrap_or_else(|| "UNKNOWN".to_string());
 
     Ok(CommunityMetaPayload {
+        extracted_at: Utc::now(),
         stars_count: repo_payload.stargazers_count,
         forks_count: repo_payload.forks_count,
         open_issues_count: repo_payload.open_issues_count,
@@ -181,16 +230,58 @@ pub async fn fetch_community_meta(
             .filter(|s| !s.is_empty()),
         last_commit_sha: last_commit.as_ref().map(|commit| commit.sha.clone()),
         last_commit_date: last_commit.map(|commit| commit.commit.author.date),
-        recent_prs: recent_prs
+        top_open_issues: top_issues
             .items
+            .into_iter()
+            .map(|issue| CommunityIssueMeta {
+                number: issue.number,
+                title: sanitize_one_line(&issue.title),
+                labels: issue
+                    .labels
+                    .into_iter()
+                    .map(|label| sanitize_one_line(&label.name))
+                    .filter(|label| !label.is_empty())
+                    .collect(),
+                comments: issue.comments,
+                reactions: issue.reactions.total_count,
+                updated_at: issue.updated_at,
+            })
+            .collect(),
+        recent_prs: recent_prs
             .into_iter()
             .map(|pr| CommunityPrMeta {
                 number: pr.number,
-                state: pr.state,
+                title: sanitize_one_line(&pr.title),
+                status: pr_status_label(&pr.state, pr.merged_at.is_some(), pr.draft),
                 updated_at: pr.updated_at,
             })
             .collect(),
     })
+}
+
+fn pr_status_label(state: &str, merged: bool, draft: bool) -> String {
+    if draft {
+        return "draft".to_string();
+    }
+    if merged {
+        return "merged".to_string();
+    }
+    let normalized = state.trim().to_ascii_lowercase();
+    if normalized == "open" {
+        "open".to_string()
+    } else {
+        "closed".to_string()
+    }
+}
+
+fn sanitize_one_line(value: &str) -> String {
+    value
+        .replace(['\n', '\r'], " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string()
 }
 
 pub async fn fetch_community_meta_for_owner_repo(

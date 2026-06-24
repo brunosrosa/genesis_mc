@@ -34,3 +34,30 @@ rules:
     severity: WARNING
     message: "Ternario aninhado sugere alta complexidade de fluxo"
     pattern-regex: '\?.*\?.*:'
+
+  - id: soda.javascript.debugger-residual
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Debugger residual indica entropia operacional"
+    pattern: debugger
+
+  - id: soda.python.debug-print
+    languages: [python]
+    severity: INFO
+    message: "print residual sugere debug esquecido"
+    pattern: print(...)
+
+  - id: soda.go.debug-print
+    languages: [go]
+    severity: INFO
+    message: "fmt.Print* residual sugere debug esquecido"
+    pattern-either:
+      - pattern: fmt.Print(...)
+      - pattern: fmt.Println(...)
+      - pattern: fmt.Printf(...)
+
+  - id: soda.elixir.debug-io-inspect
+    languages: [elixir]
+    severity: INFO
+    message: "IO.inspect residual sugere debug esquecido"
+    pattern: IO.inspect(...)

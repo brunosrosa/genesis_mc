@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
@@ -47,9 +48,6 @@ pub enum AstParserError {
 
 pub fn extract_repository_outline_native(
     repo_path: &Path,
-    max_outline_chars: usize,
-    max_architecture_chars: usize,
-    max_health_chars: usize,
 ) -> Result<NativeAstArtifacts, AstParserError> {
     let repo_root = repo_path
         .canonicalize()
@@ -60,18 +58,31 @@ pub fn extract_repository_outline_native(
             path: repo_root.display().to_string(),
         });
     }
+    let architecture_files = collect_architecture_files(&repo_root)?;
 
     let mut parsed_files = Vec::new();
     let mut languages = BTreeMap::<String, usize>::new();
     let mut total_signatures = 0usize;
     let mut total_import_edges = 0usize;
-    let mut directories = BTreeMap::<String, Vec<String>>::new();
-
     for file_path in source_files {
         let relative_path = sanitize_relative_path(&repo_root, &file_path);
         let Some(language) = detect_language(&file_path) else {
             continue;
         };
+
+        let file_size_bytes =
+            std::fs::metadata(&file_path)
+                .map_err(|e| AstParserError::ReadFailure {
+                    file: relative_path.clone(),
+                    reason: e.to_string(),
+                })?
+                .len();
+        if file_size_bytes > AST_MAX_SOURCE_FILE_BYTES {
+            continue;
+        }
+        if file_size_bytes >= AST_MINIFIED_HEURISTIC_MIN_BYTES && is_probably_minified_source(&file_path) {
+            continue;
+        }
 
         let source = std::fs::read_to_string(&file_path).map_err(|e| AstParserError::ReadFailure {
             file: relative_path.clone(),
@@ -88,12 +99,6 @@ pub fn extract_repository_outline_native(
         total_import_edges += import_edges;
         total_signatures += signatures.len();
         *languages.entry(language.clone()).or_insert(0) += 1;
-
-        let dir_key = directory_key(&relative_path);
-        directories
-            .entry(dir_key)
-            .or_default()
-            .push(format!("{relative_path} [{} symbols]", signatures.len()));
 
         parsed_files.push(ParsedFile {
             relative_path,
@@ -116,19 +121,14 @@ pub fn extract_repository_outline_native(
             .then_with(|| left.relative_path.cmp(&right.relative_path))
     });
 
-    let repo_outline = build_repo_outline(
-        &repo_root,
-        &parsed_files,
-        max_outline_chars,
-    );
-    let architecture_map = build_architecture_map(&directories, max_architecture_chars);
+    let repo_outline = build_repo_outline(&repo_root, &parsed_files);
+    let architecture_map = build_architecture_map(&architecture_files);
     let health_report = build_health_report(
         &repo_root,
         &languages,
         parsed_files.len(),
         total_signatures,
         total_import_edges,
-        max_health_chars,
     )?;
 
     Ok(NativeAstArtifacts {
@@ -268,11 +268,12 @@ fn collect_scannable_roots(
     }
 
     if by_child.len() == 1 {
-        let (child, child_tails) = by_child.into_iter().next().unwrap();
-        let child_prefix = format!("{prefix}/{child}");
-        collect_scannable_roots(&child_prefix, &child_tails, depth + 1, out);
-        if direct_files > 0 {
-            out.insert(prefix.to_string());
+        if let Some((child, child_tails)) = by_child.into_iter().next() {
+            let child_prefix = format!("{prefix}/{child}");
+            collect_scannable_roots(&child_prefix, &child_tails, depth + 1, out);
+            if direct_files > 0 {
+                out.insert(prefix.to_string());
+            }
         }
         return;
     }
@@ -391,27 +392,101 @@ fn collect_source_files(repo_root: &Path) -> Result<Vec<PathBuf>, AstParserError
     Ok(files)
 }
 
+fn collect_architecture_files(repo_root: &Path) -> Result<Vec<String>, AstParserError> {
+    let mut builder = WalkBuilder::new(repo_root);
+    builder.hidden(false);
+    builder.git_ignore(true);
+    builder.git_global(true);
+    builder.git_exclude(true);
+    builder.require_git(false);
+    builder.filter_entry(|entry| {
+        let path = entry.path();
+        let name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            return !should_skip_dir(name);
+        }
+        true
+    });
+
+    let mut files = Vec::new();
+    for item in builder.build() {
+        let entry = item.map_err(|e| AstParserError::WalkFailure {
+            path: repo_root.display().to_string(),
+            reason: e.to_string(),
+        })?;
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let relative_path = sanitize_relative_path(repo_root, entry.path());
+        if should_skip_architecture_relative_path(&relative_path) {
+            continue;
+        }
+        if !is_architecture_file_allowed(entry.path()) {
+            continue;
+        }
+        files.push(relative_path);
+    }
+    files.sort();
+    Ok(files)
+}
+
 fn should_skip_dir(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
     matches!(
-        name,
+        lower.as_str(),
         ".git"
+            | ".hg"
             | ".jj"
             | ".svn"
+            | ".bzr"
+            | ".idea"
+            | ".vscode"
+            | ".vs"
+            | ".fleet"
+            | ".history"
             | "node_modules"
+            | ".pnpm-store"
+            | ".yarn"
+            | ".turbo"
+            | ".nx"
+            | ".next"
+            | ".nuxt"
+            | ".svelte-kit"
+            | ".parcel-cache"
+            | ".cache"
             | "target"
             | "dist"
             | "build"
+            | "out"
             | "coverage"
             | "vendor"
+            | "deps"
             | ".native_ast_cache"
             | "__pycache__"
+            | ".pytest_cache"
+            | ".mypy_cache"
+            | ".ruff_cache"
+            | ".tox"
+            | ".nox"
             | ".venv"
             | "venv"
+            | "env"
+            | ".gradle"
+            | ".dart_tool"
+            | ".swiftpm"
+            | ".build"
+            | ".zig-cache"
+            | "zig-out"
+            | "cmakefiles"
+            | "pods"
+            | "deriveddata"
+            | "bin"
+            | "obj"
             | "documentation"
             | "docs"
             | "examples"
             | "evals"
-    )
+    ) || lower.starts_with("cmake-build-")
 }
 
 fn should_skip_file(path: &Path) -> bool {
@@ -420,6 +495,22 @@ fn should_skip_file(path: &Path) -> bool {
         || normalized.contains("/docs/")
         || normalized.contains("/examples/")
         || normalized.contains("/evals/")
+        || normalized.contains("/mock/")
+        || normalized.contains("/mocks/")
+        || normalized.contains("/__mocks__/")
+        || normalized.contains("/fixture/")
+        || normalized.contains("/fixtures/")
+        || normalized.contains("/__fixtures__/")
+        || normalized.contains("/snapshot/")
+        || normalized.contains("/snapshots/")
+        || normalized.contains("/__snapshots__/")
+        || normalized.contains("/playground/")
+        || normalized.contains("/playgrounds/")
+        || normalized.contains("/benchmark/")
+        || normalized.contains("/benchmarks/")
+        || normalized.contains("/benchmarking/")
+        || normalized.contains("/generated/")
+        || normalized.contains("/__generated__/")
         || normalized.contains("/node_modules/")
         || normalized.contains("/target/")
         || normalized.contains("/vendor/")
@@ -431,11 +522,126 @@ fn should_skip_file(path: &Path) -> bool {
         return true;
     }
 
-    detect_language(path).is_none()
+    if normalized.ends_with("/output.json")
+        || normalized.ends_with(".min.js")
+        || normalized.ends_with(".min.cjs")
+        || normalized.ends_with(".min.mjs")
+        || normalized.ends_with(".bundle.js")
+        || normalized.ends_with(".bundle.cjs")
+        || normalized.ends_with(".bundle.mjs")
+        || normalized.contains(".generated.")
+    {
+        return true;
+    }
+
+    !is_ast_source_file_allowed(path)
+}
+
+const AST_MAX_SOURCE_FILE_BYTES: u64 = 1_048_576;
+const AST_MINIFIED_HEURISTIC_MIN_BYTES: u64 = 32_000;
+const AST_MINIFIED_PREFIX_BYTES: usize = 8192;
+const AST_MINIFIED_WHITESPACE_RATIO_X100: usize = 7;
+const AST_MINIFIED_MAX_LINE_LEN: usize = 1200;
+
+fn is_probably_minified_source(path: &Path) -> bool {
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+
+    let mut buf = vec![0u8; AST_MINIFIED_PREFIX_BYTES];
+    let read_len = match file.read(&mut buf) {
+        Ok(len) => len,
+        Err(_) => return false,
+    };
+    buf.truncate(read_len);
+    if buf.is_empty() {
+        return false;
+    }
+
+    let sample = String::from_utf8_lossy(&buf);
+    let sample = sample.as_ref();
+    let mut total = 0usize;
+    let mut whitespace = 0usize;
+    let mut current_line = 0usize;
+    let mut max_line = 0usize;
+    for ch in sample.chars() {
+        total += 1;
+        if ch.is_whitespace() {
+            whitespace += 1;
+        }
+        if ch == '\n' {
+            if current_line > max_line {
+                max_line = current_line;
+            }
+            current_line = 0;
+        } else {
+            current_line += 1;
+        }
+    }
+    if current_line > max_line {
+        max_line = current_line;
+    }
+
+    if total < 1024 {
+        return false;
+    }
+
+    let looks_like_single_line_blob = max_line >= AST_MINIFIED_MAX_LINE_LEN;
+    let looks_like_low_whitespace = whitespace * 100 < total * AST_MINIFIED_WHITESPACE_RATIO_X100;
+
+    looks_like_single_line_blob && looks_like_low_whitespace
+}
+
+fn should_skip_architecture_relative_path(relative_path: &str) -> bool {
+    let normalized = relative_path.replace('\\', "/").to_ascii_lowercase();
+    let segments = normalized
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.iter().any(|segment| {
+        matches!(
+            *segment,
+            "test"
+                | "tests"
+                | "__tests__"
+                | "mock"
+                | "mocks"
+                | "__mocks__"
+                | "fixture"
+                | "fixtures"
+                | "__fixtures__"
+                | "snapshot"
+                | "snapshots"
+                | "__snapshots__"
+                | "sample"
+                | "samples"
+                | "playground"
+                | "playgrounds"
+                | "benchmark"
+                | "benchmarks"
+                | "benchmarking"
+                | "coverage"
+                | "generated"
+                | "__generated__"
+        )
+    }) {
+        return true;
+    }
+
+    normalized.ends_with(".min.js")
+        || normalized.ends_with(".min.cjs")
+        || normalized.ends_with(".min.mjs")
+        || normalized.ends_with(".bundle.js")
+        || normalized.ends_with(".bundle.cjs")
+        || normalized.ends_with(".bundle.mjs")
+        || normalized.ends_with(".d.ts")
+        || normalized.ends_with(".generated.rs")
+        || normalized.contains(".generated.")
 }
 
 fn detect_language(path: &Path) -> Option<String> {
-    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    let ext = normalized_source_extension(path)?;
     let language = match ext.as_str() {
         "rs" => "rust",
         "js" | "jsx" | "mjs" | "cjs" => "javascript",
@@ -448,11 +654,9 @@ fn detect_language(path: &Path) -> Option<String> {
         "cc" | "cpp" | "cxx" | "hpp" | "hh" | "hxx" => "cpp",
         "swift" => "swift",
         "cs" => "c_sharp",
-        "yaml" | "yml" => "yaml",
         "rb" => "ruby",
         "php" => "php",
         "scala" => "scala",
-        "sh" | "bash" | "zsh" => "bash",
         "dart" => "dart",
         "lua" => "lua",
         "ex" | "exs" => "elixir",
@@ -463,13 +667,218 @@ fn detect_language(path: &Path) -> Option<String> {
     Some(language.to_string())
 }
 
+fn is_ast_source_file_allowed(path: &Path) -> bool {
+    normalized_source_extension(path).is_some()
+}
+
+fn normalized_source_extension(path: &Path) -> Option<String> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "rs"
+        | "js"
+        | "jsx"
+        | "mjs"
+        | "cjs"
+        | "ts"
+        | "tsx"
+        | "py"
+        | "go"
+        | "java"
+        | "kt"
+        | "kts"
+        | "c"
+        | "h"
+        | "cc"
+        | "cpp"
+        | "cxx"
+        | "hpp"
+        | "hh"
+        | "hxx"
+        | "swift"
+        | "cs"
+        | "rb"
+        | "php"
+        | "scala"
+        | "dart"
+        | "lua"
+        | "ex"
+        | "exs"
+        | "zig"
+        | "sol" => Some(ext),
+        _ => None,
+    }
+}
+
+fn is_architecture_file_allowed(path: &Path) -> bool {
+    architecture_file_kind(path).is_some()
+}
+
+fn architecture_file_kind(path: &Path) -> Option<&'static str> {
+    let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
+    if is_named_architecture_file(&file_name) || has_named_architecture_suffix(&file_name) {
+        return Some("project");
+    }
+
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "rs"
+        | "js"
+        | "jsx"
+        | "mjs"
+        | "cjs"
+        | "ts"
+        | "tsx"
+        | "mts"
+        | "cts"
+        | "py"
+        | "go"
+        | "java"
+        | "kt"
+        | "kts"
+        | "c"
+        | "h"
+        | "cc"
+        | "cpp"
+        | "cxx"
+        | "hpp"
+        | "hh"
+        | "hxx"
+        | "swift"
+        | "cs"
+        | "fs"
+        | "fsi"
+        | "fsx"
+        | "rb"
+        | "php"
+        | "scala"
+        | "sc"
+        | "dart"
+        | "lua"
+        | "ex"
+        | "exs"
+        | "erl"
+        | "hrl"
+        | "zig"
+        | "zon"
+        | "sol"
+        | "svelte"
+        | "vue"
+        | "astro"
+        | "groovy"
+        | "clj"
+        | "cljs"
+        | "cljc"
+        | "m"
+        | "mm" => Some("source"),
+        _ => None,
+    }
+}
+
+fn is_named_architecture_file(file_name: &str) -> bool {
+    matches!(
+        file_name,
+        "cargo.toml"
+            | "package.json"
+            | "tsconfig.json"
+            | "jsconfig.json"
+            | "deno.json"
+            | "deno.jsonc"
+            | "svelte.config.js"
+            | "svelte.config.ts"
+            | "svelte.config.mjs"
+            | "svelte.config.cjs"
+            | "vite.config.js"
+            | "vite.config.ts"
+            | "vite.config.mjs"
+            | "vite.config.cjs"
+            | "vite.config.mts"
+            | "vite.config.cts"
+            | "astro.config.js"
+            | "astro.config.ts"
+            | "astro.config.mjs"
+            | "astro.config.cjs"
+            | "next.config.js"
+            | "next.config.ts"
+            | "next.config.mjs"
+            | "next.config.cjs"
+            | "nuxt.config.js"
+            | "nuxt.config.ts"
+            | "nuxt.config.mjs"
+            | "nuxt.config.cjs"
+            | "rollup.config.js"
+            | "rollup.config.ts"
+            | "rollup.config.mjs"
+            | "rollup.config.cjs"
+            | "webpack.config.js"
+            | "webpack.config.ts"
+            | "webpack.config.mjs"
+            | "webpack.config.cjs"
+            | "jest.config.js"
+            | "jest.config.ts"
+            | "jest.config.mjs"
+            | "jest.config.cjs"
+            | "vitest.config.js"
+            | "vitest.config.ts"
+            | "vitest.config.mjs"
+            | "vitest.config.cjs"
+            | "tailwind.config.js"
+            | "tailwind.config.ts"
+            | "tailwind.config.mjs"
+            | "tailwind.config.cjs"
+            | "postcss.config.js"
+            | "postcss.config.ts"
+            | "postcss.config.mjs"
+            | "postcss.config.cjs"
+            | "babel.config.js"
+            | "babel.config.ts"
+            | "babel.config.mjs"
+            | "babel.config.cjs"
+            | "go.mod"
+            | "go.work"
+            | "pyproject.toml"
+            | "requirements.txt"
+            | "pipfile"
+            | "mix.exs"
+            | "rebar.config"
+            | "gemfile"
+            | "rakefile"
+            | "composer.json"
+            | "pom.xml"
+            | "build.gradle"
+            | "build.gradle.kts"
+            | "settings.gradle"
+            | "settings.gradle.kts"
+            | "cmakelists.txt"
+            | "conanfile.txt"
+            | "meson.build"
+            | "package.swift"
+            | "build.zig"
+            | "build.zig.zon"
+            | "podfile"
+            | "project.clj"
+    )
+}
+
+fn has_named_architecture_suffix(file_name: &str) -> bool {
+    [
+        ".csproj",
+        ".fsproj",
+        ".vbproj",
+        ".vcxproj",
+        ".sln",
+        ".xcodeproj",
+    ]
+    .iter()
+    .any(|suffix| file_name.ends_with(suffix))
+}
+
 fn extract_structural_signatures(
     source: &str,
     language: &str,
     relative_path: &str,
 ) -> Result<(Vec<String>, usize), AstParserError> {
     match language {
-        "c_sharp" | "yaml" => extract_with_tree_sitter_fallback(source, language, relative_path),
+        "c_sharp" => extract_with_tree_sitter_fallback(source, language, relative_path),
         _ => extract_with_language_pack(source, language, relative_path),
     }
 }
@@ -535,7 +944,6 @@ fn extract_with_tree_sitter_fallback(
     signatures.dedup();
     if signatures.is_empty() {
         signatures.push(match language {
-            "yaml" => "yaml document <root>".to_string(),
             "c_sharp" => "c# compilation_unit <root>".to_string(),
             _ => format!("{language} <root>"),
         });
@@ -547,7 +955,6 @@ fn extract_with_tree_sitter_fallback(
 fn fallback_tree_sitter_language(language: &str) -> Option<Language> {
     match language {
         "c_sharp" => Some(tree_sitter_c_sharp::LANGUAGE.into()),
-        "yaml" => Some(tree_sitter_yaml::LANGUAGE.into()),
         _ => None,
     }
 }
@@ -571,7 +978,6 @@ fn collect_fallback_signatures(
 fn fallback_signature_for_node(language: &str, source: &[u8], node: Node<'_>) -> Option<String> {
     match language {
         "c_sharp" => csharp_signature_for_node(source, node),
-        "yaml" => yaml_signature_for_node(source, node),
         _ => None,
     }
 }
@@ -594,24 +1000,6 @@ fn csharp_signature_for_node(source: &[u8], node: Node<'_>) -> Option<String> {
     let name = node_text_by_field(node, source, &["name", "identifier"])
         .unwrap_or_else(|| compact_node_text(node, source, 80));
     Some(format!("c# {label} {name}"))
-}
-
-fn yaml_signature_for_node(source: &[u8], node: Node<'_>) -> Option<String> {
-    match node.kind() {
-        "stream" => Some("yaml stream <root>".to_string()),
-        "document" => Some("yaml document <document>".to_string()),
-        "block_mapping_pair" | "flow_pair" => {
-            let key = node_text_by_field(node, source, &["key"])
-                .or_else(|| node.named_child(0).map(|child| compact_node_text(child, source, 80)))
-                .unwrap_or_else(|| "<pair>".to_string());
-            Some(format!("yaml key {key}"))
-        }
-        "block_sequence_item" => Some(format!(
-            "yaml sequence-item {}",
-            compact_node_text(node, source, 80)
-        )),
-        _ => None,
-    }
 }
 
 fn node_text_by_field(node: Node<'_>, source: &[u8], fields: &[&str]) -> Option<String> {
@@ -661,7 +1049,6 @@ fn render_signature(item: &tree_sitter_language_pack::StructureItem) -> String {
 fn build_repo_outline(
     repo_root: &Path,
     parsed_files: &[ParsedFile],
-    max_chars: usize,
 ) -> String {
     let repo_name = repo_root
         .file_name()
@@ -690,31 +1077,34 @@ fn build_repo_outline(
             out.push('\n');
         }
         out.push('\n');
-        if out.len() >= max_chars {
-            break;
-        }
     }
-    truncate_chars(&out, max_chars)
+    out
 }
 
-fn build_architecture_map(
-    directories: &BTreeMap<String, Vec<String>>,
-    max_chars: usize,
-) -> String {
+fn build_architecture_map(files: &[String]) -> String {
+    let directories = architecture_directories(files);
     let mut out = String::from("# Architecture Map\n\n");
     for (directory, files) in directories {
         out.push_str(&format!("[{}]\n", directory));
         for file in files {
             out.push_str("- ");
-            out.push_str(file);
+            out.push_str(&file);
             out.push('\n');
         }
         out.push('\n');
-        if out.len() >= max_chars {
-            break;
-        }
     }
-    truncate_chars(&out, max_chars)
+    out
+}
+
+fn architecture_directories(files: &[String]) -> BTreeMap<String, Vec<String>> {
+    let mut directories = BTreeMap::<String, Vec<String>>::new();
+    for relative_path in files {
+        directories
+            .entry(directory_key(relative_path))
+            .or_default()
+            .push(relative_path.clone());
+    }
+    directories
 }
 
 fn build_health_report(
@@ -723,24 +1113,30 @@ fn build_health_report(
     parsed_files: usize,
     total_signatures: usize,
     total_import_edges: usize,
-    max_chars: usize,
 ) -> Result<String, AstParserError> {
     let repo_name = repo_root
         .file_name()
         .and_then(|v| v.to_str())
         .unwrap_or("repo");
-    let payload = serde_json::json!({
-        "source": "native-rust tree-sitter-language-pack",
-        "repo": repo_name,
-        "parsed_files": parsed_files,
-        "total_signatures": total_signatures,
-        "total_import_edges": total_import_edges,
-        "languages": languages,
-    });
-    let text = serde_json::to_string(&payload).map_err(|e| AstParserError::SerializationFailure {
-        reason: e.to_string(),
-    })?;
-    Ok(truncate_chars(&text, max_chars))
+    let mut text = String::from("# Health Report\n");
+    text.push_str("\nsummary: findings=0");
+    text.push_str("\nsource: native-rust tree-sitter-language-pack");
+    text.push_str("\nrepo: ");
+    text.push_str(repo_name);
+    text.push_str("\nparsed_files: ");
+    text.push_str(&parsed_files.to_string());
+    text.push_str("\ntotal_signatures: ");
+    text.push_str(&total_signatures.to_string());
+    text.push_str("\ntotal_import_edges: ");
+    text.push_str(&total_import_edges.to_string());
+    text.push_str("\nlanguages:");
+    for (language, count) in languages {
+        text.push_str("\n- ");
+        text.push_str(language);
+        text.push_str(": ");
+        text.push_str(&count.to_string());
+    }
+    Ok(text)
 }
 
 fn sanitize_relative_path(repo_root: &Path, path: &Path) -> String {
@@ -772,6 +1168,7 @@ fn truncate_chars(content: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn detects_expected_languages() {
@@ -779,9 +1176,11 @@ mod tests {
         assert_eq!(detect_language(Path::new("src/app.ts")).as_deref(), Some("typescript"));
         assert_eq!(detect_language(Path::new("main.py")).as_deref(), Some("python"));
         assert_eq!(detect_language(Path::new("Program.cs")).as_deref(), Some("c_sharp"));
-        assert_eq!(detect_language(Path::new("config.yaml")).as_deref(), Some("yaml"));
-        assert_eq!(detect_language(Path::new("config.yml")).as_deref(), Some("yaml"));
+        assert_eq!(detect_language(Path::new("include/runtime.h")).as_deref(), Some("c"));
         assert_eq!(detect_language(Path::new("notes.md")), None);
+        assert_eq!(detect_language(Path::new("ci.yml")), None);
+        assert_eq!(detect_language(Path::new("build.sh")), None);
+        assert_eq!(detect_language(Path::new("Dockerfile")), None);
     }
 
     #[test]
@@ -801,21 +1200,162 @@ public class Greeter {
     }
 
     #[test]
-    fn fallback_parser_extracts_yaml_signatures() {
-        let source = r#"
-name: ci
-jobs:
-  build:
-    steps:
-      - run: cargo test
-"#;
-        let (signatures, imports) =
-            extract_with_tree_sitter_fallback(source, "yaml", ".github/workflows/ci.yml").unwrap();
-        assert_eq!(imports, 0);
-        assert!(signatures.iter().any(|item| item.contains("yaml key name")));
-        assert!(signatures.iter().any(|item| item.contains("yaml key jobs")));
+    fn allowlist_rejects_non_source_extensions() {
+        assert!(is_ast_source_file_allowed(Path::new("src/lib.rs")));
+        assert!(is_ast_source_file_allowed(Path::new("include/runtime.hpp")));
+        assert!(!is_ast_source_file_allowed(Path::new("pnpm-lock.yaml")));
+        assert!(!is_ast_source_file_allowed(Path::new(".github/workflows/ci.yml")));
+        assert!(!is_ast_source_file_allowed(Path::new("package-lock.json")));
+        assert!(!is_ast_source_file_allowed(Path::new("scripts/bootstrap.sh")));
+        assert!(!is_ast_source_file_allowed(Path::new("README.md")));
+        assert!(!is_ast_source_file_allowed(Path::new("LICENSE")));
     }
 
+    #[test]
+    fn collect_source_files_ignores_workflows_lockfiles_and_shell_scripts() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path();
+        std::fs::create_dir_all(repo_root.join(".github/workflows")).unwrap();
+        std::fs::create_dir_all(repo_root.join("src")).unwrap();
+        std::fs::create_dir_all(repo_root.join("scripts")).unwrap();
+        std::fs::write(repo_root.join("pnpm-lock.yaml"), "lockfileVersion: 9").unwrap();
+        std::fs::write(repo_root.join(".github/workflows/ci.yml"), "name: ci").unwrap();
+        std::fs::write(repo_root.join("scripts/bootstrap.sh"), "echo hi").unwrap();
+        std::fs::write(repo_root.join("README.md"), "# demo").unwrap();
+        std::fs::write(repo_root.join("src/lib.rs"), "pub fn ok() {}").unwrap();
+        std::fs::write(repo_root.join("src/app.ts"), "export const ok = true;").unwrap();
+
+        let files = collect_source_files(repo_root).unwrap();
+        let relative = files
+            .iter()
+            .map(|path| sanitize_relative_path(repo_root, path))
+            .collect::<Vec<_>>();
+
+        assert_eq!(relative, vec!["src/app.ts".to_string(), "src/lib.rs".to_string()]);
+    }
+
+
+    #[test]
+    fn architecture_allowlist_accepts_polyglot_source_and_project_files() {
+        assert!(is_architecture_file_allowed(Path::new("src/lib.rs")));
+        assert!(is_architecture_file_allowed(Path::new("web/App.svelte")));
+        assert!(is_architecture_file_allowed(Path::new("frontend/routes/page.vue")));
+        assert!(is_architecture_file_allowed(Path::new("Cargo.toml")));
+        assert!(is_architecture_file_allowed(Path::new("package.json")));
+        assert!(is_architecture_file_allowed(Path::new("svelte.config.js")));
+        assert!(is_architecture_file_allowed(Path::new("go.mod")));
+        assert!(is_architecture_file_allowed(Path::new("mix.exs")));
+        assert!(is_architecture_file_allowed(Path::new("Gemfile")));
+        assert!(is_architecture_file_allowed(Path::new("composer.json")));
+        assert!(is_architecture_file_allowed(Path::new("pom.xml")));
+        assert!(is_architecture_file_allowed(Path::new("settings.gradle.kts")));
+        assert!(is_architecture_file_allowed(Path::new("App/App.csproj")));
+        assert!(is_architecture_file_allowed(Path::new("Workspace.sln")));
+        assert!(is_architecture_file_allowed(Path::new("cpp/CMakeLists.txt")));
+        assert!(is_architecture_file_allowed(Path::new("zig/build.zig.zon")));
+        assert!(is_architecture_file_allowed(Path::new("Package.swift")));
+        assert!(!is_architecture_file_allowed(Path::new("package-lock.json")));
+        assert!(!is_architecture_file_allowed(Path::new("README.md")));
+    }
+
+    #[test]
+    fn collect_architecture_files_prunes_build_cache_and_dependency_noise() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path();
+        std::fs::create_dir_all(repo_root.join("src")).unwrap();
+        std::fs::create_dir_all(repo_root.join("web")).unwrap();
+        std::fs::create_dir_all(repo_root.join("node_modules/pkg")).unwrap();
+        std::fs::create_dir_all(repo_root.join("target/debug")).unwrap();
+        std::fs::create_dir_all(repo_root.join("vendor/lib")).unwrap();
+        std::fs::create_dir_all(repo_root.join("venv/bin")).unwrap();
+        std::fs::create_dir_all(repo_root.join(".vscode")).unwrap();
+        std::fs::create_dir_all(repo_root.join("dist/assets")).unwrap();
+        std::fs::create_dir_all(repo_root.join(".git")).unwrap();
+        std::fs::create_dir_all(repo_root.join("tests")).unwrap();
+
+        std::fs::write(repo_root.join("src/lib.rs"), "pub fn ok() {}").unwrap();
+        std::fs::write(repo_root.join("web/App.svelte"), "<script>let ok = true;</script>").unwrap();
+        std::fs::write(repo_root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        std::fs::write(repo_root.join("package.json"), "{\"name\":\"demo\"}").unwrap();
+        std::fs::write(repo_root.join("svelte.config.js"), "export default {};").unwrap();
+        std::fs::write(repo_root.join("node_modules/pkg/index.js"), "export {};").unwrap();
+        std::fs::write(repo_root.join("target/debug/app"), "binary").unwrap();
+        std::fs::write(repo_root.join("vendor/lib/code.php"), "<?php echo 1;").unwrap();
+        std::fs::write(repo_root.join("venv/bin/python"), "python").unwrap();
+        std::fs::write(repo_root.join(".vscode/settings.json"), "{}").unwrap();
+        std::fs::write(repo_root.join("dist/assets/app.js"), "console.log(1);").unwrap();
+        std::fs::write(repo_root.join(".git/config"), "[core]").unwrap();
+        std::fs::write(repo_root.join("tests/app_test.go"), "package demo").unwrap();
+
+        let files = collect_architecture_files(repo_root).unwrap();
+
+        assert!(files.contains(&"src/lib.rs".to_string()));
+        assert!(files.contains(&"web/App.svelte".to_string()));
+        assert!(files.contains(&"Cargo.toml".to_string()));
+        assert!(files.contains(&"package.json".to_string()));
+        assert!(files.contains(&"svelte.config.js".to_string()));
+        assert!(!files.iter().any(|path| path.contains("node_modules")));
+        assert!(!files.iter().any(|path| path.contains("target/")));
+        assert!(!files.iter().any(|path| path.contains("vendor/")));
+        assert!(!files.iter().any(|path| path.contains("venv/")));
+        assert!(!files.iter().any(|path| path.contains(".vscode/")));
+        assert!(!files.iter().any(|path| path.contains("dist/")));
+        assert!(!files.iter().any(|path| path.contains(".git/")));
+        assert!(!files.iter().any(|path| path.contains("tests/")));
+    }
+
+    #[test]
+    fn architecture_map_keeps_full_polyglot_topology_without_char_truncation() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path();
+        std::fs::create_dir_all(repo_root.join("src")).unwrap();
+        std::fs::create_dir_all(repo_root.join("web")).unwrap();
+        std::fs::create_dir_all(repo_root.join("go")).unwrap();
+        std::fs::create_dir_all(repo_root.join("dotnet/App")).unwrap();
+        std::fs::create_dir_all(repo_root.join("zig")).unwrap();
+        std::fs::create_dir_all(repo_root.join("cpp")).unwrap();
+
+        std::fs::write(repo_root.join("src/lib.rs"), "pub fn ok() {}").unwrap();
+        std::fs::write(repo_root.join("web/App.svelte"), "<script>let ok = true;</script>").unwrap();
+        std::fs::write(repo_root.join("web/routes.ts"), "export const route = '/';").unwrap();
+        std::fs::write(repo_root.join("go/main.go"), "package main\nfunc main() {}\n").unwrap();
+        std::fs::write(repo_root.join("dotnet/App/App.csproj"), "<Project />").unwrap();
+        std::fs::write(repo_root.join("Workspace.sln"), "Microsoft Visual Studio Solution File").unwrap();
+        std::fs::write(repo_root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        std::fs::write(repo_root.join("package.json"), "{\"name\":\"demo\"}").unwrap();
+        std::fs::write(repo_root.join("svelte.config.js"), "export default {};").unwrap();
+        std::fs::write(repo_root.join("go.mod"), "module demo\n").unwrap();
+        std::fs::write(repo_root.join("mix.exs"), "defmodule Demo.MixProject do\nend\n").unwrap();
+        std::fs::write(repo_root.join("Gemfile"), "gem 'rails'\n").unwrap();
+        std::fs::write(repo_root.join("composer.json"), "{\"require\":{}}\n").unwrap();
+        std::fs::write(repo_root.join("cpp/CMakeLists.txt"), "project(demo)\n").unwrap();
+        std::fs::write(repo_root.join("zig/build.zig.zon"), ".{ .name = \"demo\" }\n").unwrap();
+        std::fs::write(repo_root.join("Package.swift"), "import PackageDescription\n").unwrap();
+
+        let artifacts = extract_repository_outline_native(repo_root).unwrap();
+        let architecture_map = String::from_utf8(artifacts.architecture_map_blob).unwrap();
+
+        assert!(architecture_map.len() > 20, "Blob 05 nao deve mais truncar por teto fixo");
+        assert!(architecture_map.contains("[.]"));
+        assert!(architecture_map.contains("Cargo.toml"));
+        assert!(architecture_map.contains("package.json"));
+        assert!(architecture_map.contains("svelte.config.js"));
+        assert!(architecture_map.contains("go.mod"));
+        assert!(architecture_map.contains("mix.exs"));
+        assert!(architecture_map.contains("Gemfile"));
+        assert!(architecture_map.contains("composer.json"));
+        assert!(architecture_map.contains("Workspace.sln"));
+        assert!(architecture_map.contains("[web]"));
+        assert!(architecture_map.contains("web/App.svelte"));
+        assert!(architecture_map.contains("[go]"));
+        assert!(architecture_map.contains("go/main.go"));
+        assert!(architecture_map.contains("[dotnet/App]"));
+        assert!(architecture_map.contains("dotnet/App/App.csproj"));
+        assert!(architecture_map.contains("[cpp]"));
+        assert!(architecture_map.contains("cpp/CMakeLists.txt"));
+        assert!(architecture_map.contains("[zig]"));
+        assert!(architecture_map.contains("zig/build.zig.zon"));
+    }
     #[test]
     fn derive_scannable_roots_skips_toxic_js_fixture_paths() {
         let paths = vec![

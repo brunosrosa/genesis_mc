@@ -3,7 +3,7 @@ use std::env;
 use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ignore::WalkBuilder;
 use quick_xml::de::from_str as xml_from_str;
@@ -15,6 +15,7 @@ use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
+#[cfg(test)]
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::detect::{SingleStack, StackProfile};
@@ -75,6 +76,17 @@ impl SandboxExecutor for crate::harvester::sandbox::SandboxHandle {
 
     fn repo_path(&self) -> &Path {
         self.repo_path()
+    }
+}
+
+fn cached_regex<'a>(cache: &'a OnceLock<Option<Regex>>, pattern: &str) -> Option<&'a Regex> {
+    cache.get_or_init(|| Regex::new(pattern).ok()).as_ref()
+}
+
+fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
     }
 }
 
@@ -325,12 +337,11 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
         }
         all_text.push_str(&content);
         all_text.push('\n');
-        let snippet = truncate_chars(&content, 6000);
         blocks.push((
             score,
             ScopedTextBlock {
                 file_path: rel,
-                items: vec![snippet],
+                items: vec![content],
                 omitted_count: 0,
             },
         ));
@@ -340,7 +351,7 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
         score_r.cmp(score_l).then_with(|| block_l.file_path.cmp(&block_r.file_path))
     });
     let packed_blocks = blocks.iter().map(|(_, b)| b.clone()).collect::<Vec<_>>();
-    let packed = pack_scoped_text_blocks(&packed_blocks, BLOB_04_REPO_OUTLINE_MAX_CHARS);
+    let packed = render_scoped_text_blocks(&packed_blocks);
     let kind = if skill_signal { "SkillLibrary" } else { "ContentRepo" };
     let mut outline = String::new();
     outline.push_str("# Repository Outline\n\n");
@@ -349,7 +360,7 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
     outline.push('\n');
     outline.push_str("note: Repositório sem arquivos de código indexáveis (curadoria/documentação/skills).\n");
     outline.push_str("why: ");
-    outline.push_str(truncate_chars(why.trim(), 600).trim());
+    outline.push_str(why.trim());
     outline.push_str("\n\n");
     if packed.trim().is_empty() {
         outline.push_str("Sem markdown legível encontrado.\n");
@@ -378,7 +389,7 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
                 } else {
                     remote_blocks.push(ScopedTextBlock {
                         file_path: remote_block_label(url),
-                        items: vec![truncate_chars(&markdown, 6000)],
+                        items: vec![markdown],
                         omitted_count: 0,
                     });
                 }
@@ -387,7 +398,7 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
                 remote_fetch_failures.push(format!(
                     "{} => {}",
                     url,
-                    truncate_chars(&err.to_string(), 400)
+                    err
                 ));
             }
         }
@@ -454,31 +465,37 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
         }
     }
 
-    let health = serde_json::to_string(&serde_json::json!({
-        "kind": kind,
-        "why": truncate_chars(why.trim(), 800),
-        "markdown_files": md_files.len(),
-        "github_repo_links": gh_repos.len(),
-        "external_links": external.len(),
-        "remote_doc_candidates": prioritized_remote_docs.len(),
-        "remote_doc_fetched": remote_blocks.len(),
-        "remote_doc_failed": remote_fetch_failures.len(),
-        "skill_signal": skill_signal,
-    }))
-    .unwrap_or_else(|_| "{\"kind\":\"ContentRepo\"}".to_string());
+    let mut health = String::from("# Health Report\n");
+    health.push_str("\nsummary: findings=0");
+    health.push_str("\nsource: content-repo-fallback");
+    health.push_str("\nkind: ");
+    health.push_str(kind);
+    health.push_str("\nwhy: ");
+    health.push_str(why.trim());
+    health.push_str("\nmarkdown_files: ");
+    health.push_str(&md_files.len().to_string());
+    health.push_str("\ngithub_repo_links: ");
+    health.push_str(&gh_repos.len().to_string());
+    health.push_str("\nexternal_links: ");
+    health.push_str(&external.len().to_string());
+    health.push_str("\nremote_doc_candidates: ");
+    health.push_str(&prioritized_remote_docs.len().to_string());
+    health.push_str("\nremote_doc_fetched: ");
+    health.push_str(&remote_blocks.len().to_string());
+    health.push_str("\nremote_doc_failed: ");
+    health.push_str(&remote_fetch_failures.len().to_string());
+    health.push_str("\nskill_signal: ");
+    health.push_str(if skill_signal { "true" } else { "false" });
 
     if !remote_blocks.is_empty() {
         outline.push_str("\n\n## Remote Documentation (Guaranteed)\n\n");
-        outline.push_str(&pack_scoped_text_blocks(
-            &remote_blocks,
-            BLOB_04_REPO_OUTLINE_MAX_CHARS / 2,
-        ));
+        outline.push_str(&render_scoped_text_blocks(&remote_blocks));
     }
 
     Ok(NativeAstArtifacts {
-        repo_outline_blob: truncate_chars(&outline, BLOB_04_REPO_OUTLINE_MAX_CHARS).into_bytes(),
-        architecture_map_blob: truncate_chars(&link_map, BLOB_05_ARCHITECTURE_MAP_MAX_CHARS).into_bytes(),
-        health_report_blob: truncate_chars(&health, BLOB_08_HEALTH_REPORT_MAX_CHARS).into_bytes(),
+        repo_outline_blob: outline.into_bytes(),
+        architecture_map_blob: link_map.into_bytes(),
+        health_report_blob: health.into_bytes(),
     })
 }
 
@@ -539,10 +556,8 @@ fn parse_json_payload<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, SidecarErr
     })
 }
 
-const BLOB_06_UNSAFE_HOTSPOTS_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
-const BLOB_08_HEALTH_REPORT_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+#[cfg(test)]
 const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
-const BLOB_05_ARCHITECTURE_MAP_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
 const SEMGREP_SECURITY_RULE_FILE: &str = ".soda_semgrep_blob_06_security.yml";
 const SEMGREP_HEALTH_RULE_FILE: &str = ".soda_semgrep_blob_08_health.yml";
 const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../semgrep/blob_06_security.yml");
@@ -584,6 +599,15 @@ fn format_scoped_text_block(block: &ScopedTextBlock) -> String {
     lines.join("\n")
 }
 
+fn render_scoped_text_blocks(blocks: &[ScopedTextBlock]) -> String {
+    blocks
+        .iter()
+        .map(format_scoped_text_block)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+#[cfg(test)]
 pub(crate) fn pack_scoped_text_blocks(blocks: &[ScopedTextBlock], max_chars: usize) -> String {
     let mut packed = String::new();
 
@@ -650,12 +674,6 @@ impl SemgrepRuleSet {
         }
     }
 
-    fn max_chars(self) -> usize {
-        match self {
-            Self::Security => BLOB_06_UNSAFE_HOTSPOTS_MAX_CHARS,
-            Self::Health => BLOB_08_HEALTH_REPORT_MAX_CHARS,
-        }
-    }
 }
 
 fn native_ast_cache_path_for_repo(repo_path: &Path) -> String {
@@ -906,18 +924,6 @@ fn truncate_chars(content: &str, max_chars: usize) -> String {
     content.chars().take(max_chars).collect()
 }
 
-fn truncate_utf8(content: &str, max_chars: usize, max_bytes: usize) -> String {
-    let mut out = String::new();
-    for ch in content.chars().take(max_chars) {
-        let ch_len = ch.len_utf8();
-        if out.len() + ch_len > max_bytes {
-            break;
-        }
-        out.push(ch);
-    }
-    out
-}
-
 #[cfg(test)]
 fn looks_like_repo_outline_path(value: &str) -> bool {
     let normalized = value.trim().trim_start_matches("- ").trim();
@@ -1166,12 +1172,7 @@ impl NativeAstParser {
         );
         let repo_path = input.executor.repo_path().to_path_buf();
         let native_artifacts = tokio::task::spawn_blocking(move || {
-            ast_parser::extract_repository_outline_native(
-                &repo_path,
-                BLOB_04_REPO_OUTLINE_MAX_CHARS,
-                BLOB_05_ARCHITECTURE_MAP_MAX_CHARS,
-                BLOB_08_HEALTH_REPORT_MAX_CHARS,
-            )
+            ast_parser::extract_repository_outline_native(&repo_path)
         })
         .await
         .map_err(|e| SidecarError::ExecutionFailed {
@@ -1350,12 +1351,21 @@ fn is_known_test_file_path(value: &str) -> bool {
         ".test.tsx",
         ".test.js",
         ".test.jsx",
+        ".test.mjs",
+        ".test.cjs",
+        ".test.mts",
+        ".test.cts",
         ".spec.ts",
         ".spec.tsx",
         ".spec.js",
         ".spec.jsx",
+        ".spec.mjs",
+        ".spec.cjs",
+        ".spec.mts",
+        ".spec.cts",
         "_test.go",
         "_test.py",
+        "_test.exs",
         "test_",
         "__tests__",
     ]
@@ -1366,6 +1376,7 @@ fn is_known_test_file_path(value: &str) -> bool {
 fn supports_stack(profile: &StackProfile, target: SingleStack) -> bool {
     match profile {
         StackProfile::Mixed(stacks) => stacks.contains(&target),
+        StackProfile::Unknown => true,
         _ => primary_stack(profile) == Some(target),
     }
 }
@@ -1405,6 +1416,7 @@ fn is_supported_test_file(profile: &StackProfile, path: &Path) -> bool {
 
     match extension.as_deref() {
         Some("rs") => supports_stack(profile, SingleStack::Rust),
+        Some("go") => supports_stack(profile, SingleStack::Go) && normalized.ends_with("_test.go"),
         Some("py") => {
             supports_stack(profile, SingleStack::Python)
                 && (normalized.contains("/tests/")
@@ -1414,6 +1426,12 @@ fn is_supported_test_file(profile: &StackProfile, path: &Path) -> bool {
                         .and_then(|name| name.to_str())
                         .map(|name| name.to_ascii_lowercase().starts_with("test_"))
                         .unwrap_or(false))
+        }
+        Some("exs") => {
+            supports_stack(profile, SingleStack::Elixir)
+                && (normalized.ends_with("_test.exs")
+                    || normalized.contains("/test/")
+                    || normalized.contains("/tests/"))
         }
         Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
             supports_stack(profile, SingleStack::NodeJS) && is_known_test_file_path(&normalized)
@@ -1467,18 +1485,23 @@ fn normalize_rust_test_signature(signature: &str) -> Option<String> {
     }
 }
 
-fn extract_python_test_entries_shallow(content: &str) -> Vec<String> {
-    let mut entries = BTreeSet::new();
-    for line in content.lines().take(2_000) {
-        let trimmed = line.trim();
-        let signature = if trimmed.starts_with("async def test_") || trimmed.starts_with("def test_") {
-            Some(trimmed.trim_end_matches(':'))
-        } else {
-            None
-        };
+fn is_rust_test_attribute(trimmed: &str) -> bool {
+    trimmed.starts_with("#[")
+        && (trimmed.contains("test]") || trimmed.contains("rstest") || trimmed.contains("fixture"))
+}
 
-        if let Some(signature) = signature.and_then(compact_signature_text) {
-            entries.insert(signature);
+fn extract_python_test_entries_shallow(content: &str) -> Vec<String> {
+    static PYTHON_TEST_DEF_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(re) = cached_regex(
+        &PYTHON_TEST_DEF_RE,
+        r#"(?m)^\s*(?:async\s+def|def)\s+(test_[A-Za-z0-9_]+)\s*\("#,
+    ) else {
+        return Vec::new();
+    };
+    let mut entries = BTreeSet::new();
+    for captures in re.captures_iter(content) {
+        if let Some(name) = captures.get(1) {
+            entries.insert(format!("def {}", name.as_str()));
         }
     }
     entries.into_iter().collect()
@@ -1489,7 +1512,7 @@ fn extract_rust_test_entries_shallow(content: &str) -> Vec<String> {
     let mut saw_test_attr = false;
     for line in content.lines().take(2_000) {
         let trimmed = line.trim();
-        if trimmed.starts_with("#[test]") || trimmed.starts_with("#[rstest]") {
+        if is_rust_test_attribute(trimmed) {
             saw_test_attr = true;
             continue;
         }
@@ -1513,15 +1536,81 @@ fn extract_rust_test_entries_shallow(content: &str) -> Vec<String> {
     out.into_iter().collect()
 }
 
-fn extract_frontend_test_entries_shallow(content: &str) -> Vec<String> {
-    let mut out = BTreeSet::new();
-    for line in content.lines().take(2_000) {
-        let trimmed = line.trim();
-        if !(trimmed.contains("describe(") || trimmed.contains("it(") || trimmed.contains("test(")) {
-            continue;
+fn extract_go_test_entries_shallow(content: &str) -> Vec<String> {
+    static GO_TEST_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    static GO_SUBTEST_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(test_re) = cached_regex(
+        &GO_TEST_RE,
+        r#"(?m)^\s*func\s+((?:Test|Fuzz)[A-Z][A-Za-z0-9_]*)\s*\(\s*[A-Za-z0-9_]+\s+\*testing\.(?:T|F)\s*\)"#,
+    ) else {
+        return Vec::new();
+    };
+    let Some(subtest_re) = cached_regex(
+        &GO_SUBTEST_RE,
+        r#"\b[A-Za-z0-9_]+\.(?:Run|Fuzz)\(\s*"([^"]+)""#,
+    ) else {
+        return Vec::new();
+    };
+    let mut entries = BTreeSet::new();
+    for captures in test_re.captures_iter(content) {
+        if let Some(name) = captures.get(1) {
+            entries.insert(format!("func {}", name.as_str()));
         }
-        if let Some(signature) = compact_signature_text(trimmed) {
-            out.insert(signature);
+    }
+    for captures in subtest_re.captures_iter(content) {
+        if let Some(name) = captures.get(1) {
+            entries.insert(format!("subtest \"{}\"", name.as_str()));
+        }
+    }
+    entries.into_iter().collect()
+}
+
+fn extract_elixir_test_entries_shallow(content: &str) -> Vec<String> {
+    static ELIXIR_TEST_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    static ELIXIR_DESCRIBE_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(test_re) = cached_regex(&ELIXIR_TEST_RE, r#"(?m)^\s*test\s+"([^"]+)"\s+do"#) else {
+        return Vec::new();
+    };
+    let Some(describe_re) = cached_regex(
+        &ELIXIR_DESCRIBE_RE,
+        r#"(?m)^\s*describe\s+"([^"]+)"\s+do"#,
+    ) else {
+        return Vec::new();
+    };
+    let mut entries = BTreeSet::new();
+    for captures in describe_re.captures_iter(content) {
+        if let Some(name) = captures.get(1) {
+            entries.insert(format!("describe \"{}\"", name.as_str()));
+        }
+    }
+    for captures in test_re.captures_iter(content) {
+        if let Some(name) = captures.get(1) {
+            entries.insert(format!("test \"{}\"", name.as_str()));
+        }
+    }
+    entries.into_iter().collect()
+}
+
+fn extract_frontend_test_entries_shallow(content: &str) -> Vec<String> {
+    static FRONTEND_TEST_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(re) = cached_regex(
+        &FRONTEND_TEST_RE,
+        r#"(?:^|[^\w])(describe|it|test)(?:\.(?:only|skip|concurrent|each|todo|failing))*\s*\(\s*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|`([^`\r\n]+)`)"#,
+    ) else {
+        return Vec::new();
+    };
+    let mut out = BTreeSet::new();
+    for captures in re.captures_iter(content) {
+        let kind = captures.get(1).map(|m| m.as_str()).unwrap_or_default();
+        let label = captures
+            .get(2)
+            .or_else(|| captures.get(3))
+            .or_else(|| captures.get(4))
+            .map(|m| m.as_str())
+            .unwrap_or_default()
+            .trim();
+        if !kind.is_empty() && !label.is_empty() {
+            out.insert(format!(r#"{kind} "{label}""#));
         }
     }
     out.into_iter().collect()
@@ -1671,6 +1760,8 @@ fn discover_static_test_entries_bfs(
             let discovered = match extension.as_deref() {
                 Some("rs") => extract_rust_test_entries_shallow(&content),
                 Some("py") => extract_python_test_entries_shallow(&content),
+                Some("go") => extract_go_test_entries_shallow(&content),
+                Some("exs") => extract_elixir_test_entries_shallow(&content),
                 Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
                     extract_frontend_test_entries_shallow(&content)
                 }
@@ -1772,7 +1863,7 @@ impl NativeTestDiscoverySidecar {
             }
             Err(_) => {
                 handle.abort();
-                let snapshot = progress.lock().unwrap().clone();
+                let snapshot = lock_unpoisoned(&progress).clone();
                 let mut blocks = Vec::new();
                 if !snapshot.bfs_dirs.is_empty() {
                     blocks.push(ScopedTextBlock {
@@ -1847,25 +1938,17 @@ pub struct SodaHealthIssue {
     pub level: String,
     pub file: String,
     pub message: String,
+    #[serde(skip)]
+    source_blade: String,
+    #[serde(skip)]
+    channel: SastIssueChannel,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct SodaHealthToolResult {
-    blade: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    scope: Option<String>,
-    status: String,
-    issue_count: usize,
-    error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct SodaHealthReport {
-    schema: String,
-    focus: String,
-    router: Vec<String>,
-    tool_results: Vec<SodaHealthToolResult>,
-    issues: Vec<SodaHealthIssue>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum SastIssueChannel {
+    UnsafeHotspot,
+    #[default]
+    Health,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2430,10 +2513,158 @@ fn sanitize_issue_message(repo_path: &Path, value: &str) -> String {
     collapse_inline_whitespace(&sanitize_host_paths_in_text(repo_path, value))
 }
 
+fn classify_sast_issue(blade: StaticAnalysisBlade, level: &str, message: &str) -> SastIssueChannel {
+    let normalized = message.to_ascii_lowercase();
+    let is_health_debt = [
+        "soda.tech-debt",
+        "soda.flow-debt",
+        "soda.golden-pattern",
+        "soda.fragility",
+        "nested-ternary",
+        "ternario aninhado",
+        "complexidade",
+        "ciclomat",
+        "todo",
+        "fixme",
+        "hack",
+        "xxx",
+        "console.log",
+        "console.warn",
+        "console.error",
+        "unwrap",
+        "expect",
+        "panic",
+        "copy_from_slice",
+        "style",
+        "performance",
+        "portability",
+        "manual memcpy",
+        "boolean chain",
+        "debug residual",
+        "unused variable",
+        "unused import",
+        "unused assignment",
+        "unused mut",
+        "unused result",
+        "dead code",
+        "unreachable code",
+        "cognitive complexity",
+        "cyclomatic complexity",
+        "too many branches",
+        "too many arguments",
+        "too many statements",
+        "too many lines",
+        "function is too complex",
+        "function is too long",
+        "long method",
+        "monolithic function",
+        "debugger",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle));
+    if is_health_debt {
+        return SastIssueChannel::Health;
+    }
+
+    let has_red_flag_keyword = [
+        "cve-",
+        "osv-",
+        "go-20",
+        "vulnerability",
+        "vulnerabilidade",
+        "hardcoded secret",
+        "hardcoded password",
+        "hardcoded token",
+        "hardcoded credential",
+        "segredo hardcoded",
+        "api key",
+        "aws_access_key",
+        "command injection",
+        "os command injection",
+        "sql injection",
+        "code injection",
+        "remote code execution",
+        "path traversal",
+        "insecure deserialization",
+        "unsafe deserialization",
+        "deserialization",
+        "execucao dinamica",
+        " eval",
+        "eval(",
+        "exec(",
+        "shell=true",
+        "unsafe block",
+        "memory-unsafety",
+        "memory unsafety",
+        "raw pointer",
+        "ponteiro cru",
+        "pointer arithmetic",
+        "null pointer",
+        "dangling pointer",
+        "double free",
+        "use-after-free",
+        "use after free",
+        "buffer overflow",
+        "stack overflow",
+        "heap overflow",
+        "out-of-bounds",
+        "out of bounds",
+        "secret",
+        "password",
+        "token",
+        "credential",
+        "xss",
+        "innerhtml",
+        "dangerouslysetinnerhtml",
+        "pickle",
+        "yaml.load",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle));
+
+    if matches!(blade, StaticAnalysisBlade::Govulncheck | StaticAnalysisBlade::Sobelow) {
+        return SastIssueChannel::UnsafeHotspot;
+    }
+
+    if blade == StaticAnalysisBlade::Bandit && level != "info" {
+        return SastIssueChannel::UnsafeHotspot;
+    }
+
+    if blade == StaticAnalysisBlade::Cppcheck {
+        let has_memory_danger = [
+            "memory leak",
+            "memleak",
+            "buffer",
+            "overflow",
+            "null pointer",
+            "dangling",
+            "double free",
+            "use after free",
+            "use-after-free",
+            "invalid free",
+            "pointer",
+        ]
+        .iter()
+        .any(|needle| normalized.contains(needle));
+        return if has_memory_danger {
+            SastIssueChannel::UnsafeHotspot
+        } else {
+            SastIssueChannel::Health
+        };
+    }
+
+    if has_red_flag_keyword {
+        return SastIssueChannel::UnsafeHotspot;
+    }
+
+    SastIssueChannel::Health
+}
+
 fn push_issue(
     issues: &mut Vec<SodaHealthIssue>,
     repo_path: &Path,
     execution_root: &Path,
+    blade: StaticAnalysisBlade,
     level: &str,
     file: &str,
     message: &str,
@@ -2442,10 +2673,13 @@ fn push_issue(
     if message.trim().is_empty() {
         return;
     }
+    let channel = classify_sast_issue(blade, level, &message);
     issues.push(SodaHealthIssue {
         level: sanitize_issue_level(level),
         file: sanitize_issue_file(repo_path, execution_root, file),
         message,
+        source_blade: blade_name(blade).to_string(),
+        channel,
     });
 }
 
@@ -2828,7 +3062,15 @@ fn normalize_clippy_output(
             .and_then(|span| span.get("file_name"))
             .and_then(|value| value.as_str())
             .unwrap_or("");
-        push_issue(&mut issues, repo_path, execution_root, level, file, message);
+        push_issue(
+            &mut issues,
+            repo_path,
+            execution_root,
+            StaticAnalysisBlade::RustClippy,
+            level,
+            file,
+            message,
+        );
     }
     sort_and_dedup_issues(&mut issues);
     Ok(issues)
@@ -2865,6 +3107,7 @@ fn normalize_cppcheck_output(
             &mut issues,
             repo_path,
             execution_root,
+            StaticAnalysisBlade::Cppcheck,
             error.severity.as_deref().unwrap_or("warning"),
             file,
             &format!("{rule}: {msg}{line}"),
@@ -2886,6 +3129,7 @@ fn normalize_semgrep_like_json(
             &mut issues,
             repo_path,
             execution_root,
+            StaticAnalysisBlade::Opengrep,
             result.extra.severity.as_deref().unwrap_or("warning"),
             &result.path,
             &format!("{}: {}", result.check_id, result.extra.message),
@@ -2907,30 +3151,39 @@ fn json_value_at_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'
     Some(current)
 }
 
+struct JsonIssueFieldMap<'a> {
+    file_keys: &'a [&'a str],
+    level_keys: &'a [&'a str],
+    message_keys: &'a [&'a str],
+    line_keys: &'a [&'a str],
+}
+
 fn normalize_json_array_issues(
     repo_path: &Path,
     execution_root: &Path,
+    blade: StaticAnalysisBlade,
     items: &[serde_json::Value],
-    file_keys: &[&str],
-    level_keys: &[&str],
-    message_keys: &[&str],
-    line_keys: &[&str],
+    field_map: JsonIssueFieldMap<'_>,
 ) -> Vec<SodaHealthIssue> {
     let mut issues = Vec::new();
     for item in items {
-        let file = file_keys
+        let file = field_map
+            .file_keys
             .iter()
             .find_map(|key| json_value_at_path(item, key).and_then(|value| value.as_str()))
             .unwrap_or("");
-        let level = level_keys
+        let level = field_map
+            .level_keys
             .iter()
             .find_map(|key| json_value_at_path(item, key).and_then(|value| value.as_str()))
             .unwrap_or("warning");
-        let message = message_keys
+        let message = field_map
+            .message_keys
             .iter()
             .find_map(|key| json_value_at_path(item, key).and_then(|value| value.as_str()))
             .unwrap_or("diagnostic");
-        let line_suffix = line_keys
+        let line_suffix = field_map
+            .line_keys
             .iter()
             .find_map(|key| value_as_u32(json_value_at_path(item, key)))
             .map(|line| format!(" (line {line})"))
@@ -2939,6 +3192,7 @@ fn normalize_json_array_issues(
             &mut issues,
             repo_path,
             execution_root,
+            blade,
             level,
             file,
             &format!("{message}{line_suffix}"),
@@ -2982,11 +3236,14 @@ fn normalize_json_object_issues(
                 normalize_json_array_issues(
                     repo_path,
                     execution_root,
+                    StaticAnalysisBlade::Ruff,
                     items,
-                    &["filename", "file"],
-                    &["level", "severity"],
-                    &["message"],
-                    &["location.row", "line"],
+                    JsonIssueFieldMap {
+                        file_keys: &["filename", "file"],
+                        level_keys: &["level", "severity"],
+                        message_keys: &["message"],
+                        line_keys: &["location.row", "line"],
+                    },
                 )
             })
             .unwrap_or_default(),
@@ -2997,11 +3254,14 @@ fn normalize_json_object_issues(
                 normalize_json_array_issues(
                     repo_path,
                     execution_root,
+                    StaticAnalysisBlade::Bandit,
                     items,
-                    &["filename", "file"],
-                    &["issue_severity", "severity"],
-                    &["issue_text", "message"],
-                    &["line_number", "line"],
+                    JsonIssueFieldMap {
+                        file_keys: &["filename", "file"],
+                        level_keys: &["issue_severity", "severity"],
+                        message_keys: &["issue_text", "message"],
+                        line_keys: &["line_number", "line"],
+                    },
                 )
             })
             .unwrap_or_default(),
@@ -3015,11 +3275,14 @@ fn normalize_json_object_issues(
                 normalize_json_array_issues(
                     repo_path,
                     execution_root,
+                    blade,
                     items,
-                    &["file", "path", "filename"],
-                    &["severity", "level", "confidence"],
-                    &["message", "description", "title", "type"],
-                    &["line", "line_number"],
+                    JsonIssueFieldMap {
+                        file_keys: &["file", "path", "filename"],
+                        level_keys: &["severity", "level", "confidence"],
+                        message_keys: &["message", "description", "title", "type"],
+                        line_keys: &["line", "line_number"],
+                    },
                 )
             })
             .unwrap_or_default()
@@ -3034,10 +3297,11 @@ fn normalize_sobelow_text_issues(
     execution_root: &Path,
     text: &str,
 ) -> Vec<SodaHealthIssue> {
-    let finding_re = Regex::new(
+    let Ok(finding_re) = Regex::new(
         r#"%\{file: "(?P<file>[^"]+)", line: (?P<line>\d+), type: "(?P<kind>[^"]+)"(?:, variable: (?P<variable>"[^"]+"|:[^,}]+|[A-Za-z_][A-Za-z0-9_]*))?\}"#,
-    )
-    .expect("regex sobelow invalida");
+    ) else {
+        return Vec::new();
+    };
 
     let mut issues = Vec::new();
     for captures in finding_re.captures_iter(text) {
@@ -3053,7 +3317,15 @@ fn normalize_sobelow_text_issues(
         } else {
             format!("{kind}: {variable} (line {line})")
         };
-        push_issue(&mut issues, repo_path, execution_root, "warning", file, &message);
+        push_issue(
+            &mut issues,
+            repo_path,
+            execution_root,
+            StaticAnalysisBlade::Sobelow,
+            "warning",
+            file,
+            &message,
+        );
     }
     sort_and_dedup_issues(&mut issues);
     issues
@@ -3097,7 +3369,15 @@ fn normalize_govulncheck_output(
         } else {
             format!("{osv}: {}", format!("{package} {symbol}").trim())
         };
-        push_issue(&mut issues, repo_path, execution_root, "error", file, &message);
+        push_issue(
+            &mut issues,
+            repo_path,
+            execution_root,
+            StaticAnalysisBlade::Govulncheck,
+            "error",
+            file,
+            &message,
+        );
     }
     sort_and_dedup_issues(&mut issues);
     Ok(issues)
@@ -3124,41 +3404,61 @@ fn normalize_sast_output(
     }
 }
 
-fn build_tool_result(
-    blade: StaticAnalysisBlade,
-    scope: Option<String>,
-    status: &str,
-    issue_count: usize,
-    error: Option<String>,
-) -> SodaHealthToolResult {
-    SodaHealthToolResult {
-        blade: blade_name(blade).to_string(),
-        scope,
-        status: status.to_string(),
-        issue_count,
-        error,
+fn render_unsafe_hotspots_report(issues: &[SodaHealthIssue]) -> Vec<u8> {
+    let mut text = String::from("# Unsafe Hotspots\n");
+    text.push_str(&format!("\nsummary: findings={}", issues.len()));
+
+    if issues.is_empty() {
+        text.push_str("\n\nSem linhas vermelhas estaticas relevantes.");
+        return text.into_bytes();
     }
+
+    text.push_str("\n\n");
+    for issue in issues {
+        text.push_str("- [");
+        text.push_str(&issue.level);
+        text.push_str("] [");
+        text.push_str(&issue.source_blade);
+        text.push_str("] ");
+        if !issue.file.trim().is_empty() {
+            text.push_str(&issue.file);
+            text.push_str(" :: ");
+        }
+        text.push_str(&issue.message);
+        text.push('\n');
+    }
+    text.into_bytes()
 }
 
-fn render_soda_health_report(
-    focus: &str,
-    blades: &[StaticAnalysisBlade],
-    tool_results: Vec<SodaHealthToolResult>,
-    issues: Vec<SodaHealthIssue>,
-) -> Vec<u8> {
-    let report = SodaHealthReport {
-        schema: "soda.health.v1".to_string(),
-        focus: focus.to_string(),
-        router: blades.iter().map(|blade| blade_name(*blade).to_string()).collect(),
-        tool_results,
-        issues,
-    };
-    serde_json::to_vec_pretty(&report).unwrap_or_else(|_| {
-        format!(
-            r#"{{"schema":"soda.health.v1","focus":"{focus}","router":[],"tool_results":[],"issues":[]}}"#
-        )
-        .into_bytes()
-    })
+fn render_soda_health_report(issues: &[SodaHealthIssue]) -> Vec<u8> {
+    let mut text = String::from("# Health Report\n");
+    text.push_str(&format!("\nsummary: findings={}", issues.len()));
+
+    if issues.is_empty() {
+        text.push_str("\n\nSem divida tecnica estatica relevante.");
+        return text.into_bytes();
+    }
+
+    text.push_str("\n\n");
+    for issue in issues {
+        text.push_str("- [");
+        text.push_str(&issue.level);
+        text.push_str("] [");
+        text.push_str(&issue.source_blade);
+        text.push_str("] ");
+        if !issue.file.trim().is_empty() {
+            text.push_str(&issue.file);
+            text.push_str(" :: ");
+        }
+        text.push_str(&issue.message);
+        text.push('\n');
+    }
+
+    text.into_bytes()
+}
+
+fn is_unsafe_hotspot(issue: &SodaHealthIssue) -> bool {
+    issue.channel == SastIssueChannel::UnsafeHotspot
 }
 
 pub struct PolyglotSastSidecar;
@@ -3183,7 +3483,6 @@ impl PolyglotSastSidecar {
         );
 
         let mut all_issues = Vec::<SodaHealthIssue>::new();
-        let mut tool_results = Vec::<SodaHealthToolResult>::new();
         let semaphore = Arc::new(Semaphore::new(MONOREPO_SAST_MAX_PARALLEL));
         let mut join_set = JoinSet::new();
 
@@ -3200,7 +3499,6 @@ impl PolyglotSastSidecar {
                     reason = %reason,
                     "SAST monorepo: lâmina sem manifesto compatível"
                 );
-                tool_results.push(build_tool_result(*blade, None, "skipped", 0, Some(reason)));
                 continue;
             }
 
@@ -3258,6 +3556,7 @@ impl PolyglotSastSidecar {
                         &mut all_issues,
                         &repo_path,
                         &repo_path,
+                        StaticAnalysisBlade::Opengrep,
                         "warning",
                         "",
                         &format!("sast worker execution failed: {err}"),
@@ -3269,6 +3568,7 @@ impl PolyglotSastSidecar {
                         &mut all_issues,
                         &repo_path,
                         &repo_path,
+                        StaticAnalysisBlade::Opengrep,
                         "warning",
                         "",
                         &format!("sast worker join failed: {err}"),
@@ -3286,15 +3586,7 @@ impl PolyglotSastSidecar {
                     &bytes,
                 ) {
                     Ok(mut issues) => {
-                        let issue_count = issues.len();
                         all_issues.append(&mut issues);
-                        tool_results.push(build_tool_result(
-                            outcome.blade,
-                            Some(outcome.scope),
-                            "ok",
-                            issue_count,
-                            None,
-                        ));
                     }
                     Err(err) => {
                         let reason = err.to_string();
@@ -3302,17 +3594,11 @@ impl PolyglotSastSidecar {
                             &mut all_issues,
                             &repo_path,
                             &outcome.execution_root,
+                            outcome.blade,
                             "warning",
                             "",
                             &format!("{scoped_blade} normalization failed: {reason}"),
                         );
-                        tool_results.push(build_tool_result(
-                            outcome.blade,
-                            Some(outcome.scope),
-                            "parse_error",
-                            0,
-                            Some(reason),
-                        ));
                     }
                 },
                 Err(err) => {
@@ -3321,47 +3607,30 @@ impl PolyglotSastSidecar {
                         &mut all_issues,
                         &repo_path,
                         &outcome.execution_root,
+                        outcome.blade,
                         "warning",
                         "",
                         &format!("{scoped_blade} execution failed: {reason}"),
                     );
-                    tool_results.push(build_tool_result(
-                        outcome.blade,
-                        Some(outcome.scope),
-                        "exec_error",
-                        0,
-                        Some(reason),
-                    ));
                 }
             }
         }
 
         sort_and_dedup_issues(&mut all_issues);
-        tool_results.sort_by(|left, right| {
-            left.blade
-                .cmp(&right.blade)
-                .then_with(|| left.scope.cmp(&right.scope))
-                .then_with(|| left.status.cmp(&right.status))
-        });
         let unsafe_issues = all_issues
             .iter()
-            .filter(|issue| issue.level != "info")
+            .filter(|issue| is_unsafe_hotspot(issue))
+            .cloned()
+            .collect::<Vec<_>>();
+        let health_issues = all_issues
+            .iter()
+            .filter(|issue| !is_unsafe_hotspot(issue))
             .cloned()
             .collect::<Vec<_>>();
 
         Ok(PolyglotSastArtifacts {
-            unsafe_hotspots_blob: render_soda_health_report(
-                "unsafe_hotspots",
-                &blades,
-                tool_results.clone(),
-                unsafe_issues,
-            ),
-            health_report_blob: render_soda_health_report(
-                "health_report",
-                &blades,
-                tool_results,
-                all_issues,
-            ),
+            unsafe_hotspots_blob: render_unsafe_hotspots_report(&unsafe_issues),
+            health_report_blob: render_soda_health_report(&health_issues),
         })
     }
 }
@@ -3504,18 +3773,18 @@ fn render_semgrep_blob(rule_set: SemgrepRuleSet, payload: &SemgrepNormalizedPayl
         text.push_str("\n\n");
         text.push_str(rule_set.default_message());
     } else {
-        let head_len = text.chars().count() + 2;
-        let packed = pack_scoped_text_blocks(
-            &payload.blocks,
-            rule_set.max_chars().saturating_sub(head_len),
+        text.push_str("\n\n");
+        text.push_str(
+            &payload
+                .blocks
+                .iter()
+                .map(format_scoped_text_block)
+                .collect::<Vec<_>>()
+                .join("\n\n"),
         );
-        if !packed.trim().is_empty() {
-            text.push_str("\n\n");
-            text.push_str(&packed);
-        }
     }
 
-    truncate_utf8(&text, rule_set.max_chars(), rule_set.max_chars()).into_bytes()
+    text.into_bytes()
 }
 
 fn semgrep_support_dir(repo_path: &Path) -> Result<PathBuf, SidecarError> {
@@ -3550,7 +3819,7 @@ fn semgrep_bundle_lock_for_support_dir(support_dir: &Path) -> Arc<AsyncMutex<()>
         .to_string_lossy()
         .replace('\\', "/")
         .to_ascii_lowercase();
-    let mut guard = semgrep_bundle_locks().lock().unwrap();
+    let mut guard = lock_unpoisoned(semgrep_bundle_locks());
     guard
         .entry(key)
         .or_insert_with(|| Arc::new(AsyncMutex::new(())))
@@ -3893,8 +4162,9 @@ pub mod config {
         assert!(result.is_ok(), "Extração deveria ter sucesso: {:?}", result);
         let payload = result.unwrap();
         let health_report = String::from_utf8(payload.health_report_blob).unwrap();
-        assert!(health_report.contains(r#""source":"native-rust tree-sitter-language-pack""#));
-        assert!(health_report.contains(r#""parsed_files":2"#));
+        assert!(health_report.contains("# Health Report"));
+        assert!(health_report.contains("source: native-rust tree-sitter-language-pack"));
+        assert!(health_report.contains("parsed_files: 2"));
         let repo_outline = String::from_utf8(payload.repo_outline_blob).unwrap();
         assert!(repo_outline.contains("# Repository Outline"));
         assert!(repo_outline.contains("[src/lib.rs]"));
@@ -4048,7 +4318,8 @@ pub fn boot(_runtime: Runtime) {}
         let health = String::from_utf8(payload.health_report_blob).unwrap();
         assert!(outline.contains("kind: ContentRepo"), "Outline deveria cair no modo ContentRepo");
         assert!(outline.contains("no source files found"), "Outline deveria registrar a causa estrutural");
-        assert!(health.contains(r#""kind":"ContentRepo""#));
+        assert!(health.contains("# Health Report"));
+        assert!(health.contains("kind: ContentRepo"));
     }
 
     #[tokio::test]
@@ -4072,7 +4343,8 @@ pub fn boot(_runtime: Runtime) {}
         let health = String::from_utf8(payload.health_report_blob).unwrap();
         assert!(outline.contains("kind: ContentRepo"), "Outline deveria cair no modo ContentRepo");
         assert!(outline.contains("no source files found"), "Outline deveria registrar a causa estrutural");
-        assert!(health.contains(r#""kind":"ContentRepo""#));
+        assert!(health.contains("# Health Report"));
+        assert!(health.contains("kind: ContentRepo"));
     }
 
     #[tokio::test]
@@ -4406,6 +4678,106 @@ pub fn boot(_runtime: Runtime) {}
     }
 
     #[tokio::test]
+    async fn test_native_test_discovery_detects_go_python_elixir_and_frontend_intent() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("go")).unwrap();
+        std::fs::create_dir_all(dir.path().join("python")).unwrap();
+        std::fs::create_dir_all(dir.path().join("elixir")).unwrap();
+        std::fs::create_dir_all(dir.path().join("web")).unwrap();
+
+        std::fs::write(
+            dir.path().join("go/math_test.go"),
+            r#"
+package demo
+
+import "testing"
+
+func TestSum(t *testing.T) {
+    t.Run("adds positives", func(t *testing.T) {})
+}
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("python/test_api.py"),
+            r#"
+def helper():
+    return 1
+
+async def test_async_healthcheck():
+    assert True
+
+def test_sync_healthcheck():
+    assert True
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("elixir/user_test.exs"),
+            r#"
+defmodule Demo.UserTest do
+  use ExUnit.Case
+
+  describe "create_user/1" do
+    test "persists valid payload" do
+      assert true
+    end
+  end
+end
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("web/login.spec.ts"),
+            r#"
+describe("login flow", () => {
+  it("renders button", () => {});
+  test.skip("shows errors", () => {});
+});
+"#,
+        )
+        .unwrap();
+
+        let payload = NativeTestDiscoverySidecar::extract(NativeTestDiscoveryInput {
+            repo_path: dir.path(),
+            profile: &StackProfile::Mixed(vec![
+                SingleStack::Go,
+                SingleStack::Python,
+                SingleStack::Elixir,
+                SingleStack::NodeJS,
+            ]),
+        })
+        .await
+        .unwrap();
+
+        assert!(payload
+            .blocks
+            .iter()
+            .any(|block| block.file_path == "go/math_test.go"
+                && block.items.contains(&"func TestSum".to_string())
+                && block.items.contains(&r#"subtest "adds positives""#.to_string())));
+        assert!(payload
+            .blocks
+            .iter()
+            .any(|block| block.file_path == "python/test_api.py"
+                && block.items.contains(&"def test_async_healthcheck".to_string())
+                && block.items.contains(&"def test_sync_healthcheck".to_string())));
+        assert!(payload
+            .blocks
+            .iter()
+            .any(|block| block.file_path == "elixir/user_test.exs"
+                && block.items.contains(&r#"describe "create_user/1""#.to_string())
+                && block.items.contains(&r#"test "persists valid payload""#.to_string())));
+        assert!(payload
+            .blocks
+            .iter()
+            .any(|block| block.file_path == "web/login.spec.ts"
+                && block.items.contains(&r#"describe "login flow""#.to_string())
+                && block.items.contains(&r#"it "renders button""#.to_string())
+                && block.items.contains(&r#"test "shows errors""#.to_string())));
+    }
+
+    #[tokio::test]
     async fn test_static_analysis_success_exit_1() {
         let valid_json = r#"{
             "violations": [
@@ -4583,6 +4955,46 @@ pub fn boot(_runtime: Runtime) {}
     }
 
     #[test]
+    fn test_render_semgrep_security_blob_keeps_long_tail_without_truncation() {
+        let long_tail = "RISK".repeat(PHASE1_HEAVY_BLOB_MAX_CHARS);
+        let payload = SemgrepNormalizedPayload {
+            blocks: vec![ScopedTextBlock {
+                file_path: "src/main.ts".to_string(),
+                items: vec![format!("tail-marker-{long_tail}")],
+                omitted_count: 0,
+            }],
+            files_analyzed: 1,
+            findings_count: 1,
+        };
+
+        let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Security, &payload)).unwrap();
+
+        assert!(rendered.contains("tail-marker-"));
+        assert!(rendered.ends_with(&long_tail));
+        assert!(rendered.len() > PHASE1_HEAVY_BLOB_MAX_CHARS);
+    }
+
+    #[test]
+    fn test_render_semgrep_health_blob_keeps_long_tail_without_truncation() {
+        let long_tail = "FLOW".repeat(PHASE1_HEAVY_BLOB_MAX_CHARS);
+        let payload = SemgrepNormalizedPayload {
+            blocks: vec![ScopedTextBlock {
+                file_path: "src/entropy.ts".to_string(),
+                items: vec![format!("tail-marker-{long_tail}")],
+                omitted_count: 0,
+            }],
+            files_analyzed: 1,
+            findings_count: 1,
+        };
+
+        let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Health, &payload)).unwrap();
+
+        assert!(rendered.contains("tail-marker-"));
+        assert!(rendered.ends_with(&long_tail));
+        assert!(rendered.len() > PHASE1_HEAVY_BLOB_MAX_CHARS);
+    }
+
+    #[test]
     fn test_sanitize_repo_relative_path_strips_windows_host_prefix() {
         let repo_path = Path::new(r"C:\host\projfs\owner\repo");
         let sanitized = sanitize_repo_relative_path(repo_path, r"C:\host\projfs\owner\repo\crates\goose\src\main.rs");
@@ -4655,8 +5067,55 @@ pub fn boot(_runtime: Runtime) {}
         assert!(normalized[1].message.contains("unwrap"));
     }
 
+    #[test]
+    fn test_normalize_opengrep_findings_separates_red_lines_from_flow_debt() {
+        let repo_path = Path::new(r"C:\host\projfs\owner\repo");
+        let payload = r#"{
+            "results": [
+                {
+                    "check_id": "soda.javascript.dynamic-eval",
+                    "path": "src/main.ts",
+                    "start": { "line": 4 },
+                    "extra": {
+                        "message": "Execucao dinamica via eval aumenta risco de injecao",
+                        "severity": "ERROR"
+                    }
+                },
+                {
+                    "check_id": "soda.javascript.nested-ternary",
+                    "path": "src/ui.ts",
+                    "start": { "line": 9 },
+                    "extra": {
+                        "message": "Ternario aninhado sugere alta complexidade de fluxo",
+                        "severity": "WARNING"
+                    }
+                }
+            ]
+        }"#;
+
+        let normalized = normalize_sast_output(
+            repo_path,
+            repo_path,
+            StaticAnalysisBlade::Opengrep,
+            payload.as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(normalized.len(), 2);
+        assert!(normalized.iter().any(|issue| {
+            issue.file == "src/main.ts"
+                && issue.message.contains("dynamic-eval")
+                && is_unsafe_hotspot(issue)
+        }));
+        assert!(normalized.iter().any(|issue| {
+            issue.file == "src/ui.ts"
+                && issue.message.contains("nested-ternary")
+                && !is_unsafe_hotspot(issue)
+        }));
+    }
+
     #[tokio::test]
-    async fn test_polyglot_sast_sidecar_routes_rust_and_cpp_and_emits_soda_json() {
+    async fn test_polyglot_sast_sidecar_routes_rust_and_cpp_and_breaks_blob06_from_blob08() {
         let clippy_payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"manual memcpy can be replaced with copy_from_slice","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}"#;
         let cppcheck_payload = r#"<results><errors><error id="memleak" severity="warning" msg="Memory leak: ptr"><location file="native/bridge.cpp" line="42"/></error></errors></results>"#;
         let opengrep_payload = r#"{"results":[{"check_id":"soda.tech-debt.todo-fixme","path":"README.md","extra":{"message":"Marcador de divida tecnica encontrado","severity":"INFO"}}]}"#;
@@ -4696,13 +5155,19 @@ pub fn boot(_runtime: Runtime) {}
                 && call.contains("--taint-intrafile")
                 && call.contains("[cwd=")
         }));
-        assert!(unsafe_blob.contains("\"issues\""));
-        assert!(unsafe_blob.contains("src/lib.rs"));
+        assert!(unsafe_blob.contains("# Unsafe Hotspots"));
         assert!(unsafe_blob.contains("native/bridge.cpp"));
-        assert!(health_blob.contains("\"router\""));
-        assert!(health_blob.contains("\"opengrep\""));
-        assert!(health_blob.contains(r#""blade": "opengrep""#));
-        assert!(health_blob.contains(r#""scope": ".""#));
+        assert!(unsafe_blob.contains("[cppcheck]"));
+        assert!(!unsafe_blob.contains("\"issues\""));
+        assert!(!unsafe_blob.contains("src/lib.rs"));
+        assert!(!unsafe_blob.contains("README.md"));
+        assert!(health_blob.contains("# Health Report"));
+        assert!(health_blob.contains("[rust-clippy]"));
+        assert!(health_blob.contains("[opengrep]"));
+        assert!(health_blob.contains("src/lib.rs"));
+        assert!(!health_blob.contains("README.md"));
+        assert!(!health_blob.contains("\"router\""));
+        assert!(!health_blob.contains("\"schema\""));
     }
 
     #[test]
@@ -5039,7 +5504,8 @@ Done in 1.23s"#;
                 && (call.contains("apps\\rust-sdk") || call.contains("apps/rust-sdk"))
         }));
         assert!(health_blob.contains("apps/rust-sdk/src/lib.rs"));
-        assert!(health_blob.contains(r#""scope": "apps/rust-sdk""#));
+        assert!(health_blob.contains("[rust-clippy]"));
+        assert!(!health_blob.contains("\"scope\""));
     }
 
     #[tokio::test]

@@ -18,3 +18,56 @@
 - [ ] Blindar `ensure_semgrep_rule_bundle()` contra corrida entre workers concorrentes do Tokio por repositorio/ruleset.
 - [ ] Cobrir a materializacao concorrente/idempotente do bundle YAML com teste focado.
 - [ ] Rodar `cargo clippy -- -D warnings` e `cargo test` com foco no harvester ate Exit Code 0.
+- [ ] Isolar no `ast_parser.rs` a allowlist de extensoes elegiveis para AST, separando "codigo-fonte real" de "arquivo apenas suportado pela stack".
+- [ ] Bloquear explicitamente `yaml`, `yml`, `json`, `lock`, `md`, `txt`, `sh` e arquivos sem extensao na coleta do Blob 04.
+- [ ] Atualizar os testes do AST nativo para provar que workflows, lockfiles e scripts shell nao entram mais na indexacao.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 04 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Centralizar no `ManifestExtractor` a classificacao poliglota de manifestos primarios do Blob 02, incluindo Elixir, Ruby, PHP, JVM, DotNet, C/C++ e Zig.
+- [ ] Bloquear explicitamente lockfiles (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `poetry.lock`, `Pipfile.lock`, `composer.lock`, `mix.lock`, `go.sum` e equivalentes) da coleta do Blob 02.
+- [ ] Remover o truncamento prematuro por manifesto no Blob 02 para preservar 100% das dependencias declaradas.
+- [ ] Cobrir a expansao poliglota e o bloqueio de lockfiles com testes focados no `extract.rs`.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 02 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Remover a dependencia de pastas fixas no Blob 03 e promover o classificador de arquivos de teste para Rust, Go, JS/TS, Python e Elixir.
+- [ ] Extrair apenas intencao declarativa de testes no sidecar estatico: nomes de funcoes e descricoes `describe/it/test`, sem corpos, mocks ou fixtures.
+- [ ] Cobrir com testes focados a descoberta poliglota de `*_test.go`, `*_test.exs`, `describe/it/test(...)` e `def test_...`.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 03 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Separar no `ast_parser.rs` a coleta de topologia arquitetural da coleta de arquivos parseaveis por AST.
+- [ ] Remover o truncamento por caracteres do Blob 05 e manter a arvore completa dos arquivos arquiteturalmente relevantes.
+- [ ] Ampliar a poda inteligente do Blob 05 para build/cache/dependencias/editor lixo em stacks poliglotas.
+- [ ] Criar allowlist arquitetural poliglota para extensoes-fonte e arquivos canonicos de projeto (`Cargo.toml`, `package.json`, `mix.exs`, `CMakeLists.txt`, `build.zig.zon`, `*.csproj`, `*.sln`, `Package.swift`, configs TS/Svelte/Vite e correlatos).
+- [ ] Cobrir com testes focados que o Blob 05 inclui topologia util completa e exclui `node_modules`, `target`, `.git`, `vendor`, `dist`, `venv`, `.vscode` e similares.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 05 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Introduzir classificacao semantica de issue no SAST para separar risco grave do Blob 06 de saude/estilo no Blob 08.
+- [ ] Remover envelope JSON e truncamento rigido do Blob 06, renderizando apenas lista textual densa de ameacas.
+- [ ] Manter o Blob 08 como canal de saude/fragilidade/divida, absorvendo `nested-ternary`, complexidade, TODO/FIXME e similares.
+- [ ] Cobrir com testes focados a ruptura 06/08, incluindo filtragem de warnings de estilo e preservacao de findings graves.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 06 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Expandir o `OpsBlueprintExtractor` para uma allowlist poliglota de arquivos canonicos de CI/CD, build, containerizacao e IaC.
+- [ ] Remover o truncamento do payload final do Blob 07 e impedir que os arquivos operacionais detectados herdem o teto de `MAX_MANIFEST_SIZE`.
+- [ ] Cobrir com testes focados a descoberta de `Justfile`, `Taskfile`, `Jenkinsfile`, `.gitlab-ci.yml`, Terraform, Helm, Ansible, CMake, Zig e pipelines de diretorios canonicos.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 07 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Remover do Blob 08 o envelope JSON `soda.health.v1` e qualquer truncamento por `BLOB_08_HEALTH_REPORT_MAX_CHARS`.
+- [ ] Unificar o Blob 08 como lista textual crua de flow-debt para os caminhos do parser nativo, Semgrep Health e roteador SAST poliglota.
+- [ ] Reforcar a heuristica poliglota do Blob 08 para code smells/entropia: TODO/FIXME/HACK, ternario aninhado, complexidade, `unwrap/expect/panic`, `console.*`, variaveis nao usadas e similares.
+- [ ] Cobrir com testes focados a saida textual integral do Blob 08 e a ausencia de JSON/truncamento.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 08 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Transformar o Blob 09 em dossie textual (key-value/YAML-like) sem envelope JSON e sem truncamento rigido.
+- [ ] Buscar top 7 issues abertas por interacoes (`sort:interactions-desc`) e extrair titulo + labels.
+- [ ] Buscar ultimos 5 PRs (titulo + status) e incluir `extracted_at` e `last_commit_date`.
+- [ ] Garantir fail-soft para repositorios nao-GitHub ou APIs negadas, mantendo o blob 09 textual com `fallback: true`.
+- [ ] Rodar Ralph Loop da cirurgia do Blob 09 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Auditar residuos de NotebookLM/Blob 10 dinamico no harvester e nas configuracoes da Fase 0.
+- [ ] Remover rotas/configs zumbis do `notebooklm-mcp-cli` e URLs sinteticas que ainda apontam para `notebooklm.google.com/`.
+- [ ] Confirmar que nenhum parser/contrato da Fase 0 ainda espera Blob 10 em JSON.
+- [ ] Rodar Ralph Loop da faxina pos-Blob 10 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+- [ ] Remover qualquer teto de caracteres do `blob_11_ux_contracts` e renderizar o esqueleto mecanico completo por arquivo/frontend.
+- [ ] Expandir o escopo de frontend do Blob 11 para `src/components`, `src/views`, `src/routes`, `app`, `pages`, `ui` e `frontend`, mantendo a poda de docs/tests/config/generated.
+- [ ] Extrair apenas contratos de fluxo de dados: props/contexto/estado/eventos/mutations/funcoes relevantes para Svelte/React/Vue/TS, com expurgo de template/HTML/CSS.
+- [ ] Preservar o fail-soft de "Backend puro, sem interface UX" quando nenhum frontend real existir.
+- [ ] Cobrir com testes Svelte/Vue/TSX e a ausencia de truncamento/markup no Blob 11.
+- [ ] Rodar Ralph Loop da forja do Blob 11 com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0.
+
+- [ ] Auditar `src-tauri/src/harvester/` em busca de caps de texto ainda ativos, campos mortos e helpers zumbis remanescentes da migracao pos-JSON/truncamento.
+- [ ] Remover `unwrap/expect` de caminhos de producao em `extract.rs`, `sidecar.rs` e `ast_parser.rs`, trocando por propagacao graciosa ou fallback deterministico.
+- [ ] Simplificar renderizadores/text builders onde ainda houver debt de fluxo ou estruturas intermediarias desnecessarias.
+- [ ] Rodar Ralph Loop final da sessao com `cargo clippy --lib -- -D warnings` e `cargo test harvester --lib` ate Exit Code 0 sem executar `f0_harvester_cli`.

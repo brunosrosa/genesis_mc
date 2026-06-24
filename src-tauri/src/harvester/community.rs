@@ -6,8 +6,9 @@ use std::time::Duration;
 
 use super::github_tracker;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct CommunityMetaPayload {
+    pub extracted_at: DateTime<Utc>,
     pub stars_count: u64,
     pub forks_count: u64,
     pub open_issues_count: u32,
@@ -18,21 +19,54 @@ pub struct CommunityMetaPayload {
     pub name: Option<String>,
     pub last_commit_sha: Option<String>,
     pub last_commit_date: Option<DateTime<Utc>>,
+    pub top_open_issues: Vec<CommunityIssueMeta>,
     pub recent_prs: Vec<CommunityPrMeta>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct CommunityIssueMeta {
+    pub number: u64,
+    pub title: String,
+    pub labels: Vec<String>,
+    pub comments: u64,
+    pub reactions: u64,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct CommunityPrMeta {
     pub number: u64,
-    pub state: String,
+    pub title: String,
+    pub status: String,
     pub updated_at: DateTime<Utc>,
 }
 
 impl CommunityMetaPayload {
     pub fn empty() -> Self {
         Self {
+            extracted_at: Utc::now(),
             licenca: "UNKNOWN".to_string(),
             ..Self::default()
+        }
+    }
+}
+
+impl Default for CommunityMetaPayload {
+    fn default() -> Self {
+        Self {
+            extracted_at: Utc::now(),
+            stars_count: 0,
+            forks_count: 0,
+            open_issues_count: 0,
+            open_prs_count: 0,
+            licenca: "UNKNOWN".to_string(),
+            description: None,
+            full_name: None,
+            name: None,
+            last_commit_sha: None,
+            last_commit_date: None,
+            top_open_issues: Vec::new(),
+            recent_prs: Vec::new(),
         }
     }
 }
@@ -113,14 +147,33 @@ mod tests {
             .with_header("content-type", "application/json")
             .with_body(r#"{"total_count":7,"items":[]}"#)
             .create_async().await;
-        let _recent_prs = server.mock("GET", "/search/issues")
-            .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:owner/repo+is:pr".into()))
+        let _top_issues = server.mock("GET", "/search/issues")
+            .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:owner/repo+is:issue+is:open+sort:interactions-desc".into()))
+            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "7".into()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{
+                "total_count": 1,
+                "items": [
+                    {
+                        "number": 77,
+                        "title": "pain: complex setup",
+                        "comments": 31,
+                        "reactions": { "total_count": 12 },
+                        "labels": [{ "name": "bug" }, { "name": "build" }],
+                        "updated_at": "2023-10-20T10:00:00Z"
+                    }
+                ]
+            }"#)
+            .create_async().await;
+        let _recent_prs = server.mock("GET", "/repos/owner/repo/pulls")
+            .match_query(mockito::Matcher::UrlEncoded("state".into(), "all".into()))
             .match_query(mockito::Matcher::UrlEncoded("sort".into(), "updated".into()))
-            .match_query(mockito::Matcher::UrlEncoded("order".into(), "desc".into()))
+            .match_query(mockito::Matcher::UrlEncoded("direction".into(), "desc".into()))
             .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "5".into()))
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"total_count":7,"items":[{"number":101,"state":"open","updated_at":"2023-10-28T10:00:00Z"}]}"#)
+            .with_body(r#"[{"number":101,"title":"refactor: cleanup","state":"open","updated_at":"2023-10-28T10:00:00Z","merged_at":null,"draft":false}]"#)
             .create_async().await;
         let _commits = server.mock("GET", "/repos/owner/repo/commits")
             .match_query(mockito::Matcher::UrlEncoded("sha".into(), "main".into()))
@@ -145,8 +198,12 @@ mod tests {
         assert_eq!(payload.name.as_deref(), Some("repo"));
         assert_eq!(payload.last_commit_sha.as_deref(), Some("abc123"));
         assert!(payload.last_commit_date.is_some());
+        assert_eq!(payload.top_open_issues.len(), 1);
+        assert_eq!(payload.top_open_issues[0].number, 77);
+        assert!(payload.top_open_issues[0].labels.contains(&"bug".to_string()));
         assert_eq!(payload.recent_prs.len(), 1);
         assert_eq!(payload.recent_prs[0].number, 101);
+        assert_eq!(payload.recent_prs[0].status, "open");
     }
 
     #[tokio::test]
@@ -164,11 +221,9 @@ mod tests {
             .with_header("content-type", "application/json")
             .with_body(r#"{"total_count":5,"items":[]}"#)
             .create_async().await;
-        let _recent_prs = server.mock("GET", "/search/issues")
-            .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:firecrawl/firecrawl+is:pr".into()))
-            .match_query(mockito::Matcher::UrlEncoded("sort".into(), "updated".into()))
-            .match_query(mockito::Matcher::UrlEncoded("order".into(), "desc".into()))
-            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "5".into()))
+        let _top_issues = server.mock("GET", "/search/issues")
+            .match_query(mockito::Matcher::UrlEncoded("q".into(), "repo:firecrawl/firecrawl+is:issue+is:open+sort:interactions-desc".into()))
+            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "7".into()))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{"total_count":5,"items":[]}"#)
@@ -179,6 +234,22 @@ mod tests {
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"[{"sha":"abc123","commit":{"author":{"date":"2023-10-27T10:00:00Z"}}}]"#)
+            .create_async().await;
+        let _pulls = server.mock("GET", "/repos/firecrawl/firecrawl/pulls")
+            .match_query(mockito::Matcher::UrlEncoded("state".into(), "all".into()))
+            .match_query(mockito::Matcher::UrlEncoded("sort".into(), "updated".into()))
+            .match_query(mockito::Matcher::UrlEncoded("direction".into(), "desc".into()))
+            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "5".into()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"[]"#)
+            .create_async().await;
+        let _canonical_commits = server.mock("GET", "/repos/firecrawl/firecrawl/commits")
+            .match_query(mockito::Matcher::UrlEncoded("sha".into(), "main".into()))
+            .match_query(mockito::Matcher::UrlEncoded("per_page".into(), "1".into()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"[{"sha":"def456","commit":{"author":{"date":"2023-10-29T10:00:00Z"}}}]"#)
             .create_async().await;
 
         let url = Url::parse("https://github.com/owner/repo").unwrap();

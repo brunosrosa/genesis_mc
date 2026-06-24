@@ -16,6 +16,7 @@ pub enum CascadeError {
 }
 
 const MAX_OUTPUT_TOKENS: usize = 3_000;
+const BLOB_10_CANON_MARKER: &str = "=== BLOB_10_CANON_CONTEXT ===";
 
 #[derive(Debug, Serialize)]
 struct OpenRouterRequest {
@@ -27,7 +28,31 @@ struct OpenRouterRequest {
 #[derive(Debug, Serialize)]
 struct Message {
     role: String,
-    content: String,
+    content: MessageContent,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum MessageContent {
+    Text(String),
+    Parts(Vec<ContentPart>),
+}
+
+#[derive(Debug, Serialize)]
+struct ContentPart {
+    #[serde(rename = "type")]
+    kind: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<CacheControl>,
+}
+
+#[derive(Debug, Serialize)]
+struct CacheControl {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ttl: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,11 +143,11 @@ impl CloudCascade {
             messages: vec![
                 Message {
                     role: "system".to_string(),
-                    content: system_prompt.to_string(),
+                    content: MessageContent::Text(system_prompt.to_string()),
                 },
                 Message {
                     role: "user".to_string(),
-                    content: payload.to_string(),
+                    content: build_user_content(payload),
                 },
             ],
             max_tokens: MAX_OUTPUT_TOKENS,
@@ -161,6 +186,34 @@ impl CloudCascade {
             })
         }
     }
+}
+
+fn build_user_content(payload: &str) -> MessageContent {
+    let (before, after) = match payload.split_once(BLOB_10_CANON_MARKER) {
+        Some((left, right)) => (left, Some(right)),
+        None => return MessageContent::Text(payload.to_string()),
+    };
+
+    let mut parts = Vec::new();
+    if !before.trim().is_empty() {
+        parts.push(ContentPart {
+            kind: "text".to_string(),
+            text: before.to_string(),
+            cache_control: None,
+        });
+    }
+
+    let canon_block = format!("{BLOB_10_CANON_MARKER}{after}", after = after.unwrap_or_default());
+    parts.push(ContentPart {
+        kind: "text".to_string(),
+        text: canon_block,
+        cache_control: Some(CacheControl {
+            kind: "ephemeral".to_string(),
+            ttl: Some("1h".to_string()),
+        }),
+    });
+
+    MessageContent::Parts(parts)
 }
 
 fn openrouter_chat_completions_url() -> String {

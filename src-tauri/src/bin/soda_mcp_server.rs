@@ -290,12 +290,7 @@ async fn run_soda_get_ast(params: &serde_json::Map<String, Value>) -> Result<Val
 
     let repo_path_for_task = repo_path.clone();
     let artifacts = tokio::task::spawn_blocking(move || {
-        ast_parser::extract_repository_outline_native(
-            &repo_path_for_task,
-            400_000,
-            120_000,
-            32_000,
-        )
+        ast_parser::extract_repository_outline_native(&repo_path_for_task)
     })
     .await
     .map_err(|e| RpcError {
@@ -509,8 +504,8 @@ fn format_github_meta_markdown(
         for pr in &meta.recent_prs {
             out.push_str(&format!(
                 "- `#{}`
- `{}` updated `{}`\n",
-                pr.number, pr.state, pr.updated_at
+ `{}` updated `{}`\n  {}\n",
+                pr.number, pr.status, pr.updated_at, pr.title
             ));
         }
     }

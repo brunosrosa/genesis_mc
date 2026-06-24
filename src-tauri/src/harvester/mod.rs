@@ -16,6 +16,7 @@ pub mod guard;
 pub mod orchestrator;
 pub mod canon;
 
+#[cfg(test)]
 pub(crate) const PHASE1_HEAVY_BLOB_MAX_CHARS: usize = 500_000;
 
 pub(crate) fn normalize_repo_path_key(value: &str) -> String {

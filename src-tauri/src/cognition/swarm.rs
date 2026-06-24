@@ -12,6 +12,7 @@ use thiserror::Error;
 const STATUS_OK: &str = "F2_OK";
 const STATUS_ERR: &str = "ERRO_F2";
 const DEFAULT_OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+const BLOB_10_CANON_MARKER: &str = "=== BLOB_10_CANON_CONTEXT ===";
 
 type LensFuture<'a> = Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;
 
@@ -455,11 +456,11 @@ impl LensInvoker for HttpLensInvoker {
                 messages: vec![
                     ChatMessage {
                         role: "system".to_string(),
-                        content: system_prompt,
+                        content: ChatMessageContent::Text(system_prompt),
                     },
                     ChatMessage {
                         role: "user".to_string(),
-                        content: format!("{}{}", user_prefix, payload),
+                        content: build_cached_payload_content(&format!("{}{}", user_prefix, payload)),
                     },
                 ],
                 max_tokens: LENS_MAX_TOKENS,
@@ -573,7 +574,31 @@ struct ChatCompletionsRequest {
 #[derive(Debug, Serialize)]
 struct ChatMessage {
     role: String,
-    content: String,
+    content: ChatMessageContent,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum ChatMessageContent {
+    Text(String),
+    Parts(Vec<ChatContentPart>),
+}
+
+#[derive(Debug, Serialize)]
+struct ChatContentPart {
+    #[serde(rename = "type")]
+    kind: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<ChatCacheControl>,
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCacheControl {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ttl: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -626,6 +651,33 @@ fn extract_chat_message_content_from_parsed(parsed: &serde_json::Value) -> Strin
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"));
     content.map(flatten_chat_content).unwrap_or_default()
+}
+
+fn build_cached_payload_content(payload: &str) -> ChatMessageContent {
+    let Some((before, after)) = payload.split_once(BLOB_10_CANON_MARKER) else {
+        return ChatMessageContent::Text(payload.to_string());
+    };
+
+    let mut parts = Vec::new();
+    if !before.trim().is_empty() {
+        parts.push(ChatContentPart {
+            kind: "text".to_string(),
+            text: before.to_string(),
+            cache_control: None,
+        });
+    }
+
+    let canon_block = format!("{BLOB_10_CANON_MARKER}{after}");
+    parts.push(ChatContentPart {
+        kind: "text".to_string(),
+        text: canon_block,
+        cache_control: Some(ChatCacheControl {
+            kind: "ephemeral".to_string(),
+            ttl: Some("1h".to_string()),
+        }),
+    });
+
+    ChatMessageContent::Parts(parts)
 }
 
 fn inject_usage_into_lens_payload(json_payload: &str, usage: OpenRouterUsage) -> String {

@@ -11,8 +11,8 @@ use super::persist::ArtifactBlob;
 const BLOB_10_TYPE: &str = "blob_10_soda_canon_context";
 pub const CANON_GLOBAL_REPO_ID: &str = "__SODA_CANON_GLOBAL__";
 const CANON_CACHE_MAX_AGE_SECS: i64 = 7 * 24 * 60 * 60;
-const CANON_MAX_CHARS: usize = 8_000;
 const CANON_SCHEMA_TAG: &str = "SODA_CANON_V5_ADRS_ALL";
+const CANON_MANIFEST_RELATIVE_PATH: &str = "docs/SODA_CANON_MANIFEST.md";
 const CANON_LOCAL_CONTEXT: &str = "SODA_CANON_V5_ADRS_ALL
 Raio-X Macro do SODA / Genesis MC:
 
@@ -72,7 +72,7 @@ impl SodaCanonExtractor {
             return Err(CanonError::EmptyPayload);
         }
 
-        let payload_blob = truncate_chars(&payload_text, CANON_MAX_CHARS).into_bytes();
+        let payload_blob = payload_text.into_bytes();
         Self::persist_blob(repo_id, payload_blob.clone(), Arc::clone(&conn)).await?;
         Self::persist_blob(CANON_GLOBAL_REPO_ID, payload_blob.clone(), conn).await?;
 
@@ -161,22 +161,20 @@ fn render_canon_context() -> Result<String, CanonError> {
         .map(PathBuf::from)
         .ok_or_else(|| CanonError::Storage("Falha ao resolver raiz do projeto".to_string()))?;
 
-    let adrs_all_path = root_dir.join(".archive").join("_ADRs_ALL.md");
-    let source = match fs::read_to_string(&adrs_all_path) {
+    let manifest_path = root_dir.join(CANON_MANIFEST_RELATIVE_PATH);
+    let source = match fs::read_to_string(&manifest_path) {
         Ok(text) => text,
         Err(_) => CANON_LOCAL_CONTEXT.to_string(),
     };
 
-    let payload = format!("{CANON_SCHEMA_TAG}\n\n{}", source.trim());
-    Ok(truncate_chars(&payload, CANON_MAX_CHARS))
+    if source.contains(CANON_SCHEMA_TAG) {
+        return Ok(source.trim().to_string());
+    }
+    Ok(format!("{CANON_SCHEMA_TAG}\n\n{}", source.trim()))
 }
 
 fn payload_matches_schema(payload: &[u8]) -> bool {
     std::str::from_utf8(payload)
         .map(|text| text.contains(CANON_SCHEMA_TAG))
         .unwrap_or(false)
-}
-
-fn truncate_chars(content: &str, max_chars: usize) -> String {
-    content.chars().take(max_chars).collect()
 }
