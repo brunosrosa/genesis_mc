@@ -11,6 +11,7 @@ use axum::{Json, Router};
 use genesis_mc_lib::harvester::ast_parser;
 use genesis_mc_lib::harvester::community::RateLimiter;
 use genesis_mc_lib::harvester::github_tracker;
+use genesis_mc_lib::harvester::repo_radar;
 use genesis_mc_lib::harvester::web_scraper;
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
@@ -289,9 +290,15 @@ async fn run_soda_get_ast(params: &serde_json::Map<String, Value>) -> Result<Val
     validate_repo_path(&repo_path)?;
 
     let repo_path_for_task = repo_path.clone();
-    let artifacts = tokio::task::spawn_blocking(move || {
-        ast_parser::extract_repository_outline_native(&repo_path_for_task)
-    })
+    let clean_files_for_task = repo_radar::build_repo_radar(&repo_path).clean_files().to_vec();
+    let artifacts = tokio::task::spawn_blocking(
+        move || -> Result<ast_parser::NativeAstArtifacts, ast_parser::AstParserError> {
+            ast_parser::extract_repository_outline_native_from_clean_files(
+                &repo_path_for_task,
+                &clean_files_for_task,
+            )
+        },
+    )
     .await
     .map_err(|e| RpcError {
         code: -32001,
@@ -870,28 +877,6 @@ fn validate_sqlite_query(query: &str) -> Result<(), RpcError> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::validate_sqlite_query;
-
-    #[test]
-    fn sqlite_query_rejects_multi_statement_payload() {
-        let err = validate_sqlite_query("SELECT 1; DROP TABLE users;").expect_err("multi-statement deve falhar");
-        assert_eq!(err.code, -32602);
-    }
-
-    #[test]
-    fn sqlite_query_accepts_single_select_with_trailing_semicolon() {
-        validate_sqlite_query("SELECT 1;").expect("select simples deve ser permitido");
-    }
-
-    #[test]
-    fn sqlite_query_rejects_mutating_pragma() {
-        let err = validate_sqlite_query("PRAGMA cache_size = 10;").expect_err("pragma mutavel deve falhar");
-        assert_eq!(err.code, -32602);
-    }
-}
-
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -970,4 +955,28 @@ fn jsonrpc_error(
         })),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_sqlite_query;
+
+    #[test]
+    fn sqlite_query_rejects_multi_statement_payload() {
+        let err =
+            validate_sqlite_query("SELECT 1; DROP TABLE users;").expect_err("multi-statement deve falhar");
+        assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn sqlite_query_accepts_single_select_with_trailing_semicolon() {
+        validate_sqlite_query("SELECT 1;").expect("select simples deve ser permitido");
+    }
+
+    #[test]
+    fn sqlite_query_rejects_mutating_pragma() {
+        let err =
+            validate_sqlite_query("PRAGMA cache_size = 10;").expect_err("pragma mutavel deve falhar");
+        assert_eq!(err.code, -32602);
+    }
 }

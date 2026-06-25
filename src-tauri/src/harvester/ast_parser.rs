@@ -1,7 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
 use ignore::WalkBuilder;
 use regex::Regex;
 use thiserror::Error;
@@ -48,31 +49,31 @@ pub enum AstParserError {
     SerializationFailure { reason: String },
 }
 
-pub fn extract_repository_outline_native(
-    repo_path: &Path,
+pub fn extract_repository_outline_native_from_clean_files(
+    repo_root: &Path,
+    clean_files: &[PathBuf],
 ) -> Result<NativeAstArtifacts, AstParserError> {
-    let repo_root = repo_path
+    let repo_root = repo_root
         .canonicalize()
-        .unwrap_or_else(|_| repo_path.to_path_buf());
-    let source_files = collect_source_files(&repo_root)?;
-    if source_files.is_empty() {
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    let has_any_source_candidate = clean_files.iter().any(|path| detect_language(path).is_some());
+    if !has_any_source_candidate {
         return Err(AstParserError::EmptyRepository {
             path: repo_root.display().to_string(),
         });
     }
-    let architecture_files = collect_architecture_files(&repo_root)?;
 
     let mut parsed_files = Vec::new();
     let mut languages = BTreeMap::<String, usize>::new();
     let mut total_signatures = 0usize;
     let mut total_import_edges = 0usize;
-    for file_path in source_files {
-        let relative_path = sanitize_relative_path(&repo_root, &file_path);
-        let Some(language) = detect_language(&file_path) else {
+    for file_path in clean_files {
+        let relative_path = sanitize_relative_path(&repo_root, file_path);
+        let Some(language) = detect_language(file_path) else {
             continue;
         };
 
-        let file_size_bytes = match std::fs::metadata(&file_path) {
+        let file_size_bytes = match std::fs::metadata(file_path) {
             Ok(metadata) => metadata.len(),
             Err(err) => {
                 warn!(
@@ -83,11 +84,13 @@ pub fn extract_repository_outline_native(
                 continue;
             }
         };
-        if file_size_bytes >= AST_MINIFIED_HEURISTIC_MIN_BYTES && is_probably_minified_source(&file_path) {
+        if file_size_bytes >= AST_MINIFIED_HEURISTIC_MIN_BYTES
+            && is_probably_minified_source(file_path)
+        {
             continue;
         }
 
-        let source_bytes = match std::fs::read(&file_path) {
+        let source_bytes = match std::fs::read(file_path) {
             Ok(bytes) => bytes,
             Err(err) => {
                 warn!(
@@ -146,7 +149,22 @@ pub fn extract_repository_outline_native(
     });
 
     let repo_outline = build_repo_outline(&repo_root, &parsed_files);
-    let architecture_map = build_architecture_map(&architecture_files);
+    let mut architecture_files = Vec::new();
+    for path in clean_files {
+        let relative = sanitize_relative_path(&repo_root, path);
+        if should_skip_architecture_relative_path(&relative) {
+            continue;
+        }
+        if !is_architecture_file_allowed(path) {
+            continue;
+        }
+        architecture_files.push(relative);
+    }
+    architecture_files.sort();
+    architecture_files.dedup();
+    let architecture_map = build_architecture_map(
+        &architecture_files,
+    );
     let health_report = build_health_report(
         &repo_root,
         &languages,
@@ -162,226 +180,35 @@ pub fn extract_repository_outline_native(
     })
 }
 
-pub fn derive_scannable_roots_native(
-    repo_path: &Path,
-    max_roots: usize,
-) -> Result<Vec<PathBuf>, AstParserError> {
-    let repo_root = repo_path
+pub fn build_architecture_map_blob_from_clean_files(
+    repo_root: &Path,
+    clean_files: &[PathBuf],
+) -> Vec<u8> {
+    let repo_root = repo_root
         .canonicalize()
-        .unwrap_or_else(|_| repo_path.to_path_buf());
-    let source_files = collect_source_files(&repo_root)?;
-    if source_files.is_empty() {
-        return Err(AstParserError::EmptyRepository {
-            path: repo_root.display().to_string(),
-        });
-    }
-
-    let relative_paths = source_files
-        .iter()
-        .map(|path| sanitize_relative_path(&repo_root, path))
-        .collect::<Vec<_>>();
-    let roots = derive_scannable_roots_from_relative_paths(&relative_paths, max_roots);
-    Ok(roots
-        .into_iter()
-        .map(|root| repo_root.join(root))
-        .collect::<Vec<_>>())
-}
-
-pub fn collect_direct_scannable_files(root: &Path) -> Result<Vec<PathBuf>, AstParserError> {
-    let mut files = Vec::new();
-    let entries = std::fs::read_dir(root).map_err(|err| AstParserError::WalkFailure {
-        path: root.display().to_string(),
-        reason: err.to_string(),
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|err| AstParserError::WalkFailure {
-            path: root.display().to_string(),
-            reason: err.to_string(),
-        })?;
-        let file_type = entry.file_type().map_err(|err| AstParserError::WalkFailure {
-            path: root.display().to_string(),
-            reason: err.to_string(),
-        })?;
-        if !file_type.is_file() {
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    let mut architecture_files = Vec::new();
+    for path in clean_files {
+        let relative = sanitize_relative_path(&repo_root, path);
+        if should_skip_architecture_relative_path(&relative) {
             continue;
         }
-        let path = entry.path();
-        if should_skip_file(&path) {
+        if !is_architecture_file_allowed(path) {
             continue;
         }
-        let relative_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_string();
-        if should_skip_scannable_relative_path(&relative_name) {
-            continue;
-        }
-        files.push(path);
+        architecture_files.push(relative);
     }
-    files.sort();
-    Ok(files)
-}
-
-const SCANNABLE_ROOT_FILE_THRESHOLD: usize = 80;
-const SCANNABLE_ROOT_MAX_SPLIT_DEPTH: usize = 3;
-
-fn derive_scannable_roots_from_relative_paths(
-    relative_paths: &[String],
-    max_roots: usize,
-) -> Vec<String> {
-    let mut grouped = BTreeMap::<String, Vec<Vec<String>>>::new();
-
-    for relative_path in relative_paths {
-        if should_skip_scannable_relative_path(relative_path) {
-            continue;
-        }
-        let segments = split_relative_segments(relative_path);
-        let Some(anchor_idx) = scannable_anchor_index(&segments) else {
-            continue;
-        };
-        let anchor_root = segments[..=anchor_idx].join("/");
-        let tail_dirs = if segments.len() > anchor_idx + 1 {
-            segments[anchor_idx + 1..segments.len().saturating_sub(1)].to_vec()
-        } else {
-            Vec::new()
-        };
-        grouped.entry(anchor_root).or_default().push(tail_dirs);
-    }
-
-    let mut selected = BTreeSet::new();
-    for (anchor_root, tails) in grouped {
-        collect_scannable_roots(
-            &anchor_root,
-            &tails,
-            0,
-            &mut selected,
-        );
-    }
-
-    selected.into_iter().take(max_roots).collect()
-}
-
-fn collect_scannable_roots(
-    prefix: &str,
-    tails: &[Vec<String>],
-    depth: usize,
-    out: &mut BTreeSet<String>,
-) {
-    if tails.len() <= SCANNABLE_ROOT_FILE_THRESHOLD || depth >= SCANNABLE_ROOT_MAX_SPLIT_DEPTH {
-        out.insert(prefix.to_string());
-        return;
-    }
-
-    let mut by_child = BTreeMap::<String, Vec<Vec<String>>>::new();
-    let mut direct_files = 0usize;
-    for tail in tails {
-        if let Some((head, rest)) = tail.split_first() {
-            by_child
-                .entry(head.clone())
-                .or_default()
-                .push(rest.to_vec());
-        } else {
-            direct_files += 1;
-        }
-    }
-
-    if by_child.is_empty() {
-        out.insert(prefix.to_string());
-        return;
-    }
-
-    if by_child.len() == 1 {
-        if let Some((child, child_tails)) = by_child.into_iter().next() {
-            let child_prefix = format!("{prefix}/{child}");
-            collect_scannable_roots(&child_prefix, &child_tails, depth + 1, out);
-            if direct_files > 0 {
-                out.insert(prefix.to_string());
-            }
-        }
-        return;
-    }
-
-    if by_child.len() < 2 {
-        out.insert(prefix.to_string());
-        return;
-    }
-
-    if direct_files > 0 {
-        out.insert(prefix.to_string());
-    }
-
-    for (child, child_tails) in by_child {
-        let child_prefix = format!("{prefix}/{child}");
-        collect_scannable_roots(&child_prefix, &child_tails, depth + 1, out);
+    architecture_files.sort();
+    architecture_files.dedup();
+    let rendered = build_architecture_map(&architecture_files);
+    if rendered.trim().is_empty() {
+        Vec::new()
+    } else {
+        rendered.into_bytes()
     }
 }
 
-fn split_relative_segments(relative_path: &str) -> Vec<String> {
-    relative_path
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| segment.to_string())
-        .collect::<Vec<_>>()
-}
-
-fn scannable_anchor_index(segments: &[String]) -> Option<usize> {
-    segments.iter().position(|segment| {
-        let lower = segment.to_ascii_lowercase();
-        matches!(
-            lower.as_str(),
-            "src" | "lib" | "app" | "cmd" | "internal" | "server" | "client" | "scripts" | "script"
-        )
-    })
-}
-
-fn should_skip_scannable_relative_path(relative_path: &str) -> bool {
-    let normalized = relative_path.replace('\\', "/").to_ascii_lowercase();
-    let segments = normalized
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>();
-    if segments.iter().any(|segment| {
-        matches!(
-            *segment,
-            "test"
-                | "tests"
-                | "__tests__"
-                | "mock"
-                | "mocks"
-                | "__mocks__"
-                | "fixture"
-                | "fixtures"
-                | "__fixtures__"
-                | "snapshot"
-                | "snapshots"
-                | "__snapshots__"
-                | "sample"
-                | "samples"
-                | "playground"
-                | "playgrounds"
-                | "benchmark"
-                | "benchmarking"
-                | "coverage"
-                | "generated"
-                | ".svelte-kit"
-                | ".next"
-                | ".nuxt"
-                | ".storybook"
-                | "storybook-static"
-        )
-    }) {
-        return true;
-    }
-
-    normalized.ends_with("/output.json")
-        || normalized.ends_with(".min.js")
-        || normalized.ends_with(".min.cjs")
-        || normalized.ends_with(".min.mjs")
-        || normalized.ends_with(".bundle.js")
-        || normalized.contains(".generated.")
-}
-
+#[cfg(test)]
 fn collect_source_files(repo_root: &Path) -> Result<Vec<PathBuf>, AstParserError> {
     let mut builder = WalkBuilder::new(repo_root);
     builder.hidden(false);
@@ -416,6 +243,7 @@ fn collect_source_files(repo_root: &Path) -> Result<Vec<PathBuf>, AstParserError
     Ok(files)
 }
 
+#[cfg(test)]
 fn collect_architecture_files(repo_root: &Path) -> Result<Vec<String>, AstParserError> {
     let mut builder = WalkBuilder::new(repo_root);
     builder.hidden(false);
@@ -454,6 +282,7 @@ fn collect_architecture_files(repo_root: &Path) -> Result<Vec<String>, AstParser
     Ok(files)
 }
 
+#[cfg(test)]
 fn should_skip_dir(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     matches!(
@@ -534,6 +363,7 @@ fn should_skip_dir(name: &str) -> bool {
     ) || lower.starts_with("cmake-build-")
 }
 
+#[cfg(test)]
 fn should_skip_file(path: &Path) -> bool {
     let normalized = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
     if normalized.contains("/documentation/")
@@ -712,6 +542,7 @@ fn detect_language(path: &Path) -> Option<String> {
     Some(language.to_string())
 }
 
+#[cfg(test)]
 fn is_ast_source_file_allowed(path: &Path) -> bool {
     normalized_source_extension(path).is_some()
 }
@@ -1519,7 +1350,29 @@ public class Greeter {
         std::fs::write(repo_root.join("zig/build.zig.zon"), ".{ .name = \"demo\" }\n").unwrap();
         std::fs::write(repo_root.join("Package.swift"), "import PackageDescription\n").unwrap();
 
-        let artifacts = extract_repository_outline_native(repo_root).unwrap();
+        let clean_files = vec![
+            repo_root.join("src/lib.rs"),
+            repo_root.join("web/App.svelte"),
+            repo_root.join("web/routes.ts"),
+            repo_root.join("go/main.go"),
+            repo_root.join("dotnet/App/App.csproj"),
+            repo_root.join("Workspace.sln"),
+            repo_root.join("Cargo.toml"),
+            repo_root.join("package.json"),
+            repo_root.join("svelte.config.js"),
+            repo_root.join("go.mod"),
+            repo_root.join("mix.exs"),
+            repo_root.join("Gemfile"),
+            repo_root.join("composer.json"),
+            repo_root.join("cpp/CMakeLists.txt"),
+            repo_root.join("zig/build.zig.zon"),
+            repo_root.join("Package.swift"),
+        ];
+        let clean_files = clean_files
+            .into_iter()
+            .map(|path| path.canonicalize().unwrap_or(path))
+            .collect::<Vec<_>>();
+        let artifacts = extract_repository_outline_native_from_clean_files(repo_root, &clean_files).unwrap();
         let architecture_map = String::from_utf8(artifacts.architecture_map_blob).unwrap();
 
         assert!(architecture_map.len() > 20, "Blob 05 nao deve mais truncar por teto fixo");
@@ -1603,7 +1456,23 @@ public class Greeter {
         )
         .unwrap();
 
-        let artifacts = extract_repository_outline_native(repo_root).unwrap();
+        let clean_files = vec![
+            repo_root.join("Cargo.toml"),
+            repo_root.join("pyproject.toml"),
+            repo_root.join("package.json"),
+            repo_root.join("mix.exs"),
+            repo_root.join("cpp/CMakeLists.txt"),
+            repo_root.join("src/lib.rs"),
+            repo_root.join("python/app.py"),
+            repo_root.join("web/app.tsx"),
+            repo_root.join("cpp/main.cpp"),
+            repo_root.join("lib/demo/engine.ex"),
+        ];
+        let clean_files = clean_files
+            .into_iter()
+            .map(|path| path.canonicalize().unwrap_or(path))
+            .collect::<Vec<_>>();
+        let artifacts = extract_repository_outline_native_from_clean_files(repo_root, &clean_files).unwrap();
         let repo_outline = String::from_utf8(artifacts.repo_outline_blob).unwrap();
 
         assert!(repo_outline.contains("[src/lib.rs]"));
@@ -1618,35 +1487,4 @@ public class Greeter {
         assert!(repo_outline.contains("elixir"));
     }
 
-    #[test]
-    fn derive_scannable_roots_skips_toxic_js_fixture_paths() {
-        let paths = vec![
-            "packages/web/src/lib/index.ts".to_string(),
-            "packages/web/tests/runtime/sample.spec.ts".to_string(),
-            "packages/web/__mocks__/browser.ts".to_string(),
-            "playgrounds/sandbox/src/main.ts".to_string(),
-            "packages/web/src/generated/client.generated.ts".to_string(),
-        ];
-
-        let roots = derive_scannable_roots_from_relative_paths(&paths, 16);
-
-        assert_eq!(roots, vec!["packages/web/src".to_string()]);
-    }
-
-    #[test]
-    fn derive_scannable_roots_splits_large_anchor_subtrees_recursively() {
-        let mut paths = Vec::new();
-        for idx in 0..90 {
-            paths.push(format!("packages/svelte/src/compiler/phases/1-parse/file_{idx}.js"));
-            paths.push(format!("packages/svelte/src/compiler/phases/2-analyze/file_{idx}.js"));
-            paths.push(format!("packages/svelte/src/internal/runtime/file_{idx}.js"));
-        }
-
-        let roots = derive_scannable_roots_from_relative_paths(&paths, 16);
-
-        assert!(roots.contains(&"packages/svelte/src/compiler/phases/1-parse".to_string()));
-        assert!(roots.contains(&"packages/svelte/src/compiler/phases/2-analyze".to_string()));
-        assert!(roots.contains(&"packages/svelte/src/internal/runtime".to_string()));
-        assert!(!roots.contains(&"packages/svelte/src".to_string()));
-    }
 }

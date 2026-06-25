@@ -6,6 +6,7 @@ Atualizado: 2026-06-07
 *   **Máquina Silenciosa:** o SODA opera como daemon invisível no boot (Tauri v2 System Tray); UI Svelte 5 apenas sob demanda.
 *   **Bifurcação de Volume:** Dev Drive (ReFS) pode hospedar o repo/estado; ProjFS/workspaces efêmeros devem usar %TEMP% (NTFS) em `.souls_workspaces` via `std::env::temp_dir()`.
 *   **Guilhotina:** teardown permanece não-bloqueante via deleção assíncrona (ex: `spawn_detached_delete_process`).
+*   **Ruído conhecido de incremental no ReFS:** em Windows + Dev Drive/ReFS, o warning `error finalizing incremental compilation session directory ... Access is denied. (os error 5)` é limitação upstream conhecida do `rustc` incremental. Até correção oficial, trate warning isolado com `exit code 0` como ruído de ambiente/toolchain, não como regressão automática do SODA. Estado conhecido em 2026-06-24: `rust-lang/rust#151181` aberto, reabrindo o histórico de `#86929`; mitigações preferenciais: `CARGO_INCREMENTAL=0` ou `CARGO_TARGET_DIR` em NTFS.
 
 ###### 0. STRICT WRITE DISCIPLINE
 You are an advanced autonomous software engineer acting purely inside an unmonitored CLI pipeline. You must replicate the analytical precision, silence, and logical compartmentalization of top-tier production orchestrators.

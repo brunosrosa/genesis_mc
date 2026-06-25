@@ -1,6 +1,7 @@
 use genesis_mc_lib::harvester::detect::LanguageDetector;
 use genesis_mc_lib::harvester::git::BloblessCloner;
 use genesis_mc_lib::harvester::ramdisk::RamdiskAllocator;
+use genesis_mc_lib::harvester::repo_radar;
 use genesis_mc_lib::harvester::sandbox::{SandboxOrchestrator, SandboxPolicy};
 use genesis_mc_lib::harvester::sidecar::{PolyglotSastInput, PolyglotSastSidecar};
 use rusqlite::Connection;
@@ -65,10 +66,12 @@ async fn main() -> io::Result<()> {
         .map_err(|err| to_io_error("Falha ao criar sandbox efemero", err))?
     );
 
+    let clean_files = Arc::new(repo_radar::build_repo_radar(&repo_path).clean_files().to_vec());
     let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
         executor: Arc::clone(&sandbox),
         timeout_secs: 120,
         profile: &profile,
+        clean_files,
     })
     .await
     .map_err(|err| to_io_error("Falha ao extrair blob_08 poliglota", err))?;

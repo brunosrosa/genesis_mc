@@ -96,7 +96,7 @@ fn parse_model_list_env(key: &str) -> Vec<String> {
     std::env::var(key)
         .ok()
         .map(|raw| {
-            raw.split(|ch: char| matches!(ch, ',' | ';' | '\n' | '\r'))
+            raw.split([',', ';', '\n', '\r'])
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(|value| value.to_string())
@@ -1568,7 +1568,7 @@ impl genesis_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterForma
             };
             user_prompt.push_str(
                 &serde_json::to_string_pretty(&example)
-                    .unwrap_or_else(|_| fallback_example),
+                    .unwrap_or(fallback_example),
             );
             let max_tokens = if block == 3 { 1800 } else { 4096 };
             let mut body_obj = serde_json::Map::new();

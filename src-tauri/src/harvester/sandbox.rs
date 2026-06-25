@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
+use sysinfo::{Pid, System};
 use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{debug, info, trace, warn};
@@ -143,13 +144,12 @@ struct ResolvedCommand {
 const IDLE_TIMEOUT_SECS: u64 = 45;
 const DEEP_FLOW_IDLE_TIMEOUT_SECS: u64 = 180;
 const ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 5 * 60;
-const DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 10 * 60;
 const PROCESS_WAIT_POLL_INTERVAL_MS: u64 = 250;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TimeoutProfile {
     idle_timeout_secs: u64,
-    absolute_timeout_secs: u64,
+    absolute_timeout_secs: Option<u64>,
 }
 
 pub(crate) fn truncated_args_preview<S: AsRef<str>>(args: &[S]) -> Vec<String> {
@@ -190,15 +190,15 @@ fn timeout_profile<S: AsRef<str>>(command: &str, args: &[S], requested_timeout_s
     match command {
         "cargo" if is_cargo_clippy_invocation(args) => TimeoutProfile {
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
-            absolute_timeout_secs: requested_timeout_secs.max(DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS),
+            absolute_timeout_secs: None,
         },
         "opengrep" | "govulncheck" => TimeoutProfile {
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
-            absolute_timeout_secs: requested_timeout_secs.max(DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS),
+            absolute_timeout_secs: None,
         },
         _ => TimeoutProfile {
             idle_timeout_secs: IDLE_TIMEOUT_SECS,
-            absolute_timeout_secs: requested_timeout_secs.max(ABSOLUTE_TIMEOUT_FLOOR_SECS),
+            absolute_timeout_secs: Some(requested_timeout_secs.max(ABSOLUTE_TIMEOUT_FLOOR_SECS)),
         },
     }
 }
@@ -814,6 +814,9 @@ impl SandboxHandle {
         self.lock_pids().insert(pid);
 
         let last_activity = Arc::new(Mutex::new(Instant::now()));
+        let sys_pid = Pid::from_u32(pid);
+        let mut sys = System::new();
+        sys.refresh_process(sys_pid);
         let stdout_task = {
             let last_activity = Arc::clone(&last_activity);
             tokio::spawn(drain_pipe_with_telemetry(
@@ -844,6 +847,12 @@ impl SandboxHandle {
         let started_at = Instant::now();
 
         let wait_outcome = loop {
+            sys.refresh_process(sys_pid);
+            if let Some(process) = sys.process(sys_pid) {
+                if process.cpu_usage() > 0.1 {
+                    mark_process_activity(&last_activity);
+                }
+            }
             match child.try_wait() {
                 Ok(Some(status)) => break ProcessWaitOutcome::Exited(status),
                 Ok(None) => {
@@ -852,10 +861,10 @@ impl SandboxHandle {
                     {
                         break ProcessWaitOutcome::IdleTimeout;
                     }
-                    if started_at.elapsed()
-                        >= Duration::from_secs(timeout_profile.absolute_timeout_secs)
-                    {
-                        break ProcessWaitOutcome::AbsoluteTimeout;
+                    if let Some(absolute_timeout_secs) = timeout_profile.absolute_timeout_secs {
+                        if started_at.elapsed() >= Duration::from_secs(absolute_timeout_secs) {
+                            break ProcessWaitOutcome::AbsoluteTimeout;
+                        }
                     }
                     tokio::time::sleep(Duration::from_millis(PROCESS_WAIT_POLL_INTERVAL_MS)).await;
                 }
@@ -930,7 +939,7 @@ impl SandboxHandle {
                     repo_path = %self.repo_path.display(),
                     cwd = %execution_root.display(),
                     idle_timeout_secs = timeout_profile.idle_timeout_secs,
-                    absolute_timeout_secs = timeout_profile.absolute_timeout_secs,
+                    absolute_timeout_secs = timeout_profile.absolute_timeout_secs.unwrap_or(0),
                     "Sandbox: idle timeout atingido; aniquilando sidecar"
                 );
                 let _ = child.kill().await;
@@ -959,7 +968,7 @@ impl SandboxHandle {
                     repo_path = %self.repo_path.display(),
                     cwd = %execution_root.display(),
                     idle_timeout_secs = timeout_profile.idle_timeout_secs,
-                    absolute_timeout_secs = timeout_profile.absolute_timeout_secs,
+                    absolute_timeout_secs = timeout_profile.absolute_timeout_secs.unwrap_or(0),
                     "Sandbox: absolute timeout atingido; aniquilando sidecar"
                 );
                 let _ = child.kill().await;
@@ -1159,21 +1168,15 @@ mod tests {
     fn test_timeout_profile_promotes_deep_flow_tools() {
         let normal = timeout_profile("cppcheck", &["."], 30);
         assert_eq!(normal.idle_timeout_secs, IDLE_TIMEOUT_SECS);
-        assert_eq!(normal.absolute_timeout_secs, ABSOLUTE_TIMEOUT_FLOOR_SECS);
+        assert_eq!(normal.absolute_timeout_secs, Some(ABSOLUTE_TIMEOUT_FLOOR_SECS));
 
         let heavy = timeout_profile("opengrep", &["scan"], 30);
         assert_eq!(heavy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
-        assert_eq!(
-            heavy.absolute_timeout_secs,
-            DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS
-        );
+        assert_eq!(heavy.absolute_timeout_secs, None);
 
         let cargo_clippy = timeout_profile("cargo", &["clippy", "--message-format=json"], 30);
         assert_eq!(cargo_clippy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
-        assert_eq!(
-            cargo_clippy.absolute_timeout_secs,
-            DEEP_FLOW_ABSOLUTE_TIMEOUT_FLOOR_SECS
-        );
+        assert_eq!(cargo_clippy.absolute_timeout_secs, None);
     }
 
     #[tokio::test]

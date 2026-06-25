@@ -6,6 +6,7 @@ pub mod sandbox;
 pub mod detect;
 pub mod router;
 pub mod ast_parser;
+pub mod repo_radar;
 pub mod sidecar;
 pub mod web_scraper;
 pub mod github_tracker;

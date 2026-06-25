@@ -1,10 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use ignore::WalkBuilder;
 use quick_xml::de::from_str as xml_from_str;
 use regex::Regex;
@@ -19,6 +19,7 @@ use tracing::{error, info, warn};
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::detect::{SingleStack, StackProfile};
+use crate::harvester::repo_radar;
 use crate::harvester::router::{route_static_analysis_blades, StaticAnalysisBlade};
 use crate::harvester::sandbox::{SandboxError, truncated_args_preview};
 use crate::harvester::web_scraper;
@@ -109,6 +110,7 @@ pub struct NativeAstInput<'a, E: SandboxExecutor> {
     pub executor: &'a E,
     pub timeout_secs: u64,
     pub persist_artifacts: Option<PersistArtifactConfig<'a>>,
+    pub clean_files: Arc<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1171,21 +1173,37 @@ impl NativeAstParser {
             "ast-native: iniciando extração estrutural"
         );
         let repo_path = input.executor.repo_path().to_path_buf();
+        let clean_files = Arc::clone(&input.clean_files);
         let native_artifacts = tokio::task::spawn_blocking(move || {
-            ast_parser::extract_repository_outline_native(&repo_path)
+            ast_parser::extract_repository_outline_native_from_clean_files(&repo_path, &clean_files)
         })
         .await
         .map_err(|e| SidecarError::ExecutionFailed {
             reason: format!("Falha ao aguardar parser AST nativo: {}", e),
         })?;
         let native_artifacts = match native_artifacts {
-            Ok(artifacts) => artifacts,
+            Ok(artifacts) => NativeAstArtifacts {
+                repo_outline_blob: artifacts.repo_outline_blob,
+                health_report_blob: artifacts.health_report_blob,
+                architecture_map_blob: artifacts.architecture_map_blob,
+            },
             Err(AstParserError::EmptyRepository { path }) => {
                 return content_repo_artifacts(
                     input.executor.repo_path(),
                     &format!("no source files found in {}", path),
                 )
                 .await;
+            }
+            Err(AstParserError::NoStructuralSymbols { .. }) => {
+                let architecture_map = ast_parser::build_architecture_map_blob_from_clean_files(
+                    input.executor.repo_path(),
+                    &input.clean_files,
+                );
+                NativeAstArtifacts {
+                    repo_outline_blob: Vec::new(),
+                    health_report_blob: Vec::new(),
+                    architecture_map_blob: architecture_map,
+                }
             }
             Err(other) => {
                 return Err(SidecarError::ExecutionFailed {
@@ -1382,29 +1400,13 @@ fn supports_stack(profile: &StackProfile, target: SingleStack) -> bool {
 }
 
 fn relative_display(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
+    let normalized_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let normalized_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    normalized_path
+        .strip_prefix(&normalized_root)
+        .unwrap_or(normalized_path.as_path())
         .to_string_lossy()
         .replace('\\', "/")
-}
-
-fn should_skip_test_dir(name: &str) -> bool {
-    matches!(
-        name,
-        ".git"
-            | ".jj"
-            | ".svn"
-            | "node_modules"
-            | "target"
-            | "dist"
-            | "build"
-            | ".native_ast_cache"
-            | "docs"
-            | "documentation"
-            | "examples"
-            | "mock"
-            | "mocks"
-    )
 }
 
 fn is_supported_test_file(profile: &StackProfile, path: &Path) -> bool {
@@ -1650,7 +1652,6 @@ fn build_scoped_blocks_from_pairs(
 #[derive(Debug, Clone, Default)]
 struct TestDiscoveryProgress {
     blocks: Vec<ScopedTextBlock>,
-    bfs_dirs: Vec<String>,
     bfs_test_files: Vec<String>,
 }
 
@@ -1659,177 +1660,69 @@ fn discover_static_test_entries_bfs(
     profile: &StackProfile,
     progress: Option<&Arc<Mutex<TestDiscoveryProgress>>>,
 ) -> Result<Vec<ScopedTextBlock>, SidecarError> {
-    const MAX_SNAPSHOT_DIRS: usize = 64;
-    const MAX_SNAPSHOT_FILES: usize = 96;
-    const PROGRESS_FLUSH_EVERY: usize = 32;
-
     let mut blocks = Vec::new();
-    let mut bfs_dirs = Vec::new();
-    let mut bfs_test_files = Vec::new();
+    let mut candidate_files = BTreeSet::new();
 
-    let mut queue = VecDeque::new();
-    queue.push_back(repo_path.to_path_buf());
+    let radar = repo_radar::build_repo_radar(repo_path);
+    for path in radar.all_files() {
+        candidate_files.insert(path.clone());
+    }
 
-    let mut pending_blocks = Vec::new();
-    let mut steps = 0usize;
-
-    while let Some(dir) = queue.pop_front() {
-        let rel_dir = relative_display(repo_path, &dir);
-        let rel_dir = if rel_dir.is_empty() { ".".to_string() } else { rel_dir };
-        if bfs_dirs.len() < MAX_SNAPSHOT_DIRS && !should_skip_discovered_test_entry(&rel_dir) {
-            bfs_dirs.push(rel_dir);
+    for path in &candidate_files {
+        if !is_supported_test_file(profile, path) {
+            continue;
         }
 
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(v) => v,
-            Err(_e) => {
-                steps += 1;
-                if steps.is_multiple_of(PROGRESS_FLUSH_EVERY) {
-                    if let Some(progress) = progress {
-                        if let Ok(mut guard) = progress.lock() {
-                            if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
-                                for item in &bfs_dirs {
-                                    if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
-                                        break;
-                                    }
-                                    if !guard.bfs_dirs.contains(item) {
-                                        guard.bfs_dirs.push(item.clone());
-                                    }
-                                }
-                            }
-                            if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
-                                for item in &bfs_test_files {
-                                    if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
-                                        break;
-                                    }
-                                    if !guard.bfs_test_files.contains(item) {
-                                        guard.bfs_test_files.push(item.clone());
-                                    }
-                                }
-                            }
-                            if !pending_blocks.is_empty() {
-                                guard.blocks.append(&mut pending_blocks);
-                            }
-                        }
-                    }
-                }
-                continue;
+        let relative = relative_display(repo_path, path);
+        if should_skip_discovered_test_entry(&relative) {
+            continue;
+        }
+
+        let Some(content) = read_static_test_file(path)? else {
+            continue;
+        };
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase());
+
+        let discovered = match extension.as_deref() {
+            Some("rs") => extract_rust_test_entries_shallow(&content),
+            Some("py") => extract_python_test_entries_shallow(&content),
+            Some("go") => extract_go_test_entries_shallow(&content),
+            Some("exs") => extract_elixir_test_entries_shallow(&content),
+            Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
+                extract_frontend_test_entries_shallow(&content)
             }
+            _ => Vec::new(),
         };
 
-        for entry in entries {
-            let entry = entry.map_err(|e| SidecarError::ExecutionFailed {
-                reason: format!("Falha ao iterar '{}': {}", dir.display(), e),
-            })?;
-            let path = entry.path();
-            let file_type = entry.file_type().map_err(|e| SidecarError::ExecutionFailed {
-                reason: format!("Falha ao ler tipo de '{}': {}", path.display(), e),
-            })?;
-
-            if file_type.is_dir() {
-                if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
-                    if should_skip_test_dir(name) {
-                        continue;
-                    }
-                }
-                queue.push_back(path);
-                continue;
-            }
-
-            if !file_type.is_file() || !is_supported_test_file(profile, &path) {
-                continue;
-            }
-
-            let relative = relative_display(repo_path, &path);
-            if should_skip_discovered_test_entry(&relative) {
-                continue;
-            }
-
-            if bfs_test_files.len() < MAX_SNAPSHOT_FILES {
-                bfs_test_files.push(relative.clone());
-            }
-
-            let Some(content) = read_static_test_file(&path)? else {
-                continue;
-            };
-            let extension = path
-                .extension()
-                .and_then(|value| value.to_str())
-                .map(|value| value.to_ascii_lowercase());
-
-            let discovered = match extension.as_deref() {
-                Some("rs") => extract_rust_test_entries_shallow(&content),
-                Some("py") => extract_python_test_entries_shallow(&content),
-                Some("go") => extract_go_test_entries_shallow(&content),
-                Some("exs") => extract_elixir_test_entries_shallow(&content),
-                Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
-                    extract_frontend_test_entries_shallow(&content)
-                }
-                _ => Vec::new(),
-            };
-
-            let mut items = Vec::new();
-            for entry in discovered {
-                let candidate = format!("{} :: {}", relative, entry);
-                if !should_skip_discovered_test_entry(&candidate) {
-                    items.push(entry);
-                }
-            }
-
-            if !items.is_empty() {
-                let block = ScopedTextBlock {
-                    file_path: relative,
-                    items,
-                    omitted_count: 0,
-                };
-                blocks.push(block.clone());
-                pending_blocks.push(block);
-            }
-
-            steps += 1;
-            if steps.is_multiple_of(PROGRESS_FLUSH_EVERY) {
-                if let Some(progress) = progress {
-                    if let Ok(mut guard) = progress.lock() {
-                        if guard.bfs_dirs.len() < MAX_SNAPSHOT_DIRS {
-                            for item in &bfs_dirs {
-                                if guard.bfs_dirs.len() >= MAX_SNAPSHOT_DIRS {
-                                    break;
-                                }
-                                if !guard.bfs_dirs.contains(item) {
-                                    guard.bfs_dirs.push(item.clone());
-                                }
-                            }
-                        }
-                        if guard.bfs_test_files.len() < MAX_SNAPSHOT_FILES {
-                            for item in &bfs_test_files {
-                                if guard.bfs_test_files.len() >= MAX_SNAPSHOT_FILES {
-                                    break;
-                                }
-                                if !guard.bfs_test_files.contains(item) {
-                                    guard.bfs_test_files.push(item.clone());
-                                }
-                            }
-                        }
-                        if !pending_blocks.is_empty() {
-                            guard.blocks.append(&mut pending_blocks);
-                        }
-                    }
-                }
+        let mut items = Vec::new();
+        for entry in discovered {
+            let candidate = format!("{} :: {}", relative, entry);
+            if !should_skip_discovered_test_entry(&candidate) {
+                items.push(entry);
             }
         }
+        if items.is_empty() {
+            continue;
+        }
+
+        blocks.push(ScopedTextBlock {
+            file_path: relative,
+            items,
+            omitted_count: 0,
+        });
     }
 
     if let Some(progress) = progress {
         if let Ok(mut guard) = progress.lock() {
-            if guard.bfs_dirs.is_empty() {
-                guard.bfs_dirs = bfs_dirs;
-            }
-            if guard.bfs_test_files.is_empty() {
-                guard.bfs_test_files = bfs_test_files;
-            }
-            if !pending_blocks.is_empty() {
-                guard.blocks.extend(pending_blocks);
-            }
+            guard.blocks = blocks.clone();
+            guard.bfs_test_files = candidate_files
+                .iter()
+                .take(96)
+                .map(|path| relative_display(repo_path, path))
+                .collect();
         }
     }
 
@@ -1842,51 +1735,18 @@ impl NativeTestDiscoverySidecar {
     pub async fn extract(input: NativeTestDiscoveryInput<'_>) -> Result<TestIntentPayload, SidecarError> {
         let repo_path = input.repo_path.to_path_buf();
         let profile = input.profile.clone();
-        let progress = Arc::new(Mutex::new(TestDiscoveryProgress::default()));
-        let progress_ref = progress.clone();
-
-        let mut handle = tokio::task::spawn_blocking(move || {
-            discover_static_test_entries_bfs(&repo_path, &profile, Some(&progress_ref))
-        });
-
-        match tokio::time::timeout(Duration::from_secs(60), &mut handle).await {
-            Ok(joined) => {
-                let blocks = joined
-                    .map_err(|e| SidecarError::ExecutionFailed {
-                        reason: format!("Static test discovery join failed: {}", e),
-                    })??;
-                Ok(TestIntentPayload {
-                    runner_name: "static-ast-bfs".to_string(),
-                    timed_out: false,
-                    blocks,
-                })
-            }
-            Err(_) => {
-                handle.abort();
-                let snapshot = lock_unpoisoned(&progress).clone();
-                let mut blocks = Vec::new();
-                if !snapshot.bfs_dirs.is_empty() {
-                    blocks.push(ScopedTextBlock {
-                        file_path: "bfs_snapshot::dirs".to_string(),
-                        items: snapshot.bfs_dirs,
-                        omitted_count: 0,
-                    });
-                }
-                if !snapshot.bfs_test_files.is_empty() {
-                    blocks.push(ScopedTextBlock {
-                        file_path: "bfs_snapshot::test_files".to_string(),
-                        items: snapshot.bfs_test_files,
-                        omitted_count: 0,
-                    });
-                }
-                blocks.extend(snapshot.blocks);
-                Ok(TestIntentPayload {
-                    runner_name: "static-ast-bfs".to_string(),
-                    timed_out: true,
-                    blocks,
-                })
-            }
-        }
+        let blocks = tokio::task::spawn_blocking(move || {
+            discover_static_test_entries_bfs(&repo_path, &profile, None)
+        })
+        .await
+        .map_err(|e| SidecarError::ExecutionFailed {
+            reason: format!("Static test discovery join failed: {}", e),
+        })??;
+        Ok(TestIntentPayload {
+            runner_name: "static-ast-radar".to_string(),
+            timed_out: false,
+            blocks,
+        })
     }
 }
 
@@ -1961,6 +1821,7 @@ pub struct PolyglotSastInput<'a, E: SandboxExecutor> {
     pub executor: Arc<E>,
     pub timeout_secs: u64,
     pub profile: &'a StackProfile,
+    pub clean_files: Arc<Vec<PathBuf>>,
 }
 
 const MONOREPO_SAST_MAX_PARALLEL: usize = 3;
@@ -2112,14 +1973,15 @@ fn manifest_kind_for_blade(blade: StaticAnalysisBlade) -> Option<ManifestKind> {
 
 fn execution_targets_for_blade(
     repo_path: &Path,
+    clean_files: &[PathBuf],
     manifests: &[DiscoveredManifest],
     blade: StaticAnalysisBlade,
 ) -> Vec<SastExecutionTarget> {
     if blade == StaticAnalysisBlade::Opengrep {
-        return derive_opengrep_execution_targets(repo_path);
+        return derive_opengrep_execution_targets(repo_path, clean_files);
     }
     if matches!(blade, StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc) {
-        return derive_js_lint_execution_targets(repo_path, manifests, blade);
+        return derive_js_lint_execution_targets(repo_path, manifests, blade, clean_files);
     }
 
     if let Some(kind) = manifest_kind_for_blade(blade) {
@@ -2143,10 +2005,8 @@ fn execution_targets_for_blade(
     }]
 }
 
-const OPENGREP_DYNAMIC_ROOT_LIMIT: usize = 24;
-const OPENGREP_DIRECT_FILE_CHUNK_SIZE: usize = 24;
-const JS_LINT_DYNAMIC_ROOT_LIMIT: usize = 24;
-const JS_LINT_DIRECT_FILE_CHUNK_SIZE: usize = 24;
+const OPENGREP_FILE_LIST_CHUNK_SIZE: usize = 96;
+const JS_LINT_FILE_LIST_CHUNK_SIZE: usize = 96;
 
 fn opengrep_file_batch_scope(scope: &str, batch_idx: usize) -> String {
     format!("{scope}::files-{batch_idx:02}")
@@ -2169,151 +2029,11 @@ fn descendant_roots_for_manifest<'a>(
         .collect()
 }
 
-fn derive_dynamic_execution_targets(
-    repo_root: &Path,
-    execution_root: &Path,
-    blade: StaticAnalysisBlade,
-    scope_prefix: &str,
-    max_roots: usize,
-    direct_file_chunk_size: usize,
-    boundary_roots: &[&Path],
-) -> Vec<SastExecutionTarget> {
-    let mut targets = Vec::new();
-    let roots = match ast_parser::derive_scannable_roots_native(execution_root, max_roots) {
-        Ok(roots) if !roots.is_empty() => roots,
-        Ok(_) | Err(_) => {
-            return vec![SastExecutionTarget {
-                blade,
-                execution_root: execution_root.to_path_buf(),
-                scope: scope_prefix.to_string(),
-                scan_targets: vec![".".to_string()],
-            }];
-        }
-    };
-
-    let mut roots = roots
-        .into_iter()
-        .filter(|root| root.exists())
-        .filter(|root| !boundary_roots.iter().any(|boundary| root.starts_with(boundary)))
-        .collect::<Vec<_>>();
-    roots.sort();
-    roots.dedup();
-
-    for root in &roots {
-        let relative_scope = scope_label_for_path(repo_root, root);
-        let has_descendant_roots = roots.iter().any(|other| other != root && other.starts_with(root));
-        if has_descendant_roots {
-            match ast_parser::collect_direct_scannable_files(root) {
-                Ok(files) => {
-                    for (idx, chunk) in files.chunks(direct_file_chunk_size).enumerate() {
-                        let scan_targets = chunk
-                            .iter()
-                            .filter_map(|file| {
-                                file.file_name()
-                                    .and_then(|value| value.to_str())
-                                    .map(|value| value.to_string())
-                            })
-                            .collect::<Vec<_>>();
-                        if scan_targets.is_empty() {
-                            continue;
-                        }
-                        targets.push(SastExecutionTarget {
-                            blade,
-                            execution_root: root.clone(),
-                            scope: blade_file_batch_scope(&relative_scope, idx + 1),
-                            scan_targets,
-                        });
-                    }
-                }
-                Err(err) => {
-                    warn!(
-                        blade = blade_name(blade),
-                        scope = %relative_scope,
-                        cwd = %root.display(),
-                        error = %err,
-                        "js-lint: falha ao listar arquivos diretos; mantendo scope amplo como fail-soft"
-                    );
-                    targets.push(SastExecutionTarget {
-                        blade,
-                        execution_root: root.clone(),
-                        scope: relative_scope,
-                        scan_targets: vec![".".to_string()],
-                    });
-                }
-            }
-            continue;
-        }
-
-        targets.push(SastExecutionTarget {
-            blade,
-            execution_root: root.clone(),
-            scope: relative_scope,
-            scan_targets: vec![".".to_string()],
-        });
-    }
-
-    if scope_prefix == "." {
-        match ast_parser::collect_direct_scannable_files(execution_root) {
-            Ok(files) => {
-                for (idx, chunk) in files.chunks(direct_file_chunk_size).enumerate() {
-                    let scan_targets = chunk
-                        .iter()
-                        .filter_map(|file| {
-                            file.file_name()
-                                .and_then(|value| value.to_str())
-                                .map(|value| value.to_string())
-                        })
-                        .collect::<Vec<_>>();
-                    if scan_targets.is_empty() {
-                        continue;
-                    }
-                    targets.push(SastExecutionTarget {
-                        blade,
-                        execution_root: execution_root.to_path_buf(),
-                        scope: blade_file_batch_scope(scope_prefix, idx + 1),
-                        scan_targets,
-                    });
-                }
-            }
-            Err(err) => {
-                warn!(
-                    blade = blade_name(blade),
-                    scope = scope_prefix,
-                    cwd = %execution_root.display(),
-                    error = %err,
-                    "js-lint: falha ao listar arquivos diretos na raiz do pacote"
-                );
-            }
-        }
-    }
-
-    if targets.is_empty() {
-        targets.push(SastExecutionTarget {
-            blade,
-            execution_root: execution_root.to_path_buf(),
-            scope: scope_prefix.to_string(),
-            scan_targets: vec![".".to_string()],
-        });
-    }
-
-    targets.sort_by(|left, right| {
-        left.scope
-            .cmp(&right.scope)
-            .then_with(|| left.execution_root.cmp(&right.execution_root))
-            .then_with(|| left.scan_targets.cmp(&right.scan_targets))
-    });
-    targets.dedup_by(|left, right| {
-        left.execution_root == right.execution_root
-            && left.scope == right.scope
-            && left.scan_targets == right.scan_targets
-    });
-    targets
-}
-
 fn derive_js_lint_execution_targets(
     repo_path: &Path,
     manifests: &[DiscoveredManifest],
     blade: StaticAnalysisBlade,
+    clean_files: &[PathBuf],
 ) -> Vec<SastExecutionTarget> {
     let repo_root = repo_path
         .canonicalize()
@@ -2324,26 +2044,26 @@ fn derive_js_lint_execution_targets(
         .filter(|manifest| manifest.kind == kind)
         .collect::<Vec<_>>();
 
+    let mut targets = Vec::new();
     if package_manifests.is_empty() {
-        return vec![SastExecutionTarget {
+        targets.extend(derive_js_lint_file_list_targets(
+            &repo_root,
+            ".",
+            clean_files,
+            &[],
             blade,
-            execution_root: repo_root,
-            scope: ".".to_string(),
-            scan_targets: vec![".".to_string()],
-        }];
+        ));
+        return targets;
     }
 
-    let mut targets = Vec::new();
     for manifest in package_manifests {
         let boundaries = descendant_roots_for_manifest(manifests, &manifest.execution_root, kind);
-        targets.extend(derive_dynamic_execution_targets(
-            &repo_root,
+        targets.extend(derive_js_lint_file_list_targets(
             &manifest.execution_root,
-            blade,
             &manifest.scope,
-            JS_LINT_DYNAMIC_ROOT_LIMIT,
-            JS_LINT_DIRECT_FILE_CHUNK_SIZE,
+            clean_files,
             &boundaries,
+            blade,
         ));
     }
     targets.sort_by(|left, right| {
@@ -2360,100 +2080,115 @@ fn derive_js_lint_execution_targets(
     targets
 }
 
-fn derive_opengrep_execution_targets(repo_path: &Path) -> Vec<SastExecutionTarget> {
+fn derive_opengrep_execution_targets(
+    repo_path: &Path,
+    clean_files: &[PathBuf],
+) -> Vec<SastExecutionTarget> {
     let repo_root = repo_path
         .canonicalize()
         .unwrap_or_else(|_| repo_path.to_path_buf());
-    match ast_parser::derive_scannable_roots_native(&repo_root, OPENGREP_DYNAMIC_ROOT_LIMIT) {
-        Ok(roots) if !roots.is_empty() => {
-            let mut roots = roots
-                .into_iter()
-                .filter(|root| root.exists())
-                .collect::<Vec<_>>();
-            roots.sort();
-            roots.dedup();
+    let scan_targets = derive_repo_relative_clean_targets(&repo_root, clean_files, &[], |_| true);
 
-            let mut targets = Vec::new();
-            for execution_root in &roots {
-                let scope = execution_root
-                    .strip_prefix(&repo_root)
-                    .ok()
-                    .map(|value| value.to_string_lossy().replace('\\', "/"))
-                    .filter(|value| !value.is_empty())
-                    .unwrap_or_else(|| ".".to_string());
-                let has_descendant_roots = roots
-                    .iter()
-                    .any(|other| other != execution_root && other.starts_with(execution_root));
-
-                if has_descendant_roots {
-                    match ast_parser::collect_direct_scannable_files(execution_root) {
-                        Ok(files) => {
-                            for (idx, chunk) in files.chunks(OPENGREP_DIRECT_FILE_CHUNK_SIZE).enumerate()
-                            {
-                                let scan_targets = chunk
-                                    .iter()
-                                    .filter_map(|file| {
-                                        file.file_name()
-                                            .and_then(|value| value.to_str())
-                                            .map(|value| value.to_string())
-                                    })
-                                    .collect::<Vec<_>>();
-                                if scan_targets.is_empty() {
-                                    continue;
-                                }
-                                targets.push(SastExecutionTarget {
-                                    blade: StaticAnalysisBlade::Opengrep,
-                                    execution_root: execution_root.clone(),
-                                    scope: opengrep_file_batch_scope(&scope, idx + 1),
-                                    scan_targets,
-                                });
-                            }
-                        }
-                        Err(err) => {
-                            warn!(
-                                scope = %scope,
-                                cwd = %execution_root.display(),
-                                error = %err,
-                                "opengrep: falha ao listar arquivos diretos; mantendo scope amplo como fail-soft"
-                            );
-                            targets.push(SastExecutionTarget {
-                                blade: StaticAnalysisBlade::Opengrep,
-                                execution_root: execution_root.clone(),
-                                scope,
-                                scan_targets: vec![".".to_string()],
-                            });
-                        }
-                    }
-                    continue;
-                }
-
-                targets.push(SastExecutionTarget {
-                    blade: StaticAnalysisBlade::Opengrep,
-                    execution_root: execution_root.clone(),
-                    scope,
-                    scan_targets: vec![".".to_string()],
-                });
-            }
-            targets.sort_by(|left, right| {
-                left.scope
-                    .cmp(&right.scope)
-                    .then_with(|| left.execution_root.cmp(&right.execution_root))
-                    .then_with(|| left.scan_targets.cmp(&right.scan_targets))
-            });
-            targets.dedup_by(|left, right| {
-                left.execution_root == right.execution_root
-                    && left.scope == right.scope
-                    && left.scan_targets == right.scan_targets
-            });
-            targets
-        }
-        Ok(_) | Err(_) => vec![SastExecutionTarget {
+    scan_targets
+        .chunks(OPENGREP_FILE_LIST_CHUNK_SIZE)
+        .enumerate()
+        .map(|(idx, chunk)| SastExecutionTarget {
             blade: StaticAnalysisBlade::Opengrep,
-            execution_root: repo_root,
-            scope: ".".to_string(),
-            scan_targets: vec![".".to_string()],
-        }],
+            execution_root: repo_root.clone(),
+            scope: opengrep_file_batch_scope(".", idx + 1),
+            scan_targets: chunk.to_vec(),
+        })
+        .collect::<Vec<_>>()
+}
+
+fn derive_js_lint_file_list_targets(
+    execution_root: &Path,
+    scope_prefix: &str,
+    clean_files: &[PathBuf],
+    boundary_roots: &[&Path],
+    blade: StaticAnalysisBlade,
+) -> Vec<SastExecutionTarget> {
+    let scan_targets = derive_repo_relative_clean_targets(execution_root, clean_files, boundary_roots, |path| {
+        if blade == StaticAnalysisBlade::Biome {
+            return is_biome_supported_file(path);
+        }
+        if blade == StaticAnalysisBlade::Oxc {
+            return is_oxlint_supported_file(path);
+        }
+        false
+    });
+
+    if scan_targets.is_empty() {
+        return Vec::new();
     }
+
+    let normalized_scope = if scope_prefix.trim().is_empty() {
+        ".".to_string()
+    } else {
+        scope_prefix.to_string()
+    };
+    scan_targets
+        .chunks(JS_LINT_FILE_LIST_CHUNK_SIZE)
+        .enumerate()
+        .map(|(idx, chunk)| SastExecutionTarget {
+            blade,
+            execution_root: execution_root.to_path_buf(),
+            scope: blade_file_batch_scope(&normalized_scope, idx + 1),
+            scan_targets: chunk.to_vec(),
+        })
+        .collect()
+}
+
+fn derive_repo_relative_clean_targets(
+    execution_root: &Path,
+    clean_files: &[PathBuf],
+    boundary_roots: &[&Path],
+    predicate: impl Fn(&Path) -> bool,
+) -> Vec<String> {
+    let normalized_root = execution_root
+        .canonicalize()
+        .unwrap_or_else(|_| execution_root.to_path_buf());
+    let mut out = Vec::new();
+    for path in clean_files {
+        if !path.starts_with(&normalized_root) {
+            continue;
+        }
+        if boundary_roots.iter().any(|boundary| path.starts_with(boundary)) {
+            continue;
+        }
+        if !predicate(path) {
+            continue;
+        }
+        let Some(rel) = path.strip_prefix(&normalized_root).ok() else {
+            continue;
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        if rel.is_empty() {
+            continue;
+        }
+        out.push(rel);
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn is_biome_supported_file(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(ext.as_str(), "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts")
+}
+
+fn is_oxlint_supported_file(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(ext.as_str(), "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts" | "svelte")
 }
 
 fn collapse_inline_whitespace(value: &str) -> String {
@@ -3491,7 +3226,8 @@ impl PolyglotSastSidecar {
         let mut join_set = JoinSet::new();
 
         for blade in &blades {
-            let targets = execution_targets_for_blade(&repo_path, &manifests, *blade);
+            let targets =
+                execution_targets_for_blade(&repo_path, &input.clean_files, &manifests, *blade);
             if targets.is_empty() {
                 let reason = format!(
                     "nenhum manifesto compatível foi encontrado para {}",
@@ -4069,6 +3805,18 @@ mod tests {
 
     }
 
+    fn canonicalize_or_self(path: PathBuf) -> PathBuf {
+        path.canonicalize().unwrap_or(path)
+    }
+
+    fn test_clean_files(repo_root: &Path, rels: &[&str]) -> Arc<Vec<PathBuf>> {
+        Arc::new(
+            rels.iter()
+                .map(|rel| canonicalize_or_self(repo_root.join(rel)))
+                .collect(),
+        )
+    }
+
     #[test]
     fn test_code_index_db_path_accepts_local_repo_index_name() {
         let temp_dir = TempDir::new().unwrap();
@@ -4161,6 +3909,7 @@ pub mod config {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: test_clean_files(executor.repo_path(), &["src/main.rs", "src/lib.rs"]),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4220,6 +3969,10 @@ export function Panel() {
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: test_clean_files(
+                executor.repo_path(),
+                &["icons/logo.svg", "src/backend/service.rs", "web/panel.tsx"],
+            ),
         };
         let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
@@ -4256,6 +4009,17 @@ pub fn run(_engine: Engine) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: test_clean_files(
+                executor.repo_path(),
+                &[
+                    "crates/goose/tests/session_id_propagation_test.rs",
+                    "examples/demo/main.rs",
+                    "src/backend/fixtures/sample.rs",
+                    "src/backend/test_support/helpers.rs",
+                    "src/backend/e2e/flow.rs",
+                    "src/backend/service.rs",
+                ],
+            ),
         };
         let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
@@ -4298,6 +4062,18 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: test_clean_files(
+                executor.repo_path(),
+                &[
+                    "crates/goose-cli/src/scenario_tests/message_generator.rs",
+                    "documentation/src/pages/index.tsx",
+                    "ui/desktop/src/App.tsx",
+                    "oidc-proxy/test/index.test.js",
+                    "evals/open-model-gym/suite/src/runner.ts",
+                    "crates/goose/benches/parser.rs",
+                    "src/backend/engine.rs",
+                ],
+            ),
         };
         let payload = NativeAstParser::extract(input).await.unwrap();
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
@@ -4316,6 +4092,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4341,6 +4118,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4361,6 +4139,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 45,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4379,6 +4158,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4397,6 +4177,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4414,6 +4195,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4432,6 +4214,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4455,6 +4238,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4474,6 +4258,7 @@ pub fn boot(_runtime: Runtime) {}
             executor: &executor,
             timeout_secs: 30,
             persist_artifacts: None,
+            clean_files: Arc::new(Vec::new()),
         };
 
         let result = NativeAstParser::extract(input).await;
@@ -4650,7 +4435,7 @@ pub fn boot(_runtime: Runtime) {}
         .await
         .unwrap();
 
-        assert_eq!(payload.runner_name, "static-ast-bfs");
+        assert_eq!(payload.runner_name, "static-ast-radar");
         assert!(payload
             .blocks
             .iter()
@@ -5146,6 +4931,7 @@ describe("login flow", () => {
             executor: Arc::clone(&executor),
             timeout_secs: 60,
             profile: &StackProfile::Mixed(vec![SingleStack::Rust, SingleStack::CCpp]),
+            clean_files: test_clean_files(executor.repo_path(), &["Cargo.toml"]),
         })
         .await
         .unwrap();
@@ -5323,6 +5109,7 @@ Done in 1.23s"#;
             executor: Arc::clone(&executor),
             timeout_secs: 60,
             profile: &StackProfile::Rust,
+            clean_files: test_clean_files(executor.repo_path(), &["Cargo.toml"]),
         })
         .await
         .unwrap();
@@ -5373,72 +5160,59 @@ Done in 1.23s"#;
     #[test]
     fn test_derive_opengrep_execution_targets_uses_scoped_ast_roots() {
         let executor = MockExecutor::new(Vec::new());
+        let mut clean_files = Vec::new();
         for idx in 0..90 {
-            executor.write_repo_file(
-                &format!("packages/web/src/compiler/phases/1-parse/file_{idx}.ts"),
-                "export const alpha = 1;\n",
-            );
-            executor.write_repo_file(
-                &format!("packages/web/src/compiler/phases/2-analyze/file_{idx}.ts"),
-                "export const beta = 2;\n",
-            );
+            let alpha = format!("packages/web/src/compiler/phases/1-parse/file_{idx}.ts");
+            executor.write_repo_file(&alpha, "export const alpha = 1;\n");
+            clean_files.push(canonicalize_or_self(executor.repo_path().join(&alpha)));
+
+            let beta = format!("packages/web/src/compiler/phases/2-analyze/file_{idx}.ts");
+            executor.write_repo_file(&beta, "export const beta = 2;\n");
+            clean_files.push(canonicalize_or_self(executor.repo_path().join(&beta)));
         }
         executor.write_repo_file("packages/web/tests/samples/case.ts", "export const noisy = 1;\n");
         executor.write_repo_file("playgrounds/sandbox/src/main.ts", "export const preview = 1;\n");
 
-        let targets = derive_opengrep_execution_targets(executor.repo_path());
-        let scopes = targets
+        let targets = derive_opengrep_execution_targets(executor.repo_path(), &clean_files);
+        let all_targets = targets
             .iter()
-            .map(|target| target.scope.clone())
+            .flat_map(|target| target.scan_targets.iter())
+            .cloned()
             .collect::<Vec<_>>();
 
-        assert!(
-            scopes.contains(&"packages/web/src/compiler/phases/1-parse".to_string()),
-            "scopes={scopes:?}"
-        );
-        assert!(
-            scopes.contains(&"packages/web/src/compiler/phases/2-analyze".to_string()),
-            "scopes={scopes:?}"
-        );
-        assert!(!scopes.iter().any(|scope| scope.contains("tests")), "scopes={scopes:?}");
-        assert!(
-            !scopes.iter().any(|scope| scope.contains("playgrounds")),
-            "scopes={scopes:?}"
-        );
-        assert!(!scopes.iter().any(|scope| scope == "."), "scopes={scopes:?}");
+        assert!(targets.iter().all(|target| target.scope.starts_with(".::files-")));
+        assert!(all_targets.iter().any(|target| target.contains("packages/web/src/compiler/phases/1-parse/file_0.ts")));
+        assert!(all_targets.iter().any(|target| target.contains("packages/web/src/compiler/phases/2-analyze/file_0.ts")));
+        assert!(!all_targets.iter().any(|target| target.contains("packages/web/tests/")));
+        assert!(!all_targets.iter().any(|target| target.contains("playgrounds/")));
     }
 
     #[test]
     fn test_derive_opengrep_execution_targets_batches_direct_files_without_parent_scope() {
         let executor = MockExecutor::new(Vec::new());
+        let mut clean_files = Vec::new();
         for idx in 0..90 {
-            executor.write_repo_file(
-                &format!("apps/api/src/controllers/file_{idx}.ts"),
-                "export const controller = 1;\n",
-            );
+            let rel = format!("apps/api/src/controllers/file_{idx}.ts");
+            executor.write_repo_file(&rel, "export const controller = 1;\n");
+            clean_files.push(canonicalize_or_self(executor.repo_path().join(&rel)));
         }
         executor.write_repo_file("apps/api/src/index.ts", "export const index = 1;\n");
         executor.write_repo_file("apps/api/src/server.ts", "export const server = 1;\n");
+        clean_files.push(canonicalize_or_self(executor.repo_path().join("apps/api/src/index.ts")));
+        clean_files.push(canonicalize_or_self(
+            executor.repo_path().join("apps/api/src/server.ts"),
+        ));
 
-        let targets = derive_opengrep_execution_targets(executor.repo_path());
-        let scopes = targets.iter().map(|target| target.scope.clone()).collect::<Vec<_>>();
-
-        assert!(
-            !scopes.contains(&"apps/api/src".to_string()),
-            "scopes={scopes:?}"
-        );
-        let file_batch = targets
+        let targets = derive_opengrep_execution_targets(executor.repo_path(), &clean_files);
+        let all_targets = targets
             .iter()
-            .find(|target| target.scope == "apps/api/src::files-01")
-            .expect("expected direct file batch");
-        assert_eq!(
-            file_batch.scan_targets,
-            vec!["index.ts".to_string(), "server.ts".to_string()]
-        );
-        assert!(
-            scopes.contains(&"apps/api/src/controllers".to_string()),
-            "scopes={scopes:?}"
-        );
+            .flat_map(|target| target.scan_targets.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert!(all_targets.iter().any(|target| target == "apps/api/src/index.ts"));
+        assert!(all_targets.iter().any(|target| target == "apps/api/src/server.ts"));
+        assert!(all_targets.iter().any(|target| target == "apps/api/src/controllers/file_0.ts"));
     }
 
     #[test]
@@ -5447,11 +5221,15 @@ Done in 1.23s"#;
         executor.write_repo_file("package.json", r#"{"name":"root"}"#);
         executor.write_repo_file("scripts/build.ts", "export const build = 1;\n");
         executor.write_repo_file("packages/web/package.json", r#"{"name":"web"}"#);
+        let mut clean_files = vec![
+            canonicalize_or_self(executor.repo_path().join("package.json")),
+            canonicalize_or_self(executor.repo_path().join("scripts/build.ts")),
+            canonicalize_or_self(executor.repo_path().join("packages/web/package.json")),
+        ];
         for idx in 0..90 {
-            executor.write_repo_file(
-                &format!("packages/web/src/compiler/file_{idx}.ts"),
-                "export const web = 1;\n",
-            );
+            let rel = format!("packages/web/src/compiler/file_{idx}.ts");
+            executor.write_repo_file(&rel, "export const web = 1;\n");
+            clean_files.push(canonicalize_or_self(executor.repo_path().join(&rel)));
         }
 
         let manifests = discover_monorepo_manifests(executor.repo_path());
@@ -5459,54 +5237,61 @@ Done in 1.23s"#;
             executor.repo_path(),
             &manifests,
             StaticAnalysisBlade::Biome,
+            &clean_files,
         );
-        let scopes = targets.iter().map(|target| target.scope.clone()).collect::<Vec<_>>();
+        let root_targets = targets
+            .iter()
+            .filter(|target| target.scope.starts_with(".::files-"))
+            .flat_map(|target| target.scan_targets.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+        let web_targets = targets
+            .iter()
+            .filter(|target| target.scope.starts_with("packages/web::files-"))
+            .flat_map(|target| target.scan_targets.iter())
+            .cloned()
+            .collect::<Vec<_>>();
 
-        assert!(
-            scopes.contains(&"./scripts".trim_start_matches("./").to_string()) || scopes.contains(&"scripts".to_string()),
-            "scopes={scopes:?}"
-        );
-        assert!(
-            scopes.contains(&"packages/web/src/compiler".to_string()),
-            "scopes={scopes:?}"
-        );
-        assert!(
-            !scopes.contains(&".".to_string()),
-            "scopes={scopes:?}"
-        );
+        assert!(root_targets.iter().any(|target| target == "scripts/build.ts"));
+        assert!(web_targets.iter().any(|target| target == "src/compiler/file_0.ts"));
     }
 
     #[test]
     fn test_derive_js_lint_targets_batch_direct_files_for_nested_package_scope() {
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("apps/api/package.json", r#"{"name":"api"}"#);
+        let mut clean_files = vec![canonicalize_or_self(
+            executor.repo_path().join("apps/api/package.json"),
+        )];
         for idx in 0..90 {
-            executor.write_repo_file(
-                &format!("apps/api/src/controllers/file_{idx}.ts"),
-                "export const controller = 1;\n",
-            );
+            let rel = format!("apps/api/src/controllers/file_{idx}.ts");
+            executor.write_repo_file(&rel, "export const controller = 1;\n");
+            clean_files.push(canonicalize_or_self(executor.repo_path().join(&rel)));
         }
         executor.write_repo_file("apps/api/src/index.ts", "export const index = 1;\n");
         executor.write_repo_file("apps/api/src/server.ts", "export const server = 1;\n");
+        clean_files.push(canonicalize_or_self(executor.repo_path().join("apps/api/src/index.ts")));
+        clean_files.push(canonicalize_or_self(
+            executor.repo_path().join("apps/api/src/server.ts"),
+        ));
 
         let manifests = discover_monorepo_manifests(executor.repo_path());
-        let targets =
-            derive_js_lint_execution_targets(executor.repo_path(), &manifests, StaticAnalysisBlade::Oxc);
-        let scopes = targets.iter().map(|target| target.scope.clone()).collect::<Vec<_>>();
-
-        assert!(!scopes.contains(&"apps/api/src".to_string()), "scopes={scopes:?}");
-        let file_batch = targets
+        let targets = derive_js_lint_execution_targets(
+            executor.repo_path(),
+            &manifests,
+            StaticAnalysisBlade::Oxc,
+            &clean_files,
+        );
+        let api_targets = targets
             .iter()
-            .find(|target| target.scope == "apps/api/src::files-01")
-            .expect("expected direct file batch");
-        assert_eq!(
-            file_batch.scan_targets,
-            vec!["index.ts".to_string(), "server.ts".to_string()]
-        );
-        assert!(
-            scopes.contains(&"apps/api/src/controllers".to_string()),
-            "scopes={scopes:?}"
-        );
+            .filter(|target| target.scope.starts_with("apps/api::files-"))
+            .flat_map(|target| target.scan_targets.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert!(api_targets.iter().any(|target| target == "src/index.ts"));
+        assert!(api_targets.iter().any(|target| target == "src/server.ts"));
+        assert!(api_targets.iter().any(|target| target == "src/controllers/file_0.ts"));
     }
 
     #[test]
@@ -5534,6 +5319,7 @@ Done in 1.23s"#;
             executor: Arc::clone(&executor),
             timeout_secs: 60,
             profile: &StackProfile::Rust,
+            clean_files: test_clean_files(executor.repo_path(), &["apps/rust-sdk/Cargo.toml"]),
         })
         .await
         .unwrap();

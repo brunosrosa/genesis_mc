@@ -3695,15 +3695,17 @@ mod tests {
 
     #[test]
     fn block2a_requires_indicacao_and_all_narrative_fields() {
-        let mut row = MasterSolutionsRow::default();
-        row.indicacao_otimista_canibalizacao = String::new();
-        row.ouro_a_extrair = "ouro".into();
-        row.deep_pattern = "pattern".into();
-        row.transplantable_core = "core".into();
-        row.logic_math_heuristic = "heuristic".into();
-        row.real_structural_problem = "problem".into();
-        row.categoria_nuance_tecnica = "nuance".into();
-        row.integracao_papel_exato = "integracao".into();
+        let mut row = MasterSolutionsRow {
+            indicacao_otimista_canibalizacao: String::new(),
+            ouro_a_extrair: "ouro".into(),
+            deep_pattern: "pattern".into(),
+            transplantable_core: "core".into(),
+            logic_math_heuristic: "heuristic".into(),
+            real_structural_problem: "problem".into(),
+            categoria_nuance_tecnica: "nuance".into(),
+            integracao_papel_exato: "integracao".into(),
+            ..Default::default()
+        };
         assert!(!is_block2a_complete(&row));
 
         row.indicacao_otimista_canibalizacao = "canibalizar".into();

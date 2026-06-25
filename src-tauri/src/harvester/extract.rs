@@ -13,18 +13,16 @@ use thiserror::Error;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
+use super::repo_radar;
 use super::detect::StackProfile;
 use super::git::RepoPath;
 use super::persist::ArtifactBlob;
 use super::sidecar::{NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tracing::{info, warn};
-
-/// Tamanho máximo permitido para um arquivo de manifesto (1 MiB).
-const MAX_MANIFEST_SIZE: u64 = 1_048_576;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestPayload {
@@ -129,11 +127,6 @@ pub struct OpsInput<'a> {
 pub struct OpsBlueprintExtractor;
 pub struct LocalStaticExtractor;
 
-/// Fase 0 deve persistir artefatos textuais praticamente completos.
-/// O limite elastico existe apenas para evitar estouro de memoria em READMEs patologicos.
-const README_ELASTIC_SAFETY_MAX_CHARS: usize = 150_000;
-const README_MISSING_COGNITIVE_DIRECTIVE: &str = "[DIRETIVA SODA COGNITIVA: DOCUMENTAÇÃO RAIZ NÃO ENCONTRADA. O repositório não possui um arquivo README padrão na raiz (.md, .rst, .txt). Lentes de Avaliação: penalizem a experiência de onboarding e documentação (Lente A e Lente C), mas prossigam com a análise arquitetural utilizando apenas a AST e os manifestos.]";
-const MAX_SCAN_FILE_BYTES: u64 = 262_144;
 const STATE_CALL_NAMES: [&str; 5] = ["useState", "createSignal", "writable", "useReducer", "$state"];
 const UX_INPUT_CALL_NAMES: [&str; 6] = [
     "$props",
@@ -219,11 +212,6 @@ impl<'a> Visit<'a> for UxAstCollector<'a> {
 }
 
 impl LocalStaticExtractor {
-    /// Lei arquitetural da Fase 0:
-    /// arquivos textuais devem entrar no SQLite sem hard-truncation semantico.
-    /// O Harvester limpa apenas ruído visual nativo/estrutural; a destilação cognitiva
-    /// e os cortes semânticos pertencem à Fase 1.5. O guard rail de 150k caracteres
-    /// é apenas uma trava elastica anti-OOM para documentos anormalmente grandes.
     pub async fn extract_all(repo_path: &Path) -> Result<Vec<ArtifactBlob>, ExtractionError> {
         let mut blobs = Vec::new();
 
@@ -240,8 +228,6 @@ impl LocalStaticExtractor {
                 "readme",
             ],
             "blob_01_promessa_readme",
-            README_ELASTIC_SAFETY_MAX_CHARS,
-            README_MISSING_COGNITIVE_DIRECTIVE,
         )
         .await);
 
@@ -252,36 +238,11 @@ impl LocalStaticExtractor {
         repo_path: &Path,
         candidates: &[&str],
         artifact_type: &str,
-        max_chars: usize,
     ) -> Result<ArtifactBlob, ExtractionError> {
-        let mut case_insensitive = HashMap::<String, PathBuf>::new();
-        let mut entries = fs::read_dir(repo_path)
-            .await
-            .map_err(|e| ExtractionError::IoError {
-                file: repo_path.display().to_string(),
-                reason: e.to_string(),
-            })?;
-        while let Some(entry) = entries.next_entry().await.map_err(|e| ExtractionError::IoError {
-            file: repo_path.display().to_string(),
-            reason: e.to_string(),
-        })? {
-            let file_type = entry.file_type().await.map_err(|e| ExtractionError::IoError {
-                file: repo_path.display().to_string(),
-                reason: e.to_string(),
-            })?;
-            if !file_type.is_file() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            case_insensitive.insert(name.to_ascii_lowercase(), entry.path());
-        }
+        let radar = repo_radar::build_repo_radar(repo_path);
 
         for candidate in candidates {
-            let preferred = repo_path.join(candidate);
-            let metadata = fs::metadata(&preferred).await.ok();
-            let path = if metadata.as_ref().is_some_and(|m| m.is_file()) {
-                preferred
-            } else if let Some(found) = case_insensitive.get(&candidate.to_ascii_lowercase()) {
+            let path = if let Some(found) = radar.find_root_file_case_insensitive(candidate) {
                 found.clone()
             } else {
                 warn!(
@@ -309,9 +270,9 @@ impl LocalStaticExtractor {
                         });
                     }
                     let payload_text = if artifact_type == "blob_01_promessa_readme" {
-                        finalize_readme_blob(&content, max_chars, &path.display().to_string())?
+                        finalize_readme_blob(&content, &path.display().to_string())?
                     } else {
-                        truncate_chars(&content, max_chars)
+                        content
                     };
                     return Ok(ArtifactBlob {
                         artifact_type: artifact_type.to_string(),
@@ -354,29 +315,23 @@ impl LocalStaticExtractor {
         repo_path: &Path,
         candidates: &[&str],
         artifact_type: &str,
-        max_chars: usize,
-        missing_directive: &str,
     ) -> ArtifactBlob {
-        match Self::extract_blob(repo_path, candidates, artifact_type, max_chars).await {
+        match Self::extract_blob(repo_path, candidates, artifact_type).await {
             Ok(blob) => blob,
             Err(ExtractionError::RequiredArtifactMissing { .. }) | Err(ExtractionError::NotFound) => {
-                blob_from_text(artifact_type, missing_directive.to_string())
+                empty_artifact_blob(artifact_type)
             }
             Err(e) => {
                 warn!(
                     artifact_type,
                     error = %e,
                     repo_root = %repo_path.display(),
-                    "Falha ao extrair artefato opcional; seguindo com fallback cognitivo"
+                    "Falha ao extrair artefato opcional; persistindo zero-byte"
                 );
-                blob_from_text(artifact_type, missing_directive.to_string())
+                empty_artifact_blob(artifact_type)
             }
         }
     }
-}
-
-fn truncate_chars(content: &str, max_chars: usize) -> String {
-    content.chars().take(max_chars).collect()
 }
 
 fn markdown_badge_link_regex() -> Option<&'static Regex> {
@@ -508,22 +463,9 @@ fn sanitize_readme_blob(content: &str, source_name: &str) -> Result<String, Extr
 
 fn finalize_readme_blob(
     content: &str,
-    elastic_max_chars: usize,
     source_name: &str,
 ) -> Result<String, ExtractionError> {
-    let sanitized = sanitize_readme_blob(content, source_name)?;
-    let total_chars = sanitized.chars().count();
-    if total_chars > elastic_max_chars {
-        warn!(
-            artifact_type = "blob_01_promessa_readme",
-            actual_chars = total_chars,
-            elastic_limit = elastic_max_chars,
-            "README excedeu a trava elastica anti-OOM; aplicando corte excepcional"
-        );
-        Ok(truncate_chars(&sanitized, elastic_max_chars))
-    } else {
-        Ok(sanitized)
-    }
+    sanitize_readme_blob(content, source_name)
 }
 
 fn blob_from_text(artifact_type: &str, text: String) -> ArtifactBlob {
@@ -533,16 +475,23 @@ fn blob_from_text(artifact_type: &str, text: String) -> ArtifactBlob {
     }
 }
 
+fn empty_artifact_blob(artifact_type: &str) -> ArtifactBlob {
+    ArtifactBlob {
+        artifact_type: artifact_type.to_string(),
+        payload_blob: Vec::new(),
+    }
+}
+
 fn default_test_intent_message() -> String {
-    "Sem cobertura de testes explicita".to_string()
+    String::new()
 }
 
 fn default_ux_contracts_message() -> String {
-    "Backend puro, sem interface UX".to_string()
+    String::new()
 }
 
 fn default_unsafe_hotspots_message() -> String {
-    "Sem hotspots explicitos de risco".to_string()
+    String::new()
 }
 
 fn render_scoped_text_blocks(blocks: &[ScopedTextBlock]) -> String {
@@ -561,25 +510,6 @@ fn render_scoped_text_blocks(blocks: &[ScopedTextBlock]) -> String {
 
 fn cached_regex<'a>(cache: &'a OnceLock<Option<Regex>>, pattern: &str) -> Option<&'a Regex> {
     cache.get_or_init(|| Regex::new(pattern).ok()).as_ref()
-}
-
-fn should_skip_dir(name: &str) -> bool {
-    matches!(
-        name,
-        ".git"
-            | ".jj"
-            | ".svn"
-            | "node_modules"
-            | "target"
-            | "dist"
-            | "build"
-            | ".native_ast_cache"
-            | "docs"
-            | "documentation"
-            | "examples"
-            | "mock"
-            | "mocks"
-    )
 }
 
 fn has_code_extension(path: &Path) -> bool {
@@ -1101,68 +1031,10 @@ fn function_signature_re() -> Option<&'static Regex> {
 }
 
 fn collect_repo_files(root: &Path) -> Result<Vec<PathBuf>, ExtractionError> {
-    fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), ExtractionError> {
-        let entries = match std::fs::read_dir(dir) {
-            Ok(entries) => entries,
-            Err(e) => {
-                if dir == root {
-                    return Err(ExtractionError::IoError {
-                        file: dir.display().to_string(),
-                        reason: e.to_string(),
-                    });
-                }
-                warn!(dir = %dir.display(), error = %e, "Falha ao listar diretório; ignorando");
-                return Ok(());
-            }
-        };
-
-        for entry in entries {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(e) => {
-                    warn!(dir = %dir.display(), error = %e, "Falha ao iterar entrada; ignorando");
-                    continue;
-                }
-            };
-            let path = entry.path();
-            let file_type = match entry.file_type() {
-                Ok(file_type) => file_type,
-                Err(e) => {
-                    warn!(path = %path.display(), error = %e, "Falha ao ler tipo da entrada; ignorando");
-                    continue;
-                }
-            };
-
-            if file_type.is_dir() {
-                if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                    if should_skip_dir(name) {
-                        continue;
-                    }
-                }
-                walk(root, &path, out)?;
-            } else if file_type.is_file() {
-                out.push(path);
-            }
-        }
-
-        Ok(())
-    }
-
-    let mut out = Vec::new();
-    walk(root, root, &mut out)?;
-    Ok(out)
+    Ok(repo_radar::build_repo_radar(root).clean_files().to_vec())
 }
 
 fn read_small_text_file(path: &Path) -> Result<Option<String>, ExtractionError> {
-    let metadata = match std::fs::metadata(path) {
-        Ok(metadata) => metadata,
-        Err(_) => return Ok(None),
-    };
-
-    if metadata.len() > MAX_SCAN_FILE_BYTES {
-        return Ok(None);
-    }
-
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(_) => return Ok(None),
@@ -1175,8 +1047,11 @@ fn read_small_text_file(path: &Path) -> Result<Option<String>, ExtractionError> 
 }
 
 fn relative_display(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
+    let normalized_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let normalized_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    normalized_path
+        .strip_prefix(&normalized_root)
+        .unwrap_or(normalized_path.as_path())
         .to_string_lossy()
         .replace('\\', "/")
 }
@@ -1240,7 +1115,7 @@ impl TestIntentExtractor {
         let timed_out = payload.timed_out;
         let mut blocks = payload.blocks;
 
-            let mut body = if blocks.is_empty() {
+        let body = if blocks.is_empty() {
             default_test_intent_message()
         } else {
             if !timed_out {
@@ -1252,10 +1127,6 @@ impl TestIntentExtractor {
             };
             render_scoped_text_blocks(&blocks)
         };
-
-        if timed_out {
-            body.push_str("\n\n[AVISO SODA FINOPS: Repositório massivo. Extração profunda abortada aos 60s. O texto acima representa a topologia ampla extraída em Busca em Largura.]");
-        }
 
         Ok(body)
     }
@@ -1319,11 +1190,7 @@ impl UnsafeHotspotsExtractor {
                 }
             }
 
-            let body = if hits.is_empty() {
-                default_unsafe_hotspots_message()
-            } else {
-                hits.join("\n")
-            };
+            let body = if hits.is_empty() { default_unsafe_hotspots_message() } else { hits.join("\n") };
 
             Ok(blob_from_text("blob_06_unsafe_hotspots", body))
         })
@@ -1363,11 +1230,7 @@ impl UxContractsExtractor {
                 }
             }
 
-            let body = if sections.is_empty() {
-                default_ux_contracts_message()
-            } else {
-                render_scoped_text_blocks(&sections)
-            };
+            let body = if sections.is_empty() { default_ux_contracts_message() } else { render_scoped_text_blocks(&sections) };
 
             Ok(body)
         })
@@ -1413,10 +1276,7 @@ impl OpsBlueprintExtractor {
     pub async fn extract_blob(input: OpsInput<'_>) -> Result<ArtifactBlob, ExtractionError> {
         let payload = Self::extract(input).await?;
         if payload.infra_files.is_empty() {
-            return Ok(ArtifactBlob {
-                artifact_type: "blob_07_ops_blueprint".to_string(),
-                payload_blob: b"Nenhum artefato operacional detectado na allowlist DevOps/IaC.\n".to_vec(),
-            });
+            return Ok(empty_artifact_blob("blob_07_ops_blueprint"));
         }
 
         let mut body = String::new();
@@ -1628,7 +1488,7 @@ impl ManifestExtractor {
                     continue;
                 }
                 manifest_kinds_seen.insert(kind);
-                let metadata = match std::fs::metadata(&path) {
+                let _size = match std::fs::metadata(&path) {
                     Ok(metadata) => metadata,
                     Err(e) => {
                         warn!(
@@ -1641,15 +1501,6 @@ impl ManifestExtractor {
                         continue;
                     }
                 };
-
-                let size = metadata.len();
-                if size > MAX_MANIFEST_SIZE {
-                    return Err(ExtractionError::FileTooLarge {
-                        file: rel_path,
-                        size_bytes: size,
-                        limit_bytes: MAX_MANIFEST_SIZE,
-                    });
-                }
 
                 info!(
                     artifact_type = "blob_02_dependency_manifest",
@@ -1694,19 +1545,12 @@ impl ManifestExtractor {
                     .then_with(|| left.file_path.cmp(&right.file_path))
             });
 
-            let header = format!("stack_base: {}\n\n", stack_base);
-            let packed = if blocks.is_empty() {
-                format!(
-                    "Nenhum manifesto detectado ({}).",
-                    Self::supported_manifest_names().join(", ")
-                )
-            } else {
-                render_scoped_text_blocks(&blocks)
-            };
-            let mut final_text = format!("{}{}", header, packed);
-            if final_text.trim().is_empty() {
-                final_text = header;
+            if blocks.is_empty() {
+                return Ok(empty_artifact_blob("blob_02_dependency_manifest"));
             }
+
+            let header = format!("stack_base: {}\n\n", stack_base);
+            let final_text = format!("{}{}", header, render_scoped_text_blocks(&blocks));
 
             Ok(blob_from_text("blob_02_dependency_manifest", final_text))
         })
@@ -1729,27 +1573,6 @@ impl ManifestExtractor {
         ];
         let normalized = super::normalize_repo_path_key(rel_path);
         super::normalized_path_has_any_segment(&normalized, &SKIP_DIRS)
-    }
-
-    fn supported_manifest_names() -> Vec<&'static str> {
-        vec![
-            "Cargo.toml",
-            "package.json",
-            "go.mod",
-            "pyproject.toml",
-            "requirements.txt",
-            "Pipfile",
-            "mix.exs",
-            "Gemfile",
-            "composer.json",
-            "pom.xml",
-            "build.gradle",
-            "build.gradle.kts",
-            "*.csproj",
-            "CMakeLists.txt",
-            "conanfile.txt",
-            "build.zig.zon",
-        ]
     }
 
     fn is_manifest_lockfile_name(file_name: &str) -> bool {
@@ -2293,18 +2116,12 @@ impl ManifestExtractor {
                     continue;
                 }
 
-                let metadata = std::fs::metadata(&path).map_err(|e| ExtractionError::IoError {
-                    file: rel_path.clone(),
-                    reason: e.to_string(),
-                })?;
-                let size = metadata.len();
-                if size > MAX_MANIFEST_SIZE {
-                    return Err(ExtractionError::FileTooLarge {
-                        file: rel_path,
-                        size_bytes: size,
-                        limit_bytes: MAX_MANIFEST_SIZE,
-                    });
-                }
+                let size = std::fs::metadata(&path)
+                    .map(|metadata| metadata.len())
+                    .map_err(|e| ExtractionError::IoError {
+                        file: rel_path.clone(),
+                        reason: e.to_string(),
+                    })?;
 
                 info!(
                     artifact_type = "manifest",
@@ -2860,9 +2677,9 @@ tempfile = "3"
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_caps_only_pathological_readme_sizes() {
+    async fn test_local_static_extractor_preserves_pathological_readme_sizes_without_truncation() {
         let dir = TempDir::new().unwrap();
-        let oversized = "a".repeat(README_ELASTIC_SAFETY_MAX_CHARS + 25);
+        let oversized = "a".repeat(150_025);
         fs::write(dir.path().join("README.md"), oversized).await.unwrap();
 
         let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
@@ -2872,7 +2689,7 @@ tempfile = "3"
 
         assert_eq!(
             String::from_utf8_lossy(&readme_blob.payload_blob).chars().count(),
-            README_ELASTIC_SAFETY_MAX_CHARS
+            150_025
         );
     }
 
@@ -3426,7 +3243,7 @@ mutation.mutate();
         let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
-        assert_eq!(text, "Backend puro, sem interface UX");
+        assert_eq!(text, "");
     }
 
     #[tokio::test]
@@ -3664,22 +3481,20 @@ FetchContent_Declare(fmt)
     }
 
     #[tokio::test]
-    async fn test_file_too_large() {
+    async fn test_large_manifest_is_parsed_without_hard_limit() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("Cargo.toml");
-        
-        // Criar um arquivo com mais de 1MB
+
         let mut file = std::fs::File::create(&path).unwrap();
-        let buffer = vec![0u8; (MAX_MANIFEST_SIZE + 100) as usize];
-        file.write_all(&buffer).unwrap();
-        
+        let large_manifest = format!(
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[dependencies]\nserde = \"1\"\n#{}\n",
+            "a".repeat(1_200_000)
+        );
+        file.write_all(large_manifest.as_bytes()).unwrap();
+
         let repo_path = RepoPath(dir.path().to_path_buf());
-        let result = ManifestExtractor::extract(ManifestInput { repo_path: &repo_path }).await;
-        
-        match result {
-            Err(ExtractionError::FileTooLarge { file, .. }) => assert_eq!(file, "Cargo.toml"),
-            _ => panic!("Deveria ter falhado com FileTooLarge, mas retornou {:?}", result),
-        }
+        let result = ManifestExtractor::extract(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        assert!(result.manifests.iter().any(|manifest| manifest.file_name == "Cargo.toml"));
     }
 
     #[tokio::test]
@@ -3728,7 +3543,7 @@ FetchContent_Declare(fmt)
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_missing_readme_uses_cognitive_fallback() {
+    async fn test_local_static_extractor_missing_readme_returns_zero_byte() {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"demo\"").await.unwrap();
         fs::write(dir.path().join("Dockerfile"), "FROM rust:1.80").await.unwrap();
@@ -3737,9 +3552,7 @@ FetchContent_Declare(fmt)
         let readme_blob = blobs.iter()
             .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
             .expect("README blob deve existir mesmo em fallback");
-        let text = String::from_utf8_lossy(&readme_blob.payload_blob);
-
-        assert_eq!(text, README_MISSING_COGNITIVE_DIRECTIVE);
+        assert!(readme_blob.payload_blob.is_empty());
     }
 
     #[tokio::test]

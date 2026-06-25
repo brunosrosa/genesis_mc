@@ -12,6 +12,7 @@ use super::detect::{LanguageDetector, StackProfile};
 use super::router::{ExtractionInput, ExtractionRouter, ExtractionTask};
 use super::community::{CommunityMetaFetcher, RateLimiter};
 use super::persist::{BlobNormalizer, ArtifactBlob};
+use super::repo_radar;
 use super::extract::{
     render_community_meta_dossier, LocalStaticExtractor, ManifestInput, OpsInput, TestIntentInput,
     TestIntentExtractor, UxContractsExtractor,
@@ -36,8 +37,6 @@ pub enum OrchestratorError {
 }
 
 pub struct HarvesterOrchestrator;
-
-const SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE: &str = "[DIRETIVA SODA COGNITIVA: NÃO SE APLICA. Este artefato é categorizado como uma Biblioteca de Conhecimento, Metodologia ou Skill. A ausência de código compilável, análise estática de segurança ou infraestrutura CI/CD é intencional (By-Design). As Lentes de IA estão estritamente proibidas de penalizar este repositório por não possuir estes artefatos. O foco absoluto do debate deve ser a genialidade teórica, os padrões de prompts, as abstrações estruturais e as heurísticas metodológicas.]";
 
 impl HarvesterOrchestrator {
     /// Maestro do pipeline SODA ETL (F0: Harvester/Zero-IA).
@@ -171,6 +170,15 @@ impl HarvesterOrchestrator {
         });
         info!(repo_id = %repo_id, tasks = ?tasks, "N5: Tarefas roteadas");
 
+        let repo_radar = repo_radar::build_repo_radar(repo_path.as_ref());
+        let clean_files = Arc::new(repo_radar.clean_files().to_vec());
+        info!(
+            repo_id = %repo_id,
+            clean_files = clean_files.len(),
+            all_files = repo_radar.all_files().len(),
+            "N5.1: Radar Global e Poda Universal prontos"
+        );
+
         // [N10] Concorrência (Rede vs Disco)
         // Dispara o fetcher de rede paralelamente ao router de extração local.
         let limiter = RateLimiter;
@@ -189,6 +197,7 @@ impl HarvesterOrchestrator {
                 persist_artifacts: Some(PersistArtifactConfig {
                     repo_id,
                 }),
+                clean_files: Arc::clone(&clean_files),
             };
             let native_ast_started = Instant::now();
             debug!(repo_id = %repo_id, timeout_secs = input.timeout_secs, "N6: Invocando parser AST nativo");
@@ -270,13 +279,7 @@ impl HarvesterOrchestrator {
 
         if tasks.contains(&ExtractionTask::ExtractOpsBlueprint) {
             info!(repo_id = %repo_id, "N9: Extraindo blob_07_ops_blueprint");
-            if is_unknown_stack {
-                blobs.push(ArtifactBlob {
-                    artifact_type: "blob_07_ops_blueprint".to_string(),
-                    payload_blob: SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec(),
-                });
-                log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
-            } else {
+            if !is_unknown_stack {
                 let input = OpsInput { repo_path: &repo_path };
                 match super::extract::OpsBlueprintExtractor::extract_blob(input).await {
                     Ok(payload) => push_blob(repo_id, &mut blobs, payload),
@@ -289,6 +292,8 @@ impl HarvesterOrchestrator {
                         push_empty_blob(repo_id, &mut blobs, "blob_07_ops_blueprint", &e.to_string());
                     }
                 }
+            } else {
+                push_blob(repo_id, &mut blobs, empty_blob("blob_07_ops_blueprint"));
             }
         }
 
@@ -311,7 +316,7 @@ impl HarvesterOrchestrator {
                 }
             }
         } else {
-            TestIntentExtractor::default_blob()
+            empty_blob("blob_03_test_intent")
         };
         push_blob(repo_id, &mut blobs, test_intent_blob);
 
@@ -329,10 +334,7 @@ impl HarvesterOrchestrator {
                 }
             }
         } else {
-            ArtifactBlob {
-                artifact_type: "blob_11_ux_contracts".to_string(),
-                payload_blob: b"# UX Contracts\n\npackage.json ausente; etapa oxc/UX foi pulada.\n".to_vec(),
-            }
+            empty_blob("blob_11_ux_contracts")
         };
         push_blob(repo_id, &mut blobs, ux_contracts_blob);
 
@@ -346,6 +348,7 @@ impl HarvesterOrchestrator {
                 executor: Arc::new(sandbox_ref.clone()),
                 timeout_secs: 600,
                 profile: &profile,
+                clean_files: Arc::clone(&clean_files),
             })
             .await
             {
@@ -386,26 +389,12 @@ impl HarvesterOrchestrator {
                 }
             }
         } else {
-            let (unsafe_blob, health_blob) = if is_unknown_stack {
-                let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
-                (bytes.clone(), bytes)
-            } else {
-                let unsafe_blob = render_unsafe_hotspots_fallback(
-                    "polyglot-sast-router",
-                    "static analysis foi pulada pelo roteamento de tarefas",
-                );
-                let health_blob = render_health_report_fallback(
-                    "polyglot-sast-router",
-                    "static analysis foi pulada pelo roteamento de tarefas",
-                );
-                (unsafe_blob, health_blob)
-            };
             push_blob(
                 repo_id,
                 &mut blobs,
                 ArtifactBlob {
                     artifact_type: "blob_06_unsafe_hotspots".to_string(),
-                    payload_blob: unsafe_blob,
+                    payload_blob: Vec::new(),
                 },
             );
             push_blob(
@@ -413,7 +402,7 @@ impl HarvesterOrchestrator {
                 &mut blobs,
                 ArtifactBlob {
                     artifact_type: "blob_08_health_report".to_string(),
-                    payload_blob: health_blob,
+                    payload_blob: Vec::new(),
                 },
             );
         }
@@ -544,20 +533,6 @@ fn push_empty_blob(repo_id: &str, blobs: &mut Vec<ArtifactBlob>, artifact_type: 
         "Persistindo blob zero-byte por fail-soft"
     );
     push_blob(repo_id, blobs, empty_blob(artifact_type));
-}
-
-fn render_unsafe_hotspots_fallback(source: &str, reason: &str) -> Vec<u8> {
-    format!(
-        "# Unsafe Hotspots\nsummary: findings=0\n\nfallback: true\nsource: {source}\nreason: {reason}\n"
-    )
-    .into_bytes()
-}
-
-fn render_health_report_fallback(source: &str, reason: &str) -> Vec<u8> {
-    format!(
-        "# Health Report\nsummary: findings=0\n\nfallback: true\nsource: {source}\nreason: {reason}\n"
-    )
-    .into_bytes()
 }
 
 #[cfg(test)]

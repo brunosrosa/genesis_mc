@@ -20,6 +20,8 @@ O SODA opera como daemon invisível no boot (Tauri v2 System Tray). A UI Svelte 
 *   O repositório e o estado durável do SODA podem residir na Dev Drive (ReFS, ex: Z:).
 *   O ProjFS (prjflt.sys) não anexa minifiltro em ReFS; portanto, workspaces efêmeros de ProjFS devem nascer no %TEMP% (NTFS) via `std::env::temp_dir()` sob `.souls_workspaces`.
 *   A guilhotina de teardown permanece não-bloqueante fora do repositório host (deleção assíncrona via `spawn_detached_delete_process`).
+*   **Ruído conhecido do toolchain Rust em ReFS:** no Windows/Dev Drive (ReFS), o warning `error finalizing incremental compilation session directory ... Access is denied. (os error 5)` é um bug upstream conhecido do `rustc` incremental, não devendo ser tratado por padrão como regressão do código do projeto. Estado conhecido em 2026-06-24: issue aberta `rust-lang/rust#151181` (reincidência de `#86929`), com relatos de reprodução em ReFS desde `Rust 1.90+`.
+*   **Regra operacional:** enquanto o bug upstream não for corrigido, esse warning isolado com `exit code 0` deve ser classificado como ruído de ambiente/toolchain. Só elevar para alerta real se vier acompanhado de `exit code != 0`, ICE do `rustc`, corrupção de artefato ou repetição bloqueante. Para validações críticas, preferir `CARGO_INCREMENTAL=0`; alternativa secundária: mover `CARGO_TARGET_DIR` para NTFS.
 
 ###### 1. MOSAICO COMPOSICIONAL E PLANARIDADE ABSOLUTA
 O frontend é fracionado matematicamente via CSS Grid, repudiando janelas flutuantes caóticas.

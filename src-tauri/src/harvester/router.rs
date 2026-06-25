@@ -56,8 +56,16 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
             ExtractionTask::FetchCommunityMeta,
             ExtractionTask::ExtractOpsBlueprint,
         ],
-        SingleStack::CCpp | SingleStack::Elixir => vec![
+        SingleStack::CCpp => vec![
             ExtractionTask::RunNativeAstParser,
+            ExtractionTask::ExtractManifests,
+            ExtractionTask::RunStaticAnalysis,
+            ExtractionTask::FetchCommunityMeta,
+            ExtractionTask::ExtractOpsBlueprint,
+        ],
+        SingleStack::Elixir => vec![
+            ExtractionTask::RunNativeAstParser,
+            ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
@@ -74,6 +82,7 @@ fn single_stack_tasks(stack: &SingleStack) -> Vec<ExtractionTask> {
         ],
         SingleStack::Go => vec![
             ExtractionTask::RunNativeAstParser,
+            ExtractionTask::DiscoverTests,
             ExtractionTask::ExtractManifests,
             ExtractionTask::RunStaticAnalysis,
             ExtractionTask::FetchCommunityMeta,
