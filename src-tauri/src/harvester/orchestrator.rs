@@ -3,7 +3,7 @@ use std::time::Instant;
 use url::Url;
 use rusqlite::Connection;
 use thiserror::Error;
-use tracing::{debug, info, error, warn};
+use tracing::{debug, info, warn};
 
 use super::ramdisk::{RamdiskAllocator, RamdiskHandle};
 use super::git::{BloblessCloner};
@@ -192,48 +192,80 @@ impl HarvesterOrchestrator {
             };
             let native_ast_started = Instant::now();
             debug!(repo_id = %repo_id, timeout_secs = input.timeout_secs, "N6: Invocando parser AST nativo");
-            let payload = NativeAstParser::extract(input).await.map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blob_04_repo_outline");
-                OrchestratorError::ExtractionError(e.to_string())
-            })?;
-            info!(
-                repo_id = %repo_id,
-                elapsed_ms = native_ast_started.elapsed().as_millis(),
-                repo_outline_bytes = payload.repo_outline_blob.len(),
-                architecture_map_bytes = payload.architecture_map_blob.len(),
-                "N6: parser AST nativo concluido"
-            );
-            blobs.push(ArtifactBlob {
-                artifact_type: "blob_04_repo_outline".to_string(),
-                payload_blob: payload.repo_outline_blob,
-            });
-            log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
-            blobs.push(ArtifactBlob {
-                artifact_type: "blob_05_architecture_map".to_string(),
-                payload_blob: payload.architecture_map_blob,
-            });
-            log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+            match NativeAstParser::extract(input).await {
+                Ok(payload) => {
+                    info!(
+                        repo_id = %repo_id,
+                        elapsed_ms = native_ast_started.elapsed().as_millis(),
+                        repo_outline_bytes = payload.repo_outline_blob.len(),
+                        architecture_map_bytes = payload.architecture_map_blob.len(),
+                        "N6: parser AST nativo concluido"
+                    );
+                    push_blob(
+                        repo_id,
+                        &mut blobs,
+                        ArtifactBlob {
+                            artifact_type: "blob_04_repo_outline".to_string(),
+                            payload_blob: payload.repo_outline_blob,
+                        },
+                    );
+                    push_blob(
+                        repo_id,
+                        &mut blobs,
+                        ArtifactBlob {
+                            artifact_type: "blob_05_architecture_map".to_string(),
+                            payload_blob: payload.architecture_map_blob,
+                        },
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        repo_id = %repo_id,
+                        error = %e,
+                        "Falha ao extrair blobs 04/05; persistindo zero-byte e seguindo"
+                    );
+                    push_empty_blob(repo_id, &mut blobs, "blob_04_repo_outline", &e.to_string());
+                    push_empty_blob(repo_id, &mut blobs, "blob_05_architecture_map", &e.to_string());
+                }
+            }
         }
 
         info!(repo_id = %repo_id, "N7: Extraindo blob_01_promessa_readme");
-        let static_blobs = LocalStaticExtractor::extract_all(repo_path.as_ref()).await.map_err(|e| {
-            error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair Super Pacote RAW");
-            OrchestratorError::ExtractionError(e.to_string())
-        })?;
-        for blob in &static_blobs {
-            log_blob_generated(repo_id, blob);
+        match LocalStaticExtractor::extract_all(repo_path.as_ref()).await {
+            Ok(static_blobs) => {
+                for blob in static_blobs {
+                    push_blob(repo_id, &mut blobs, blob);
+                }
+            }
+            Err(e) => {
+                warn!(
+                    repo_id = %repo_id,
+                    error = %e,
+                    "Falha ao extrair blob_01_promessa_readme; persistindo zero-byte e seguindo"
+                );
+                push_empty_blob(repo_id, &mut blobs, "blob_01_promessa_readme", &e.to_string());
+            }
         }
-        blobs.extend(static_blobs);
 
         if tasks.contains(&ExtractionTask::ExtractManifests) {
             let input = ManifestInput { repo_path: &repo_path };
             info!(repo_id = %repo_id, "N8: Extraindo blob_02_dependency_manifest");
-            let payload = super::extract::ManifestExtractor::extract_blob(input).await.map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha critica ao empacotar blob_02_dependency_manifest");
-                OrchestratorError::ExtractionError(e.to_string())
-            })?;
-            blobs.push(payload);
-            log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+            match super::extract::ManifestExtractor::extract_blob(input).await {
+                Ok(payload) => push_blob(repo_id, &mut blobs, payload),
+                Err(e) => {
+                    warn!(
+                        repo_id = %repo_id,
+                        error = %e,
+                        "Falha ao extrair blob_02_dependency_manifest; persistindo zero-byte e seguindo"
+                    );
+                    push_empty_blob(
+                        repo_id,
+                        &mut blobs,
+                        "blob_02_dependency_manifest",
+                        &e.to_string(),
+                    );
+                }
+            }
         }
 
         if tasks.contains(&ExtractionTask::ExtractOpsBlueprint) {
@@ -247,21 +279,14 @@ impl HarvesterOrchestrator {
             } else {
                 let input = OpsInput { repo_path: &repo_path };
                 match super::extract::OpsBlueprintExtractor::extract_blob(input).await {
-                    Ok(payload) => {
-                        blobs.push(payload);
-                        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
-                    }
+                    Ok(payload) => push_blob(repo_id, &mut blobs, payload),
                     Err(e) => {
-                        info!(
+                        warn!(
                             repo_id = %repo_id,
                             reason = %e,
-                            "Falha ao extrair blob_07_ops_blueprint; seguindo com fail-soft"
+                            "Falha ao extrair blob_07_ops_blueprint; persistindo zero-byte e seguindo"
                         );
-                        blobs.push(ArtifactBlob {
-                            artifact_type: "blob_07_ops_blueprint".to_string(),
-                            payload_blob: b"# Ops Blueprint\n\nFallback: nenhum artefato de infra encontrado ou leitura falhou.\n".to_vec(),
-                        });
-                        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                        push_empty_blob(repo_id, &mut blobs, "blob_07_ops_blueprint", &e.to_string());
                     }
                 }
             }
@@ -269,37 +294,47 @@ impl HarvesterOrchestrator {
 
         info!(repo_id = %repo_id, "N11: Extraindo blob_03_test_intent");
         let test_intent_blob = if tasks.contains(&ExtractionTask::DiscoverTests) {
-            TestIntentExtractor::extract_blob(TestIntentInput {
+            match TestIntentExtractor::extract_blob(TestIntentInput {
                 repo_path: &repo_path,
                 profile: &profile,
             })
             .await
-            .map_err(|e| {
-                error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_03_test_intent");
-                OrchestratorError::ExtractionError(e.to_string())
-            })?
+            {
+                Ok(blob) => blob,
+                Err(e) => {
+                    warn!(
+                        repo_id = %repo_id,
+                        error = %e,
+                        "Falha ao extrair blob_03_test_intent; persistindo zero-byte e seguindo"
+                    );
+                    empty_blob("blob_03_test_intent")
+                }
+            }
         } else {
             TestIntentExtractor::default_blob()
         };
-        blobs.push(test_intent_blob);
-        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+        push_blob(repo_id, &mut blobs, test_intent_blob);
 
         info!(repo_id = %repo_id, "N11: Extraindo blob_11_ux_contracts");
         let ux_contracts_blob = if tasks.contains(&ExtractionTask::RunOxc) {
-            UxContractsExtractor::extract_blob(&repo_path)
-                .await
-                .map_err(|e| {
-                    error!(repo_id = %repo_id, error = %e, "Falha ao extrair blob_11_ux_contracts");
-                    OrchestratorError::ExtractionError(e.to_string())
-                })?
+            match UxContractsExtractor::extract_blob(&repo_path).await {
+                Ok(blob) => blob,
+                Err(e) => {
+                    warn!(
+                        repo_id = %repo_id,
+                        error = %e,
+                        "Falha ao extrair blob_11_ux_contracts; persistindo zero-byte e seguindo"
+                    );
+                    empty_blob("blob_11_ux_contracts")
+                }
+            }
         } else {
             ArtifactBlob {
                 artifact_type: "blob_11_ux_contracts".to_string(),
                 payload_blob: b"# UX Contracts\n\npackage.json ausente; etapa oxc/UX foi pulada.\n".to_vec(),
             }
         };
-        blobs.push(ux_contracts_blob);
-        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+        push_blob(repo_id, &mut blobs, ux_contracts_blob);
 
         if tasks.contains(&ExtractionTask::RunStaticAnalysis) {
             let sandbox_ref = sandbox_out.as_ref().ok_or_else(|| {
@@ -322,44 +357,32 @@ impl HarvesterOrchestrator {
                         health_report_bytes = payload.health_report_blob.len(),
                         "N11: roteador poliglota de SAST concluido"
                     );
-                    blobs.push(ArtifactBlob {
-                        artifact_type: "blob_06_unsafe_hotspots".to_string(),
-                        payload_blob: payload.unsafe_hotspots_blob,
-                    });
-                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
-                    blobs.push(ArtifactBlob {
-                        artifact_type: "blob_08_health_report".to_string(),
-                        payload_blob: payload.health_report_blob,
-                    });
-                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                    push_blob(
+                        repo_id,
+                        &mut blobs,
+                        ArtifactBlob {
+                            artifact_type: "blob_06_unsafe_hotspots".to_string(),
+                            payload_blob: payload.unsafe_hotspots_blob,
+                        },
+                    );
+                    push_blob(
+                        repo_id,
+                        &mut blobs,
+                        ArtifactBlob {
+                            artifact_type: "blob_08_health_report".to_string(),
+                            payload_blob: payload.health_report_blob,
+                        },
+                    );
                 }
                 Err(e) => {
                     let reason = e.to_string();
                     warn!(
                         repo_id = %repo_id,
                         reason = %reason,
-                        "Falha ao extrair blobs 06/08 via roteador poliglota de SAST; seguindo com fail-soft"
+                        "Falha ao extrair blobs 06/08 via roteador poliglota de SAST; persistindo zero-byte e seguindo"
                     );
-                    let (unsafe_blob, health_blob) = if is_unknown_stack {
-                        let bytes = SODA_COGNITIVE_NOT_APPLICABLE_DIRECTIVE.as_bytes().to_vec();
-                        (bytes.clone(), bytes)
-                    } else {
-                        let unsafe_blob =
-                            render_unsafe_hotspots_fallback("polyglot-sast-router", &reason);
-                        let health_blob =
-                            render_health_report_fallback("polyglot-sast-router", &reason);
-                        (unsafe_blob, health_blob)
-                    };
-                    blobs.push(ArtifactBlob {
-                        artifact_type: "blob_06_unsafe_hotspots".to_string(),
-                        payload_blob: unsafe_blob,
-                    });
-                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
-                    blobs.push(ArtifactBlob {
-                        artifact_type: "blob_08_health_report".to_string(),
-                        payload_blob: health_blob,
-                    });
-                    log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+                    push_empty_blob(repo_id, &mut blobs, "blob_06_unsafe_hotspots", &reason);
+                    push_empty_blob(repo_id, &mut blobs, "blob_08_health_report", &reason);
                 }
             }
         } else {
@@ -377,40 +400,49 @@ impl HarvesterOrchestrator {
                 );
                 (unsafe_blob, health_blob)
             };
-            blobs.push(ArtifactBlob {
-                artifact_type: "blob_06_unsafe_hotspots".to_string(),
-                payload_blob: unsafe_blob,
-            });
-            log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
-            blobs.push(ArtifactBlob {
-                artifact_type: "blob_08_health_report".to_string(),
-                payload_blob: health_blob,
-            });
-            log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+            push_blob(
+                repo_id,
+                &mut blobs,
+                ArtifactBlob {
+                    artifact_type: "blob_06_unsafe_hotspots".to_string(),
+                    payload_blob: unsafe_blob,
+                },
+            );
+            push_blob(
+                repo_id,
+                &mut blobs,
+                ArtifactBlob {
+                    artifact_type: "blob_08_health_report".to_string(),
+                    payload_blob: health_blob,
+                },
+            );
         }
 
         info!(repo_id = %repo_id, "N10: Finalizando coleta de metadados comunitarios");
-        let (community_payload, community_error) = match community_fut.await {
-            Ok(payload) => (payload, None),
+        let community_blob = match community_fut.await {
+            Ok(payload) => ArtifactBlob {
+                artifact_type: "blob_09_community_meta".to_string(),
+                payload_blob: render_community_meta_dossier(&payload, None),
+            },
             Err(e) => {
                 warn!(repo_id = %repo_id, reason = %e, "Falha ao coletar metrica comunitaria; seguindo com fail-soft");
-                (super::community::CommunityMetaPayload::empty(), Some(e.to_string()))
+                empty_blob("blob_09_community_meta")
             }
         };
-        let community_blob = render_community_meta_dossier(&community_payload, community_error.as_deref());
-        blobs.push(ArtifactBlob {
-            artifact_type: "blob_09_community_meta".to_string(),
-            payload_blob: community_blob,
-        });
-        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+        push_blob(repo_id, &mut blobs, community_blob);
 
         info!(repo_id = %repo_id, "N11: Extraindo blob_10_soda_canon_context");
-        let canon_blob = SodaCanonExtractor::extract(repo_id, Arc::clone(&conn)).await.map_err(|e| {
-            error!(repo_id = %repo_id, error = %e, "Falha critica ao extrair blob_10_soda_canon_context");
-            OrchestratorError::ExtractionError(e.to_string())
-        })?;
-        blobs.push(canon_blob);
-        log_blob_generated(repo_id, &blobs[blobs.len() - 1]);
+        match SodaCanonExtractor::extract(repo_id, Arc::clone(&conn)).await {
+            Ok(canon_blob) => push_blob(repo_id, &mut blobs, canon_blob),
+            Err(e) => {
+                warn!(
+                    repo_id = %repo_id,
+                    error = %e,
+                    "Falha ao extrair blob_10_soda_canon_context; persistindo zero-byte e seguindo"
+                );
+                push_empty_blob(repo_id, &mut blobs, "blob_10_soda_canon_context", &e.to_string());
+            }
+        }
 
         // [N12] Persistência Atômica
         // PT-BLOB-1: Injeção individualizada no banco episódico.
@@ -490,6 +522,28 @@ fn log_blob_generated(repo_id: &str, blob: &ArtifactBlob) {
         payload_bytes = blob.payload_blob.len(),
         "Blob gerado"
     );
+}
+
+fn empty_blob(artifact_type: &str) -> ArtifactBlob {
+    ArtifactBlob {
+        artifact_type: artifact_type.to_string(),
+        payload_blob: Vec::new(),
+    }
+}
+
+fn push_blob(repo_id: &str, blobs: &mut Vec<ArtifactBlob>, blob: ArtifactBlob) {
+    log_blob_generated(repo_id, &blob);
+    blobs.push(blob);
+}
+
+fn push_empty_blob(repo_id: &str, blobs: &mut Vec<ArtifactBlob>, artifact_type: &str, reason: &str) {
+    warn!(
+        repo_id = %repo_id,
+        artifact_type,
+        reason,
+        "Persistindo blob zero-byte por fail-soft"
+    );
+    push_blob(repo_id, blobs, empty_blob(artifact_type));
 }
 
 fn render_unsafe_hotspots_fallback(source: &str, reason: &str) -> Vec<u8> {

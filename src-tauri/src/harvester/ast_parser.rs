@@ -3,9 +3,11 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
+use regex::Regex;
 use thiserror::Error;
 use tree_sitter::{Language, Node, Parser};
 use tree_sitter_language_pack::{process, ProcessConfig};
+use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeAstArtifacts {
@@ -70,27 +72,49 @@ pub fn extract_repository_outline_native(
             continue;
         };
 
-        let file_size_bytes =
-            std::fs::metadata(&file_path)
-                .map_err(|e| AstParserError::ReadFailure {
-                    file: relative_path.clone(),
-                    reason: e.to_string(),
-                })?
-                .len();
-        if file_size_bytes > AST_MAX_SOURCE_FILE_BYTES {
-            continue;
-        }
+        let file_size_bytes = match std::fs::metadata(&file_path) {
+            Ok(metadata) => metadata.len(),
+            Err(err) => {
+                warn!(
+                    file = %relative_path,
+                    error = %err,
+                    "ast-native: falha ao ler metadata; descartando arquivo"
+                );
+                continue;
+            }
+        };
         if file_size_bytes >= AST_MINIFIED_HEURISTIC_MIN_BYTES && is_probably_minified_source(&file_path) {
             continue;
         }
 
-        let source = std::fs::read_to_string(&file_path).map_err(|e| AstParserError::ReadFailure {
-            file: relative_path.clone(),
-            reason: e.to_string(),
-        })?;
+        let source_bytes = match std::fs::read(&file_path) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                warn!(
+                    file = %relative_path,
+                    error = %err,
+                    "ast-native: falha ao ler bytes do arquivo; descartando arquivo"
+                );
+                continue;
+            }
+        };
+        let source = String::from_utf8_lossy(&source_bytes).into_owned();
+        if source.trim().is_empty() {
+            continue;
+        }
 
-        let (signatures, import_edges) =
-            extract_structural_signatures(&source, &language, &relative_path)?;
+        let (signatures, import_edges) = match extract_structural_signatures(&source, &language, &relative_path) {
+            Ok(result) => result,
+            Err(err) => {
+                warn!(
+                    file = %relative_path,
+                    language = %language,
+                    error = %err,
+                    "ast-native: extracao estrutural falhou; descartando arquivo"
+                );
+                continue;
+            }
+        };
 
         if signatures.is_empty() {
             continue;
@@ -434,7 +458,28 @@ fn should_skip_dir(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     matches!(
         lower.as_str(),
-        ".git"
+        "test"
+            | "tests"
+            | "__tests__"
+            | "mock"
+            | "mocks"
+            | "__mocks__"
+            | "fixture"
+            | "fixtures"
+            | "__fixtures__"
+            | "snapshot"
+            | "snapshots"
+            | "__snapshots__"
+            | "sample"
+            | "samples"
+            | "playground"
+            | "playgrounds"
+            | "benchmark"
+            | "benchmarks"
+            | "benchmarking"
+            | "generated"
+            | "__generated__"
+            | ".git"
             | ".hg"
             | ".jj"
             | ".svn"
@@ -537,7 +582,6 @@ fn should_skip_file(path: &Path) -> bool {
     !is_ast_source_file_allowed(path)
 }
 
-const AST_MAX_SOURCE_FILE_BYTES: u64 = 1_048_576;
 const AST_MINIFIED_HEURISTIC_MIN_BYTES: u64 = 32_000;
 const AST_MINIFIED_PREFIX_BYTES: usize = 8192;
 const AST_MINIFIED_WHITESPACE_RATIO_X100: usize = 7;
@@ -645,7 +689,7 @@ fn detect_language(path: &Path) -> Option<String> {
     let language = match ext.as_str() {
         "rs" => "rust",
         "js" | "jsx" | "mjs" | "cjs" => "javascript",
-        "ts" | "tsx" => "typescript",
+        "ts" | "tsx" | "mts" | "cts" => "typescript",
         "py" => "python",
         "go" => "go",
         "java" => "java",
@@ -660,6 +704,7 @@ fn detect_language(path: &Path) -> Option<String> {
         "dart" => "dart",
         "lua" => "lua",
         "ex" | "exs" => "elixir",
+        "svelte" => "svelte",
         "zig" => "zig",
         "sol" => "solidity",
         _ => return None,
@@ -681,6 +726,8 @@ fn normalized_source_extension(path: &Path) -> Option<String> {
         | "cjs"
         | "ts"
         | "tsx"
+        | "mts"
+        | "cts"
         | "py"
         | "go"
         | "java"
@@ -703,6 +750,7 @@ fn normalized_source_extension(path: &Path) -> Option<String> {
         | "lua"
         | "ex"
         | "exs"
+        | "svelte"
         | "zig"
         | "sol" => Some(ext),
         _ => None,
@@ -877,10 +925,23 @@ fn extract_structural_signatures(
     language: &str,
     relative_path: &str,
 ) -> Result<(Vec<String>, usize), AstParserError> {
-    match language {
-        "c_sharp" => extract_with_tree_sitter_fallback(source, language, relative_path),
-        _ => extract_with_language_pack(source, language, relative_path),
+    let mut import_edges = 0usize;
+
+    if language != "svelte" {
+        if let Ok((signatures, edges)) = extract_with_language_pack(source, language, relative_path) {
+            import_edges = edges;
+            if !signatures.is_empty() {
+                return Ok((signatures, edges));
+            }
+        }
     }
+
+    if let Ok((signatures, edges)) = extract_with_official_tree_sitter(source, language, relative_path) {
+        return Ok((signatures, import_edges.max(edges)));
+    }
+
+    let (signatures, fallback_edges) = extract_with_regex_fallback(source, language, relative_path)?;
+    Ok((signatures, import_edges.max(fallback_edges)))
 }
 
 fn extract_with_language_pack(
@@ -912,15 +973,15 @@ fn extract_with_language_pack(
     Ok((signatures, processed.imports.len()))
 }
 
-fn extract_with_tree_sitter_fallback(
+fn extract_with_official_tree_sitter(
     source: &str,
     language: &str,
     relative_path: &str,
 ) -> Result<(Vec<String>, usize), AstParserError> {
-    let ts_language = fallback_tree_sitter_language(language).ok_or_else(|| AstParserError::ParseFailure {
+    let ts_language = official_tree_sitter_language(language, relative_path).ok_or_else(|| AstParserError::ParseFailure {
         file: relative_path.to_string(),
         language: language.to_string(),
-        reason: "grammar tree-sitter nativa indisponivel".to_string(),
+        reason: "grammar tree-sitter oficial indisponivel".to_string(),
     })?;
 
     let mut parser = Parser::new();
@@ -939,43 +1000,44 @@ fn extract_with_tree_sitter_fallback(
     })?;
 
     let mut signatures = Vec::new();
-    collect_fallback_signatures(language, source.as_bytes(), tree.root_node(), &mut signatures);
+    collect_official_tree_sitter_signatures(language, source.as_bytes(), tree.root_node(), &mut signatures);
     signatures.sort();
     signatures.dedup();
     if signatures.is_empty() {
-        signatures.push(match language {
-            "c_sharp" => "c# compilation_unit <root>".to_string(),
-            _ => format!("{language} <root>"),
+        return Err(AstParserError::ParseFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            reason: "grammar oficial nao encontrou simbolos estruturais".to_string(),
         });
     }
 
-    Ok((signatures, 0))
+    Ok((signatures, estimate_import_edges(language, source)))
 }
 
-fn fallback_tree_sitter_language(language: &str) -> Option<Language> {
+fn official_tree_sitter_language(language: &str, _relative_path: &str) -> Option<Language> {
     match language {
         "c_sharp" => Some(tree_sitter_c_sharp::LANGUAGE.into()),
         _ => None,
     }
 }
 
-fn collect_fallback_signatures(
+fn collect_official_tree_sitter_signatures(
     language: &str,
     source: &[u8],
     node: Node<'_>,
     out: &mut Vec<String>,
 ) {
-    if let Some(signature) = fallback_signature_for_node(language, source, node) {
+    if let Some(signature) = official_signature_for_node(language, source, node) {
         out.push(signature);
     }
 
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        collect_fallback_signatures(language, source, child, out);
+        collect_official_tree_sitter_signatures(language, source, child, out);
     }
 }
 
-fn fallback_signature_for_node(language: &str, source: &[u8], node: Node<'_>) -> Option<String> {
+fn official_signature_for_node(language: &str, source: &[u8], node: Node<'_>) -> Option<String> {
     match language {
         "c_sharp" => csharp_signature_for_node(source, node),
         _ => None,
@@ -1014,6 +1076,129 @@ fn compact_node_text(node: Node<'_>, source: &[u8], max_chars: usize) -> String 
     let raw = node.utf8_text(source).unwrap_or("").replace('\n', " ");
     let compact = raw.split_whitespace().collect::<Vec<_>>().join(" ");
     truncate_chars(compact.trim(), max_chars)
+}
+
+fn extract_with_regex_fallback(
+    source: &str,
+    language: &str,
+    relative_path: &str,
+) -> Result<(Vec<String>, usize), AstParserError> {
+    let mut signatures = Vec::new();
+    for (label, pattern) in regex_fallback_patterns(language) {
+        let Ok(regex) = Regex::new(pattern) else {
+            continue;
+        };
+        for captures in regex.captures_iter(source) {
+            let Some(matched) = captures.get(1) else {
+                continue;
+            };
+            let name = truncate_chars(matched.as_str().trim(), 96);
+            if name.is_empty() {
+                continue;
+            }
+            signatures.push(format!("{language} {label} {name}"));
+        }
+    }
+    signatures.sort();
+    signatures.dedup();
+
+    if signatures.is_empty() && looks_like_legible_source(source) {
+        signatures.push(format!(
+            "{language} file {}",
+            Path::new(relative_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(relative_path)
+        ));
+    }
+
+    if signatures.is_empty() {
+        return Err(AstParserError::ParseFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            reason: "fallback regex nao encontrou simbolos estruturais".to_string(),
+        });
+    }
+
+    Ok((signatures, estimate_import_edges(language, source)))
+}
+
+fn regex_fallback_patterns(language: &str) -> &'static [(&'static str, &'static str)] {
+    match language {
+        "rust" => &[
+            ("fn", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("struct", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("enum", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("trait", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("impl", r"(?m)^\s*impl(?:<[^>\n]+>)?\s+([A-Za-z_][A-Za-z0-9_:<>]*)"),
+            ("mod", r"(?m)^\s*(?:pub\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)"),
+        ],
+        "python" => &[
+            ("class", r"(?m)^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("def", r"(?m)^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)"),
+        ],
+        "javascript" | "svelte" => &[
+            ("class", r"(?m)^\s*(?:export\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
+            ("function", r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
+            ("const", r"(?m)^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s*)?(?:\([^=\n]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>"),
+        ],
+        "typescript" => &[
+            ("class", r"(?m)^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
+            ("interface", r"(?m)^\s*(?:export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
+            ("type", r"(?m)^\s*(?:export\s+)?type\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
+            ("enum", r"(?m)^\s*(?:export\s+)?enum\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
+            ("function", r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
+            ("const", r"(?m)^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s*)?(?:\([^=\n]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>"),
+        ],
+        "c" | "cpp" => &[
+            ("namespace", r"(?m)^\s*namespace\s+([A-Za-z_][A-Za-z0-9_:]*)"),
+            ("class", r"(?m)^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("struct", r"(?m)^\s*struct\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("enum", r"(?m)^\s*enum(?:\s+class)?\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("fn", r"(?m)^\s*(?:template\s*<[^>\n]+>\s*)?(?:inline\s+)?[A-Za-z_][A-Za-z0-9_:<>\s\*&~]*\s+([A-Za-z_~][A-Za-z0-9_:~]*)\s*\([^;{}]*\)\s*(?:const\s*)?(?:\{|$)"),
+        ],
+        "elixir" => &[
+            ("module", r"(?m)^\s*defmodule\s+([A-Za-z_][A-Za-z0-9_\.!]*)"),
+            ("protocol", r"(?m)^\s*defprotocol\s+([A-Za-z_][A-Za-z0-9_\.!]*)"),
+            ("impl", r"(?m)^\s*defimpl\s+([A-Za-z_][A-Za-z0-9_\.!]*)"),
+            ("macro", r"(?m)^\s*defmacrop?\s+([A-Za-z_][A-Za-z0-9_!?]*)"),
+            ("guard", r"(?m)^\s*defguardp?\s+([A-Za-z_][A-Za-z0-9_!?]*)"),
+            ("def", r"(?m)^\s*defp?\s+([A-Za-z_][A-Za-z0-9_!?]*)"),
+        ],
+        "c_sharp" => &[
+            ("namespace", r"(?m)^\s*namespace\s+([A-Za-z_][A-Za-z0-9_\.]*)"),
+            ("class", r"(?m)^\s*(?:public|private|protected|internal|sealed|abstract|static|\s)+class\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("interface", r"(?m)^\s*(?:public|private|protected|internal|\s)+interface\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            ("method", r"(?m)^\s*(?:public|private|protected|internal|static|virtual|override|async|\s)+[A-Za-z_<>\[\],\s]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
+        ],
+        _ => &[],
+    }
+}
+
+fn estimate_import_edges(language: &str, source: &str) -> usize {
+    let pattern = match language {
+        "rust" => r"(?m)^\s*use\s+[A-Za-z_]",
+        "python" => r"(?m)^\s*(?:from\s+\S+\s+import|import\s+\S+)",
+        "javascript" | "typescript" | "svelte" => {
+            r#"(?m)^\s*(?:import\s+.+from\s+['"]|import\s+['"]|(?:const|let|var)\s+\w+\s*=\s*require\s*\()"#
+        }
+        "c" | "cpp" => r#"(?m)^\s*#\s*include\s+[<"]"#,
+        "elixir" => r"(?m)^\s*(?:alias|import|require|use)\s+[A-Za-z_]",
+        "c_sharp" => r"(?m)^\s*using\s+[A-Za-z_]",
+        _ => return 0,
+    };
+    Regex::new(pattern)
+        .ok()
+        .map(|regex| regex.find_iter(source).count())
+        .unwrap_or(0)
+}
+
+fn looks_like_legible_source(source: &str) -> bool {
+    if source.trim().is_empty() {
+        return false;
+    }
+    let non_whitespace = source.chars().filter(|ch| !ch.is_whitespace()).take(64).count();
+    non_whitespace >= 12
 }
 
 fn flatten_structure_signatures(
@@ -1058,7 +1243,7 @@ fn build_repo_outline(
     out.push_str("# Repository Outline\n\n");
     out.push_str(&format!("repo: {repo_name}\n"));
     out.push_str(&format!("symbol_files: {}\n", parsed_files.len()));
-    out.push_str("source: native-rust tree-sitter-language-pack\n\n");
+    out.push_str("source: native-rust multi-strategy (language-pack + targeted-tree-sitter + regex-fallback)\n\n");
     out.push_str("## Indexed Symbol Files\n");
     for file in parsed_files {
         out.push_str(&format!(
@@ -1120,7 +1305,7 @@ fn build_health_report(
         .unwrap_or("repo");
     let mut text = String::from("# Health Report\n");
     text.push_str("\nsummary: findings=0");
-    text.push_str("\nsource: native-rust tree-sitter-language-pack");
+    text.push_str("\nsource: native-rust multi-strategy (language-pack + targeted-tree-sitter + regex-fallback)");
     text.push_str("\nrepo: ");
     text.push_str(repo_name);
     text.push_str("\nparsed_files: ");
@@ -1174,7 +1359,9 @@ mod tests {
     fn detects_expected_languages() {
         assert_eq!(detect_language(Path::new("src/lib.rs")).as_deref(), Some("rust"));
         assert_eq!(detect_language(Path::new("src/app.ts")).as_deref(), Some("typescript"));
+        assert_eq!(detect_language(Path::new("src/app.mts")).as_deref(), Some("typescript"));
         assert_eq!(detect_language(Path::new("main.py")).as_deref(), Some("python"));
+        assert_eq!(detect_language(Path::new("web/App.svelte")).as_deref(), Some("svelte"));
         assert_eq!(detect_language(Path::new("Program.cs")).as_deref(), Some("c_sharp"));
         assert_eq!(detect_language(Path::new("include/runtime.h")).as_deref(), Some("c"));
         assert_eq!(detect_language(Path::new("notes.md")), None);
@@ -1193,7 +1380,7 @@ public class Greeter {
 }
 "#;
         let (signatures, imports) =
-            extract_with_tree_sitter_fallback(source, "c_sharp", "Program.cs").unwrap();
+            extract_with_official_tree_sitter(source, "c_sharp", "Program.cs").unwrap();
         assert_eq!(imports, 0);
         assert!(signatures.iter().any(|item| item.contains("c# class Greeter")));
         assert!(signatures.iter().any(|item| item.contains("c# method Run")));
@@ -1356,6 +1543,81 @@ public class Greeter {
         assert!(architecture_map.contains("[zig]"));
         assert!(architecture_map.contains("zig/build.zig.zon"));
     }
+
+    #[test]
+    fn regex_fallback_covers_target_polyglot_ecosystems() {
+        let scenarios = [
+            ("rust", "pub struct Engine;\npub async fn run() {}\n", "src/lib.rs", "rust fn run"),
+            ("python", "class Engine:\n    pass\n\ndef run():\n    pass\n", "app.py", "python def run"),
+            (
+                "typescript",
+                "export interface Engine {}\nexport const boot = async () => {}\n",
+                "src/app.ts",
+                "typescript const boot",
+            ),
+            ("cpp", "namespace demo {}\nclass Engine {};\nint run() { return 0; }\n", "src/main.cpp", "cpp fn run"),
+            ("elixir", "defmodule Demo.Engine do\n  def run, do: :ok\nend\n", "lib/demo/engine.ex", "elixir module Demo.Engine"),
+        ];
+
+        for (language, source, path, expected_fragment) in scenarios {
+            let (signatures, _) = extract_with_regex_fallback(source, language, path).unwrap();
+            assert!(
+                signatures.iter().any(|item| item.contains(expected_fragment)),
+                "assinaturas de {language} deveriam conter `{expected_fragment}`; obtido: {:?}",
+                signatures
+            );
+        }
+    }
+
+    #[test]
+    fn extract_repository_outline_native_keeps_blob04_alive_for_target_ecosystems() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path();
+        std::fs::create_dir_all(repo_root.join("src")).unwrap();
+        std::fs::create_dir_all(repo_root.join("python")).unwrap();
+        std::fs::create_dir_all(repo_root.join("web")).unwrap();
+        std::fs::create_dir_all(repo_root.join("cpp")).unwrap();
+        std::fs::create_dir_all(repo_root.join("lib/demo")).unwrap();
+
+        std::fs::write(repo_root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        std::fs::write(repo_root.join("pyproject.toml"), "[project]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        std::fs::write(repo_root.join("package.json"), "{\"name\":\"demo\"}").unwrap();
+        std::fs::write(repo_root.join("mix.exs"), "defmodule Demo.MixProject do\nend\n").unwrap();
+        std::fs::write(repo_root.join("cpp/CMakeLists.txt"), "project(demo)\n").unwrap();
+
+        std::fs::write(repo_root.join("src/lib.rs"), "pub struct Engine;\npub fn run() {}\n").unwrap();
+        std::fs::write(repo_root.join("python/app.py"), "class Engine:\n    pass\n\ndef run():\n    pass\n").unwrap();
+        std::fs::write(
+            repo_root.join("web/app.tsx"),
+            "export interface EngineProps {}\nexport function App() { return null; }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_root.join("cpp/main.cpp"),
+            "namespace demo {}\nclass Engine {};\nint run() { return 0; }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_root.join("lib/demo/engine.ex"),
+            "defmodule Demo.Engine do\n  def run, do: :ok\nend\n",
+        )
+        .unwrap();
+
+        let artifacts = extract_repository_outline_native(repo_root).unwrap();
+        let repo_outline = String::from_utf8(artifacts.repo_outline_blob).unwrap();
+
+        assert!(repo_outline.contains("[src/lib.rs]"));
+        assert!(repo_outline.contains("[python/app.py]"));
+        assert!(repo_outline.contains("[web/app.tsx]"));
+        assert!(repo_outline.contains("[cpp/main.cpp]"));
+        assert!(repo_outline.contains("[lib/demo/engine.ex]"));
+        assert!(repo_outline.contains("rust"));
+        assert!(repo_outline.contains("python"));
+        assert!(repo_outline.contains("typescript"));
+        assert!(repo_outline.contains("cpp"));
+        assert!(repo_outline.contains("elixir"));
+    }
+
     #[test]
     fn derive_scannable_roots_skips_toxic_js_fixture_paths() {
         let paths = vec![

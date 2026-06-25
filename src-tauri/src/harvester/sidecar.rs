@@ -2456,14 +2456,6 @@ fn derive_opengrep_execution_targets(repo_path: &Path) -> Vec<SastExecutionTarge
     }
 }
 
-fn scoped_blade_label(blade: StaticAnalysisBlade, scope: &str) -> String {
-    if scope == "." {
-        blade_name(blade).to_string()
-    } else {
-        format!("{}@{scope}", blade_name(blade))
-    }
-}
-
 fn collapse_inline_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -2701,6 +2693,16 @@ fn clippy_args() -> Vec<String> {
 }
 
 const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
+    ".git",
+    "**/.git/**",
+    "node_modules",
+    "**/node_modules/**",
+    "dist",
+    "**/dist/**",
+    "build",
+    "**/build/**",
+    "vendor",
+    "**/vendor/**",
     "tests",
     "**/tests/**",
     "__tests__",
@@ -2820,7 +2822,7 @@ fn sobelow_args() -> Vec<String> {
 
 fn biome_args(scan_targets: &[String]) -> Vec<String> {
     let mut args = vec![
-        "check".to_string(),
+        "lint".to_string(),
         "--reporter=json".to_string(),
         "--no-errors-on-unmatched".to_string(),
     ];
@@ -3483,6 +3485,8 @@ impl PolyglotSastSidecar {
         );
 
         let mut all_issues = Vec::<SodaHealthIssue>::new();
+        let mut had_successful_payload = false;
+        let mut had_failed_payload = false;
         let semaphore = Arc::new(Semaphore::new(MONOREPO_SAST_MAX_PARALLEL));
         let mut join_set = JoinSet::new();
 
@@ -3552,32 +3556,25 @@ impl PolyglotSastSidecar {
             let outcome = match joined {
                 Ok(Ok(outcome)) => outcome,
                 Ok(Err(err)) => {
-                    push_issue(
-                        &mut all_issues,
-                        &repo_path,
-                        &repo_path,
-                        StaticAnalysisBlade::Opengrep,
-                        "warning",
-                        "",
-                        &format!("sast worker execution failed: {err}"),
+                    had_failed_payload = true;
+                    warn!(
+                        repo_path = %repo_path.display(),
+                        error = %err,
+                        "SAST monorepo: worker falhou; descartando sub-scan"
                     );
                     continue;
                 }
                 Err(err) => {
-                    push_issue(
-                        &mut all_issues,
-                        &repo_path,
-                        &repo_path,
-                        StaticAnalysisBlade::Opengrep,
-                        "warning",
-                        "",
-                        &format!("sast worker join failed: {err}"),
+                    had_failed_payload = true;
+                    warn!(
+                        repo_path = %repo_path.display(),
+                        error = %err,
+                        "SAST monorepo: join do worker falhou; descartando sub-scan"
                     );
                     continue;
                 }
             };
 
-            let scoped_blade = scoped_blade_label(outcome.blade, &outcome.scope);
             match outcome.result {
                 Ok(bytes) => match normalize_sast_output(
                     &repo_path,
@@ -3586,34 +3583,42 @@ impl PolyglotSastSidecar {
                     &bytes,
                 ) {
                     Ok(mut issues) => {
+                        had_successful_payload = true;
                         all_issues.append(&mut issues);
                     }
                     Err(err) => {
-                        let reason = err.to_string();
-                        push_issue(
-                            &mut all_issues,
-                            &repo_path,
-                            &outcome.execution_root,
-                            outcome.blade,
-                            "warning",
-                            "",
-                            &format!("{scoped_blade} normalization failed: {reason}"),
+                        had_failed_payload = true;
+                        warn!(
+                            blade = blade_name(outcome.blade),
+                            scope = %outcome.scope,
+                            cwd = %outcome.execution_root.display(),
+                            error = %err,
+                            "SAST monorepo: normalizacao falhou; descartando payload bruto"
                         );
                     }
                 },
                 Err(err) => {
-                    let reason = err.to_string();
-                    push_issue(
-                        &mut all_issues,
-                        &repo_path,
-                        &outcome.execution_root,
-                        outcome.blade,
-                        "warning",
-                        "",
-                        &format!("{scoped_blade} execution failed: {reason}"),
+                    had_failed_payload = true;
+                    warn!(
+                        blade = blade_name(outcome.blade),
+                        scope = %outcome.scope,
+                        cwd = %outcome.execution_root.display(),
+                        error = %err,
+                        "SAST monorepo: execucao da lamina falhou; descartando sub-scan"
                     );
                 }
             }
+        }
+
+        if had_failed_payload && !had_successful_payload {
+            warn!(
+                repo_path = %repo_path.display(),
+                "SAST monorepo: todas as laminas falharam; retornando blobs zero-byte"
+            );
+            return Ok(PolyglotSastArtifacts {
+                unsafe_hotspots_blob: Vec::new(),
+                health_report_blob: Vec::new(),
+            });
         }
 
         sort_and_dedup_issues(&mut all_issues);
@@ -4163,7 +4168,9 @@ pub mod config {
         let payload = result.unwrap();
         let health_report = String::from_utf8(payload.health_report_blob).unwrap();
         assert!(health_report.contains("# Health Report"));
-        assert!(health_report.contains("source: native-rust tree-sitter-language-pack"));
+        assert!(health_report.contains(
+            "source: native-rust multi-strategy (language-pack + targeted-tree-sitter + regex-fallback)"
+        ));
         assert!(health_report.contains("parsed_files: 2"));
         let repo_outline = String::from_utf8(payload.repo_outline_blob).unwrap();
         assert!(repo_outline.contains("# Repository Outline"));
@@ -5163,9 +5170,11 @@ describe("login flow", () => {
         assert!(!unsafe_blob.contains("README.md"));
         assert!(health_blob.contains("# Health Report"));
         assert!(health_blob.contains("[rust-clippy]"));
-        assert!(health_blob.contains("[opengrep]"));
         assert!(health_blob.contains("src/lib.rs"));
+        assert!(!health_blob.contains("[opengrep]"));
         assert!(!health_blob.contains("README.md"));
+        assert!(!health_blob.contains("execution failed"));
+        assert!(!health_blob.contains("normalization failed"));
         assert!(!health_blob.contains("\"router\""));
         assert!(!health_blob.contains("\"schema\""));
     }
@@ -5183,6 +5192,11 @@ describe("login flow", () => {
         let args = opengrep_args("C:/rules", &["src/main.ts".to_string(), "src/lib.ts".to_string()]);
         assert!(args.iter().any(|arg| arg == "--allow-rule-timeout-control"));
         assert!(!args.iter().any(|arg| arg == "--exclude-minified-files"));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", ".git"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "node_modules"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "dist"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "build"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "vendor"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/mocks/**"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/samples/**"]));
@@ -5284,11 +5298,37 @@ Done in 1.23s"#;
 
         assert_eq!(biome_binary, "biome");
         assert_eq!(oxlint_binary, "oxlint");
+        assert_eq!(biome_args.first().map(String::as_str), Some("lint"));
+        assert!(!biome_args.iter().any(|arg| arg == "check"));
         assert!(biome_args.iter().any(|arg| arg == "--no-errors-on-unmatched"));
         assert!(oxlint_args.iter().any(|arg| arg == "--no-error-on-unmatched-pattern"));
         assert!(oxlint_args.windows(2).any(|pair| pair == ["--ignore-pattern", "**/*.min.js"]));
         assert!(biome_args.ends_with(&scan_targets));
         assert!(oxlint_args.ends_with(&scan_targets));
+    }
+
+    #[tokio::test]
+    async fn test_polyglot_sast_sidecar_returns_zero_byte_when_all_scanners_fail() {
+        let executor = Arc::new(MockExecutor::new(vec![
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 2,
+                stderr: "fatal clippy failure".to_string(),
+                stdout: Vec::new(),
+            }),
+            Err(SandboxError::Timeout),
+        ]));
+        executor.write_repo_file("Cargo.toml", "[package]\nname='repo'\nversion='0.1.0'\n");
+
+        let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
+            executor: Arc::clone(&executor),
+            timeout_secs: 60,
+            profile: &StackProfile::Rust,
+        })
+        .await
+        .unwrap();
+
+        assert!(artifacts.unsafe_hotspots_blob.is_empty());
+        assert!(artifacts.health_report_blob.is_empty());
     }
 
     #[test]
