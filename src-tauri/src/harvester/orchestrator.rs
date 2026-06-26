@@ -334,7 +334,7 @@ impl HarvesterOrchestrator {
                 }
             }
         } else {
-            empty_blob("blob_11_ux_contracts")
+            UxContractsExtractor::backend_only_blob()
         };
         push_blob(repo_id, &mut blobs, ux_contracts_blob);
 

@@ -1,10 +1,4 @@
 rules:
-  - id: soda.tech-debt.todo-fixme
-    languages: [generic]
-    severity: INFO
-    message: "Marcador de divida tecnica encontrado"
-    pattern-regex: '\b(TODO|FIXME|HACK|XXX)\b'
-
   - id: soda.rust.panic.unwrap.expect
     languages: [rust]
     severity: WARNING
@@ -14,50 +8,46 @@ rules:
       - pattern: $VALUE.unwrap()
       - pattern: $VALUE.expect(...)
 
-  - id: soda.javascript.console-debug
-    languages: [javascript, typescript]
-    severity: INFO
-    message: "Console debug residual indica ruido ou debito tecnico"
+  - id: soda.rust.unsafe.usage
+    languages: [rust]
+    severity: WARNING
+    message: "unsafe merece auditoria manual por ampliar o blast radius de memoria"
+    pattern-regex: '\bunsafe\b'
+
+  - id: soda.rust.temp-dir
+    languages: [rust]
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e higiene de cleanup"
     pattern-either:
-      - pattern: console.log(...)
-      - pattern: console.error(...)
-      - pattern: console.warn(...)
+      - pattern: std::env::temp_dir()
+      - pattern: env::temp_dir()
+      - pattern: tempfile::tempdir()
+      - pattern: tempfile::Builder::new()
 
-  - id: soda.complexity.boolean-chain
-    languages: [generic]
-    severity: WARNING
-    message: "Condicional com cadeia booleana densa sugere complexidade ciclomática elevada"
-    pattern-regex: '(if|while)\s*[^\n]*(&&|\|\|)[^\n]*(&&|\|\|)'
-
-  - id: soda.javascript.nested-ternary
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: "Ternario aninhado sugere alta complexidade de fluxo"
-    pattern-regex: '\?.*\?.*:'
-
-  - id: soda.javascript.debugger-residual
-    languages: [javascript, typescript]
-    severity: WARNING
-    message: "Debugger residual indica entropia operacional"
-    pattern: debugger
-
-  - id: soda.python.debug-print
+  - id: soda.python.temp-dir
     languages: [python]
-    severity: INFO
-    message: "print residual sugere debug esquecido"
-    pattern: print(...)
-
-  - id: soda.go.debug-print
-    languages: [go]
-    severity: INFO
-    message: "fmt.Print* residual sugere debug esquecido"
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
     pattern-either:
-      - pattern: fmt.Print(...)
-      - pattern: fmt.Println(...)
-      - pattern: fmt.Printf(...)
+      - pattern: tempfile.TemporaryDirectory(...)
+      - pattern: tempfile.NamedTemporaryFile(...)
+      - pattern: tempfile.mkstemp(...)
+      - pattern: tempfile.mkdtemp(...)
 
-  - id: soda.elixir.debug-io-inspect
+  - id: soda.go.temp-dir
+    languages: [go]
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
+    pattern-either:
+      - pattern: os.MkdirTemp(...)
+      - pattern: os.CreateTemp(...)
+      - pattern: ioutil.TempDir(...)
+      - pattern: ioutil.TempFile(...)
+
+  - id: soda.elixir.temp-dir
     languages: [elixir]
-    severity: INFO
-    message: "IO.inspect residual sugere debug esquecido"
-    pattern: IO.inspect(...)
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
+    pattern-either:
+      - pattern: System.tmp_dir!()
+      - pattern: Briefly.create(...)

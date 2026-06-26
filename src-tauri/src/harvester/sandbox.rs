@@ -142,7 +142,7 @@ struct ResolvedCommand {
 }
 
 const IDLE_TIMEOUT_SECS: u64 = 45;
-const DEEP_FLOW_IDLE_TIMEOUT_SECS: u64 = 180;
+const DEEP_FLOW_IDLE_TIMEOUT_SECS: u64 = 900;
 const ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 5 * 60;
 const PROCESS_WAIT_POLL_INTERVAL_MS: u64 = 250;
 
@@ -192,7 +192,7 @@ fn timeout_profile<S: AsRef<str>>(command: &str, args: &[S], requested_timeout_s
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
             absolute_timeout_secs: None,
         },
-        "opengrep" | "govulncheck" => TimeoutProfile {
+        "opengrep" | "govulncheck" | "biome" | "oxlint" => TimeoutProfile {
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
             absolute_timeout_secs: None,
         },

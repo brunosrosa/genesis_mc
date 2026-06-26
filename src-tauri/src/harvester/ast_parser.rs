@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -22,6 +22,39 @@ struct ParsedFile {
     relative_path: String,
     language: String,
     signatures: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum OutlineDomainTag {
+    Rust,
+    CppCuda,
+    ObjectiveCMetal,
+    JavascriptTypescript,
+    Python,
+    Go,
+    Elixir,
+    Other,
+}
+
+impl OutlineDomainTag {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Rust => "RUST",
+            Self::CppCuda => "C++ / CUDA",
+            Self::ObjectiveCMetal => "OBJECTIVE-C / METAL",
+            Self::JavascriptTypescript => "JAVASCRIPT / TYPESCRIPT",
+            Self::Python => "PYTHON",
+            Self::Go => "GO",
+            Self::Elixir => "ELIXIR",
+            Self::Other => "OTHER",
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct ProductiveTreeNode {
+    children: BTreeMap<String, ProductiveTreeNode>,
+    is_file: bool,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -148,7 +181,7 @@ pub fn extract_repository_outline_native_from_clean_files(
             .then_with(|| left.relative_path.cmp(&right.relative_path))
     });
 
-    let repo_outline = build_repo_outline(&repo_root, &parsed_files);
+    let repo_outline = build_repo_outline(&repo_root, clean_files, &parsed_files);
     let mut architecture_files = Vec::new();
     for path in clean_files {
         let relative = sanitize_relative_path(&repo_root, path);
@@ -1062,37 +1095,175 @@ fn render_signature(item: &tree_sitter_language_pack::StructureItem) -> String {
     signature.trim().to_string()
 }
 
+fn classify_outline_domain(relative_path: &str, language: &str) -> OutlineDomainTag {
+    let normalized = relative_path.replace('\\', "/").to_ascii_lowercase();
+    let extension = Path::new(relative_path)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+
+    if normalized.contains("/candle-metal-kernels/")
+        || normalized.contains("/metal/")
+        || normalized.contains("objc")
+        || normalized.contains("objc2")
+        || normalized.contains("core-ml")
+        || matches!(extension.as_deref(), Some("m" | "mm" | "metal"))
+    {
+        return OutlineDomainTag::ObjectiveCMetal;
+    }
+
+    if normalized.contains("/cuda/")
+        || normalized.contains("/candle-kernels/")
+        || normalized.contains("cudarc")
+        || normalized.contains("cuda")
+        || normalized.contains("kernel")
+        || matches!(
+            extension.as_deref(),
+            Some("c" | "cc" | "cpp" | "cxx" | "cu" | "cuh" | "h" | "hh" | "hpp" | "hxx")
+        )
+    {
+        return OutlineDomainTag::CppCuda;
+    }
+
+    match language {
+        "rust" => OutlineDomainTag::Rust,
+        "typescript" | "javascript" | "tsx" | "jsx" | "svelte" | "vue" => {
+            OutlineDomainTag::JavascriptTypescript
+        }
+        "python" => OutlineDomainTag::Python,
+        "go" => OutlineDomainTag::Go,
+        "elixir" => OutlineDomainTag::Elixir,
+        _ => match extension.as_deref() {
+            Some("rs") => OutlineDomainTag::Rust,
+            Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts" | "svelte" | "vue") => {
+                OutlineDomainTag::JavascriptTypescript
+            }
+            Some("py") => OutlineDomainTag::Python,
+            Some("go") => OutlineDomainTag::Go,
+            Some("ex" | "exs") => OutlineDomainTag::Elixir,
+            _ => OutlineDomainTag::Other,
+        },
+    }
+}
+
+fn render_outline_domain_header(domain: OutlineDomainTag) -> String {
+    format!(
+        "=================================================================\n[DOMAIN: {}]\n=================================================================",
+        domain.label()
+    )
+}
+
+impl ProductiveTreeNode {
+    fn insert(&mut self, relative_path: &str) {
+        let mut node = self;
+        for segment in relative_path.split('/').filter(|segment| !segment.is_empty()) {
+            node = node.children.entry(segment.to_string()).or_default();
+        }
+        node.is_file = true;
+    }
+}
+
+fn render_productive_tree_node(
+    node: &ProductiveTreeNode,
+    prefix: &str,
+    out: &mut String,
+) {
+    let mut children = node.children.iter().collect::<Vec<_>>();
+    children.sort_by(|(left_name, left_node), (right_name, right_node)| {
+        left_node
+            .is_file
+            .cmp(&right_node.is_file)
+            .then_with(|| left_name.cmp(right_name))
+    });
+
+    for (index, (name, child)) in children.iter().enumerate() {
+        let is_last = index + 1 == children.len();
+        out.push_str(prefix);
+        out.push_str(if is_last { "`-- " } else { "|-- " });
+        out.push_str(name);
+        if !child.is_file {
+            out.push('/');
+        }
+        out.push('\n');
+
+        if !child.children.is_empty() {
+            let mut next_prefix = prefix.to_string();
+            next_prefix.push_str(if is_last { "    " } else { "|   " });
+            render_productive_tree_node(child, &next_prefix, out);
+        }
+    }
+}
+
+fn build_productive_tree(repo_root: &Path, clean_files: &[PathBuf]) -> String {
+    let repo_name = repo_root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("repo");
+    let mut root = ProductiveTreeNode::default();
+    let mut seen = BTreeSet::new();
+    for path in clean_files {
+        let relative_path = sanitize_relative_path(repo_root, path);
+        if relative_path.is_empty() || !seen.insert(relative_path.clone()) {
+            continue;
+        }
+        root.insert(&relative_path);
+    }
+
+    let mut out = String::new();
+    out.push_str(repo_name);
+    out.push_str("/\n");
+    render_productive_tree_node(&root, "", &mut out);
+    out.trim_end().to_string()
+}
+
 fn build_repo_outline(
     repo_root: &Path,
+    clean_files: &[PathBuf],
     parsed_files: &[ParsedFile],
 ) -> String {
     let repo_name = repo_root
         .file_name()
         .and_then(|v| v.to_str())
         .unwrap_or("repo");
+    let mut by_domain = BTreeMap::<OutlineDomainTag, Vec<&ParsedFile>>::new();
+    for file in parsed_files {
+        let domain = classify_outline_domain(&file.relative_path, &file.language);
+        by_domain.entry(domain).or_default().push(file);
+    }
     let mut out = String::new();
     out.push_str("# Repository Outline\n\n");
     out.push_str(&format!("repo: {repo_name}\n"));
     out.push_str(&format!("symbol_files: {}\n", parsed_files.len()));
     out.push_str("source: native-rust multi-strategy (language-pack + targeted-tree-sitter + regex-fallback)\n\n");
-    out.push_str("## Indexed Symbol Files\n");
-    for file in parsed_files {
-        out.push_str(&format!(
-            "- {} [{}; {} symbols]\n",
-            file.relative_path,
-            file.language,
-            file.signatures.len()
-        ));
-    }
-    out.push_str("\n## AST Blueprint\n\n");
-    for file in parsed_files {
-        out.push_str(&format!("[{}]\n", file.relative_path));
-        for signature in &file.signatures {
-            out.push_str("- ");
-            out.push_str(signature);
-            out.push('\n');
+    out.push_str("## Productive Tree\n\n");
+    out.push_str(&build_productive_tree(repo_root, clean_files));
+    out.push_str("\n\n## Indexed Symbol Files\n\n");
+    for (domain, files) in &by_domain {
+        out.push_str(&render_outline_domain_header(*domain));
+        out.push('\n');
+        for file in files {
+            out.push_str(&format!(
+                "- {} [{}; {} symbols]\n",
+                file.relative_path,
+                file.language,
+                file.signatures.len()
+            ));
         }
         out.push('\n');
+    }
+    out.push_str("## AST Blueprint\n\n");
+    for (domain, files) in by_domain {
+        out.push_str(&render_outline_domain_header(domain));
+        out.push('\n');
+        for file in files {
+            out.push_str(&format!("[{}]\n", file.relative_path));
+            for signature in &file.signatures {
+                out.push_str("- ");
+                out.push_str(signature);
+                out.push('\n');
+            }
+            out.push('\n');
+        }
     }
     out
 }
@@ -1475,6 +1646,13 @@ public class Greeter {
         let artifacts = extract_repository_outline_native_from_clean_files(repo_root, &clean_files).unwrap();
         let repo_outline = String::from_utf8(artifacts.repo_outline_blob).unwrap();
 
+        assert!(repo_outline.contains("## Productive Tree"));
+        assert!(repo_outline.contains("demo/"));
+        assert!(repo_outline.contains("[DOMAIN: RUST]"));
+        assert!(repo_outline.contains("[DOMAIN: PYTHON]"));
+        assert!(repo_outline.contains("[DOMAIN: JAVASCRIPT / TYPESCRIPT]"));
+        assert!(repo_outline.contains("[DOMAIN: C++ / CUDA]"));
+        assert!(repo_outline.contains("[DOMAIN: ELIXIR]"));
         assert!(repo_outline.contains("[src/lib.rs]"));
         assert!(repo_outline.contains("[python/app.py]"));
         assert!(repo_outline.contains("[web/app.tsx]"));

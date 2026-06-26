@@ -15,8 +15,6 @@ use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
-#[cfg(test)]
-use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
 use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::detect::{SingleStack, StackProfile};
 use crate::harvester::repo_radar;
@@ -558,8 +556,7 @@ fn parse_json_payload<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, SidecarErr
     })
 }
 
-#[cfg(test)]
-const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
+const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = 500_000;
 const SEMGREP_SECURITY_RULE_FILE: &str = ".soda_semgrep_blob_06_security.yml";
 const SEMGREP_HEALTH_RULE_FILE: &str = ".soda_semgrep_blob_08_health.yml";
 const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../semgrep/blob_06_security.yml");
@@ -590,6 +587,125 @@ pub struct ScopedTextBlock {
     pub omitted_count: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum DomainTag {
+    Rust,
+    CppCuda,
+    ObjectiveCMetal,
+    JavascriptTypescript,
+    Python,
+    Go,
+    Elixir,
+    Other,
+}
+
+impl DomainTag {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Rust => "RUST",
+            Self::CppCuda => "C++ / CUDA",
+            Self::ObjectiveCMetal => "OBJECTIVE-C / METAL",
+            Self::JavascriptTypescript => "JAVASCRIPT / TYPESCRIPT",
+            Self::Python => "PYTHON",
+            Self::Go => "GO",
+            Self::Elixir => "ELIXIR",
+            Self::Other => "OTHER",
+        }
+    }
+}
+
+const DOMAIN_SECTION_DIVIDER: &str =
+    "=================================================================";
+
+fn classify_domain_from_path(value: &str) -> DomainTag {
+    let normalized = value.trim().replace('\\', "/").to_ascii_lowercase();
+    if normalized.is_empty() {
+        return DomainTag::Other;
+    }
+
+    let extension = Path::new(value)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+
+    let has_any_marker = |markers: &[&str]| markers.iter().any(|marker| normalized.contains(marker));
+
+    if has_any_marker(&["/candle-metal-kernels/", "/metal/", "objc", "objc2", "core-ml"])
+        || matches!(extension.as_deref(), Some("m" | "mm" | "metal"))
+    {
+        return DomainTag::ObjectiveCMetal;
+    }
+
+    if has_any_marker(&["/cuda/", "/candle-kernels/", "cudarc", "cuda", "kernel"])
+        || matches!(
+            extension.as_deref(),
+            Some("c" | "cc" | "cpp" | "cxx" | "cu" | "cuh" | "h" | "hh" | "hpp" | "hxx")
+        )
+    {
+        return DomainTag::CppCuda;
+    }
+
+    match extension.as_deref() {
+        Some("rs") => DomainTag::Rust,
+        Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts") => {
+            DomainTag::JavascriptTypescript
+        }
+        Some("py") => DomainTag::Python,
+        Some("go") => DomainTag::Go,
+        Some("ex" | "exs") => DomainTag::Elixir,
+        _ => DomainTag::Other,
+    }
+}
+
+fn classify_issue_domain(issue: &SodaHealthIssue) -> DomainTag {
+    let from_file = classify_domain_from_path(&issue.file);
+    if from_file != DomainTag::Other {
+        return from_file;
+    }
+
+    let blade = issue.source_blade.to_ascii_lowercase();
+    if blade.contains("clippy") {
+        DomainTag::Rust
+    } else if blade.contains("cppcheck") {
+        DomainTag::CppCuda
+    } else {
+        DomainTag::Other
+    }
+}
+
+fn productive_domains_from_clean_files(clean_files: &[PathBuf]) -> Vec<DomainTag> {
+    let mut domains = clean_files
+        .iter()
+        .map(|path| classify_domain_from_path(&path.to_string_lossy()))
+        .filter(|domain| *domain != DomainTag::Other)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if domains.is_empty() {
+        domains.push(DomainTag::Other);
+    }
+    domains
+}
+
+fn merge_domain_inventory(
+    clean_files: &[PathBuf],
+    grouped: &BTreeMap<DomainTag, Vec<&SodaHealthIssue>>,
+) -> Vec<DomainTag> {
+    let mut domains = productive_domains_from_clean_files(clean_files)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    domains.extend(grouped.keys().copied());
+    domains.into_iter().collect()
+}
+
+fn render_domain_header(domain: DomainTag) -> String {
+    format!(
+        "{divider}\n[DOMAIN: {label}]\n{divider}",
+        divider = DOMAIN_SECTION_DIVIDER,
+        label = domain.label()
+    )
+}
+
 fn format_scoped_text_block(block: &ScopedTextBlock) -> String {
     let mut lines = vec![format!("[{}]", block.file_path)];
     for item in &block.items {
@@ -602,14 +718,24 @@ fn format_scoped_text_block(block: &ScopedTextBlock) -> String {
 }
 
 fn render_scoped_text_blocks(blocks: &[ScopedTextBlock]) -> String {
-    blocks
-        .iter()
-        .map(format_scoped_text_block)
+    let mut grouped = BTreeMap::<DomainTag, Vec<String>>::new();
+    for block in blocks {
+        let domain = classify_domain_from_path(&block.file_path);
+        grouped
+            .entry(domain)
+            .or_default()
+            .push(format_scoped_text_block(block));
+    }
+
+    grouped
+        .into_iter()
+        .map(|(domain, entries)| {
+            format!("{}\n{}", render_domain_header(domain), entries.join("\n\n"))
+        })
         .collect::<Vec<_>>()
         .join("\n\n")
 }
 
-#[cfg(test)]
 pub(crate) fn pack_scoped_text_blocks(blocks: &[ScopedTextBlock], max_chars: usize) -> String {
     let mut packed = String::new();
 
@@ -674,6 +800,10 @@ impl SemgrepRuleSet {
             Self::Security => "Sem hotspots estaticos relevantes do semgrep",
             Self::Health => "Sem divida tecnica estatica relevante do semgrep",
         }
+    }
+
+    fn copies_workspace_rules(self) -> bool {
+        matches!(self, Self::Security)
     }
 
 }
@@ -926,7 +1056,6 @@ fn truncate_chars(content: &str, max_chars: usize) -> String {
     content.chars().take(max_chars).collect()
 }
 
-#[cfg(test)]
 fn looks_like_repo_outline_path(value: &str) -> bool {
     let normalized = value.trim().trim_start_matches("- ").trim();
     if normalized.is_empty() {
@@ -946,7 +1075,6 @@ fn looks_like_repo_outline_path(value: &str) -> bool {
         || normalized.ends_with(".swift")
 }
 
-#[cfg(test)]
 fn normalize_repo_outline_markdown(text: &str) -> String {
     let mut leading = Vec::new();
     let mut blocks = Vec::new();
@@ -1019,7 +1147,6 @@ fn normalize_repo_outline_markdown(text: &str) -> String {
     normalized
 }
 
-#[cfg(test)]
 fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     if stdout_is_blank(bytes) {
         tracing::debug!(binary = "native-ast-parser", "Sidecar claude-md retornou stdout vazio");
@@ -1029,7 +1156,11 @@ fn normalize_repo_outline(bytes: &[u8]) -> Result<Vec<u8>, SidecarError> {
     }
 
     let text = String::from_utf8_lossy(bytes);
-    let normalized = normalize_repo_outline_markdown(&text);
+    let normalized = if text.contains("[DOMAIN: ") && text.contains("## Productive Tree") {
+        text.trim().to_string()
+    } else {
+        normalize_repo_outline_markdown(&text)
+    };
     let truncated = truncate_chars(&normalized, BLOB_04_REPO_OUTLINE_MAX_CHARS);
     if truncated.trim().is_empty() {
         return Err(SidecarError::ExecutionFailed {
@@ -1117,18 +1248,21 @@ async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                 || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
             {
                 if binary == "cppcheck" {
-                    if let Some(xml_payload) = extract_cppcheck_xml_payload(&sanitized_stderr) {
-                        Ok(xml_payload.as_bytes().to_vec())
-                    } else if let Some(xml_payload) =
-                        extract_cppcheck_xml_payload(&String::from_utf8_lossy(&sanitized_stdout))
-                    {
-                        Ok(xml_payload.as_bytes().to_vec())
-                    } else {
+                    let mut merged = sanitized_stderr.into_bytes();
+                    if !stdout_is_blank(&sanitized_stdout) {
+                        if !merged.is_empty() {
+                            merged.push(b'\n');
+                        }
+                        merged.extend_from_slice(&sanitized_stdout);
+                    }
+                    if merged.is_empty() {
                         Ok(sanitized_stdout)
+                    } else {
+                        Ok(merged)
                     }
                 } else if is_sobelow_mix_invocation(binary, args)
                     && stdout_is_blank(&sanitized_stdout)
-                    && sanitized_stderr.contains("total_findings:")
+                    && !sanitized_stderr.trim().is_empty()
                 {
                     Ok(sanitized_stderr.into_bytes())
                 } else {
@@ -1212,7 +1346,11 @@ impl NativeAstParser {
             }
         };
 
-        let repo_outline_blob = native_artifacts.repo_outline_blob;
+        let repo_outline_blob = if native_artifacts.repo_outline_blob.is_empty() {
+            Vec::new()
+        } else {
+            normalize_repo_outline(&native_artifacts.repo_outline_blob)?
+        };
         let health_report_blob = native_artifacts.health_report_blob;
         let architecture_map_blob = native_artifacts.architecture_map_blob;
         tracing::info!(
@@ -1391,6 +1529,19 @@ fn is_known_test_file_path(value: &str) -> bool {
     .any(|marker| lower.contains(marker))
 }
 
+fn is_inline_test_candidate_source_file(profile: &StackProfile, path: &Path) -> bool {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+
+    match extension.as_deref() {
+        Some("rs") => supports_stack(profile, SingleStack::Rust),
+        Some("go") => supports_stack(profile, SingleStack::Go),
+        _ => false,
+    }
+}
+
 fn supports_stack(profile: &StackProfile, target: SingleStack) -> bool {
     match profile {
         StackProfile::Mixed(stacks) => stacks.contains(&target),
@@ -1416,9 +1567,11 @@ fn is_supported_test_file(profile: &StackProfile, path: &Path) -> bool {
         .map(|value| value.to_ascii_lowercase());
     let normalized = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
 
+    if is_inline_test_candidate_source_file(profile, path) {
+        return true;
+    }
+
     match extension.as_deref() {
-        Some("rs") => supports_stack(profile, SingleStack::Rust),
-        Some("go") => supports_stack(profile, SingleStack::Go) && normalized.ends_with("_test.go"),
         Some("py") => {
             supports_stack(profile, SingleStack::Python)
                 && (normalized.contains("/tests/")
@@ -1543,7 +1696,7 @@ fn extract_go_test_entries_shallow(content: &str) -> Vec<String> {
     static GO_SUBTEST_RE: OnceLock<Option<Regex>> = OnceLock::new();
     let Some(test_re) = cached_regex(
         &GO_TEST_RE,
-        r#"(?m)^\s*func\s+((?:Test|Fuzz)[A-Z][A-Za-z0-9_]*)\s*\(\s*[A-Za-z0-9_]+\s+\*testing\.(?:T|F)\s*\)"#,
+        r#"(?m)^\s*(func\s+(?:\([^)]+\)\s+)?(?:Test|Fuzz)[A-Z][A-Za-z0-9_]*\s*\([^)]*\))"#,
     ) else {
         return Vec::new();
     };
@@ -1555,8 +1708,10 @@ fn extract_go_test_entries_shallow(content: &str) -> Vec<String> {
     };
     let mut entries = BTreeSet::new();
     for captures in test_re.captures_iter(content) {
-        if let Some(name) = captures.get(1) {
-            entries.insert(format!("func {}", name.as_str()));
+        if let Some(signature) = captures.get(1) {
+            if let Some(signature) = compact_signature_text(signature.as_str()) {
+                entries.insert(signature);
+            }
         }
     }
     for captures in subtest_re.captures_iter(content) {
@@ -1825,6 +1980,7 @@ pub struct PolyglotSastInput<'a, E: SandboxExecutor> {
 }
 
 const MONOREPO_SAST_MAX_PARALLEL: usize = 3;
+const RUST_CLIPPY_MAX_PARALLEL: usize = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum ManifestKind {
@@ -1848,6 +2004,7 @@ struct SastExecutionTarget {
     execution_root: PathBuf,
     scope: String,
     scan_targets: Vec<String>,
+    command_args: Option<Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -1857,6 +2014,32 @@ struct SastExecutionOutcome {
     scope: String,
     result: Result<Vec<u8>, SidecarError>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RustClippyPlan {
+    command_args: Vec<String>,
+}
+
+const RUST_NATIVE_BUILD_MARKERS: &[&str] = &[
+    "cuda",
+    "cudarc",
+    "cublas",
+    "cudnn",
+    "nccl",
+    "metal",
+    "objc",
+    "objc2",
+    "core-ml",
+    "bindgen",
+    "autocxx",
+    "cxx",
+    "cmake",
+    "pkg-config",
+    "openssl-sys",
+    "libz-sys",
+    "clang-sys",
+    "torch-sys",
+];
 
 #[derive(Debug, Deserialize)]
 struct CppcheckResults {
@@ -1971,6 +2154,234 @@ fn manifest_kind_for_blade(blade: StaticAnalysisBlade) -> Option<ManifestKind> {
     }
 }
 
+fn clippy_args_for_package(package_name: &str) -> Vec<String> {
+    vec![
+        "clippy".to_string(),
+        "--message-format=json".to_string(),
+        "--offline".to_string(),
+        "-p".to_string(),
+        package_name.to_string(),
+        "--".to_string(),
+        "--no-deps".to_string(),
+    ]
+}
+
+fn default_clippy_args() -> Vec<String> {
+    vec![
+        "clippy".to_string(),
+        "--message-format=json".to_string(),
+        "--offline".to_string(),
+        "--".to_string(),
+        "--no-deps".to_string(),
+    ]
+}
+
+fn manifest_effectively_has_build_script(
+    package_root: &Path,
+    package_table: &toml::value::Table,
+) -> bool {
+    match package_table.get("build") {
+        Some(toml::Value::Boolean(false)) => false,
+        Some(toml::Value::String(value)) => !value.trim().is_empty(),
+        Some(_) => true,
+        None => package_root.join("build.rs").is_file(),
+    }
+}
+
+fn rust_manifest_native_marker(value: &toml::Value) -> Option<&'static str> {
+    fn marker_in_text(text: &str) -> Option<&'static str> {
+        let normalized = text.to_ascii_lowercase();
+        RUST_NATIVE_BUILD_MARKERS
+            .iter()
+            .copied()
+            .find(|marker| normalized.contains(marker))
+    }
+
+    match value {
+        toml::Value::String(text) => marker_in_text(text),
+        toml::Value::Array(items) => items.iter().find_map(rust_manifest_native_marker),
+        toml::Value::Table(entries) => entries.iter().find_map(|(key, inner)| {
+            marker_in_text(key).or_else(|| rust_manifest_native_marker(inner))
+        }),
+        _ => None,
+    }
+}
+
+fn build_rust_clippy_plan(manifest: &DiscoveredManifest) -> Result<RustClippyPlan, String> {
+    let manifest_text = std::fs::read_to_string(&manifest.manifest_path).map_err(|error| {
+        format!(
+            "nao foi possivel ler {}: {error}",
+            manifest.manifest_path.display()
+        )
+    })?;
+    let manifest_value = manifest_text
+        .parse::<toml::Value>()
+        .map_err(|error| format!("manifesto TOML invalido em {}: {error}", manifest.scope))?;
+    let package_table = manifest_value
+        .get("package")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| "manifesto virtual/workspace sem [package]".to_string())?;
+    let package_name = package_table
+        .get("name")
+        .and_then(toml::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "manifesto sem [package].name".to_string())?;
+
+    if manifest_effectively_has_build_script(&manifest.execution_root, package_table) {
+        return Err("package contem build.rs efetivo".to_string());
+    }
+
+    if let Some(links) = package_table.get("links").and_then(toml::Value::as_str) {
+        return Err(format!("package declara links={links}"));
+    }
+
+    if let Some(marker) = rust_manifest_native_marker(&manifest_value) {
+        return Err(format!("manifesto referencia dependencia nativa/FFI marker={marker}"));
+    }
+
+    Ok(RustClippyPlan {
+        command_args: clippy_args_for_package(package_name),
+    })
+}
+
+fn derive_rust_clippy_execution_targets(manifests: &[DiscoveredManifest]) -> Vec<SastExecutionTarget> {
+    manifests
+        .iter()
+        .filter(|manifest| manifest.kind == ManifestKind::CargoToml)
+        .filter_map(|manifest| match build_rust_clippy_plan(manifest) {
+            Ok(plan) => Some(SastExecutionTarget {
+                blade: StaticAnalysisBlade::RustClippy,
+                execution_root: manifest.execution_root.clone(),
+                scope: manifest.scope.clone(),
+                scan_targets: vec![".".to_string()],
+                command_args: Some(plan.command_args),
+            }),
+            Err(reason) => {
+                info!(
+                    manifest = %manifest.manifest_path.display(),
+                    scope = %manifest.scope,
+                    reason = %reason,
+                    "SAST rust-clippy: manifesto blindado para evitar build.rs/FFI"
+                );
+                None
+            }
+        })
+        .collect()
+}
+
+fn is_go_supported_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("go"))
+        .unwrap_or(false)
+}
+
+fn is_elixir_supported_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "ex" | "exs"))
+        .unwrap_or(false)
+}
+
+fn govulncheck_args_for_module() -> Vec<String> {
+    vec![
+        "-format".to_string(),
+        "json".to_string(),
+        "./...".to_string(),
+    ]
+}
+
+fn sobelow_args_for_root(root: &str) -> Vec<String> {
+    vec![
+        "sobelow".to_string(),
+        "--format".to_string(),
+        "json".to_string(),
+        "--private".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+    ]
+}
+
+fn derive_go_execution_targets(
+    manifests: &[DiscoveredManifest],
+    clean_files: &[PathBuf],
+) -> Vec<SastExecutionTarget> {
+    manifests
+        .iter()
+        .filter(|manifest| manifest.kind == ManifestKind::GoMod)
+        .filter_map(|manifest| {
+            let boundaries =
+                descendant_roots_for_manifest(manifests, &manifest.execution_root, ManifestKind::GoMod);
+            let productive_go_files = derive_repo_relative_clean_targets(
+                &manifest.execution_root,
+                clean_files,
+                &boundaries,
+                is_go_supported_file,
+            );
+            if productive_go_files.is_empty() {
+                info!(
+                    manifest = %manifest.manifest_path.display(),
+                    scope = %manifest.scope,
+                    "SAST govulncheck: manifesto ignorado por ausencia de pacotes Go produtivos"
+                );
+                return None;
+            }
+
+            Some(SastExecutionTarget {
+                blade: StaticAnalysisBlade::Govulncheck,
+                execution_root: manifest.execution_root.clone(),
+                scope: manifest.scope.clone(),
+                scan_targets: vec!["./...".to_string()],
+                command_args: Some(govulncheck_args_for_module()),
+            })
+        })
+        .collect()
+}
+
+fn derive_elixir_execution_targets(
+    manifests: &[DiscoveredManifest],
+    clean_files: &[PathBuf],
+) -> Vec<SastExecutionTarget> {
+    manifests
+        .iter()
+        .filter(|manifest| manifest.kind == ManifestKind::MixExs)
+        .filter_map(|manifest| {
+            let boundaries =
+                descendant_roots_for_manifest(manifests, &manifest.execution_root, ManifestKind::MixExs);
+            let productive_elixir_files = derive_repo_relative_clean_targets(
+                &manifest.execution_root,
+                clean_files,
+                &boundaries,
+                is_elixir_supported_file,
+            );
+            if productive_elixir_files.is_empty() {
+                info!(
+                    manifest = %manifest.manifest_path.display(),
+                    scope = %manifest.scope,
+                    "SAST sobelow: manifesto ignorado por ausencia de codigo Elixir produtivo"
+                );
+                return None;
+            }
+
+            Some(SastExecutionTarget {
+                blade: StaticAnalysisBlade::Sobelow,
+                execution_root: manifest.execution_root.clone(),
+                scope: manifest.scope.clone(),
+                scan_targets: vec![".".to_string()],
+                command_args: Some(sobelow_args_for_root(".")),
+            })
+        })
+        .collect()
+}
+
+fn blade_parallelism_limit(blade: StaticAnalysisBlade) -> usize {
+    match blade {
+        StaticAnalysisBlade::RustClippy => RUST_CLIPPY_MAX_PARALLEL,
+        _ => MONOREPO_SAST_MAX_PARALLEL,
+    }
+}
+
 fn execution_targets_for_blade(
     repo_path: &Path,
     clean_files: &[PathBuf],
@@ -1979,6 +2390,15 @@ fn execution_targets_for_blade(
 ) -> Vec<SastExecutionTarget> {
     if blade == StaticAnalysisBlade::Opengrep {
         return derive_opengrep_execution_targets(repo_path, clean_files);
+    }
+    if blade == StaticAnalysisBlade::RustClippy {
+        return derive_rust_clippy_execution_targets(manifests);
+    }
+    if blade == StaticAnalysisBlade::Govulncheck {
+        return derive_go_execution_targets(manifests, clean_files);
+    }
+    if blade == StaticAnalysisBlade::Sobelow {
+        return derive_elixir_execution_targets(manifests, clean_files);
     }
     if matches!(blade, StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc) {
         return derive_js_lint_execution_targets(repo_path, manifests, blade, clean_files);
@@ -1993,6 +2413,7 @@ fn execution_targets_for_blade(
                 execution_root: manifest.execution_root.clone(),
                 scope: manifest.scope.clone(),
                 scan_targets: vec![".".to_string()],
+                command_args: None,
             })
             .collect();
     }
@@ -2002,6 +2423,7 @@ fn execution_targets_for_blade(
         execution_root: repo_path.to_path_buf(),
         scope: ".".to_string(),
         scan_targets: vec![".".to_string()],
+        command_args: None,
     }]
 }
 
@@ -2097,6 +2519,7 @@ fn derive_opengrep_execution_targets(
             execution_root: repo_root.clone(),
             scope: opengrep_file_batch_scope(".", idx + 1),
             scan_targets: chunk.to_vec(),
+            command_args: None,
         })
         .collect::<Vec<_>>()
 }
@@ -2135,6 +2558,7 @@ fn derive_js_lint_file_list_targets(
             execution_root: execution_root.to_path_buf(),
             scope: blade_file_batch_scope(&normalized_scope, idx + 1),
             scan_targets: chunk.to_vec(),
+            command_args: None,
         })
         .collect()
 }
@@ -2166,11 +2590,55 @@ fn derive_repo_relative_clean_targets(
         if rel.is_empty() {
             continue;
         }
+        if should_skip_sast_relative_target(&rel) {
+            continue;
+        }
         out.push(rel);
     }
     out.sort();
     out.dedup();
     out
+}
+
+fn should_skip_sast_relative_target(rel: &str) -> bool {
+    let normalized = rel.replace('\\', "/").to_ascii_lowercase();
+    let segments = normalized
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+
+    segments.iter().any(|segment| {
+        matches!(
+            *segment,
+            "test"
+                | "tests"
+                | "__tests__"
+                | "spec"
+                | "specs"
+                | "integration"
+                | "e2e"
+                | "mock"
+                | "mocks"
+                | "__mocks__"
+                | "fixture"
+                | "fixtures"
+                | "__fixtures__"
+                | "snapshot"
+                | "snapshots"
+                | "__snapshots__"
+                | "sample"
+                | "samples"
+                | "playground"
+                | "playgrounds"
+                | "benchmark"
+                | "benchmarks"
+                | "benchmarking"
+                | "docs"
+                | "documentation"
+                | "examples"
+                | "example"
+        )
+    })
 }
 
 fn is_biome_supported_file(path: &Path) -> bool {
@@ -2420,13 +2888,6 @@ fn sort_and_dedup_issues(issues: &mut Vec<SodaHealthIssue>) {
     issues.dedup();
 }
 
-fn clippy_args() -> Vec<String> {
-    vec![
-        "clippy".to_string(),
-        "--message-format=json".to_string(),
-    ]
-}
-
 const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     ".git",
     "**/.git/**",
@@ -2444,6 +2905,10 @@ const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "**/__tests__/**",
     "test",
     "**/test/**",
+    "spec",
+    "**/spec/**",
+    "specs",
+    "**/specs/**",
     "mock",
     "mocks",
     "__mocks__",
@@ -2462,10 +2927,13 @@ const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "sample",
     "samples",
     "**/samples/**",
+    "example",
     "playground",
     "playgrounds",
     "**/playgrounds/**",
     "benchmark",
+    "bench",
+    "benches",
     "benchmarking",
     "**/benchmarking/**",
     "generated",
@@ -2477,10 +2945,13 @@ const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "**/*.min.mjs",
     "**/*.bundle.js",
     "test_support",
+    "**/test_support/**",
     "e2e",
     "docs",
+    "**/docs/**",
     "documentation",
     "examples",
+    "**/examples/**",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -2540,19 +3011,14 @@ fn cppcheck_args() -> Vec<String> {
     vec![
         "--xml".to_string(),
         "--xml-version=2".to_string(),
+        "--quiet".to_string(),
         "--enable=warning,style,performance,portability,information".to_string(),
-        "--error-exitcode=1".to_string(),
         ".".to_string(),
     ]
 }
 
 fn sobelow_args() -> Vec<String> {
-    vec![
-        "sobelow".to_string(),
-        "--format".to_string(),
-        "json".to_string(),
-        "--private".to_string(),
-    ]
+    sobelow_args_for_root(".")
 }
 
 fn biome_args(scan_targets: &[String]) -> Vec<String> {
@@ -2624,11 +3090,7 @@ fn bandit_args() -> Vec<String> {
 }
 
 fn govulncheck_args() -> Vec<String> {
-    vec![
-        "-format".to_string(),
-        "json".to_string(),
-        "./...".to_string(),
-    ]
+    govulncheck_args_for_module()
 }
 
 fn opengrep_args(rule_arg: &str, scan_targets: &[String]) -> Vec<String> {
@@ -2719,16 +3181,35 @@ fn blade_name(blade: StaticAnalysisBlade) -> &'static str {
     }
 }
 
-fn blade_command(blade: StaticAnalysisBlade, scan_targets: &[String]) -> (&'static str, Vec<String>) {
+fn blade_command(
+    blade: StaticAnalysisBlade,
+    scan_targets: &[String],
+    command_args: Option<&[String]>,
+) -> (&'static str, Vec<String>) {
     match blade {
-        StaticAnalysisBlade::RustClippy => ("cargo", clippy_args()),
+        StaticAnalysisBlade::RustClippy => (
+            "cargo",
+            command_args
+                .map(|value| value.to_vec())
+                .unwrap_or_else(default_clippy_args),
+        ),
         StaticAnalysisBlade::Cppcheck => ("cppcheck", cppcheck_args()),
-        StaticAnalysisBlade::Sobelow => ("mix", sobelow_args()),
+        StaticAnalysisBlade::Sobelow => (
+            "mix",
+            command_args
+                .map(|value| value.to_vec())
+                .unwrap_or_else(sobelow_args),
+        ),
         StaticAnalysisBlade::Biome => ("biome", biome_args(scan_targets)),
         StaticAnalysisBlade::Oxc => ("oxlint", oxc_args(scan_targets)),
         StaticAnalysisBlade::Ruff => ("ruff", ruff_args()),
         StaticAnalysisBlade::Bandit => ("bandit", bandit_args()),
-        StaticAnalysisBlade::Govulncheck => ("govulncheck", govulncheck_args()),
+        StaticAnalysisBlade::Govulncheck => (
+            "govulncheck",
+            command_args
+                .map(|value| value.to_vec())
+                .unwrap_or_else(govulncheck_args),
+        ),
         StaticAnalysisBlade::Opengrep => ("opengrep", Vec::new()),
     }
 }
@@ -2739,11 +3220,12 @@ async fn run_sast_blade<E: SandboxExecutor>(
     timeout_secs: u64,
     execution_root: &Path,
     scan_targets: &[String],
+    command_args: Option<&[String]>,
 ) -> Result<Vec<u8>, SidecarError> {
     if blade == StaticAnalysisBlade::Opengrep {
         return run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets).await;
     }
-    let (binary, args) = blade_command(blade, scan_targets);
+    let (binary, args) = blade_command(blade, scan_targets, command_args);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     let result = execute_sidecar_in_dir(
         executor,
@@ -3141,28 +3623,42 @@ fn normalize_sast_output(
     }
 }
 
-fn render_unsafe_hotspots_report(issues: &[SodaHealthIssue]) -> Vec<u8> {
+fn render_unsafe_hotspots_report(issues: &[SodaHealthIssue], clean_files: &[PathBuf]) -> Vec<u8> {
     let mut text = String::from("# Unsafe Hotspots\n");
     text.push_str(&format!("\nsummary: findings={}", issues.len()));
 
-    if issues.is_empty() {
-        text.push_str("\n\nSem linhas vermelhas estaticas relevantes.");
-        return text.into_bytes();
+    let mut grouped = BTreeMap::<DomainTag, Vec<&SodaHealthIssue>>::new();
+    for issue in issues {
+        let domain = classify_issue_domain(issue);
+        grouped.entry(domain).or_default().push(issue);
     }
 
     text.push_str("\n\n");
-    for issue in issues {
-        text.push_str("- [");
-        text.push_str(&issue.level);
-        text.push_str("] [");
-        text.push_str(&issue.source_blade);
-        text.push_str("] ");
-        if !issue.file.trim().is_empty() {
-            text.push_str(&issue.file);
-            text.push_str(" :: ");
+    let mut first_domain = true;
+    for domain in merge_domain_inventory(clean_files, &grouped) {
+        if !first_domain {
+            text.push_str("\n\n");
         }
-        text.push_str(&issue.message);
+        first_domain = false;
+        text.push_str(&render_domain_header(domain));
         text.push('\n');
+        if let Some(domain_issues) = grouped.get(&domain) {
+            for issue in domain_issues {
+                text.push_str("- [");
+                text.push_str(&issue.level);
+                text.push_str("] [");
+                text.push_str(&issue.source_blade);
+                text.push_str("] ");
+                if !issue.file.trim().is_empty() {
+                    text.push_str(&issue.file);
+                    text.push_str(" :: ");
+                }
+                text.push_str(&issue.message);
+                text.push('\n');
+            }
+        } else {
+            text.push_str("- clean: Sem linhas vermelhas estaticas relevantes.\n");
+        }
     }
     text.into_bytes()
 }
@@ -3176,21 +3672,35 @@ fn render_soda_health_report(issues: &[SodaHealthIssue]) -> Vec<u8> {
         return text.into_bytes();
     }
 
-    text.push_str("\n\n");
+    let mut grouped = BTreeMap::<DomainTag, Vec<&SodaHealthIssue>>::new();
     for issue in issues {
-        text.push_str("- [");
-        text.push_str(&issue.level);
-        text.push_str("] [");
-        text.push_str(&issue.source_blade);
-        text.push_str("] ");
-        if !issue.file.trim().is_empty() {
-            text.push_str(&issue.file);
-            text.push_str(" :: ");
-        }
-        text.push_str(&issue.message);
-        text.push('\n');
+        let domain = classify_issue_domain(issue);
+        grouped.entry(domain).or_default().push(issue);
     }
 
+    text.push_str("\n\n");
+    let mut first_domain = true;
+    for (domain, domain_issues) in grouped {
+        if !first_domain {
+            text.push_str("\n\n");
+        }
+        first_domain = false;
+        text.push_str(&render_domain_header(domain));
+        text.push('\n');
+        for issue in domain_issues {
+            text.push_str("- [");
+            text.push_str(&issue.level);
+            text.push_str("] [");
+            text.push_str(&issue.source_blade);
+            text.push_str("] ");
+            if !issue.file.trim().is_empty() {
+                text.push_str(&issue.file);
+                text.push_str(" :: ");
+            }
+            text.push_str(&issue.message);
+            text.push('\n');
+        }
+    }
     text.into_bytes()
 }
 
@@ -3222,7 +3732,8 @@ impl PolyglotSastSidecar {
         let mut all_issues = Vec::<SodaHealthIssue>::new();
         let mut had_successful_payload = false;
         let mut had_failed_payload = false;
-        let semaphore = Arc::new(Semaphore::new(MONOREPO_SAST_MAX_PARALLEL));
+        let global_semaphore = Arc::new(Semaphore::new(MONOREPO_SAST_MAX_PARALLEL));
+        let cargo_semaphore = Arc::new(Semaphore::new(RUST_CLIPPY_MAX_PARALLEL));
         let mut join_set = JoinSet::new();
 
         for blade in &blades {
@@ -3244,11 +3755,27 @@ impl PolyglotSastSidecar {
 
             for target in targets {
                 let executor = Arc::clone(&input.executor);
-                let semaphore = Arc::clone(&semaphore);
+                let global_semaphore = Arc::clone(&global_semaphore);
+                let cargo_semaphore = Arc::clone(&cargo_semaphore);
                 let scope = target.scope.clone();
                 let execution_root = target.execution_root.clone();
+                let blade_parallelism = blade_parallelism_limit(target.blade);
                 join_set.spawn(async move {
-                    let permit = Arc::clone(&semaphore)
+                    let cargo_permit = if target.blade == StaticAnalysisBlade::RustClippy {
+                        Some(
+                            Arc::clone(&cargo_semaphore)
+                                .acquire_owned()
+                                .await
+                                .map_err(|e| SidecarError::ExecutionFailed {
+                                    reason: format!(
+                                        "falha ao adquirir permissão serial do cargo-clippy: {e}"
+                                    ),
+                                })?,
+                        )
+                    } else {
+                        None
+                    };
+                    let global_permit = Arc::clone(&global_semaphore)
                         .acquire_owned()
                         .await
                         .map_err(|e| SidecarError::ExecutionFailed {
@@ -3258,8 +3785,11 @@ impl PolyglotSastSidecar {
                         blade = blade_name(target.blade),
                         scope = %scope,
                         cwd = %execution_root.display(),
-                        concurrency_limit = MONOREPO_SAST_MAX_PARALLEL,
-                        in_flight = MONOREPO_SAST_MAX_PARALLEL.saturating_sub(semaphore.available_permits()),
+                        concurrency_limit = blade_parallelism,
+                        global_in_flight = MONOREPO_SAST_MAX_PARALLEL
+                            .saturating_sub(global_semaphore.available_permits()),
+                        cargo_in_flight = RUST_CLIPPY_MAX_PARALLEL
+                            .saturating_sub(cargo_semaphore.available_permits()),
                         "SAST monorepo: permissão adquirida"
                     );
                     let result = run_sast_blade(
@@ -3268,14 +3798,17 @@ impl PolyglotSastSidecar {
                         input.timeout_secs,
                         &execution_root,
                         &target.scan_targets,
+                        target.command_args.as_deref(),
                     )
                     .await;
-                    drop(permit);
+                    drop(global_permit);
+                    drop(cargo_permit);
                     info!(
                         blade = blade_name(target.blade),
                         scope = %scope,
                         cwd = %execution_root.display(),
-                        available_permits = semaphore.available_permits(),
+                        available_global_permits = global_semaphore.available_permits(),
+                        available_cargo_permits = cargo_semaphore.available_permits(),
                         "SAST monorepo: sub-scan concluído"
                     );
                     Ok::<SastExecutionOutcome, SidecarError>(SastExecutionOutcome {
@@ -3370,7 +3903,7 @@ impl PolyglotSastSidecar {
             .collect::<Vec<_>>();
 
         Ok(PolyglotSastArtifacts {
-            unsafe_hotspots_blob: render_unsafe_hotspots_report(&unsafe_issues),
+            unsafe_hotspots_blob: render_unsafe_hotspots_report(&unsafe_issues, &input.clean_files),
             health_report_blob: render_soda_health_report(&health_issues),
         })
     }
@@ -3660,7 +4193,7 @@ async fn ensure_semgrep_rule_bundle(repo_path: &Path, rule_set: SemgrepRuleSet) 
         })?;
 
     let workspace_rules_dir = workspace_semgrep_rules_dir();
-    if workspace_rules_dir.exists() {
+    if rule_set.copies_workspace_rules() && workspace_rules_dir.exists() {
         let copied = copy_semgrep_rule_tree(&workspace_rules_dir, &workspace_rules_dir, &support_dir)?;
         tracing::info!(
             repo_path = %repo_path.display(),
@@ -3669,6 +4202,13 @@ async fn ensure_semgrep_rule_bundle(repo_path: &Path, rule_set: SemgrepRuleSet) 
             workspace_rules_dir = %workspace_rules_dir.display(),
             support_dir = %support_dir.display(),
             "Semgrep: ruleset air-gapped materializado"
+        );
+    } else {
+        tracing::info!(
+            repo_path = %repo_path.display(),
+            rule_set = ?rule_set,
+            support_dir = %support_dir.display(),
+            "Semgrep: ruleset slim sem workspace rules para evitar slop"
         );
     }
 
@@ -3923,6 +4463,9 @@ pub mod config {
         assert!(health_report.contains("parsed_files: 2"));
         let repo_outline = String::from_utf8(payload.repo_outline_blob).unwrap();
         assert!(repo_outline.contains("# Repository Outline"));
+        assert!(repo_outline.contains("## Productive Tree"));
+        assert!(repo_outline.contains("example/"));
+        assert!(repo_outline.contains("[DOMAIN: RUST]"));
         assert!(repo_outline.contains("[src/lib.rs]"));
         assert!(repo_outline.contains("[src/main.rs]"));
         let architecture_map = String::from_utf8(payload.architecture_map_blob).unwrap();
@@ -3939,7 +4482,53 @@ pub mod config {
         assert!(result.is_ok(), "Normalização deveria tolerar repo outline com UTF-8 inválido: {:?}", result);
         let repo_outline = String::from_utf8(result.unwrap()).unwrap();
         assert!(repo_outline.contains("# Repository Outline"));
+        assert!(repo_outline.contains("[DOMAIN: RUST]"));
         assert!(repo_outline.contains("[src/main.rs]"));
+    }
+
+    #[test]
+    fn test_render_scoped_text_blocks_slices_domains_orthogonally() {
+        let rendered = render_scoped_text_blocks(&[
+            ScopedTextBlock {
+                file_path: "src/lib.rs".to_string(),
+                items: vec!["pub fn run()".to_string()],
+                omitted_count: 0,
+            },
+            ScopedTextBlock {
+                file_path: "candle-kernels/conv.cu".to_string(),
+                items: vec!["__global__ void conv_kernel".to_string()],
+                omitted_count: 0,
+            },
+            ScopedTextBlock {
+                file_path: "candle-metal-kernels/ops.metal".to_string(),
+                items: vec!["kernel void softmax".to_string()],
+                omitted_count: 0,
+            },
+        ]);
+
+        assert!(rendered.contains("[DOMAIN: RUST]"));
+        assert!(rendered.contains("[DOMAIN: C++ / CUDA]"));
+        assert!(rendered.contains("[DOMAIN: OBJECTIVE-C / METAL]"));
+        assert!(rendered.contains("[src/lib.rs]"));
+        assert!(rendered.contains("[candle-kernels/conv.cu]"));
+        assert!(rendered.contains("[candle-metal-kernels/ops.metal]"));
+    }
+
+    #[test]
+    fn test_render_unsafe_hotspots_report_keeps_domain_headers_without_findings() {
+        let rendered = String::from_utf8(render_unsafe_hotspots_report(
+            &[],
+            &[
+                PathBuf::from("services/api/main.go"),
+                PathBuf::from("web/app.ts"),
+            ],
+        ))
+        .unwrap();
+
+        assert!(rendered.contains("# Unsafe Hotspots"));
+        assert!(rendered.contains("[DOMAIN: GO]"));
+        assert!(rendered.contains("[DOMAIN: JAVASCRIPT / TYPESCRIPT]"));
+        assert!(rendered.contains("Sem linhas vermelhas estaticas relevantes."));
     }
 
     #[tokio::test]
@@ -4546,7 +5135,7 @@ describe("login flow", () => {
             .blocks
             .iter()
             .any(|block| block.file_path == "go/math_test.go"
-                && block.items.contains(&"func TestSum".to_string())
+                && block.items.contains(&"func TestSum(t *testing.T)".to_string())
                 && block.items.contains(&r#"subtest "adds positives""#.to_string())));
         assert!(payload
             .blocks
@@ -4567,6 +5156,43 @@ describe("login flow", () => {
                 && block.items.contains(&r#"describe "login flow""#.to_string())
                 && block.items.contains(&r#"it "renders button""#.to_string())
                 && block.items.contains(&r#"test "shows errors""#.to_string())));
+    }
+
+    #[tokio::test]
+    async fn test_native_test_discovery_detects_inline_go_tests_outside_test_dirs() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("pkg")).unwrap();
+        std::fs::write(
+            dir.path().join("pkg/smoke.go"),
+            r#"
+package demo
+
+import "testing"
+
+func helper() {}
+
+func TestSmokePath(t *testing.T) {
+    if t == nil {
+        panic("unreachable")
+    }
+}
+"#,
+        )
+        .unwrap();
+
+        let payload = NativeTestDiscoverySidecar::extract(NativeTestDiscoveryInput {
+            repo_path: dir.path(),
+            profile: &StackProfile::Go,
+        })
+        .await
+        .unwrap();
+
+        assert!(payload
+            .blocks
+            .iter()
+            .any(|block| block.file_path == "pkg/smoke.go"
+                && block.items.contains(&"func TestSmokePath(t *testing.T)".to_string())
+                && !block.items.iter().any(|item| item.contains("panic"))));
     }
 
     #[tokio::test]
@@ -4748,7 +5374,7 @@ describe("login flow", () => {
 
     #[test]
     fn test_render_semgrep_security_blob_keeps_long_tail_without_truncation() {
-        let long_tail = "RISK".repeat(PHASE1_HEAVY_BLOB_MAX_CHARS);
+        let long_tail = "RISK".repeat(BLOB_04_REPO_OUTLINE_MAX_CHARS);
         let payload = SemgrepNormalizedPayload {
             blocks: vec![ScopedTextBlock {
                 file_path: "src/main.ts".to_string(),
@@ -4763,12 +5389,12 @@ describe("login flow", () => {
 
         assert!(rendered.contains("tail-marker-"));
         assert!(rendered.ends_with(&long_tail));
-        assert!(rendered.len() > PHASE1_HEAVY_BLOB_MAX_CHARS);
+        assert!(rendered.len() > BLOB_04_REPO_OUTLINE_MAX_CHARS);
     }
 
     #[test]
     fn test_render_semgrep_health_blob_keeps_long_tail_without_truncation() {
-        let long_tail = "FLOW".repeat(PHASE1_HEAVY_BLOB_MAX_CHARS);
+        let long_tail = "FLOW".repeat(BLOB_04_REPO_OUTLINE_MAX_CHARS);
         let payload = SemgrepNormalizedPayload {
             blocks: vec![ScopedTextBlock {
                 file_path: "src/entropy.ts".to_string(),
@@ -4783,7 +5409,7 @@ describe("login flow", () => {
 
         assert!(rendered.contains("tail-marker-"));
         assert!(rendered.ends_with(&long_tail));
-        assert!(rendered.len() > PHASE1_HEAVY_BLOB_MAX_CHARS);
+        assert!(rendered.len() > BLOB_04_REPO_OUTLINE_MAX_CHARS);
     }
 
     #[test]
@@ -4939,7 +5565,11 @@ describe("login flow", () => {
         let unsafe_blob = String::from_utf8(artifacts.unsafe_hotspots_blob).unwrap();
         let health_blob = String::from_utf8(artifacts.health_report_blob).unwrap();
 
-        assert!(executor.calls().iter().any(|call| call.starts_with("cargo clippy")));
+        assert!(executor.calls().iter().any(|call| {
+            call.starts_with("cargo clippy")
+                && call.contains("-p repo")
+                && call.contains("-- --no-deps")
+        }));
         assert!(executor.calls().iter().any(|call| call.starts_with("cppcheck ")));
         assert!(executor.calls().iter().any(|call| {
             call.starts_with("opengrep scan --config")
@@ -4949,12 +5579,14 @@ describe("login flow", () => {
                 && call.contains("[cwd=")
         }));
         assert!(unsafe_blob.contains("# Unsafe Hotspots"));
+        assert!(unsafe_blob.contains("[DOMAIN: C++ / CUDA]"));
         assert!(unsafe_blob.contains("native/bridge.cpp"));
         assert!(unsafe_blob.contains("[cppcheck]"));
         assert!(!unsafe_blob.contains("\"issues\""));
         assert!(!unsafe_blob.contains("src/lib.rs"));
         assert!(!unsafe_blob.contains("README.md"));
         assert!(health_blob.contains("# Health Report"));
+        assert!(health_blob.contains("[DOMAIN: RUST]"));
         assert!(health_blob.contains("[rust-clippy]"));
         assert!(health_blob.contains("src/lib.rs"));
         assert!(!health_blob.contains("[opengrep]"));
@@ -4967,10 +5599,11 @@ describe("login flow", () => {
 
     #[test]
     fn test_cppcheck_blade_enforces_xml_v2_args() {
-        let (binary, args) = blade_command(StaticAnalysisBlade::Cppcheck, &[".".to_string()]);
+        let (binary, args) = blade_command(StaticAnalysisBlade::Cppcheck, &[".".to_string()], None);
         assert_eq!(binary, "cppcheck");
         assert!(args.iter().any(|arg| arg == "--xml"));
         assert!(args.iter().any(|arg| arg == "--xml-version=2"));
+        assert!(!args.iter().any(|arg| arg.starts_with("--error-exitcode")));
     }
 
     #[test]
@@ -4984,6 +5617,8 @@ describe("login flow", () => {
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "build"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "vendor"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/examples/**"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/docs/**"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/mocks/**"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/samples/**"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/output.json"]));
@@ -5022,7 +5657,7 @@ describe("login flow", () => {
 
         let workspace_rule = workspace_semgrep_rules_dir().join("soda-golden-patterns.yaml");
         if workspace_rule.exists() {
-            assert!(left.join("soda-golden-patterns.yaml").exists());
+            assert!(!left.join("soda-golden-patterns.yaml").exists());
         }
     }
 
@@ -5071,16 +5706,18 @@ Done in 1.23s"#;
 
     #[test]
     fn test_sobelow_blade_uses_mix_with_private_json_flags() {
-        let (binary, args) = blade_command(StaticAnalysisBlade::Sobelow, &[".".to_string()]);
+        let (binary, args) = blade_command(StaticAnalysisBlade::Sobelow, &[".".to_string()], None);
         assert_eq!(binary, "mix");
-        assert_eq!(args, vec!["sobelow", "--format", "json", "--private"]);
+        assert_eq!(args, vec!["sobelow", "--format", "json", "--private", "--root", "."]);
     }
 
     #[test]
     fn test_biome_and_oxlint_args_accept_explicit_scan_targets() {
         let scan_targets = vec!["src/index.ts".to_string(), "src/server.ts".to_string()];
-        let (biome_binary, biome_args) = blade_command(StaticAnalysisBlade::Biome, &scan_targets);
-        let (oxlint_binary, oxlint_args) = blade_command(StaticAnalysisBlade::Oxc, &scan_targets);
+        let (biome_binary, biome_args) =
+            blade_command(StaticAnalysisBlade::Biome, &scan_targets, None);
+        let (oxlint_binary, oxlint_args) =
+            blade_command(StaticAnalysisBlade::Oxc, &scan_targets, None);
 
         assert_eq!(biome_binary, "biome");
         assert_eq!(oxlint_binary, "oxlint");
@@ -5155,6 +5792,93 @@ Done in 1.23s"#;
         assert!(scopes.contains(&"apps/rust-sdk".to_string()));
         assert!(!scopes.iter().any(|scope| scope.contains("node_modules")));
         assert!(!scopes.iter().any(|scope| scope.contains("target")));
+    }
+
+    #[test]
+    fn test_derive_rust_clippy_targets_skip_toxic_manifests_and_scope_to_package() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("Cargo.toml", "[package]\nname='root'\nversion='0.1.0'\n");
+        executor.write_repo_file(
+            "crates/cuda/Cargo.toml",
+            "[package]\nname='cuda-kernel'\nversion='0.1.0'\n[dependencies]\ncudarc='0.12'\n",
+        );
+        executor.write_repo_file(
+            "crates/apple/Cargo.toml",
+            "[package]\nname='metal-kernel'\nversion='0.1.0'\n[dependencies]\nobjc2='0.6'\nmetal='0.31'\n",
+        );
+        let manifests = discover_monorepo_manifests(executor.repo_path());
+
+        let targets = derive_rust_clippy_execution_targets(&manifests);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].scope, ".");
+        assert_eq!(
+            targets[0].command_args.as_ref(),
+            Some(&clippy_args_for_package("root"))
+        );
+    }
+
+    #[test]
+    fn test_blade_parallelism_limit_serializes_rust_clippy_only() {
+        assert_eq!(
+            blade_parallelism_limit(StaticAnalysisBlade::RustClippy),
+            RUST_CLIPPY_MAX_PARALLEL
+        );
+        assert_eq!(
+            blade_parallelism_limit(StaticAnalysisBlade::Cppcheck),
+            MONOREPO_SAST_MAX_PARALLEL
+        );
+        assert_eq!(
+            blade_parallelism_limit(StaticAnalysisBlade::Opengrep),
+            MONOREPO_SAST_MAX_PARALLEL
+        );
+    }
+
+    #[test]
+    fn test_derive_go_execution_targets_anchor_govulncheck_to_real_modules_only() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("go.mod", "module root.example\n\ngo 1.22\n");
+        executor.write_repo_file("README.md", "docs only\n");
+        executor.write_repo_file("services/api/go.mod", "module api.example\n\ngo 1.22\n");
+        executor.write_repo_file("services/api/cmd/api/main.go", "package main\nfunc main() {}\n");
+        executor.write_repo_file("tools/empty/go.mod", "module empty.example\n\ngo 1.22\n");
+        let clean_files = vec![
+            canonicalize_or_self(executor.repo_path().join("README.md")),
+            canonicalize_or_self(executor.repo_path().join("services/api/cmd/api/main.go")),
+        ];
+
+        let manifests = discover_monorepo_manifests(executor.repo_path());
+        let targets = derive_go_execution_targets(&manifests, &clean_files);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].scope, "services/api");
+        assert_eq!(targets[0].scan_targets, vec!["./...".to_string()]);
+        assert_eq!(
+            targets[0].command_args.as_ref(),
+            Some(&govulncheck_args_for_module())
+        );
+    }
+
+    #[test]
+    fn test_derive_elixir_execution_targets_set_explicit_root_and_skip_empty_apps() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("mix.exs", "defmodule Root.MixProject do end\n");
+        executor.write_repo_file("apps/web/mix.exs", "defmodule Web.MixProject do end\n");
+        executor.write_repo_file("apps/web/lib/web/router.ex", "defmodule Web.Router do end\n");
+        let clean_files = vec![canonicalize_or_self(
+            executor.repo_path().join("apps/web/lib/web/router.ex"),
+        )];
+
+        let manifests = discover_monorepo_manifests(executor.repo_path());
+        let targets = derive_elixir_execution_targets(&manifests, &clean_files);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].scope, "apps/web");
+        assert_eq!(targets[0].scan_targets, vec![".".to_string()]);
+        assert_eq!(
+            targets[0].command_args.as_ref(),
+            Some(&sobelow_args_for_root("."))
+        );
     }
 
     #[test]
@@ -5327,11 +6051,50 @@ Done in 1.23s"#;
 
         assert!(executor.calls().iter().any(|call| {
             call.starts_with("cargo clippy")
+                && call.contains("-p sdk")
+                && call.contains("-- --no-deps")
                 && (call.contains("apps\\rust-sdk") || call.contains("apps/rust-sdk"))
         }));
         assert!(health_blob.contains("apps/rust-sdk/src/lib.rs"));
+        assert!(health_blob.contains("[DOMAIN: RUST]"));
         assert!(health_blob.contains("[rust-clippy]"));
         assert!(!health_blob.contains("\"scope\""));
+    }
+
+    #[test]
+    fn test_render_soda_health_report_groups_findings_by_domain() {
+        let issues = vec![
+            SodaHealthIssue {
+                level: "warning".to_string(),
+                file: "src/lib.rs".to_string(),
+                message: "unwrap precisa de contexto".to_string(),
+                source_blade: "rust-clippy".to_string(),
+                channel: SastIssueChannel::Health,
+            },
+            SodaHealthIssue {
+                level: "warning".to_string(),
+                file: "candle-kernels/sgemm.cu".to_string(),
+                message: "kernel sem bounds check".to_string(),
+                source_blade: "cppcheck".to_string(),
+                channel: SastIssueChannel::Health,
+            },
+            SodaHealthIssue {
+                level: "warning".to_string(),
+                file: "candle-metal-kernels/reduce.metal".to_string(),
+                message: "metal path requer auditoria".to_string(),
+                source_blade: "opengrep".to_string(),
+                channel: SastIssueChannel::Health,
+            },
+        ];
+
+        let rendered = String::from_utf8(render_soda_health_report(&issues)).unwrap();
+
+        assert!(rendered.contains("[DOMAIN: RUST]"));
+        assert!(rendered.contains("[DOMAIN: C++ / CUDA]"));
+        assert!(rendered.contains("[DOMAIN: OBJECTIVE-C / METAL]"));
+        assert!(rendered.contains("src/lib.rs"));
+        assert!(rendered.contains("candle-kernels/sgemm.cu"));
+        assert!(rendered.contains("candle-metal-kernels/reduce.metal"));
     }
 
     #[tokio::test]
@@ -5355,6 +6118,7 @@ Done in 1.23s"#;
             60,
             &execution_root,
             &[".".to_string()],
+            Some(&clippy_args_for_package("sdk")),
         )
         .await
         .unwrap();

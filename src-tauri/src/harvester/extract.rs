@@ -487,7 +487,7 @@ fn default_test_intent_message() -> String {
 }
 
 fn default_ux_contracts_message() -> String {
-    String::new()
+    "[NO_UX_DETECTED_BACKEND_ONLY_TOPOLOGY]".to_string()
 }
 
 fn default_unsafe_hotspots_message() -> String {
@@ -1203,6 +1203,10 @@ impl UnsafeHotspotsExtractor {
 }
 
 impl UxContractsExtractor {
+    pub fn backend_only_blob() -> ArtifactBlob {
+        blob_from_text("blob_11_ux_contracts", default_ux_contracts_message())
+    }
+
     pub async fn extract_blob(repo_path: &RepoPath) -> Result<ArtifactBlob, ExtractionError> {
         let body = Self::extract_body(repo_path).await?;
         Ok(blob_from_text("blob_11_ux_contracts", body))
@@ -3243,7 +3247,7 @@ mutation.mutate();
         let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
-        assert_eq!(text, "");
+        assert_eq!(text, "[NO_UX_DETECTED_BACKEND_ONLY_TOPOLOGY]");
     }
 
     #[tokio::test]

@@ -220,8 +220,12 @@ fn should_skip_clean_relative_path(relative_path: &str) -> bool {
                 | "__snapshots__"
                 | "sample"
                 | "samples"
+                | "example"
+                | "examples"
                 | "playground"
                 | "playgrounds"
+                | "bench"
+                | "benches"
                 | "benchmark"
                 | "benchmarks"
                 | "benchmarking"
@@ -278,4 +282,3 @@ fn has_binary_or_image_extension(path: &Path) -> bool {
             | "flac"
     )
 }
-
