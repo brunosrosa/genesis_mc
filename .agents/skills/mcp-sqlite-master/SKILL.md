@@ -1,19 +1,19 @@
 ---
 name: mcp-sqlite-master
-description: Arquiteto de Dados da Memória L2 do SODA. Manual estrito para o FrankenSQLite servido intra-processo pelo Gateway Rust via `soda_sqlite_query`, com bloqueio de mutações e consultas somente leitura.
+description: Arquiteto de Dados da Memória L2 do SODA. Manual estrito para o FrankenSQLite servido intra-processo pelo Gateway Rust via `db_query`, com bloqueio de mutações e consultas somente leitura.
 triggers: ["mcp-sqlite-master", "consultar banco", "ler sqlite", "ver tabela", "banco de dados", "histórico de logs", "memória l2", "buscar memória", "pesquisar histórico"]
 ---
 
 ### skill: MCP SQLite Master (O Interrogador da Memória L2 V7.0)
 
 #### Goal
-Atuar como o Arquiteto de Dados Cirúrgico para a Memória Transacional e Episódica (L2) do SODA. Os bancos locais `soda_state.db` e `soda_heuristic_vault.db` são a Única Fonte da Verdade (SSOT) para eventos e estados estruturados. Seu objetivo inegociável é proteger a Tríade de Memória (L2 nunca processa vetores, isso é papel do L3/LanceDB), prevenir o OOM através da extração sub-textual de JSONs, abolir comandos destrutivos protegendo o *Event Sourcing* e operar via `soda_sqlite_query` em modo somente leitura.
+Atuar como o Arquiteto de Dados Cirúrgico para a Memória Transacional e Episódica (L2) do SODA. Os bancos locais `soda_state.db` e `soda_heuristic_vault.db` são a Única Fonte da Verdade (SSOT) para eventos e estados estruturados. Seu objetivo inegociável é proteger a Tríade de Memória (L2 nunca processa vetores, isso é papel do L3/LanceDB), prevenir o OOM através da extração sub-textual de JSONs, abolir comandos destrutivos protegendo o *Event Sourcing* e operar via `db_query` em modo somente leitura.
 
 #### Instructions
 Sempre que precisar acessar a memória relacional do SODA, utilize exclusivamente este MCP sob esta máquina de estados restritiva:
 
 1. **Firewall Compliance e Reconhecimento Seguro:**
-   * Utilize OBRIGATORIAMENTE `soda_sqlite_query` para leituras locais no cofre SQLite.
+   * Utilize OBRIGATORIAMENTE `db_query` para leituras locais no cofre SQLite.
    * Informe o `db_name` correto (`soda_state.db` ou `soda_heuristic_vault.db`) e mantenha a query estritamente informacional.
 
 2. **A Lei da Tríade de Memória (Fobia Vetorial L2):**
@@ -26,7 +26,7 @@ Sempre que precisar acessar a memória relacional do SODA, utilize exclusivament
 
 4. **Blindagem do FrankenSQLite (Anti-Mutação):**
    * O backend em Rust configura este banco cirurgicamente com MVCC e *Write-Merge Ladder* em modo WAL.
-   * É PROIBIDO executar comandos administrativos como `VACUUM`, `PRAGMA journal_mode`, `PRAGMA synchronous` ou manipulações de trava. `soda_sqlite_query` barra mutações e PRAGMAs alteradores por design.
+   * É PROIBIDO executar comandos administrativos como `VACUUM`, `PRAGMA journal_mode`, `PRAGMA synchronous` ou manipulações de trava. `db_query` barra mutações e PRAGMAs alteradores por design.
 
 5. **Interrogação Temporal (Epoch) e Proteção de VRAM:**
    * O tempo é registrado em **UNIX Epoch Int64 UTC**. Converta strings mentalmente para matemática Epoch (ex: `timestamp > 1713368700`).
@@ -44,8 +44,9 @@ Sempre que precisar acessar a memória relacional do SODA, utilize exclusivament
 **Entrada do Usuário:** "SODA, dá uma olhada no SQLite e veja as últimas 3 tarefas que o Agente Financeiro concluiu hoje. Quero só os resumos."
 
 **Ação do Agente:**
-1. Invoca `soda_sqlite_query` com `db_name: "soda_state.db"` e uma query limitada.
+1. Invoca `db_query` com `db_name: "soda_state.db"` e uma query limitada.
 2. Calcula matematicamente o limite Epoch UTC para "hoje".
 3. Constrói a query blindada abstendo-se de `SELECT *` e garantindo o limite:
    `SELECT task_id, substr(resultado, 1, 200) as resumo FROM task_events WHERE status = 'CONCLUIDO' AND timestamp > 1715040000 ORDER BY timestamp DESC LIMIT 3;`
 4. Retorna a síntese destilada no Canvas, garantindo que o SQLite continuou atuando apenas como L2 Relacional e a VRAM local foi preservada.
+

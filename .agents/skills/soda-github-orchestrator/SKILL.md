@@ -1,7 +1,7 @@
 ---
 name: soda-github-orchestrator
 description: O Ditador GitOps e Mestre do Fluxo SODA. Impõe 'No Ticket, No Code' e Shadow Workspaces O(1). Delega a sincronia da Tríade de Memória para o Chyros Daemon (Consistência Eventual). Protege a concorrência via Mutex de Arquivos e roteia aprovações via Trust Score Dinâmico (EMA/ELO) prevenindo a Fadiga de Aprovação.
-triggers: ["soda-github-orchestrator", "gerenciar fluxo", "gitops", "atualizar kanban", "issue", "pull request", "fechar tarefa", "submeter pr", "soda_github_meta"]
+triggers: ["soda-github-orchestrator", "gerenciar fluxo", "gitops", "atualizar kanban", "issue", "pull request", "fechar tarefa", "submeter pr", "repo_meta"]
 ---
 
 ### skill: SODA GitHub Orchestrator (O Ditador GitOps V4.0 Supremo)
@@ -47,3 +47,4 @@ Sempre que for invocado para planejar código, gerenciar fluxo de versionamento 
 4. Move o Kanban no SQLite e enfileira a carga vetorial para o *Chyros Daemon* trabalhar em background.
 5. Verifica o EMA da tarefa: Como é Risco Nível 1 e EMA > 0.95, consolida silenciosamente.
 6. Emite via *Ghost Telemetry*: *"Pull Request consolidado via Rebase Semântico. Indexação delegada ao Chyros Daemon. Aprovado autonomamente (HOTL via EMA > 0.94)."*
+

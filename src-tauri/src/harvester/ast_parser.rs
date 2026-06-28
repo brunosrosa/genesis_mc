@@ -89,7 +89,14 @@ pub fn extract_repository_outline_native_from_clean_files(
     let repo_root = repo_root
         .canonicalize()
         .unwrap_or_else(|_| repo_root.to_path_buf());
-    let has_any_source_candidate = clean_files.iter().any(|path| detect_language(path).is_some());
+    let outline_files = clean_files
+        .iter()
+        .filter(|path| !should_skip_blob04_clean_file(&repo_root, path))
+        .cloned()
+        .collect::<Vec<_>>();
+    let has_any_source_candidate = outline_files
+        .iter()
+        .any(|path| detect_language(path).is_some());
     if !has_any_source_candidate {
         return Err(AstParserError::EmptyRepository {
             path: repo_root.display().to_string(),
@@ -100,7 +107,7 @@ pub fn extract_repository_outline_native_from_clean_files(
     let mut languages = BTreeMap::<String, usize>::new();
     let mut total_signatures = 0usize;
     let mut total_import_edges = 0usize;
-    for file_path in clean_files {
+    for file_path in &outline_files {
         let relative_path = sanitize_relative_path(&repo_root, file_path);
         let Some(language) = detect_language(file_path) else {
             continue;
@@ -181,9 +188,9 @@ pub fn extract_repository_outline_native_from_clean_files(
             .then_with(|| left.relative_path.cmp(&right.relative_path))
     });
 
-    let repo_outline = build_repo_outline(&repo_root, clean_files, &parsed_files);
+    let repo_outline = build_repo_outline(&repo_root, &outline_files, &parsed_files);
     let mut architecture_files = Vec::new();
-    for path in clean_files {
+    for path in &outline_files {
         let relative = sanitize_relative_path(&repo_root, path);
         if should_skip_architecture_relative_path(&relative) {
             continue;
@@ -434,6 +441,7 @@ fn should_skip_file(path: &Path) -> bool {
         || normalized.ends_with(".min.js")
         || normalized.ends_with(".min.cjs")
         || normalized.ends_with(".min.mjs")
+        || normalized.ends_with(".min.css")
         || normalized.ends_with(".bundle.js")
         || normalized.ends_with(".bundle.cjs")
         || normalized.ends_with(".bundle.mjs")
@@ -500,7 +508,28 @@ fn is_probably_minified_source(path: &Path) -> bool {
     looks_like_single_line_blob && looks_like_low_whitespace
 }
 
-fn should_skip_architecture_relative_path(relative_path: &str) -> bool {
+fn should_skip_blob04_clean_file(repo_root: &Path, path: &Path) -> bool {
+    let relative_path = sanitize_relative_path(repo_root, path);
+    if relative_path.is_empty() {
+        return true;
+    }
+    if should_skip_architecture_relative_path(&relative_path) {
+        return true;
+    }
+
+    let normalized = relative_path.to_ascii_lowercase();
+    if normalized.ends_with(".min.css") {
+        return true;
+    }
+
+    let file_size_bytes = match std::fs::metadata(path) {
+        Ok(metadata) => metadata.len(),
+        Err(_) => return true,
+    };
+    file_size_bytes >= AST_MINIFIED_HEURISTIC_MIN_BYTES && is_probably_minified_source(path)
+}
+
+pub(crate) fn should_skip_architecture_relative_path(relative_path: &str) -> bool {
     let normalized = relative_path.replace('\\', "/").to_ascii_lowercase();
     let segments = normalized
         .split('/')
@@ -523,14 +552,24 @@ fn should_skip_architecture_relative_path(relative_path: &str) -> bool {
                 | "__snapshots__"
                 | "sample"
                 | "samples"
+                | "spec"
+                | "specs"
+                | "integration"
+                | "e2e"
                 | "playground"
                 | "playgrounds"
+                | "example"
                 | "benchmark"
+                | "benches"
                 | "benchmarks"
                 | "benchmarking"
                 | "coverage"
                 | "generated"
                 | "__generated__"
+                | "node_modules"
+                | "target"
+                | "dist"
+                | "build"
         )
     }) {
         return true;
@@ -539,6 +578,7 @@ fn should_skip_architecture_relative_path(relative_path: &str) -> bool {
     normalized.ends_with(".min.js")
         || normalized.ends_with(".min.cjs")
         || normalized.ends_with(".min.mjs")
+        || normalized.ends_with(".min.css")
         || normalized.ends_with(".bundle.js")
         || normalized.ends_with(".bundle.cjs")
         || normalized.ends_with(".bundle.mjs")
@@ -790,22 +830,42 @@ fn extract_structural_signatures(
     relative_path: &str,
 ) -> Result<(Vec<String>, usize), AstParserError> {
     let mut import_edges = 0usize;
-
-    if language != "svelte" {
+    let (signatures, edges) = if language != "svelte" {
         if let Ok((signatures, edges)) = extract_with_language_pack(source, language, relative_path) {
-            import_edges = edges;
             if !signatures.is_empty() {
-                return Ok((signatures, edges));
+                (signatures, edges)
+            } else if let Ok((signatures, edges)) =
+                extract_with_official_tree_sitter(source, language, relative_path)
+            {
+                (signatures, edges)
+            } else {
+                extract_with_regex_fallback(source, language, relative_path)?
             }
+        } else if let Ok((signatures, edges)) =
+            extract_with_official_tree_sitter(source, language, relative_path)
+        {
+            (signatures, edges)
+        } else {
+            extract_with_regex_fallback(source, language, relative_path)?
         }
-    }
+    } else if let Ok((signatures, edges)) =
+        extract_with_official_tree_sitter(source, language, relative_path)
+    {
+        (signatures, edges)
+    } else {
+        extract_with_regex_fallback(source, language, relative_path)?
+    };
 
-    if let Ok((signatures, edges)) = extract_with_official_tree_sitter(source, language, relative_path) {
-        return Ok((signatures, import_edges.max(edges)));
+    import_edges = import_edges.max(edges);
+    let signatures = sanitize_outline_signatures(signatures, source, language);
+    if signatures.is_empty() {
+        return Err(AstParserError::ParseFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            reason: "sanitizacao eliminou todos os simbolos estruturais".to_string(),
+        });
     }
-
-    let (signatures, fallback_edges) = extract_with_regex_fallback(source, language, relative_path)?;
-    Ok((signatures, import_edges.max(fallback_edges)))
+    Ok((signatures, import_edges))
 }
 
 fn extract_with_language_pack(
@@ -985,6 +1045,110 @@ fn extract_with_regex_fallback(
     }
 
     Ok((signatures, estimate_import_edges(language, source)))
+}
+
+fn sanitize_outline_signatures(
+    signatures: Vec<String>,
+    source: &str,
+    language: &str,
+) -> Vec<String> {
+    let mut sanitized = signatures
+        .into_iter()
+        .filter_map(|signature| sanitize_outline_signature(&signature, language))
+        .collect::<Vec<_>>();
+    sanitized.extend(extract_import_signatures(source, language));
+    sanitized.sort();
+    sanitized.dedup();
+    sanitized
+}
+
+fn sanitize_outline_signature(signature: &str, language: &str) -> Option<String> {
+    let mut text = strip_signature_comments(signature, language);
+    text = trim_structural_body_suffix(&text);
+    text = compact_signature_whitespace(&text);
+    let text = text
+        .trim_matches(|ch: char| ch.is_whitespace() || ch == ';' || ch == ',')
+        .trim()
+        .to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(truncate_chars(&text, 220))
+    }
+}
+
+fn strip_signature_comments(signature: &str, language: &str) -> String {
+    let mut text = Regex::new(r"/\*[\s\S]*?\*/")
+        .unwrap()
+        .replace_all(signature, " ")
+        .into_owned();
+    if !matches!(language, "python" | "ruby") {
+        text = Regex::new(r"//.*$")
+            .unwrap()
+            .replace_all(&text, "")
+            .into_owned();
+    }
+    text
+}
+
+fn trim_structural_body_suffix(signature: &str) -> String {
+    let compact = compact_signature_whitespace(signature);
+    let trimmed = compact.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let looks_like_import = lower.starts_with("import ")
+        || lower.starts_with("export import ")
+        || lower.starts_with("use ")
+        || lower.starts_with("pub use ")
+        || lower.starts_with("from ")
+        || lower.starts_with("#include ");
+    if looks_like_import {
+        return trimmed.to_string();
+    }
+
+    if let Some(index) = trimmed.find('{') {
+        return trimmed[..index].trim().to_string();
+    }
+    if let Some(index) = trimmed.find(" =>") {
+        return trimmed[..index + 3].trim().to_string();
+    }
+    if let Some(index) = trimmed.find("=> ") {
+        return trimmed[..index + 2].trim().to_string();
+    }
+    trimmed.to_string()
+}
+
+fn compact_signature_whitespace(signature: &str) -> String {
+    signature.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn extract_import_signatures(source: &str, language: &str) -> Vec<String> {
+    let patterns: &[&str] = match language {
+        "rust" => &[r"(?m)^\s*(?:pub\s+)?use\s+[^;\n]+;"],
+        "python" => &[r"(?m)^\s*(?:from\s+[^\n]+?\s+import\s+[^\n#]+|import\s+[^\n#]+)"],
+        "javascript" | "typescript" | "svelte" => &[r#"(?m)^\s*import\s+[^;\n]+(?:from\s+["'][^"']+["'])?;?"#],
+        "go" => &[r#"(?m)^\s*import\s+(?:\([\s\S]*?\)|[^\n]+)"#],
+        "java" | "kotlin" => &[r"(?m)^\s*import\s+[^\n;]+;"],
+        "c" | "cpp" => &[r#"(?m)^\s*#include\s+[<"][^>"]+[>"]"#],
+        "php" => &[r"(?m)^\s*use\s+[^\n;]+;"],
+        "ruby" => &[r#"(?m)^\s*(?:require|require_relative)\s+["'][^"']+["']"#],
+        _ => &[],
+    };
+
+    let mut imports = Vec::new();
+    for pattern in patterns {
+        let Ok(regex) = Regex::new(pattern) else {
+            continue;
+        };
+        for matched in regex.find_iter(source) {
+            if let Some(signature) = sanitize_outline_signature(matched.as_str(), language) {
+                imports.push(signature);
+            }
+        }
+    }
+    imports
 }
 
 fn regex_fallback_patterns(language: &str) -> &'static [(&'static str, &'static str)] {
@@ -1265,7 +1429,35 @@ fn build_repo_outline(
             out.push('\n');
         }
     }
-    out
+    compact_outline_blob_text(&out)
+}
+
+fn compact_outline_blob_text(text: &str) -> String {
+    let mut out = String::new();
+    let mut previous_blank = false;
+    for raw_line in text.lines() {
+        let trimmed_end = raw_line.trim_end();
+        let line = if trimmed_end.starts_with("- ") {
+            let suffix = trimmed_end.trim_start_matches("- ").trim();
+            format!("- {}", compact_signature_whitespace(suffix))
+        } else {
+            trimmed_end.to_string()
+        };
+
+        if line.trim().is_empty() {
+            if previous_blank {
+                continue;
+            }
+            previous_blank = true;
+            out.push('\n');
+            continue;
+        }
+
+        previous_blank = false;
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out.trim().to_string()
 }
 
 fn build_architecture_map(files: &[String]) -> String {
@@ -1663,6 +1855,57 @@ public class Greeter {
         assert!(repo_outline.contains("typescript"));
         assert!(repo_outline.contains("cpp"));
         assert!(repo_outline.contains("elixir"));
+    }
+
+    #[test]
+    fn sanitize_outline_signature_removes_body_and_dead_comments() {
+        let signature = "pub async fn run(ctx: Ctx) { /* noop */ // dead\n execute(ctx)\n }";
+        let sanitized = sanitize_outline_signature(signature, "rust").unwrap();
+        assert_eq!(sanitized, "pub async fn run(ctx: Ctx)");
+    }
+
+    #[test]
+    fn blob04_reapplies_universal_pruning_even_with_dirty_clean_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path();
+        std::fs::create_dir_all(repo_root.join("src")).unwrap();
+        std::fs::create_dir_all(repo_root.join("tests")).unwrap();
+        std::fs::create_dir_all(repo_root.join("node_modules/pkg")).unwrap();
+        std::fs::create_dir_all(repo_root.join("dist")).unwrap();
+        std::fs::create_dir_all(repo_root.join("build")).unwrap();
+        std::fs::create_dir_all(repo_root.join("target")).unwrap();
+
+        std::fs::write(repo_root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        std::fs::write(repo_root.join("src/lib.rs"), "pub struct Engine;\npub fn run() {}\n").unwrap();
+        std::fs::write(repo_root.join("tests/engine.rs"), "pub fn noisy_test() {}\n").unwrap();
+        std::fs::write(repo_root.join("node_modules/pkg/index.ts"), "export function noise() { return 1 }\n").unwrap();
+        std::fs::write(repo_root.join("dist/app.min.js"), "function x(){return 1};").unwrap();
+        std::fs::write(repo_root.join("build/app.min.css"), ".app{color:red}").unwrap();
+        std::fs::write(repo_root.join("target/generated.rs"), "pub fn generated() {}\n").unwrap();
+
+        let clean_files = vec![
+            repo_root.join("Cargo.toml"),
+            repo_root.join("src/lib.rs"),
+            repo_root.join("tests/engine.rs"),
+            repo_root.join("node_modules/pkg/index.ts"),
+            repo_root.join("dist/app.min.js"),
+            repo_root.join("build/app.min.css"),
+            repo_root.join("target/generated.rs"),
+        ];
+        let clean_files = clean_files
+            .into_iter()
+            .map(|path| path.canonicalize().unwrap_or(path))
+            .collect::<Vec<_>>();
+
+        let artifacts = extract_repository_outline_native_from_clean_files(repo_root, &clean_files).unwrap();
+        let repo_outline = String::from_utf8(artifacts.repo_outline_blob).unwrap();
+
+        assert!(repo_outline.contains("[src/lib.rs]"));
+        assert!(!repo_outline.contains("tests/engine.rs"));
+        assert!(!repo_outline.contains("node_modules/pkg/index.ts"));
+        assert!(!repo_outline.contains("dist/app.min.js"));
+        assert!(!repo_outline.contains("build/app.min.css"));
+        assert!(!repo_outline.contains("target/generated.rs"));
     }
 
 }

@@ -1,6 +1,6 @@
 ---
 name: soda-ralph-loop
-description: O Motor Implacável de Resiliência do Antigravity IDE. Impõe 'cargo clippy' (-D warnings). Executa Morte e Renascimento (Context Purge). Blinda o workspace com 'snapsafe' e isola o compilador via Landlock. Escalonamento FinOps O(1): na 3ª falha, usa `soda_get_ast` para extrair o núcleo estrutural do erro e envia apenas o recorte mínimo ao Cloud Brain.
+description: O Motor Implacável de Resiliência do Antigravity IDE. Impõe 'cargo clippy' (-D warnings). Executa Morte e Renascimento (Context Purge). Blinda o workspace com 'snapsafe' e isola o compilador via Landlock. Escalonamento FinOps O(1): na 3ª falha, usa `repo_ast` para extrair o núcleo estrutural do erro e envia apenas o recorte mínimo ao Cloud Brain.
 triggers: ["soda-ralph-loop", "testar código", "rodar testes", "corrigir erro", "loop de compilação", "ralph loop", "auto-fix", "debug"]
 ---
 
@@ -28,7 +28,7 @@ Sempre que finalizar a escrita de código, ou a compilação falhar, execute est
 4. **A Guilhotina FinOps (Escalonamento AST O(1)):**
    * Você tem um limite inquebrável de **3 (TRÊS) TENTATIVAS LOCAIS**.
    * Se falhar na 3ª vez, **NÃO** mande o arquivo inteiro para a nuvem.
-   * Acione o poder intrínseco `soda_get_ast` para extrair APENAS a Árvore de Sintaxe Abstrata (AST) da área exata que está causando o erro.
+   * Acione o poder intrínseco `repo_ast` para extrair APENAS a Árvore de Sintaxe Abstrata (AST) da área exata que está causando o erro.
    * Envie apenas esse micro-recorte ($\mathcal{O}(1)$) para o *Cloud Brain* (Claude Opus/GPT) analisar. Aplique a "Bala de Prata" devolvida pela nuvem em uma 4ª tentativa final.
 
 5. **O Rollback Atômico (Fail-Closed Máximo):**
@@ -41,7 +41,7 @@ Sempre que finalizar a escrita de código, ou a compilação falhar, execute est
 
 #### Constraints
 * **FOBIA DE LIXO TOXICO:** Você NÃO PODE usar `.unwrap()`, `.expect()` ou `.clone()` preguiçosos para "fazer o compilador calar a boca". O `clippy` vai rejeitar, e você perderá uma tentativa local à toa.
-* **ESCUDO FINOPS:** É um crime arquitetural enviar um arquivo de 1000 linhas para o Claude Opus só para arrumar um erro de Borrow Checker na linha 42. Use `soda_get_ast`.
+* **ESCUDO FINOPS:** É um crime arquitetural enviar um arquivo de 1000 linhas para o Claude Opus só para arrumar um erro de Borrow Checker na linha 42. Use `repo_ast`.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação do roteamento de *Amarração Tardia*.
 
 #### Examples
@@ -49,6 +49,7 @@ Sempre que finalizar a escrita de código, ou a compilação falhar, execute est
 **Ação do Agente:**
 1. Isola com `snapsafe`. Roda `cargo clippy`.
 2. Falha na Iteração 1 e 2 por causa do Borrow Checker. Na 3ª tentativa local, o erro persiste.
-3. O agente aciona `soda_get_ast`, fatia apenas a função `transmit_ipc` (15 linhas) e despacha o erro exato para a Nuvem (Cloud Brain).
+3. O agente aciona `repo_ast`, fatia apenas a função `transmit_ipc` (15 linhas) e despacha o erro exato para a Nuvem (Cloud Brain).
 4. O Claude devolve o uso correto do `Arc<RwLock>`, o agente aplica na 4ª tentativa e atinge o *Exit Code 0*.
 5. Retorna no Canvas: *-> Ralph Loop concluído com Escalonamento Nuvem (AST). Clippy Puro (Exit Code 0). Workspace preservado.*
+

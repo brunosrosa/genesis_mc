@@ -1,6 +1,6 @@
 ---
 name: soda-docs-hydrator
-description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e JSON IPC. Prioriza docs estruturadas e usa `soda_fetch_web` como fallback bare-metal garantido para hidratar contexto sem sidecars web legados.
+description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e JSON IPC. Prioriza docs estruturadas e usa `web_fetch` como fallback bare-metal garantido para hidratar contexto sem sidecars web legados.
 triggers: ["soda-docs-hydrator", "consultar documentação", "validar api", "buscar referências", "como usar a biblioteca", "docs", "verificar sintaxe"]
 ---
 
@@ -33,7 +33,7 @@ Sempre que for solicitado a implementar uma funcionalidade usando os frameworks 
    * **Expurgo Obrigatório:** Aplique um *Context Purge* mental. Esqueça todo o restante do HTML/Markdown irrelevante que leu no `search_docs`. Mantenha apenas as assinaturas antes de projetar o código no IDE.
 
 #### Constraints
-* **FALBACK DA WEB:** Apenas se a documentação estruturada falhar ou não encontrar o domínio, realize o recuo tático para `soda_fetch_web`.
+* **FALBACK DA WEB:** Apenas se a documentação estruturada falhar ou não encontrar o domínio, realize o recuo tático para `web_fetch`.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do Roteamento SODA.
 
 #### Examples
@@ -44,3 +44,4 @@ Sempre que for solicitado a implementar uma funcionalidade usando os frameworks 
 3. Descobre a sintaxe TS para ArrayBuffers e a emissão via `rkyv` em Rust, rejeitando tutoriais antigos baseados em JSON puro.
 4. Extrai a *Trait* `tauri::Emitter`. 
 5. Expelindo o lixo da VRAM local, devolve no Canvas a arquitetura sintática pura e limpa de *Garbage Collection*.
+

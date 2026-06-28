@@ -20,10 +20,9 @@ binds:
                     || mcp.tool.name.matches("^(read_query|list_tables|describe_table|sequentialthinking)$")
                     || mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$")
                     || mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|notebook_create|notebook_delete|source_get_content|source_add|source_delete|add_source|delete_source)$")
-                    || mcp.tool.name.matches("^(web_search)$")
-                    || mcp.tool.name.matches("^(soda_get_ast|soda_fetch_web|soda_github_meta|soda_sqlite_query|soda_get_time|soda_duckduckgo_search)$")
+                    || mcp.tool.name.matches("^(repo_ast|web_fetch|sys_time|web_search|repo_meta|db_query)$")
                     || mcp.tool.name.matches("^(read_values|write_values|create_spreadsheet|clear_values|get_sheet_info)$")
-                    || mcp.tool.name.matches("^(memory_.*|sqlite_.*|lean_.*|ctx_.*|sqz_.*|toon_compress)$")
+                    || mcp.tool.name.matches("^(memory_.*|sqlite_.*|ctx_.*|sqz_.*|toon_compress)$")
             backends:
               # ==========================================
               # NÚCLEO COGNITIVO SODA (FAIL CLOSED)
@@ -31,7 +30,7 @@ binds:
               - mcp:
                   failureMode: failClosed
                   targets:
-                    - name: lean-ctx
+                    - name: lean
                       stdio:
                         cmd: 'lean-ctx.exe'
                         args: []
@@ -50,6 +49,6 @@ binds:
                         args: ['--db-path', 'Z:/genesis_mc/.soda_data/soda_state.db']
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
-                    - name: soda-native-ast
+                    - name: core
                       mcp:
                         host: 'http://127.0.0.1:3002/mcp'

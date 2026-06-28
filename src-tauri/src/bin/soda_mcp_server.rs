@@ -42,7 +42,7 @@ impl AppState {
 
     fn next_session_id(&self) -> String {
         let id = self.session_seed.fetch_add(1, Ordering::Relaxed);
-        format!("soda-native-ast-{id}")
+        format!("souls-{id}")
     }
 }
 
@@ -116,7 +116,7 @@ async fn handle_mcp(
                         }
                     },
                     "serverInfo": {
-                        "name": "soda-native-ast",
+                        "name": "souls",
                         "version": env!("CARGO_PKG_VERSION")
                     }
                 }),
@@ -140,7 +140,7 @@ async fn handle_mcp(
                 json!({
                     "tools": [
                         {
-                            "name": "soda_get_ast",
+                            "name": "repo_ast",
                             "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust.",
                             "inputSchema": {
                                 "type": "object",
@@ -155,7 +155,7 @@ async fn handle_mcp(
                             }
                         },
                         {
-                            "name": "soda_fetch_web",
+                            "name": "web_fetch",
                             "description": "Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo.",
                             "inputSchema": {
                                 "type": "object",
@@ -170,7 +170,7 @@ async fn handle_mcp(
                             }
                         },
                         {
-                            "name": "soda_get_time",
+                            "name": "sys_time",
                             "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo.",
                             "inputSchema": {
                                 "type": "object",
@@ -179,7 +179,7 @@ async fn handle_mcp(
                             }
                         },
                         {
-                            "name": "soda_duckduckgo_search",
+                            "name": "web_search",
                             "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.",
                             "inputSchema": {
                                 "type": "object",
@@ -200,7 +200,7 @@ async fn handle_mcp(
                             }
                         },
                         {
-                            "name": "soda_github_meta",
+                            "name": "repo_meta",
                             "description": "Extrai metadados GitHub nativos via octocrab para owner/repo.",
                             "inputSchema": {
                                 "type": "object",
@@ -215,7 +215,7 @@ async fn handle_mcp(
                             }
                         },
                         {
-                            "name": "soda_sqlite_query",
+                            "name": "db_query",
                             "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.",
                             "inputSchema": {
                                 "type": "object",
@@ -289,12 +289,12 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         })?;
 
     match tool_name {
-        "soda_get_ast" => run_soda_get_ast(params).await,
-        "soda_fetch_web" => run_soda_fetch_web(params).await,
-        "soda_get_time" => run_soda_get_time(params).await,
-        "soda_duckduckgo_search" => run_soda_duckduckgo_search(params).await,
-        "soda_github_meta" => run_soda_github_meta(params).await,
-        "soda_sqlite_query" => run_soda_sqlite_query(params).await,
+        "repo_ast" => run_repo_ast(params).await,
+        "web_fetch" => run_web_fetch(params).await,
+        "sys_time" => run_sys_time(params).await,
+        "web_search" => run_web_search(params).await,
+        "repo_meta" => run_repo_meta(params).await,
+        "db_query" => run_db_query(params).await,
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -303,7 +303,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
     }
 }
 
-async fn run_soda_get_ast(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_repo_ast(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let arguments = params
         .get("arguments")
         .and_then(Value::as_object)
@@ -384,7 +384,7 @@ async fn run_soda_get_ast(params: &serde_json::Map<String, Value>) -> Result<Val
     }))
 }
 
-async fn run_soda_fetch_web(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_web_fetch(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let arguments = params
         .get("arguments")
         .and_then(Value::as_object)
@@ -441,7 +441,7 @@ struct SodaTimePayload {
     unix_epoch_seconds: i64,
 }
 
-async fn run_soda_get_time(_params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_sys_time(_params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let local_now = Local::now();
     let utc_now = Utc::now();
     let timezone_offset_seconds = local_now.offset().local_minus_utc();
@@ -480,7 +480,7 @@ struct DuckDuckGoSearchResult {
     snippet: String,
 }
 
-async fn run_soda_duckduckgo_search(
+async fn run_web_search(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {
     let arguments = params
@@ -727,7 +727,7 @@ fn format_duckduckgo_results_markdown(query: &str, results: &[DuckDuckGoSearchRe
     out
 }
 
-async fn run_soda_github_meta(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_repo_meta(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let arguments = params
         .get("arguments")
         .and_then(Value::as_object)
@@ -851,7 +851,7 @@ fn format_github_meta_markdown(
     out
 }
 
-async fn run_soda_sqlite_query(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_db_query(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let arguments = params
         .get("arguments")
         .and_then(Value::as_object)

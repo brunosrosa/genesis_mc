@@ -2403,6 +2403,9 @@ fn execution_targets_for_blade(
     if matches!(blade, StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc) {
         return derive_js_lint_execution_targets(repo_path, manifests, blade, clean_files);
     }
+    if matches!(blade, StaticAnalysisBlade::Ruff | StaticAnalysisBlade::Bandit) {
+        return derive_python_execution_targets(repo_path, blade, clean_files);
+    }
 
     if let Some(kind) = manifest_kind_for_blade(blade) {
         return manifests
@@ -2429,6 +2432,7 @@ fn execution_targets_for_blade(
 
 const OPENGREP_FILE_LIST_CHUNK_SIZE: usize = 96;
 const JS_LINT_FILE_LIST_CHUNK_SIZE: usize = 96;
+const PYTHON_LINT_FILE_LIST_CHUNK_SIZE: usize = 96;
 
 fn opengrep_file_batch_scope(scope: &str, batch_idx: usize) -> String {
     format!("{scope}::files-{batch_idx:02}")
@@ -2524,6 +2528,34 @@ fn derive_opengrep_execution_targets(
         .collect::<Vec<_>>()
 }
 
+fn derive_python_execution_targets(
+    repo_path: &Path,
+    blade: StaticAnalysisBlade,
+    clean_files: &[PathBuf],
+) -> Vec<SastExecutionTarget> {
+    let repo_root = repo_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_path.to_path_buf());
+    let scan_targets =
+        derive_repo_relative_clean_targets(&repo_root, clean_files, &[], is_python_supported_file);
+
+    if scan_targets.is_empty() {
+        return Vec::new();
+    }
+
+    scan_targets
+        .chunks(PYTHON_LINT_FILE_LIST_CHUNK_SIZE)
+        .enumerate()
+        .map(|(idx, chunk)| SastExecutionTarget {
+            blade,
+            execution_root: repo_root.clone(),
+            scope: blade_file_batch_scope(".", idx + 1),
+            scan_targets: chunk.to_vec(),
+            command_args: None,
+        })
+        .collect()
+}
+
 fn derive_js_lint_file_list_targets(
     execution_root: &Path,
     scope_prefix: &str,
@@ -2601,6 +2633,10 @@ fn derive_repo_relative_clean_targets(
 }
 
 fn should_skip_sast_relative_target(rel: &str) -> bool {
+    if ast_parser::should_skip_architecture_relative_path(rel) {
+        return true;
+    }
+
     let normalized = rel.replace('\\', "/").to_ascii_lowercase();
     let segments = normalized
         .split('/')
@@ -2639,6 +2675,13 @@ fn should_skip_sast_relative_target(rel: &str) -> bool {
                 | "example"
         )
     })
+}
+
+fn is_python_supported_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("py"))
+        .unwrap_or(false)
 }
 
 fn is_biome_supported_file(path: &Path) -> bool {
@@ -2868,6 +2911,9 @@ fn push_issue(
     if message.trim().is_empty() {
         return;
     }
+    if should_drop_sast_issue(blade, &message) {
+        return;
+    }
     let channel = classify_sast_issue(blade, level, &message);
     issues.push(SodaHealthIssue {
         level: sanitize_issue_level(level),
@@ -2876,6 +2922,39 @@ fn push_issue(
         source_blade: blade_name(blade).to_string(),
         channel,
     });
+}
+
+fn should_drop_sast_issue(blade: StaticAnalysisBlade, message: &str) -> bool {
+    is_aesthetic_or_minor_warning(blade, message)
+}
+
+fn is_aesthetic_or_minor_warning(blade: StaticAnalysisBlade, message: &str) -> bool {
+    if !matches!(
+        blade,
+        StaticAnalysisBlade::Ruff
+            | StaticAnalysisBlade::Bandit
+            | StaticAnalysisBlade::Biome
+            | StaticAnalysisBlade::Oxc
+    ) {
+        return false;
+    }
+
+    let normalized = message.to_ascii_lowercase();
+    [
+        "use of assert detected",
+        "docstring",
+        "alt text",
+        "alternative text",
+        "aria",
+        "unused",
+        "never used",
+        "escape character",
+        "f-string",
+        "image",
+        "picture",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
 }
 
 fn sort_and_dedup_issues(issues: &mut Vec<SodaHealthIssue>) {
@@ -3026,6 +3105,8 @@ fn biome_args(scan_targets: &[String]) -> Vec<String> {
         "lint".to_string(),
         "--reporter=json".to_string(),
         "--no-errors-on-unmatched".to_string(),
+        "--only=lint/correctness".to_string(),
+        "--only=lint/complexity".to_string(),
     ];
     if scan_targets.is_empty() {
         args.push(".".to_string());
@@ -3071,22 +3152,35 @@ fn oxc_args(scan_targets: &[String]) -> Vec<String> {
     args
 }
 
-fn ruff_args() -> Vec<String> {
-    vec![
+fn ruff_args(scan_targets: &[String]) -> Vec<String> {
+    let mut args = vec![
         "check".to_string(),
-        ".".to_string(),
         "--output-format".to_string(),
         "json".to_string(),
-    ]
+        "--ignore".to_string(),
+        "D,F401,UP,W".to_string(),
+    ];
+    if scan_targets.is_empty() {
+        args.push(".".to_string());
+    } else {
+        args.extend(scan_targets.iter().cloned());
+    }
+    args
 }
 
-fn bandit_args() -> Vec<String> {
-    vec![
-        "-r".to_string(),
-        ".".to_string(),
+fn bandit_args(scan_targets: &[String]) -> Vec<String> {
+    let mut args = vec![
         "-f".to_string(),
         "json".to_string(),
-    ]
+        "-s".to_string(),
+        "B101".to_string(),
+    ];
+    if scan_targets.is_empty() {
+        args.push(".".to_string());
+    } else {
+        args.extend(scan_targets.iter().cloned());
+    }
+    args
 }
 
 fn govulncheck_args() -> Vec<String> {
@@ -3202,8 +3296,8 @@ fn blade_command(
         ),
         StaticAnalysisBlade::Biome => ("biome", biome_args(scan_targets)),
         StaticAnalysisBlade::Oxc => ("oxlint", oxc_args(scan_targets)),
-        StaticAnalysisBlade::Ruff => ("ruff", ruff_args()),
-        StaticAnalysisBlade::Bandit => ("bandit", bandit_args()),
+        StaticAnalysisBlade::Ruff => ("ruff", ruff_args(scan_targets)),
+        StaticAnalysisBlade::Bandit => ("bandit", bandit_args(scan_targets)),
         StaticAnalysisBlade::Govulncheck => (
             "govulncheck",
             command_args
@@ -5756,6 +5850,40 @@ Done in 1.23s"#;
     }
 
     #[test]
+    fn test_normalize_bandit_output_drops_assert_noise_even_if_tool_leaks_it() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("src/app.py", "def run():\n    return 1\n");
+        let payload = br#"{
+            "results": [
+                {
+                    "filename": "tests/test_app.py",
+                    "issue_severity": "LOW",
+                    "issue_text": "Use of assert detected.",
+                    "line_number": 7
+                },
+                {
+                    "filename": "src/app.py",
+                    "issue_severity": "HIGH",
+                    "issue_text": "Potential shell injection via subprocess",
+                    "line_number": 12
+                }
+            ]
+        }"#;
+
+        let issues = normalize_sast_output(
+            executor.repo_path(),
+            executor.repo_path(),
+            StaticAnalysisBlade::Bandit,
+            payload,
+        )
+        .unwrap();
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].file, "src/app.py");
+        assert!(issues[0].message.contains("Potential shell injection"));
+    }
+
+    #[test]
     fn test_extract_xml_payload_discards_terminal_noise_prefix() {
         let text = "Checking src/main.c ...\n<results><errors></errors></results>";
         let payload = extract_xml_payload(text.as_bytes()).unwrap();
@@ -5783,10 +5911,65 @@ Done in 1.23s"#;
         assert_eq!(biome_args.first().map(String::as_str), Some("lint"));
         assert!(!biome_args.iter().any(|arg| arg == "check"));
         assert!(biome_args.iter().any(|arg| arg == "--no-errors-on-unmatched"));
+        assert!(biome_args.iter().any(|arg| arg == "--only=lint/correctness"));
+        assert!(biome_args.iter().any(|arg| arg == "--only=lint/complexity"));
         assert!(oxlint_args.iter().any(|arg| arg == "--no-error-on-unmatched-pattern"));
         assert!(oxlint_args.windows(2).any(|pair| pair == ["--ignore-pattern", "**/*.min.js"]));
         assert!(biome_args.ends_with(&scan_targets));
         assert!(oxlint_args.ends_with(&scan_targets));
+    }
+
+    #[test]
+    fn test_python_linter_args_accept_explicit_scan_targets_and_skip_bandit_b101() {
+        let scan_targets = vec!["src/app.py".to_string(), "services/api.py".to_string()];
+        let (ruff_binary, ruff_args) = blade_command(StaticAnalysisBlade::Ruff, &scan_targets, None);
+        let (bandit_binary, bandit_args) =
+            blade_command(StaticAnalysisBlade::Bandit, &scan_targets, None);
+
+        assert_eq!(ruff_binary, "ruff");
+        assert_eq!(bandit_binary, "bandit");
+        assert_eq!(ruff_args[..3], ["check", "--output-format", "json"]);
+        assert!(ruff_args.windows(2).any(|pair| pair == ["--ignore", "D,F401,UP,W"]));
+        assert!(ruff_args.ends_with(&scan_targets));
+        assert!(bandit_args.windows(2).any(|pair| pair == ["-s", "B101"]));
+        assert!(bandit_args.ends_with(&scan_targets));
+        assert!(!bandit_args.iter().any(|arg| arg == "-r"));
+    }
+
+    #[test]
+    fn test_aesthetic_warning_filter_drops_minor_js_python_noise_but_preserves_signal() {
+        assert!(is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Ruff,
+            "Property docstring should not start with a verb"
+        ));
+        assert!(is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Ruff,
+            "f-string without any placeholders"
+        ));
+        assert!(is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Biome,
+            "Alternative text title element cannot be empty"
+        ));
+        assert!(is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Biome,
+            "ARIA attributes should be valid"
+        ));
+        assert!(is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Oxc,
+            "Catch parameter 'e' is caught but never used"
+        ));
+        assert!(is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Bandit,
+            "Use of assert detected."
+        ));
+        assert!(!is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Bandit,
+            "Potential shell injection via subprocess"
+        ));
+        assert!(!is_aesthetic_or_minor_warning(
+            StaticAnalysisBlade::Opengrep,
+            "panic! found in hot path"
+        ));
     }
 
     #[tokio::test]
@@ -5938,6 +6121,36 @@ Done in 1.23s"#;
             targets[0].command_args.as_ref(),
             Some(&sobelow_args_for_root("."))
         );
+    }
+
+    #[test]
+    fn test_derive_python_execution_targets_use_clean_files_instead_of_repo_root() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("pyproject.toml", "[project]\nname='demo'\nversion='0.1.0'\n");
+        executor.write_repo_file("src/app.py", "def run():\n    return 1\n");
+        executor.write_repo_file("tests/test_app.py", "def test_run():\n    assert True\n");
+        executor.write_repo_file("dist/generated.py", "def noise():\n    return 0\n");
+        executor.write_repo_file("build/generated.py", "def noise():\n    return 0\n");
+        executor.write_repo_file("node_modules/pkg/index.py", "def noise():\n    return 0\n");
+
+        let clean_files = vec![
+            canonicalize_or_self(executor.repo_path().join("src/app.py")),
+            canonicalize_or_self(executor.repo_path().join("tests/test_app.py")),
+            canonicalize_or_self(executor.repo_path().join("dist/generated.py")),
+            canonicalize_or_self(executor.repo_path().join("build/generated.py")),
+            canonicalize_or_self(executor.repo_path().join("node_modules/pkg/index.py")),
+        ];
+
+        let ruff_targets =
+            derive_python_execution_targets(executor.repo_path(), StaticAnalysisBlade::Ruff, &clean_files);
+        let bandit_targets =
+            derive_python_execution_targets(executor.repo_path(), StaticAnalysisBlade::Bandit, &clean_files);
+
+        assert_eq!(ruff_targets.len(), 1);
+        assert_eq!(bandit_targets.len(), 1);
+        assert_eq!(ruff_targets[0].scope, ".::files-01");
+        assert_eq!(ruff_targets[0].scan_targets, vec!["src/app.py".to_string()]);
+        assert_eq!(bandit_targets[0].scan_targets, vec!["src/app.py".to_string()]);
     }
 
     #[test]

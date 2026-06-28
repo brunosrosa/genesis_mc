@@ -32,7 +32,8 @@ pub fn parse_log_level_from_env() -> Level {
 
 pub fn init_cli_tracing(level: Level) {
     enable_virtual_terminal();
-    let ansi = io::stderr().is_terminal() || io::stdout().is_terminal();
+    let ansi =
+        (io::stderr().is_terminal() || io::stdout().is_terminal()) && std::env::var_os("NO_COLOR").is_none();
     let formatter = SodaEventFormatter::new(ansi, supports_truecolor());
     let _ = tracing_subscriber::fmt()
         .with_max_level(level)
@@ -117,6 +118,7 @@ where
             writer.write_str(base)?;
         }
         let label_color = match kind {
+            EventKind::Processing => COLOR_PROCESSING,
             EventKind::Error => COLOR_ERROR,
             EventKind::Success => COLOR_SUCCESS,
             _ => base,
@@ -126,6 +128,7 @@ where
         }
         writer.write_str(label)?;
         if self.ansi {
+            writer.write_str(SGR_RESET_ALL)?;
             writer.write_str(base)?;
         }
         write!(writer, " ")?;
@@ -149,8 +152,7 @@ where
             }
         }
         if self.ansi {
-            writer.write_str(SGR_UNDERLINE_OFF)?;
-            writer.write_str(SGR_RESET_FG)?;
+            writer.write_str(SGR_RESET_ALL)?;
         }
         writeln!(writer)
     }
@@ -212,13 +214,14 @@ enum EventKind {
 const PHASE_F0: &str = "\x1b[38;2;217;119;6m";
 const PHASE_F1_4: &str = "\x1b[38;2;138;43;226m";
 const PHASE_F5: &str = "\x1b[38;2;0;191;255m";
-const COLOR_ERROR: &str = "\x1b[38;2;255;127;80m";
-const COLOR_SUCCESS: &str = "\x1b[38;2;0;255;127m";
+const COLOR_PROCESSING: &str = "\x1b[36m";
+const COLOR_ERROR: &str = "\x1b[97;41m";
+const COLOR_SUCCESS: &str = "\x1b[32m";
 const COLOR_CYAN_NEON: &str = "\x1b[38;2;0;255;255m";
 const COLOR_WHITE: &str = "\x1b[97m";
+const SGR_RESET_ALL: &str = "\x1b[0m";
 const SGR_UNDERLINE_ON: &str = "\x1b[4m";
 const SGR_UNDERLINE_OFF: &str = "\x1b[24m";
-const SGR_RESET_FG: &str = "\x1b[39m";
 
 fn supports_truecolor() -> bool {
     std::env::var("COLORTERM")
@@ -361,6 +364,18 @@ fn looks_like_owner_repo(token: &str) -> bool {
 }
 
 fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, String)]) -> EventKind {
+    if message == Some("Sandbox: processo efemero concluido") {
+        if let Some(exit_code) = fields
+            .iter()
+            .find_map(|(key, value)| (key == "exit_code").then_some(value))
+        {
+            return if exit_code == "0" {
+                EventKind::Success
+            } else {
+                EventKind::Error
+            };
+        }
+    }
     let mut haystack = String::new();
     if let Some(msg) = message {
         haystack.push_str(msg);
@@ -411,5 +426,24 @@ mod tests {
     fn strip_ansi_removes_sgr_sequences() {
         let raw = "\x1b[38;2;138;43;226mPROC\x1b[24m\x1b[39m pronto";
         assert_eq!(strip_ansi_codes(raw), "PROC pronto");
+    }
+
+    #[test]
+    fn sandbox_completion_is_success_only_for_exit_code_zero() {
+        let ok = classify_event(
+            &Level::INFO,
+            Some("Sandbox: processo efemero concluido"),
+            &[("exit_code".to_string(), "0".to_string())],
+        );
+        let err = classify_event(
+            &Level::INFO,
+            Some("Sandbox: processo efemero concluido"),
+            &[
+                ("exit_code".to_string(), "7".to_string()),
+                ("stderr_bytes".to_string(), "999".to_string()),
+            ],
+        );
+        assert_eq!(ok, EventKind::Success);
+        assert_eq!(err, EventKind::Error);
     }
 }

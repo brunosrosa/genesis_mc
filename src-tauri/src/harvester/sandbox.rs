@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use sysinfo::{Pid, System};
 use thiserror::Error;
 use tokio::time::timeout;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use super::git::RepoPath;
 #[cfg(target_os = "windows")]
 use std::mem::size_of;
@@ -879,22 +879,35 @@ impl SandboxHandle {
                 let stdout_buffer = collect_output_task(stdout_task).await;
                 let stderr_buffer = collect_output_task(stderr_task).await;
                 self.lock_pids().remove(&pid);
-                info!(
-                    command = %requested_command,
-                    pid,
-                    exit_code = status.code().unwrap_or(-1),
-                    stdout_bytes = stdout_buffer.len(),
-                    stderr_bytes = stderr_buffer.len(),
-                    repo_path = %self.repo_path.display(),
-                    cwd = %execution_root.display(),
-                    "Sandbox: processo efemero concluido"
-                );
+                let exit_code = status.code().unwrap_or(-1);
+                if exit_code == 0 {
+                    info!(
+                        command = %requested_command,
+                        pid,
+                        exit_code,
+                        stdout_bytes = stdout_buffer.len(),
+                        stderr_bytes = stderr_buffer.len(),
+                        repo_path = %self.repo_path.display(),
+                        cwd = %execution_root.display(),
+                        "Sandbox: processo efemero concluido"
+                    );
+                } else {
+                    error!(
+                        command = %requested_command,
+                        pid,
+                        exit_code,
+                        stdout_bytes = stdout_buffer.len(),
+                        stderr_bytes = stderr_buffer.len(),
+                        repo_path = %self.repo_path.display(),
+                        cwd = %execution_root.display(),
+                        "Sandbox: processo efemero concluido"
+                    );
+                }
                 let merged_stdout = merge_tool_streams(&requested_command, stdout_buffer, &stderr_buffer);
                 if status.success() {
                     Ok(merged_stdout)
                 } else {
                     let mut stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
-                    let exit_code = status.code().unwrap_or(-1);
                     if requested_command == "semgrep" {
                         if let Some(diagnostics_path) = persist_semgrep_diagnostics(
                             execution_root,

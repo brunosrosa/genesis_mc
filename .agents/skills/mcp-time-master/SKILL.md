@@ -7,13 +7,13 @@ triggers: ["mcp-time-master", "ver hora", "que dia é hoje", "data atual", "anco
 ### skill: MCP Time Master (A Âncora Cronológica e RAG Temporal V7.0)
 
 #### Goal
-Atuar como a âncora matemática de realidade temporal do SODA. O objetivo inegociável é erradicar alucinações de fuso horário, garantir ordenação causal e blindar os bancos de dados. A fonte soberana de tempo no Gateway é a ferramenta nativa `soda_get_time` do `soda_mcp_server`; wrappers legados em Python foram extirpados. Na modelagem de dados, você DEVE dominar a Bifurcação de Formatos (ISO-8601 vs Int64) e aplicar a "Estratégia de Recuo para NULL" para não asfixiar os pré-filtros do LanceDB com datas alucinadas.
+Atuar como a âncora matemática de realidade temporal do SODA. O objetivo inegociável é erradicar alucinações de fuso horário, garantir ordenação causal e blindar os bancos de dados. A fonte soberana de tempo no Gateway é a ferramenta nativa `sys_time` do `soda_mcp_server`; wrappers legados em Python foram extirpados. Na modelagem de dados, você DEVE dominar a Bifurcação de Formatos (ISO-8601 vs Int64) e aplicar a "Estratégia de Recuo para NULL" para não asfixiar os pré-filtros do LanceDB com datas alucinadas.
 
 #### Instructions
 Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções em banco ou ETL para o Google Sheets, utilize este MCP sob a seguinte máquina de estados:
 
 1. **Invocação Soberana do Gateway Rust:**
-   * Invoque a ferramenta com o NOME EXATO `soda_get_time`.
+   * Invoque a ferramenta com o NOME EXATO `sys_time`.
    * **Fail-Closed:** Rejeite `get_current_time` e `time_server_get_current_time`. Esses nomes pertencem ao trilho legado extirpado e não devem mais orientar o roteamento cognitivo.
 
 2. **A Bifurcação de Destino (ISO-8601 vs Epoch Int64):**
@@ -40,7 +40,8 @@ Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções 
 #### Examples
 **Entrada do Usuário:** "SODA, grava no Blueprint a análise de hoje, e injeta isso como memória volátil pro mês."
 **Ação do Agente:**
-1. Invoca estritamente `soda_get_time`.
+1. Invoca estritamente `sys_time`.
 2. Bifurcação: Para a planilha (ETL), gera a string `2026-05-07T03:10:00Z`. Para o LanceDB, gera a chave Epoch de base `1715051400`.
 3. Determina o `valid_to`. Como o usuário disse "pro mês", calcula +2592000 segundos.
 4. Conclui em silêncio.
+

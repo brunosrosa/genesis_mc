@@ -20,6 +20,9 @@
 - .soda_scratchpad/reports/ -> OBRIGATÓRIO: Destino exclusivo de outputs textuais da IA
     (Ex: os relatórios de execução _PHASE_REPORT_...txt).
 [ZONA 3: O CÂNONE E MEMÓRIA DE PRODUTO] (Repositório Rígido de Documentação)
+- .archive/ -> Arquivo Frio / Histórico Forense do workspace. Destino legítimo para
+    relatórios congelados, scripts órfãos desativados, dumps de contexto e artefatos
+    históricos fora do caminho crítico do Produto.
 - docs/.audits/ -> Relatórios de segurança, vulnerabilidades e semgrep.
 - docs/adrs/ -> Architecture Decision Records (O Por Quê).
 - docs/architecture/ -> Manuais macro e visões de engenharia (Inference, Memory).
