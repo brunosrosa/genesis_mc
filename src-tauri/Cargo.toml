@@ -37,6 +37,7 @@ sha2 = "0.10"
 toml = "0.8"
 tiktoken-rs = "0.5"
 reqwest = { version = "0.12", features = ["json", "blocking"] }
+scraper = "0.24"
 octocrab = "0.53.1"
 gix = { version = "0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
 axum = "0.7"

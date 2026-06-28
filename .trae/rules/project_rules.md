@@ -122,7 +122,7 @@ O SODA repudia a hipercomplexidade do *Temporal Graph RAG* (TG-RAG) para não as
 ###### 3. O HIPOCAMPO EPISTÊMICO (LOGIT PROBING)
 O SODA NÃO GERA TEXTO para avaliar risco, moralidade ou ambiguidade da fala do usuário (isso esgotaria a VRAM local).
 *   **O Bisturi Analítico:** Usamos um SLM quantizado ultraleve (ex: Gemma-4-E2B ou Phi-4-mini). As LoRAs destes modelos DEVEM obrigatoriamente ser treinadas com **Classification Head Trimming** (extirpando o vocabulário gerador de texto no Unsloth para poupar 1GB de RAM).
-*   **Logit Probing:** O SODA executa ESTRITAMENTE a passagem direta (*forward pass*). Lemos as probabilidades matemáticas brutas (*logits*) da camada oculta via `llama-cpp-4` ou `mistral.rs` para extrair scores exatos de "ambiguidade" ou "risco relacional" em <150ms.
+*   **Logit Probing:** O SODA executa ESTRITAMENTE a passagem direta (*forward pass*). O motor central de inferência em produção permanece o **Candle** em Rust puro; `llama-cpp-4` ou `mistral.rs` sobrevivem apenas como bisturis isolados em background para extrair logits do Hipocampo Epistêmico em <150ms.
 *   **Isolamento de Thread:** Para não paralisar o motor Tokio, a inferência do Hipocampo RODA OBRIGATORIAMENTE em *Dedicated Worker Threads* isoladas (com canais MPSC), preservando o alinhamento vetorial AVX2 e o cache L1/L2 da CPU.
 
 ###### 4. MATURIDADE SIMBIÓTICA E PERSISTÊNCIA ASSÍNCRONA
@@ -150,8 +150,8 @@ Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do có
     *   **iGPU (Intel UHD 630):** BANIDA DE QUALQUER OPERAÇÃO DE IA. É expressamente proibido alocar LLMs, SLMs ou tensores na iGPU devido ao estrangulamento letal da banda de memória RAM. Seu uso é ESTRITAMENTE PASSIVO, restrito unicamente à renderização da interface gráfica Svelte no modo `LowPower` da API WGPU.
 
 ###### 3. MOTORES DE IA E INFERÊNCIA (O FIM DO MONOLITO)
-*   **Motores Generativos Nativos:** A IA roda nativamente no ecossistema Rust usando **Candle**, **Burn (CubeCL)** e **mistral.rs**.
-*   **A Prisão do llama.cpp:** O `llama.cpp` monolítico e daemons externos (Ollama/LM Studio) estão SUMARIAMENTE BANIDOS do núcleo generativo. A crate `llama-cpp-4` sobrevive isolada operando na CPU EXCLUSIVAMENTE como um "bisturi" para *Logit Probing* (Avaliador Epistêmico), extraindo a probabilidade matemática do risco em <150ms sem gerar texto.
+*   **Motores Generativos Nativos:** A IA roda nativamente no ecossistema Rust usando **Candle** como motor central de inferência em produção. `Burn (CubeCL)` e `mistral.rs` são auxiliares estratégicos; nenhum deles revoga a soberania do Candle no caminho crítico.
+*   **A Prisão do llama.cpp:** O `llama.cpp` monolítico e daemons externos (Ollama/LM Studio) estão SUMARIAMENTE BANIDOS do núcleo generativo. A crate `llama-cpp-4` sobrevive isolada operando na CPU EXCLUSIVAMENTE como um "bisturi" de background para *Logit Probing* (Avaliador Epistêmico), sem assumir o papel de motor central de inferência ou geração.
 *   **Decodificação Restrita (Constrained Decoding):** Tarefas de extração estruturada (JSON/ETL) não operam por prompt livre. É OBRIGATÓRIO o uso da crate `llguidance` em Rust para forçar a saída contra um Autômato de Gramática Livre de Contexto em meros 50µs, garantindo 100% de precisão mecânica.
 *   **Atenção Esparsa e Retenção de Outliers:** A compressão de contexto longo no Rust (framework `candle`) DEVE usar **Max Pooling** (blocos de ~64 tokens). O *Mean Pooling* está PROIBIDO, pois atua como filtro passa-baixa e causa amnésia de outliers vitais (caminhos absolutos de arquivos, URIs e sintaxes exatas).
 

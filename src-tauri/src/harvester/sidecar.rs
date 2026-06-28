@@ -3304,6 +3304,21 @@ fn normalize_cppcheck_output(
     let xml_payload = extract_cppcheck_xml_payload(&text).ok_or_else(|| SidecarError::ParseError {
         reason: "Falha ao localizar payload XML do cppcheck".to_string(),
     })?;
+    let compact_xml = xml_payload.chars().filter(|ch| !ch.is_whitespace()).collect::<String>();
+    if compact_xml.contains("<results></results>") || compact_xml.contains("<results/>") {
+        let mut issues = Vec::new();
+        push_issue(
+            &mut issues,
+            repo_path,
+            execution_root,
+            StaticAnalysisBlade::Cppcheck,
+            "info",
+            "",
+            "[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck.",
+        );
+        sort_and_dedup_issues(&mut issues);
+        return Ok(issues);
+    }
     let parsed: CppcheckResults = xml_from_str(xml_payload).map_err(|err| SidecarError::ParseError {
         reason: format!("Falha ao parsear XML do cppcheck: {err}"),
     })?;
@@ -3330,6 +3345,17 @@ fn normalize_cppcheck_output(
             error.severity.as_deref().unwrap_or("warning"),
             file,
             &format!("{rule}: {msg}{line}"),
+        );
+    }
+    if issues.is_empty() {
+        push_issue(
+            &mut issues,
+            repo_path,
+            execution_root,
+            StaticAnalysisBlade::Cppcheck,
+            "info",
+            "",
+            "[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck.",
         );
     }
     sort_and_dedup_issues(&mut issues);
@@ -5678,6 +5704,39 @@ func TestSmokePath(t *testing.T) {
     }
 
     #[test]
+    fn test_normalize_cppcheck_output_accepts_empty_results_as_clean_info() {
+        let repo_path = Path::new("C:/repos/example");
+        let payload = r#"<?xml version="1.0"?><results></results>"#;
+
+        let issues = normalize_cppcheck_output(repo_path, repo_path, payload.as_bytes()).unwrap();
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].level, "info");
+        assert_eq!(issues[0].file, "");
+        assert_eq!(
+            issues[0].message,
+            "[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck."
+        );
+        assert_eq!(issues[0].source_blade, "cppcheck");
+    }
+
+    #[test]
+    fn test_normalize_cppcheck_output_accepts_self_closing_results_as_clean_info() {
+        let repo_path = Path::new("C:/repos/example");
+        let payload = r#"<?xml version="1.0"?><results/>"#;
+
+        let issues = normalize_cppcheck_output(repo_path, repo_path, payload.as_bytes()).unwrap();
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].level, "info");
+        assert_eq!(
+            issues[0].message,
+            "[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck."
+        );
+        assert_eq!(issues[0].source_blade, "cppcheck");
+    }
+
+    #[test]
     fn test_extract_json_payload_discards_terminal_noise_prefix() {
         let bytes = br#"warning: compiling helper
 progress 10%
@@ -6095,6 +6154,23 @@ Done in 1.23s"#;
         assert!(rendered.contains("src/lib.rs"));
         assert!(rendered.contains("candle-kernels/sgemm.cu"));
         assert!(rendered.contains("candle-metal-kernels/reduce.metal"));
+    }
+
+    #[test]
+    fn test_render_soda_health_report_keeps_cppcheck_clean_info_under_cpp_domain() {
+        let issues = vec![SodaHealthIssue {
+            level: "info".to_string(),
+            file: String::new(),
+            message: "[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck.".to_string(),
+            source_blade: "cppcheck".to_string(),
+            channel: SastIssueChannel::Health,
+        }];
+
+        let rendered = String::from_utf8(render_soda_health_report(&issues)).unwrap();
+
+        assert!(rendered.contains("[DOMAIN: C++ / CUDA]"));
+        assert!(rendered.contains("[cppcheck]"));
+        assert!(rendered.contains("[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck."));
     }
 
     #[tokio::test]

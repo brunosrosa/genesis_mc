@@ -8,6 +8,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use chrono::{Local, Utc};
 use genesis_mc_lib::harvester::ast_parser;
 use genesis_mc_lib::harvester::community::RateLimiter;
 use genesis_mc_lib::harvester::github_tracker;
@@ -15,10 +16,13 @@ use genesis_mc_lib::harvester::repo_radar;
 use genesis_mc_lib::harvester::web_scraper;
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
+use scraper::{Html, Selector};
+use serde::Serialize;
 use serde_json::{Value, json};
 use sqlparser::ast::Statement as SqlStatement;
 use sqlparser::dialect::SQLiteDialect;
 use sqlparser::parser::Parser;
+use url::Url;
 
 const MCP_SESSION_ID_HEADER: &str = "Mcp-Session-Id";
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -166,6 +170,36 @@ async fn handle_mcp(
                             }
                         },
                         {
+                            "name": "soda_get_time",
+                            "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "soda_duckduckgo_search",
+                            "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {
+                                        "type": "string",
+                                        "description": "Consulta textual a ser enviada ao DuckDuckGo HTML."
+                                    },
+                                    "max_results": {
+                                        "type": "integer",
+                                        "description": "Numero maximo de resultados retornados (1-10, padrao 5).",
+                                        "minimum": 1,
+                                        "maximum": 10
+                                    }
+                                },
+                                "required": ["query"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
                             "name": "soda_github_meta",
                             "description": "Extrai metadados GitHub nativos via octocrab para owner/repo.",
                             "inputSchema": {
@@ -257,6 +291,8 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
     match tool_name {
         "soda_get_ast" => run_soda_get_ast(params).await,
         "soda_fetch_web" => run_soda_fetch_web(params).await,
+        "soda_get_time" => run_soda_get_time(params).await,
+        "soda_duckduckgo_search" => run_soda_duckduckgo_search(params).await,
         "soda_github_meta" => run_soda_github_meta(params).await,
         "soda_sqlite_query" => run_soda_sqlite_query(params).await,
         other => Err(RpcError {
@@ -393,6 +429,302 @@ async fn run_soda_fetch_web(params: &serde_json::Map<String, Value>) -> Result<V
         },
         "isError": false
     }))
+}
+
+#[derive(Debug, Serialize)]
+struct SodaTimePayload {
+    local_rfc3339: String,
+    utc_rfc3339: String,
+    timezone_name: String,
+    timezone_offset_seconds: i32,
+    timezone_offset_human: String,
+    unix_epoch_seconds: i64,
+}
+
+async fn run_soda_get_time(_params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let local_now = Local::now();
+    let utc_now = Utc::now();
+    let timezone_offset_seconds = local_now.offset().local_minus_utc();
+    let timezone_name = local_now.format("%Z").to_string();
+    let timezone_offset_human = format_timezone_offset(timezone_offset_seconds);
+    let payload = SodaTimePayload {
+        local_rfc3339: local_now.to_rfc3339(),
+        utc_rfc3339: utc_now.to_rfc3339(),
+        timezone_name: if timezone_name.is_empty() {
+            "Local".to_string()
+        } else {
+            timezone_name
+        },
+        timezone_offset_seconds,
+        timezone_offset_human,
+        unix_epoch_seconds: utc_now.timestamp(),
+    };
+    let markdown = format_time_markdown(&payload);
+
+    Ok(json!({
+        "content": [
+            {
+                "type": "text",
+                "text": markdown
+            }
+        ],
+        "structuredContent": payload,
+        "isError": false
+    }))
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct DuckDuckGoSearchResult {
+    title: String,
+    url: String,
+    snippet: String,
+}
+
+async fn run_soda_duckduckgo_search(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+
+    let query = arguments
+        .get("query")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento query e obrigatorio".to_string(),
+            data: Some(json!({ "required": "query" })),
+        })?;
+
+    let max_results = arguments
+        .get("max_results")
+        .and_then(Value::as_u64)
+        .map(|value| value.clamp(1, 10) as usize)
+        .unwrap_or(5);
+
+    let results = fetch_duckduckgo_search_results(query, max_results).await?;
+    let markdown = format_duckduckgo_results_markdown(query, &results);
+
+    Ok(json!({
+        "content": [
+            {
+                "type": "text",
+                "text": markdown
+            }
+        ],
+        "structuredContent": {
+            "query": query,
+            "count": results.len(),
+            "results": results
+        },
+        "isError": false
+    }))
+}
+
+async fn fetch_duckduckgo_search_results(
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<DuckDuckGoSearchResult>, RpcError> {
+    let client = reqwest::Client::builder()
+        .user_agent("SODA Native MCP Search/0.1")
+        .build()
+        .map_err(|e| RpcError {
+            code: -32021,
+            message: "Falha ao construir cliente HTTP nativo".to_string(),
+            data: Some(json!({ "reason": e.to_string() })),
+        })?;
+
+    let mut search_url = Url::parse("https://html.duckduckgo.com/html/").map_err(|e| RpcError {
+        code: -32022,
+        message: "Falha ao montar endpoint do DuckDuckGo HTML".to_string(),
+        data: Some(json!({ "reason": e.to_string() })),
+    })?;
+    search_url.query_pairs_mut().append_pair("q", query);
+
+    let html = client
+        .get(search_url.clone())
+        .send()
+        .await
+        .map_err(|e| RpcError {
+            code: -32023,
+            message: "Falha de rede ao consultar DuckDuckGo HTML".to_string(),
+            data: Some(json!({
+                "query": query,
+                "url": search_url.as_str(),
+                "reason": e.to_string()
+            })),
+        })?
+        .error_for_status()
+        .map_err(|e| RpcError {
+            code: -32024,
+            message: "DuckDuckGo HTML retornou status de erro".to_string(),
+            data: Some(json!({
+                "query": query,
+                "url": search_url.as_str(),
+                "reason": e.to_string()
+            })),
+        })?
+        .text()
+        .await
+        .map_err(|e| RpcError {
+            code: -32025,
+            message: "Falha ao ler corpo HTML do DuckDuckGo".to_string(),
+            data: Some(json!({
+                "query": query,
+                "url": search_url.as_str(),
+                "reason": e.to_string()
+            })),
+        })?;
+
+    parse_duckduckgo_results(&html, max_results)
+}
+
+fn parse_duckduckgo_results(
+    html: &str,
+    max_results: usize,
+) -> Result<Vec<DuckDuckGoSearchResult>, RpcError> {
+    let document = Html::parse_document(html);
+    let result_selector = parse_selector("div.result")?;
+    let title_selector = parse_selector("a.result__a")?;
+    let snippet_selector = parse_selector(".result__snippet")?;
+
+    let mut results = Vec::new();
+    for result in document.select(&result_selector) {
+        if results.len() >= max_results {
+            break;
+        }
+
+        let Some(title_node) = result.select(&title_selector).next() else {
+            continue;
+        };
+
+        let title = collapse_html_text(title_node.text());
+        if title.is_empty() {
+            continue;
+        }
+
+        let raw_href = title_node.value().attr("href").unwrap_or_default();
+        let normalized_url = normalize_duckduckgo_result_url(raw_href);
+        if normalized_url.is_empty() {
+            continue;
+        }
+
+        let snippet = result
+            .select(&snippet_selector)
+            .next()
+            .map(|node| collapse_html_text(node.text()))
+            .unwrap_or_default();
+
+        results.push(DuckDuckGoSearchResult {
+            title,
+            url: normalized_url,
+            snippet,
+        });
+    }
+
+    Ok(results)
+}
+
+fn parse_selector(selector: &str) -> Result<Selector, RpcError> {
+    Selector::parse(selector).map_err(|e| RpcError {
+        code: -32026,
+        message: "Falha ao compilar seletor HTML nativo".to_string(),
+        data: Some(json!({
+            "selector": selector,
+            "reason": e.to_string()
+        })),
+    })
+}
+
+fn normalize_duckduckgo_result_url(raw_href: &str) -> String {
+    let trimmed = raw_href.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let candidate = if trimmed.starts_with("//") {
+        format!("https:{trimmed}")
+    } else if trimmed.starts_with('/') {
+        format!("https://html.duckduckgo.com{trimmed}")
+    } else {
+        trimmed.to_string()
+    };
+
+    let Ok(parsed) = Url::parse(&candidate) else {
+        return candidate;
+    };
+
+    let host = parsed.host_str().unwrap_or_default();
+    if matches!(host, "duckduckgo.com" | "www.duckduckgo.com" | "html.duckduckgo.com") {
+        for (key, value) in parsed.query_pairs() {
+            if key == "uddg" && !value.is_empty() {
+                return value.into_owned();
+            }
+        }
+    }
+
+    candidate
+}
+
+fn collapse_html_text<'a>(segments: impl Iterator<Item = &'a str>) -> String {
+    segments
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn format_time_markdown(payload: &SodaTimePayload) -> String {
+    let mut out = String::new();
+    out.push_str("# Time Snapshot\n\n");
+    out.push_str(&format!("- Local: `{}`\n", payload.local_rfc3339));
+    out.push_str(&format!("- UTC: `{}`\n", payload.utc_rfc3339));
+    out.push_str(&format!(
+        "- Timezone: `{}` ({})\n",
+        payload.timezone_name, payload.timezone_offset_human
+    ));
+    out.push_str(&format!(
+        "- Unix Epoch Seconds: `{}`\n",
+        payload.unix_epoch_seconds
+    ));
+    out
+}
+
+fn format_timezone_offset(offset_seconds: i32) -> String {
+    let sign = if offset_seconds >= 0 { '+' } else { '-' };
+    let total_minutes = offset_seconds.abs() / 60;
+    let hours = total_minutes / 60;
+    let minutes = total_minutes % 60;
+    format!("{sign}{hours:02}:{minutes:02}")
+}
+
+fn format_duckduckgo_results_markdown(query: &str, results: &[DuckDuckGoSearchResult]) -> String {
+    let mut out = String::new();
+    out.push_str("# DuckDuckGo Search\n\n");
+    out.push_str(&format!("- Query: `{}`\n", query));
+    out.push_str(&format!("- Results: `{}`\n\n", results.len()));
+
+    if results.is_empty() {
+        out.push_str("_Nenhum resultado encontrado._\n");
+        return out;
+    }
+
+    for (index, result) in results.iter().enumerate() {
+        out.push_str(&format!("{}. {}\n", index + 1, result.title));
+        out.push_str(&format!("   - URL: `{}`\n", result.url));
+        if !result.snippet.is_empty() {
+            out.push_str(&format!("   - Snippet: {}\n", result.snippet));
+        }
+    }
+
+    out
 }
 
 async fn run_soda_github_meta(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
@@ -959,7 +1291,9 @@ fn jsonrpc_error(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_sqlite_query;
+    use super::{
+        normalize_duckduckgo_result_url, parse_duckduckgo_results, validate_sqlite_query,
+    };
 
     #[test]
     fn sqlite_query_rejects_multi_statement_payload() {
@@ -978,5 +1312,39 @@ mod tests {
         let err =
             validate_sqlite_query("PRAGMA cache_size = 10;").expect_err("pragma mutavel deve falhar");
         assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn duckduckgo_redirect_url_is_unwrapped_to_destination() {
+        let url = normalize_duckduckgo_result_url(
+            "/l/?uddg=https%3A%2F%2Fexample.com%2Fdocs%3Fa%3D1%26b%3D2",
+        );
+        assert_eq!(url, "https://example.com/docs?a=1&b=2");
+    }
+
+    #[test]
+    fn duckduckgo_html_parser_extracts_title_url_and_snippet() {
+        let html = r#"
+        <html>
+          <body>
+            <div class="result">
+              <a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample.com%2Falpha">Alpha Result</a>
+              <a class="result__snippet">Alpha snippet</a>
+            </div>
+            <div class="result">
+              <a class="result__a" href="https://example.com/beta">Beta Result</a>
+              <span class="result__snippet">Beta snippet</span>
+            </div>
+          </body>
+        </html>
+        "#;
+
+        let results = parse_duckduckgo_results(html, 5).expect("parser deve aceitar fixture");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].title, "Alpha Result");
+        assert_eq!(results[0].url, "https://example.com/alpha");
+        assert_eq!(results[0].snippet, "Alpha snippet");
+        assert_eq!(results[1].title, "Beta Result");
+        assert_eq!(results[1].url, "https://example.com/beta");
     }
 }
