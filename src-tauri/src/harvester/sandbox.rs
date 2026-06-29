@@ -400,6 +400,23 @@ fn merge_tool_streams(command: &str, stdout: Vec<u8>, stderr: &[u8]) -> Vec<u8> 
     merged
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProcessObservabilityClass {
+    Ok,
+    InformationalNonZero,
+    LethalNonZero,
+}
+
+fn classify_process_observability(exit_code: i32, stdout: &[u8]) -> ProcessObservabilityClass {
+    if exit_code == 0 {
+        ProcessObservabilityClass::Ok
+    } else if !stdout.is_empty() {
+        ProcessObservabilityClass::InformationalNonZero
+    } else {
+        ProcessObservabilityClass::LethalNonZero
+    }
+}
+
 fn persist_semgrep_diagnostics(
     repo_path: &Path,
     resolved: &ResolvedCommand,
@@ -456,6 +473,20 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
             let program = resolve_from_path("cargo").unwrap_or_else(|| PathBuf::from(command));
             let mut env = BTreeMap::new();
             env.insert("CARGO_INCREMENTAL".to_string(), "0".to_string());
+            env.insert(
+                "CARGO_HOME".to_string(),
+                sandbox_tool_state_root(repo_path, "cargo-home")
+                    .display()
+                    .to_string(),
+            );
+            env.insert(
+                "CARGO_REGISTRIES_CRATES_IO_PROTOCOL".to_string(),
+                "sparse".to_string(),
+            );
+            env.insert(
+                "CARGO_NET_GIT_FETCH_WITH_CLI".to_string(),
+                "false".to_string(),
+            );
             let cargo_target_dir = if is_cargo_clippy_invocation(args) {
                 sandbox_tool_state_root(repo_path, "cargo-clippy-target")
             } else {
@@ -880,30 +911,49 @@ impl SandboxHandle {
                 let stderr_buffer = collect_output_task(stderr_task).await;
                 self.lock_pids().remove(&pid);
                 let exit_code = status.code().unwrap_or(-1);
-                if exit_code == 0 {
-                    info!(
-                        command = %requested_command,
-                        pid,
-                        exit_code,
-                        stdout_bytes = stdout_buffer.len(),
-                        stderr_bytes = stderr_buffer.len(),
-                        repo_path = %self.repo_path.display(),
-                        cwd = %execution_root.display(),
-                        "Sandbox: processo efemero concluido"
-                    );
-                } else {
-                    error!(
-                        command = %requested_command,
-                        pid,
-                        exit_code,
-                        stdout_bytes = stdout_buffer.len(),
-                        stderr_bytes = stderr_buffer.len(),
-                        repo_path = %self.repo_path.display(),
-                        cwd = %execution_root.display(),
-                        "Sandbox: processo efemero concluido"
-                    );
-                }
                 let merged_stdout = merge_tool_streams(&requested_command, stdout_buffer, &stderr_buffer);
+                let observability = classify_process_observability(exit_code, &merged_stdout);
+                match observability {
+                    ProcessObservabilityClass::Ok => {
+                        info!(
+                            command = %requested_command,
+                            pid,
+                            exit_code,
+                            stdout_bytes = merged_stdout.len(),
+                            stderr_bytes = stderr_buffer.len(),
+                            repo_path = %self.repo_path.display(),
+                            cwd = %execution_root.display(),
+                            semantic_outcome = "ok",
+                            "Sandbox: processo efemero concluido"
+                        );
+                    }
+                    ProcessObservabilityClass::InformationalNonZero => {
+                        warn!(
+                            command = %requested_command,
+                            pid,
+                            exit_code,
+                            stdout_bytes = merged_stdout.len(),
+                            stderr_bytes = stderr_buffer.len(),
+                            repo_path = %self.repo_path.display(),
+                            cwd = %execution_root.display(),
+                            semantic_outcome = "informational_non_zero",
+                            "Sandbox: processo efemero concluido"
+                        );
+                    }
+                    ProcessObservabilityClass::LethalNonZero => {
+                        error!(
+                            command = %requested_command,
+                            pid,
+                            exit_code,
+                            stdout_bytes = merged_stdout.len(),
+                            stderr_bytes = stderr_buffer.len(),
+                            repo_path = %self.repo_path.display(),
+                            cwd = %execution_root.display(),
+                            semantic_outcome = "lethal_non_zero",
+                            "Sandbox: processo efemero concluido"
+                        );
+                    }
+                }
                 if status.success() {
                     Ok(merged_stdout)
                 } else {
@@ -1190,6 +1240,57 @@ mod tests {
         let cargo_clippy = timeout_profile("cargo", &["clippy", "--message-format=json"], 30);
         assert_eq!(cargo_clippy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
         assert_eq!(cargo_clippy.absolute_timeout_secs, None);
+    }
+
+    #[test]
+    fn test_classify_process_observability_distinguishes_ok_info_and_lethal() {
+        assert_eq!(
+            classify_process_observability(0, b"{}"),
+            ProcessObservabilityClass::Ok
+        );
+        assert_eq!(
+            classify_process_observability(1, b"{\"results\":[]}"),
+            ProcessObservabilityClass::InformationalNonZero
+        );
+        assert_eq!(
+            classify_process_observability(101, b""),
+            ProcessObservabilityClass::LethalNonZero
+        );
+    }
+
+    #[test]
+    fn test_classify_process_observability_treats_any_stdout_bytes_as_informational_non_zero() {
+        assert_eq!(
+            classify_process_observability(1, b"\n"),
+            ProcessObservabilityClass::InformationalNonZero
+        );
+    }
+
+    #[test]
+    fn test_resolve_command_injects_isolated_cargo_home_and_sparse_network_guards() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_dir = temp_dir.path().join("owner").join("repo");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+
+        let resolved =
+            resolve_command("cargo", &["clippy", "--message-format=json"], &repo_dir).unwrap();
+
+        assert_eq!(
+            resolved.env.get("CARGO_HOME"),
+            Some(&sandbox_tool_state_root(&repo_dir, "cargo-home").display().to_string())
+        );
+        assert_eq!(
+            resolved.env.get("CARGO_TARGET_DIR"),
+            Some(&sandbox_tool_state_root(&repo_dir, "cargo-clippy-target").display().to_string())
+        );
+        assert_eq!(
+            resolved.env.get("CARGO_REGISTRIES_CRATES_IO_PROTOCOL"),
+            Some(&"sparse".to_string())
+        );
+        assert_eq!(
+            resolved.env.get("CARGO_NET_GIT_FETCH_WITH_CLI"),
+            Some(&"false".to_string())
+        );
     }
 
     #[tokio::test]

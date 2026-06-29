@@ -134,6 +134,23 @@ fn stdout_preview(bytes: &[u8], max_chars: usize) -> String {
     truncate_chars(&text.replace(['\r', '\n'], " "), max_chars)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SidecarObservabilityClass {
+    Ok,
+    InformationalNonZero,
+    LethalNonZero,
+}
+
+fn classify_sidecar_observability(exit_code: i32, stdout: &[u8]) -> SidecarObservabilityClass {
+    if exit_code == 0 {
+        SidecarObservabilityClass::Ok
+    } else if !stdout.is_empty() || !stdout_preview(stdout, 400).is_empty() {
+        SidecarObservabilityClass::InformationalNonZero
+    } else {
+        SidecarObservabilityClass::LethalNonZero
+    }
+}
+
 fn extract_urls_from_text(text: &str, max_urls: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut idx = 0usize;
@@ -1270,13 +1287,38 @@ async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                 }
             } else {
                 let stdout_hint = stdout_preview(&sanitized_stdout, 400);
-                error!(
-                    binary = %binary,
-                    exit_code,
-                    stderr = %sanitized_stderr,
-                    stdout = %stdout_hint,
-                    "Sidecar terminou com exit code nao zero"
-                );
+                match classify_sidecar_observability(exit_code, &sanitized_stdout) {
+                    SidecarObservabilityClass::Ok => {
+                        info!(
+                            binary = %binary,
+                            exit_code,
+                            stderr = %sanitized_stderr,
+                            stdout = %stdout_hint,
+                            semantic_outcome = "ok",
+                            "Sidecar terminou"
+                        );
+                    }
+                    SidecarObservabilityClass::InformationalNonZero => {
+                        warn!(
+                            binary = %binary,
+                            exit_code,
+                            stderr = %sanitized_stderr,
+                            stdout = %stdout_hint,
+                            semantic_outcome = "informational_non_zero",
+                            "Sidecar terminou com exit code nao zero"
+                        );
+                    }
+                    SidecarObservabilityClass::LethalNonZero => {
+                        error!(
+                            binary = %binary,
+                            exit_code,
+                            stderr = %sanitized_stderr,
+                            stdout = %stdout_hint,
+                            semantic_outcome = "lethal_non_zero",
+                            "Sidecar terminou com exit code nao zero"
+                        );
+                    }
+                }
                 let reason = if sanitized_stderr.trim().is_empty() && !stdout_hint.trim().is_empty() {
                     format!("exit code {exit_code}: stdout={stdout_hint}")
                 } else {
@@ -2009,10 +2051,17 @@ struct SastExecutionTarget {
 
 #[derive(Debug)]
 struct SastExecutionOutcome {
-    blade: StaticAnalysisBlade,
+    requested_blade: StaticAnalysisBlade,
+    effective_blade: StaticAnalysisBlade,
     execution_root: PathBuf,
     scope: String,
     result: Result<Vec<u8>, SidecarError>,
+}
+
+#[derive(Debug)]
+struct SastBladeResult {
+    effective_blade: StaticAnalysisBlade,
+    bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2158,7 +2207,7 @@ fn clippy_args_for_package(package_name: &str) -> Vec<String> {
     vec![
         "clippy".to_string(),
         "--message-format=json".to_string(),
-        "--offline".to_string(),
+        "--frozen".to_string(),
         "-p".to_string(),
         package_name.to_string(),
         "--".to_string(),
@@ -2170,10 +2219,39 @@ fn default_clippy_args() -> Vec<String> {
     vec![
         "clippy".to_string(),
         "--message-format=json".to_string(),
-        "--offline".to_string(),
+        "--frozen".to_string(),
         "--".to_string(),
         "--no-deps".to_string(),
     ]
+}
+
+fn cargo_fetch_args(manifest_path: &Path) -> Vec<String> {
+    vec![
+        "fetch".to_string(),
+        "--locked".to_string(),
+        "--manifest-path".to_string(),
+        manifest_path.display().to_string(),
+    ]
+}
+
+fn cargo_metadata_args(manifest_path: &Path) -> Vec<String> {
+    vec![
+        "metadata".to_string(),
+        "--format-version".to_string(),
+        "1".to_string(),
+        "--locked".to_string(),
+        "--offline".to_string(),
+        "--manifest-path".to_string(),
+        manifest_path.display().to_string(),
+    ]
+}
+
+fn rust_clippy_manifest_path(execution_root: &Path) -> PathBuf {
+    execution_root.join("Cargo.toml")
+}
+
+fn rust_clippy_preflight_timeout_secs(timeout_secs: u64) -> u64 {
+    timeout_secs.clamp(60, 180)
 }
 
 fn manifest_effectively_has_build_script(
@@ -2243,6 +2321,187 @@ fn build_rust_clippy_plan(manifest: &DiscoveredManifest) -> Result<RustClippyPla
     Ok(RustClippyPlan {
         command_args: clippy_args_for_package(package_name),
     })
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadataPackage {
+    manifest_path: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadataPayload {
+    packages: Vec<CargoMetadataPackage>,
+}
+
+fn rust_manifest_declares_build_dependencies(value: &toml::Value) -> bool {
+    match value {
+        toml::Value::Table(entries) => entries.iter().any(|(key, inner)| {
+            key.eq_ignore_ascii_case("build-dependencies")
+                || rust_manifest_declares_build_dependencies(inner)
+        }),
+        toml::Value::Array(items) => items.iter().any(rust_manifest_declares_build_dependencies),
+        _ => false,
+    }
+}
+
+fn rust_manifest_declares_proc_macro(value: &toml::Value) -> bool {
+    match value {
+        toml::Value::Table(entries) => entries.iter().any(|(key, inner)| {
+            (key.eq_ignore_ascii_case("proc-macro")
+                && inner.as_bool().unwrap_or(false))
+                || rust_manifest_declares_proc_macro(inner)
+        }),
+        toml::Value::Array(items) => items.iter().any(rust_manifest_declares_proc_macro),
+        _ => false,
+    }
+}
+
+fn fail_closed_rust_manifest(reason: String) -> SidecarError {
+    SidecarError::ExecutionFailed {
+        reason: format!("cargo-clippy fail-closed: {reason}"),
+    }
+}
+
+fn rust_clippy_should_fallback_to_opengrep(err: &SidecarError) -> Option<String> {
+    match err {
+        SidecarError::ExecutionFailed { reason }
+            if reason.starts_with("cargo-clippy fail-closed:") =>
+        {
+            Some(
+                reason
+                    .trim_start_matches("cargo-clippy fail-closed:")
+                    .trim()
+                    .to_string(),
+            )
+        }
+        _ => None,
+    }
+}
+
+fn audit_transitive_rust_manifests(
+    repo_path: &Path,
+    metadata_bytes: &[u8],
+) -> Result<(), SidecarError> {
+    let payload = parse_json_payload::<CargoMetadataPayload>(metadata_bytes)?;
+    let mut manifests = payload
+        .packages
+        .into_iter()
+        .map(|package| package.manifest_path)
+        .collect::<Vec<_>>();
+    manifests.sort();
+    manifests.dedup();
+
+    if manifests.is_empty() {
+        return Err(fail_closed_rust_manifest(
+            "cargo metadata nao retornou manifestos para auditoria transitiva".to_string(),
+        ));
+    }
+
+    for manifest_path in manifests {
+        let manifest_path = if manifest_path.is_absolute() {
+            manifest_path
+        } else {
+            repo_path.join(manifest_path)
+        };
+        let manifest_text = std::fs::read_to_string(&manifest_path).map_err(|error| {
+            fail_closed_rust_manifest(format!(
+                "nao foi possivel ler manifesto transitivo '{}': {error}",
+                sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
+            ))
+        })?;
+        let manifest_value = manifest_text.parse::<toml::Value>().map_err(|error| {
+            fail_closed_rust_manifest(format!(
+                "manifesto transitivo invalido em '{}': {error}",
+                sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
+            ))
+        })?;
+        let manifest_root = manifest_path
+            .parent()
+            .unwrap_or_else(|| Path::new(""));
+        let manifest_label =
+            sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string());
+
+        if let Some(package_table) = manifest_value.get("package").and_then(toml::Value::as_table) {
+            if manifest_effectively_has_build_script(manifest_root, package_table) {
+                return Err(fail_closed_rust_manifest(format!(
+                    "manifesto transitivo '{}' contem build.rs efetivo",
+                    manifest_label
+                )));
+            }
+
+            if let Some(links) = package_table.get("links").and_then(toml::Value::as_str) {
+                return Err(fail_closed_rust_manifest(format!(
+                    "manifesto transitivo '{}' declara links={links}",
+                    manifest_label
+                )));
+            }
+        }
+
+        if rust_manifest_declares_build_dependencies(&manifest_value) {
+            return Err(fail_closed_rust_manifest(format!(
+                "manifesto transitivo '{}' declara build-dependencies",
+                manifest_label
+            )));
+        }
+
+        if rust_manifest_declares_proc_macro(&manifest_value) {
+            return Err(fail_closed_rust_manifest(format!(
+                "manifesto transitivo '{}' declara proc-macro = true",
+                manifest_label
+            )));
+        }
+
+        if let Some(marker) = rust_manifest_native_marker(&manifest_value) {
+            return Err(fail_closed_rust_manifest(format!(
+                "manifesto transitivo '{}' referencia dependencia nativa/FFI marker={marker}",
+                manifest_label
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_rust_clippy_preflight<E: SandboxExecutor>(
+    executor: &E,
+    execution_root: &Path,
+    timeout_secs: u64,
+) -> Result<(), SidecarError> {
+    let manifest_path = rust_clippy_manifest_path(execution_root);
+    if !manifest_path.is_file() {
+        return Err(fail_closed_rust_manifest(format!(
+            "manifest-path ausente para preflight: {}",
+            sanitize_host_paths_in_text(executor.repo_path(), &manifest_path.display().to_string())
+        )));
+    }
+
+    let preflight_timeout_secs = rust_clippy_preflight_timeout_secs(timeout_secs);
+
+    let fetch_args = cargo_fetch_args(&manifest_path);
+    let fetch_arg_refs = fetch_args.iter().map(String::as_str).collect::<Vec<_>>();
+    execute_sidecar_in_dir(
+        executor,
+        "cargo",
+        &fetch_arg_refs,
+        preflight_timeout_secs,
+        SidecarExitPolicy::StrictZeroOnly,
+        execution_root,
+    )
+    .await?;
+
+    let metadata_args = cargo_metadata_args(&manifest_path);
+    let metadata_arg_refs = metadata_args.iter().map(String::as_str).collect::<Vec<_>>();
+    let metadata_bytes = execute_sidecar_in_dir(
+        executor,
+        "cargo",
+        &metadata_arg_refs,
+        preflight_timeout_secs,
+        SidecarExitPolicy::StrictZeroOnly,
+        execution_root,
+    )
+    .await?;
+
+    audit_transitive_rust_manifests(executor.repo_path(), &metadata_bytes)
 }
 
 fn derive_rust_clippy_execution_targets(manifests: &[DiscoveredManifest]) -> Vec<SastExecutionTarget> {
@@ -3217,25 +3476,32 @@ fn semgrep_args(rule_arg: &str) -> Vec<String> {
     )
 }
 
-async fn cleanup_clippy_target_dir(execution_root: &Path) {
-    let target_dir = crate::harvester::sandbox::sandbox_tool_state_root(
-        execution_root,
-        "cargo-clippy-target",
-    );
-    if !target_dir.exists() {
-        return;
-    }
-
-    match tokio::fs::remove_dir_all(&target_dir).await {
-        Ok(_) => {
-            info!(target_dir = %target_dir.display(), "clippy: cache efemero removido");
+async fn cleanup_rust_cargo_sandbox_state(execution_root: &Path) {
+    for tool_name in ["cargo-clippy-target", "cargo-target", "cargo-home"] {
+        let target_dir = crate::harvester::sandbox::sandbox_tool_state_root(
+            execution_root,
+            tool_name,
+        );
+        if !target_dir.exists() {
+            continue;
         }
-        Err(err) => {
-            warn!(
-                target_dir = %target_dir.display(),
-                error = %err,
-                "clippy: falha ao remover cache efemero"
-            );
+
+        match tokio::fs::remove_dir_all(&target_dir).await {
+            Ok(_) => {
+                info!(
+                    target_dir = %target_dir.display(),
+                    tool_name,
+                    "cargo-clippy: estado efemero removido"
+                );
+            }
+            Err(err) => {
+                warn!(
+                    target_dir = %target_dir.display(),
+                    tool_name,
+                    error = %err,
+                    "cargo-clippy: falha ao remover estado efemero"
+                );
+            }
         }
     }
 }
@@ -3315,23 +3581,71 @@ async fn run_sast_blade<E: SandboxExecutor>(
     execution_root: &Path,
     scan_targets: &[String],
     command_args: Option<&[String]>,
-) -> Result<Vec<u8>, SidecarError> {
+) -> Result<SastBladeResult, SidecarError> {
     if blade == StaticAnalysisBlade::Opengrep {
-        return run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets).await;
+        return run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets)
+            .await
+            .map(|bytes| SastBladeResult {
+                effective_blade: StaticAnalysisBlade::Opengrep,
+                bytes,
+            });
     }
-    let (binary, args) = blade_command(blade, scan_targets, command_args);
-    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-    let result = execute_sidecar_in_dir(
-        executor,
-        binary,
-        &arg_refs,
-        timeout_secs,
-        SidecarExitPolicy::AllowFindingsExitOne,
-        execution_root,
-    )
-    .await;
+    let result = if blade == StaticAnalysisBlade::RustClippy {
+        match run_rust_clippy_preflight(executor, execution_root, timeout_secs).await {
+            Ok(()) => {
+                let (binary, args) = blade_command(blade, scan_targets, command_args);
+                let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+                execute_sidecar_in_dir(
+                    executor,
+                    binary,
+                    &arg_refs,
+                    timeout_secs,
+                    SidecarExitPolicy::AllowFindingsExitOne,
+                    execution_root,
+                )
+                .await
+                .map(|bytes| SastBladeResult {
+                    effective_blade: StaticAnalysisBlade::RustClippy,
+                    bytes,
+                })
+            }
+            Err(err) => {
+                if let Some(reason) = rust_clippy_should_fallback_to_opengrep(&err) {
+                    warn!(
+                        cwd = %execution_root.display(),
+                        reason = %reason,
+                        "Clippy bloqueado por Trava C de seguranca. Realizando fallback para Opengrep SAST."
+                    );
+                    run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets)
+                        .await
+                        .map(|bytes| SastBladeResult {
+                            effective_blade: StaticAnalysisBlade::Opengrep,
+                            bytes,
+                        })
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    } else {
+        let (binary, args) = blade_command(blade, scan_targets, command_args);
+        let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        execute_sidecar_in_dir(
+            executor,
+            binary,
+            &arg_refs,
+            timeout_secs,
+            SidecarExitPolicy::AllowFindingsExitOne,
+            execution_root,
+        )
+        .await
+        .map(|bytes| SastBladeResult {
+            effective_blade: blade,
+            bytes,
+        })
+    };
     if blade == StaticAnalysisBlade::RustClippy {
-        cleanup_clippy_target_dir(execution_root).await;
+        cleanup_rust_cargo_sandbox_state(execution_root).await;
     }
     result
 }
@@ -3931,8 +4245,13 @@ impl PolyglotSastSidecar {
                         available_cargo_permits = cargo_semaphore.available_permits(),
                         "SAST monorepo: sub-scan concluído"
                     );
+                    let (effective_blade, result) = match result {
+                        Ok(result) => (result.effective_blade, Ok(result.bytes)),
+                        Err(err) => (target.blade, Err(err)),
+                    };
                     Ok::<SastExecutionOutcome, SidecarError>(SastExecutionOutcome {
-                        blade: target.blade,
+                        requested_blade: target.blade,
+                        effective_blade,
                         execution_root,
                         scope,
                         result,
@@ -3968,7 +4287,7 @@ impl PolyglotSastSidecar {
                 Ok(bytes) => match normalize_sast_output(
                     &repo_path,
                     &outcome.execution_root,
-                    outcome.blade,
+                    outcome.effective_blade,
                     &bytes,
                 ) {
                     Ok(mut issues) => {
@@ -3978,7 +4297,8 @@ impl PolyglotSastSidecar {
                     Err(err) => {
                         had_failed_payload = true;
                         warn!(
-                            blade = blade_name(outcome.blade),
+                            blade = blade_name(outcome.effective_blade),
+                            requested_blade = blade_name(outcome.requested_blade),
                             scope = %outcome.scope,
                             cwd = %outcome.execution_root.display(),
                             error = %err,
@@ -3989,7 +4309,7 @@ impl PolyglotSastSidecar {
                 Err(err) => {
                     had_failed_payload = true;
                     warn!(
-                        blade = blade_name(outcome.blade),
+                        blade = blade_name(outcome.requested_blade),
                         scope = %outcome.scope,
                         cwd = %outcome.execution_root.display(),
                         error = %err,
@@ -5850,6 +6170,22 @@ Done in 1.23s"#;
     }
 
     #[test]
+    fn test_classify_sidecar_observability_distinguishes_ok_info_and_lethal() {
+        assert_eq!(
+            classify_sidecar_observability(0, b"{}"),
+            SidecarObservabilityClass::Ok
+        );
+        assert_eq!(
+            classify_sidecar_observability(1, br#"{"diagnostics":[]}"#),
+            SidecarObservabilityClass::InformationalNonZero
+        );
+        assert_eq!(
+            classify_sidecar_observability(101, b""),
+            SidecarObservabilityClass::LethalNonZero
+        );
+    }
+
+    #[test]
     fn test_normalize_bandit_output_drops_assert_noise_even_if_tool_leaks_it() {
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("src/app.py", "def run():\n    return 1\n");
@@ -6389,17 +6725,35 @@ Done in 1.23s"#;
     #[tokio::test]
     async fn test_run_sast_blade_cleans_clippy_target_dir_after_execution() {
         let clippy_payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"lint in workspace member","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}"#;
-        let executor = MockExecutor::new(vec![Err(SandboxError::ProcessNonZeroExit {
-            exit_code: 1,
-            stderr: "findings".to_string(),
-            stdout: clippy_payload.as_bytes().to_vec(),
-        })]);
+        let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
         let execution_root = executor.repo_path().join("apps").join("rust-sdk");
+        let manifest_path = execution_root.join("Cargo.toml");
+        let metadata_payload = serde_json::json!({
+            "packages": [
+                {
+                    "manifest_path": manifest_path.display().to_string()
+                }
+            ]
+        })
+        .to_string();
+        *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
+            Ok(Vec::new()),
+            Ok(metadata_payload.as_bytes().to_vec()),
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 1,
+                stderr: "findings".to_string(),
+                stdout: clippy_payload.as_bytes().to_vec(),
+            }),
+        ]);
         let cache_root =
             crate::harvester::sandbox::sandbox_tool_state_root(&execution_root, "cargo-clippy-target");
+        let cargo_home =
+            crate::harvester::sandbox::sandbox_tool_state_root(&execution_root, "cargo-home");
         std::fs::create_dir_all(cache_root.join("debug")).unwrap();
         std::fs::write(cache_root.join("debug").join(".keep"), "temp").unwrap();
+        std::fs::create_dir_all(cargo_home.join("registry").join("cache")).unwrap();
+        std::fs::write(cargo_home.join("registry").join("cache").join(".keep"), "temp").unwrap();
 
         let payload = run_sast_blade(
             &executor,
@@ -6412,7 +6766,78 @@ Done in 1.23s"#;
         .await
         .unwrap();
 
-        assert!(!payload.is_empty());
+        let calls = executor.calls();
+        assert_eq!(payload.effective_blade, StaticAnalysisBlade::RustClippy);
+        assert!(!payload.bytes.is_empty());
+        assert!(calls[0].starts_with("cargo fetch --locked --manifest-path "));
+        assert!(calls[1].starts_with("cargo metadata --format-version 1 --locked --offline --manifest-path "));
+        assert!(calls[2].starts_with("cargo clippy --message-format=json --frozen -p sdk -- --no-deps"));
         assert!(!cache_root.exists());
+        assert!(!cargo_home.exists());
+    }
+
+    #[tokio::test]
+    async fn test_run_sast_blade_falls_back_to_opengrep_when_transitive_manifest_declares_build_dependencies() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
+        executor.write_repo_file(
+            "vendor/toxic/Cargo.toml",
+            "[package]\nname='toxic'\nversion='0.1.0'\n\n[build-dependencies]\ncc='1'\n",
+        );
+        let execution_root = executor.repo_path().join("apps").join("rust-sdk");
+        let metadata_payload = serde_json::json!({
+            "packages": [
+                {
+                    "manifest_path": execution_root.join("Cargo.toml").display().to_string()
+                },
+                {
+                    "manifest_path": executor
+                        .repo_path()
+                        .join("vendor")
+                        .join("toxic")
+                        .join("Cargo.toml")
+                        .display()
+                        .to_string()
+                }
+            ]
+        })
+        .to_string();
+        let opengrep_payload = br#"{
+            "results": [
+                {
+                    "check_id": "soda.fragility.unwrap",
+                    "path": "src/lib.rs",
+                    "extra": {
+                        "message": "unwrap encontrado em caminho critico",
+                        "severity": "WARNING"
+                    }
+                }
+            ]
+        }"#;
+        *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
+            Ok(Vec::new()),
+            Ok(metadata_payload.as_bytes().to_vec()),
+            Ok(opengrep_payload.to_vec()),
+        ]);
+
+        let result = run_sast_blade(
+            &executor,
+            StaticAnalysisBlade::RustClippy,
+            60,
+            &execution_root,
+            &[".".to_string()],
+            Some(&clippy_args_for_package("sdk")),
+        )
+        .await
+        .unwrap();
+
+        let calls = executor.calls();
+        assert_eq!(result.effective_blade, StaticAnalysisBlade::Opengrep);
+        assert_eq!(result.bytes, opengrep_payload.to_vec());
+        assert_eq!(calls.len(), 3);
+        assert!(calls[0].starts_with("cargo fetch --locked --manifest-path "));
+        assert!(calls[1].starts_with("cargo metadata --format-version 1 --locked --offline --manifest-path "));
+        assert!(calls[2].starts_with("opengrep "));
+        assert!(!calls[2].contains("cargo clippy"));
     }
 }
