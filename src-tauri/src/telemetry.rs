@@ -111,6 +111,7 @@ where
         let label = match kind {
             EventKind::Processing => "[PROC]",
             EventKind::Success => "[OK]",
+            EventKind::Warning => "[WARN]",
             EventKind::Error => "[ERR]",
             EventKind::Finops => "[FINOPS]",
         };
@@ -119,6 +120,7 @@ where
         }
         let label_color = match kind {
             EventKind::Processing => COLOR_PROCESSING,
+            EventKind::Warning => COLOR_WARNING,
             EventKind::Error => COLOR_ERROR,
             EventKind::Success => COLOR_SUCCESS,
             _ => base,
@@ -207,6 +209,7 @@ impl Visit for SodaFieldVisitor {
 enum EventKind {
     Processing,
     Success,
+    Warning,
     Error,
     Finops,
 }
@@ -215,6 +218,7 @@ const PHASE_F0: &str = "\x1b[38;2;217;119;6m";
 const PHASE_F1_4: &str = "\x1b[38;2;138;43;226m";
 const PHASE_F5: &str = "\x1b[38;2;0;191;255m";
 const COLOR_PROCESSING: &str = "\x1b[36m";
+const COLOR_WARNING: &str = "\x1b[33m";
 const COLOR_ERROR: &str = "\x1b[97;41m";
 const COLOR_SUCCESS: &str = "\x1b[32m";
 const COLOR_CYAN_NEON: &str = "\x1b[38;2;0;255;255m";
@@ -364,6 +368,17 @@ fn looks_like_owner_repo(token: &str) -> bool {
 }
 
 fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, String)]) -> EventKind {
+    if let Some(semantic_outcome) = fields
+        .iter()
+        .find_map(|(key, value)| (key == "semantic_outcome").then_some(value.as_str()))
+    {
+        return match semantic_outcome {
+            "ok" => EventKind::Success,
+            "informational_non_zero" => EventKind::Warning,
+            "lethal_non_zero" => EventKind::Error,
+            _ => EventKind::Processing,
+        };
+    }
     if message == Some("Sandbox: processo efemero concluido") {
         if let Some(exit_code) = fields
             .iter()
@@ -372,7 +387,7 @@ fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, Strin
             return if exit_code == "0" {
                 EventKind::Success
             } else {
-                EventKind::Error
+                EventKind::Warning
             };
         }
     }
@@ -389,15 +404,19 @@ fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, Strin
     }
     let haystack = haystack.to_ascii_lowercase();
     let contains_any = |needles: &[&str]| needles.iter().any(|n| haystack.contains(n));
-    if *level == Level::ERROR
-        || contains_any(&["erro", "error", "timeout", "panic", "429", "rate limit", "falha", "failed"])
-    {
+    if *level == Level::ERROR {
         return EventKind::Error;
+    }
+    if *level == Level::WARN {
+        return EventKind::Warning;
     }
     if fields.iter().any(|(key, _)| is_finops_key(key))
         || contains_any(&["token", "tokens", "custo", "cost", "usd", "latency", "tempo", "elapsed_ms"])
     {
         return EventKind::Finops;
+    }
+    if contains_any(&["erro", "error", "timeout", "panic", "429", "rate limit", "falha", "failed"]) {
+        return EventKind::Error;
     }
     if contains_any(&[
         "sucesso",
@@ -433,17 +452,47 @@ mod tests {
         let ok = classify_event(
             &Level::INFO,
             Some("Sandbox: processo efemero concluido"),
-            &[("exit_code".to_string(), "0".to_string())],
+            &[
+                ("exit_code".to_string(), "0".to_string()),
+                ("semantic_outcome".to_string(), "ok".to_string()),
+            ],
         );
         let err = classify_event(
-            &Level::INFO,
+            &Level::WARN,
             Some("Sandbox: processo efemero concluido"),
             &[
                 ("exit_code".to_string(), "7".to_string()),
                 ("stderr_bytes".to_string(), "999".to_string()),
+                (
+                    "semantic_outcome".to_string(),
+                    "informational_non_zero".to_string(),
+                ),
             ],
         );
         assert_eq!(ok, EventKind::Success);
-        assert_eq!(err, EventKind::Error);
+        assert_eq!(err, EventKind::Warning);
+    }
+
+    #[test]
+    fn warn_level_with_fail_soft_text_remains_warning() {
+        let kind = classify_event(
+            &Level::WARN,
+            Some("SAST monorepo: normalizacao falhou; descartando payload bruto"),
+            &[("scope".to_string(), ".::files-01".to_string())],
+        );
+        assert_eq!(kind, EventKind::Warning);
+    }
+
+    #[test]
+    fn semantic_outcome_informational_non_zero_forces_warning() {
+        let kind = classify_event(
+            &Level::ERROR,
+            Some("Sandbox: processo efemero concluido"),
+            &[(
+                "semantic_outcome".to_string(),
+                "informational_non_zero".to_string(),
+            )],
+        );
+        assert_eq!(kind, EventKind::Warning);
     }
 }

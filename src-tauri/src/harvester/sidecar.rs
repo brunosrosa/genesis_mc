@@ -2214,25 +2214,36 @@ fn default_clippy_args() -> Vec<String> {
     ]
 }
 
-fn cargo_fetch_args(manifest_path: &Path) -> Vec<String> {
-    vec![
-        "fetch".to_string(),
-        "--locked".to_string(),
-        "--manifest-path".to_string(),
-        manifest_path.display().to_string(),
-    ]
+fn cargo_lockfile_path(manifest_path: &Path) -> PathBuf {
+    manifest_path
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .join("Cargo.lock")
 }
 
-fn cargo_metadata_args(manifest_path: &Path) -> Vec<String> {
-    vec![
+fn cargo_fetch_args(manifest_path: &Path, use_locked: bool) -> Vec<String> {
+    let mut args = vec!["fetch".to_string()];
+    if use_locked {
+        args.push("--locked".to_string());
+    }
+    args.push("--manifest-path".to_string());
+    args.push(manifest_path.display().to_string());
+    args
+}
+
+fn cargo_metadata_args(manifest_path: &Path, use_locked: bool) -> Vec<String> {
+    let mut args = vec![
         "metadata".to_string(),
         "--format-version".to_string(),
         "1".to_string(),
-        "--locked".to_string(),
-        "--offline".to_string(),
-        "--manifest-path".to_string(),
-        manifest_path.display().to_string(),
-    ]
+    ];
+    if use_locked {
+        args.push("--locked".to_string());
+    }
+    args.push("--offline".to_string());
+    args.push("--manifest-path".to_string());
+    args.push(manifest_path.display().to_string());
+    args
 }
 
 fn rust_clippy_manifest_path(execution_root: &Path) -> PathBuf {
@@ -2465,8 +2476,9 @@ async fn run_rust_clippy_preflight<E: SandboxExecutor>(
     }
 
     let preflight_timeout_secs = rust_clippy_preflight_timeout_secs(timeout_secs);
+    let lockfile_path = cargo_lockfile_path(&manifest_path);
 
-    let fetch_args = cargo_fetch_args(&manifest_path);
+    let fetch_args = cargo_fetch_args(&manifest_path, lockfile_path.is_file());
     let fetch_arg_refs = fetch_args.iter().map(String::as_str).collect::<Vec<_>>();
     execute_sidecar_in_dir(
         executor,
@@ -2478,7 +2490,7 @@ async fn run_rust_clippy_preflight<E: SandboxExecutor>(
     )
     .await?;
 
-    let metadata_args = cargo_metadata_args(&manifest_path);
+    let metadata_args = cargo_metadata_args(&manifest_path, lockfile_path.is_file());
     let metadata_arg_refs = metadata_args.iter().map(String::as_str).collect::<Vec<_>>();
     let metadata_bytes = execute_sidecar_in_dir(
         executor,
@@ -3366,8 +3378,10 @@ fn biome_args(scan_targets: &[String]) -> Vec<String> {
 
 fn oxc_args(scan_targets: &[String]) -> Vec<String> {
     let mut args = vec![
-        "-f".to_string(),
+        "lint".to_string(),
+        "--format".to_string(),
         "json".to_string(),
+        "--quiet".to_string(),
         "--no-error-on-unmatched-pattern".to_string(),
         "--ignore-pattern".to_string(),
         "**/*.min.js".to_string(),
@@ -3698,9 +3712,40 @@ fn normalize_cppcheck_output(
     bytes: &[u8],
 ) -> Result<Vec<SodaHealthIssue>, SidecarError> {
     let text = String::from_utf8_lossy(bytes);
-    let xml_payload = extract_cppcheck_xml_payload(&text).ok_or_else(|| SidecarError::ParseError {
-        reason: "Falha ao localizar payload XML do cppcheck".to_string(),
-    })?;
+    let Some(xml_payload) = extract_cppcheck_xml_payload(&text) else {
+        let mut issues = Vec::new();
+        let preview = text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(" | ");
+
+        if preview.is_empty() {
+            push_issue(
+                &mut issues,
+                repo_path,
+                execution_root,
+                StaticAnalysisBlade::Cppcheck,
+                "info",
+                "",
+                "[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck.",
+            );
+        } else {
+            push_issue(
+                &mut issues,
+                repo_path,
+                execution_root,
+                StaticAnalysisBlade::Cppcheck,
+                "warning",
+                "",
+                &format!("cppcheck output nao estruturado preservado: {preview}"),
+            );
+        }
+        sort_and_dedup_issues(&mut issues);
+        return Ok(issues);
+    };
     let compact_xml = xml_payload.chars().filter(|ch| !ch.is_whitespace()).collect::<String>();
     if compact_xml.contains("<results></results>") || compact_xml.contains("<results/>") {
         let mut issues = Vec::new();
@@ -6124,6 +6169,21 @@ func TestSmokePath(t *testing.T) {
     }
 
     #[test]
+    fn test_normalize_cppcheck_output_falls_back_to_unstructured_text_without_crashing() {
+        let repo_path = Path::new("C:/repos/example");
+        let payload = "cppcheck: progress 100%\nmain.c:42: warning: suspicious arithmetic";
+
+        let issues = normalize_cppcheck_output(repo_path, repo_path, payload.as_bytes()).unwrap();
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].level, "warning");
+        assert_eq!(issues[0].source_blade, "cppcheck");
+        assert!(issues[0]
+            .message
+            .contains("cppcheck output nao estruturado preservado"));
+    }
+
+    #[test]
     fn test_normalize_cppcheck_output_accepts_self_closing_results_as_clean_info() {
         let repo_path = Path::new("C:/repos/example");
         let payload = r#"<?xml version="1.0"?><results/>"#;
@@ -6234,7 +6294,11 @@ Done in 1.23s"#;
         assert_eq!(biome_binary, "biome");
         assert_eq!(oxlint_binary, "oxlint");
         assert_eq!(biome_args.first().map(String::as_str), Some("lint"));
+        assert_eq!(oxlint_args.first().map(String::as_str), Some("lint"));
         assert!(!biome_args.iter().any(|arg| arg == "check"));
+        assert!(!oxlint_args.iter().any(|arg| arg == "-f"));
+        assert!(oxlint_args.windows(2).any(|pair| pair == ["--format", "json"]));
+        assert!(oxlint_args.iter().any(|arg| arg == "--quiet"));
         assert!(biome_args.iter().any(|arg| arg == "--no-errors-on-unmatched"));
         assert!(biome_args.iter().any(|arg| arg == "--only=lint/correctness"));
         assert!(biome_args.iter().any(|arg| arg == "--only=lint/complexity"));
@@ -6717,6 +6781,7 @@ Done in 1.23s"#;
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
         let execution_root = executor.repo_path().join("apps").join("rust-sdk");
+        executor.write_repo_file("apps/rust-sdk/Cargo.lock", "version = 3\n");
         let manifest_path = execution_root.join("Cargo.toml");
         let metadata_payload = serde_json::json!({
             "packages": [
@@ -6824,8 +6889,10 @@ Done in 1.23s"#;
         assert_eq!(result.effective_blade, StaticAnalysisBlade::Opengrep);
         assert_eq!(result.bytes, opengrep_payload.to_vec());
         assert_eq!(calls.len(), 3);
-        assert!(calls[0].starts_with("cargo fetch --locked --manifest-path "));
-        assert!(calls[1].starts_with("cargo metadata --format-version 1 --locked --offline --manifest-path "));
+        assert!(calls[0].starts_with("cargo fetch --manifest-path "));
+        assert!(!calls[0].contains("--locked"));
+        assert!(calls[1].starts_with("cargo metadata --format-version 1 --offline --manifest-path "));
+        assert!(!calls[1].contains("--locked"));
         assert!(calls[2].starts_with("opengrep "));
         assert!(!calls[2].contains("cargo clippy"));
     }

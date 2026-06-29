@@ -400,6 +400,15 @@ fn merge_tool_streams(command: &str, stdout: Vec<u8>, stderr: &[u8]) -> Vec<u8> 
     merged
 }
 
+fn is_govulncheck_no_packages_match(command: &str, exit_code: i32, stderr: &[u8]) -> bool {
+    if command != "govulncheck" || exit_code != 2 {
+        return false;
+    }
+    String::from_utf8_lossy(stderr)
+        .to_ascii_lowercase()
+        .contains("no packages matched the provided patterns")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProcessObservabilityClass {
     Ok,
@@ -912,6 +921,20 @@ impl SandboxHandle {
                 self.lock_pids().remove(&pid);
                 let exit_code = status.code().unwrap_or(-1);
                 let merged_stdout = merge_tool_streams(&requested_command, stdout_buffer, &stderr_buffer);
+                if is_govulncheck_no_packages_match(&requested_command, exit_code, &stderr_buffer) {
+                    info!(
+                        command = %requested_command,
+                        pid,
+                        exit_code,
+                        stdout_bytes = 0,
+                        stderr_bytes = stderr_buffer.len(),
+                        repo_path = %self.repo_path.display(),
+                        cwd = %execution_root.display(),
+                        semantic_outcome = "ok",
+                        "Sandbox: processo efemero concluido"
+                    );
+                    return Ok(Vec::new());
+                }
                 let observability = classify_process_observability(exit_code, &merged_stdout);
                 match observability {
                     ProcessObservabilityClass::Ok => {
@@ -1264,6 +1287,25 @@ mod tests {
             classify_process_observability(1, b"\n"),
             ProcessObservabilityClass::InformationalNonZero
         );
+    }
+
+    #[test]
+    fn test_govulncheck_no_packages_match_is_treated_as_clean() {
+        assert!(is_govulncheck_no_packages_match(
+            "govulncheck",
+            2,
+            b"govulncheck: no packages matched the provided patterns",
+        ));
+        assert!(!is_govulncheck_no_packages_match(
+            "govulncheck",
+            1,
+            b"govulncheck: no packages matched the provided patterns",
+        ));
+        assert!(!is_govulncheck_no_packages_match(
+            "semgrep",
+            2,
+            b"govulncheck: no packages matched the provided patterns",
+        ));
     }
 
     #[test]
