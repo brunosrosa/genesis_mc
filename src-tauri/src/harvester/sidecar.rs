@@ -144,7 +144,7 @@ enum SidecarObservabilityClass {
 fn classify_sidecar_observability(exit_code: i32, stdout: &[u8]) -> SidecarObservabilityClass {
     if exit_code == 0 {
         SidecarObservabilityClass::Ok
-    } else if !stdout.is_empty() || !stdout_preview(stdout, 400).is_empty() {
+    } else if !stdout.is_empty() {
         SidecarObservabilityClass::InformationalNonZero
     } else {
         SidecarObservabilityClass::LethalNonZero
@@ -1287,37 +1287,26 @@ async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                 }
             } else {
                 let stdout_hint = stdout_preview(&sanitized_stdout, 400);
-                match classify_sidecar_observability(exit_code, &sanitized_stdout) {
-                    SidecarObservabilityClass::Ok => {
-                        info!(
-                            binary = %binary,
-                            exit_code,
-                            stderr = %sanitized_stderr,
-                            stdout = %stdout_hint,
-                            semantic_outcome = "ok",
-                            "Sidecar terminou"
-                        );
-                    }
-                    SidecarObservabilityClass::InformationalNonZero => {
-                        warn!(
-                            binary = %binary,
-                            exit_code,
-                            stderr = %sanitized_stderr,
-                            stdout = %stdout_hint,
-                            semantic_outcome = "informational_non_zero",
-                            "Sidecar terminou com exit code nao zero"
-                        );
-                    }
-                    SidecarObservabilityClass::LethalNonZero => {
-                        error!(
-                            binary = %binary,
-                            exit_code,
-                            stderr = %sanitized_stderr,
-                            stdout = %stdout_hint,
-                            semantic_outcome = "lethal_non_zero",
-                            "Sidecar terminou com exit code nao zero"
-                        );
-                    }
+                if classify_sidecar_observability(exit_code, &sanitized_stdout)
+                    == SidecarObservabilityClass::InformationalNonZero
+                {
+                    warn!(
+                        binary = %binary,
+                        exit_code,
+                        stderr = %sanitized_stderr,
+                        stdout = %stdout_hint,
+                        semantic_outcome = "informational_non_zero",
+                        "Sidecar terminou com exit code nao zero"
+                    );
+                } else {
+                    error!(
+                        binary = %binary,
+                        exit_code,
+                        stderr = %sanitized_stderr,
+                        stdout = %stdout_hint,
+                        semantic_outcome = "lethal_non_zero",
+                        "Sidecar terminou com exit code nao zero"
+                    );
                 }
                 let reason = if sanitized_stderr.trim().is_empty() && !stdout_hint.trim().is_empty() {
                     format!("exit code {exit_code}: stdout={stdout_hint}")
