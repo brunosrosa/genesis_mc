@@ -54,5 +54,5 @@
 # REGRAS DE FORMA E HIGIENE DIGITAL
 # ==============================================================================
 - PRDs em andamento na pasta prds devem adotar o prefixo da Fase Temporal correspondente
-    (Ex: PRD_001_Fase_0_...).
+    (Ex: PRD_00X_Fase_X_...).
 - O arquivo '_WOKSPACE_MAP.txt' deve ser lido pelo agente no início de cada sessão.

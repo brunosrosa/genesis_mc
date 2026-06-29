@@ -32,10 +32,8 @@ binds:
                   targets:
                     - name: lean
                       stdio:
-                        cmd: 'lean-ctx.exe'
+                        cmd: 'C:/Users/rosas/.cargo/bin/lean-ctx-patched3.exe'
                         args: []
-                        env:
-                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: sequential_thinking
                       stdio:
                         cmd: 'sequential-thinking-server.exe'

@@ -36,3 +36,4 @@ dist-ssr
 .jcodemunch_index/
 .soda_semgrep/
 .pytest_cache/
+.lean-ctx/
