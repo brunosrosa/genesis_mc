@@ -192,7 +192,7 @@ fn timeout_profile<S: AsRef<str>>(command: &str, args: &[S], requested_timeout_s
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
             absolute_timeout_secs: None,
         },
-        "opengrep" | "govulncheck" | "biome" | "oxlint" => TimeoutProfile {
+        "opengrep" | "govulncheck" | "biome" | "oxlint" | "cppcheck" => TimeoutProfile {
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
             absolute_timeout_secs: None,
         },
@@ -1255,9 +1255,9 @@ mod tests {
 
     #[test]
     fn test_timeout_profile_promotes_deep_flow_tools() {
-        let normal = timeout_profile("cppcheck", &["."], 30);
-        assert_eq!(normal.idle_timeout_secs, IDLE_TIMEOUT_SECS);
-        assert_eq!(normal.absolute_timeout_secs, Some(ABSOLUTE_TIMEOUT_FLOOR_SECS));
+        let cppcheck = timeout_profile("cppcheck", &["."], 30);
+        assert_eq!(cppcheck.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
+        assert_eq!(cppcheck.absolute_timeout_secs, None);
 
         let heavy = timeout_profile("opengrep", &["scan"], 30);
         assert_eq!(heavy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
