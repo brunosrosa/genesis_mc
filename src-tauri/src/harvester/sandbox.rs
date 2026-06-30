@@ -188,7 +188,7 @@ enum ProcessWaitOutcome {
 
 fn timeout_profile<S: AsRef<str>>(command: &str, args: &[S], requested_timeout_secs: u64) -> TimeoutProfile {
     match command {
-        "cargo" if is_cargo_clippy_invocation(args) => TimeoutProfile {
+        "cargo" if is_cargo_sast_invocation(args) => TimeoutProfile {
             idle_timeout_secs: DEEP_FLOW_IDLE_TIMEOUT_SECS,
             absolute_timeout_secs: None,
         },
@@ -383,8 +383,11 @@ fn build_semgrep_env(repo_path: &Path) -> BTreeMap<String, String> {
     ])
 }
 
-fn is_cargo_clippy_invocation<S: AsRef<str>>(args: &[S]) -> bool {
-    args.first().map(|arg| arg.as_ref()) == Some("clippy")
+fn is_cargo_sast_invocation<S: AsRef<str>>(args: &[S]) -> bool {
+    matches!(
+        args.first().map(|value| value.as_ref()),
+        Some("clippy" | "fetch" | "metadata")
+    )
 }
 
 fn merge_tool_streams(command: &str, stdout: Vec<u8>, stderr: &[u8]) -> Vec<u8> {
@@ -496,7 +499,7 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
                 "CARGO_NET_GIT_FETCH_WITH_CLI".to_string(),
                 "false".to_string(),
             );
-            let cargo_target_dir = if is_cargo_clippy_invocation(args) {
+            let cargo_target_dir = if is_cargo_sast_invocation(args) {
                 sandbox_tool_state_root(repo_path, "cargo-clippy-target")
             } else {
                 sandbox_tool_state_root(repo_path, "cargo-target")
@@ -1263,6 +1266,15 @@ mod tests {
         let cargo_clippy = timeout_profile("cargo", &["clippy", "--message-format=json"], 30);
         assert_eq!(cargo_clippy.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
         assert_eq!(cargo_clippy.absolute_timeout_secs, None);
+
+        let cargo_fetch = timeout_profile("cargo", &["fetch", "--manifest-path", "Cargo.toml"], 30);
+        assert_eq!(cargo_fetch.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
+        assert_eq!(cargo_fetch.absolute_timeout_secs, None);
+
+        let cargo_metadata =
+            timeout_profile("cargo", &["metadata", "--format-version", "1"], 30);
+        assert_eq!(cargo_metadata.idle_timeout_secs, DEEP_FLOW_IDLE_TIMEOUT_SECS);
+        assert_eq!(cargo_metadata.absolute_timeout_secs, None);
     }
 
     #[test]

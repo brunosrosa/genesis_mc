@@ -573,7 +573,7 @@ fn parse_json_payload<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, SidecarErr
     })
 }
 
-const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = 500_000;
+const BLOB_04_REPO_OUTLINE_MAX_CHARS: usize = 3_000_000;
 const SEMGREP_SECURITY_RULE_FILE: &str = ".soda_semgrep_blob_06_security.yml";
 const SEMGREP_HEALTH_RULE_FILE: &str = ".soda_semgrep_blob_08_health.yml";
 const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../semgrep/blob_06_security.yml");
@@ -2010,7 +2010,7 @@ pub struct PolyglotSastInput<'a, E: SandboxExecutor> {
     pub clean_files: Arc<Vec<PathBuf>>,
 }
 
-const MONOREPO_SAST_MAX_PARALLEL: usize = 3;
+const MONOREPO_SAST_MAX_PARALLEL: usize = 8;
 const RUST_CLIPPY_MAX_PARALLEL: usize = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -2019,6 +2019,12 @@ enum ManifestKind {
     PackageJson,
     MixExs,
     GoMod,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JsLintProfile {
+    UnsafeHotspot,
+    Health,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -2036,6 +2042,7 @@ struct SastExecutionTarget {
     scope: String,
     scan_targets: Vec<String>,
     command_args: Option<Vec<String>>,
+    forced_channel: Option<SastIssueChannel>,
 }
 
 #[derive(Debug)]
@@ -2044,6 +2051,7 @@ struct SastExecutionOutcome {
     effective_blade: StaticAnalysisBlade,
     execution_root: PathBuf,
     scope: String,
+    forced_channel: Option<SastIssueChannel>,
     result: Result<Vec<u8>, SidecarError>,
 }
 
@@ -2516,6 +2524,7 @@ fn derive_rust_clippy_execution_targets(manifests: &[DiscoveredManifest]) -> Vec
                 scope: manifest.scope.clone(),
                 scan_targets: vec![".".to_string()],
                 command_args: Some(plan.command_args),
+                forced_channel: None,
             }),
             Err(reason) => {
                 info!(
@@ -2594,6 +2603,7 @@ fn derive_go_execution_targets(
                 scope: manifest.scope.clone(),
                 scan_targets: vec!["./...".to_string()],
                 command_args: Some(govulncheck_args_for_module()),
+                forced_channel: None,
             })
         })
         .collect()
@@ -2630,6 +2640,7 @@ fn derive_elixir_execution_targets(
                 scope: manifest.scope.clone(),
                 scan_targets: vec![".".to_string()],
                 command_args: Some(sobelow_args_for_root(".")),
+                forced_channel: None,
             })
         })
         .collect()
@@ -2642,6 +2653,13 @@ fn blade_parallelism_limit(blade: StaticAnalysisBlade) -> usize {
     }
 }
 
+fn has_global_opengrep_coverage(targets: &[SastExecutionTarget]) -> bool {
+    targets.iter().any(|target| {
+        target.blade == StaticAnalysisBlade::Opengrep
+            && (target.scope == "." || target.scope.starts_with(".::files-"))
+    })
+}
+
 fn execution_targets_for_blade(
     repo_path: &Path,
     clean_files: &[PathBuf],
@@ -2650,6 +2668,9 @@ fn execution_targets_for_blade(
 ) -> Vec<SastExecutionTarget> {
     if blade == StaticAnalysisBlade::Opengrep {
         return derive_opengrep_execution_targets(repo_path, clean_files);
+    }
+    if blade == StaticAnalysisBlade::Cppcheck {
+        return derive_cppcheck_execution_targets(repo_path, clean_files);
     }
     if blade == StaticAnalysisBlade::RustClippy {
         return derive_rust_clippy_execution_targets(manifests);
@@ -2677,6 +2698,7 @@ fn execution_targets_for_blade(
                 scope: manifest.scope.clone(),
                 scan_targets: vec![".".to_string()],
                 command_args: None,
+                forced_channel: None,
             })
             .collect();
     }
@@ -2687,10 +2709,12 @@ fn execution_targets_for_blade(
         scope: ".".to_string(),
         scan_targets: vec![".".to_string()],
         command_args: None,
+        forced_channel: None,
     }]
 }
 
 const OPENGREP_FILE_LIST_CHUNK_SIZE: usize = 96;
+const CPPCHECK_FILE_LIST_CHUNK_SIZE: usize = 96;
 const JS_LINT_FILE_LIST_CHUNK_SIZE: usize = 96;
 const PYTHON_LINT_FILE_LIST_CHUNK_SIZE: usize = 96;
 
@@ -2784,8 +2808,38 @@ fn derive_opengrep_execution_targets(
             scope: opengrep_file_batch_scope(".", idx + 1),
             scan_targets: chunk.to_vec(),
             command_args: None,
+            forced_channel: None,
         })
         .collect::<Vec<_>>()
+}
+
+fn derive_cppcheck_execution_targets(
+    repo_path: &Path,
+    clean_files: &[PathBuf],
+) -> Vec<SastExecutionTarget> {
+    let repo_root = repo_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_path.to_path_buf());
+    let scan_targets = derive_repo_relative_clean_targets(&repo_root, clean_files, &[], is_cpp_supported_file);
+    if scan_targets.is_empty() {
+        return Vec::new();
+    }
+
+    scan_targets
+        .chunks(CPPCHECK_FILE_LIST_CHUNK_SIZE)
+        .enumerate()
+        .map(|(idx, chunk)| {
+            let chunk_targets = chunk.to_vec();
+            SastExecutionTarget {
+                blade: StaticAnalysisBlade::Cppcheck,
+                execution_root: repo_root.clone(),
+                scope: blade_file_batch_scope(".", idx + 1),
+                scan_targets: chunk_targets.clone(),
+                command_args: Some(cppcheck_args_for_targets(&chunk_targets)),
+                forced_channel: None,
+            }
+        })
+        .collect()
 }
 
 fn derive_python_execution_targets(
@@ -2812,6 +2866,7 @@ fn derive_python_execution_targets(
             scope: blade_file_batch_scope(".", idx + 1),
             scan_targets: chunk.to_vec(),
             command_args: None,
+            forced_channel: None,
         })
         .collect()
 }
@@ -2842,17 +2897,36 @@ fn derive_js_lint_file_list_targets(
     } else {
         scope_prefix.to_string()
     };
-    scan_targets
-        .chunks(JS_LINT_FILE_LIST_CHUNK_SIZE)
-        .enumerate()
-        .map(|(idx, chunk)| SastExecutionTarget {
-            blade,
-            execution_root: execution_root.to_path_buf(),
-            scope: blade_file_batch_scope(&normalized_scope, idx + 1),
-            scan_targets: chunk.to_vec(),
-            command_args: None,
-        })
-        .collect()
+    let mut targets = Vec::new();
+    for profile in [JsLintProfile::UnsafeHotspot, JsLintProfile::Health] {
+        let profile_scope = format!(
+            "{}::{}",
+            normalized_scope,
+            match profile {
+                JsLintProfile::UnsafeHotspot => "unsafe",
+                JsLintProfile::Health => "health",
+            }
+        );
+        for (idx, chunk) in scan_targets.chunks(JS_LINT_FILE_LIST_CHUNK_SIZE).enumerate() {
+            let chunk_targets = chunk.to_vec();
+            targets.push(SastExecutionTarget {
+                blade,
+                execution_root: execution_root.to_path_buf(),
+                scope: blade_file_batch_scope(&profile_scope, idx + 1),
+                scan_targets: chunk_targets.clone(),
+                command_args: Some(match blade {
+                    StaticAnalysisBlade::Biome => biome_args_for_profile(&chunk_targets, profile),
+                    StaticAnalysisBlade::Oxc => oxc_args_for_profile(&chunk_targets, profile),
+                    _ => Vec::new(),
+                }),
+                forced_channel: Some(match profile {
+                    JsLintProfile::UnsafeHotspot => SastIssueChannel::UnsafeHotspot,
+                    JsLintProfile::Health => SastIssueChannel::Health,
+                }),
+            });
+        }
+    }
+    targets
 }
 
 fn derive_repo_relative_clean_targets(
@@ -2903,12 +2977,13 @@ fn should_skip_sast_relative_target(rel: &str) -> bool {
         .filter(|segment| !segment.is_empty())
         .collect::<Vec<_>>();
 
-    segments.iter().any(|segment| {
+    let has_test_like_segment = segments.iter().any(|segment| {
         matches!(
             *segment,
             "test"
                 | "tests"
                 | "__tests__"
+                | "testutil"
                 | "spec"
                 | "specs"
                 | "integration"
@@ -2934,7 +3009,16 @@ fn should_skip_sast_relative_target(rel: &str) -> bool {
                 | "examples"
                 | "example"
         )
-    })
+    });
+    if has_test_like_segment {
+        return true;
+    }
+
+    let file_name = segments.last().copied().unwrap_or_default();
+    file_name.contains(".spec.")
+        || file_name.contains(".test.")
+        || file_name.ends_with("test.go")
+        || file_name.ends_with("test.rs")
 }
 
 fn is_python_supported_file(path: &Path) -> bool {
@@ -2951,6 +3035,18 @@ fn is_biome_supported_file(path: &Path) -> bool {
         .unwrap_or("")
         .to_ascii_lowercase();
     matches!(ext.as_str(), "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "mts" | "cts")
+}
+
+fn is_cpp_supported_file(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        ext.as_str(),
+        "c" | "cc" | "cpp" | "cxx" | "h" | "hh" | "hpp" | "hxx"
+    )
 }
 
 fn is_oxlint_supported_file(path: &Path) -> bool {
@@ -3171,7 +3267,7 @@ fn push_issue(
     if message.trim().is_empty() {
         return;
     }
-    if should_drop_sast_issue(blade, &message) {
+    if should_drop_sast_issue(blade, level, &message) {
         return;
     }
     let channel = classify_sast_issue(blade, level, &message);
@@ -3184,8 +3280,9 @@ fn push_issue(
     });
 }
 
-fn should_drop_sast_issue(blade: StaticAnalysisBlade, message: &str) -> bool {
+fn should_drop_sast_issue(blade: StaticAnalysisBlade, level: &str, message: &str) -> bool {
     is_aesthetic_or_minor_warning(blade, message)
+        || is_blob_06_semantic_slop(blade, level, message)
 }
 
 fn is_aesthetic_or_minor_warning(blade: StaticAnalysisBlade, message: &str) -> bool {
@@ -3212,6 +3309,63 @@ fn is_aesthetic_or_minor_warning(blade: StaticAnalysisBlade, message: &str) -> b
         "f-string",
         "image",
         "picture",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn is_blob_06_semantic_slop(blade: StaticAnalysisBlade, level: &str, message: &str) -> bool {
+    if !matches!(
+        blade,
+        StaticAnalysisBlade::Cppcheck | StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc
+    ) {
+        return false;
+    }
+
+    let normalized_level = level.to_ascii_lowercase();
+    let normalized = message.to_ascii_lowercase();
+    let preserve_signal = normalized_level.contains("error")
+        || [
+            "error",
+            "security",
+            "unsafe",
+            "leak",
+            "injection",
+            "timeout",
+            "vulnerability",
+            "vulnerabilidade",
+            "hardcoded",
+            "secret",
+            "password",
+            "token",
+            "credential",
+            "overflow",
+            "double free",
+            "use-after-free",
+            "use after free",
+            "null pointer",
+            "dangling",
+        ]
+        .iter()
+        .any(|needle| normalized.contains(needle));
+
+    if preserve_signal {
+        return false;
+    }
+
+    [
+        "[info]",
+        " style ",
+        "style:",
+        "import specifier",
+        "never used",
+        "can be declared as",
+        "can be const",
+        "dependency",
+        "could not find or open",
+        "could not resolve",
+        "cannot resolve",
+        "unresolved import",
     ]
     .iter()
     .any(|needle| normalized.contains(needle))
@@ -3286,11 +3440,17 @@ const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "test_support",
     "**/test_support/**",
     "e2e",
+    "testutil",
+    "**/testutil/**",
     "docs",
     "**/docs/**",
     "documentation",
     "examples",
     "**/examples/**",
+    "**/*.spec.*",
+    "**/*.test.*",
+    "**/*test.go",
+    "**/*test.rs",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -3346,27 +3506,13 @@ fn build_semgrep_like_scan_args(
     args
 }
 
-fn cppcheck_args() -> Vec<String> {
-    vec![
+fn cppcheck_args_for_targets(scan_targets: &[String]) -> Vec<String> {
+    let mut args = vec![
         "--xml".to_string(),
         "--xml-version=2".to_string(),
         "--quiet".to_string(),
-        "--enable=warning,style,performance,portability,information".to_string(),
-        ".".to_string(),
-    ]
-}
-
-fn sobelow_args() -> Vec<String> {
-    sobelow_args_for_root(".")
-}
-
-fn biome_args(scan_targets: &[String]) -> Vec<String> {
-    let mut args = vec![
-        "lint".to_string(),
-        "--reporter=json".to_string(),
-        "--no-errors-on-unmatched".to_string(),
-        "--only=lint/correctness".to_string(),
-        "--only=lint/complexity".to_string(),
+        "--enable=warning".to_string(),
+        "--disable=style,performance,portability,information".to_string(),
     ];
     if scan_targets.is_empty() {
         args.push(".".to_string());
@@ -3376,12 +3522,56 @@ fn biome_args(scan_targets: &[String]) -> Vec<String> {
     args
 }
 
+fn cppcheck_args() -> Vec<String> {
+    cppcheck_args_for_targets(&[".".to_string()])
+}
+
+fn sobelow_args() -> Vec<String> {
+    sobelow_args_for_root(".")
+}
+
+fn biome_args(scan_targets: &[String]) -> Vec<String> {
+    biome_args_for_profile(scan_targets, JsLintProfile::Health)
+}
+
+fn biome_args_for_profile(scan_targets: &[String], profile: JsLintProfile) -> Vec<String> {
+    let mut args = vec![
+        "lint".to_string(),
+        "--reporter=json".to_string(),
+        "--no-errors-on-unmatched".to_string(),
+    ];
+    match profile {
+        JsLintProfile::UnsafeHotspot => {
+            args.push("--only=lint/security".to_string());
+            args.push("--only=lint/suspicious".to_string());
+        }
+        JsLintProfile::Health => {
+            args.push("--only=lint/complexity".to_string());
+            args.push("--only=lint/suspicious".to_string());
+        }
+    }
+    if scan_targets.is_empty() {
+        args.push(".".to_string());
+    } else {
+        args.extend(scan_targets.iter().cloned());
+    }
+    args
+}
+
 fn oxc_args(scan_targets: &[String]) -> Vec<String> {
+    oxc_args_for_profile(scan_targets, JsLintProfile::Health)
+}
+
+fn oxc_args_for_profile(scan_targets: &[String], _profile: JsLintProfile) -> Vec<String> {
     let mut args = vec![
         "lint".to_string(),
         "--format".to_string(),
         "json".to_string(),
         "--quiet".to_string(),
+        "-A".to_string(),
+        "all".to_string(),
+        "-D".to_string(),
+        "suspicious".to_string(),
         "--no-error-on-unmatched-pattern".to_string(),
         "--ignore-pattern".to_string(),
         "**/*.min.js".to_string(),
@@ -3556,15 +3746,30 @@ fn blade_command(
                 .map(|value| value.to_vec())
                 .unwrap_or_else(default_clippy_args),
         ),
-        StaticAnalysisBlade::Cppcheck => ("cppcheck", cppcheck_args()),
+        StaticAnalysisBlade::Cppcheck => (
+            "cppcheck",
+            command_args
+                .map(|value| value.to_vec())
+                .unwrap_or_else(cppcheck_args),
+        ),
         StaticAnalysisBlade::Sobelow => (
             "mix",
             command_args
                 .map(|value| value.to_vec())
                 .unwrap_or_else(sobelow_args),
         ),
-        StaticAnalysisBlade::Biome => ("biome", biome_args(scan_targets)),
-        StaticAnalysisBlade::Oxc => ("oxlint", oxc_args(scan_targets)),
+        StaticAnalysisBlade::Biome => (
+            "biome",
+            command_args
+                .map(|value| value.to_vec())
+                .unwrap_or_else(|| biome_args(scan_targets)),
+        ),
+        StaticAnalysisBlade::Oxc => (
+            "oxlint",
+            command_args
+                .map(|value| value.to_vec())
+                .unwrap_or_else(|| oxc_args(scan_targets)),
+        ),
         StaticAnalysisBlade::Ruff => ("ruff", ruff_args(scan_targets)),
         StaticAnalysisBlade::Bandit => ("bandit", bandit_args(scan_targets)),
         StaticAnalysisBlade::Govulncheck => (
@@ -3582,8 +3787,10 @@ async fn run_sast_blade<E: SandboxExecutor>(
     blade: StaticAnalysisBlade,
     timeout_secs: u64,
     execution_root: &Path,
+    scope: &str,
     scan_targets: &[String],
     command_args: Option<&[String]>,
+    has_global_opengrep_coverage: bool,
 ) -> Result<SastBladeResult, SidecarError> {
     if blade == StaticAnalysisBlade::Opengrep {
         return run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets)
@@ -3614,17 +3821,31 @@ async fn run_sast_blade<E: SandboxExecutor>(
             }
             Err(err) => {
                 if let Some(reason) = rust_clippy_should_fallback_to_opengrep(&err) {
-                    warn!(
-                        cwd = %execution_root.display(),
-                        reason = %reason,
-                        "Clippy bloqueado por Trava C de seguranca. Realizando fallback para Opengrep SAST."
-                    );
-                    run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets)
-                        .await
-                        .map(|bytes| SastBladeResult {
-                            effective_blade: StaticAnalysisBlade::Opengrep,
-                            bytes,
+                    if has_global_opengrep_coverage {
+                        info!(
+                            scope = %scope,
+                            cwd = %execution_root.display(),
+                            reason = %reason,
+                            "Fallback para Opengrep ignorado em {}: Opengrep global ja cobre a base",
+                            scope
+                        );
+                        Ok(SastBladeResult {
+                            effective_blade: StaticAnalysisBlade::RustClippy,
+                            bytes: Vec::new(),
                         })
+                    } else {
+                        warn!(
+                            cwd = %execution_root.display(),
+                            reason = %reason,
+                            "Clippy bloqueado por Trava C de seguranca. Realizando fallback para Opengrep SAST."
+                        );
+                        run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets)
+                            .await
+                            .map(|bytes| SastBladeResult {
+                                effective_blade: StaticAnalysisBlade::Opengrep,
+                                bytes,
+                            })
+                    }
                 } else {
                     Err(err)
                 }
@@ -4202,6 +4423,17 @@ impl PolyglotSastSidecar {
         let mut had_failed_payload = false;
         let global_semaphore = Arc::new(Semaphore::new(MONOREPO_SAST_MAX_PARALLEL));
         let cargo_semaphore = Arc::new(Semaphore::new(RUST_CLIPPY_MAX_PARALLEL));
+        let global_opengrep_targets = if blades.contains(&StaticAnalysisBlade::Opengrep) {
+            execution_targets_for_blade(
+                &repo_path,
+                &input.clean_files,
+                &manifests,
+                StaticAnalysisBlade::Opengrep,
+            )
+        } else {
+            Vec::new()
+        };
+        let has_global_opengrep_coverage = has_global_opengrep_coverage(&global_opengrep_targets);
         let mut join_set = JoinSet::new();
 
         for blade in &blades {
@@ -4265,8 +4497,10 @@ impl PolyglotSastSidecar {
                         target.blade,
                         input.timeout_secs,
                         &execution_root,
+                        &scope,
                         &target.scan_targets,
                         target.command_args.as_deref(),
+                        has_global_opengrep_coverage,
                     )
                     .await;
                     drop(global_permit);
@@ -4288,6 +4522,7 @@ impl PolyglotSastSidecar {
                         effective_blade,
                         execution_root,
                         scope,
+                        forced_channel: target.forced_channel,
                         result,
                     })
                 });
@@ -4325,6 +4560,11 @@ impl PolyglotSastSidecar {
                     &bytes,
                 ) {
                     Ok(mut issues) => {
+                        if let Some(forced_channel) = outcome.forced_channel {
+                            for issue in &mut issues {
+                                issue.channel = forced_channel;
+                            }
+                        }
                         had_successful_payload = true;
                         all_issues.append(&mut issues);
                     }
@@ -6300,12 +6540,25 @@ Done in 1.23s"#;
         assert!(oxlint_args.windows(2).any(|pair| pair == ["--format", "json"]));
         assert!(oxlint_args.iter().any(|arg| arg == "--quiet"));
         assert!(biome_args.iter().any(|arg| arg == "--no-errors-on-unmatched"));
-        assert!(biome_args.iter().any(|arg| arg == "--only=lint/correctness"));
         assert!(biome_args.iter().any(|arg| arg == "--only=lint/complexity"));
+        assert!(biome_args.iter().any(|arg| arg == "--only=lint/suspicious"));
         assert!(oxlint_args.iter().any(|arg| arg == "--no-error-on-unmatched-pattern"));
+        assert!(oxlint_args.windows(2).any(|pair| pair == ["-A", "all"]));
+        assert!(oxlint_args.windows(2).any(|pair| pair == ["-D", "suspicious"]));
         assert!(oxlint_args.windows(2).any(|pair| pair == ["--ignore-pattern", "**/*.min.js"]));
         assert!(biome_args.ends_with(&scan_targets));
         assert!(oxlint_args.ends_with(&scan_targets));
+    }
+
+    #[test]
+    fn test_cppcheck_args_are_security_scoped() {
+        let (binary, args) = blade_command(StaticAnalysisBlade::Cppcheck, &[".".to_string()], None);
+        assert_eq!(binary, "cppcheck");
+        assert!(args.iter().any(|arg| arg == "--enable=warning"));
+        assert!(args
+            .iter()
+            .any(|arg| arg == "--disable=style,performance,portability,information"));
+        assert!(!args.iter().any(|arg| arg == "--enable=all"));
     }
 
     #[test]
@@ -6359,6 +6612,60 @@ Done in 1.23s"#;
             StaticAnalysisBlade::Opengrep,
             "panic! found in hot path"
         ));
+    }
+
+    #[test]
+    fn test_blob06_semantic_filter_drops_cppcheck_biome_oxc_slop_but_preserves_security_signal() {
+        assert!(should_drop_sast_issue(
+            StaticAnalysisBlade::Cppcheck,
+            "warning",
+            "[INFO] style issue: variable can be declared as const"
+        ));
+        assert!(should_drop_sast_issue(
+            StaticAnalysisBlade::Biome,
+            "warning",
+            "Import specifier could not resolve and is never used"
+        ));
+        assert!(should_drop_sast_issue(
+            StaticAnalysisBlade::Oxc,
+            "warning",
+            "Value can be declared as const"
+        ));
+        assert!(should_drop_sast_issue(
+            StaticAnalysisBlade::Biome,
+            "warning",
+            "Dependency react isn't specified"
+        ));
+        assert!(should_drop_sast_issue(
+            StaticAnalysisBlade::Cppcheck,
+            "warning",
+            "could not find or open any of the paths given"
+        ));
+        assert!(!should_drop_sast_issue(
+            StaticAnalysisBlade::Cppcheck,
+            "warning",
+            "Memory leak: ptr"
+        ));
+        assert!(!should_drop_sast_issue(
+            StaticAnalysisBlade::Biome,
+            "error",
+            "Potential command injection vulnerability"
+        ));
+        assert!(!should_drop_sast_issue(
+            StaticAnalysisBlade::Bandit,
+            "warning",
+            "Potential shell injection via subprocess"
+        ));
+    }
+
+    #[test]
+    fn test_should_skip_sast_relative_target_handles_testutil_and_test_file_patterns() {
+        assert!(should_skip_sast_relative_target("pkg/testutil/helpers.go"));
+        assert!(should_skip_sast_relative_target("pkg/service/foo_test.go"));
+        assert!(should_skip_sast_relative_target("src/app.test.ts"));
+        assert!(should_skip_sast_relative_target("src/app.spec.ts"));
+        assert!(should_skip_sast_relative_target("crates/core/render_test.rs"));
+        assert!(!should_skip_sast_relative_target("src/app.ts"));
     }
 
     #[tokio::test]
@@ -6543,6 +6850,29 @@ Done in 1.23s"#;
     }
 
     #[test]
+    fn test_derive_cppcheck_execution_targets_requires_productive_cpp_files() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("src/main.c", "int main() { return 0; }\n");
+        executor.write_repo_file("tests/main_test.c", "int main() { return 1; }\n");
+        executor.write_repo_file("pkg/service.go", "package service\n");
+
+        let clean_files = vec![
+            canonicalize_or_self(executor.repo_path().join("src/main.c")),
+            canonicalize_or_self(executor.repo_path().join("tests/main_test.c")),
+            canonicalize_or_self(executor.repo_path().join("pkg/service.go")),
+        ];
+
+        let targets = derive_cppcheck_execution_targets(executor.repo_path(), &clean_files);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].scan_targets, vec!["src/main.c".to_string()]);
+        assert_eq!(
+            targets[0].command_args.as_ref(),
+            Some(&cppcheck_args_for_targets(&["src/main.c".to_string()]))
+        );
+    }
+
+    #[test]
     fn test_derive_opengrep_execution_targets_uses_scoped_ast_roots() {
         let executor = MockExecutor::new(Vec::new());
         let mut clean_files = Vec::new();
@@ -6626,17 +6956,25 @@ Done in 1.23s"#;
         );
         let root_targets = targets
             .iter()
-            .filter(|target| target.scope.starts_with(".::files-"))
+            .filter(|target| target.scope.starts_with(".::"))
             .flat_map(|target| target.scan_targets.iter())
             .cloned()
             .collect::<Vec<_>>();
         let web_targets = targets
             .iter()
-            .filter(|target| target.scope.starts_with("packages/web::files-"))
+            .filter(|target| target.scope.starts_with("packages/web::"))
             .flat_map(|target| target.scan_targets.iter())
             .cloned()
             .collect::<Vec<_>>();
 
+        assert!(targets.iter().any(|target| {
+            target.scope.starts_with(".::unsafe::files-")
+                && target.forced_channel == Some(SastIssueChannel::UnsafeHotspot)
+        }));
+        assert!(targets.iter().any(|target| {
+            target.scope.starts_with(".::health::files-")
+                && target.forced_channel == Some(SastIssueChannel::Health)
+        }));
         assert!(root_targets.iter().any(|target| target == "scripts/build.ts"));
         assert!(web_targets.iter().any(|target| target == "src/compiler/file_0.ts"));
     }
@@ -6669,11 +7007,19 @@ Done in 1.23s"#;
         );
         let api_targets = targets
             .iter()
-            .filter(|target| target.scope.starts_with("apps/api::files-"))
+            .filter(|target| target.scope.starts_with("apps/api::"))
             .flat_map(|target| target.scan_targets.iter())
             .cloned()
             .collect::<Vec<_>>();
 
+        assert!(targets.iter().any(|target| {
+            target.scope.starts_with("apps/api::unsafe::files-")
+                && target.forced_channel == Some(SastIssueChannel::UnsafeHotspot)
+        }));
+        assert!(targets.iter().any(|target| {
+            target.scope.starts_with("apps/api::health::files-")
+                && target.forced_channel == Some(SastIssueChannel::Health)
+        }));
         assert!(api_targets.iter().any(|target| target == "src/index.ts"));
         assert!(api_targets.iter().any(|target| target == "src/server.ts"));
         assert!(api_targets.iter().any(|target| target == "src/controllers/file_0.ts"));
@@ -6814,8 +7160,10 @@ Done in 1.23s"#;
             StaticAnalysisBlade::RustClippy,
             60,
             &execution_root,
+            "apps/rust-sdk",
             &[".".to_string()],
             Some(&clippy_args_for_package("sdk")),
+            false,
         )
         .await
         .unwrap();
@@ -6879,8 +7227,10 @@ Done in 1.23s"#;
             StaticAnalysisBlade::RustClippy,
             60,
             &execution_root,
+            "apps/rust-sdk",
             &[".".to_string()],
             Some(&clippy_args_for_package("sdk")),
+            false,
         )
         .await
         .unwrap();
@@ -6895,5 +7245,59 @@ Done in 1.23s"#;
         assert!(!calls[1].contains("--locked"));
         assert!(calls[2].starts_with("opengrep "));
         assert!(!calls[2].contains("cargo clippy"));
+    }
+
+    #[tokio::test]
+    async fn test_run_sast_blade_skips_opengrep_fallback_when_global_coverage_exists() {
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
+        executor.write_repo_file(
+            "vendor/toxic/Cargo.toml",
+            "[package]\nname='toxic'\nversion='0.1.0'\n\n[build-dependencies]\ncc='1'\n",
+        );
+        let execution_root = executor.repo_path().join("apps").join("rust-sdk");
+        let metadata_payload = serde_json::json!({
+            "packages": [
+                {
+                    "manifest_path": execution_root.join("Cargo.toml").display().to_string()
+                },
+                {
+                    "manifest_path": executor
+                        .repo_path()
+                        .join("vendor")
+                        .join("toxic")
+                        .join("Cargo.toml")
+                        .display()
+                        .to_string()
+                }
+            ]
+        })
+        .to_string();
+        *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
+            Ok(Vec::new()),
+            Ok(metadata_payload.as_bytes().to_vec()),
+        ]);
+
+        let result = run_sast_blade(
+            &executor,
+            StaticAnalysisBlade::RustClippy,
+            60,
+            &execution_root,
+            "apps/rust-sdk",
+            &[".".to_string()],
+            Some(&clippy_args_for_package("sdk")),
+            true,
+        )
+        .await
+        .unwrap();
+
+        let calls = executor.calls();
+        assert_eq!(result.effective_blade, StaticAnalysisBlade::RustClippy);
+        assert!(result.bytes.is_empty());
+        assert_eq!(calls.len(), 2);
+        assert!(calls[0].starts_with("cargo fetch --manifest-path "));
+        assert!(!calls[0].contains("--locked"));
+        assert!(calls[1].starts_with("cargo metadata --format-version 1 --offline --manifest-path "));
+        assert!(!calls[1].contains("--locked"));
     }
 }
