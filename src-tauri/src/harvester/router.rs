@@ -284,8 +284,6 @@ impl ExtractionRouter {
                 }
                 tasks
             }
-            // Inalcançável: profile_to_single já cobriu todas as variantes individuais.
-            // O fallback garante PT-ROUTE-3 (vetor nunca vazio).
             _ => unknown_fallback(),
             }
         };

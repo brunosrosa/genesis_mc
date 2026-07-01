@@ -1,6 +1,8 @@
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use rusqlite::{params, Connection};
 use thiserror::Error;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactBlob {
@@ -22,20 +24,20 @@ impl BlobNormalizer {
         blobs: Vec<ArtifactBlob>,
         conn: Arc<Mutex<Connection>>,
     ) -> Result<(), HarvesterError> {
-        // PT-3: I/O do SQLite é síncrono, delegamos para spawn_blocking
         tokio::task::spawn_blocking(move || {
             let mut conn = conn.lock().map_err(|e| HarvesterError::StorageError(e.to_string()))?;
-            
-            // Início da Transação Atômica
+
+            conn.busy_timeout(Duration::from_millis(5000))
+                .map_err(|e| HarvesterError::StorageError(e.to_string()))?;
+
             let tx = conn.transaction().map_err(|e| HarvesterError::StorageError(e.to_string()))?;
 
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| HarvesterError::StorageError(e.to_string()))?
+                .as_secs() as i64;
+
             for blob in blobs {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|e| HarvesterError::StorageError(e.to_string()))?
-                    .as_secs() as i64;
-                    
-                // PT-BLOB-1: UPSERT individual de artefatos (repo_id + artifact_type)
                 tx.execute(
                     "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao)
                      VALUES (?1, ?2, ?3, ?4)
@@ -46,7 +48,6 @@ impl BlobNormalizer {
                 ).map_err(|e| HarvesterError::StorageError(e.to_string()))?;
             }
 
-            // Commit da Transação
             tx.commit().map_err(|e| HarvesterError::StorageError(e.to_string()))
         })
         .await

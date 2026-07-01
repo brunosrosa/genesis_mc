@@ -364,19 +364,21 @@ fn looks_like_knowledge_repo(conn: &Connection, repo_id: &str) -> bool {
         return false;
     }
 
-    let manifest = read_repo_blob_text(conn, repo_id, "blob_02_dependency_manifest")
-        .ok()
-        .flatten()
-        .unwrap_or_default();
+    let manifest = match read_repo_blob_text(conn, repo_id, "blob_02_dependency_manifest") {
+        Ok(Some(value)) => value,
+        Ok(None) => String::new(),
+        Err(_) => return false,
+    };
     let stack_unknown = manifest.contains("stack_base: UNKNOWN")
         || manifest.contains("stack_base: unknown")
         || manifest.contains("stack_base: N/A")
         || manifest.contains("stack_base: n/a");
 
-    let ux = read_repo_blob_text(conn, repo_id, "blob_11_ux_contracts")
-        .ok()
-        .flatten()
-        .unwrap_or_default();
+    let ux = match read_repo_blob_text(conn, repo_id, "blob_11_ux_contracts") {
+        Ok(Some(value)) => value,
+        Ok(None) => String::new(),
+        Err(_) => return false,
+    };
     let ux_skipped = ux.contains("package.json ausente") || ux.contains("foi pulada");
 
     stack_unknown && ux_skipped
@@ -414,8 +416,7 @@ fn load_repo_versions(conn: &Connection, repo_id: &str) -> io::Result<(String, S
 async fn resolve_release_seed_for_repo_url(repo_url: &Url) -> io::Result<String> {
     let mut segments = repo_url
         .path_segments()
-        .map(|parts| parts.collect::<Vec<_>>())
-        .unwrap_or_default()
+        .ok_or_else(|| io::Error::other("repo_url sem path segments para resolver versão"))?
         .into_iter()
         .filter(|segment| !segment.is_empty())
         .map(|segment| segment.trim_end_matches(".git").to_string())
@@ -423,8 +424,12 @@ async fn resolve_release_seed_for_repo_url(repo_url: &Url) -> io::Result<String>
     if segments.len() < 2 {
         return Err(io::Error::other("repo_url sem owner/repo para resolver versão"));
     }
-    let repo = segments.pop().unwrap_or_default();
-    let owner = segments.pop().unwrap_or_default();
+    let repo = segments
+        .pop()
+        .ok_or_else(|| io::Error::other("repo_url sem repo para resolver versão"))?;
+    let owner = segments
+        .pop()
+        .ok_or_else(|| io::Error::other("repo_url sem owner para resolver versão"))?;
     let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
         .ok()
         .map(|v| v.trim().to_string())
@@ -657,7 +662,10 @@ async fn fetch_harvester_batch_candidates(
 ) -> Result<(Vec<BatchCandidate>, MasterCols), String> {
     let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone()).await?;
-    let header_row = header.first().cloned().unwrap_or_default();
+    let header_row = header
+        .first()
+        .cloned()
+        .ok_or_else(|| format!("Header vazio em MASTER_SOLUTIONS!{header_range}"))?;
     if header_row.is_empty() {
         return Err(format!("Header vazio em MASTER_SOLUTIONS!{}", header_range));
     }
@@ -682,7 +690,10 @@ fn select_batch_candidates_from_values(
     for (i, row) in values.iter().enumerate() {
         let get = |abs_idx: usize| -> String {
             let rel = abs_idx.saturating_sub(min_idx);
-            row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+            match row.get(rel) {
+                Some(value) => value.trim().to_string(),
+                None => String::new(),
+            }
         };
         let status = get(cols.status_atualizacao_idx);
         if status.trim() != STATUS_GATE_HARVESTER {
@@ -727,9 +738,22 @@ async fn process_one_repo_f0(
         info!(repo_id = %repo_id, row_number = row_number_1based, "F0: iniciando");
     }
 
-    let status_atualizacao = read_status_atualizacao_at_row(spreadsheet_id, row_number_1based, cols)
-        .await
-        .unwrap_or_default();
+    let status_atualizacao =
+        match read_status_atualizacao_at_row(spreadsheet_id, row_number_1based, cols).await {
+            Ok(value) => value,
+            Err(e) => {
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: Vec::new(),
+                    blobs_missing: expected_blobs.clone(),
+                    report_path: None,
+                    error: Some(e),
+                };
+            }
+        };
     if status_atualizacao.trim() != STATUS_GATE_HARVESTER {
         info!(
             repo_id = %repo_id,
@@ -914,10 +938,20 @@ async fn process_one_repo_f0(
     }
     hb.abort();
 
+    let mut pre_error: Option<String> = None;
     let (mut blobs_present, mut blobs_missing) = {
         let present = match conn_arc.lock() {
-            Ok(conn_lock) => read_repo_blobs_present(&conn_lock, repo_id).unwrap_or_default(),
-            Err(_) => Vec::new(),
+            Ok(conn_lock) => match read_repo_blobs_present(&conn_lock, repo_id) {
+                Ok(value) => value,
+                Err(e) => {
+                    pre_error = Some(format!("Falha ao ler blobs presentes após F0: {e}"));
+                    Vec::new()
+                }
+            },
+            Err(e) => {
+                pre_error = Some(format!("Falha ao adquirir lock do banco após F0: {e}"));
+                Vec::new()
+            }
         };
         let missing = compute_missing_blobs(&present, &expected_blobs);
         (present, missing)
@@ -925,7 +959,7 @@ async fn process_one_repo_f0(
 
     match res {
         Ok(_) => {
-            let mut post_error: Option<String> = None;
+            let mut post_error: Option<String> = pre_error.take();
             if let Ok(conn_lock) = conn_arc.lock() {
                 match now_epoch_secs() {
                     Ok(now) => {
@@ -953,8 +987,17 @@ async fn process_one_repo_f0(
                 }
             };
             let degraded_blobs = match conn_arc.lock() {
-                Ok(conn_lock) => detect_degraded_blobs(&conn_lock, repo_id).unwrap_or_default(),
-                Err(_) => Vec::new(),
+                Ok(conn_lock) => match detect_degraded_blobs(&conn_lock, repo_id) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        post_error = Some(format!("Falha ao detectar blobs degradados: {e}"));
+                        Vec::new()
+                    }
+                },
+                Err(e) => {
+                    post_error = Some(format!("Falha ao adquirir lock do banco para detectar degradação: {e}"));
+                    Vec::new()
+                }
             };
             if !degraded_blobs.is_empty() {
                 let msg = format!(
@@ -1209,8 +1252,33 @@ async fn process_one_repo_f0_direct(
 
     let (mut blobs_present, mut blobs_missing) = {
         let present = match conn_arc.lock() {
-            Ok(conn_lock) => read_repo_blobs_present(&conn_lock, repo_id).unwrap_or_default(),
-            Err(_) => Vec::new(),
+            Ok(conn_lock) => match read_repo_blobs_present(&conn_lock, repo_id) {
+                Ok(value) => value,
+                Err(e) => {
+                    return RepoBatchSummary {
+                        repo_id: repo_id.to_string(),
+                        row_number_1based: 0,
+                        outcome: RepoOutcome::Error,
+                        elapsed_ms: started.elapsed().as_millis(),
+                        blobs_present: Vec::new(),
+                        blobs_missing: expected_blobs.clone(),
+                        report_path: None,
+                        error: Some(format!("Falha ao ler blobs presentes após F0(direct): {e}")),
+                    };
+                }
+            },
+            Err(e) => {
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based: 0,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: Vec::new(),
+                    blobs_missing: expected_blobs.clone(),
+                    report_path: None,
+                    error: Some(format!("Falha ao adquirir lock do banco após F0(direct): {e}")),
+                };
+            }
         };
         let missing = compute_missing_blobs(&present, &expected_blobs);
         (present, missing)
@@ -1245,8 +1313,33 @@ async fn process_one_repo_f0_direct(
             let report_path = write_f0_report(root_dir, &conn_arc, repo_id).ok();
 
             let degraded_blobs = match conn_arc.lock() {
-                Ok(conn_lock) => detect_degraded_blobs(&conn_lock, repo_id).unwrap_or_default(),
-                Err(_) => Vec::new(),
+                Ok(conn_lock) => match detect_degraded_blobs(&conn_lock, repo_id) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        return RepoBatchSummary {
+                            repo_id: repo_id.to_string(),
+                            row_number_1based: 0,
+                            outcome: RepoOutcome::Error,
+                            elapsed_ms: started.elapsed().as_millis(),
+                            blobs_present: std::mem::take(&mut blobs_present),
+                            blobs_missing: std::mem::take(&mut blobs_missing),
+                            report_path,
+                            error: Some(format!("Falha ao detectar blobs degradados: {e}")),
+                        };
+                    }
+                },
+                Err(e) => {
+                    return RepoBatchSummary {
+                        repo_id: repo_id.to_string(),
+                        row_number_1based: 0,
+                        outcome: RepoOutcome::Error,
+                        elapsed_ms: started.elapsed().as_millis(),
+                        blobs_present: std::mem::take(&mut blobs_present),
+                        blobs_missing: std::mem::take(&mut blobs_missing),
+                        report_path,
+                        error: Some(format!("Falha ao adquirir lock do banco para detectar degradação: {e}")),
+                    };
+                }
             };
             if !degraded_blobs.is_empty() {
                 let msg = format!(
@@ -1369,7 +1462,10 @@ fn resolve_master_cols(header_row: &[String]) -> Result<MasterCols, String> {
 async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<(u32, MasterCols, usize), String> {
     let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone()).await?;
-    let header_row = header.first().cloned().unwrap_or_default();
+    let header_row = header
+        .first()
+        .cloned()
+        .ok_or_else(|| format!("Header vazio em MASTER_SOLUTIONS!{header_range}"))?;
     if header_row.is_empty() {
         return Err(format!("Header vazio em MASTER_SOLUTIONS!{}", header_range));
     }
@@ -1387,7 +1483,10 @@ async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<
     for (i, row) in values.iter().enumerate() {
         let get = |abs_idx: usize| -> String {
             let rel = abs_idx.saturating_sub(min_idx);
-            row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+            match row.get(rel) {
+                Some(value) => value.trim().to_string(),
+                None => String::new(),
+            }
         };
         let repo_url = normalize_repo_url_for_match(&get(cols.repo_url_idx));
         if repo_url.is_empty() {
@@ -1413,11 +1512,11 @@ async fn read_status_atualizacao_at_row(
     let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
     let range = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
     let values = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", range).await?;
-    Ok(values
+    values
         .first()
-        .and_then(|r| r.first())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default())
+        .and_then(|row| row.first())
+        .map(|value| value.trim().to_string())
+        .ok_or_else(|| "Sheets: célula status_atualizacao vazia".to_string())
 }
 
 async fn update_status_atualizacao_e_fase(

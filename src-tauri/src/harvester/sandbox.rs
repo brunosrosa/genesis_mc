@@ -1112,8 +1112,6 @@ impl SandboxHandle {
     }
 }
 
-// Implementação do Drop RAII à prova de falhas com thread spawn + join para aniquilar processos ativos.
-// D1 CORRIGIDO: Usa unwrap_or_else para recuperar de Mutex poisoned ao invés de panic.
 impl Drop for SandboxHandle {
     fn drop(&mut self) {
         let pids: Vec<u32> = {
@@ -1122,9 +1120,6 @@ impl Drop for SandboxHandle {
         };
 
         if !pids.is_empty() {
-            // Executa a guilhotina em uma thread dedicada do sistema operacional (PT-3).
-            // O join() garante que o Drop é síncrono: o SandboxHandle não é destruído
-            // até que todos os processos filhos tenham sido exterminados.
             let _ = std::thread::spawn(move || {
                 for pid in pids {
                     #[cfg(target_os = "windows")]

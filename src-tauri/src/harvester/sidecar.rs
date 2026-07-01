@@ -4,11 +4,9 @@ use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 use ignore::WalkBuilder;
 use quick_xml::de::from_str as xml_from_str;
 use regex::Regex;
-use rusqlite::params;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -107,13 +105,7 @@ pub enum SidecarError {
 pub struct NativeAstInput<'a, E: SandboxExecutor> {
     pub executor: &'a E,
     pub timeout_secs: u64,
-    pub persist_artifacts: Option<PersistArtifactConfig<'a>>,
     pub clean_files: Arc<Vec<PathBuf>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PersistArtifactConfig<'a> {
-    pub repo_id: &'a str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -367,8 +359,10 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
     blocks.sort_by(|(score_l, block_l), (score_r, block_r)| {
         score_r.cmp(score_l).then_with(|| block_l.file_path.cmp(&block_r.file_path))
     });
-    let packed_blocks = blocks.iter().map(|(_, b)| b.clone()).collect::<Vec<_>>();
-    let packed = render_scoped_text_blocks(&packed_blocks);
+    let packed = {
+        let block_refs = blocks.iter().map(|(_, block)| block).collect::<Vec<_>>();
+        render_scoped_text_block_refs(&block_refs)
+    };
     let kind = if skill_signal { "SkillLibrary" } else { "ContentRepo" };
     let mut outline = String::new();
     outline.push_str("# Repository Outline\n\n");
@@ -753,6 +747,25 @@ fn render_scoped_text_blocks(blocks: &[ScopedTextBlock]) -> String {
         .join("\n\n")
 }
 
+fn render_scoped_text_block_refs(blocks: &[&ScopedTextBlock]) -> String {
+    let mut grouped = BTreeMap::<DomainTag, Vec<String>>::new();
+    for block in blocks {
+        let domain = classify_domain_from_path(&block.file_path);
+        grouped
+            .entry(domain)
+            .or_default()
+            .push(format_scoped_text_block(block));
+    }
+
+    grouped
+        .into_iter()
+        .map(|(domain, entries)| {
+            format!("{}\n{}", render_domain_header(domain), entries.join("\n\n"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 pub(crate) fn pack_scoped_text_blocks(blocks: &[ScopedTextBlock], max_chars: usize) -> String {
     let mut packed = String::new();
 
@@ -907,17 +920,17 @@ fn native_ast_cache_db_path_for_repo_id(
     }
 
     let repo_lower = repo.to_ascii_lowercase();
-    if let Some(path) = all_candidates.iter().find(|path| {
+    if let Some(path) = all_candidates.iter().position(|path| {
         path.file_stem()
             .and_then(|stem| stem.to_str())
             .map(|stem| stem.to_ascii_lowercase().contains(&repo_lower))
             .unwrap_or(false)
     }) {
-        return Ok(path.clone());
+        return Ok(all_candidates.swap_remove(path));
     }
 
-    if let [single] = all_candidates.as_slice() {
-        return Ok(single.clone());
+    if all_candidates.len() == 1 {
+        return Ok(all_candidates.swap_remove(0));
     }
 
     Err(SidecarError::ExecutionFailed {
@@ -1022,51 +1035,6 @@ fn sanitize_repo_relative_path(repo_path: &Path, value: &str) -> Option<String> 
     }
 
     Some(normalized)
-}
-
-async fn persist_artifact_blob(
-    config: PersistArtifactConfig<'_>,
-    artifact_type: &str,
-    payload_blob: Vec<u8>,
-) -> Result<(), SidecarError> {
-    let repo_id = config.repo_id.to_string();
-    let artifact_type = artifact_type.to_string();
-    tokio::task::spawn_blocking(move || {
-        let db_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")))
-            .join(".soda_data")
-            .join("soda_heuristic_vault.db");
-
-        let conn = rusqlite::Connection::open(&db_path).map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!("Falha ao conectar no SQLite para persistir artefato: {}", e),
-        })?;
-
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| SidecarError::ExecutionFailed {
-                reason: format!("Falha ao calcular timestamp de extracao: {}", e),
-            })?
-            .as_secs() as i64;
-
-        conn.execute(
-            "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(repo_id, artifact_type) DO UPDATE SET
-                payload_blob = excluded.payload_blob,
-                timestamp_extracao = excluded.timestamp_extracao",
-            params![repo_id, artifact_type, payload_blob, now],
-        )
-        .map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!("Falha ao persistir artefato no SQLite: {}", e),
-        })?;
-
-        Ok(())
-    })
-    .await
-    .map_err(|e| SidecarError::ExecutionFailed {
-        reason: format!("Falha ao aguardar persistencia do artefato: {}", e),
-    })?
 }
 
 fn truncate_chars(content: &str, max_chars: usize) -> String {
@@ -1263,6 +1231,7 @@ async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                 && !stdout_is_blank(&sanitized_stdout)
                 && stdout_contains_json_payload(&sanitized_stdout))
                 || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
+                || (binary == "opengrep" && exit_code == 7)
             {
                 if binary == "cppcheck" {
                     let mut merged = sanitized_stderr.into_bytes();
@@ -1278,6 +1247,12 @@ async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                         Ok(merged)
                     }
                 } else if is_sobelow_mix_invocation(binary, args)
+                    && stdout_is_blank(&sanitized_stdout)
+                    && !sanitized_stderr.trim().is_empty()
+                {
+                    Ok(sanitized_stderr.into_bytes())
+                } else if binary == "opengrep"
+                    && exit_code == 7
                     && stdout_is_blank(&sanitized_stdout)
                     && !sanitized_stderr.trim().is_empty()
                 {
@@ -1391,21 +1366,6 @@ impl NativeAstParser {
             health_report_bytes = health_report_blob.len(),
             "ast-native: artefatos normalizados"
         );
-
-        if let Some(config) = input.persist_artifacts {
-            persist_artifact_blob(
-                config,
-                "blob_04_repo_outline",
-                repo_outline_blob.clone(),
-            )
-            .await?;
-            persist_artifact_blob(
-                config,
-                "blob_05_architecture_map",
-                architecture_map_blob.clone(),
-            )
-            .await?;
-        }
 
         Ok(NativeAstArtifacts {
             repo_outline_blob,
@@ -1804,9 +1764,7 @@ fn extract_frontend_test_entries_shallow(content: &str) -> Vec<String> {
     out.into_iter().collect()
 }
 
-fn build_scoped_blocks_from_pairs(
-    pairs: Vec<(String, String)>,
-) -> Vec<ScopedTextBlock> {
+fn build_scoped_blocks_from_pairs(pairs: Vec<(String, String)>) -> Vec<ScopedTextBlock> {
     let mut grouped = BTreeMap::<String, Vec<String>>::new();
     let mut seen = BTreeMap::<String, BTreeSet<String>>::new();
 
@@ -1835,26 +1793,13 @@ fn build_scoped_blocks_from_pairs(
         .collect()
 }
 
-#[derive(Debug, Clone, Default)]
-struct TestDiscoveryProgress {
-    blocks: Vec<ScopedTextBlock>,
-    bfs_test_files: Vec<String>,
-}
-
 fn discover_static_test_entries_bfs(
     repo_path: &Path,
     profile: &StackProfile,
-    progress: Option<&Arc<Mutex<TestDiscoveryProgress>>>,
 ) -> Result<Vec<ScopedTextBlock>, SidecarError> {
     let mut blocks = Vec::new();
-    let mut candidate_files = BTreeSet::new();
-
     let radar = repo_radar::build_repo_radar(repo_path);
     for path in radar.all_files() {
-        candidate_files.insert(path.clone());
-    }
-
-    for path in &candidate_files {
         if !is_supported_test_file(profile, path) {
             continue;
         }
@@ -1901,17 +1846,6 @@ fn discover_static_test_entries_bfs(
         });
     }
 
-    if let Some(progress) = progress {
-        if let Ok(mut guard) = progress.lock() {
-            guard.blocks = blocks.clone();
-            guard.bfs_test_files = candidate_files
-                .iter()
-                .take(96)
-                .map(|path| relative_display(repo_path, path))
-                .collect();
-        }
-    }
-
     Ok(blocks)
 }
 
@@ -1921,13 +1855,12 @@ impl NativeTestDiscoverySidecar {
     pub async fn extract(input: NativeTestDiscoveryInput<'_>) -> Result<TestIntentPayload, SidecarError> {
         let repo_path = input.repo_path.to_path_buf();
         let profile = input.profile.clone();
-        let blocks = tokio::task::spawn_blocking(move || {
-            discover_static_test_entries_bfs(&repo_path, &profile, None)
-        })
-        .await
-        .map_err(|e| SidecarError::ExecutionFailed {
-            reason: format!("Static test discovery join failed: {}", e),
-        })??;
+        let blocks =
+            tokio::task::spawn_blocking(move || discover_static_test_entries_bfs(&repo_path, &profile))
+                .await
+                .map_err(|e| SidecarError::ExecutionFailed {
+                    reason: format!("Static test discovery join failed: {}", e),
+                })??;
         Ok(TestIntentPayload {
             runner_name: "static-ast-radar".to_string(),
             timed_out: false,
@@ -2204,6 +2137,8 @@ fn clippy_args_for_package(package_name: &str) -> Vec<String> {
     vec![
         "clippy".to_string(),
         "--message-format=json".to_string(),
+        "--workspace".to_string(),
+        "--offline".to_string(),
         "--frozen".to_string(),
         "-p".to_string(),
         package_name.to_string(),
@@ -2216,6 +2151,8 @@ fn default_clippy_args() -> Vec<String> {
     vec![
         "clippy".to_string(),
         "--message-format=json".to_string(),
+        "--workspace".to_string(),
+        "--offline".to_string(),
         "--frozen".to_string(),
         "--".to_string(),
         "--no-deps".to_string(),
@@ -2913,16 +2850,17 @@ fn derive_js_lint_file_list_targets(
         );
         for (idx, chunk) in scan_targets.chunks(JS_LINT_FILE_LIST_CHUNK_SIZE).enumerate() {
             let chunk_targets = chunk.to_vec();
+            let command_args = match blade {
+                StaticAnalysisBlade::Biome => biome_args_for_profile(&chunk_targets, profile),
+                StaticAnalysisBlade::Oxc => oxc_args_for_profile(&chunk_targets, profile),
+                _ => Vec::new(),
+            };
             targets.push(SastExecutionTarget {
                 blade,
                 execution_root: execution_root.to_path_buf(),
                 scope: blade_file_batch_scope(&profile_scope, idx + 1),
-                scan_targets: chunk_targets.clone(),
-                command_args: Some(match blade {
-                    StaticAnalysisBlade::Biome => biome_args_for_profile(&chunk_targets, profile),
-                    StaticAnalysisBlade::Oxc => oxc_args_for_profile(&chunk_targets, profile),
-                    _ => Vec::new(),
-                }),
+                scan_targets: chunk_targets,
+                command_args: Some(command_args),
                 forced_channel: Some(match profile {
                     JsLintProfile::UnsafeHotspot => SastIssueChannel::UnsafeHotspot,
                     JsLintProfile::Health => SastIssueChannel::Health,
@@ -3657,6 +3595,7 @@ fn biome_args_for_profile(scan_targets: &[String], profile: JsLintProfile) -> Ve
         "lint".to_string(),
         "--reporter=json".to_string(),
         "--no-errors-on-unmatched".to_string(),
+        "--skip-parse-errors".to_string(),
         "--vcs-enabled=true".to_string(),
         "--vcs-client-kind=git".to_string(),
         "--vcs-use-ignore-file=true".to_string(),
@@ -4594,11 +4533,17 @@ impl PolyglotSastSidecar {
                 let executor = Arc::clone(&input.executor);
                 let global_semaphore = Arc::clone(&global_semaphore);
                 let cargo_semaphore = Arc::clone(&cargo_semaphore);
-                let scope = target.scope.clone();
-                let execution_root = target.execution_root.clone();
                 let blade_parallelism = blade_parallelism_limit(target.blade);
                 join_set.spawn(async move {
-                    let cargo_permit = if target.blade == StaticAnalysisBlade::RustClippy {
+                    let SastExecutionTarget {
+                        blade,
+                        execution_root,
+                        scope,
+                        scan_targets,
+                        command_args,
+                        forced_channel,
+                    } = target;
+                    let cargo_permit = if blade == StaticAnalysisBlade::RustClippy {
                         Some(
                             Arc::clone(&cargo_semaphore)
                                 .acquire_owned()
@@ -4619,7 +4564,7 @@ impl PolyglotSastSidecar {
                             reason: format!("falha ao adquirir permissão do semáforo SAST: {e}"),
                         })?;
                     info!(
-                        blade = blade_name(target.blade),
+                        blade = blade_name(blade),
                         scope = %scope,
                         cwd = %execution_root.display(),
                         concurrency_limit = blade_parallelism,
@@ -4631,20 +4576,20 @@ impl PolyglotSastSidecar {
                     );
                     let result = run_sast_blade(
                         executor.as_ref(),
-                        target.blade,
+                        blade,
                         input.timeout_secs,
                         &execution_root,
                         &scope,
-                        &target.scan_targets,
-                        target.command_args.as_deref(),
-                        target.forced_channel,
+                        &scan_targets,
+                        command_args.as_deref(),
+                        forced_channel,
                         has_global_opengrep_coverage,
                     )
                     .await;
                     drop(global_permit);
                     drop(cargo_permit);
                     info!(
-                        blade = blade_name(target.blade),
+                        blade = blade_name(blade),
                         scope = %scope,
                         cwd = %execution_root.display(),
                         available_global_permits = global_semaphore.available_permits(),
@@ -4653,14 +4598,14 @@ impl PolyglotSastSidecar {
                     );
                     let (effective_blade, result) = match result {
                         Ok(result) => (result.effective_blade, Ok(result.bytes)),
-                        Err(err) => (target.blade, Err(err)),
+                        Err(err) => (blade, Err(err)),
                     };
                     Ok::<SastExecutionOutcome, SidecarError>(SastExecutionOutcome {
-                        requested_blade: target.blade,
+                        requested_blade: blade,
                         effective_blade,
                         execution_root,
                         scope,
-                        forced_channel: target.forced_channel,
+                        forced_channel,
                         result,
                     })
                 });
@@ -5122,6 +5067,7 @@ impl SemgrepSidecar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::params;
     use std::collections::VecDeque;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -5302,7 +5248,6 @@ pub mod config {
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: test_clean_files(executor.repo_path(), &["src/main.rs", "src/lib.rs"]),
         };
 
@@ -5411,7 +5356,6 @@ export function Panel() {
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: test_clean_files(
                 executor.repo_path(),
                 &["icons/logo.svg", "src/backend/service.rs", "web/panel.tsx"],
@@ -5451,7 +5395,6 @@ pub fn run(_engine: Engine) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: test_clean_files(
                 executor.repo_path(),
                 &[
@@ -5504,7 +5447,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: test_clean_files(
                 executor.repo_path(),
                 &[
@@ -5534,7 +5476,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5560,7 +5501,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5581,7 +5521,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 45,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5600,7 +5539,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5619,7 +5557,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5637,7 +5574,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5656,7 +5592,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5680,7 +5615,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 
@@ -5700,7 +5634,6 @@ pub fn boot(_runtime: Runtime) {}
         let input = NativeAstInput {
             executor: &executor,
             timeout_secs: 30,
-            persist_artifacts: None,
             clean_files: Arc::new(Vec::new()),
         };
 

@@ -18,7 +18,7 @@ use super::extract::{
     TestIntentExtractor, UxContractsExtractor,
 };
 use super::guard::PurgeGuard;
-use super::sidecar::{NativeAstInput, NativeAstParser, PersistArtifactConfig, PolyglotSastInput, PolyglotSastSidecar};
+use super::sidecar::{NativeAstInput, NativeAstParser, PolyglotSastInput, PolyglotSastSidecar};
 use super::canon::SodaCanonExtractor;
 
 #[derive(Error, Debug)]
@@ -174,11 +174,11 @@ impl HarvesterOrchestrator {
 
         // [N5] Roteamento de Tarefas
         info!(repo_id = %repo_id, "N5: Roteando tarefas de extração");
-        let requested_blobs = requested_blobs.unwrap_or_else(BlobSelection::all);
+        let selection = requested_blobs.as_ref();
         let tasks = ExtractionRouter::route(ExtractionInput {
             profile: profile.clone(),
             repo_path: &repo_path,
-            requested_blobs: Some(&requested_blobs),
+            requested_blobs: selection,
         });
         info!(repo_id = %repo_id, tasks = ?tasks, "N5: Tarefas roteadas");
 
@@ -194,7 +194,7 @@ impl HarvesterOrchestrator {
         // [N10] Concorrência (Rede vs Disco)
         // Dispara o fetcher de rede paralelamente ao router de extração local.
         let limiter = RateLimiter;
-        let community_fut = if requested_blobs.contains_artifact("blob_09_community_meta") {
+        let community_fut = if selection.map_or(true, |selection| selection.contains_artifact("blob_09_community_meta")) {
             info!(repo_id = %repo_id, "N10: Iniciando coleta concorrente de metadados comunitarios");
             Some(CommunityMetaFetcher::fetch(repo_url, &limiter))
         } else {
@@ -210,9 +210,6 @@ impl HarvesterOrchestrator {
             let input = NativeAstInput {
                 executor: sandbox_ref,
                 timeout_secs: 600,
-                persist_artifacts: Some(PersistArtifactConfig {
-                    repo_id,
-                }),
                 clean_files: Arc::clone(&clean_files),
             };
             let native_ast_started = Instant::now();
@@ -255,12 +252,12 @@ impl HarvesterOrchestrator {
             }
         }
 
-        if requested_blobs.contains_artifact("blob_01_promessa_readme") {
+        if selection.map_or(true, |selection| selection.contains_artifact("blob_01_promessa_readme")) {
             info!(repo_id = %repo_id, "N7: Extraindo blob_01_promessa_readme");
             match LocalStaticExtractor::extract_all(repo_path.as_ref()).await {
                 Ok(static_blobs) => {
                     for blob in static_blobs {
-                        if requested_blobs.contains_artifact(&blob.artifact_type) {
+                        if selection.map_or(true, |selection| selection.contains_artifact(&blob.artifact_type)) {
                             push_blob(repo_id, &mut blobs, blob);
                         }
                     }
@@ -317,7 +314,7 @@ impl HarvesterOrchestrator {
             }
         }
 
-        if requested_blobs.contains_artifact("blob_03_test_intent") {
+        if selection.map_or(true, |selection| selection.contains_artifact("blob_03_test_intent")) {
             info!(repo_id = %repo_id, "N11: Extraindo blob_03_test_intent");
             let test_intent_blob = if tasks.contains(&ExtractionTask::DiscoverTests) {
                 match TestIntentExtractor::extract_blob(TestIntentInput {
@@ -342,7 +339,7 @@ impl HarvesterOrchestrator {
             push_blob(repo_id, &mut blobs, test_intent_blob);
         }
 
-        if requested_blobs.contains_artifact("blob_11_ux_contracts") {
+        if selection.map_or(true, |selection| selection.contains_artifact("blob_11_ux_contracts")) {
             info!(repo_id = %repo_id, "N11: Extraindo blob_11_ux_contracts");
             let ux_contracts_blob = if tasks.contains(&ExtractionTask::RunOxc) {
                 match UxContractsExtractor::extract_blob(&repo_path).await {
@@ -384,7 +381,7 @@ impl HarvesterOrchestrator {
                         health_report_bytes = payload.health_report_blob.len(),
                         "N11: roteador poliglota de SAST concluido"
                     );
-                    if requested_blobs.contains_artifact("blob_06_unsafe_hotspots") {
+                    if selection.map_or(true, |selection| selection.contains_artifact("blob_06_unsafe_hotspots")) {
                         push_blob(
                             repo_id,
                             &mut blobs,
@@ -394,7 +391,7 @@ impl HarvesterOrchestrator {
                             },
                         );
                     }
-                    if requested_blobs.contains_artifact("blob_08_health_report") {
+                    if selection.map_or(true, |selection| selection.contains_artifact("blob_08_health_report")) {
                         push_blob(
                             repo_id,
                             &mut blobs,
@@ -412,10 +409,10 @@ impl HarvesterOrchestrator {
                         reason = %reason,
                         "Falha ao extrair blobs 06/08 via roteador poliglota de SAST; persistindo zero-byte e seguindo"
                     );
-                    if requested_blobs.contains_artifact("blob_06_unsafe_hotspots") {
+                    if selection.map_or(true, |selection| selection.contains_artifact("blob_06_unsafe_hotspots")) {
                         push_empty_blob(repo_id, &mut blobs, "blob_06_unsafe_hotspots", &reason);
                     }
-                    if requested_blobs.contains_artifact("blob_08_health_report") {
+                    if selection.map_or(true, |selection| selection.contains_artifact("blob_08_health_report")) {
                         push_empty_blob(repo_id, &mut blobs, "blob_08_health_report", &reason);
                     }
                 }
@@ -437,7 +434,7 @@ impl HarvesterOrchestrator {
             push_blob(repo_id, &mut blobs, community_blob);
         }
 
-        if requested_blobs.contains_artifact("blob_10_soda_canon_context") {
+        if selection.map_or(true, |selection| selection.contains_artifact("blob_10_soda_canon_context")) {
             info!(repo_id = %repo_id, "N11: Extraindo blob_10_soda_canon_context");
             match SodaCanonExtractor::extract(repo_id, Arc::clone(&conn)).await {
                 Ok(canon_blob) => push_blob(repo_id, &mut blobs, canon_blob),
@@ -453,7 +450,6 @@ impl HarvesterOrchestrator {
         }
 
         // [N12] Persistência Atômica
-        // PT-BLOB-1: Injeção individualizada no banco episódico.
         let total_payload_bytes: usize = blobs.iter().map(|blob| blob.payload_blob.len()).sum();
         info!(
             repo_id = %repo_id,
