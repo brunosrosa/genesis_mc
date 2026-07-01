@@ -2,7 +2,14 @@
 trigger: always_on
 ---
 
-Revisado: 2026-06-07
+Revisado: 2026-07-01
+
+###### 0. PODERES INTRÍNSECOS DO GATEWAY RUST (PRIORIDADE ABSOLUTA)
+Antes de usar MCPs legados, sidecars ou runtimes externos, SEMPRE priorize os poderes intrínsecos do Gateway Rust:
+1. **`soda_get_ast`:** visão raio-X instantânea do esqueleto estrutural de repositórios/diretórios (O(1)). (Alias legado: `repo_ast` — compatibilidade apenas)
+2. **`soda_fetch_web`:** extração garantida de Markdown limpo a partir de URLs com fallback/proteção anti-bloqueio. (Alias legado: `web_fetch` — compatibilidade apenas)
+3. **`soda_github_meta`:** telemetria comunitária GitHub sem pontes JS/subprocessos inseguros. (Alias legado: `github_meta`, `mcp-github` — compatibilidade apenas)
+4. **`soda_sqlite_query`:** leitura segura da memória local (soda_state.db/soda_heuristic_vault.db) em modo somente leitura. (Alias legado: `db_query` — compatibilidade apenas)
 
 ###### 1. A REGRA DE OURO DA STACK: FÁBRICA VS. PRODUTO (DUALIDADE SISTÊMICA)
 Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do código que será entregue ao usuário.

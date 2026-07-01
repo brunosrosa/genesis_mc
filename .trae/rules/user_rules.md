@@ -62,12 +62,11 @@ Abandone parágrafos monolíticos. Separe o diagnóstico por: **Camada de Persis
 *   **Encerramento:** Relatório sintético final (Viabilidade, Blast Radius, Próximos Passos).
 
 ###### 8. LEAN-CTX (CONTEXT ENGINEERING LAYER)
-<!-- lean-ctx-rules-v9 -->
-CRITICAL: ALWAYS use lean-ctx MCP tools instead of native equivalents. This is NOT optional.
+<!-- lean-ctx-rules-v10 -->
+CRITICAL: ALWAYS use lean-ctx MCP tools for CONTEXT READING instead of native equivalents. This is NOT optional.
 | ALWAYS USE | NEVER USE | Why |
 | :----- | :----- | :----- |
 | `ctx_read(path, mode)` | Read / cat / head / tail | Cached, 10 read modes, re-reads ~13 tokens |
-| `ctx_shell(command)` | Shell / bash / terminal | Pattern compression for git/npm/cargo output |
 | `ctx_search(pattern, path)` | Grep / rg | Compact, token-efficient results |
 | `ctx_tree(path, depth)` | ls / find | Compact directory maps |
 
@@ -75,4 +74,28 @@ Compatibility: `ctx_read` replaces READ operations only. Your native Edit/Write/
 If Edit requires native Read and Read is unavailable, use `ctx_edit(path, old_string, new_string)` instead. Write, Delete, Glob → use normally. NEVER loop on Edit failures — switch to `ctx_edit` immediately.
 Preferred workflow control: use `ctx_workflow` to track states + enforce tool gates + evidence.
 Fallback only if a lean-ctx tool is unavailable: use native equivalents.
+
+**IMPORTANTE DISTINÇÃO**: Para EXECUÇÃO REAL DE COMANDOS no terminal da IDE, use exclusivamente o executor nativo do Trae (como o `RunCommand`), **não** `ctx_shell`.
+- `ctx_shell`: ferramenta de contexto/MCP apenas para saída compactada de git/npm/cargo (não executa comandos que alterem estado significativamente, não substitui terminal real da IDE).
 <!-- /lean-ctx -->
+
+###### 9. NOMENCLATURA CANÔNICA E COMPATIBILIDADE
+Os poderes intrínsecos do Gateway Rust são a autoridade soberana. Aliases legados existem apenas para compatibilidade e não devem ser preferidos.
+
+| Nome Canônico | Alias Legado |
+| :----- | :----- |
+| `soda_get_ast` | `repo_ast` |
+| `soda_fetch_web` | `web_fetch` |
+| `soda_github_meta` | `mcp-github`, `github_meta` |
+| `soda_sqlite_query` | `db_query` |
+
+Sempre priorize o nome canônico; use aliases apenas se o nome canônico não estiver disponível.
+
+###### 10. APRENDIZADOS OPERACIONAIS RECENTES DO HARVESTER
+Injetados diretamente na constituição após validação prática:
+1. **SQLite**: caminhos de escrita concorrente devem configurar explicitamente `busy_timeout` para evitar `SQLITE_BUSY`.
+2. **Biome**: operar em fail-soft para diretórios sem arquivos alvo ou com parse defeituoso.
+3. **Clippy**: em auditoria local blindada, preferir modo hermético (`--workspace`, `--offline`, `--no-deps` quando aplicável).
+4. **Opengrep**: `exit code 7` pode representar sucesso parcial e não deve ser tratado cegamente como falha letal.
+5. **Filtros opcionais**: ausência de flag opcional (como `--only-blobs`) não deve quebrar o fluxo padrão e não deve depender de listas estáticas.
+6. **Teardown**: comentário e comportamento do teardown/sandbox devem coincidir; processos filhos não podem sobreviver ao shutdown.

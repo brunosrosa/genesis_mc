@@ -34,6 +34,8 @@ Sempre que for instruído a realizar varreduras de contradição, arquivar ou re
 #### Constraints
 * **PROIBIÇÃO DA SINCRONICIDADE:** Processos de varredura global ($O(N \log N)$) rodando na thread principal do Tokio violam a arquitetura letalmente. O *Chyros* é o seu único motor.
 * **A SUPREMACIA DO STABLE:** A deriva de Langevin afeta exclusivamente memórias `EVOLVING`. Arquivos `STABLE` permanecem ancorados eternamente, zerando a força de tração do decaimento.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
 
 #### Examples

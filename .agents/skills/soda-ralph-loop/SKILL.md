@@ -42,6 +42,8 @@ Sempre que finalizar a escrita de código, ou a compilação falhar, execute est
 #### Constraints
 * **FOBIA DE LIXO TOXICO:** Você NÃO PODE usar `.unwrap()`, `.expect()` ou `.clone()` preguiçosos para "fazer o compilador calar a boca". O `clippy` vai rejeitar, e você perderá uma tentativa local à toa.
 * **ESCUDO FINOPS:** É um crime arquitetural enviar um arquivo de 1000 linhas para o Claude Opus só para arrumar um erro de Borrow Checker na linha 42. Use `repo_ast`.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação do roteamento de *Amarração Tardia*.
 
 #### Examples

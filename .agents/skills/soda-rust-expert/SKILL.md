@@ -42,9 +42,15 @@ Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBR
 
 7. **Leis de Performance SAST e Sandboxing:**
    * Qualquer CLI, sidecar ou lâmina de análise criada em Rust deve aplicar timeout adaptativo por arquivo/regra sempre que a ferramenta suportar `--allow-rule-timeout-control`; timeout cego global é proibido como estratégia principal.
+   * **Timeout Deep-Flow:** Ferramentas de análise profunda (cppcheck, semgrep, etc.) devem ter idle timeout de 900s, não o padrão curto. Promova ferramentas críticas ao braço deep-flow em `timeout_profile()`.
    * Exclusões de scan podem amputar `tests/` e `**/mocks/*`, mas nunca manifestos e lockfiles (`Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock`, `mix.lock` e equivalentes).
+   * **ADR-024 na CLI:** Implemente exclusões físicas via `--exclude`, `--force-exclude`, `--ignore` para banir tests/mocks/vendor/libs/minificados. Aplique heurística de 7% de espaço em branco para detectar minificados.
    * Arquivos minificados devem ser excluídos com `--exclude-minified-files`; sem suporte nativo, descarte qualquer arquivo com menos de 7% de espaço em branco antes de AST ou regex scanning.
    * Rotinas que materializam `target/`, caches ou builds transitórios, como `cargo clippy`, devem limpar esse lixo imediatamente após o uso, ainda dentro do teardown, para blindar Ramdisk e SSD.
+   * **Allowlist Semântica:** Reduza "slop" aplicando filtros semânticos estritos por blob (ex: blob_06 apenas regras security, blob_08 apenas complexity).
+   * **Otimização Zero-Copy:** Evite clones preguiçosos; use referências temporais, `Cow<str>`, `Arc<String>` ou `Arc<Vec<T>>`.
+   * **Fail-Soft:** Trate exit codes não-letais (ex: Opengrep code 7) como sucesso, não falha.
+   * **Roteamento Seletivo:** Suporte `--only-blobs` para processamento cirúrgico de subconjuntos de blobs.
 
 8. **Zero-Copy Total, IPC Zero-Garbage, Imutabilidade e FrankenSQLite:**
    * **Rust <-> Svelte 5 (UI):** PROIBIDO serializar com JSON puro para arrays massivos. Exporte a memória via buffers binários usando **Apache Arrow**, **rkyv**, **bytemuck** e **zerocopy** sempre que aplicável, entregando fatias, views e buffers transferíveis para os Web Workers sem acordar o Garbage Collector do V8.
@@ -57,6 +63,8 @@ Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBR
 * **SOBERANIA DO BORROW CHECKER:** Para passar pelo *Ralph Loop*, evite clonagens preguiçosas (`.clone()`). Resolva lifetimes pela topologia correta, rejeite `Arc<Mutex<_>>` e `Arc<RwLock<_>>` como default e só aceite sincronização dinâmica após provar que ownership particionado, filas, arenas ou formulação relacional não resolvem o caso.
 * **ZERO-COPY INEGOCIÁVEL:** Evite serialização textual e cópias redundantes. Sempre que a topologia permitir, prefira `rkyv`, `bytemuck`, `zerocopy`, views sobre buffers e transporte binário O(1).
 * **ISOLAMENTO FÍSICO DO TOKIO:** Tarefas de inferência, hashing pesado, parsing massivo, OCR ou sidecars hostis não podem compartilhar sem análise o mesmo pool do *event loop* principal. Se houver risco de jitter, construa runtime separado e considere afinidade de núcleo.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a âncora de amarração tardia do SODA e não pode ser ignorado.
 
 #### Examples

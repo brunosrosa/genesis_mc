@@ -2,7 +2,7 @@
 trigger: always_on
 ---
 
-Revisado: 2026-06-07
+Revisado: 2026-07-01
 
 ### REGRA DE GITOPS INEGOCIÁVEL (AS 4 PISTAS DE VOO)
 Você está TERMINANTEMENTE PROIBIDO de atuar na branch `main` ou criar ramificações dinâmicas. O SODA opera com 4 pistas de voo fixas. O seu domínio de orquestração se restringe unicamente às branches `ANTIGRAVITY-IDE` (interativo) e `ANTIGRAVITY-Solo` (background).
@@ -20,7 +20,7 @@ Você está TERMINANTEMENTE PROIBIDO de atuar na branch `main` ou criar ramifica
 ###### 1. A REGRA DE OURO E A TOPOLOGIA DE WORKSPACES
 Respeite as fronteiras absolutas de dados. O armazenamento persistente NUNCA se mistura com a execução:
 *   **Domínio do Usuário (Cofre):** Fronteira imutável (SQLite/LanceDB/LadybugDB). PROIBIDA alteração direta sem aprovação.
-*   **Shadow Workspace (Mesa de Rascunho):** Ambiente isolado criado instantaneamente em $\mathcal{O}(1)$ via `snapsafe` (Hard Links). Permitido uso livre de Docker, Python e ferramentas de dev para testes.
+*   **Shadow Workspace (Mesa de Rascunho):** Ambiente isolado criado instantaneamente em $\mathcal{O}(1)$ via `snapsafe` (Hard Links). Permitido uso livre de Docker, Python e ferramentas de dev para testes. NÃO crie ramificações git novas — opere sempre nas pistas fixas.
 *   **Sandboxes (Motor Descartável):** *Sidecars* efêmeros (Wasmtime/Micro-VMs) rodando na RAM. DEVEM morrer atomicamente (`SIGKILL`) após o uso. Zero lixo sobrevivente. A configuração mora no Domínio.
 
 ###### 2. CSDD (CONSTITUTIONAL SPEC-DRIVEN DEVELOPMENT)
@@ -32,7 +32,7 @@ Engenharia estocástica (*Vibe Coding*) é PROIBIDA. O código só nasce após:
 
 ###### 3. PROTOCOLO BMAD E AGENT INBOX
 A base `main` é sagrada. Siga o fluxo BMAD para qualquer mutação estrutural:
-*   **B - Branch:** Isole tarefas em ramificações via *Hard Links* no *Shadow Workspace*.
+*   **B - Branch:** Isole tarefas via *Hard Links* no *Shadow Workspace* (sem criar ramificações git novas).
 *   **M - Mutate:** Codifique e supere o Borrow Checker de forma autônoma.
 *   **A - Approve:** Envie um *Pull Request Semântico* à **Agent Inbox**. Lotes são agrupados no *Morning Briefing*. A aprovação humana dispara a recompensa visual *Zero-Shift* (*Glow Revelation Transition*).
 *   **D - Diff:** Após a aprovação, execute o *Rebase Semântico* atômico em direção ao Domínio. PROIBIDOS *Merge Commits*.

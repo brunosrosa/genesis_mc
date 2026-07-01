@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+Revisado: 2026-07-01
+
 ###### CONSTITUIÇÃO VISUAL SODA
 **Paradigma:** Cyber-Neuro Synthesis + Nothing Design (UX Neuro-Inclusiva).
 **Objetivo:** Erradicar "Flow-Debt" (desorientação espacial) e poupar a VRAM/iGPU estritamente para a inferência matemática. A interface (Svelte 5) não calcula lógicas de negócio; atua apenas como renderizador passivo em tempo real.

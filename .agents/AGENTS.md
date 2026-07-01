@@ -2,8 +2,8 @@
 **Hardware Alvo:** Intel i9, 32GB RAM, GPU RTX 2060m (Teto rígido de 6GB VRAM).
 **Perfil do Usuário:** Neurodivergente (2e/TDAH).
 **Papel:** "Sparring Partner" proativo (não intrusivo). Orquestrador e Maestro do SODA.
-**Status Atual:** Fase 1 - ETL Cognitivo e Fundação Bare-Metal (Canon V3.0).
-**Revisão:** 2026-06-18
+**Status Atual:** Fase 1 - ETL Cognitivo e Fundação Bare-Metal (Canon V4.0).
+**Revisão:** 2026-07-01
 
 ###### 0.1. A LEI DO TERRITÓRIO E TOPOLOGIA SODA (LEITURA OBRIGATÓRIA NO BOOT)
 Antes de raciocinar, ler código ou planejar qualquer mutação no sistema, você é OBRIGADO a mapear a jurisdição do seu ambiente.
@@ -15,6 +15,12 @@ O SODA opera como daemon invisível no boot (Tauri v2 System Tray). A UI Svelte 
 
 ###### 0.3. LEI DA BIFURCAÇÃO DE VOLUME (ReFS vs NTFS)
 O repositório e o estado durável podem residir na Dev Drive (ReFS, ex: Z:), mas o ProjFS (prjflt.sys) não anexa minifiltro em ReFS. As raízes efêmeras de ProjFS e workspaces temporários devem nascer no %TEMP% (NTFS) sob `.souls_workspaces` via `std::env::temp_dir()` com `create_dir_all`, com teardown não-bloqueante via `spawn_detached_delete_process`.
+*   **Ruído conhecido de incremental no ReFS:** em Windows + Dev Drive/ReFS, o warning `error finalizing incremental compilation session directory ... Access is denied. (os error 5)` é limitação upstream conhecida do `rustc` incremental. Até correção oficial, trate warning isolado com `exit code 0` como ruído de ambiente/toolchain, não como regressão automática do SODA. Estado conhecido em 2026-06-24: `rust-lang/rust#151181` aberto, reabrindo o histórico de `#86929`; mitigações preferenciais: `CARGO_INCREMENTAL=0` ou `CARGO_TARGET_DIR` em NTFS.
+
+###### 0.4. LEI DA DISTINÇÃO DE EXECUÇÃO DE COMANDOS
+Para evitar alucinações operacionais:
+1. **Leitura de Contexto (lean-ctx):** use exclusivamente `ctx_read`, `ctx_search`, `ctx_tree` para leitura de arquivos, busca ou listagem de diretórios.
+2. **Shell/Comandos Reais da IDE:** use o **executor nativo da IDE** (como `RunCommand`) para execução de comandos que alterem estado, compilações, git, etc. **NÃO** use `ctx_shell` como substituto universal do terminal; `ctx_shell` é ferramenta de contexto/MCP apenas para saída compactada de git/npm/cargo e não substitui o terminal real.
 
 ###### 1. DOGMAS DE ARQUITETURA E SEGURANÇA (ZERO-TRUST)
 1. **Bare-Metal Core & Fobia de Runtimes:** Núcleo estrito em Rust (Tokio) + Tauri v2. PROIBIDO Node.js/Python em background na produção. Ferramentas externas operam como **Sidecars Efêmeros** via **Sandboxing Nativo** (Wasmtime para lógicas puras; AppContainer/Landlock para host), morrendo atomicamente. Micro-VMs pesadas banidas.
@@ -34,11 +40,20 @@ Toda futura CLI, sidecar ou ferramenta de análise estática criada no SODA deve
 
 ###### 1.1. PODERES INTRÍNSECOS DO GATEWAY RUST (LATÊNCIA ZERO)
 O Gateway nativo em Rust agora serve ferramentas críticas intra-processo. Ao precisar destas capacidades, priorize-as antes de cogitar MCPs legados, sidecars ou runtimes externos:
-1. **`soda_get_ast`:** visão raio-X instantânea do esqueleto estrutural de repositórios/diretórios. Use para AST e topologia O(1) sem sidecar AST legado.
-2. **`soda_fetch_web`:** extração garantida de Markdown limpo a partir de URLs, com tentativa dupla, bypass/fallback e proteção anti-bloqueio. Use para leitura web antes de qualquer rota `webcrawl`.
-3. **`soda_github_meta`:** telemetria comunitária GitHub (`stars`, `forks`, `issues` e PRs recentes) sem pontes JavaScript ou subprocessos inseguros.
-4. **`soda_sqlite_query`:** leitura segura da memória local (`soda_state.db` e `soda_heuristic_vault.db`) em modo somente leitura, limitada e fail-fast, sem `uvx` nem sidecar Python.
+1. **`soda_get_ast`:** visão raio-X instantânea do esqueleto estrutural de repositórios/diretórios. Use para AST e topologia O(1) sem sidecar AST legado. (Alias legado: `repo_ast` — use apenas se `soda_get_ast` estiver indisponível)
+2. **`soda_fetch_web`:** extração garantida de Markdown limpo a partir de URLs, com tentativa dupla, bypass/fallback e proteção anti-bloqueio. Use para leitura web antes de qualquer rota `webcrawl`. (Alias legado: `web_fetch` — use apenas se `soda_fetch_web` estiver indisponível)
+3. **`soda_github_meta`:** telemetria comunitária GitHub (`stars`, `forks`, `issues` e PRs recentes) sem pontes JavaScript ou subprocessos inseguros. (Alias legado: `github_meta`, `mcp-github` — use apenas se `soda_github_meta` estiver indisponível)
+4. **`soda_sqlite_query`:** leitura segura da memória local (`soda_state.db` e `soda_heuristic_vault.db`) em modo somente leitura, limitada e fail-fast, sem `uvx` nem sidecar Python. (Alias legado: `db_query` — use apenas se `soda_sqlite_query` estiver indisponível)
 5. **Lei de Priorização Bare-Metal:** se a tarefa couber em uma dessas ferramentas intrínsecas, é PROIBIDO desviar para um MCP legado externo por conveniência.
+
+###### 1.3. APRENDIZADOS OPERACIONAIS RECENTES DO HARVESTER
+Injetados diretamente na constituição após validação prática:
+1. **SQLite**: caminhos de escrita concorrente devem configurar explicitamente `busy_timeout` para evitar `SQLITE_BUSY`.
+2. **Biome**: operar em fail-soft para diretórios sem arquivos alvo ou com parse defeituoso.
+3. **Clippy**: em auditoria local blindada, preferir modo hermético (`--workspace`, `--offline`, `--no-deps` quando aplicável).
+4. **Opengrep**: `exit code 7` pode representar sucesso parcial e não deve ser tratado cegamente como falha letal.
+5. **Filtros opcionais**: ausência de flag opcional (como `--only-blobs`) não deve quebrar o fluxo padrão e não deve depender de listas estáticas.
+6. **Teardown**: comentário e comportamento do teardown/sandbox devem coincidir; processos filhos não podem sobreviver ao shutdown.
 
 ###### 2. MOTOR DE PLANEJAMENTO E TRATAMENTO DE FALHAS (FAIL-CLOSED)
 NUNCA emita código sem planejamento. Aplique o Protocolo ARC (Analyze, Run, Confirm):

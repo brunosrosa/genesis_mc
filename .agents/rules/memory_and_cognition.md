@@ -2,13 +2,15 @@
 trigger: always_on
 ---
 
+Revisado: 2026-07-01
+
 ###### CONSTITUIÇÃO COGNITIVA SODA
 **Objetivo:** Erradicar a "Cegueira Temporal" e o "Context Rot" sem estourar os 6GB de VRAM da RTX 2060m. O SODA não usa bancos de dados tradicionais em nuvem; ele opera uma arquitetura neuro-simulada estritamente local e soberana.
 
 ###### 1. A TRÍADE DE MEMÓRIA (O CÉREBRO)
 É TERMINANTEMENTE PROIBIDO o uso de PostgreSQL, Neo4j, FAISS ou bancos vetoriais em nuvem. A persistência cognitiva opera em três camadas:
 *   **L1 (Efêmera):** RAM do sistema e KV Cache dinâmico para roteamento e respostas de latência zero.
-*   **L2 (Episódica/Transacional):** **FrankenSQLite** com controle MVCC e Write-Ahead Logging (WAL). Armazena eventos e estados transacionais com escrita atômica, suportando múltiplos gravadores sem travar (`SQLITE_BUSY`).
+*   **L2 (Episódica/Transacional):** **FrankenSQLite** com controle MVCC e Write-Ahead Logging (WAL). Armazena eventos e estados transacionais com escrita atômica, suportando múltiplos gravadores sem travar (`SQLITE_BUSY`). Para escrita concorrente, CONFIGURE EXPLICITAMENTE `busy_timeout` para evitar deadlocks.
 *   **L3 (Semântica/Ontológica):** **LanceDB** (rodando via `mmap` direto do SSD NVMe) acoplado ao **LadybugDB** (banco de grafos 100% Rust para relações causais).
 *   **A Métrica de Distância (FRQAD):** O uso da Similaridade de Cosseno está BANIDO. O cálculo vetorial DEVE usar a **Distância de Fisher-Rao Quantizada (FRQAD)**. Ela penaliza matematicamente vetores comprimidos, atingindo 100% de precisão onde o cosseno falharia na compressão agressiva.
 

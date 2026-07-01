@@ -36,6 +36,8 @@ Sempre que for invocado para planejar código, gerenciar fluxo de versionamento 
 #### Constraints
 * **PROIBIÇÃO DA SINCRONIA LETAL:** Sincronizar o LanceDB na mesma thread da interface gráfica corrompe a arquitetura SODA. O *Daemon Chyros* é a sua válvula de escape.
 * **FOBIA DE LIBGIT2/C:** Confie unicamente nas abstrações nativas do `gitoxide` [8].
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento $\mathcal{O}(1)$ [8].
 
 #### Examples
