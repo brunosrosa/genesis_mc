@@ -1,0 +1,1499 @@
+ARTEFATO: blob_08_health_report
+TOTAL DE REPOS: 10
+
+=== REPO: tldraw/tldraw === TAMANHO: 47408 bytes | LINHAS TOTAIS: 734 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=727
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] An empty interface is equivalent to {}.
+- [error] [biome] An empty interface is equivalent to {}.
+- [error] [biome] An empty interface is equivalent to {}.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "unescape" property.
+- [error] [biome] Do not shadow the global "valueOf" property.
+- [error] [biome] Do not shadow the global "valueOf" property.
+- [error] [biome] Forbidden non-null assertion after optional chaining.
+- [error] [biome] Forbidden non-null assertion after optional chaining.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] This callback passed to filter() iterable method should always return a value.
+- [error] [biome] This callback passed to filter() iterable method should always return a value.
+- [error] [biome] This callback passed to filter() iterable method should always return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This comparison uses the same expression on both sides.
+- [error] [biome] This comparison uses the same expression on both sides.
+- [error] [biome] This comparison uses the same expression on both sides.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Use the namespace keyword instead of the outdated module keyword.
+- [error] [biome] Use the namespace keyword instead of the outdated module keyword.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [info] [biome] Avoid redundant double-negation.
+- [info] [biome] Don't use unnecessary undefined.
+- [info] [biome] Excessive complexity of 114 detected (max: 15).
+- [info] [biome] Excessive complexity of 16 detected (max: 15).
+- [info] [biome] Excessive complexity of 17 detected (max: 15).
+- [info] [biome] Excessive complexity of 170 detected (max: 15).
+- [info] [biome] Excessive complexity of 18 detected (max: 15).
+- [info] [biome] Excessive complexity of 19 detected (max: 15).
+- [info] [biome] Excessive complexity of 20 detected (max: 15).
+- [info] [biome] Excessive complexity of 21 detected (max: 15).
+- [info] [biome] Excessive complexity of 22 detected (max: 15).
+- [info] [biome] Excessive complexity of 223 detected (max: 15).
+... [OMITIDO 534 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 47408 BYTES] ...
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected template string placeholder.
+- [warning] [biome] Unexpected template string placeholder.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Use Date.now() instead of new Date().getTime().
+- [warning] [biome] Use a while loop instead of a for loop.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use the rest parameters instead of arguments.
+- [warning] [biome] Using super in a static context can be confusing.
+- [warning] [biome] Using this in a static context can be confusing.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing outside a return type or a type parameter.
+- [warning] [biome] void is confusing outside a return type or a type parameter.
+=== FIM DO PAYLOAD ===
+
+=== REPO: trailbaseio/trailbase === TAMANHO: 53780 bytes | LINHAS TOTAIS: 361 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=344
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- [warning] [opengrep] crates/auth-ui/src/auth.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/build/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/build/src/version.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/cli/src/bin/trail.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/cli/src/bin/trail.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] crates/cli/src/import.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/client/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/client/tests/integration_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/client/tests/integration_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] crates/core/src/admin/logs/stats.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/admin/rows/delete_rows.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/admin/rows/insert_row.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/admin/rows/list_rows.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/admin/rows/update_row.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/admin/table/alter_table.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/admin/user/create_user.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/admin/user/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/app_state.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/avatar.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/change_email.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/change_password.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/change_username.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/login.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/promote_anonymous.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/reset_password.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/api/verify_email.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/auth_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/error.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/jwt.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/login_params.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/oauth/callback.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/oauth/oauth_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/oauth/providers/oidc.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/oauth/providers/test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/oauth/providers/twitch.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/oauth/state.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/user.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/auth/util.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/config.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/connection.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/email.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/encryption.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/extract/either.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/extract/multipart.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/logging.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/migrations.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/create_record.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/delete_record.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/expand.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/list_records.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/params.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/read_record.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/record_api.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/subscribe/event.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/subscribe/hook.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/subscribe/tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/test_utils.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/transaction.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/update_record.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/validate.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/records/write_queries.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/scheduler.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/schema_metadata.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/server/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/server/serve.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/src/transaction_recorder.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/tests/admin_permissions_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/tests/integration_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/tests/public_dir_spa_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/tests/public_dir_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/core/tests/tls_test.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/extension-so/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] crates/extension/src/base64.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/extension/src/geoip.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/extension/src/jsonschema.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/extension/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/extension/src/regex.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/extension/src/uuid.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/extension/src/validators.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/pg-schema/src/index.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/pg-schema/src/table.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/pg-schema/src/trigger.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/pg-schema/src/util.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/pg-schema/src/view.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/qs/src/column_rel_value.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/qs/src/filter.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/qs/src/query.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/refinery/src/drivers/rusqlite.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/refinery/src/drivers/trailbase.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/refinery/src/runner.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/refinery/src/traits/async.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] crates/refinery/src/traits/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782785705085400300.repos.trailbaseio..soda_semgrep.trailbase.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+... [OMITIDO 161 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 53780 BYTES] ...
+- [info] [biome] This function has too many lines (52). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (53). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (54). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (55). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (56). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (57). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (58). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (59). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (62). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (63). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (64). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (66). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (67). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (68). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (69). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (70). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (72). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (73). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (74). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (75). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (76). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (79). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (80). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (81). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (82). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (84). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (87). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (89). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (90). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (92). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (94). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (98). Maximum allowed is 50.
+- [info] [biome] This return statement is unnecessary.
+- [info] [biome] Unexpected prompt
+- [info] [biome] Unexpected prompt
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '>>>'.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unnecessary use of boolean literals in conditional expression.
+- [info] [biome] Useless case clause.
+- [warning] [biome] Default export exports the same symbol as a named export.
+- [warning] [biome] Direct assigning to document.cookie is not recommended.
+- [warning] [biome] Don't use 'Function' as a type.
+- [warning] [biome] Don't use '{}' as a type.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Function has 5 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 6 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 7 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 8 parameters, but only 4 are allowed.
+- [warning] [biome] Potential leaked value that might cause unintended rendering.
+- [warning] [biome] Potential leaked value that might cause unintended rendering.
+- [warning] [biome] Prefer for...of instead of forEach.
+- [warning] [biome] Property 'class' is not a valid React prop name.
+- [warning] [biome] Property 'class' is not a valid React prop name.
+- [warning] [biome] Property 'class' is not a valid React prop name.
+- [warning] [biome] Property 'enctype' is not a valid React prop name.
+- [warning] [biome] Property 'onError' is not valid on a <object> element.
+- [warning] [biome] Property 'stroke-linecap' is not a valid React prop name.
+- [warning] [biome] Property 'stroke-linecap' is not a valid React prop name.
+- [warning] [biome] Property 'stroke-linejoin' is not a valid React prop name.
+- [warning] [biome] Property 'stroke-linejoin' is not a valid React prop name.
+- [warning] [biome] Property 'stroke-width' is not a valid React prop name.
+- [warning] [biome] Property 'stroke-width' is not a valid React prop name.
+- [warning] [biome] Property 'tabindex' is not a valid React prop name.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The property 'classList' is not a valid DOM attribute.
+- [warning] [biome] The use of void is not allowed.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This comparison always has the same result.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This function expression can be turned into an arrow function.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This parameter is only used in recursive calls.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected template string placeholder.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Use Array.isArray() instead of instanceof Array.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] void is confusing inside a union type.
+=== FIM DO PAYLOAD ===
+
+=== REPO: bytecodealliance/wasmtime === TAMANHO: 475487 bytes | LINHAS TOTAIS: 1604 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=1582
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- [warning] [opengrep] build.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] ci/find-latest-release.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] ci/trigger-release-branch-ci.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/build.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/meta/src/dsl/encoding.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/meta/src/generate/format.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/meta/src/generate/inst.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/meta/src/generate/operand.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/meta/src/instructions.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/meta/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/src/api.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/src/custom.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/src/fuzz.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/src/gpr.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/src/mem.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/assembler-x64/src/xmm.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/bforest/src/map.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/bforest/src/node.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/bforest/src/path.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/bforest/src/pool.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/bitset/src/compound.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/bitset/src/scalar.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/build.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/cdsl/instructions.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/cdsl/settings.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/cdsl/typevar.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/cdsl/typevar.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] cranelift/codegen/meta/src/gen_asm.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/gen_inst.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/gen_isle.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/gen_settings.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/meta/src/pulley.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/alias_analysis.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/context.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/cursor.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/data_value.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/data_value.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] cranelift/codegen/src/dominator_tree.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/dominator_tree/simple.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/egraph/cost.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/egraph/elaborate.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/egraph/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/incremental_cache.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/inline.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/inst_predicates.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] cranelift/codegen/src/ir/atomic_rmw_op.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/builder.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/constant.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/debug_tags.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/dfg.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/exception_table.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/extfunc.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/extname.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/function.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/globalvalue.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/immediates.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/instructions.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/jumptable.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/layout.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/memflags.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/memflags.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] cranelift/codegen/src/ir/progpoint.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/trapcode.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/types.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/ir/user_stack_maps.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/abi.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/inst/args.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/inst/emit.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/inst/emit_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/inst/imms.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/inst/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/inst/regs.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/inst/unwind/systemv.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/aarch64/lower/isle.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/pulley_shared/abi.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/pulley_shared/inst/args.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/pulley_shared/inst/emit.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/pulley_shared/inst/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/pulley_shared/lower/isle.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/pulley_shared/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/abi.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/args.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/emit.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/emit_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/encode.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/imms.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/unwind/systemv.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/inst/vector.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/riscv64/lower/isle.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/s390x/abi.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] cranelift/codegen/src/isa/s390x/inst/args.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+... [OMITIDO 1404 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 475487 BYTES] ...
+- [warning] [opengrep] tests/all/pulley.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/all/relocs.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/all/stack_creator.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/all/stack_creator.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/all/stack_overflow.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/all/structs.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/all/table.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/all/tags.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/all/threads.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/all/threads.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/all/traps.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/all/wait_notify.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/all/wait_notify.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/disable_host_trap_handlers.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/disas.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/disas.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/rlimited-memory.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/rlimited-memory.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] tests/wasi.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] tests/wast.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/build.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/abi/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/codegen/bounds.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/codegen/call.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/codegen/context.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/codegen/control.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/codegen/env.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/codegen/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/frame/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/aarch64/abi.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/aarch64/address.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/aarch64/asm.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/aarch64/masm.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/aarch64/regs.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/x64/abi.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/x64/asm.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/x64/masm.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/isa/x64/regs.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/masm.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/regset.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] winch/codegen/src/stack.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782786099629782000.repos.bytecodealliance..soda_semgrep.wasmtime.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+
+
+=================================================================
+[DOMAIN: C++ / CUDA]
+=================================================================
+- [error] [cppcheck] crates/c-api/include/wasm.h :: missingReturn: Found an exit path from function with non-void return type that has missing return statement (line 725)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Extern' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 732)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Foreign' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 712)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Func' defines member function with name 'copy' also defined in its parent class 'Extern'. (line 766)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Func' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 766)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Func' defines member function with name 'type' also defined in its parent class 'Extern'. (line 768)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'FuncType' defines member function with name 'copy' also defined in its parent class 'ExternType'. (line 355)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Global' defines member function with name 'copy' also defined in its parent class 'Extern'. (line 788)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Global' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 788)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Global' defines member function with name 'type' also defined in its parent class 'Extern'. (line 790)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'GlobalType' defines member function with name 'copy' also defined in its parent class 'ExternType'. (line 374)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Instance' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 861)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Memory' defines member function with name 'copy' also defined in its parent class 'Extern'. (line 833)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Memory' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 833)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Memory' defines member function with name 'type' also defined in its parent class 'Extern'. (line 839)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'MemoryType' defines member function with name 'copy' also defined in its parent class 'ExternType'. (line 412)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Module' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 674)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Table' defines member function with name 'copy' also defined in its parent class 'Extern'. (line 811)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Table' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 811)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Table' defines member function with name 'type' also defined in its parent class 'Extern'. (line 813)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'TableType' defines member function with name 'copy' also defined in its parent class 'ExternType'. (line 393)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'TagType' defines member function with name 'copy' also defined in its parent class 'ExternType'. (line 430)
+- [warning] [cppcheck] crates/c-api/include/wasm.hh :: duplInheritedMember: The class 'Trap' defines member function with name 'copy' also defined in its parent class 'Ref'. (line 651)
+- [error] [cppcheck] crates/c-api/include/wasmtime/_structref_class.hh :: unknownMacro: There is an unknown macro here somewhere. Configuration is required. If WASMTIME_OWN_WRAPPER is a macro then please configure it. (line 26)
+- [error] [cppcheck] crates/c-api/include/wasmtime/async.h :: unknownMacro: There is an unknown macro here somewhere. Configuration is required. If WASMTIME_CONFIG_PROP is a macro then please configure it. (line 68)
+- [error] [cppcheck] crates/c-api/include/wasmtime/component/types/module.hh :: unknownMacro: There is an unknown macro here somewhere. Configuration is required. If WASMTIME_CLONE_WRAPPER is a macro then please configure it. (line 30)
+- [error] [cppcheck] crates/c-api/include/wasmtime/types/_structref_class.hh :: unknownMacro: There is an unknown macro here somewhere. Configuration is required. If WASMTIME_CLONE_WRAPPER is a macro then please configure it. (line 146)
+- [error] [cppcheck] crates/c-api/include/wasmtime/types/arrayref.hh :: unknownMacro: There is an unknown macro here somewhere. Configuration is required. If WASMTIME_CLONE_WRAPPER is a macro then please configure it. (line 21)
+- [error] [cppcheck] crates/test-programs/src/bin/dwarf_generic.h :: syntaxError: Code 'classSomeClass{' is invalid C code. (line 3)
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] crates/explorer/src/index.js :: Unexpected class with only a constructor.
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [info] [biome] This return statement is unnecessary.
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '<<'.
+- [info] [biome] Unexpected use of '>>'.
+- [info] [biome] Unexpected use of '>>='.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '|'.
+- [warning] [biome] Don't use console.
+- [warning] [biome] null comparison with != is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: mendableai/firecrawl === TAMANHO: 63547 bytes | LINHAS TOTAIS: 680 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=658
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- [warning] [opengrep] apps/api/native/src/crawler.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/api/native/src/document/providers/docx.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/api/native/src/document/providers/odt.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/api/native/src/document/providers/rtf.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/api/native/src/document/providers/xlsx.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] apps/api/native/src/html.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/api/native/src/logging.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/examples/example.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/agent.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/batch_scrape.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/client.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/crawl.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/map.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/monitor.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/parse.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/scrape.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/search.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/serde_helpers.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/src/types.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] apps/rust-sdk/tests/v2_e2e.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797619317207900.repos.mendableai..soda_semgrep.firecrawl.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] apps/api/native/wasi-worker-browser.mjs :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] apps/api/native/wasi-worker-browser.mjs :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] apps/api/src/controllers/auth.ts :: There is no cause error attached to this new thrown error.
+- [error] [oxc] apps/api/src/controllers/auth.ts :: Unexpected dangling '_' in '`_agentSponsor`'.
+- [error] [oxc] apps/api/src/controllers/v0/admin/crawl-monitor.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v0/admin/metrics.ts :: 'res' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v0/crawl-status.ts :: 'x' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v0/crawl.ts :: 'url' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v0/crawl.ts :: Do not use 'new' for side effects.
+- [error] [oxc] apps/api/src/controllers/v0/crawl.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v0/scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/batch-scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/crawl-status.ts :: 'x' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v1/crawl.ts :: Do not use 'new' for side effects.
+- [error] [oxc] apps/api/src/controllers/v1/crawl.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/deep-research-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/extract-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_llmUsage`'.
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_showCostTracking`'.
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_showSources`'.
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_streamSteps`'.
+- [error] [oxc] apps/api/src/controllers/v1/generate-llmstxt-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/scrape.ts :: 'doc' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v1/scrape.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v1/scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/search.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/batch-scrape.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/batch-scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/crawl-status.ts :: 'x' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/crawl.ts :: Do not use 'new' for side effects.
+- [error] [oxc] apps/api/src/controllers/v2/crawl.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/extract-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_llmUsage`'.
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_showCostTracking`'.
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_showSources`'.
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_streamSteps`'.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: 'doc' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/research-proxy.ts :: 'config' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/scrape-browser.ts :: Empty import specifier is not allowed
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: 'doc' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unexpected dangling '_' in '`__experimental_cache`'.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/search.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/search.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: 'crawlerOptions' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: 'scrapeOptions' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: Unexpected dangling '_' in '`__experimental_cache`'.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: Unexpected dangling '_' in '`__firePdfAsync`'.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/lib/branding/merge.ts :: Unexpected dangling '_' in '`__debug_colors`'.
+- [error] [oxc] apps/api/src/lib/branding/merge.ts :: Unexpected dangling '_' in '`__llm_button_reasoning`'.
+- [error] [oxc] apps/api/src/lib/branding/merge.ts :: Unexpected dangling '_' in '`__llm_logo_reasoning`'.
+- [error] [oxc] apps/api/src/lib/branding/processor.ts :: Unexpected dangling '_' in '`_score`'.
+- [error] [oxc] apps/api/src/lib/branding/processor.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/branding/prompt.ts :: Unexpected dangling '_' in '`__framework_hints`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__button_snapshots`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__framework_hints`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__input_snapshots`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__llm_metadata`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__logo_candidates`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/browser-sessions.ts :: There is no cause error attached to this new thrown error.
+- [error] [oxc] apps/api/src/lib/cclog.ts :: Unexpected dangling '_' in '`__empty__`'.
+... [OMITIDO 480 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 63547 BYTES] ...
+- [info] [biome] This function has too many lines (78). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (79). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (80). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (81). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (82). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (83). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (84). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (846). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (85). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (86). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (87). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (88). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (89). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (90). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (91). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (92). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (93). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (94). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (95). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (96). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (97). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (98). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (99). Maximum allowed is 50.
+- [info] [biome] This return statement is unnecessary.
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '>>>'.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unnecessary continue statement
+- [info] [biome] Unnecessary use of boolean literals in conditional expression.
+- [info] [biome] Useless case clause.
+- [info] [biome] Useless string concatenation.
+- [warning] [biome] An empty source is not allowed.
+- [warning] [biome] Change to an optional chain.
+- [warning] [biome] Compare function missing.
+- [warning] [biome] Default export exports the same symbol as a named export.
+- [warning] [biome] Deprecated import: The extract endpoint is in maintenance mode and its use is discouraged. Review https://docs.firecrawl.dev/developer-guides/usage-guides/choosing-the-data-extractor to find a replacement.
+- [warning] [biome] Deprecated import: The extract endpoint is in maintenance mode and its use is discouraged. Review https://docs.firecrawl.dev/developer-guides/usage-guides/choosing-the-data-extractor to find a replacement.
+- [warning] [biome] Deprecated import: Use QuestionFormat or HighlightsFormat instead.
+- [warning] [biome] Deprecated import: Use QuestionFormat or HighlightsFormat instead.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Don't use '{}' as a type.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Function has 5 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 6 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 7 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 8 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 9 parameters, but only 4 are allowed.
+- [warning] [biome] Potential leaked value that might cause unintended rendering.
+- [warning] [biome] Prefer for...of instead of forEach.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] The use of void is not allowed.
+- [warning] [biome] This JSX attribute is specific to React.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This comparison always has the same result.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This function expression can be turned into an arrow function.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] Unexpected absence of the directive "use strict".
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Use Date.now() instead of new Date().getTime().
+- [warning] [biome] Use Date.now() instead of new Date().valueOf().
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use the rest parameters instead of arguments.
+- [warning] [biome] Using this in a static context can be confusing.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: microsoft/graphrag === TAMANHO: 1585 bytes | LINHAS TOTAIS: 13 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=6
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- [error] [ruff] packages/graphrag-storage/graphrag_storage/tables/csv_table.py :: Yield in context manager in async generator may not trigger cleanup (line 108)
+- [warning] [opengrep] packages/graphrag-storage/graphrag_storage/tables/csv_table.py :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797910495394400.repos.microsoft..soda_semgrep.graphrag.health.soda.python.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+- [error] [ruff] packages/graphrag/graphrag/graphs/modularity.py :: Unreliable floating point equality comparison `total_edge_weight == 0.0` (line 143)
+- [error] [ruff] packages/graphrag/graphrag/index/update/communities.py :: When using only the values of a dict use the `values()` method (line 51)
+- [warning] [opengrep] tests/integration/logging/test_standard_logging.py :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797910495394400.repos.microsoft..soda_semgrep.graphrag.health.soda.python.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+- [warning] [opengrep] tests/integration/vector_stores/test_lancedb.py :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782797910495394400.repos.microsoft..soda_semgrep.graphrag.health.soda.python.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+=== FIM DO PAYLOAD ===
+
+=== REPO: huggingface/candle === TAMANHO: 116464 bytes | LINHAS TOTAIS: 495 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=463
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- [warning] [opengrep] candle-book/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-book/src/lib.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/accelerate.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/accelerate.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/backend.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/backprop.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/cpu/avx.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/cpu/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/cpu/neon.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/cpu/simd128.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/cpu_backend/conv2d.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/cpu_backend/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/cpu_backend/utils.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/custom_op.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/device.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/display.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/dummy_metal_backend.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/metal_backend/device.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/metal_backend/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/metal_backend/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/mkl.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/mkl.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/npy.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/avx.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/fast_mmq.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/fast_mmq.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/fast_mmvq.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/fast_mmvq.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/ggml_file.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/imatrix_file.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/k_quants.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/k_quants.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/metal.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/metal.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/mod.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/neon.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/simd128.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/quantized/tokenizer.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/quantized/utils.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/safetensors.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/safetensors.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/scalar.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/sort.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/tensor.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/tensor.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/tensor_cat.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/src/utils.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/src/utils.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-core/tests/conv_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/custom_op_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/gguf_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/grad_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/layout_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/metal_concurrent_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/pth_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/serialization_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-core/tests/serialization_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e higiene de cleanup
+- [warning] [opengrep] candle-core/tests/tensor_tests.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-datasets/src/hub.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-datasets/src/nlp/tinystories.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-datasets/src/nlp/tinystories.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-datasets/src/vision/cifar.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-datasets/src/vision/mnist.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/build.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/examples/based/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/beit/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/bert/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/bigcode/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/blip/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/chatglm/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/chinese_clip/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/clip/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/codegeex4-9b/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/examples/codegeex4-9b/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/colpali/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/examples/colpali/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/convmixer/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/convnext/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/csm/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/examples/csm/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/custom-ops/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/debertav2/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/examples/debertav2/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/deepseekv2/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/depth_anything_v2/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/examples/depth_anything_v2/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/dinov2/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/dinov2reg4/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-examples/examples/dinov2reg4/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/distilbert/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/efficientnet/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-examples/examples/efficientvit/main.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+... [OMITIDO 295 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 116464 BYTES] ...
+[DOMAIN: OBJECTIVE-C / METAL]
+=================================================================
+- [warning] [opengrep] candle-metal-kernels/src/metal/buffer.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/command_buffer.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-metal-kernels/src/metal/command_buffer.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/commands.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-metal-kernels/src/metal/commands.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/compute_pipeline.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/device.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/encoder.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-metal-kernels/src/metal/encoder.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/fence.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-metal-kernels/src/metal/fence.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/library.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.panic.unwrap.expect: panic/unwrap/expect aumentam fragilidade operacional
+- [warning] [opengrep] candle-metal-kernels/src/metal/library.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+- [warning] [opengrep] candle-metal-kernels/src/metal/residency_set.rs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798016897180600.repos.huggingface..soda_semgrep.candle.health.soda.rust.unsafe.usage: unsafe merece auditoria manual por ampliar o blast radius de memoria
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] candle-wasm-examples/bert/bertWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/bert/bertWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/bert/utils.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/blip/blipWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/blip/blipWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/llama2-c/llama2cWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/llama2-c/llama2cWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: 'prompt' is already declared in the upper scope.
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: 'token' is already declared in the upper scope.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: 'token_id' is already declared in the upper scope.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/phi/phiWorker.js :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] candle-wasm-examples/phi/phiWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/phi/phiWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/segment-anything/samWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/segment-anything/samWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelConditionalGeneration.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelConditionalGeneration.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelEncoderWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelEncoderWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/t5/utils.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/whisper/whisperWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/whisper/whisperWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/yolo/yoloWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/yolo/yoloWorker.js :: Unexpected class with only static properties.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Index` (line 51)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 15)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 21)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 27)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 33)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 39)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 45)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 57)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 63)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 69)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 75)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 81)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 87)
+- [error] [ruff] candle-pyo3/_additional_typing/__init__.py :: Undefined name `Scalar` (line 9)
+- [error] [ruff] candle-pyo3/py_src/candle/__init__.py :: `candle` may be undefined, or defined from star imports (line 53)
+- [error] [ruff] candle-pyo3/py_src/candle/__init__.py :: `candle` may be undefined, or defined from star imports (line 54)
+- [error] [ruff] candle-pyo3/py_src/candle/__init__.py :: `candle` may be undefined, or defined from star imports (line 55)
+- [error] [ruff] candle-pyo3/py_src/candle/__init__.py :: `from .candle import *` used; unable to detect undefined names (line 4)
+- [error] [ruff] candle-pyo3/py_src/candle/__init__.py :: `from .candle import *` used; unable to detect undefined names (line 49)
+- [error] [ruff] candle-pyo3/py_src/candle/nn/module.py :: Undefined name `load` (line 368)
+- [error] [ruff] candle-pyo3/py_src/candle/nn/normalization.py :: Module level import not at top of file (line 7)
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] Promise executor functions should not be `async`.
+- [info] [biome] Logical expression contains unnecessary complexity.
+- [info] [biome] This function has too many lines (57). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (71). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (80). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (83). Maximum allowed is 50.
+- [info] [biome] Unexpected use of '^='.
+- [warning] [biome] Avoid classes that contain only static members.
+- [warning] [biome] Change to an optional chain.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Function has 5 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 7 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 8 parameters, but only 4 are allowed.
+- [warning] [biome] Prefer for...of instead of forEach.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] Use Array.isArray() instead of instanceof Array.
+- [warning] [biome] Using this in a static context can be confusing.
+=== FIM DO PAYLOAD ===
+
+=== REPO: agentjido/jido === TAMANHO: 774 bytes | LINHAS TOTAIS: 9 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=2
+
+=================================================================
+[DOMAIN: ELIXIR]
+=================================================================
+- [warning] [opengrep] test/jido/agent/schedules_integration_test.exs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798361621361800.repos.agentjido..soda_semgrep.jido.health.soda.elixir.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+- [warning] [opengrep] test/jido/storage/file_test.exs :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798361621361800.repos.agentjido..soda_semgrep.jido.health.soda.elixir.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+=== FIM DO PAYLOAD ===
+
+=== REPO: multigres/multigres-operator === TAMANHO: 2770 bytes | LINHAS TOTAIS: 38 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=16
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] scripts/update-action-pins.js :: 'path' is already declared in the upper scope.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- [warning] [bandit] tools/skills/pin_upstream_images/scripts/fetch_latest_tags.py :: Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected. (line 35)
+- [warning] [bandit] tools/skills/pin_upstream_images/scripts/fetch_latest_tags.py :: Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected. (line 45)
+- [warning] [bandit] tools/skills/pin_upstream_images/scripts/fetch_latest_tags.py :: Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected. (line 52)
+
+
+=================================================================
+[DOMAIN: GO]
+=================================================================
+- [warning] [opengrep] pkg/testutil/envtest.go :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798395459354500.repos.multigres..soda_semgrep.multigres-operator.health.soda.go.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+- [warning] [opengrep] pkg/testutil/kind.go :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798395459354500.repos.multigres..soda_semgrep.multigres-operator.health.soda.go.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+- [warning] [opengrep] test/e2e/framework/cluster.go :: C.Users.rosas.AppData.Local.Temp..souls_workspaces.souls_mc_workspace_42668_1782798395459354500.repos.multigres..soda_semgrep.multigres-operator.health.soda.go.temp-dir: Uso de diretorio temporario requer auditoria de seguranca e cleanup
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [info] [biome] Excessive complexity of 17 detected (max: 15).
+- [info] [biome] Excessive complexity of 26 detected (max: 15).
+- [info] [biome] Excessive complexity of 44 detected (max: 15).
+- [info] [biome] Logical expression contains unnecessary complexity.
+- [info] [biome] This function has too many lines (58). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (61). Maximum allowed is 50.
+- [warning] [biome] Change to an optional chain.
+- [warning] [biome] Don't use console.
+- [warning] [biome] null comparison with != is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: sveltejs/svelte === TAMANHO: 92508 bytes | LINHAS TOTAIS: 895 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=883
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] packages/svelte/scripts/check-treeshakeability.js :: 'entry' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/check-treeshakeability.js :: 'entry' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Unexpected dangling '_' in '`__dirname`'.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Unexpected dangling '_' in '`__dirname`'.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'line' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'line' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'messages' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'messages' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'vars' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'vars' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/process-messages/templates/compile-warnings.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/scripts/process-messages/templates/compile-warnings.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sx' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sx' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sy' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sy' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: Unexpected dangling '_' in '`__raw__`'.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: Unexpected dangling '_' in '`__raw__`'.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attr' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attr' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attribute' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attribute' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'handlers' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'handlers' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'prop' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'prop' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'acorn' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'acorn' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'comment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'comment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'code' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'code' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'fragment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'fragment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'state' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'state' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/read/options.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/read/options.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/remove_typescript_nodes.js :: Unexpected dangling '_' in '`_child`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/remove_typescript_nodes.js :: Unexpected dangling '_' in '`_child`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'current' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'current' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'element' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'element' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'index' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'index' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'type' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'type' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/bracket.js :: 'char' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/bracket.js :: 'char' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`__get`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`__get`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_add`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_add`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_distance`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_distance`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'child' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'child' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'context' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'context' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-prune.js :: 'is_global' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-prune.js :: 'is_global' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-prune.js :: 'node' is already declared in the upper scope.
+... [OMITIDO 695 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 92508 BYTES] ...
+- [info] [biome] Unexpected use of '<<'.
+- [info] [biome] Unexpected use of '>>'.
+- [info] [biome] Unexpected use of '>>>'.
+- [info] [biome] Unexpected use of '>>>'.
+- [info] [biome] Unexpected use of '>>>'.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '~'.
+- [info] [biome] Unexpected use of '~'.
+- [info] [biome] Unexpected use of '~'.
+- [info] [biome] Unnecessary continue statement
+- [info] [biome] Unnecessary use of boolean literals in conditional expression.
+- [warning] [biome] Change to an optional chain.
+- [warning] [biome] Deprecated import.
+- [warning] [biome] Deprecated import.
+- [warning] [biome] Deprecated import: Use this only as a temporary solution to migrate your imperative component code to Svelte 5.
+- [warning] [biome] Deprecated import: Use this only as a temporary solution to migrate your imperative component code to Svelte 5.
+- [warning] [biome] Deprecated import: when we get rid of legacy mode and stores, we can get rid of this
+- [warning] [biome] Deprecated import: when we get rid of legacy mode and stores, we can get rid of this
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Error message should not be an empty string.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Function has 5 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 6 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 7 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 8 parameters, but only 4 are allowed.
+- [warning] [biome] Prefer for...of instead of forEach.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The comma operator is disallowed.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This parameter is only used in recursive calls.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use the rest parameters instead of arguments.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: pocketbase/pocketbase === TAMANHO: 48472 bytes | LINHAS TOTAIS: 542 === INICIO DO PAYLOAD ===
+# Health Report
+
+summary: findings=525
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'L' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'a' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'a' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'c' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'c' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'e' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'f' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'g' is not modified in this loop.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'i' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'l' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'n' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'n' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'o' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'o' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'r' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'r' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 's' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 's' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 't' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 't' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'u' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Unexpected dangling '_' in '`__id`'.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Unexpected dangling '_' in '`_self`'.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'a' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'c' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'd' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'f' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'l' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'n' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'o' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'p' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'r' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 's' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 't' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'u' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: Unexpected dangling '_' in '`__raw`'.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: Unexpected dangling '_' in '`_refs`'.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: Unexpected dangling '_' in '`_watcher`'.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: '$' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: '$e' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: '$t' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'A' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Al' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'B' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Bt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'C' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ce' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Cl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'D' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'De' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Dl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'E' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'El' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'F' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Fl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'G' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ge' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Gl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'H' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Hl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'I' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Il' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'It' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'J' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Je' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'K' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ke' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'L' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ll' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Lt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'M' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ml' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Mt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'N' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Nl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Nt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'O' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Oe' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ol' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ot' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'P' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Pl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Q' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Qe' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'R' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Rl' is already declared in the upper scope.
+... [OMITIDO 342 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 48472 BYTES] ...
+- [info] [biome] This function has too many lines (350). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (367). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (371). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (416). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (51). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (517). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (52). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (53). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (54). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (55). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (558). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (56). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (57). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (58). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (59). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (60). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (61). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (62). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (633). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (65). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (66). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (67). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (68). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (70). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (71). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (72). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (73). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (74). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (75). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (76). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (77). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (78). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (79). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (80). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (81). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (82). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (83). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (84). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (86). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (87). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (88). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (89). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (92). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (93). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (94). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (95). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (96). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (97). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (98). Maximum allowed is 50.
+- [info] [biome] This function has too many lines (99). Maximum allowed is 50.
+- [info] [biome] This return statement is unnecessary.
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '<<'.
+- [info] [biome] Unexpected use of '<<'.
+- [info] [biome] Unexpected use of '>>'.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unnecessary continue statement
+- [warning] [biome] Change to an optional chain.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Function has 10 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 11 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 12 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 5 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 6 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 7 parameters, but only 4 are allowed.
+- [warning] [biome] Function has 9 parameters, but only 4 are allowed.
+- [warning] [biome] Prefer for...of instead of forEach.
+- [warning] [biome] Redundant use strict directive.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The character doesn't need to be escaped.
+- [warning] [biome] The comma operator is disallowed.
+- [warning] [biome] The use of void is not allowed.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This comparison always has the same result.
+- [warning] [biome] This function expression can be turned into an arrow function.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Use Date.now() instead of new Date().getTime().
+- [warning] [biome] Use a regular expression literal instead of the RegExp constructor.
+- [warning] [biome] Use a while loop instead of a for loop.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use the rest parameters instead of arguments.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+=== FIM DO PAYLOAD ===

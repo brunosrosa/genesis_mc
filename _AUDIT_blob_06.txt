@@ -1,0 +1,1164 @@
+ARTEFATO: blob_06_unsafe_hotspots
+TOTAL DE REPOS: 10
+
+=== REPO: tldraw/tldraw === TAMANHO: 26951 bytes | LINHAS TOTAIS: 454 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=441
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] An empty interface is equivalent to {}.
+- [error] [biome] An empty interface is equivalent to {}.
+- [error] [biome] An empty interface is equivalent to {}.
+- [error] [biome] Avoid passing content using the dangerouslySetInnerHTML prop.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "hasOwnProperty" property.
+- [error] [biome] Do not shadow the global "unescape" property.
+- [error] [biome] Do not shadow the global "valueOf" property.
+- [error] [biome] Do not shadow the global "valueOf" property.
+- [error] [biome] Forbidden non-null assertion after optional chaining.
+- [error] [biome] Forbidden non-null assertion after optional chaining.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] This callback passed to filter() iterable method should always return a value.
+- [error] [biome] This callback passed to filter() iterable method should always return a value.
+- [error] [biome] This callback passed to filter() iterable method should always return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] This comparison uses the same expression on both sides.
+- [error] [biome] This comparison uses the same expression on both sides.
+- [error] [biome] This comparison uses the same expression on both sides.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Use the namespace keyword instead of the outdated module keyword.
+- [error] [biome] Use the namespace keyword instead of the outdated module keyword.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [info] [biome] Potential secret found.
+- [info] [biome] Unexpected alert
+- [info] [biome] Unexpected alert
+- [info] [biome] Unexpected alert
+- [info] [biome] Unexpected alert
+- [info] [biome] Unexpected alert
+- [info] [biome] Unexpected alert
+- [info] [biome] Unexpected alert
+- [info] [biome] Unexpected confirm
+- [info] [biome] Unexpected confirm
+- [info] [biome] Unexpected prompt
+- [info] [biome] Unexpected prompt
+... [OMITIDO 254 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 26951 BYTES] ...
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected template string placeholder.
+- [warning] [biome] Unexpected template string placeholder.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] Use of forwardRef is detected, which is deprecated.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing inside a union type.
+- [warning] [biome] void is confusing outside a return type or a type parameter.
+- [warning] [biome] void is confusing outside a return type or a type parameter.
+=== FIM DO PAYLOAD ===
+
+=== REPO: trailbaseio/trailbase === TAMANHO: 11919 bytes | LINHAS TOTAIS: 149 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=119
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] crates/assets/js/admin/src/components/FormFields.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/FormFields.tsx :: Do not use 'new' for side effects.
+- [error] [oxc] crates/assets/js/admin/src/components/Table.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/Table.tsx :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] crates/assets/js/admin/src/components/auth/Totp.tsx :: 'totp' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/editor/EditorPage.tsx :: 'attachedDbs' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/editor/EditorPage.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/editor/EditorPage.tsx :: 'selected' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/erd/ErdGraph.tsx :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] crates/assets/js/admin/src/components/logs/LogsPage.tsx :: 'filter' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/logs/LogsPage.tsx :: 'pageIndex' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/logs/LogsPage.tsx :: 'pageSize' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/logs/LogsPage.tsx :: Unexpected dangling '_' in '`_changeDistantPointLineColorToTransparent`'.
+- [error] [oxc] crates/assets/js/admin/src/components/settings/AuthSettings.tsx :: 'config' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/settings/AuthSettings.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/settings/EmailSettings.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/settings/JobSettings.tsx :: 'enabled' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/settings/JobSettings.tsx :: 'field' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/settings/JobSettings.tsx :: 'latest' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/settings/JobSettings.tsx :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/CreateAlterColumnForm.tsx :: 'name' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/CreateAlterColumnForm.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/CreateAlterIndex.tsx :: 'field' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/CreateAlterTable.tsx :: 'columns' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/InsertUpdateRow.tsx :: 'expected' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/InsertUpdateRow.tsx :: 'value' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/RecordApiSettings.tsx :: 'api' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/RecordApiSettings.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/RecordApiSettings.tsx :: 'v' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/SchemaDownload.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/TablePane.tsx :: 'filter' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/TablePane.tsx :: 'pageIndex' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/TablePane.tsx :: 'pageSize' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/TablePane.tsx :: 'props' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/components/tables/TablesPage.tsx :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] crates/assets/js/admin/src/components/ui/sidebar.tsx :: 'open' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/admin/src/lib/api/config.ts :: Unexpected dangling '_' in '`_configKey`'.
+- [error] [oxc] crates/assets/js/admin/src/lib/fexpr.ts :: Unexpected dangling '_' in '`_lastStart`'.
+- [error] [oxc] crates/assets/js/admin/src/lib/list.ts :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] crates/assets/js/admin/src/lib/signals.ts :: 'v' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/client/src/client.ts :: 'tokens' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/client/src/client.ts :: Unexpected dangling '_' in '`_authChange`'.
+- [error] [oxc] crates/assets/js/client/src/client.ts :: Unexpected dangling '_' in '`_base`'.
+- [error] [oxc] crates/assets/js/client/src/client.ts :: Unexpected dangling '_' in '`_tokenState`'.
+- [error] [oxc] crates/assets/js/client/src/client.ts :: Unexpected dangling '_' in '`_transport`'.
+- [error] [oxc] crates/assets/js/client/src/constants.ts :: Unexpected dangling '_' in '`_isDev`'.
+- [error] [oxc] crates/assets/js/client/src/json.ts :: BigInt prototype is read-only, properties should not be added.
+- [error] [oxc] crates/assets/js/client/src/record_api.ts :: 'T' is already declared in the upper scope.
+- [error] [oxc] crates/assets/js/client/src/record_api.ts :: Do not use 'new' for side effects.
+- [error] [oxc] crates/auth-ui/ui/src/components/ErrorBoundary.tsx :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] crates/auth-ui/ui/src/components/Totp.tsx :: 'totp' is already declared in the upper scope.
+- [error] [oxc] guests/typescript/src/db/index.ts :: 'query' is already declared in the upper scope.
+- [error] [oxc] guests/typescript/src/db/index.ts :: BigInt prototype is read-only, properties should not be added.
+- [error] [oxc] guests/typescript/src/fs/index.ts :: 'path' is already declared in the upper scope.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_authority`'.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_body`'.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_headers`'.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_method`'.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_params`'.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_path`'.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_scheme`'.
+- [error] [oxc] guests/typescript/src/http/request.ts :: Unexpected dangling '_' in '`_user`'.
+- [error] [oxc] guests/typescript/src/json.js :: '$' is already declared in the upper scope.
+- [error] [oxc] guests/typescript/src/json.js :: 'rawJSON' is already declared in the upper scope.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: GO]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] Do not shadow the global "JSON" property.
+- [error] [biome] Do not shadow the global "JSON" property.
+- [error] [biome] Do not shadow the global "escape" property.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] This case is falling through to the next case.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [info] [biome] Potential secret found.
+- [info] [biome] Unexpected prompt
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '>>>'.
+- [info] [biome] Unexpected use of '|'.
+- [warning] [biome] Direct assigning to document.cookie is not recommended.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Potential leaked value that might cause unintended rendering.
+- [warning] [biome] Property 'class' is not a valid React prop name.
+- [warning] [biome] Property 'class' is not a valid React prop name.
+- [warning] [biome] Property 'enctype' is not a valid React prop name.
+- [warning] [biome] Property 'onError' is not valid on a <object> element.
+- [warning] [biome] Property 'stroke-linecap' is not a valid React prop name.
+- [warning] [biome] Property 'stroke-linejoin' is not a valid React prop name.
+- [warning] [biome] Property 'stroke-width' is not a valid React prop name.
+- [warning] [biome] Property 'tabindex' is not a valid React prop name.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The property 'classList' is not a valid DOM attribute.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This comparison always has the same result.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This parameter is only used in recursive calls.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected template string placeholder.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Use Array.isArray() instead of instanceof Array.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] void is confusing inside a union type.
+=== FIM DO PAYLOAD ===
+
+=== REPO: bytecodealliance/wasmtime === TAMANHO: 1880 bytes | LINHAS TOTAIS: 45 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=16
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: C++ / CUDA]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] crates/explorer/src/index.js :: Unexpected class with only a constructor.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- [info] [bandit] ci/run-tests.py :: Consider possible security implications associated with the subprocess module. (line 23)
+- [info] [bandit] ci/run-tests.py :: subprocess call - check for execution of untrusted input. (line 36)
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '<<'.
+- [info] [biome] Unexpected use of '>>'.
+- [info] [biome] Unexpected use of '>>='.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '|'.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] null comparison with != is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: mendableai/firecrawl === TAMANHO: 33381 bytes | LINHAS TOTAIS: 357 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=322
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] apps/api/native/wasi-worker-browser.mjs :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] apps/api/native/wasi-worker-browser.mjs :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] apps/api/src/controllers/auth.ts :: There is no cause error attached to this new thrown error.
+- [error] [oxc] apps/api/src/controllers/auth.ts :: Unexpected dangling '_' in '`_agentSponsor`'.
+- [error] [oxc] apps/api/src/controllers/v0/admin/crawl-monitor.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v0/admin/metrics.ts :: 'res' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v0/crawl-status.ts :: 'x' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v0/crawl.ts :: 'url' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v0/crawl.ts :: Do not use 'new' for side effects.
+- [error] [oxc] apps/api/src/controllers/v0/crawl.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v0/scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/batch-scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/crawl-status.ts :: 'x' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v1/crawl.ts :: Do not use 'new' for side effects.
+- [error] [oxc] apps/api/src/controllers/v1/crawl.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/deep-research-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/extract-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_llmUsage`'.
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_showCostTracking`'.
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_showSources`'.
+- [error] [oxc] apps/api/src/controllers/v1/extract.ts :: Unexpected dangling '_' in '`__experimental_streamSteps`'.
+- [error] [oxc] apps/api/src/controllers/v1/generate-llmstxt-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/scrape.ts :: 'doc' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v1/scrape.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v1/scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v1/search.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/batch-scrape.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/batch-scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/crawl-status.ts :: 'x' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/crawl.ts :: Do not use 'new' for side effects.
+- [error] [oxc] apps/api/src/controllers/v2/crawl.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/extract-status.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_llmUsage`'.
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_showCostTracking`'.
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_showSources`'.
+- [error] [oxc] apps/api/src/controllers/v2/extract.ts :: Unexpected dangling '_' in '`__experimental_streamSteps`'.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: 'doc' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/parse.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/research-proxy.ts :: 'config' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/scrape-browser.ts :: Empty import specifier is not allowed
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: 'doc' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unexpected dangling '_' in '`__experimental_cache`'.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/scrape.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/controllers/v2/search.ts :: Unexpected dangling '_' in '`__agentInterop`'.
+- [error] [oxc] apps/api/src/controllers/v2/search.ts :: Unexpected dangling '_' in '`__searchPreviewToken`'.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: 'crawlerOptions' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: 'scrapeOptions' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: Unexpected dangling '_' in '`__experimental_cache`'.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: Unexpected dangling '_' in '`__firePdfAsync`'.
+- [error] [oxc] apps/api/src/controllers/v2/types.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/lib/branding/merge.ts :: Unexpected dangling '_' in '`__debug_colors`'.
+- [error] [oxc] apps/api/src/lib/branding/merge.ts :: Unexpected dangling '_' in '`__llm_button_reasoning`'.
+- [error] [oxc] apps/api/src/lib/branding/merge.ts :: Unexpected dangling '_' in '`__llm_logo_reasoning`'.
+- [error] [oxc] apps/api/src/lib/branding/processor.ts :: Unexpected dangling '_' in '`_score`'.
+- [error] [oxc] apps/api/src/lib/branding/processor.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/branding/prompt.ts :: Unexpected dangling '_' in '`__framework_hints`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__button_snapshots`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__framework_hints`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__input_snapshots`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__llm_metadata`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Unexpected dangling '_' in '`__logo_candidates`'.
+- [error] [oxc] apps/api/src/lib/branding/transformer.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/browser-sessions.ts :: There is no cause error attached to this new thrown error.
+- [error] [oxc] apps/api/src/lib/cclog.ts :: Unexpected dangling '_' in '`__empty__`'.
+- [error] [oxc] apps/api/src/lib/crawl-redis.ts :: 'urlO' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/deterministicJson/html/simplify.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/deterministicJson/llm/client.ts :: There is no cause error attached to this new thrown error.
+- [error] [oxc] apps/api/src/lib/extract/document-scraper.ts :: Unnecessary use of boolean literals in conditional expression
+- [error] [oxc] apps/api/src/lib/extract/extraction-service.ts :: 'error' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/fire-0/helpers/spread-schemas-f0.ts :: 'schema' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/fire-0/llmExtract-f0.ts :: 'logger' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/fire-0/llmExtract-f0.ts :: 'x' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/fire-0/reranker-f0.ts :: 'link' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/fire-0/reranker-f0.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/extract/fire-0/url-processor-f0.ts :: 'rerankerResult' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/helpers/spread-schemas.ts :: 'schema' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/reranker.ts :: 'link' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/extract/reranker.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/extract/url-processor.ts :: 'rerankerResult' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/fire-privacy-client.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] apps/api/src/lib/gcs-jobs.ts :: 'logger' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/generate-llmstxt/generate-llmstxt-service.ts :: 'url' is already declared in the upper scope.
+- [error] [oxc] apps/api/src/lib/highlight-spans.ts :: 'tokens' is already declared in the upper scope.
+... [OMITIDO 157 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 33381 BYTES] ...
+=================================================================
+[DOMAIN: GO]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: ELIXIR]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] 'Firecrawl' is redeclared in the same scope.
+- [error] [biome] Avoid using the index of an array as key property in an element.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] This callback passed to filter() iterable method should always return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This callback passed to map() iterable method should always return a value.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Unexpected control character in a regular expression.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [info] [biome] Potential secret found.
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '>>>'.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|='.
+- [warning] [biome] An empty source is not allowed.
+- [warning] [biome] Compare function missing.
+- [warning] [biome] Deprecated import: The extract endpoint is in maintenance mode and its use is discouraged. Review https://docs.firecrawl.dev/developer-guides/usage-guides/choosing-the-data-extractor to find a replacement.
+- [warning] [biome] Deprecated import: The extract endpoint is in maintenance mode and its use is discouraged. Review https://docs.firecrawl.dev/developer-guides/usage-guides/choosing-the-data-extractor to find a replacement.
+- [warning] [biome] Deprecated import: Use QuestionFormat or HighlightsFormat instead.
+- [warning] [biome] Deprecated import: Use QuestionFormat or HighlightsFormat instead.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Potential leaked value that might cause unintended rendering.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] This JSX attribute is specific to React.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This comparison always has the same result.
+- [warning] [biome] This comparison always has the same result.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] Unexpected absence of the directive "use strict".
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected any. Specify a different type.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary nullish coalescing.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: microsoft/graphrag === TAMANHO: 1938 bytes | LINHAS TOTAIS: 22 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=9
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- [info] [bandit] packages/graphrag-llm/graphrag_llm/middleware/with_errors_for_testing.py :: Standard pseudo-random generators are not suitable for security/cryptographic purposes. (line 60)
+- [info] [bandit] packages/graphrag-llm/graphrag_llm/middleware/with_errors_for_testing.py :: Standard pseudo-random generators are not suitable for security/cryptographic purposes. (line 73)
+- [info] [bandit] packages/graphrag-llm/graphrag_llm/retry/exponential_retry.py :: Standard pseudo-random generators are not suitable for security/cryptographic purposes. (line 112)
+- [info] [bandit] packages/graphrag-llm/graphrag_llm/retry/exponential_retry.py :: Standard pseudo-random generators are not suitable for security/cryptographic purposes. (line 81)
+- [warning] [bandit] packages/graphrag-vectors/graphrag_vectors/cosmosdb.py :: Possible SQL injection vector through string-based query construction. (line 293)
+- [warning] [bandit] packages/graphrag-vectors/graphrag_vectors/cosmosdb.py :: Possible SQL injection vector through string-based query construction. (line 311)
+- [info] [bandit] packages/graphrag/graphrag/index/utils/uuid.py :: Standard pseudo-random generators are not suitable for security/cryptographic purposes. (line 13)
+- [info] [bandit] scripts/update_workspace_dependency_versions.py :: Consider possible security implications associated with the subprocess module. (line 8)
+- [info] [bandit] scripts/update_workspace_dependency_versions.py :: subprocess call - check for execution of untrusted input. (line 14)
+=== FIM DO PAYLOAD ===
+
+=== REPO: huggingface/candle === TAMANHO: 5385 bytes | LINHAS TOTAIS: 77 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=42
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: C++ / CUDA]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: OBJECTIVE-C / METAL]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] candle-wasm-examples/bert/bertWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/bert/bertWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/bert/utils.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/blip/blipWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/blip/blipWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/llama2-c/llama2cWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/llama2-c/llama2cWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: 'prompt' is already declared in the upper scope.
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/moondream/code.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: 'token' is already declared in the upper scope.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: 'token_id' is already declared in the upper scope.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/moondream/moondreamWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/phi/phiWorker.js :: Do not use `instanceof` with built-in constructors
+- [error] [oxc] candle-wasm-examples/phi/phiWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/phi/phiWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/segment-anything/samWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/segment-anything/samWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelConditionalGeneration.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelConditionalGeneration.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelEncoderWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/t5/T5ModelEncoderWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/t5/utils.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/whisper/whisperWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/whisper/whisperWorker.js :: Unexpected class with only static properties.
+- [error] [oxc] candle-wasm-examples/yolo/yoloWorker.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] candle-wasm-examples/yolo/yoloWorker.js :: Unexpected class with only static properties.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- [warning] [bandit] candle-pyo3/e5.py :: Unsafe Hugging Face Hub download without revision pinning in from_pretrained() (line 31)
+- [warning] [bandit] candle-pyo3/e5.py :: Unsafe Hugging Face Hub download without revision pinning in from_pretrained() (line 32)
+- [warning] [bandit] candle-pyo3/e5.py :: Unsafe Hugging Face Hub download without revision pinning in hf_hub_download() (line 16)
+- [warning] [bandit] candle-pyo3/e5.py :: Unsafe Hugging Face Hub download without revision pinning in hf_hub_download() (line 17)
+- [warning] [bandit] candle-wasm-examples/quant-qwen3/serve.py :: Unsafe Hugging Face Hub download without revision pinning in hf_hub_download() (line 42)
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] Promise executor functions should not be `async`.
+- [info] [biome] Potential secret found.
+- [info] [biome] Unexpected use of '^='.
+- [warning] [biome] Don't use console.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] Use Array.isArray() instead of instanceof Array.
+=== FIM DO PAYLOAD ===
+
+=== REPO: agentjido/jido === TAMANHO: 241 bytes | LINHAS TOTAIS: 8 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=0
+
+=================================================================
+[DOMAIN: ELIXIR]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+=== FIM DO PAYLOAD ===
+
+=== REPO: multigres/multigres-operator === TAMANHO: 952 bytes | LINHAS TOTAIS: 27 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=3
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] scripts/update-action-pins.js :: 'path' is already declared in the upper scope.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: GO]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [warning] [biome] Don't use console.
+- [warning] [biome] null comparison with != is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: sveltejs/svelte === TAMANHO: 80197 bytes | LINHAS TOTAIS: 729 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=717
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] packages/svelte/scripts/check-treeshakeability.js :: 'entry' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/check-treeshakeability.js :: 'entry' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Unexpected dangling '_' in '`__dirname`'.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Unexpected dangling '_' in '`__dirname`'.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/generate-browser-support.ts :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'line' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'line' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'messages' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'messages' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'vars' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: 'vars' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/process-messages/index.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] packages/svelte/scripts/process-messages/templates/compile-warnings.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/scripts/process-messages/templates/compile-warnings.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sx' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sx' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sy' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/animate/index.js :: 'sy' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: Unexpected dangling '_' in '`__raw__`'.
+- [error] [oxc] packages/svelte/src/compiler/legacy.js :: Unexpected dangling '_' in '`__raw__`'.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attr' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attr' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attribute' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'attribute' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'handlers' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'handlers' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'prop' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'prop' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/src/compiler/migrate/index.js :: Redundant super call in constructor
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'acorn' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'acorn' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'comment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'comment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/acorn.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'code' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'code' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'fragment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'fragment' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'state' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/index.js :: 'state' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/read/options.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/read/options.js :: 'name' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/remove_typescript_nodes.js :: Unexpected dangling '_' in '`_child`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/remove_typescript_nodes.js :: Unexpected dangling '_' in '`_child`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'current' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'current' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'element' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'element' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'index' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'index' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'type' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/element.js :: 'type' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'end' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/state/tag.js :: 'start' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/bracket.js :: 'char' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/bracket.js :: 'char' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`__get`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`__get`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_add`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_add`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_distance`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/1-parse/utils/fuzzymatch.js :: Unexpected dangling '_' in '`_distance`'.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'child' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'child' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'context' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'context' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-analyze.js :: 'node' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-prune.js :: 'is_global' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-prune.js :: 'is_global' is already declared in the upper scope.
+- [error] [oxc] packages/svelte/src/compiler/phases/2-analyze/css/css-prune.js :: 'node' is already declared in the upper scope.
+... [OMITIDO 529 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 80197 BYTES] ...
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '^='.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '|='.
+- [info] [biome] Unexpected use of '~'.
+- [info] [biome] Unexpected use of '~'.
+- [info] [biome] Unexpected use of '~'.
+- [warning] [biome] Deprecated import.
+- [warning] [biome] Deprecated import.
+- [warning] [biome] Deprecated import: Use this only as a temporary solution to migrate your imperative component code to Svelte 5.
+- [warning] [biome] Deprecated import: Use this only as a temporary solution to migrate your imperative component code to Svelte 5.
+- [warning] [biome] Deprecated import: when we get rid of legacy mode and stores, we can get rid of this
+- [warning] [biome] Deprecated import: when we get rid of legacy mode and stores, we can get rid of this
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Error message should not be an empty string.
+- [warning] [biome] Error message should not be an empty string.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] Provide an error message for the error.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always falsy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This condition is always truthy.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This import is part of a cycle.
+- [warning] [biome] This parameter is only used in recursive calls.
+- [warning] [biome] This parameter is only used in recursive calls.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Unsafe use of the @ts-ignore directive found in this comment.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+=== FIM DO PAYLOAD ===
+
+=== REPO: pocketbase/pocketbase === TAMANHO: 30403 bytes | LINHAS TOTAIS: 337 === INICIO DO PAYLOAD ===
+# Unsafe Hotspots
+
+summary: findings=319
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'L' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'a' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'a' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'c' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'c' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'e' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'f' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'g' is not modified in this loop.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'i' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'l' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'n' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'n' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'o' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'o' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'r' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'r' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 's' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 's' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 't' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 't' is used outside of binding context.
+- [error] [oxc] ui/public/libs/prism/prism.js :: 'u' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Unexpected dangling '_' in '`__id`'.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Unexpected dangling '_' in '`_self`'.
+- [error] [oxc] ui/public/libs/prism/prism.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'a' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'c' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'd' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'f' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'i' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'l' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'n' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'o' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'p' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'r' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 's' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 't' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: 'u' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: Unexpected dangling '_' in '`__raw`'.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: Unexpected dangling '_' in '`_refs`'.
+- [error] [oxc] ui/public/libs/shablon/shablon.iife.js :: Unexpected dangling '_' in '`_watcher`'.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: '$' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: '$e' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: '$t' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'A' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Al' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'B' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Bt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'C' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ce' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Cl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'D' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'De' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Dl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'E' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'El' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'F' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Fl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'G' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ge' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Gl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'H' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Hl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'I' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Il' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'It' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'J' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Je' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'K' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ke' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'L' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ll' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Lt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'M' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ml' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Mt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'N' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Nl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Nt' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'O' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Oe' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ol' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Ot' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'P' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Pl' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Q' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Qe' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'R' is already declared in the upper scope.
+- [error] [oxc] ui/public/libs/uplot/uplot.iife.js :: 'Rl' is already declared in the upper scope.
+... [OMITIDO 137 LINHAS PARA AUDITORIA - TAMANHO TOTAL: 30403 BYTES] ...
+- [error] [oxc] ui/src/base/fieldSettings.js :: Unexpected dangling '_' in '`__detailsOpen`'.
+- [error] [oxc] ui/src/base/fieldSettings.js :: Unexpected dangling '_' in '`__focus`'.
+- [error] [oxc] ui/src/base/leaflet.js :: Unexpected dangling '_' in '`_latlng`'.
+- [error] [oxc] ui/src/base/modal.js :: Unexpected dangling '_' in '`_forceClose`'.
+- [error] [oxc] ui/src/base/pageSidebar.js :: Unexpected dangling '_' in '`_startWidth`'.
+- [error] [oxc] ui/src/base/ruleField.js :: Unexpected dangling '_' in '`_prevValue`'.
+- [error] [oxc] ui/src/base/select.js :: Unexpected dangling '_' in '`__raw`'.
+- [error] [oxc] ui/src/base/toast.js :: Unexpected dangling '_' in '`_removeTimeout`'.
+- [error] [oxc] ui/src/base/tooltip.js :: 'el' is already declared in the upper scope.
+- [error] [oxc] ui/src/base/tooltip.js :: Unexpected dangling '_' in '`_relatedNode`'.
+- [error] [oxc] ui/src/base/tooltip.js :: Unexpected dangling '_' in '`_tooltipText`'.
+- [error] [oxc] ui/src/collections/autocomplete.utils.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] ui/src/collections/collectionUpsertModal.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] ui/src/collections/collectionUpsertModal.js :: 'el' is already declared in the upper scope.
+- [error] [oxc] ui/src/collections/collectionUpsertModal.js :: 'rawCollection' is already declared in the upper scope.
+- [error] [oxc] ui/src/collections/collectionUpsertModal.js :: Unexpected dangling '_' in '`__collectionRenameTimeoutId`'.
+- [error] [oxc] ui/src/collections/collectionUpsertModal.js :: Unexpected dangling '_' in '`_watchers`'.
+- [error] [oxc] ui/src/collections/collectionsOverviewModal.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] ui/src/collections/indexUpsertModal.js :: 'index' is already declared in the upper scope.
+- [error] [oxc] ui/src/collections/oauth2Accordion.js :: 'providerConfig' is already declared in the upper scope.
+- [error] [oxc] ui/src/collections/oauth2Accordion.js :: 'providerInfo' is already declared in the upper scope.
+- [error] [oxc] ui/src/collections/providerSettingsModal.js :: 'providerInfo' is already declared in the upper scope.
+- [error] [oxc] ui/src/logs/logsChart.js :: 'e' is already declared in the upper scope.
+- [error] [oxc] ui/src/logs/logsChart.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] ui/src/logs/logsChart.js :: Unexpected dangling '_' in '`_positionWatcher`'.
+- [error] [oxc] ui/src/logs/logsChart.js :: Unexpected dangling '_' in '`_resizeChartFunc`'.
+- [error] [oxc] ui/src/logs/logsChart.js :: Unexpected dangling '_' in '`_resizeTimeoutId`'.
+- [error] [oxc] ui/src/logs/logsChart.js :: Unexpected dangling '_' in '`_uplot`'.
+- [error] [oxc] ui/src/logs/logsList.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] ui/src/logs/pageLogs.js :: Unexpected dangling '_' in '`_chartTiemoutId`'.
+- [error] [oxc] ui/src/main.js :: Unexpected dangling '_' in '`_ready`'.
+- [error] [oxc] ui/src/pb.js :: Unexpected dangling '_' in '`__customUIEvents`'.
+- [error] [oxc] ui/src/records/recordFileThumb.js :: Unexpected dangling '_' in '`_semaphoreRelease`'.
+- [error] [oxc] ui/src/records/recordSummary.js :: Unexpected dangling '_' in '`_summaryDropdownTimeoutId`'.
+- [error] [oxc] ui/src/records/recordSummary.js :: Unexpected dangling '_' in '`_summaryDropdown`'.
+- [error] [oxc] ui/src/records/recordSummary.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] ui/src/records/recordUpsertModal.js :: 'rawRecord' is already declared in the upper scope.
+- [error] [oxc] ui/src/records/recordUpsertModal.js :: Unexpected dangling '_' in '`__raw`'.
+- [error] [oxc] ui/src/records/recordUpsertModal.js :: Unexpected dangling '_' in '`_quickSaveHandler`'.
+- [error] [oxc] ui/src/records/recordUpsertModal.js :: Unexpected dangling '_' in '`_watchers`'.
+- [error] [oxc] ui/src/records/recordsList.js :: Unexpected dangling '_' in '`__raw`'.
+- [error] [oxc] ui/src/records/recordsList.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+- [error] [oxc] ui/src/router.js :: Unexpected dangling '_' in '`_ready`'.
+- [error] [oxc] ui/src/settings/application/superuserAccordion.js :: Unexpected dangling '_' in '`_ipwatcher`'.
+- [error] [oxc] ui/src/settings/application/trustedProxyAccordion.js :: Unexpected dangling '_' in '`_infoWatcher`'.
+- [error] [oxc] ui/src/settings/backups/backupsList.js :: Unexpected dangling '_' in '`_canBackupIntervalId`'.
+- [error] [oxc] ui/src/settings/sync/importCollectionsReviewModal.js :: 'newCollections' is already declared in the upper scope.
+- [error] [oxc] ui/src/settings/sync/pageImportCollections.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] ui/src/store.js :: Missing the `targetOrigin` argument.
+- [error] [oxc] ui/src/store.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] ui/src/store.js :: Unexpected dangling '_' in '`__errListener`'.
+- [error] [oxc] ui/src/store.js :: Unexpected dangling '_' in '`_activeCollectionIdOrName`'.
+- [error] [oxc] ui/src/store.js :: Unexpected dangling '_' in '`_mediaColorScheme`'.
+- [error] [oxc] ui/src/store.js :: Unexpected dangling '_' in '`_oldTitle`'.
+- [error] [oxc] ui/src/store.js :: Unexpected dangling '_' in '`_ready`'.
+- [error] [oxc] ui/src/utils.js :: Prefer `addEventListener()` over their `on`-function counterparts.
+- [error] [oxc] ui/src/utils.js :: Unexpected dangling '_' in '`__raw`'.
+- [error] [oxc] ui/src/utils.js :: Use `Array#toSorted()` instead of `Array#sort()`.
+
+
+=================================================================
+[DOMAIN: GO]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [error] [biome] Promise executor functions should not be `async`.
+- [error] [biome] Return statements should not contain assignments.
+- [error] [biome] The assignment should not be in an expression.
+- [error] [biome] This callback passed to forEach() iterable method should not return a value.
+- [error] [biome] This property is later overwritten by an object member with the same name.
+- [error] [biome] Using != may be unsafe if you are relying on type coercion.
+- [error] [biome] Using == may be unsafe if you are relying on type coercion.
+- [info] [biome] Potential secret found.
+- [info] [biome] Unexpected use of '&'.
+- [info] [biome] Unexpected use of '<<'.
+- [info] [biome] Unexpected use of '>>'.
+- [info] [biome] Unexpected use of '^'.
+- [info] [biome] Unexpected use of '|'.
+- [info] [biome] Unexpected use of '|='.
+- [warning] [biome] Do not access Object.prototype method 'hasOwnProperty' from target object.
+- [warning] [biome] Don't use console.
+- [warning] [biome] Expected an assignment or function call but found an expression instead.
+- [warning] [biome] Redundant use strict directive.
+- [warning] [biome] The body of a for-in should be wrapped in an `if` statement.
+- [warning] [biome] The character doesn't need to be escaped.
+- [warning] [biome] This async function lacks an await expression.
+- [warning] [biome] This case is unreachable.
+- [warning] [biome] This comparison always has the same result.
+- [warning] [biome] Unexpected empty block.
+- [warning] [biome] Unexpected for-in loop.
+- [warning] [biome] Unnecessary optional chaining.
+- [warning] [biome] Use let or const instead of var.
+- [warning] [biome] isFinite is unsafe. It attempts a type coercion. Use Number.isFinite instead.
+- [warning] [biome] isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+- [warning] [biome] null comparison with != is disallowed.
+- [warning] [biome] null comparison with == is disallowed.
+=== FIM DO PAYLOAD ===

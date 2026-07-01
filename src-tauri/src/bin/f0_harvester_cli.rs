@@ -6,6 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
+use genesis_mc_lib::harvester::router::{BlobSelection, PHASE0_BLOB_TYPES};
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
 use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
@@ -24,20 +25,6 @@ const STATUS_FASE_F0_OK: &str = "FASE_0_HARVESTER_OK";
 const STATUS_ERRO_F0: &str = "ERRO_F0";
 const STATUS_DEGRADADO_F0: &str = "DEGRADADO_F0";
 const STATUS_FASE_F0_DEGRADADA: &str = "FASE_0_DEGRADADA";
-
-const EXPECTED_F0_BLOBS: [&str; 11] = [
-    "blob_01_promessa_readme",
-    "blob_02_dependency_manifest",
-    "blob_03_test_intent",
-    "blob_04_repo_outline",
-    "blob_05_architecture_map",
-    "blob_06_unsafe_hotspots",
-    "blob_07_ops_blueprint",
-    "blob_08_health_report",
-    "blob_09_community_meta",
-    "blob_10_soda_canon_context",
-    "blob_11_ux_contracts",
-];
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -212,9 +199,10 @@ struct CliArgs {
     repo_id: Option<String>,
     batch: bool,
     direct: bool,
+    only_blobs: Option<BlobSelection>,
 }
 
-fn parse_cli_args_from<I>(args: I) -> CliArgs
+fn parse_cli_args_from<I>(args: I) -> Result<CliArgs, String>
 where
     I: IntoIterator<Item = String>,
 {
@@ -223,19 +211,33 @@ where
     let mut repo_id: Option<String> = None;
     let mut batch = false;
     let mut direct = false;
+    let mut only_blobs: Option<BlobSelection> = None;
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--repo" => repo_id = it.next(),
             "--batch" => batch = true,
             "--direct" => direct = true,
+            "--only-blobs" => {
+                let raw = it
+                    .next()
+                    .ok_or_else(|| "A flag --only-blobs exige uma lista, por exemplo: 06,08".to_string())?;
+                only_blobs = Some(BlobSelection::from_csv(&raw)?);
+            }
             _ => {}
         }
     }
-    CliArgs {
+    Ok(CliArgs {
         repo_id,
         batch,
         direct,
-    }
+        only_blobs,
+    })
+}
+
+fn expected_f0_blobs(requested_blobs: Option<&BlobSelection>) -> Vec<String> {
+    requested_blobs
+        .map(BlobSelection::expected_artifact_types)
+        .unwrap_or_else(|| PHASE0_BLOB_TYPES.iter().map(|s| (*s).to_string()).collect())
 }
 
 fn normalize_repo_url_for_match(raw: &str) -> String {
@@ -641,12 +643,12 @@ fn detect_degraded_blobs(conn: &Connection, repo_id: &str) -> io::Result<Vec<Str
     Ok(degraded)
 }
 
-fn compute_missing_blobs(present: &[String]) -> Vec<String> {
+fn compute_missing_blobs(present: &[String], expected: &[String]) -> Vec<String> {
     let set = present.iter().cloned().collect::<BTreeSet<_>>();
-    EXPECTED_F0_BLOBS
+    expected
         .iter()
-        .filter(|t| !set.contains(**t))
-        .map(|t| t.to_string())
+        .filter(|t| !set.contains(*t))
+        .cloned()
         .collect()
 }
 
@@ -709,8 +711,10 @@ async fn process_one_repo_f0(
     repo_id: &str,
     row_number_1based: u32,
     batch_index: Option<(usize, usize)>,
+    requested_blobs: Option<&BlobSelection>,
 ) -> RepoBatchSummary {
     let started = Instant::now();
+    let expected_blobs = expected_f0_blobs(requested_blobs);
     if let Some((idx, total)) = batch_index {
         info!(
             repo_id = %repo_id,
@@ -740,7 +744,7 @@ async fn process_one_repo_f0(
             outcome: RepoOutcome::Skipped,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: None,
         };
@@ -755,7 +759,7 @@ async fn process_one_repo_f0(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -768,7 +772,7 @@ async fn process_one_repo_f0(
             outcome: RepoOutcome::Error,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: Some(e.to_string()),
         };
@@ -784,7 +788,7 @@ async fn process_one_repo_f0(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -799,7 +803,7 @@ async fn process_one_repo_f0(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -848,7 +852,7 @@ async fn process_one_repo_f0(
             outcome: RepoOutcome::Error,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: Some(msg),
         };
@@ -875,7 +879,14 @@ async fn process_one_repo_f0(
     let mut attempt: u32 = 0;
     let mut res: Result<(), genesis_mc_lib::harvester::orchestrator::OrchestratorError> = Ok(());
     while attempt < max_attempts {
-        match HarvesterOrchestrator::run(repo_id, &repo_url, Arc::clone(&conn_arc)).await {
+        match HarvesterOrchestrator::run(
+            repo_id,
+            &repo_url,
+            Arc::clone(&conn_arc),
+            requested_blobs.cloned(),
+        )
+        .await
+        {
             Ok(()) => {
                 res = Ok(());
                 break;
@@ -908,7 +919,7 @@ async fn process_one_repo_f0(
             Ok(conn_lock) => read_repo_blobs_present(&conn_lock, repo_id).unwrap_or_default(),
             Err(_) => Vec::new(),
         };
-        let missing = compute_missing_blobs(&present);
+        let missing = compute_missing_blobs(&present, &expected_blobs);
         (present, missing)
     };
 
@@ -1057,8 +1068,10 @@ async fn process_one_repo_f0_direct(
     root_dir: &Path,
     db_path: &Path,
     repo_id: &str,
+    requested_blobs: Option<&BlobSelection>,
 ) -> RepoBatchSummary {
     let started = Instant::now();
+    let expected_blobs = expected_f0_blobs(requested_blobs);
     info!(repo_id = %repo_id, "F0(direct): iniciando (sem Sheets)");
 
     let conn = match Connection::open(db_path).map_err(io::Error::other) {
@@ -1070,7 +1083,7 @@ async fn process_one_repo_f0_direct(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -1083,7 +1096,7 @@ async fn process_one_repo_f0_direct(
             outcome: RepoOutcome::Error,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: Some(e.to_string()),
         };
@@ -1099,7 +1112,7 @@ async fn process_one_repo_f0_direct(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -1114,7 +1127,7 @@ async fn process_one_repo_f0_direct(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -1149,7 +1162,7 @@ async fn process_one_repo_f0_direct(
             outcome: RepoOutcome::Error,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: Some(msg),
         };
@@ -1160,7 +1173,14 @@ async fn process_one_repo_f0_direct(
     let mut attempt: u32 = 0;
     let mut res: Result<(), genesis_mc_lib::harvester::orchestrator::OrchestratorError> = Ok(());
     while attempt < max_attempts {
-        match HarvesterOrchestrator::run(repo_id, &repo_url, Arc::clone(&conn_arc)).await {
+        match HarvesterOrchestrator::run(
+            repo_id,
+            &repo_url,
+            Arc::clone(&conn_arc),
+            requested_blobs.cloned(),
+        )
+        .await
+        {
             Ok(()) => {
                 res = Ok(());
                 break;
@@ -1192,7 +1212,7 @@ async fn process_one_repo_f0_direct(
             Ok(conn_lock) => read_repo_blobs_present(&conn_lock, repo_id).unwrap_or_default(),
             Err(_) => Vec::new(),
         };
-        let missing = compute_missing_blobs(&present);
+        let missing = compute_missing_blobs(&present, &expected_blobs);
         (present, missing)
     };
 
@@ -1432,7 +1452,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::fs::create_dir_all(&soda_data_dir).await?;
 
     let db_path = soda_data_dir.join("soda_heuristic_vault.db");
-    let args = parse_cli_args_from(std::env::args());
+    let args = parse_cli_args_from(std::env::args()).map_err(io::Error::other)?;
 
     if args.batch {
         let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
@@ -1456,6 +1476,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &item.repo_id,
                 item.row_number_1based,
                 Some((idx + 1, total)),
+                args.only_blobs.as_ref(),
             )
             .await;
             results.push(summary);
@@ -1543,7 +1564,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "aaif-goose/goose".to_string());
     if args.direct {
         info!("SODA F0 (Harvester/Zero-IA): execução direta (sem Sheets)");
-        let summary = process_one_repo_f0_direct(&root_dir, &db_path, &repo_id).await;
+        let summary = process_one_repo_f0_direct(&root_dir, &db_path, &repo_id, args.only_blobs.as_ref()).await;
         if summary.outcome == RepoOutcome::Error {
             let detail = summary
                 .error
@@ -1558,9 +1579,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("SODA F0 (Harvester/Zero-IA): execução isolada (1 repo)");
     let (row_number, cols, _min_idx) =
         gate_harvester_by_sheet(&spreadsheet_id, &repo_id).await.map_err(io::Error::other)?;
-    let summary =
-        process_one_repo_f0(&root_dir, &db_path, &spreadsheet_id, cols, &repo_id, row_number, None)
-            .await;
+    let summary = process_one_repo_f0(
+        &root_dir,
+        &db_path,
+        &spreadsheet_id,
+        cols,
+        &repo_id,
+        row_number,
+        None,
+        args.only_blobs.as_ref(),
+    )
+    .await;
     if summary.outcome == RepoOutcome::Error {
         let detail = summary
             .error
@@ -1582,22 +1611,45 @@ mod tests {
             "acme/widgets".to_string(),
         ];
         assert_eq!(
-            parse_cli_args_from(args),
+            parse_cli_args_from(args).unwrap(),
             CliArgs {
                 repo_id: Some("acme/widgets".to_string()),
                 batch: false,
-                direct: false
+                direct: false,
+                only_blobs: None,
             }
         );
 
         let args = vec!["bin".to_string(), "--batch".to_string()];
         assert_eq!(
-            parse_cli_args_from(args),
+            parse_cli_args_from(args).unwrap(),
             CliArgs {
                 repo_id: None,
                 batch: true,
-                direct: false
+                direct: false,
+                only_blobs: None,
             }
+        );
+    }
+
+    #[test]
+    fn parse_cli_args_reads_only_blobs_filter() {
+        let args = vec![
+            "bin".to_string(),
+            "--repo".to_string(),
+            "acme/widgets".to_string(),
+            "--only-blobs".to_string(),
+            "06,08".to_string(),
+        ];
+
+        let parsed = parse_cli_args_from(args).unwrap();
+        assert_eq!(parsed.repo_id.as_deref(), Some("acme/widgets"));
+        assert_eq!(
+            parsed.only_blobs.unwrap().expected_artifact_types(),
+            vec![
+                "blob_06_unsafe_hotspots".to_string(),
+                "blob_08_health_report".to_string(),
+            ]
         );
     }
 

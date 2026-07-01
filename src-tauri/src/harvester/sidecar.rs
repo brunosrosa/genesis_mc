@@ -2656,7 +2656,10 @@ fn blade_parallelism_limit(blade: StaticAnalysisBlade) -> usize {
 fn has_global_opengrep_coverage(targets: &[SastExecutionTarget]) -> bool {
     targets.iter().any(|target| {
         target.blade == StaticAnalysisBlade::Opengrep
-            && (target.scope == "." || target.scope.starts_with(".::files-"))
+            && (target.scope == "."
+                || target.scope.starts_with(".::files-")
+                || target.scope.starts_with(".::unsafe::files-")
+                || target.scope.starts_with(".::health::files-"))
     })
 }
 
@@ -2681,7 +2684,7 @@ fn execution_targets_for_blade(
     if blade == StaticAnalysisBlade::Sobelow {
         return derive_elixir_execution_targets(manifests, clean_files);
     }
-    if matches!(blade, StaticAnalysisBlade::Biome | StaticAnalysisBlade::Oxc) {
+    if blade == StaticAnalysisBlade::Biome {
         return derive_js_lint_execution_targets(repo_path, manifests, blade, clean_files);
     }
     if matches!(blade, StaticAnalysisBlade::Ruff | StaticAnalysisBlade::Bandit) {
@@ -2717,10 +2720,6 @@ const OPENGREP_FILE_LIST_CHUNK_SIZE: usize = 96;
 const CPPCHECK_FILE_LIST_CHUNK_SIZE: usize = 96;
 const JS_LINT_FILE_LIST_CHUNK_SIZE: usize = 96;
 const PYTHON_LINT_FILE_LIST_CHUNK_SIZE: usize = 96;
-
-fn opengrep_file_batch_scope(scope: &str, batch_idx: usize) -> String {
-    format!("{scope}::files-{batch_idx:02}")
-}
 
 fn blade_file_batch_scope(scope: &str, batch_idx: usize) -> String {
     format!("{scope}::files-{batch_idx:02}")
@@ -2799,18 +2798,23 @@ fn derive_opengrep_execution_targets(
         .unwrap_or_else(|_| repo_path.to_path_buf());
     let scan_targets = derive_repo_relative_clean_targets(&repo_root, clean_files, &[], |_| true);
 
-    scan_targets
-        .chunks(OPENGREP_FILE_LIST_CHUNK_SIZE)
-        .enumerate()
-        .map(|(idx, chunk)| SastExecutionTarget {
-            blade: StaticAnalysisBlade::Opengrep,
-            execution_root: repo_root.clone(),
-            scope: opengrep_file_batch_scope(".", idx + 1),
-            scan_targets: chunk.to_vec(),
-            command_args: None,
-            forced_channel: None,
-        })
-        .collect::<Vec<_>>()
+    let mut targets = Vec::new();
+    for (profile_scope, forced_channel) in [
+        (".::unsafe", SastIssueChannel::UnsafeHotspot),
+        (".::health", SastIssueChannel::Health),
+    ] {
+        for (idx, chunk) in scan_targets.chunks(OPENGREP_FILE_LIST_CHUNK_SIZE).enumerate() {
+            targets.push(SastExecutionTarget {
+                blade: StaticAnalysisBlade::Opengrep,
+                execution_root: repo_root.clone(),
+                scope: blade_file_batch_scope(profile_scope, idx + 1),
+                scan_targets: chunk.to_vec(),
+                command_args: None,
+                forced_channel: Some(forced_channel),
+            });
+        }
+    }
+    targets
 }
 
 fn derive_cppcheck_execution_targets(
@@ -2984,6 +2988,8 @@ fn should_skip_sast_relative_target(rel: &str) -> bool {
                 | "tests"
                 | "__tests__"
                 | "testutil"
+                | "vendor"
+                | "libs"
                 | "spec"
                 | "specs"
                 | "integration"
@@ -3014,11 +3020,21 @@ fn should_skip_sast_relative_target(rel: &str) -> bool {
         return true;
     }
 
+    if segments.windows(2).any(|pair| pair == ["public", "libs"]) {
+        return true;
+    }
+
     let file_name = segments.last().copied().unwrap_or_default();
     file_name.contains(".spec.")
         || file_name.contains(".test.")
         || file_name.ends_with("test.go")
         || file_name.ends_with("test.rs")
+        || file_name.contains(".min.")
+        || file_name.contains(".iife.")
+        || file_name.contains(".umd.")
+        || file_name.contains(".bundle.")
+        || file_name.contains(".pack.")
+        || file_name.contains(".vendor.")
 }
 
 fn is_python_supported_file(path: &Path) -> bool {
@@ -3371,6 +3387,73 @@ fn is_blob_06_semantic_slop(blade: StaticAnalysisBlade, level: &str, message: &s
     .any(|needle| normalized.contains(needle))
 }
 
+fn matches_blob06_allowlist(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    [
+        "security",
+        "unsafe",
+        "dangerouslysetinnerhtml",
+        "injection",
+        "leak",
+        "vulnerability",
+        "hardcoded",
+        "password",
+        "secret",
+        "credential",
+        "overflow",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn should_keep_blob06_issue(issue: &SodaHealthIssue) -> bool {
+    if issue.channel != SastIssueChannel::UnsafeHotspot {
+        return true;
+    }
+
+    if !issue.source_blade.eq_ignore_ascii_case("biome")
+        && !issue.source_blade.eq_ignore_ascii_case("cppcheck")
+    {
+        return true;
+    }
+
+    matches_blob06_allowlist(&issue.message)
+}
+
+fn matches_blob08_allowlist(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    [
+        "complexity",
+        "cognitive",
+        "cyclomatic",
+        "panic",
+        "unwrap",
+        "expect",
+        "todo",
+        "fixme",
+        "temp-dir",
+        "deprecated",
+        "debt",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn should_keep_blob08_issue(issue: &SodaHealthIssue) -> bool {
+    if issue.channel != SastIssueChannel::Health {
+        return true;
+    }
+
+    if !issue.source_blade.eq_ignore_ascii_case("biome")
+        && !issue.source_blade.eq_ignore_ascii_case("oxc")
+        && !issue.source_blade.eq_ignore_ascii_case("opengrep")
+    {
+        return true;
+    }
+
+    matches_blob08_allowlist(&issue.message)
+}
+
 fn sort_and_dedup_issues(issues: &mut Vec<SodaHealthIssue>) {
     issues.sort_by(|left, right| {
         left.file
@@ -3392,6 +3475,10 @@ const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "**/build/**",
     "vendor",
     "**/vendor/**",
+    "libs",
+    "**/libs/**",
+    "public/libs",
+    "**/public/libs/**",
     "tests",
     "**/tests/**",
     "__tests__",
@@ -3434,9 +3521,13 @@ const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "**/output.json",
     "**/*.generated.*",
     "**/*.min.js",
+    "**/*.iife.js",
+    "**/*.umd.js",
     "**/*.min.cjs",
     "**/*.min.mjs",
     "**/*.bundle.js",
+    "**/*.pack.js",
+    "**/*.vendor.js",
     "test_support",
     "**/test_support/**",
     "e2e",
@@ -3451,6 +3542,32 @@ const SEMGREP_SCAN_EXCLUDES: &[&str] = &[
     "**/*.test.*",
     "**/*test.go",
     "**/*test.rs",
+];
+
+const CLI_PATH_EXCLUDES: &[&str] = &[
+    "test",
+    "tests",
+    "testutil",
+    "mocks",
+    "vendor",
+    "libs",
+    "public/libs",
+    "*test.go",
+    "*test.rs",
+    "*.spec.*",
+    "*.test.*",
+    "*.min.js",
+    "*.min.cjs",
+    "*.min.mjs",
+    "*.iife.js",
+    "*.umd.js",
+    "*.bundle.js",
+    "*.bundle.cjs",
+    "*.bundle.mjs",
+    "*.pack.js",
+    "*.pack.cjs",
+    "*.pack.mjs",
+    "*.vendor.js",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -3492,6 +3609,7 @@ fn build_semgrep_like_scan_args(
     if options.exclude_minified_files {
         args.push("--exclude-minified-files".to_string());
     }
+    args.push("--force-exclude".to_string());
 
     for exclude in SEMGREP_SCAN_EXCLUDES {
         args.push("--exclude".to_string());
@@ -3539,15 +3657,17 @@ fn biome_args_for_profile(scan_targets: &[String], profile: JsLintProfile) -> Ve
         "lint".to_string(),
         "--reporter=json".to_string(),
         "--no-errors-on-unmatched".to_string(),
+        "--vcs-enabled=true".to_string(),
+        "--vcs-client-kind=git".to_string(),
+        "--vcs-use-ignore-file=true".to_string(),
+        "--files-ignore-unknown=true".to_string(),
     ];
     match profile {
         JsLintProfile::UnsafeHotspot => {
             args.push("--only=lint/security".to_string());
-            args.push("--only=lint/suspicious".to_string());
         }
         JsLintProfile::Health => {
             args.push("--only=lint/complexity".to_string());
-            args.push("--only=lint/suspicious".to_string());
         }
     }
     if scan_targets.is_empty() {
@@ -3611,7 +3731,12 @@ fn ruff_args(scan_targets: &[String]) -> Vec<String> {
         "json".to_string(),
         "--ignore".to_string(),
         "D,F401,UP,W".to_string(),
+        "--force-exclude".to_string(),
     ];
+    for exclude in CLI_PATH_EXCLUDES {
+        args.push("--exclude".to_string());
+        args.push((*exclude).to_string());
+    }
     if scan_targets.is_empty() {
         args.push(".".to_string());
     } else {
@@ -3639,13 +3764,13 @@ fn govulncheck_args() -> Vec<String> {
     govulncheck_args_for_module()
 }
 
-fn opengrep_args(rule_arg: &str, scan_targets: &[String]) -> Vec<String> {
+fn opengrep_args(rule_arg: &str, scan_targets: &[String], rule_set: SemgrepRuleSet) -> Vec<String> {
     build_semgrep_like_scan_args(
         rule_arg,
         SemgrepScanOptions {
             disable_version_check: true,
             metrics_off: false,
-            taint_intrafile: true,
+            taint_intrafile: matches!(rule_set, SemgrepRuleSet::Security),
             allow_rule_timeout_control: true,
             // Compat mode: o opengrep 1.23.0 no Windows anuncia esta flag no --help,
             // mas a rejeita em runtime durante `scan`.
@@ -3704,10 +3829,15 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
     timeout_secs: u64,
     execution_root: &Path,
     scan_targets: &[String],
+    forced_channel: Option<SastIssueChannel>,
 ) -> Result<Vec<u8>, SidecarError> {
-    let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), SemgrepRuleSet::Health).await?;
+    let rule_set = match forced_channel {
+        Some(SastIssueChannel::Health) => SemgrepRuleSet::Health,
+        _ => SemgrepRuleSet::Security,
+    };
+    let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), rule_set).await?;
     let rule_arg = rule_path.to_string_lossy().to_string();
-    let args = opengrep_args(&rule_arg, scan_targets);
+    let args = opengrep_args(&rule_arg, scan_targets, rule_set);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     execute_sidecar_in_dir(
         executor,
@@ -3790,10 +3920,11 @@ async fn run_sast_blade<E: SandboxExecutor>(
     scope: &str,
     scan_targets: &[String],
     command_args: Option<&[String]>,
+    forced_channel: Option<SastIssueChannel>,
     has_global_opengrep_coverage: bool,
 ) -> Result<SastBladeResult, SidecarError> {
     if blade == StaticAnalysisBlade::Opengrep {
-        return run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets)
+        return run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets, forced_channel)
             .await
             .map(|bytes| SastBladeResult {
                 effective_blade: StaticAnalysisBlade::Opengrep,
@@ -3839,7 +3970,13 @@ async fn run_sast_blade<E: SandboxExecutor>(
                             reason = %reason,
                             "Clippy bloqueado por Trava C de seguranca. Realizando fallback para Opengrep SAST."
                         );
-                        run_opengrep_scan(executor, timeout_secs, execution_root, scan_targets)
+                        run_opengrep_scan(
+                            executor,
+                            timeout_secs,
+                            execution_root,
+                            scan_targets,
+                            Some(SastIssueChannel::UnsafeHotspot),
+                        )
                             .await
                             .map(|bytes| SastBladeResult {
                                 effective_blade: StaticAnalysisBlade::Opengrep,
@@ -4500,6 +4637,7 @@ impl PolyglotSastSidecar {
                         &scope,
                         &target.scan_targets,
                         target.command_args.as_deref(),
+                        target.forced_channel,
                         has_global_opengrep_coverage,
                     )
                     .await;
@@ -4608,11 +4746,13 @@ impl PolyglotSastSidecar {
         let unsafe_issues = all_issues
             .iter()
             .filter(|issue| is_unsafe_hotspot(issue))
+            .filter(|issue| should_keep_blob06_issue(issue))
             .cloned()
             .collect::<Vec<_>>();
         let health_issues = all_issues
             .iter()
             .filter(|issue| !is_unsafe_hotspot(issue))
+            .filter(|issue| should_keep_blob08_issue(issue))
             .cloned()
             .collect::<Vec<_>>();
 
@@ -6322,8 +6462,14 @@ func TestSmokePath(t *testing.T) {
 
     #[test]
     fn test_opengrep_args_use_runtime_compatible_flags_and_test_excludes() {
-        let args = opengrep_args("C:/rules", &["src/main.ts".to_string(), "src/lib.ts".to_string()]);
+        let args = opengrep_args(
+            "C:/rules",
+            &["src/main.ts".to_string(), "src/lib.ts".to_string()],
+            SemgrepRuleSet::Security,
+        );
         assert!(args.iter().any(|arg| arg == "--allow-rule-timeout-control"));
+        assert!(args.iter().any(|arg| arg == "--force-exclude"));
+        assert!(args.iter().any(|arg| arg == "--taint-intrafile"));
         assert!(!args.iter().any(|arg| arg == "--exclude-minified-files"));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", ".git"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "node_modules"]));
@@ -6331,9 +6477,12 @@ func TestSmokePath(t *testing.T) {
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "build"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "vendor"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "testutil"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/examples/**"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/docs/**"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/mocks/**"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/*.min.js"]));
+        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/*.iife.js"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/samples/**"]));
         assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/output.json"]));
         assert!(!args.windows(2).any(|pair| pair == ["--exclude", "C:/rules"]));
@@ -6342,6 +6491,13 @@ func TestSmokePath(t *testing.T) {
         assert!(!args.iter().any(|arg| arg.contains("Cargo.lock")));
         assert!(!args.iter().any(|arg| arg.contains("package-lock.json")));
         assert!(args.ends_with(&["src/main.ts".to_string(), "src/lib.ts".to_string()]));
+    }
+
+    #[test]
+    fn test_opengrep_health_args_disable_security_taint_profile() {
+        let args = opengrep_args("C:/rules", &["src/main.ts".to_string()], SemgrepRuleSet::Health);
+        assert!(!args.iter().any(|arg| arg == "--taint-intrafile"));
+        assert!(args.iter().any(|arg| arg == "--force-exclude"));
     }
 
     #[test]
@@ -6524,30 +6680,30 @@ Done in 1.23s"#;
     }
 
     #[test]
-    fn test_biome_and_oxlint_args_accept_explicit_scan_targets() {
+    fn test_biome_args_accept_explicit_scan_targets_with_health_profile() {
         let scan_targets = vec!["src/index.ts".to_string(), "src/server.ts".to_string()];
         let (biome_binary, biome_args) =
             blade_command(StaticAnalysisBlade::Biome, &scan_targets, None);
-        let (oxlint_binary, oxlint_args) =
-            blade_command(StaticAnalysisBlade::Oxc, &scan_targets, None);
 
         assert_eq!(biome_binary, "biome");
-        assert_eq!(oxlint_binary, "oxlint");
         assert_eq!(biome_args.first().map(String::as_str), Some("lint"));
-        assert_eq!(oxlint_args.first().map(String::as_str), Some("lint"));
         assert!(!biome_args.iter().any(|arg| arg == "check"));
-        assert!(!oxlint_args.iter().any(|arg| arg == "-f"));
-        assert!(oxlint_args.windows(2).any(|pair| pair == ["--format", "json"]));
-        assert!(oxlint_args.iter().any(|arg| arg == "--quiet"));
         assert!(biome_args.iter().any(|arg| arg == "--no-errors-on-unmatched"));
         assert!(biome_args.iter().any(|arg| arg == "--only=lint/complexity"));
-        assert!(biome_args.iter().any(|arg| arg == "--only=lint/suspicious"));
-        assert!(oxlint_args.iter().any(|arg| arg == "--no-error-on-unmatched-pattern"));
-        assert!(oxlint_args.windows(2).any(|pair| pair == ["-A", "all"]));
-        assert!(oxlint_args.windows(2).any(|pair| pair == ["-D", "suspicious"]));
-        assert!(oxlint_args.windows(2).any(|pair| pair == ["--ignore-pattern", "**/*.min.js"]));
+        assert!(!biome_args.iter().any(|arg| arg == "--only=lint/security"));
+        assert!(!biome_args.iter().any(|arg| arg == "--only=lint/suspicious"));
         assert!(biome_args.ends_with(&scan_targets));
-        assert!(oxlint_args.ends_with(&scan_targets));
+    }
+
+    #[test]
+    fn test_biome_args_use_security_only_for_blob06_profile() {
+        let scan_targets = vec!["src/index.ts".to_string()];
+        let biome_args = biome_args_for_profile(&scan_targets, JsLintProfile::UnsafeHotspot);
+
+        assert!(biome_args.iter().any(|arg| arg == "--only=lint/security"));
+        assert!(!biome_args.iter().any(|arg| arg == "--only=lint/complexity"));
+        assert!(!biome_args.iter().any(|arg| arg == "--only=lint/suspicious"));
+        assert!(biome_args.ends_with(&scan_targets));
     }
 
     #[test]
@@ -6615,7 +6771,7 @@ Done in 1.23s"#;
     }
 
     #[test]
-    fn test_blob06_semantic_filter_drops_cppcheck_biome_oxc_slop_but_preserves_security_signal() {
+    fn test_blob06_semantic_filter_drops_cppcheck_and_biome_slop_but_preserves_security_signal() {
         assert!(should_drop_sast_issue(
             StaticAnalysisBlade::Cppcheck,
             "warning",
@@ -6625,11 +6781,6 @@ Done in 1.23s"#;
             StaticAnalysisBlade::Biome,
             "warning",
             "Import specifier could not resolve and is never used"
-        ));
-        assert!(should_drop_sast_issue(
-            StaticAnalysisBlade::Oxc,
-            "warning",
-            "Value can be declared as const"
         ));
         assert!(should_drop_sast_issue(
             StaticAnalysisBlade::Biome,
@@ -6659,13 +6810,93 @@ Done in 1.23s"#;
     }
 
     #[test]
+    fn test_blob06_allowlist_only_keeps_biome_and_cppcheck_when_message_has_security_signal() {
+        let biome_slop = SodaHealthIssue {
+            level: "error".to_string(),
+            file: "src/app.tsx".to_string(),
+            message: "An empty interface is equivalent to {}.".to_string(),
+            source_blade: "biome".to_string(),
+            channel: SastIssueChannel::UnsafeHotspot,
+        };
+        let biome_security = SodaHealthIssue {
+            message: "dangerouslySetInnerHTML may enable injection".to_string(),
+            ..biome_slop.clone()
+        };
+        let cppcheck_overflow = SodaHealthIssue {
+            level: "error".to_string(),
+            file: "src/main.c".to_string(),
+            message: "Potential buffer overflow in parser".to_string(),
+            source_blade: "cppcheck".to_string(),
+            channel: SastIssueChannel::UnsafeHotspot,
+        };
+        let bandit_signal = SodaHealthIssue {
+            level: "warning".to_string(),
+            file: "service.py".to_string(),
+            message: "Possible shell injection via subprocess".to_string(),
+            source_blade: "bandit".to_string(),
+            channel: SastIssueChannel::UnsafeHotspot,
+        };
+        let health_biome = SodaHealthIssue {
+            message: "Function is too complex".to_string(),
+            channel: SastIssueChannel::Health,
+            ..biome_slop.clone()
+        };
+
+        assert!(!should_keep_blob06_issue(&biome_slop));
+        assert!(should_keep_blob06_issue(&biome_security));
+        assert!(should_keep_blob06_issue(&cppcheck_overflow));
+        assert!(should_keep_blob06_issue(&bandit_signal));
+        assert!(should_keep_blob06_issue(&health_biome));
+    }
+
+    #[test]
     fn test_should_skip_sast_relative_target_handles_testutil_and_test_file_patterns() {
         assert!(should_skip_sast_relative_target("pkg/testutil/helpers.go"));
         assert!(should_skip_sast_relative_target("pkg/service/foo_test.go"));
         assert!(should_skip_sast_relative_target("src/app.test.ts"));
         assert!(should_skip_sast_relative_target("src/app.spec.ts"));
         assert!(should_skip_sast_relative_target("crates/core/render_test.rs"));
+        assert!(should_skip_sast_relative_target("vendor/prism.js"));
+        assert!(should_skip_sast_relative_target("public/libs/prism.js"));
+        assert!(should_skip_sast_relative_target("src/vendor.bundle.js"));
+        assert!(should_skip_sast_relative_target("src/prism.min.js"));
         assert!(!should_skip_sast_relative_target("src/app.ts"));
+    }
+
+    #[test]
+    fn test_blob08_allowlist_only_keeps_health_findings_with_technical_debt_signal() {
+        let biome_slop = SodaHealthIssue {
+            level: "warning".to_string(),
+            file: "src/app.ts".to_string(),
+            message: "An empty interface is equivalent to {}.".to_string(),
+            source_blade: "biome".to_string(),
+            channel: SastIssueChannel::Health,
+        };
+        let biome_complexity = SodaHealthIssue {
+            message: "complexity threshold exceeded in request mapper".to_string(),
+            ..biome_slop.clone()
+        };
+        let opengrep_unwrap = SodaHealthIssue {
+            message: "unwrap encontrado em caminho critico".to_string(),
+            source_blade: "opengrep".to_string(),
+            ..biome_slop.clone()
+        };
+        let clippy_signal = SodaHealthIssue {
+            message: "use of deprecated item".to_string(),
+            source_blade: "clippy".to_string(),
+            ..biome_slop.clone()
+        };
+        let unsafe_issue = SodaHealthIssue {
+            message: "unsafe merece auditoria manual".to_string(),
+            channel: SastIssueChannel::UnsafeHotspot,
+            ..biome_slop.clone()
+        };
+
+        assert!(!should_keep_blob08_issue(&biome_slop));
+        assert!(should_keep_blob08_issue(&biome_complexity));
+        assert!(should_keep_blob08_issue(&opengrep_unwrap));
+        assert!(should_keep_blob08_issue(&clippy_signal));
+        assert!(should_keep_blob08_issue(&unsafe_issue));
     }
 
     #[tokio::test]
@@ -6895,7 +7126,15 @@ Done in 1.23s"#;
             .cloned()
             .collect::<Vec<_>>();
 
-        assert!(targets.iter().all(|target| target.scope.starts_with(".::files-")));
+        assert!(targets.iter().all(|target| {
+            target.scope.starts_with(".::unsafe::files-") || target.scope.starts_with(".::health::files-")
+        }));
+        assert!(targets
+            .iter()
+            .any(|target| target.forced_channel == Some(SastIssueChannel::UnsafeHotspot)));
+        assert!(targets
+            .iter()
+            .any(|target| target.forced_channel == Some(SastIssueChannel::Health)));
         assert!(all_targets.iter().any(|target| target.contains("packages/web/src/compiler/phases/1-parse/file_0.ts")));
         assert!(all_targets.iter().any(|target| target.contains("packages/web/src/compiler/phases/2-analyze/file_0.ts")));
         assert!(!all_targets.iter().any(|target| target.contains("packages/web/tests/")));
@@ -6925,6 +7164,14 @@ Done in 1.23s"#;
             .cloned()
             .collect::<Vec<_>>();
 
+        assert!(targets
+            .iter()
+            .any(|target| target.scope.starts_with(".::unsafe::files-")
+                && target.forced_channel == Some(SastIssueChannel::UnsafeHotspot)));
+        assert!(targets
+            .iter()
+            .any(|target| target.scope.starts_with(".::health::files-")
+                && target.forced_channel == Some(SastIssueChannel::Health)));
         assert!(all_targets.iter().any(|target| target == "apps/api/src/index.ts"));
         assert!(all_targets.iter().any(|target| target == "apps/api/src/server.ts"));
         assert!(all_targets.iter().any(|target| target == "apps/api/src/controllers/file_0.ts"));
@@ -7002,7 +7249,7 @@ Done in 1.23s"#;
         let targets = derive_js_lint_execution_targets(
             executor.repo_path(),
             &manifests,
-            StaticAnalysisBlade::Oxc,
+            StaticAnalysisBlade::Biome,
             &clean_files,
         );
         let api_targets = targets
@@ -7163,6 +7410,7 @@ Done in 1.23s"#;
             "apps/rust-sdk",
             &[".".to_string()],
             Some(&clippy_args_for_package("sdk")),
+            None,
             false,
         )
         .await
@@ -7230,6 +7478,7 @@ Done in 1.23s"#;
             "apps/rust-sdk",
             &[".".to_string()],
             Some(&clippy_args_for_package("sdk")),
+            None,
             false,
         )
         .await
@@ -7286,6 +7535,7 @@ Done in 1.23s"#;
             "apps/rust-sdk",
             &[".".to_string()],
             Some(&clippy_args_for_package("sdk")),
+            None,
             true,
         )
         .await

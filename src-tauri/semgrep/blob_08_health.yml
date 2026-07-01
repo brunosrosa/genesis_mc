@@ -8,12 +8,6 @@ rules:
       - pattern: $VALUE.unwrap()
       - pattern: $VALUE.expect(...)
 
-  - id: soda.rust.unsafe.usage
-    languages: [rust]
-    severity: WARNING
-    message: "unsafe merece auditoria manual por ampliar o blast radius de memoria"
-    pattern-regex: '\bunsafe\b'
-
   - id: soda.rust.temp-dir
     languages: [rust]
     severity: WARNING
