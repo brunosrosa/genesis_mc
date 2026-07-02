@@ -180,7 +180,7 @@ try {
                 "--message-format", "short",
                 "--manifest-path", "third_party/lean-ctx/Cargo.toml",
                 "--bin", "lean-ctx",
-                "--target-dir", "../target"
+                "--target-dir", "target"
             ) `
             -Label "cargo-build-lean-ctx" `
             -WorkingDirectory $srcTauriDir

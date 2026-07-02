@@ -1,8 +1,0 @@
-Z:\genesis_mc\src-tauri\../target\debug\deps\tree_sitter_scala-eda452b2070d713a.d: C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\lib.rs C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../src/node-types.json C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../queries/highlights.scm C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../queries/locals.scm
-
-Z:\genesis_mc\src-tauri\../target\debug\deps\libtree_sitter_scala-eda452b2070d713a.rmeta: C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\lib.rs C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../src/node-types.json C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../queries/highlights.scm C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../queries/locals.scm
-
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\lib.rs:
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../src/node-types.json:
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../queries/highlights.scm:
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-scala-0.25.0\bindings\rust\../../queries/locals.scm:

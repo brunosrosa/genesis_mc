@@ -1,8 +1,0 @@
-Z:\genesis_mc\src-tauri\../target\debug\deps\tree_sitter_zig-98394e4c9e4ba9b6.d: C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\lib.rs C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../src/node-types.json C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../queries/highlights.scm C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../queries/injections.scm
-
-Z:\genesis_mc\src-tauri\../target\debug\deps\libtree_sitter_zig-98394e4c9e4ba9b6.rmeta: C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\lib.rs C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../src/node-types.json C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../queries/highlights.scm C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../queries/injections.scm
-
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\lib.rs:
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../src/node-types.json:
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../queries/highlights.scm:
-C:\Users\rosas\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tree-sitter-zig-1.1.2\bindings\rust\../../queries/injections.scm:
