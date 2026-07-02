@@ -173,6 +173,18 @@ try {
             -Label "cargo-build-supervisores" `
             -WorkingDirectory $srcTauriDir
 
+        Invoke-TrackedProcess `
+            -FilePath "cargo" `
+            -Arguments @(
+                "build",
+                "--message-format", "short",
+                "--manifest-path", "third_party/lean-ctx/Cargo.toml",
+                "--bin", "lean-ctx",
+                "--target-dir", "../target"
+            ) `
+            -Label "cargo-build-lean-ctx" `
+            -WorkingDirectory $srcTauriDir
+
         # 5. IGNIÇÃO DO DAEMON JÁ COMPILADO
         Write-Host "`n[5/5] Iniciando o daemon compilado (genesis_mc)..." -ForegroundColor Yellow
         $daemonPath = Join-Path $srcTauriDir "target\debug\genesis_mc.exe"

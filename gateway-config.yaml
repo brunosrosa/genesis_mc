@@ -32,7 +32,7 @@ binds:
                   targets:
                     - name: lean
                       stdio:
-                        cmd: 'C:/Users/rosas/.cargo/bin/lean-ctx-patched3.exe'
+                        cmd: 'src-tauri/target/debug/lean-ctx.exe'
                         args: []
                     - name: sequential_thinking
                       stdio:
