@@ -417,7 +417,6 @@ async fn resolve_release_seed_for_repo_url(repo_url: &Url) -> io::Result<String>
     let mut segments = repo_url
         .path_segments()
         .ok_or_else(|| io::Error::other("repo_url sem path segments para resolver versão"))?
-        .into_iter()
         .filter(|segment| !segment.is_empty())
         .map(|segment| segment.trim_end_matches(".git").to_string())
         .collect::<Vec<_>>();
@@ -714,6 +713,7 @@ fn select_batch_candidates_from_values(
     out
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_one_repo_f0(
     root_dir: &Path,
     db_path: &Path,

@@ -17,7 +17,7 @@ use super::repo_radar;
 use super::detect::StackProfile;
 use super::git::RepoPath;
 use super::persist::ArtifactBlob;
-use super::sidecar::{NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
+use super::sast::{NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};

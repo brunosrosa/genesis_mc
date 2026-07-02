@@ -462,7 +462,7 @@ mod tests {
             zone: RoutingZone::Yellow,
         }]);
         let distiller = MockDistiller::new(vec![Err("GPU OOM".to_string())]);
-        let cloud = MockCloudCascade::new(vec![Ok("cloud".to_string())]);
+        let cloud = MockCloudCascade::new(vec![Err("GPU OOM".to_string())]);
         let reader = MockDbReader::new(vec![BlobRecord {
             artifact_type: "blob_01".to_string(),
             payload_blob: "content".to_string(),

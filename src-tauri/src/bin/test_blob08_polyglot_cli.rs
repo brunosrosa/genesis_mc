@@ -3,7 +3,7 @@ use genesis_mc_lib::harvester::git::BloblessCloner;
 use genesis_mc_lib::harvester::ramdisk::RamdiskAllocator;
 use genesis_mc_lib::harvester::repo_radar;
 use genesis_mc_lib::harvester::sandbox::{SandboxOrchestrator, SandboxPolicy};
-use genesis_mc_lib::harvester::sidecar::{PolyglotSastInput, PolyglotSastSidecar};
+use genesis_mc_lib::harvester::sast::{PolyglotSastInput, PolyglotSastSidecar};
 use rusqlite::Connection;
 use std::fs;
 use std::io;

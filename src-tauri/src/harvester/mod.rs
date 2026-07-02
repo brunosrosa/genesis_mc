@@ -7,7 +7,7 @@ pub mod detect;
 pub mod router;
 pub mod ast_parser;
 pub mod repo_radar;
-pub mod sidecar;
+pub mod sast;
 pub mod web_scraper;
 pub mod github_tracker;
 pub mod extract;

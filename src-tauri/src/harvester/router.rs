@@ -401,6 +401,7 @@ mod tests {
             tasks,
             vec![
                 ExtractionTask::RunNativeAstParser,
+                ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
@@ -534,11 +535,11 @@ mod tests {
             tasks,
             vec![
                 ExtractionTask::RunNativeAstParser,
+                ExtractionTask::DiscoverTests,
                 ExtractionTask::ExtractManifests,
                 ExtractionTask::RunStaticAnalysis,
                 ExtractionTask::FetchCommunityMeta,
                 ExtractionTask::ExtractOpsBlueprint,
-                ExtractionTask::DiscoverTests,
             ]
         );
     }

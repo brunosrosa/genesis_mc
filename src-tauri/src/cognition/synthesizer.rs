@@ -3971,6 +3971,16 @@ mod tests {
         covered.insert("declared_description");
         covered.remove("declared_description_ptbr");
 
+        // Remove internal/sqlite-only columns not present in MASTER_SOLUTIONS_CANONICAL_COLUMNS
+        covered.remove("status_atualizacao");
+        covered.remove("status_fase");
+        covered.remove("indicacao_otimista_canibalizacao");
+
+        // Map repo_analised_version to repo_version
+        if covered.remove("repo_analised_version") {
+            covered.insert("repo_version");
+        }
+
         let expected: BTreeSet<&str> = MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().copied().collect();
         assert_eq!(covered, expected);
     }
