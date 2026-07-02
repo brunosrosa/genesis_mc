@@ -18,7 +18,7 @@ Este artefato é a Constituição do ecossistema SODA (Sistema Operacional Agên
 
 A linha do tempo do SODA repudia o "Context Rot" dividindo a construção da ferramenta e a construção do produto final.
 
-* **Fase 0 (A Fábrica / ETL Cognitivo):** O motor de ingestão $\mathcal{O}(1)$ (via MCPs e `jcodemunch`) que mastiga repositórios e extrai o "ouro matemático" para a matriz de dados. Ambiente pragmático onde scripts temporários (Python/Bash) habitam o `.soda_scratchpad`.
+* **Fase 0 (A Fábrica / ETL Cognitivo):** O motor de ingestão $\mathcal{O}(1)$ (via MCPs e parser AST nativo) que mastiga repositórios e extrai o "ouro matemático" para a matriz de dados. Ambiente pragmático onde scripts temporários (Python/Bash) habitam o `.soda_scratchpad`.
 * **Fases A, B, C... (O Produto / Genesis MC):** O código de produção final. Intolerância absoluta a runtimes interpretados. Backend 100% Rust assíncrono (Tokio). Frontend 100% Svelte 5 (Runes).
 
 ---
@@ -49,7 +49,7 @@ A estrutura de pastas é uma barreira de proteção. O Agente é **proibido** de
 ## 3. Restrições Arquiteturais (A Lei do Bare-Metal)
 
 O SODA foi desenhado para operar livre de nuvem, respeitando os limites físicos de uma máquina com 32GB de RAM e GPUs de classe consumidor (RTX 2060m).
-* **Fronteira UI (Anti-VRAM Burn):** É formalmente **banida** a utilização da estética "Liquid Glass" (filtros de desfoque, `backdrop-filter` agressivo). O processamento de GPU é vitalício da inferência local (LLMs via `llama.cpp` mmap). A UI Svelte 5 deve ser utilitária, planar e renderizada com baixo custo energético.
+* **Fronteira UI (Anti-VRAM Burn):** É formalmente **banida** a utilização da estética "Liquid Glass" (filtros de desfoque, `backdrop-filter` agressivo). O processamento de GPU é vitalício da inferência local comandada pelo **Candle** em Rust puro; `llama-cpp-4` não ocupa esse papel e permanece isolado no Hipocampo Epistêmico para *Logit Probing*. A UI Svelte 5 deve ser utilitária, planar e renderizada com baixo custo energético.
 * **Comunicação Zero-Copy:** O uso massivo de serialização JSON entre Rust e Svelte é repudiado. Utiliza-se ponteiros de transferência e memória alocada estritamente para evitar estrangulamento do *Garbage Collector* do navegador (V8).
 
 ---

@@ -1,6 +1,8 @@
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use rusqlite::{params, Connection};
 use thiserror::Error;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactBlob {
@@ -22,28 +24,20 @@ impl BlobNormalizer {
         blobs: Vec<ArtifactBlob>,
         conn: Arc<Mutex<Connection>>,
     ) -> Result<(), HarvesterError> {
-        // PT-3: I/O do SQLite é síncrono, delegamos para spawn_blocking
         tokio::task::spawn_blocking(move || {
             let mut conn = conn.lock().map_err(|e| HarvesterError::StorageError(e.to_string()))?;
-            
-            // Início da Transação Atômica
+
+            conn.busy_timeout(Duration::from_millis(5000))
+                .map_err(|e| HarvesterError::StorageError(e.to_string()))?;
+
             let tx = conn.transaction().map_err(|e| HarvesterError::StorageError(e.to_string()))?;
 
-            tx.execute(
-                "DELETE FROM artefatos_brutos
-                 WHERE repo_id = ?1
-                   AND artifact_type LIKE 'blob_%'",
-                params![repo_id.clone()],
-            )
-            .map_err(|e| HarvesterError::StorageError(e.to_string()))?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| HarvesterError::StorageError(e.to_string()))?
+                .as_secs() as i64;
 
             for blob in blobs {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|e| HarvesterError::StorageError(e.to_string()))?
-                    .as_secs() as i64;
-                    
-                // PT-BLOB-1: UPSERT individual de artefatos (repo_id + artifact_type)
                 tx.execute(
                     "INSERT INTO artefatos_brutos (repo_id, artifact_type, payload_blob, timestamp_extracao)
                      VALUES (?1, ?2, ?3, ?4)
@@ -54,7 +48,6 @@ impl BlobNormalizer {
                 ).map_err(|e| HarvesterError::StorageError(e.to_string()))?;
             }
 
-            // Commit da Transação
             tx.commit().map_err(|e| HarvesterError::StorageError(e.to_string()))
         })
         .await
@@ -131,7 +124,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_persist_removes_stale_blob_types_for_same_repo() {
+    async fn test_persist_preserves_unrelated_blob_types_for_same_repo() {
         let conn = Arc::new(Mutex::new(setup_db()));
         let first_pass = vec![
             ArtifactBlob { artifact_type: "blob_03_test_intent".to_string(), payload_blob: b"tests".to_vec() },
@@ -149,15 +142,15 @@ mod tests {
         let count: i64 = conn_locked
             .query_row("SELECT count(*) FROM artefatos_brutos WHERE repo_id = ?1", ["repo_goose"], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 2);
+        assert_eq!(count, 3);
 
-        let stale_count: i64 = conn_locked
+        let preserved_count: i64 = conn_locked
             .query_row(
                 "SELECT count(*) FROM artefatos_brutos WHERE repo_id = ?1 AND artifact_type = ?2",
                 ["repo_goose", "blob_03_domain_mechanics"],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(stale_count, 0);
+        assert_eq!(preserved_count, 1);
     }
 }

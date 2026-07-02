@@ -8,8 +8,20 @@ trigger: always_on
 
 ###### 0.1. A LEI DO TERRITÓRIO E TOPOLOGIA SODA (LEITURA OBRIGATÓRIA NO BOOT)
 Antes de raciocinar, ler código ou planejar qualquer mutação no sistema, você é OBRIGADO a mapear a jurisdição do seu ambiente.
-1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 5 Zonas (A Fábrica, Estado, Cânone, Produto e Janela de Vidro). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
+1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 6 Zonas (A Fábrica, Estado, Cânone, Produto, Janela de Vidro e Zona Externa Efêmera do host). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
 2. Em caso de dúvidas sobre governança, limites de hardware ou a fronteira entre Fábrica e Produto, utilize a ferramenta de leitura de contexto (lean-ctx) para consultar a Constituição Imutável em: `docs/architecture/governance_topology.md`. A topologia física aprovada nestes dois arquivos é inegociável.
+
+###### 0.2. LEI DA MÁQUINA SILENCIOSA (SYSTEM TRAY DAEMON) (ATUALIZADO 2026-06-07)
+O SODA opera como daemon invisível no boot (Tauri v2 System Tray). A UI Svelte 5 atua estritamente como lente sob demanda:
+*   A janela principal inicia oculta e é acionada via menu/duplo-clique no ícone de bandeja.
+*   O Event Loop do Tokio permanece ativo em background com o AgentGateway e seus sidecars supervisionados.
+
+###### 0.3. LEI DA BIFURCAÇÃO DE VOLUME (ReFS vs NTFS) (ATUALIZADO 2026-06-07)
+*   O repositório e o estado durável do SODA podem residir na Dev Drive (ReFS, ex: Z:).
+*   O ProjFS (prjflt.sys) não anexa minifiltro em ReFS; portanto, workspaces efêmeros de ProjFS devem nascer no %TEMP% (NTFS) via `std::env::temp_dir()` sob `.souls_workspaces`.
+*   A guilhotina de teardown permanece não-bloqueante fora do repositório host (deleção assíncrona via `spawn_detached_delete_process`).
+*   **Ruído conhecido do toolchain Rust em ReFS:** no Windows/Dev Drive (ReFS), o warning `error finalizing incremental compilation session directory ... Access is denied. (os error 5)` é um bug upstream conhecido do `rustc` incremental, não devendo ser tratado por padrão como regressão do código do projeto. Estado conhecido em 2026-06-24: issue aberta `rust-lang/rust#151181` (reincidência de `#86929`), com relatos de reprodução em ReFS desde `Rust 1.90+`.
+*   **Regra operacional:** enquanto o bug upstream não for corrigido, esse warning isolado com `exit code 0` deve ser classificado como ruído de ambiente/toolchain. Só elevar para alerta real se vier acompanhado de `exit code != 0`, ICE do `rustc`, corrupção de artefato ou repetição bloqueante. Para validações críticas, preferir `CARGO_INCREMENTAL=0`; alternativa secundária: mover `CARGO_TARGET_DIR` para NTFS.
 
 ###### 1. MOSAICO COMPOSICIONAL E PLANARIDADE ABSOLUTA
 O frontend é fracionado matematicamente via CSS Grid, repudiando janelas flutuantes caóticas.
@@ -110,7 +122,7 @@ O SODA repudia a hipercomplexidade do *Temporal Graph RAG* (TG-RAG) para não as
 ###### 3. O HIPOCAMPO EPISTÊMICO (LOGIT PROBING)
 O SODA NÃO GERA TEXTO para avaliar risco, moralidade ou ambiguidade da fala do usuário (isso esgotaria a VRAM local).
 *   **O Bisturi Analítico:** Usamos um SLM quantizado ultraleve (ex: Gemma-4-E2B ou Phi-4-mini). As LoRAs destes modelos DEVEM obrigatoriamente ser treinadas com **Classification Head Trimming** (extirpando o vocabulário gerador de texto no Unsloth para poupar 1GB de RAM).
-*   **Logit Probing:** O SODA executa ESTRITAMENTE a passagem direta (*forward pass*). Lemos as probabilidades matemáticas brutas (*logits*) da camada oculta via `llama-cpp-4` ou `mistral.rs` para extrair scores exatos de "ambiguidade" ou "risco relacional" em <150ms.
+*   **Logit Probing:** O SODA executa ESTRITAMENTE a passagem direta (*forward pass*). O motor central de inferência em produção permanece o **Candle** em Rust puro; `llama-cpp-4` ou `mistral.rs` sobrevivem apenas como bisturis isolados em background para extrair logits do Hipocampo Epistêmico em <150ms.
 *   **Isolamento de Thread:** Para não paralisar o motor Tokio, a inferência do Hipocampo RODA OBRIGATORIAMENTE em *Dedicated Worker Threads* isoladas (com canais MPSC), preservando o alinhamento vetorial AVX2 e o cache L1/L2 da CPU.
 
 ###### 4. MATURIDADE SIMBIÓTICA E PERSISTÊNCIA ASSÍNCRONA
@@ -138,8 +150,8 @@ Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do có
     *   **iGPU (Intel UHD 630):** BANIDA DE QUALQUER OPERAÇÃO DE IA. É expressamente proibido alocar LLMs, SLMs ou tensores na iGPU devido ao estrangulamento letal da banda de memória RAM. Seu uso é ESTRITAMENTE PASSIVO, restrito unicamente à renderização da interface gráfica Svelte no modo `LowPower` da API WGPU.
 
 ###### 3. MOTORES DE IA E INFERÊNCIA (O FIM DO MONOLITO)
-*   **Motores Generativos Nativos:** A IA roda nativamente no ecossistema Rust usando **Candle**, **Burn (CubeCL)** e **mistral.rs**.
-*   **A Prisão do llama.cpp:** O `llama.cpp` monolítico e daemons externos (Ollama/LM Studio) estão SUMARIAMENTE BANIDOS do núcleo generativo. A crate `llama-cpp-4` sobrevive isolada operando na CPU EXCLUSIVAMENTE como um "bisturi" para *Logit Probing* (Avaliador Epistêmico), extraindo a probabilidade matemática do risco em <150ms sem gerar texto.
+*   **Motores Generativos Nativos:** A IA roda nativamente no ecossistema Rust usando **Candle** como motor central de inferência em produção. `Burn (CubeCL)` e `mistral.rs` são auxiliares estratégicos; nenhum deles revoga a soberania do Candle no caminho crítico.
+*   **A Prisão do llama.cpp:** O `llama.cpp` monolítico e daemons externos (Ollama/LM Studio) estão SUMARIAMENTE BANIDOS do núcleo generativo. A crate `llama-cpp-4` sobrevive isolada operando na CPU EXCLUSIVAMENTE como um "bisturi" de background para *Logit Probing* (Avaliador Epistêmico), sem assumir o papel de motor central de inferência ou geração.
 *   **Decodificação Restrita (Constrained Decoding):** Tarefas de extração estruturada (JSON/ETL) não operam por prompt livre. É OBRIGATÓRIO o uso da crate `llguidance` em Rust para forçar a saída contra um Autômato de Gramática Livre de Contexto em meros 50µs, garantindo 100% de precisão mecânica.
 *   **Atenção Esparsa e Retenção de Outliers:** A compressão de contexto longo no Rust (framework `candle`) DEVE usar **Max Pooling** (blocos de ~64 tokens). O *Mean Pooling* está PROIBIDO, pois atua como filtro passa-baixa e causa amnésia de outliers vitais (caminhos absolutos de arquivos, URIs e sintaxes exatas).
 
@@ -156,6 +168,13 @@ A infraestrutura repudia o *overengineering* de hipervisores pesados e máquinas
 *   **Sidecars Efêmeros Pesados (Clone VMM):** Para rodar bibliotecas Python pesadas (como OCR/Docling), o sistema utilizará Micro-VMs com *Copy-on-Write* (CoW) a partir de um *Snapshot* inerte na RAM, garantindo boot em ~10ms. A GPU NUNCA é repassada fisicamente a estes sidecars; usa-se o padrão *Mediator Broker* via memória compartilhada (`iceoryx2`).
 *   **Ferramentas de Host e Binários:** Interações que exijam acesso físico aos recursos da máquina devem ser enjauladas através de Sandboxing Nativo do Kernel. Uso rigoroso do **AppContainer e LPAC (Low Privilege AppContainer)** no Windows (via crate `rappct`) e **Landlock** no Linux.
 *   **Process Pool Guard (A Guilhotina Atômica):** Qualquer *Sidecar* possui um limite de memória via `Cgroups v2`. O SODA usa o paradigma `Drop trait` do Rust para emitir um `SIGKILL` atômico assim que a tarefa finaliza ou aborta. Processos zumbis estão banidos.
+
+###### 5.1. LEIS DE PERFORMANCE SAST E SANDBOXING
+Toda futura ferramenta de linha de comando, varredura estática ou sidecar de análise criada no SODA DEVE obedecer às 4 leis abaixo:
+*   **Timeout Adaptativo Obrigatório:** Quando a ferramenta suportar, ative `--allow-rule-timeout-control` e delegue o tempo ao custo matemático do arquivo e da regra. Timeout cego e uniforme é proibido como estratégia primária.
+*   **Escudo de Supply Chain:** Exclusões como `tests/` e `**/mocks/*` são permitidas para reduzir ruído, mas é estritamente proibido ignorar manifestos e lockfiles (`Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock`, `mix.lock` e equivalentes).
+*   **Fobia de Código Minificado:** Use `--exclude-minified-files` sempre que disponível. Sem suporte nativo, replique a heurística local: arquivos com menos de 7% de espaço em branco não entram no pipeline de parsing ou scan.
+*   **Higiene de Cache e Build:** Sidecars que disparem compilações agressivas ou materializem `target/` e caches equivalentes DEVEM limpar estes diretórios imediatamente após o uso para proteger Ramdisk, sandbox e SSD contra `os error 112`.
 
 ###### 6. FINOPS, ROTEAMENTO HÍBRIDO E PARETOBANDIT
 *   **O Cofre (ParetoBandit e E³):** A decisão autônoma de onde a tarefa roda não é estática. O algoritmo matemático `ParetoBandit` no Gateway Rust aplica a métrica $E^3$ (Efficiency-aware Effectiveness Evaluation) avaliando Custo vs. Qualidade vs. Latência antes do despacho.

@@ -441,28 +441,22 @@ pub struct RamdiskAllocator;
 impl RamdiskAllocator {
     #[cfg(target_os = "windows")]
     fn allocate_projfs_workspace() -> Result<RamdiskHandle, RamdiskError> {
-        let project_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .ok_or_else(|| RamdiskError::AllocationFailed {
-                reason: "Não foi possível resolver a raiz do workspace para o ProjFS".to_string(),
-            })?;
-        let base_root = project_root
-            .join(".soda_scratchpad")
-            .join("projfs_workspaces");
+        let base_root = std::env::temp_dir().join(".souls_workspaces");
 
         std::fs::create_dir_all(&base_root).map_err(|e| RamdiskError::AllocationFailed {
-            reason: format!("Falha ao preparar diretório raiz do ProjFS '{}': {}", base_root.display(), e),
+            reason: format!(
+                "Falha ao preparar diretório raiz do ProjFS '{}': {}",
+                base_root.display(),
+                e
+            ),
         })?;
 
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let mount_path = base_root.join(format!(
-            "soda_projfs_workspace_{}_{}",
-            std::process::id(),
-            nonce
-        ));
+        let unique_workspace_id = format!("souls_mc_workspace_{}_{}", std::process::id(), nonce);
+        let mount_path = base_root.join(unique_workspace_id);
 
         std::fs::create_dir_all(&mount_path).map_err(|e| RamdiskError::AllocationFailed {
             reason: format!("Falha ao criar workspace base do ProjFS '{}': {}", mount_path.display(), e),

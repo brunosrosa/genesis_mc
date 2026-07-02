@@ -7,6 +7,7 @@ use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::cognition::swarm::{
     ensure_phase2_schema, CognitiveSwarmDispatcher, HttpLensInvoker, SqliteDebateStore,
 };
+use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use rusqlite::{params, Connection};
 use tracing::info;
 
@@ -217,29 +218,19 @@ fn write_f2_report(root_dir: &Path, report_data: &Phase2Report<'_>) -> io::Resul
     report.push_str(report_data.lens_c_json);
     report.push('\n');
 
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&report_path)
-        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
-    file.write_all(report.as_bytes())
-        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
+    append_plaintext_report(&report_path, &report)
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL {}: {}", report_path.display(), e)))?;
 
     Ok(report_path)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let started = Instant::now();
     let repo_id = parse_repo_id_from_args();

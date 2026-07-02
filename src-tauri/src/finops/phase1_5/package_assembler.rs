@@ -28,6 +28,38 @@ pub struct PackageAssembler<'a, DB: DbReader> {
     db: &'a DB,
 }
 
+fn compact_canon_context(blob_10: &str) -> String {
+    let trimmed = blob_10.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let len_chars = trimmed.chars().count();
+    let excerpt = trimmed.chars().take(4000).collect::<String>();
+    format!(
+        "canon_context_len_chars={}\ncanon_context_excerpt:\n{}\n",
+        len_chars, excerpt
+    )
+}
+
+fn detect_repo_kind(essence_02: &str, essence_04: &str, essence_05: &str) -> &'static str {
+    let hay = format!("{}\n{}", essence_04, essence_05).to_ascii_lowercase();
+    if hay.contains("kind: skilllibrary") {
+        return "SkillLibrary";
+    }
+    if hay.contains("kind: contentrepo") {
+        return "ContentRepo";
+    }
+    let dep = essence_02.to_ascii_lowercase();
+    if dep.contains("stack_base: unknown")
+        || dep.contains("stack_base: n/a")
+        || dep.contains("stack_base: ")
+            && dep.lines().any(|line| line.trim() == "stack_base:")
+    {
+        return "ContentRepo";
+    }
+    "CodeRepo"
+}
+
 impl<'a, DB: DbReader> PackageAssembler<'a, DB> {
     pub fn new(db: &'a DB) -> Self {
         PackageAssembler { db }
@@ -87,20 +119,24 @@ impl<'a, DB: DbReader> PackageAssembler<'a, DB> {
             .map_err(AssemblerError::DatabaseReadError)?;
 
         let canon_marker = "\n=== BLOB_10_CANON_CONTEXT ===\n";
+        let canon_full = format!("{}{}", canon_marker, blob_10);
+        let canon_compact = format!("{}{}", canon_marker, compact_canon_context(&blob_10));
+        let repo_kind = detect_repo_kind(&essence_02, &essence_04, &essence_05);
+        let kind_marker = format!("repo_kind={repo_kind}\n");
 
         let package_a = format!(
-            "=== PACOTE A (PRODUTO/UX) ===\n{}\n{}\n{}\n{}{}\n=== FIM PACOTE A ===",
-            essence_01, essence_03, essence_11, canon_marker, blob_10
+            "=== PACOTE A (PRODUTO/UX) ===\n{}{}\n{}\n{}\n{}\n=== FIM PACOTE A ===",
+            kind_marker, essence_01, essence_03, essence_11, canon_compact
         );
 
         let package_b = format!(
-            "=== PACOTE B (ARQUITETO) ===\n{}\n{}\n{}{}\n=== FIM PACOTE B ===",
-            essence_04, essence_05, canon_marker, blob_10
+            "=== PACOTE B (ARQUITETO) ===\n{}{}\n{}\n{}\n=== FIM PACOTE B ===",
+            kind_marker, essence_04, essence_05, canon_full
         );
 
         let package_c = format!(
-            "=== PACOTE C (OPS/AUDITOR) ===\n{}\n{}\n{}\n{}\n{}\n{}{}\n=== FIM PACOTE C ===",
-            essence_02, essence_06, essence_07, essence_08, essence_09, canon_marker, blob_10
+            "=== PACOTE C (OPS/AUDITOR) ===\n{}{}\n{}\n{}\n{}\n{}\n{}\n=== FIM PACOTE C ===",
+            kind_marker, essence_02, essence_06, essence_07, essence_08, essence_09, canon_compact
         );
 
         Ok(Phase2Payloads {
@@ -260,9 +296,9 @@ mod tests {
         let assembler = PackageAssembler::new(&db);
         let result = assembler.assemble("aaif-goose/goose").expect("Should succeed");
 
-        assert!(result.package_a.contains("[BLOB_10_CANON_CONTEXT]"));
+        assert!(result.package_a.contains("canon_context_len_chars="));
         assert!(result.package_b.contains("[BLOB_10_CANON_CONTEXT]"));
-        assert!(result.package_c.contains("[BLOB_10_CANON_CONTEXT]"));
+        assert!(result.package_c.contains("canon_context_len_chars="));
     }
 
     #[test]

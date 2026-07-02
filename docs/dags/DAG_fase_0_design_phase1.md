@@ -50,7 +50,7 @@ Zero escrita estrutural do checkout toca o SSD do host.
 
 | Abordagem SLOP | Risco Letal |
 |---|---|
-| `jcodemunch > raw_logic.txt` gerando arquivos temporários | 3.330+ arquivos-lixo, vetores de SDC (Silent Data Corruption) |
+| `native-ast-parser > raw_logic.txt` gerando arquivos temporários | 3.330+ arquivos-lixo, vetores de SDC (Silent Data Corruption) |
 
 **Lei Dura:** O output de todos os Sidecars Efêmeros DEVE trafegar via **IPC Zero-Copy**
 (captura de `stdout` via `tokio::process::Command`). Dados transitam como `Vec<u8>` na RAM
@@ -81,7 +81,7 @@ de processos órfãos via RAII.
 |---|---|---|
 | Cerca de paths | `enforce_host_path_policy()` recusa qualquer caminho absoluto fora do repositório ou das roots permitidas | Sidecars não escapam para o host |
 | Spawn assíncrono | `tokio::process::Command` com `kill_on_drop(true)` | Nenhum sidecar bloqueia o Tokio |
-| Escrita mínima | `build_host_write_roots()` libera somente `.jcodemunch_index`, `.soda_sandbox` e suporte do semgrep | Escrita host é restrita e auditável |
+| Escrita mínima | `build_host_write_roots()` libera somente `.native_ast_cache`, `.soda_sandbox` e suporte do semgrep | Escrita host é restrita e auditável |
 | Extermínio Windows | `CreateJobObjectW` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Toda árvore do processo morre ao fechar o handle |
 | Extermínio em timeout | `child.kill()` + `kill_process_tree_by_pid()` + limpeza de órfãos | Timeout vira guilhotina, não zombie |
 
@@ -121,7 +121,7 @@ graph TD
     end
 
     subgraph CAMADA_2 ["CAMADA 2: EXTRAÇÃO DOS 11 BLOBS"]
-        N6["N6: JCodemunchSidecar<br/>(AST + topologia)<br/>O: `blob_04`, `blob_05`"]
+        N6["N6: NativeAstParser<br/>(AST + topologia)<br/>O: `blob_04`, `blob_05`"]
         N7["N7: LocalStaticExtractor<br/>(README sanitizado)<br/>O: `blob_01`"]
         N8["N8: ManifestExtractor<br/>(manifests empacotados)<br/>O: `blob_02`"]
         N9["N9: OpsBlueprintExtractor<br/>(CI/CD, Dockerfiles, ops)<br/>O: `blob_07`"]
@@ -185,7 +185,7 @@ canônico no SQLite removendo `blob_*` obsoletos do mesmo `repo_id`.
 | N3 | `sandbox::SandboxOrchestrator` | `&RepoPath`, `SandboxPolicy::ReadWrite` | `Result<SandboxHandle, SandboxError>` | PT-2, PT-3 |
 | N4 | `detect::LanguageDetector` | `&RepoPath` | `StackProfile` | — |
 | N5 | `router::ExtractionRouter` | `ExtractionInput` | `Vec<ExtractionTask>` | — |
-| N6 | `sidecar::JCodemunchSidecar` | `JCodemunchInput` | `JCodemunchArtifacts` (`blob_04`, `blob_05`) | PT-2, PT-3 |
+| N6 | `sidecar::NativeAstParser` | `NativeAstInput` | `NativeAstArtifacts` (`blob_04`, `blob_05`) | PT-2, PT-3 |
 | N7 | `extract::LocalStaticExtractor` | `&RepoPath` | `Vec<ArtifactBlob>` (`blob_01`) | PT-2 |
 | N8 | `extract::ManifestExtractor` | `ManifestInput` | `ArtifactBlob` (`blob_02`) | PT-2 |
 | N9 | `extract::OpsBlueprintExtractor` | `OpsInput` | `ArtifactBlob` (`blob_07`) | PT-2 |
@@ -201,8 +201,8 @@ canônico no SQLite removendo `blob_*` obsoletos do mesmo `repo_id`.
 | 1 | `blob_01_promessa_readme` | `LocalStaticExtractor` | Promessa explícita do produto a partir do README, com sanitização do conteúdo visual supérfluo |
 | 2 | `blob_02_dependency_manifest` | `ManifestExtractor` | Dependências e dev-dependencies empacotadas em texto compacto |
 | 3 | `blob_03_test_intent` | `TestIntentExtractor` | Intenção de testes, prioridades e trilhas de validação. Fica formalmente separado dos contratos de UX |
-| 4 | `blob_04_repo_outline` | `JCodemunchSidecar` | Outline estrutural do repositório |
-| 5 | `blob_05_architecture_map` | `JCodemunchSidecar` | Mapa topológico sanitizado das relações internas |
+| 4 | `blob_04_repo_outline` | `NativeAstParser` | Outline estrutural do repositório |
+| 5 | `blob_05_architecture_map` | `NativeAstParser` | Mapa topológico sanitizado das relações internas |
 | 6 | `blob_06_unsafe_hotspots` | `SemgrepSidecar` | Hotspots estáticos de segurança e unsafe |
 | 7 | `blob_07_ops_blueprint` | `OpsBlueprintExtractor` | Blueprint operacional: CI/CD, Dockerfiles e pegadas de operação |
 | 8 | `blob_08_health_report` | `SemgrepSidecar` | Saúde estática e dívida técnica resumida |
@@ -226,7 +226,7 @@ legados durante a substituição atômica do pacote `blob_*`.
 | 3 | PRD-003: NativeSandboxOrchestrator | N3 | PRD-002 |
 | 4 | PRD-004: LanguageDetector | N4 | PRD-002 |
 | 5 | PRD-005: ExtractionRouter | N5 | PRD-004 |
-| 6 | PRD-006: JCodemunchSidecar | N6 | PRD-003, PRD-005 |
+| 6 | PRD-006: NativeAstParser | N6 | PRD-003, PRD-005 |
 | 7 | PRD-007: LocalStaticExtractor | N7 | PRD-005 |
 | 8 | PRD-008: ManifestExtractor | N8 | PRD-005 |
 | 9 | PRD-009: OpsBlueprintExtractor | N9 | PRD-005 |

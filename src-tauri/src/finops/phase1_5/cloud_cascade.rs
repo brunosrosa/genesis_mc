@@ -15,10 +15,8 @@ pub enum CascadeError {
     NetworkError(String),
 }
 
-const FREE_MODEL: &str = "qwen/qwen3-coder:free";
-const PAID_MODEL: &str = "deepseek/deepseek-v4-flash";
-const DEFAULT_OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_OUTPUT_TOKENS: usize = 3_000;
+const BLOB_10_CANON_MARKER: &str = "=== BLOB_10_CANON_CONTEXT ===";
 
 #[derive(Debug, Serialize)]
 struct OpenRouterRequest {
@@ -30,7 +28,31 @@ struct OpenRouterRequest {
 #[derive(Debug, Serialize)]
 struct Message {
     role: String,
-    content: String,
+    content: MessageContent,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum MessageContent {
+    Text(String),
+    Parts(Vec<ContentPart>),
+}
+
+#[derive(Debug, Serialize)]
+struct ContentPart {
+    #[serde(rename = "type")]
+    kind: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<CacheControl>,
+}
+
+#[derive(Debug, Serialize)]
+struct CacheControl {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ttl: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,13 +78,22 @@ pub struct CloudCascade {
 
 impl CloudCascade {
     pub fn new() -> Result<Self, CascadeError> {
-        let api_key = std::env::var("OPENROUTER_API_KEY")
-            .map_err(|_| CascadeError::NetworkError("OPENROUTER_API_KEY not set".to_string()))?;
+        let api_key = ["OPENROUTER_API_FAST_KEY", "OPENROUTER_API_FREE_KEY", "OPENROUTER_API_HEAVY_KEY"]
+            .into_iter()
+            .find_map(|key| std::env::var(key).ok())
+            .map(|value| value.trim().trim_matches('"').to_string())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                CascadeError::NetworkError(
+                    "OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY not set"
+                        .to_string(),
+                )
+            })?;
 
         Ok(CloudCascade {
             api_key,
             client: reqwest::Client::new(),
-            base_url: DEFAULT_OPENROUTER_URL.to_string(),
+            base_url: openrouter_chat_completions_url(),
         })
     }
 
@@ -85,7 +116,7 @@ impl CloudCascade {
         }
 
         let result = self
-            .call_openrouter(payload, system_prompt, FREE_MODEL)
+            .call_openrouter(payload, system_prompt, &free_model_name())
             .await;
 
         match result {
@@ -95,7 +126,7 @@ impl CloudCascade {
                     "CloudCascade: Free tier unavailable ({}), switching to paid",
                     status
                 );
-                self.call_openrouter(payload, system_prompt, PAID_MODEL).await
+                self.call_openrouter(payload, system_prompt, &paid_model_name()).await
             }
             Err(e) => Err(e),
         }
@@ -112,11 +143,11 @@ impl CloudCascade {
             messages: vec![
                 Message {
                     role: "system".to_string(),
-                    content: system_prompt.to_string(),
+                    content: MessageContent::Text(system_prompt.to_string()),
                 },
                 Message {
                     role: "user".to_string(),
-                    content: payload.to_string(),
+                    content: build_user_content(payload),
                 },
             ],
             max_tokens: MAX_OUTPUT_TOKENS,
@@ -157,10 +188,57 @@ impl CloudCascade {
     }
 }
 
-impl Default for CloudCascade {
-    fn default() -> Self {
-        Self::new().expect("CloudCascade requires OPENROUTER_API_KEY")
+fn build_user_content(payload: &str) -> MessageContent {
+    let (before, after) = match payload.split_once(BLOB_10_CANON_MARKER) {
+        Some((left, right)) => (left, Some(right)),
+        None => return MessageContent::Text(payload.to_string()),
+    };
+
+    let mut parts = Vec::new();
+    if !before.trim().is_empty() {
+        parts.push(ContentPart {
+            kind: "text".to_string(),
+            text: before.to_string(),
+            cache_control: None,
+        });
     }
+
+    let canon_block = format!("{BLOB_10_CANON_MARKER}{after}", after = after.unwrap_or_default());
+    parts.push(ContentPart {
+        kind: "text".to_string(),
+        text: canon_block,
+        cache_control: Some(CacheControl {
+            kind: "ephemeral".to_string(),
+            ttl: Some("1h".to_string()),
+        }),
+    });
+
+    MessageContent::Parts(parts)
+}
+
+fn openrouter_chat_completions_url() -> String {
+    let base = std::env::var("OPENAI_BASE_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
+    format!("{base}/chat/completions")
+}
+
+fn free_model_name() -> String {
+    std::env::var("OPENROUTER_FREE_MODEL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "openrouter/free".to_string())
+}
+
+fn paid_model_name() -> String {
+    std::env::var("OPENROUTER_DEFAULT_MODEL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "deepseek/deepseek-v4-flash".to_string())
 }
 
 #[cfg(test)]
@@ -172,7 +250,7 @@ mod tests {
         let response_body = serde_json::json!({
             "choices": [{
                 "message": {
-                    "content": "Distilled essence: test summary [MOCK_ESSENCE]"
+                    "content": "Distilled essence: test summary"
                 }
             }]
         });
@@ -216,7 +294,7 @@ mod tests {
             eprintln!("ERROR: {:?}", result.as_ref().err());
         }
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("[MOCK_ESSENCE]"));
+        assert!(result.unwrap().contains("Distilled essence"));
     }
 
     #[tokio::test]
@@ -238,7 +316,7 @@ mod tests {
             eprintln!("ERROR: {:?}", result.as_ref().err());
         }
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("[MOCK_ESSENCE]"));
+        assert!(result.unwrap().contains("Distilled essence"));
     }
 
     #[tokio::test]

@@ -1,0 +1,37 @@
+rules:
+  - id: soda.elixir.code-eval
+    languages: [elixir]
+    severity: ERROR
+    message: "Execucao dinamica via Code.eval_* amplia superficie de RCE"
+    pattern-either:
+      - pattern: Code.eval_string(...)
+      - pattern: Code.eval_quoted(...)
+      - pattern: Code.compile_string(...)
+
+  - id: soda.elixir.binary-to-term-unsafe
+    languages: [elixir]
+    severity: ERROR
+    message: "`:erlang.binary_to_term/1` sem a opcao `[:safe]` pode desserializar payload inseguro"
+    patterns:
+      - pattern: :erlang.binary_to_term($PAYLOAD)
+      - pattern-not: :erlang.binary_to_term($PAYLOAD, [:safe])
+
+  - id: soda.elixir.eex-eval-string
+    languages: [elixir]
+    severity: WARNING
+    message: "EEx.eval_* com entrada dinamica pode habilitar SSTI ou execucao inesperada"
+    pattern-either:
+      - pattern: EEx.eval_string(...)
+      - pattern: EEx.eval_file(...)
+
+  - id: soda.elixir.system-cmd-dynamic
+    languages: [elixir]
+    severity: WARNING
+    message: "System.cmd/3 com argumentos dinamicos requer auditoria para command injection"
+    pattern: System.cmd($CMD, $ARGS, ...)
+
+  - id: soda.elixir.http-insecure-verify
+    languages: [elixir]
+    severity: WARNING
+    message: "Desabilitar verificacao TLS abre risco de MITM"
+    pattern-regex: '(verify|ssl_verify)\s*:\s*(false|:verify_none)'

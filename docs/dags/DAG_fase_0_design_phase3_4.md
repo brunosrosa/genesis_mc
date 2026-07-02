@@ -16,7 +16,7 @@ O sistema abandona envios fragmentados e evita colapso de contexto fatiando a Fa
 - Blocos 0 e 5 são **Zero-AI** (processamento local em Rust).
 - Blocos 1–4 são gerados pelo **Sintetizador** com **Decodificação Restrita / Schema-Guided Reasoning (SGR)**.
 - A saída final do Sintetizador registra obrigatoriamente **`"model_used": "anthropic/claude-sonnet-4.6"`**.
-- A Fase 4 executa uma **carga destrutiva e atômica** das 82 colunas via `batch_update_cells`, minimizando chamadas para respeitar o limite de taxa (60 RPM).
+- A Fase 4 executa uma **carga destrutiva e coerente** das 82 colunas via `write_values` em micro-lotes, minimizando chamadas sem colapsar o stdio do MCP.
 
 ---
 
@@ -74,7 +74,7 @@ flowchart TD
 ### 3.2. Unidade de Consistência
 
 - Unidade atômica de computação: **1 repositório** (1 linha na planilha).
-- Unidade atômica de escrita na planilha: **1 request batch_update_cells** contendo as 82 colunas da linha.
+- Unidade atômica de escrita lógica na planilha: **1 linha** despachada em micro-lotes sequenciais de `write_values`, preservando coerência por ranges.
 
 ---
 
@@ -236,7 +236,7 @@ Colunas (10):
 
 Execução:
 
-- O Rust executa `batch_update_cells` enviando **as 82 colunas** para a aba `MASTER_SOLUTIONS` em escrita destrutiva e coerente.
+- O Rust executa `write_values` enviando **as 82 colunas** para a aba `MASTER_SOLUTIONS` em escrita destrutiva e coerente, fatiada por ranges.
 - O range por linha deve cobrir exatamente 82 colunas: **A → CD**.
 
 ---

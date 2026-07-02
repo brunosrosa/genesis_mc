@@ -1,0 +1,116 @@
+rules:
+  - id: soda.needs-transmutation.react
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: toxic-stack
+      technology: [react, javascript, typescript]
+    pattern-either:
+      - pattern: import React from "react"
+      - pattern: import * as React from "react"
+      - pattern: const React = require("react")
+
+  - id: soda.needs-transmutation.express
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: toxic-stack
+      technology: [express, javascript, typescript]
+    pattern-either:
+      - pattern: import express from "express"
+      - pattern: const express = require("express")
+      - pattern: require("express")
+
+  - id: soda.needs-transmutation.electron
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: toxic-stack
+      technology: [electron, javascript, typescript]
+    pattern-either:
+      - pattern: import { BrowserWindow } from "electron"
+      - pattern: import electron from "electron"
+      - pattern: const electron = require("electron")
+
+  - id: soda.needs-transmutation.vue
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: toxic-stack
+      technology: [vue, javascript, typescript]
+    pattern-either:
+      - pattern: import Vue from "vue"
+      - pattern: import { createApp } from "vue"
+      - pattern: const Vue = require("vue")
+
+  - id: soda.needs-transmutation.python-web
+    languages: [python]
+    severity: INFO
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: toxic-stack
+      technology: [python, flask, django, fastapi]
+    pattern-either:
+      - pattern: from flask import Flask
+      - pattern: import django
+      - pattern: from fastapi import FastAPI
+
+  - id: soda.fragility.rust-unwrap
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: rust-fragility
+      technology: [rust]
+    pattern: $VALUE.unwrap()
+
+  - id: soda.fragility.rust-expect
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: rust-fragility
+      technology: [rust]
+    pattern: $VALUE.expect(...)
+
+  - id: soda.fragility.rust-panic
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: rust-fragility
+      technology: [rust]
+    pattern: panic!(...)
+
+  - id: soda.fragility.rust-sync-blocking-in-async
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SODA: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      soda_lens: transmutation
+      category: rust-fragility
+      technology: [rust, async]
+    patterns:
+      - pattern-inside: |
+          async fn $FUNC(...) {
+            ...
+          }
+      - pattern-either:
+          - pattern: std::thread::sleep(...)
+          - pattern: std::fs::read(...)
+          - pattern: std::fs::read_to_string(...)
+          - pattern: std::fs::write(...)
+          - pattern: std::fs::metadata(...)
+          - pattern: std::fs::create_dir_all(...)

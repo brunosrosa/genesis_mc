@@ -3,81 +3,82 @@ A,project_name,TEXT,NOT NULL,"Owner / Repo (formatado com espaços)."
 B,repo_url,TEXT,NOT NULL,URL do repositório (canônica).
 C,repo_version,TEXT,NOT NULL,Tag de release ou SHA curto usado na análise.
 D,ultima_versao_online,TEXT,NOT NULL,Última versão observável na nuvem (tag/sha).
-E,lote_id,TEXT,NOT NULL,Identificador do lote/bateria de execução.
-F,data_ultima_analise,TEXT,NOT NULL,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:SSZ)."
-G,analise_origem,TEXT,NOT NULL,Assinatura do motor/fluxo que gerou a linha.
-H,licenca,TEXT,NOT NULL,Licença SPDX (quando disponível).
-I,stack_base,TEXT,NOT NULL,Stack detectada (string/bullets) para auditoria.
-J,declared_description,TEXT,NOT NULL,"Descrição declarada (PT-BR quando disponível). Limite elástico: ~2000 caracteres."
-K,lente_a_sentido_prod_ux,TEXT,NOT NULL,Lente A normalizada (bullets).
-L,lente_b_estrutura_arq,TEXT,NOT NULL,Lente B normalizada (bullets).
-M,lente_c_realidade_ops,TEXT,NOT NULL,Lente C normalizada (bullets).
-N,proposta_original_resumo,TEXT,NOT NULL,"Resumo técnico neutro (Bloco 1). Limite elástico: ~3000 caracteres."
-O,visao_do_enxame,TEXT,NOT NULL,"Síntese dialética das 3 lentes (Bloco 2). Limite elástico: ~3000 caracteres."
-P,justificativa_decisao,TEXT,NOT NULL,"Justificativa da decisão (Bloco 2). Limite elástico: ~3000 caracteres."
-Q,executive_verdict,TEXT,NOT NULL,"Veredito executivo (Bloco 2). Limite elástico: ~3000 caracteres."
-R,risco_principal,TEXT,NOT NULL,"Risco principal (idealmente frase curta). Limite elástico: ~3000 caracteres."
-S,risco_linha_vermelha,TEXT,NOT NULL,"Restrição de linha vermelha (imperativo). Limite elástico: ~3000 caracteres."
-T,observacoes,TEXT,NOT NULL,"Observações/ressalvas. Limite elástico: ~3000 caracteres."
-U,ouro_a_extrair,TEXT,NOT NULL,"Ouro a extrair (Bloco 3). Limite elástico: ~3000 caracteres."
-V,deep_pattern,TEXT,NOT NULL,"Padrão profundo (Bloco 3). Limite elástico: ~3000 caracteres."
-W,transplantable_core,TEXT,NOT NULL,"Núcleo transplantável (Bloco 3). Limite elástico: ~3000 caracteres."
-X,logic_math_heuristic,TEXT,NOT NULL,"Heurística lógico-matemática (Bloco 3). Limite elástico: ~3000 caracteres."
-Y,real_structural_problem,TEXT,NOT NULL,"Problema estrutural real (Bloco 3). Limite elástico: ~3000 caracteres."
-Z,categoria_nuance_tecnica,TEXT,NOT NULL,Categoria/nuance técnica (Bloco 3).
-AA,integracao_papel_exato,TEXT,NOT NULL,Papel exato da integração (Bloco 3).
-AB,must_components_prod_ux,TEXT,NOT NULL,"Lista (bullets) de componentes de Produto/UX. Limite elástico: ~3000 caracteres."
-AC,must_components_arq,TEXT,NOT NULL,"Lista (bullets) de componentes de Arquitetura. Limite elástico: ~3000 caracteres."
-AD,must_components_ops,TEXT,NOT NULL,"Lista (bullets) de componentes de Operações. Limite elástico: ~3000 caracteres."
-AE,detected_toxic_deps,TEXT,NOT NULL,"Lista (bullets) de dependências tóxicas detectadas. Limite elástico: ~3000 caracteres."
-AF,do_not_absorb,TEXT,NOT NULL,"Lista (bullets) do que não absorver. Limite elástico: ~3000 caracteres."
-AG,where_ai_should_not_enter,TEXT,NOT NULL,"Restrições imperativas (zona proibida para IA). Limite elástico: ~3000 caracteres."
-AH,classificacao_terminal,TEXT,NOT NULL,Enum terminal humanizado.
-AI,acao_de_canibalizacao,TEXT,NOT NULL,Enum humanizado da ação de canibalização.
-AJ,categoria_arquitetural,TEXT,NOT NULL,Enum humanizado da categoria arquitetural.
-AK,horizonte_extracao,TEXT,NOT NULL,Enum humanizado do horizonte de extração.
-AL,tipo_integracao,TEXT,NOT NULL,Enum humanizado do tipo de integração.
-AM,capability_nature_primary,TEXT,NOT NULL,Enum humanizado da natureza primária da capacidade.
-AN,architectural_topology,TEXT,NOT NULL,Enum humanizado da topologia arquitetural.
-AO,temporal_stability,TEXT,NOT NULL,Enum humanizado da estabilidade temporal.
-AP,bare_metal_fit,TEXT,NOT NULL,Enum humanizado do fit bare-metal.
-AQ,extractability_level,TEXT,NOT NULL,Enum humanizado do nível de extraibilidade.
-AR,runtime_sovereignty_fit,TEXT,NOT NULL,Enum humanizado da soberania de runtime.
-AS,local_first_fit,TEXT,NOT NULL,Enum humanizado do fit local-first.
-AT,adoptability_level,TEXT,NOT NULL,Enum humanizado de adotabilidade.
-AU,longitudinal_sustainability,TEXT,NOT NULL,Enum humanizado de sustentabilidade longitudinal.
-AV,maintenance_burden,TEXT,NOT NULL,Enum humanizado do fardo de manutenção.
-AW,onboarding_friction,TEXT,NOT NULL,Enum humanizado da fricção de onboarding.
-AX,observability_operational,TEXT,NOT NULL,Enum humanizado de observabilidade operacional.
-AY,recoverability_level,TEXT,NOT NULL,Enum humanizado de recuperabilidade.
-AZ,degradation_behavior,TEXT,NOT NULL,Enum humanizado do comportamento sob degradação.
-BA,curation_burden,TEXT,NOT NULL,Enum humanizado do fardo de curadoria.
-BB,evolution_cost,TEXT,NOT NULL,Enum humanizado do custo de evolução.
-BC,operability_level,TEXT,NOT NULL,Enum humanizado de operabilidade.
-BD,abandonment_risk,TEXT,NOT NULL,Enum humanizado do risco de abandono.
-BE,time_to_first_clear_value,TEXT,NOT NULL,Enum humanizado do tempo para primeiro valor claro.
-BF,imperfection_tolerance,TEXT,NOT NULL,Enum humanizado de tolerância a imperfeição.
-BG,entropy_risk,TEXT,NOT NULL,Enum humanizado do risco de entropia.
-BH,design_misuse_risk,TEXT,NOT NULL,Enum humanizado do risco de mau uso.
-BI,intrinsic_ethics_risk,TEXT,NOT NULL,Enum humanizado do risco ético intrínseco.
-BJ,discipline_dependency,TEXT,NOT NULL,Enum humanizado de dependência de disciplina.
-BK,regulatory_risk,TEXT,NOT NULL,Enum humanizado do risco regulatório.
-BL,score_philosophical_fit,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BM,score_bare_metal_fit,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BN,score_architectural_extractability,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BO,score_operability,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BP,score_creep_risk,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BQ,score_runtime_sovereignty,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BR,score_model_logic_value,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BS,score_ethics_safety,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BT,score_intrinsic_risk,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
-BU,score_final,TEXT,NOT NULL,"Score final float, 1 casa decimal (texto)."
-BV,score_fit_geral_soda,TEXT,NOT NULL,"Score fit geral float, 1 casa decimal (texto)."
-BW,score_architectural_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
-BX,score_human_product_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
-BY,score_absorption_readiness,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
-BZ,score_operational_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
-CA,score_sustainability_adjusted_fit,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
-CB,valid_from,TEXT,NOT NULL,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:SSZ)."
-CC,valid_to,TEXT,-,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:SSZ) ou vazio."
-CD,embargo_status,TEXT,NOT NULL,"LIVRE ou EMBARGADO."
+E,indicacao_otimista_canibalizacao,TEXT,NOT NULL,"Emita estritamente entre 3 e 5 bullet points otimistas e diretos. Sintetize tudo o que o SODA pode roubar deste projeto hoje ou no futuro, incluindo lógicas, inspirações de UX, conhecimentos teóricos ou códigos físicos."
+F,lote_id,TEXT,NOT NULL,Identificador do lote/bateria de execução.
+G,data_ultima_analise,TEXT,NOT NULL,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:SSZ)."
+H,analise_origem,TEXT,NOT NULL,Assinatura do motor/fluxo que gerou a linha.
+I,licenca,TEXT,NOT NULL,Licença SPDX (quando disponível).
+J,stack_base,TEXT,NOT NULL,Stack detectada (string/bullets) para auditoria.
+J,declared_description,TEXT,NOT NULL,"Descrição declarada do repositório. Heurística SSOT: prioridade 1 = seção ABOUT no topo da página GitHub; prioridade 2 = README; prioridade 3 = título/headline da página do repositório. Limite elástico: ~2000 caracteres."
+L,lente_a_sentido_prod_ux,TEXT,NOT NULL,Lente A normalizada (bullets).
+M,lente_b_estrutura_arq,TEXT,NOT NULL,Lente B normalizada (bullets).
+N,lente_c_realidade_ops,TEXT,NOT NULL,Lente C normalizada (bullets).
+O,proposta_original_resumo,TEXT,NOT NULL,"Resumo técnico neutro (Bloco 1). Limite elástico: ~3000 caracteres."
+P,visao_do_enxame,TEXT,NOT NULL,"Síntese dialética das 3 lentes (Bloco 2). Limite elástico: ~3000 caracteres."
+Q,justificativa_decisao,TEXT,NOT NULL,"Justificativa da decisão (Bloco 2). Limite elástico: ~3000 caracteres."
+R,executive_verdict,TEXT,NOT NULL,"Veredito executivo (Bloco 2). Limite elástico: ~3000 caracteres."
+S,risco_principal,TEXT,NOT NULL,"Risco principal (idealmente frase curta). Limite elástico: ~3000 caracteres."
+T,risco_linha_vermelha,TEXT,NOT NULL,"Restrição de linha vermelha (imperativo). Limite elástico: ~3000 caracteres."
+U,observacoes,TEXT,NOT NULL,"Observações/ressalvas. Limite elástico: ~3000 caracteres."
+V,ouro_a_extrair,TEXT,NOT NULL,"Ouro a extrair (Bloco 3). Limite elástico: ~3000 caracteres."
+W,deep_pattern,TEXT,NOT NULL,"Padrão profundo (Bloco 3). Limite elástico: ~3000 caracteres."
+X,transplantable_core,TEXT,NOT NULL,"Núcleo transplantável (Bloco 3). Limite elástico: ~3000 caracteres."
+Y,logic_math_heuristic,TEXT,NOT NULL,"Heurística lógico-matemática (Bloco 3). Limite elástico: ~3000 caracteres."
+Z,real_structural_problem,TEXT,NOT NULL,"Problema estrutural real (Bloco 3). Limite elástico: ~3000 caracteres."
+AA,categoria_nuance_tecnica,TEXT,NOT NULL,Categoria/nuance técnica (Bloco 3).
+AB,integracao_papel_exato,TEXT,NOT NULL,Papel exato da integração (Bloco 3).
+AC,must_components_prod_ux,TEXT,NOT NULL,"Lista (bullets) de componentes de Produto/UX. Limite elástico: ~3000 caracteres."
+AD,must_components_arq,TEXT,NOT NULL,"Lista (bullets) de componentes de Arquitetura. Limite elástico: ~3000 caracteres."
+AE,must_components_ops,TEXT,NOT NULL,"Lista (bullets) de componentes de Operações. Limite elástico: ~3000 caracteres."
+AF,detected_toxic_deps,TEXT,NOT NULL,"Lista (bullets) de dependências tóxicas detectadas. Limite elástico: ~3000 caracteres."
+AG,do_not_absorb,TEXT,NOT NULL,"Lista (bullets) do que não absorver. Limite elástico: ~3000 caracteres."
+AH,where_ai_should_not_enter,TEXT,NOT NULL,"Restrições imperativas (zona proibida para IA). Limite elástico: ~3000 caracteres."
+AI,classificacao_terminal,TEXT,NOT NULL,"Enum estrito do veredito final de adoção. Valores canônicos: STACK_CORE_PLANO_A1 | STACK_CORE_PLANO_A2 | STACK_CORE_PLANO_B | INTEGRATE_AS_COMPONENT | ABSORB_PARTIALLY | ABSORB_CONCEPT | USE_AS_INSPIRATION_ONLY | REJECT | SHORT-CIRCUIT."
+AJ,acao_de_canibalizacao,TEXT,NOT NULL,"Enum estrito da ação de canibalização. Valores canônicos: Data Model / Schema | Prompt / Heuristic Seed | Protocol / Standard | Concept | UX Pattern | Canvas Refinement | New Canvas | Cognitive Layer | Infra Capability | Technical Runtime | Sandbox | Plugin | External Contract | No Absorption."
+AK,categoria_arquitetural,TEXT,NOT NULL,Enum humanizado da categoria arquitetural.
+AL,horizonte_extracao,TEXT,NOT NULL,"Enum estrito do timing de extração. Valores canônicos: IMEDIATO | CURTO_PRAZO | CURTO_MEDIO_PRAZO | MEDIO_PRAZO | LONGO_PRAZO | REFERENCIAL_TEORICO | NUNCA."
+AM,tipo_integracao,TEXT,NOT NULL,Enum humanizado do tipo de integração.
+AN,capability_nature_primary,TEXT,NOT NULL,"Enum estrito da natureza primária da capacidade. Valores canônicos: Context | Memory | Perception | Expression | Execution | Observation | Documentation | Planning | Curation | Identity | Infrastructure | Multimodal IO | Sandbox | Serving | Retrieval | Synchronization."
+AO,architectural_topology,TEXT,NOT NULL,Enum humanizado da topologia arquitetural.
+AP,temporal_stability,TEXT,NOT NULL,Enum humanizado da estabilidade temporal.
+AQ,bare_metal_fit,TEXT,NOT NULL,Enum humanizado do fit bare-metal.
+AR,extractability_level,TEXT,NOT NULL,Enum humanizado do nível de extraibilidade.
+AS,runtime_sovereignty_fit,TEXT,NOT NULL,Enum humanizado da soberania de runtime.
+AT,local_first_fit,TEXT,NOT NULL,Enum humanizado do fit local-first.
+AU,adoptability_level,TEXT,NOT NULL,Enum humanizado de adotabilidade.
+AV,longitudinal_sustainability,TEXT,NOT NULL,Enum humanizado de sustentabilidade longitudinal.
+AW,maintenance_burden,TEXT,NOT NULL,Enum humanizado do fardo de manutenção.
+AX,onboarding_friction,TEXT,NOT NULL,Enum humanizado da fricção de onboarding.
+AY,observability_operational,TEXT,NOT NULL,Enum humanizado de observabilidade operacional.
+AZ,recoverability_level,TEXT,NOT NULL,Enum humanizado de recuperabilidade.
+BA,degradation_behavior,TEXT,NOT NULL,Enum humanizado do comportamento sob degradação.
+BB,curation_burden,TEXT,NOT NULL,Enum humanizado do fardo de curadoria.
+BC,evolution_cost,TEXT,NOT NULL,Enum humanizado do custo de evolução.
+BD,operability_level,TEXT,NOT NULL,Enum humanizado de operabilidade.
+BE,abandonment_risk,TEXT,NOT NULL,Enum humanizado do risco de abandono.
+BF,time_to_first_clear_value,TEXT,NOT NULL,Enum humanizado do tempo para primeiro valor claro.
+BG,imperfection_tolerance,TEXT,NOT NULL,Enum humanizado de tolerância a imperfeição.
+BH,entropy_risk,TEXT,NOT NULL,Enum humanizado do risco de entropia.
+BI,design_misuse_risk,TEXT,NOT NULL,Enum humanizado do risco de mau uso.
+BJ,intrinsic_ethics_risk,TEXT,NOT NULL,Enum humanizado do risco ético intrínseco.
+BK,discipline_dependency,TEXT,NOT NULL,"Enum estrito de dependência disciplinar. Valores canônicos: Nenhuma | Baixa | Média | Alta | Crítica."
+BL,regulatory_risk,TEXT,NOT NULL,Enum humanizado do risco regulatório.
+BM,score_philosophical_fit,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BN,score_bare_metal_fit,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BO,score_architectural_extractability,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BP,score_operability,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BQ,score_creep_risk,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BR,score_runtime_sovereignty,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BS,score_model_logic_value,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BT,score_ethics_safety,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BU,score_intrinsic_risk,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
+BV,score_final,TEXT,NOT NULL,"Score final float, 1 casa decimal (texto)."
+BW,score_fit_geral_soda,TEXT,NOT NULL,"Score fit geral float, 1 casa decimal (texto)."
+BX,score_architectural_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
+BY,score_human_product_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
+BZ,score_absorption_readiness,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
+CA,score_operational_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
+CB,score_sustainability_adjusted_fit,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
+CC,valid_from,TEXT,NOT NULL,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:SSZ)."
+CD,valid_to,TEXT,-,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:SSZ) ou vazio."
+CE,embargo_status,TEXT,NOT NULL,"LIVRE ou EMBARGADO."

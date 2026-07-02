@@ -15,7 +15,7 @@ Ao receber a ordem de analisar um repositório ou processar um lote, execute EXC
    * Execute o lote em um **Terminal Dedicado e Visível**.
    * Antes de iniciar um repo, consulte o banco SQLite (`status_processamento`). Se estiver em `FASE_1_OK` ou `FASE_2_OK`, RETOME o trabalho de onde parou.
 2. **Fase 1: Harvester O(1) e Proteção de VRAM (FastSwitch):**
-   * Extraia a AST via `jcodemunch` enjaulado.
+   * Extraia a AST via `repo_ast`.
    * **Lei da Reciclagem (KVCOMM):** Entre o término de um repositório e o início de outro, exija o expurgo do *KV Cache* via FastSwitch para evitar o *Spillover* da PCIe. A RTX 2060m deve começar a nova extração sempre com VRAM limpa. Atualize o SQLite para `FASE_1_OK`.
 3. **Fase 2: O Enxame Cognitivo (A Tríade Sentido-Estrutura-Realidade):**
    * Dispare paralelamente as três Lentes de análise:
@@ -34,6 +34,9 @@ Ao receber a ordem de analisar um repositório ou processar um lote, execute EXC
 ###### Constraints
 * **FOBIA DE "N/A" E VIBE CODING TABULAR:** Se o Enxame não souber um dado, falhe intencionalmente para acionar o *Human-in-the-Loop* (HITL).
 * **FOBIA DE LENTE C ANTIGA:** A Lente C não é mais só sobre RCE. Ela deve avaliar estritamente: "Isso sobrevive ao uso real ao longo dos meses?".
+* **PROIBIÇÃO DO MONÓLITO:** Se o repositório for um monólito preso a interpretadores (V8/JVM) e não puder ser recompilado dinamicamente para outros hardwares, ele deve ser rejeitado pela Lente B.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo é a âncora inegociável de descoberta do SODA.
 
 ###### Examples
@@ -43,3 +46,4 @@ Ao receber a ordem de analisar um repositório ou processar um lote, execute EXC
 3. Dispara a Tríade (Sentido, Estrutura, Realidade). A Lente B valida que a lógica matemática é agnóstica e desvinculada de Node.js, perfeita para Megakernels.
 4. O iron_cost avisa que o budget cloud está no limite; o agente faz fallback proativo.
 5. O LLM, preso pelo SGR, dá score de aderência bare-metal alto. Faz o batchUpdate no Sheets. Retorna: *"-> Repo Y dissecado. Lógica agnóstica extraída. VRAM protegida e Budget salvo."*
+

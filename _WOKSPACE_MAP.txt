@@ -9,7 +9,7 @@
 - .agents/ -> Armazenamento global das engrenagens da IA.
 - .agents/rules/ -> Diretrizes e manifestos de contexto (DESIGN, tech-stack).
 - .agents/sidecars/ -> Dockerfiles e isolamentos efêmeros de desenvolvimento.
-- .agents/skills/ -> Servidores MCP locais e customizados (jcodemunch, sheets).
+- .agents/skills/ -> Servidores MCP locais e customizados (native-ast-parser, sheets).
 - .trae/ -> Habilidades e configurações exclusivas da IDE Trae PRO+.
 - .antigravitycli/ -> Logs de execução e sessões do Antigravity CLI.
 - .vscode/ -> Perfis de workspace, tarefas e debugger local.
@@ -20,6 +20,9 @@
 - .soda_scratchpad/reports/ -> OBRIGATÓRIO: Destino exclusivo de outputs textuais da IA
     (Ex: os relatórios de execução _PHASE_REPORT_...txt).
 [ZONA 3: O CÂNONE E MEMÓRIA DE PRODUTO] (Repositório Rígido de Documentação)
+- .archive/ -> Arquivo Frio / Histórico Forense do workspace. Destino legítimo para
+    relatórios congelados, scripts órfãos desativados, dumps de contexto e artefatos
+    históricos fora do caminho crítico do Produto.
 - docs/.audits/ -> Relatórios de segurança, vulnerabilidades e semgrep.
 - docs/adrs/ -> Architecture Decision Records (O Por Quê).
 - docs/architecture/ -> Manuais macro e visões de engenharia (Inference, Memory).
@@ -43,9 +46,13 @@
 - src/components/ -> Componentes visuais passivos (Svelte Runes). Sem lógica.
 - src/lib/ -> Tipagem TypeScript e invocadores assíncronos do Tauri.
 - src/routes/ -> Telas e roteamento estático da interface.
+[ZONA 6: ZONA EXTERNA EFÊMERA (HOST %TEMP%)] (Ignorada no Git Principal)
+- %TEMP%/.souls_workspaces/ -> Raízes efêmeras do ProjFS e workspaces de extração (exigem NTFS/mini-filtro).
+- Criação: Zero-Config via std::env::temp_dir() + std::fs::create_dir_all.
+- Teardown: deleção não-bloqueante via spawn_detached_delete_process (fora do repositório host).
 # ==============================================================================
 # REGRAS DE FORMA E HIGIENE DIGITAL
 # ==============================================================================
 - PRDs em andamento na pasta prds devem adotar o prefixo da Fase Temporal correspondente
-    (Ex: PRD_001_Fase_0_...).
-- O arquivo '_WORKSPACE_MAP.txt' deve ser lido pelo agente no início de cada sessão.
+    (Ex: PRD_00X_Fase_X_...).
+- O arquivo '_WOKSPACE_MAP.txt' deve ser lido pelo agente no início de cada sessão.

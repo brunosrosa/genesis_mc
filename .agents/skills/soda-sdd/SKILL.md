@@ -23,6 +23,14 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
    * **Lei do Scaffold:** Cada tarefa deve ter uma *Definition of Done (DoD)* rigorosa, exigindo infraestrutura executável (testes vazios de falha) antes da lógica real.
 4. **Fase 4: Mutação Atômica e Delegação (Mutate):**
    * A escrita em disco é sagrada. Utilize **OBRIGATORIAMENTE** `atomic-write-file` ou edição por *offset* protegida por Mutex assíncrono do Tokio.
+   * **LEIS DE PERFORMANCE SAST E SANDBOXING:** Ao criar qualquer CLI, sidecar ou rotina de análise estática, injete desde o design as 4 leis duras: `--allow-rule-timeout-control` ou equivalente adaptativo, exclusão permitida de `tests/` e `**/mocks/*` sem jamais amputar manifestos/lockfiles, exclusão de minificados via `--exclude-minified-files` ou heurística de 7% de espaço em branco, e limpeza imediata de `target/` ou caches de build após o uso.
+   * **APRENDIZADOS DO HARVESTER (FASE 0):** Incorpore as lições operacionais recentes:
+     - **Timeout Deep-Flow:** Ferramentas de análise profunda (cppcheck, semgrep, etc.) devem ter idle timeout de 900s, não o padrão curto.
+     - **Allowlist Semântica:** Reduza "slop" aplicando filtros semânticos estritos por blob (ex: blob_06 apenas regras security, blob_08 apenas complexity).
+     - **ADR-024 na CLI:** Implemente exclusões físicas via `--exclude`, `--force-exclude`, `--ignore` para banir tests/mocks/vendor/libs/minificados.
+     - **Otimização Zero-Copy:** Evite clones preguiçosos; use referências temporais, `Cow<str>`, `Arc<String>` ou `Arc<Vec<T>>`.
+     - **Fail-Soft:** Trate exit codes não-letais (ex: Opengrep code 7) como sucesso, não falha.
+     - **Roteamento Seletivo:** Suporte `--only-blobs` para processamento cirúrgico de subconjuntos de blobs.
    * Escreva o teste (Red), escreva o código, e rode `cargo check`.
    * Se o compilador quebrar, NÃO alucine uma resposta. Delegue IMEDIATAMENTE o erro invocando a skill mecânica `@soda-ralph-loop` para aplicar a correção sob o teto de 3 tentativas (*Fail-Closed*).
 5. **Fase 5: Anti-Consenso e Rebase Semântico (Approve & Diff):**
@@ -32,7 +40,9 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
 #### Constraints
 * **PROIBIÇÃO ABSOLUTA DE VIBE CODING:** O "Plan" documentado em disco precede o "Mutate". Pular direto para o código falha a execução.
 * **BLINDAGEM CONCORRENTE:** Edições de arquivo devem prever colisões. Se outro agente estiver tocando no mesmo arquivo, aplique as regras de travamento (Mutex/Atomic).
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação do roteamento $\mathcal{O}(1)$.
+* **FRONTMATTER ABSOLUTA:** O bloco YAML `---` no topo desta skill é a fundação do roteamento $\mathcal{O}(1)$.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 
 #### Examples
 **Entrada do Usuário:** "Implemente o roteador semântico para o ParetoBandit que extraímos daquele repositório de FinOps."
@@ -42,3 +52,11 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
 3. Após aprovação, cria o Scaffold e o DoD no `tasks.md`.
 4. Roda TDD via escrita atômica. Falha de *lifetime* no Rust? Invoca silenciosamente `@soda-ralph-loop`.
 5. Obtém *Exit Code 0*. Prepara o *Pull Request Semântico*, envia para a Agent Inbox relatando o *Blast Radius* e aguarda a autorização biométrica/tátil.
+
+**Entrada do Usuário:** "Corrija o timeout do cppcheck no deep-flow do Harvester."
+**Ação do Agente:**
+1. Valida a premissa lendo `sandbox.rs` e verifica que cppcheck não está na lista deep-flow.
+2. Aplica correção cirúrgica: adiciona `cppcheck` ao braço deep-flow em `timeout_profile()`.
+3. Atualiza testes focados para refletir idle timeout 900s e `absolute_timeout_secs=None`.
+4. Roda `cargo check` e valida com testes específicos.
+5. Documenta a correção como aprendizado operacional na skill.

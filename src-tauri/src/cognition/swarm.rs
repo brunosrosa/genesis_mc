@@ -1,19 +1,40 @@
-use crate::cognition::sgr_synthesizer::SwarmDebate;
 use crate::finops::phase1_5::package_assembler::Phase2Payloads;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use thiserror::Error;
 
 const STATUS_OK: &str = "F2_OK";
 const STATUS_ERR: &str = "ERRO_F2";
 const DEFAULT_OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+const BLOB_10_CANON_MARKER: &str = "=== BLOB_10_CANON_CONTEXT ===";
 
 type LensFuture<'a> = Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;
+
+#[cfg(not(test))]
+const LENS_TIMEOUT: Duration = Duration::from_secs(180);
+#[cfg(test)]
+const LENS_TIMEOUT: Duration = Duration::from_millis(220);
+
+#[cfg(not(test))]
+const OPENROUTER_HTTP_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(test)]
+const OPENROUTER_HTTP_TIMEOUT: Duration = Duration::from_secs(3);
+
+const LENS_MAX_TOKENS: usize = 4096;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SwarmDebate {
+    pub repo_id: String,
+    pub lente_a: String,
+    pub lente_b: String,
+    pub lente_c: String,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LensKind {
@@ -41,9 +62,9 @@ impl LensKind {
 
     fn system_prompt(self) -> &'static str {
         match self {
-            Self::ProductUx => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensA_ProductUX. Analise a inovacao e o valor real de produto. Qual e o 'UAU moment', o 'refreshness' da UX ou o fluxo de trabalho genial que amplia as capacidades do usuario? Avalie estrategicamente como essa solucao se encaixa ou cria novos Canvas no SODA. Valide se essa entrega respeita nossas leis de neuro-inclusao (mitigacao de Flow-Debt, Zero Layout Shift). Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
-            Self::Architecture => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensB_Architecture. Isole a 'alma matematica' e o nucleo transplantavel. A logica e transmutavel e agnostica (recompilavel dinamicamente via CubeCL/Burn)? Avalie a viabilidade do codigo sobreviver ao nosso 'Treino de Gravidade' (limite da RTX 2060m) sem depender de interpretadores presos a arquitetura (Node.js/JVM). Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
-            Self::Operations => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como o Auditor Pessimista (FinOps e HardwareOps). Qual a real taxa de entropia? O sistema gera custos em nuvem ou Rate Limits perigosos? Liste o lixo toxico da stack original. O sistema 'fala' quando tem dor (observabilidade) e falha graciosamente? Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
+            Self::ProductUx => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensA_ProductUX. Analise a inovacao e o valor real de produto. Qual e o 'UAU moment', o 'refreshness' da UX ou o fluxo de trabalho genial que amplia as capacidades do usuario? Avalie estrategicamente como essa solucao se encaixa ou cria novos Canvas no SODA. Valide se essa entrega respeita nossas leis de neuro-inclusao (mitigacao de Flow-Debt, Zero Layout Shift). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, trate como curadoria de conhecimento: avalie clareza, utilidade operacional, reusabilidade como skill e se ha exemplos determinísticos (formatos de saída bem definidos) para virar ferramenta no SODA. Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
+            Self::Architecture => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensB_Architecture. Isole a 'alma matematica' e o nucleo transplantavel. A logica e transmutavel e agnostica (recompilavel dinamicamente via CubeCL/Burn)? Avalie a viabilidade do codigo sobreviver ao nosso 'Treino de Gravidade' (limite da RTX 2060m) sem depender de interpretadores presos a arquitetura (Node.js/JVM). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie extraibilidade como biblioteca de habilidades: taxonomia, consistencia de formato, existencia de contratos de I/O (inputs/outputs), facilidade de normalizar para JSON/gramatica e o custo de manutencao do catalogo. Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
+            Self::Operations => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como o Auditor Pessimista (FinOps e HardwareOps). Qual a real taxa de entropia? O sistema gera custos em nuvem ou Rate Limits perigosos? Liste o lixo toxico da stack original. O sistema 'fala' quando tem dor (observabilidade) e falha graciosamente? Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie riscos de prompt-injection, licenca, drift temporal (links mortos), custo de curadoria, e se o conteudo incentiva stack proibida. Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
         }
     }
 }
@@ -209,14 +230,21 @@ where
             let max_attempts = if stage == "primario" { 3 } else { 1 };
 
             for attempt in 1..=max_attempts {
-                match self
-                    .invoker
-                    .invoke(lens, repo_id, payload, Some(model))
-                    .await
-                {
-                    Ok(result) => return Ok(result),
-                    Err(err) => {
-                        let msg = format!("stage={}, attempt {} => {}", stage, attempt, truncate_for_log(&err, 1400));
+                let res = tokio::time::timeout(
+                    LENS_TIMEOUT,
+                    self.invoker.invoke(lens, repo_id, payload, Some(model)),
+                )
+                .await;
+
+                match res {
+                    Ok(Ok(result)) => return Ok(result),
+                    Ok(Err(err)) => {
+                        let msg = format!(
+                            "stage={}, attempt {} => {}",
+                            stage,
+                            attempt,
+                            truncate_for_log(&err, 1400)
+                        );
                         errors.push(msg.clone());
                         tracing::warn!(
                             lens_id = lens.lens_id(),
@@ -228,7 +256,25 @@ where
                             "Falha no passo da cascata FinOps"
                         );
                     }
-                }
+                    Err(_) => {
+                        let msg = format!(
+                            "stage={}, attempt {} => timeout_ms={}",
+                            stage,
+                            attempt,
+                            LENS_TIMEOUT.as_millis()
+                        );
+                        errors.push(msg.clone());
+                        tracing::warn!(
+                            lens_id = lens.lens_id(),
+                            repo_id = repo_id,
+                            model_used = model,
+                            stage = stage,
+                            attempt = attempt,
+                            error = %msg,
+                            "Timeout atingido na execução da lente"
+                        );
+                    }
+                };
             }
         }
 
@@ -268,13 +314,13 @@ impl HttpLensInvoker {
     pub fn from_openrouter_env() -> Result<Self, Phase2Error> {
         let api_key = get_first_env(&[
             "OPENROUTER_API_HEAVY_KEY",
-            "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
         ])
         .ok_or_else(|| {
             Phase2Error::ConfigError(
-                "OPENROUTER_API_HEAVY_KEY/OPENROUTER_API_KEY/OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY ausente".to_string(),
+                "OPENROUTER_API_HEAVY_KEY/OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY ausente"
+                    .to_string(),
             )
         })?;
         let base_url = std::env::var("OPENAI_BASE_URL")
@@ -283,7 +329,10 @@ impl HttpLensInvoker {
             .unwrap_or_else(|_| DEFAULT_OPENROUTER_URL.to_string());
 
         Ok(Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(OPENROUTER_HTTP_TIMEOUT)
+                .build()
+                .map_err(|e| Phase2Error::ConfigError(format!("Falha ao construir reqwest client: {}", e)))?,
             claude: HttpLensConfig {
                 base_url: base_url.clone(),
                 api_key: api_key.clone(),
@@ -338,7 +387,10 @@ impl HttpLensInvoker {
     #[cfg(test)]
     fn with_configs(claude: HttpLensConfig, deepseek: HttpLensConfig, glm: HttpLensConfig) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(OPENROUTER_HTTP_TIMEOUT)
+                .build()
+                .expect("reqwest client"),
             claude,
             deepseek,
             glm,
@@ -380,24 +432,59 @@ impl LensInvoker for HttpLensInvoker {
         Box::pin(async move {
             let config = self.config_for(lens);
             let model_used = model_override.unwrap_or(&config.model);
+            let mut user_prefix = format!("repo_id={}\n", repo_id);
+            if payload_looks_like_knowledge_repo(payload) {
+                user_prefix.push_str("ALERTA: Este é um repositório de Conhecimento/Metodologia (stack_base desconhecida ou conteúdo sem stack). Ignore exigências de código fonte/AVX2/Bare-Metal. Avalie prompts, padrões teóricos, metodologia e artefatos textuais a serem canibalizados.\n");
+            }
+            let mut system_prompt = lens.system_prompt().to_string();
+            let mut reasoning_effort: Option<String> = None;
+            system_prompt.push_str("\nVocê deve retornar EXCLUSIVAMENTE um JSON válido. Não utilize blocos de código Markdown (```json).");
+            if model_used.contains("deepseek-v4-pro") {
+                reasoning_effort = Some("xhigh".to_string());
+            }
+
+            let response_format = if model_used.contains("google/") {
+                None
+            } else {
+                Some(ChatResponseFormat {
+                    kind: "json_object".to_string(),
+                })
+            };
+
             let body = ChatCompletionsRequest {
                 model: model_used.to_string(),
                 messages: vec![
                     ChatMessage {
                         role: "system".to_string(),
-                        content: lens.system_prompt().to_string(),
+                        content: ChatMessageContent::Text(system_prompt),
                     },
                     ChatMessage {
                         role: "user".to_string(),
-                        content: format!("repo_id={}\n{}", repo_id, payload),
+                        content: build_cached_payload_content(&format!("{}{}", user_prefix, payload)),
                     },
                 ],
-                max_tokens: 8192,
+                max_tokens: LENS_MAX_TOKENS,
                 temperature: 0.0,
-                response_format: ChatResponseFormat {
-                    kind: "json_object".to_string(),
-                },
+                response_format,
+                reasoning_effort,
             };
+
+            #[cfg(not(test))]
+            {
+                let jitter_ms = rand::random::<u64>() % 2500;
+                tokio::time::sleep(tokio::time::Duration::from_millis(jitter_ms)).await;
+            }
+
+            tracing::info!(
+                lens_id = lens.lens_id(),
+                repo_id = repo_id,
+                model_used = model_used,
+                max_tokens = LENS_MAX_TOKENS,
+                response_format_enabled = !model_used.contains("google/"),
+                reasoning_effort_enabled = model_used.contains("deepseek-v4-pro"),
+                base_url = %config.base_url,
+                "F2: enviando request para OpenRouter"
+            );
 
             let response = self
                 .client
@@ -407,15 +494,37 @@ impl LensInvoker for HttpLensInvoker {
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        tracing::warn!(
+                            lens_id = lens.lens_id(),
+                            repo_id = repo_id,
+                            model_used = model_used,
+                            timeout_ms = OPENROUTER_HTTP_TIMEOUT.as_millis(),
+                            "Timeout HTTP ao chamar OpenRouter"
+                        );
+                    }
+                    e.to_string()
+                })?;
 
             let status = response.status();
-            if !status.is_success() {
-                let body = response.text().await.unwrap_or_default();
-                return Err(format!("HTTP {}: {}", status.as_u16(), body));
+            let raw_response = response.text().await.map_err(|e| e.to_string())?;
+            if status != StatusCode::OK {
+                tracing::error!(
+                    lens_id = lens.lens_id(),
+                    repo_id = repo_id,
+                    model_used = model_used,
+                    status = status.as_u16(),
+                    response_body = %truncate_for_log(&raw_response, 6000),
+                    "OpenRouter retornou status != 200; abortando parse"
+                );
+                return Err(format!(
+                    "HTTP {}: {}",
+                    status.as_u16(),
+                    truncate_for_log(&raw_response, 6000)
+                ));
             }
 
-            let raw_response = response.text().await.map_err(|e| e.to_string())?;
             let parsed: serde_json::Value = serde_json::from_str(&raw_response).map_err(|e| {
                 format!(
                     "Resposta HTTP invalida da lente {}: {}",
@@ -456,13 +565,40 @@ struct ChatCompletionsRequest {
     messages: Vec<ChatMessage>,
     max_tokens: usize,
     temperature: f32,
-    response_format: ChatResponseFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<ChatResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct ChatMessage {
     role: String,
-    content: String,
+    content: ChatMessageContent,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum ChatMessageContent {
+    Text(String),
+    Parts(Vec<ChatContentPart>),
+}
+
+#[derive(Debug, Serialize)]
+struct ChatContentPart {
+    #[serde(rename = "type")]
+    kind: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<ChatCacheControl>,
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCacheControl {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ttl: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -515,6 +651,33 @@ fn extract_chat_message_content_from_parsed(parsed: &serde_json::Value) -> Strin
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"));
     content.map(flatten_chat_content).unwrap_or_default()
+}
+
+fn build_cached_payload_content(payload: &str) -> ChatMessageContent {
+    let Some((before, after)) = payload.split_once(BLOB_10_CANON_MARKER) else {
+        return ChatMessageContent::Text(payload.to_string());
+    };
+
+    let mut parts = Vec::new();
+    if !before.trim().is_empty() {
+        parts.push(ChatContentPart {
+            kind: "text".to_string(),
+            text: before.to_string(),
+            cache_control: None,
+        });
+    }
+
+    let canon_block = format!("{BLOB_10_CANON_MARKER}{after}");
+    parts.push(ChatContentPart {
+        kind: "text".to_string(),
+        text: canon_block,
+        cache_control: Some(ChatCacheControl {
+            kind: "ephemeral".to_string(),
+            ttl: Some("1h".to_string()),
+        }),
+    });
+
+    ChatMessageContent::Parts(parts)
 }
 
 fn inject_usage_into_lens_payload(json_payload: &str, usage: OpenRouterUsage) -> String {
@@ -835,6 +998,17 @@ impl DebateStore for SqliteDebateStore {
 
 fn get_first_env(keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| std::env::var(key).ok().filter(|value| !value.trim().is_empty()))
+}
+
+fn payload_looks_like_knowledge_repo(payload: &str) -> bool {
+    let lower = payload.to_ascii_lowercase();
+    lower.contains("stack_base: unknown")
+        || lower.contains("stack_base: n/a")
+        || lower.contains("\nstack_base: unknown")
+        || lower.contains("\nstack_base: n/a")
+        || lower.contains("\nstack_base: \n")
+        || lower.contains("repo_kind=skilllibrary")
+        || lower.contains("repo_kind=contentrepo")
 }
 
 fn normalize_lens_payload(
@@ -1287,7 +1461,6 @@ mod tests {
     fn test_from_env_missing_var_returns_config_error() {
         let env_keys = [
             "OPENROUTER_API_HEAVY_KEY",
-            "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
             "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX",
@@ -1324,7 +1497,6 @@ mod tests {
     fn test_from_openrouter_env_missing_key_returns_config_error() {
         let env_keys = [
             "OPENROUTER_API_HEAVY_KEY",
-            "OPENROUTER_API_KEY",
             "OPENROUTER_API_FAST_KEY",
             "OPENROUTER_API_FREE_KEY",
             "OPENROUTER_HEAVY_MODEL_LENS_PROD_UX",
@@ -1387,6 +1559,25 @@ mod tests {
         assert!(result.is_ok());
         assert!(elapsed < Duration::from_millis(320), "tempo parece sequencial: {:?}", elapsed);
         assert!(elapsed >= Duration::from_millis(180), "tempo nao refletiu a lente mais lenta: {:?}", elapsed);
+    }
+
+    #[tokio::test]
+    async fn test_timeout_does_not_hang_join_and_marks_phase2_error() {
+        let store = MemoryStore::new(sample_payloads());
+        let store_errors = Arc::clone(&store.errors);
+        let invoker = RecordingLensInvoker::new(
+            HashMap::from([(LensKind::Architecture, 800)]),
+            HashMap::new(),
+        );
+        let dispatcher = CognitiveSwarmDispatcher::new(store, invoker);
+
+        let started = Instant::now();
+        let result = dispatcher.dispatch_swarm("repo/test").await;
+        let elapsed = started.elapsed();
+
+        assert!(result.is_err());
+        assert!(elapsed < Duration::from_secs(2), "timeout nao abortou em tempo util: {:?}", elapsed);
+        assert_eq!(store_errors.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

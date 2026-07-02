@@ -5,22 +5,24 @@ use oxc::{
     parser::{ParseOptions, Parser},
     span::{GetSpan, SourceType, Span},
 };
+use html_to_markdown_rs::{convert, CodeBlockStyle, ConversionOptions, HeadingStyle};
+use pulldown_cmark::{html, Options as MarkdownOptions, Parser as MarkdownParser};
 use regex::Regex;
 use tokio::fs;
 use thiserror::Error;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use crate::harvester::PHASE1_HEAVY_BLOB_MAX_CHARS;
+use super::repo_radar;
 use super::detect::StackProfile;
 use super::git::RepoPath;
 use super::persist::ArtifactBlob;
-use super::sidecar::{pack_scoped_text_blocks, NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use super::sast::{NativeTestDiscoveryInput, NativeTestDiscoverySidecar, ScopedTextBlock};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tracing::{info, warn};
-
-/// Tamanho máximo permitido para um arquivo de manifesto (1 MiB).
-const MAX_MANIFEST_SIZE: u64 = 1_048_576;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestPayload {
@@ -98,6 +100,26 @@ pub struct TestIntentExtractor;
 pub struct UnsafeHotspotsExtractor;
 pub struct UxContractsExtractor;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ManifestKind {
+    CargoToml,
+    PackageJson,
+    GoMod,
+    PyprojectToml,
+    RequirementsTxt,
+    Pipfile,
+    MixExs,
+    Gemfile,
+    ComposerJson,
+    PomXml,
+    BuildGradle,
+    BuildGradleKts,
+    Csproj,
+    CMakeListsTxt,
+    ConanfileTxt,
+    BuildZigZon,
+}
+
 pub struct OpsInput<'a> {
     pub repo_path: &'a RepoPath,
 }
@@ -105,24 +127,18 @@ pub struct OpsInput<'a> {
 pub struct OpsBlueprintExtractor;
 pub struct LocalStaticExtractor;
 
-const README_MAX_CHARS: usize = 8_000;
-const MANIFEST_BLOB_MAX_CHARS: usize = 3_000;
-const OPS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
-const COMMUNITY_META_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
-const TEST_INTENT_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
-const UNSAFE_HOTSPOTS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
-const UX_CONTRACTS_BLOB_MAX_CHARS: usize = PHASE1_HEAVY_BLOB_MAX_CHARS;
-const MAX_SCAN_FILE_BYTES: u64 = 262_144;
 const STATE_CALL_NAMES: [&str; 5] = ["useState", "createSignal", "writable", "useReducer", "$state"];
-const README_MAX_ALLOWED_SECTIONS: usize = 3;
-const MANIFEST_MAX_DEPENDENCIES_PER_FILE: usize = 24;
+const UX_INPUT_CALL_NAMES: [&str; 6] = [
+    "$props",
+    "defineProps",
+    "useContext",
+    "getContext",
+    "useLoaderData",
+    "useRouteLoaderData",
+];
+const UX_EVENT_FACTORY_CALL_NAMES: [&str; 2] = ["defineEmits", "createEventDispatcher"];
+const UX_MUTATION_CALL_NAMES: [&str; 1] = ["useMutation"];
 const MANIFEST_DEPENDENCY_CHUNK_SIZE: usize = 8;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CappedFileEntries {
-    items: Vec<String>,
-    omitted_count: usize,
-}
 
 #[derive(Debug, Default)]
 struct UxAstCollector<'a> {
@@ -150,6 +166,12 @@ impl<'a> UxAstCollector<'a> {
             return;
         };
         self.push_entry(snippet);
+    }
+
+    fn push_entries(&mut self, entries: Vec<String>) {
+        for entry in entries {
+            self.push_entry(entry);
+        }
     }
 
     fn push_entry(&mut self, entry: String) {
@@ -180,11 +202,10 @@ impl<'a> Visit<'a> for UxAstCollector<'a> {
     }
 
     fn visit_variable_declarator(&mut self, declarator: &VariableDeclarator<'a>) {
-        if let Some(entry) = compact_state_entry(self.source_text, declarator) {
-            self.push_entry(entry);
-        } else if let Some(entry) = compact_props_binding_entry(self.source_text, declarator) {
-            self.push_entry(entry);
-        }
+        self.push_entries(compact_state_entries(self.source_text, declarator));
+        self.push_entries(compact_input_binding_entries(self.source_text, declarator));
+        self.push_entries(compact_event_binding_entries(self.source_text, declarator));
+        self.push_entries(compact_mutation_binding_entries(self.source_text, declarator));
 
         walk::walk_variable_declarator(self, declarator);
     }
@@ -194,13 +215,21 @@ impl LocalStaticExtractor {
     pub async fn extract_all(repo_path: &Path) -> Result<Vec<ArtifactBlob>, ExtractionError> {
         let mut blobs = Vec::new();
 
-        blobs.push(Self::extract_blob(
+        blobs.push(Self::extract_optional_blob(
             repo_path,
-            &["README.md", "README.txt"],
+            &[
+                "README.md",
+                "README.rst",
+                "README.txt",
+                "README",
+                "readme.md",
+                "readme.rst",
+                "readme.txt",
+                "readme",
+            ],
             "blob_01_promessa_readme",
-            README_MAX_CHARS,
         )
-        .await?);
+        .await);
 
         Ok(blobs)
     }
@@ -209,36 +238,11 @@ impl LocalStaticExtractor {
         repo_path: &Path,
         candidates: &[&str],
         artifact_type: &str,
-        max_chars: usize,
     ) -> Result<ArtifactBlob, ExtractionError> {
-        let mut case_insensitive = HashMap::<String, PathBuf>::new();
-        let mut entries = fs::read_dir(repo_path)
-            .await
-            .map_err(|e| ExtractionError::IoError {
-                file: repo_path.display().to_string(),
-                reason: e.to_string(),
-            })?;
-        while let Some(entry) = entries.next_entry().await.map_err(|e| ExtractionError::IoError {
-            file: repo_path.display().to_string(),
-            reason: e.to_string(),
-        })? {
-            let file_type = entry.file_type().await.map_err(|e| ExtractionError::IoError {
-                file: repo_path.display().to_string(),
-                reason: e.to_string(),
-            })?;
-            if !file_type.is_file() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            case_insensitive.insert(name.to_ascii_lowercase(), entry.path());
-        }
+        let radar = repo_radar::build_repo_radar(repo_path);
 
         for candidate in candidates {
-            let preferred = repo_path.join(candidate);
-            let metadata = fs::metadata(&preferred).await.ok();
-            let path = if metadata.as_ref().is_some_and(|m| m.is_file()) {
-                preferred
-            } else if let Some(found) = case_insensitive.get(&candidate.to_ascii_lowercase()) {
+            let path = if let Some(found) = radar.find_root_file_case_insensitive(candidate) {
                 found.clone()
             } else {
                 warn!(
@@ -265,15 +269,14 @@ impl LocalStaticExtractor {
                             file: path.display().to_string(),
                         });
                     }
-                    let sanitized = if artifact_type == "blob_01_promessa_readme" {
-                        sanitize_readme_blob(&content)
+                    let payload_text = if artifact_type == "blob_01_promessa_readme" {
+                        finalize_readme_blob(&content, &path.display().to_string())?
                     } else {
                         content
                     };
-                    let truncated = truncate_chars(&sanitized, max_chars);
                     return Ok(ArtifactBlob {
                         artifact_type: artifact_type.to_string(),
-                        payload_blob: truncated.into_bytes(),
+                        payload_blob: payload_text.into_bytes(),
                     });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -307,24 +310,28 @@ impl LocalStaticExtractor {
             candidates: candidates.join(", "),
         })
     }
-}
 
-fn truncate_chars(content: &str, max_chars: usize) -> String {
-    content.chars().take(max_chars).collect()
-}
-
-fn html_anchor_image_regex() -> Option<&'static Regex> {
-    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
-    REGEX
-        .get_or_init(|| Regex::new(r#"(?is)<a\b[^>]*>\s*<img\b[^>]*>\s*</a>"#).ok())
-        .as_ref()
-}
-
-fn html_image_regex() -> Option<&'static Regex> {
-    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
-    REGEX
-        .get_or_init(|| Regex::new(r#"(?is)<img\b[^>]*>"#).ok())
-        .as_ref()
+    async fn extract_optional_blob(
+        repo_path: &Path,
+        candidates: &[&str],
+        artifact_type: &str,
+    ) -> ArtifactBlob {
+        match Self::extract_blob(repo_path, candidates, artifact_type).await {
+            Ok(blob) => blob,
+            Err(ExtractionError::RequiredArtifactMissing { .. }) | Err(ExtractionError::NotFound) => {
+                empty_artifact_blob(artifact_type)
+            }
+            Err(e) => {
+                warn!(
+                    artifact_type,
+                    error = %e,
+                    repo_root = %repo_path.display(),
+                    "Falha ao extrair artefato opcional; persistindo zero-byte"
+                );
+                empty_artifact_blob(artifact_type)
+            }
+        }
+    }
 }
 
 fn markdown_badge_link_regex() -> Option<&'static Regex> {
@@ -341,15 +348,11 @@ fn markdown_image_regex() -> Option<&'static Regex> {
         .as_ref()
 }
 
-fn strip_html_badge_links(content: &str) -> String {
-    let Some(anchor_re) = html_anchor_image_regex() else {
-        return content.to_string();
-    };
-    let Some(img_re) = html_image_regex() else {
-        return content.to_string();
-    };
-    let no_anchor_images = anchor_re.replace_all(content, "");
-    img_re.replace_all(&no_anchor_images, "").into_owned()
+fn empty_markdown_link_regex() -> Option<&'static Regex> {
+    static REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    REGEX
+        .get_or_init(|| Regex::new(r#"\[\s*\]\([^)]+\)"#).ok())
+        .as_ref()
 }
 
 fn strip_markdown_badges(content: &str) -> String {
@@ -366,14 +369,71 @@ fn strip_markdown_images(content: &str) -> String {
     re.replace_all(content, "").into_owned()
 }
 
-fn normalize_blank_lines(content: &str) -> String {
+fn strip_empty_markdown_links(content: &str) -> String {
+    let Some(re) = empty_markdown_link_regex() else {
+        return content.to_string();
+    };
+    re.replace_all(content, "").into_owned()
+}
+
+fn readme_markdown_render_options() -> MarkdownOptions {
+    let mut options = MarkdownOptions::empty();
+    options.insert(MarkdownOptions::ENABLE_TABLES);
+    options.insert(MarkdownOptions::ENABLE_TASKLISTS);
+    options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
+    options.insert(MarkdownOptions::ENABLE_FOOTNOTES);
+    options
+}
+
+fn render_markdown_document_to_html(content: &str) -> String {
+    let parser = MarkdownParser::new_ext(content, readme_markdown_render_options());
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
+}
+
+fn readme_html_to_markdown_options() -> ConversionOptions {
+    ConversionOptions {
+        heading_style: HeadingStyle::Atx,
+        code_block_style: CodeBlockStyle::Backticks,
+        bullets: "-".to_string(),
+        wrap: false,
+        skip_images: true,
+        strip_tags: vec![
+            "script".to_string(),
+            "style".to_string(),
+            "meta".to_string(),
+            "link".to_string(),
+            "svg".to_string(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn normalize_markdown_document(content: &str) -> String {
+    let normalized = content.replace("\r\n", "\n");
     let mut lines = Vec::new();
     let mut previous_blank = false;
+    let mut in_fenced_code_block = false;
 
-    for line in content.lines() {
+    for line in normalized.lines() {
         let trimmed_end = line.trim_end();
-        let is_blank = trimmed_end.trim().is_empty();
+        let trimmed_start = trimmed_end.trim_start();
+        let is_fence = trimmed_start.starts_with("```") || trimmed_start.starts_with("~~~");
 
+        if is_fence {
+            lines.push(trimmed_end.to_string());
+            previous_blank = false;
+            in_fenced_code_block = !in_fenced_code_block;
+            continue;
+        }
+
+        if in_fenced_code_block {
+            lines.push(trimmed_end.to_string());
+            continue;
+        }
+
+        let is_blank = trimmed_end.trim().is_empty();
         if is_blank {
             if !previous_blank {
                 lines.push(String::new());
@@ -381,129 +441,31 @@ fn normalize_blank_lines(content: &str) -> String {
         } else {
             lines.push(trimmed_end.to_string());
         }
-
         previous_blank = is_blank;
     }
 
     lines.join("\n").trim().to_string()
 }
 
-fn markdown_heading_parts(line: &str) -> Option<(usize, &str)> {
-    let trimmed = line.trim();
-    let level = trimmed.chars().take_while(|ch| *ch == '#').count();
-    if level == 0 || level > 6 {
-        return None;
-    }
-
-    let title = trimmed.get(level..)?.trim();
-    if title.is_empty() {
-        None
-    } else {
-        Some((level, title))
-    }
+fn sanitize_readme_blob(content: &str, source_name: &str) -> Result<String, ExtractionError> {
+    let rendered_html = render_markdown_document_to_html(content);
+    let converted = convert(&rendered_html, Some(readme_html_to_markdown_options())).map_err(|err| {
+        ExtractionError::ParseError {
+            file: source_name.to_string(),
+            reason: format!("Falha ao converter README HTML->Markdown: {err}"),
+        }
+    })?;
+    let without_badges = strip_markdown_badges(&converted);
+    let without_images = strip_markdown_images(&without_badges);
+    let without_empty_links = strip_empty_markdown_links(&without_images);
+    Ok(normalize_markdown_document(&without_empty_links))
 }
 
-fn should_drop_readme_section(title: &str) -> bool {
-    let normalized = title.to_ascii_lowercase();
-    let denied = [
-        "installation",
-        "install",
-        "getting started",
-        "setup",
-        "contributing",
-        "contribution",
-        "development",
-        "license",
-        "licence",
-        "security",
-        "release",
-        "deployment",
-        "docker",
-        "build",
-        "testing",
-        "test",
-    ];
-
-    denied.iter().any(|needle| normalized.contains(needle))
-}
-
-fn prune_readme_sections(content: &str) -> String {
-    let mut intro_lines = Vec::new();
-    let mut sections: Vec<(String, Vec<String>)> = Vec::new();
-    let mut current_heading: Option<String> = None;
-    let mut current_body: Vec<String> = Vec::new();
-
-    for raw_line in content.lines() {
-        let line = raw_line.trim_end().to_string();
-        let trimmed = line.trim();
-
-        if let Some((level, _)) = markdown_heading_parts(trimmed) {
-            if level == 1 && current_heading.is_none() && current_body.is_empty() {
-                intro_lines.push(line);
-                continue;
-            }
-
-            if let Some(heading) = current_heading.take() {
-                sections.push((heading, std::mem::take(&mut current_body)));
-            }
-            current_heading = Some(line);
-        } else if current_heading.is_some() {
-            current_body.push(line);
-        } else {
-            intro_lines.push(line);
-        }
-    }
-
-    if let Some(heading) = current_heading {
-        sections.push((heading, current_body));
-    }
-
-    let mut kept_chunks = Vec::new();
-    let intro = normalize_blank_lines(&intro_lines.join("\n"));
-    if !intro.is_empty() {
-        kept_chunks.push(intro);
-    }
-
-    for (heading, body_lines) in sections.into_iter().take(README_MAX_ALLOWED_SECTIONS + 8) {
-        let Some((_, title)) = markdown_heading_parts(heading.trim()) else {
-            continue;
-        };
-        if should_drop_readme_section(title) {
-            continue;
-        }
-
-        let body = normalize_blank_lines(&body_lines.join("\n"));
-        if body.is_empty() {
-            continue;
-        }
-
-        kept_chunks.push(format!("{}\n\n{}", heading.trim(), body));
-        if kept_chunks.len().saturating_sub(1) >= README_MAX_ALLOWED_SECTIONS {
-            break;
-        }
-    }
-
-    kept_chunks.join("\n\n")
-}
-
-fn sanitize_readme_blob(content: &str) -> String {
-    let without_html_badges = strip_html_badge_links(content);
-    let without_markdown_badges = strip_markdown_badges(&without_html_badges);
-    let without_markdown_images = strip_markdown_images(&without_markdown_badges);
-    let pruned = prune_readme_sections(&without_markdown_images);
-    normalize_blank_lines(&pruned)
-}
-
-fn truncate_utf8(content: &str, max_chars: usize, max_bytes: usize) -> String {
-    let mut out = String::new();
-    for ch in content.chars().take(max_chars) {
-        let ch_len = ch.len_utf8();
-        if out.len() + ch_len > max_bytes {
-            break;
-        }
-        out.push(ch);
-    }
-    out
+fn finalize_readme_blob(
+    content: &str,
+    source_name: &str,
+) -> Result<String, ExtractionError> {
+    sanitize_readme_blob(content, source_name)
 }
 
 fn blob_from_text(artifact_type: &str, text: String) -> ArtifactBlob {
@@ -513,35 +475,41 @@ fn blob_from_text(artifact_type: &str, text: String) -> ArtifactBlob {
     }
 }
 
+fn empty_artifact_blob(artifact_type: &str) -> ArtifactBlob {
+    ArtifactBlob {
+        artifact_type: artifact_type.to_string(),
+        payload_blob: Vec::new(),
+    }
+}
+
 fn default_test_intent_message() -> String {
-    "Sem cobertura de testes explicita".to_string()
+    String::new()
 }
 
 fn default_ux_contracts_message() -> String {
-    "Backend puro, sem interface UX".to_string()
+    "[NO_UX_DETECTED_BACKEND_ONLY_TOPOLOGY]".to_string()
 }
 
 fn default_unsafe_hotspots_message() -> String {
-    "Sem hotspots explicitos de risco".to_string()
+    String::new()
 }
 
-fn should_skip_dir(name: &str) -> bool {
-    matches!(
-        name,
-        ".git"
-            | ".jj"
-            | ".svn"
-            | "node_modules"
-            | "target"
-            | "dist"
-            | "build"
-            | ".jcodemunch_index"
-            | "docs"
-            | "documentation"
-            | "examples"
-            | "mock"
-            | "mocks"
-    )
+fn render_scoped_text_blocks(blocks: &[ScopedTextBlock]) -> String {
+    blocks
+        .iter()
+        .map(|block| {
+            let mut lines = vec![format!("[{}]", block.file_path)];
+            for item in &block.items {
+                lines.push(format!("- {}", item));
+            }
+            lines.join("\n")
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn cached_regex<'a>(cache: &'a OnceLock<Option<Regex>>, pattern: &str) -> Option<&'a Regex> {
+    cache.get_or_init(|| Regex::new(pattern).ok()).as_ref()
 }
 
 fn has_code_extension(path: &Path) -> bool {
@@ -564,21 +532,26 @@ fn is_frontend_file(path: &Path) -> bool {
         return false;
     }
 
-    let in_frontend_dir = path.components().any(|component| {
-        component
-            .as_os_str()
-            .to_str()
-            .map(|part| {
-                let lower = part.to_ascii_lowercase();
-                lower == "ui" || lower == "components" || lower == "frontend"
-            })
-            .unwrap_or(false)
-    });
+    let in_frontend_dir = path
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .map(|part| part.to_ascii_lowercase())
+        .any(|lower| {
+            matches!(
+                lower.as_str(),
+                "ui" | "frontend" | "components" | "views" | "routes" | "app" | "pages"
+            )
+        });
     let valid_extension = matches!(
         path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.to_ascii_lowercase()),
         Some(ext) if matches!(ext.as_str(), "ts" | "tsx" | "js" | "jsx" | "svelte" | "vue")
     );
-    let has_real_ui_scope = has_path_segment(path, "src") || has_path_segment(path, "components");
+    let has_real_ui_scope = has_path_segment(path, "src")
+        || has_path_segment(path, "components")
+        || has_path_segment(path, "views")
+        || has_path_segment(path, "routes")
+        || has_path_segment(path, "app")
+        || has_path_segment(path, "pages");
 
     in_frontend_dir && valid_extension && has_real_ui_scope
 }
@@ -677,30 +650,127 @@ fn compact_props_parameter_entry(source: &str, parameter: &FormalParameter<'_>) 
 }
 
 fn compact_props_binding_entry(source: &str, declarator: &VariableDeclarator<'_>) -> Option<String> {
+    let init = declarator.init.as_ref()?;
     let snippet = slice_source_span(source, declarator.id.span())
         .or_else(|| capture_line_at_offset(source, declarator.id.span().start))
         .and_then(normalize_code_line_snippet)?;
-    if snippet.to_ascii_lowercase().contains("props") {
+    let full_line = capture_line_at_offset(source, declarator.span.start)
+        .and_then(normalize_code_line_snippet);
+    let oxc::ast::ast::Expression::CallExpression(call) = init else {
+        return None;
+    };
+    let callee_name = call.callee_name()?;
+    if UX_INPUT_CALL_NAMES.contains(&callee_name) {
+        Some(match callee_name {
+            "$props" | "defineProps" => format!("props {} = {}()", snippet, callee_name),
+            "useContext" | "getContext" | "useLoaderData" | "useRouteLoaderData" => {
+                format!("input {} = {}()", snippet, callee_name)
+            }
+            _ => format_props_entry(&snippet),
+        })
+    } else if callee_name == "withDefaults" {
+        full_line
+            .filter(|line| line.contains("defineProps"))
+            .map(|line| format!("props {line}"))
+    } else if snippet.to_ascii_lowercase().contains("props") {
         Some(format_props_entry(&snippet))
     } else {
         None
     }
 }
 
-fn compact_state_entry(source: &str, declarator: &VariableDeclarator<'_>) -> Option<String> {
-    let init = declarator.init.as_ref()?;
-    let oxc::ast::ast::Expression::CallExpression(call) = init else {
-        return None;
+fn compact_state_entries(source: &str, declarator: &VariableDeclarator<'_>) -> Vec<String> {
+    let Some(init) = declarator.init.as_ref() else {
+        return Vec::new();
     };
-    let callee_name = call.callee_name()?;
+    let oxc::ast::ast::Expression::CallExpression(call) = init else {
+        return Vec::new();
+    };
+    let Some(callee_name) = call.callee_name() else {
+        return Vec::new();
+    };
     if !STATE_CALL_NAMES.contains(&callee_name) {
-        return None;
+        return Vec::new();
     }
 
     let binding = slice_source_span(source, declarator.id.span())
         .or_else(|| capture_line_at_offset(source, declarator.id.span().start))
-        .and_then(normalize_code_line_snippet)?;
-    Some(format!("state {} = {}()", binding, callee_name))
+        .and_then(normalize_code_line_snippet);
+    let Some(binding) = binding else {
+        return Vec::new();
+    };
+    let mut entries = vec![format!("state {} = {}()", binding, callee_name)];
+    if let Some(mutation) = infer_state_mutation_entry(&binding, callee_name) {
+        entries.push(mutation);
+    }
+    entries
+}
+
+fn infer_state_mutation_entry(binding: &str, callee_name: &str) -> Option<String> {
+    static STATE_SETTER_RE: OnceLock<Option<Regex>> = OnceLock::new();
+    let captures = cached_regex(
+        &STATE_SETTER_RE,
+        r#"^\[\s*[^,\]]+\s*,\s*([A-Za-z_$][A-Za-z0-9_$]*)"#,
+    )?
+    .captures(binding)?;
+    let setter = captures.get(1)?.as_str();
+    if setter.is_empty() {
+        return None;
+    }
+    Some(match callee_name {
+        "useReducer" => format!("mutation {setter}() = dispatch"),
+        _ => format!("mutation {setter}()"),
+    })
+}
+
+fn compact_input_binding_entries(source: &str, declarator: &VariableDeclarator<'_>) -> Vec<String> {
+    compact_props_binding_entry(source, declarator).into_iter().collect()
+}
+
+fn compact_event_binding_entries(source: &str, declarator: &VariableDeclarator<'_>) -> Vec<String> {
+    let init = match declarator.init.as_ref() {
+        Some(init) => init,
+        None => return Vec::new(),
+    };
+    let oxc::ast::ast::Expression::CallExpression(call) = init else {
+        return Vec::new();
+    };
+    let Some(callee_name) = call.callee_name() else {
+        return Vec::new();
+    };
+    if !UX_EVENT_FACTORY_CALL_NAMES.contains(&callee_name) {
+        return Vec::new();
+    }
+    let binding = slice_source_span(source, declarator.id.span())
+        .or_else(|| capture_line_at_offset(source, declarator.id.span().start))
+        .and_then(normalize_code_line_snippet);
+    let Some(binding) = binding else {
+        return Vec::new();
+    };
+    vec![format!("event {binding} = {callee_name}()")]
+}
+
+fn compact_mutation_binding_entries(source: &str, declarator: &VariableDeclarator<'_>) -> Vec<String> {
+    let init = match declarator.init.as_ref() {
+        Some(init) => init,
+        None => return Vec::new(),
+    };
+    let oxc::ast::ast::Expression::CallExpression(call) = init else {
+        return Vec::new();
+    };
+    let Some(callee_name) = call.callee_name() else {
+        return Vec::new();
+    };
+    if !UX_MUTATION_CALL_NAMES.contains(&callee_name) {
+        return Vec::new();
+    }
+    let binding = slice_source_span(source, declarator.id.span())
+        .or_else(|| capture_line_at_offset(source, declarator.id.span().start))
+        .and_then(normalize_code_line_snippet);
+    let Some(binding) = binding else {
+        return Vec::new();
+    };
+    vec![format!("mutation {binding} = {callee_name}()")]
 }
 
 fn extract_embedded_script_source(path: &Path, content: &str) -> Option<(String, PathBuf)> {
@@ -759,18 +829,12 @@ fn frontend_ast_input(path: &Path, content: &str) -> Option<(String, PathBuf)> {
     }
 }
 
-fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> CappedFileEntries {
+fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> Vec<String> {
     let Some((source_text, parse_path)) = frontend_ast_input(path, content) else {
-        return CappedFileEntries {
-            items: Vec::new(),
-            omitted_count: 0,
-        };
+        return Vec::new();
     };
     let Ok(source_type) = SourceType::from_path(&parse_path) else {
-        return CappedFileEntries {
-            items: Vec::new(),
-            omitted_count: 0,
-        };
+        return Vec::new();
     };
 
     let allocator = Allocator::default();
@@ -782,30 +846,45 @@ fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> Capped
         .parse();
 
     if parser_return.panicked {
-        return CappedFileEntries {
-            items: Vec::new(),
-            omitted_count: 0,
-        };
+        return Vec::new();
     }
 
     let mut collector = UxAstCollector::new(&source_text);
     collector.visit_program(&parser_return.program);
-    prioritize_ux_entries(collector.finish())
+    let mut entries = collector.finish();
+    entries.extend(extract_regex_frontend_signals(&source_text));
+    prioritize_ux_entries(entries)
 }
 
-fn prioritize_ux_entries(entries: Vec<String>) -> CappedFileEntries {
+fn prioritize_ux_entries(entries: Vec<String>) -> Vec<String> {
     let mut types = Vec::new();
     let mut props = Vec::new();
+    let mut inputs = Vec::new();
     let mut states = Vec::new();
+    let mut events = Vec::new();
+    let mut mutations = Vec::new();
+    let mut functions = Vec::new();
     let mut other = Vec::new();
+    let mut seen = BTreeSet::new();
 
     for entry in entries {
+        if !seen.insert(entry.clone()) {
+            continue;
+        }
         if entry.starts_with("interface ") || entry.starts_with("type ") {
             types.push(entry);
         } else if entry.starts_with("props") {
             props.push(entry);
+        } else if entry.starts_with("input ") {
+            inputs.push(entry);
         } else if entry.starts_with("state ") {
             states.push(entry);
+        } else if entry.starts_with("event ") {
+            events.push(entry);
+        } else if entry.starts_with("mutation ") {
+            mutations.push(entry);
+        } else if entry.starts_with("fn ") {
+            functions.push(entry);
         } else {
             other.push(entry);
         }
@@ -814,67 +893,152 @@ fn prioritize_ux_entries(entries: Vec<String>) -> CappedFileEntries {
     let mut prioritized = Vec::new();
     prioritized.extend(types);
     prioritized.extend(props);
+    prioritized.extend(inputs);
     prioritized.extend(states);
+    prioritized.extend(events);
+    prioritized.extend(mutations);
+    prioritized.extend(functions);
     prioritized.extend(other);
 
-    CappedFileEntries {
-        items: prioritized,
-        omitted_count: 0,
+    prioritized
+}
+
+fn extract_regex_frontend_signals(source: &str) -> Vec<String> {
+    let mut entries = Vec::new();
+    let mut seen = BTreeSet::new();
+    if let Some(regex) = svelte_props_re() {
+        collect_regex_entries(&mut entries, &mut seen, source, regex, |captures| {
+            captures
+                .get(1)
+                .map(|value| format!("props {{ {} }} = $props()", collapse_inline_contract(value.as_str())))
+        });
     }
+    if let Some(regex) = define_props_re() {
+        collect_regex_entries(&mut entries, &mut seen, source, regex, |captures| {
+            captures.get(0).map(|value| {
+                format!("props {}", collapse_inline_contract(value.as_str()))
+            })
+        });
+    }
+    if let Some(regex) = define_emits_re() {
+        collect_regex_entries(&mut entries, &mut seen, source, regex, |captures| {
+            captures.get(0).map(|value| {
+                format!("event {}", collapse_inline_contract(value.as_str()))
+            })
+        });
+    }
+    if let Some(regex) = event_call_re() {
+        collect_regex_entries(&mut entries, &mut seen, source, regex, |captures| {
+            captures
+                .get(1)
+                .map(|value| format!("event {}()", value.as_str()))
+        });
+    }
+    if let Some(regex) = mutation_call_re() {
+        collect_regex_entries(&mut entries, &mut seen, source, regex, |captures| {
+            captures
+                .get(1)
+                .map(|value| format!("mutation {}()", collapse_inline_contract(value.as_str())))
+        });
+    }
+    if let Some(regex) = function_signature_re() {
+        collect_regex_entries(&mut entries, &mut seen, source, regex, |captures| {
+            let name = captures
+                .get(1)
+                .or_else(|| captures.get(3))
+                .map(|value| value.as_str())?;
+            let params = captures
+                .get(2)
+                .or_else(|| captures.get(4))
+                .map(|value| collapse_inline_contract(value.as_str()))
+                .unwrap_or_default();
+            Some(if params.is_empty() {
+                format!("fn {name}()")
+            } else {
+                format!("fn {name}({params})")
+            })
+        });
+    }
+    entries
+}
+
+fn collect_regex_entries<F>(
+    out: &mut Vec<String>,
+    seen: &mut BTreeSet<String>,
+    source: &str,
+    re: &Regex,
+    mut render: F,
+) where
+    F: FnMut(&regex::Captures<'_>) -> Option<String>,
+{
+    for captures in re.captures_iter(source) {
+        let Some(entry) = render(&captures) else {
+            continue;
+        };
+        if seen.insert(entry.clone()) {
+            out.push(entry);
+        }
+    }
+}
+
+fn collapse_inline_contract(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn svelte_props_re() -> Option<&'static Regex> {
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    cached_regex(
+        &RE,
+        r#"(?m)^\s*(?:let|const)\s*\{([^}]+)\}\s*(?::\s*[^=]+)?=\s*\$props\(\)\s*;?"#,
+    )
+}
+
+fn define_props_re() -> Option<&'static Regex> {
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    cached_regex(
+        &RE,
+        r#"(?m)^\s*(?:const|let)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*(?:withDefaults\([^;\n]*defineProps(?:<[^>]+>)?\([^)]*\)[^;\n]*\)|defineProps(?:<[^>]+>)?\([^)]*\))\s*;?"#,
+    )
+}
+
+fn define_emits_re() -> Option<&'static Regex> {
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    cached_regex(
+        &RE,
+        r#"(?m)^\s*(?:const|let)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*defineEmits(?:<[^>]+>)?\([^)]*\)\s*;?"#,
+    )
+}
+
+fn event_call_re() -> Option<&'static Regex> {
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    cached_regex(&RE, r#"\b(?:dispatch|emit)\(\s*['"`]([^'"`]+)['"`]"#)
+}
+
+fn mutation_call_re() -> Option<&'static Regex> {
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    cached_regex(
+        &RE,
+        r#"\b(set[A-Z][A-Za-z0-9_$]*|[A-Za-z_$][A-Za-z0-9_$]*\.(?:mutate|mutateAsync))\s*\("#,
+    )
+}
+
+fn function_signature_re() -> Option<&'static Regex> {
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    cached_regex(
+        &RE,
+        r#"(?m)^\s*(?:export\s+default\s+|export\s+)?function\s+([A-Z][A-Za-z0-9_$]*)\s*\(([^)]*)\)|^\s*(?:export\s+)?const\s+([A-Z][A-Za-z0-9_$]*)\s*=\s*\(([^)]*)\)\s*=>"#,
+    )
 }
 
 fn collect_repo_files(root: &Path) -> Result<Vec<PathBuf>, ExtractionError> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), ExtractionError> {
-        let entries = std::fs::read_dir(dir).map_err(|e| ExtractionError::IoError {
-            file: dir.display().to_string(),
-            reason: e.to_string(),
-        })?;
-
-        for entry in entries {
-            let entry = entry.map_err(|e| ExtractionError::IoError {
-                file: dir.display().to_string(),
-                reason: e.to_string(),
-            })?;
-            let path = entry.path();
-            let file_type = entry.file_type().map_err(|e| ExtractionError::IoError {
-                file: path.display().to_string(),
-                reason: e.to_string(),
-            })?;
-
-            if file_type.is_dir() {
-                if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                    if should_skip_dir(name) {
-                        continue;
-                    }
-                }
-                walk(&path, out)?;
-            } else if file_type.is_file() {
-                out.push(path);
-            }
-        }
-
-        Ok(())
-    }
-
-    let mut out = Vec::new();
-    walk(root, &mut out)?;
-    Ok(out)
+    Ok(repo_radar::build_repo_radar(root).clean_files().to_vec())
 }
 
 fn read_small_text_file(path: &Path) -> Result<Option<String>, ExtractionError> {
-    let metadata = std::fs::metadata(path).map_err(|e| ExtractionError::IoError {
-        file: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
-
-    if metadata.len() > MAX_SCAN_FILE_BYTES {
-        return Ok(None);
-    }
-
-    let bytes = std::fs::read(path).map_err(|e| ExtractionError::IoError {
-        file: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_) => return Ok(None),
+    };
 
     match String::from_utf8(bytes) {
         Ok(text) => Ok(Some(text)),
@@ -883,10 +1047,48 @@ fn read_small_text_file(path: &Path) -> Result<Option<String>, ExtractionError> 
 }
 
 fn relative_display(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
+    let normalized_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let normalized_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    normalized_path
+        .strip_prefix(&normalized_root)
+        .unwrap_or(normalized_path.as_path())
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+impl ManifestKind {
+    fn stack_label(self) -> &'static str {
+        match self {
+            Self::CargoToml => "Rust",
+            Self::PackageJson => "TypeScript",
+            Self::GoMod => "Go",
+            Self::PyprojectToml | Self::RequirementsTxt | Self::Pipfile => "Python",
+            Self::MixExs => "Elixir",
+            Self::Gemfile => "Ruby",
+            Self::ComposerJson => "PHP",
+            Self::PomXml | Self::BuildGradle | Self::BuildGradleKts => "JVM",
+            Self::Csproj => "DotNet",
+            Self::CMakeListsTxt | Self::ConanfileTxt => "C/C++",
+            Self::BuildZigZon => "Zig",
+        }
+    }
+
+    fn priority(self) -> u8 {
+        match self {
+            Self::CargoToml => 0,
+            Self::PackageJson => 1,
+            Self::PyprojectToml | Self::RequirementsTxt | Self::Pipfile => 2,
+            Self::GoMod => 3,
+            Self::MixExs => 4,
+            Self::Gemfile => 5,
+            Self::ComposerJson => 6,
+            Self::PomXml | Self::BuildGradle | Self::BuildGradleKts => 7,
+            Self::Csproj => 8,
+            Self::CMakeListsTxt | Self::ConanfileTxt => 9,
+            Self::BuildZigZon => 10,
+        }
+    }
+
 }
 
 impl TestIntentExtractor {
@@ -910,16 +1112,20 @@ impl TestIntentExtractor {
             reason: e.to_string(),
         })?;
 
-        let body = if payload.blocks.is_empty() {
+        let timed_out = payload.timed_out;
+        let mut blocks = payload.blocks;
+
+        let body = if blocks.is_empty() {
             default_test_intent_message()
         } else {
-            let mut ordered = payload.blocks;
-            ordered.sort_by(|left, right| {
-                test_intent_priority(&left.file_path)
-                    .cmp(&test_intent_priority(&right.file_path))
-                    .then_with(|| left.file_path.cmp(&right.file_path))
-            });
-            pack_scoped_text_blocks(&ordered, TEST_INTENT_BLOB_MAX_CHARS)
+            if !timed_out {
+                blocks.sort_by(|left, right| {
+                    test_intent_priority(&left.file_path)
+                        .cmp(&test_intent_priority(&right.file_path))
+                        .then_with(|| left.file_path.cmp(&right.file_path))
+                });
+            };
+            render_scoped_text_blocks(&blocks)
         };
 
         Ok(body)
@@ -984,15 +1190,7 @@ impl UnsafeHotspotsExtractor {
                 }
             }
 
-            let body = if hits.is_empty() {
-                default_unsafe_hotspots_message()
-            } else {
-                truncate_utf8(
-                    &hits.join("\n"),
-                    UNSAFE_HOTSPOTS_BLOB_MAX_CHARS,
-                    UNSAFE_HOTSPOTS_BLOB_MAX_CHARS,
-                )
-            };
+            let body = if hits.is_empty() { default_unsafe_hotspots_message() } else { hits.join("\n") };
 
             Ok(blob_from_text("blob_06_unsafe_hotspots", body))
         })
@@ -1005,6 +1203,10 @@ impl UnsafeHotspotsExtractor {
 }
 
 impl UxContractsExtractor {
+    pub fn backend_only_blob() -> ArtifactBlob {
+        blob_from_text("blob_11_ux_contracts", default_ux_contracts_message())
+    }
+
     pub async fn extract_blob(repo_path: &RepoPath) -> Result<ArtifactBlob, ExtractionError> {
         let body = Self::extract_body(repo_path).await?;
         Ok(blob_from_text("blob_11_ux_contracts", body))
@@ -1023,20 +1225,16 @@ impl UxContractsExtractor {
                 let rel = relative_display(&root, &path);
                 let semantics = extract_frontend_contracts_from_content(&path, &content);
 
-                if !semantics.items.is_empty() {
+                if !semantics.is_empty() {
                     sections.push(ScopedTextBlock {
                         file_path: rel,
-                        items: semantics.items,
-                        omitted_count: semantics.omitted_count,
+                        items: semantics,
+                        omitted_count: 0,
                     });
                 }
             }
 
-            let body = if sections.is_empty() {
-                default_ux_contracts_message()
-            } else {
-                pack_scoped_text_blocks(&sections, UX_CONTRACTS_BLOB_MAX_CHARS)
-            };
+            let body = if sections.is_empty() { default_ux_contracts_message() } else { render_scoped_text_blocks(&sections) };
 
             Ok(body)
         })
@@ -1058,122 +1256,61 @@ impl DomainMechanicsExtractor {
         let ux_body = UxContractsExtractor::extract_body(input.repo_path).await?;
 
         let merged = Self::compose_blob_body(test_body, ux_body);
-        let packed = truncate_utf8(
-            &merged,
-            PHASE1_HEAVY_BLOB_MAX_CHARS,
-            PHASE1_HEAVY_BLOB_MAX_CHARS,
-        );
-
-        if packed.trim().is_empty() {
+        if merged.trim().is_empty() {
             return Err(ExtractionError::EmptyArtifact {
                 artifact_type: "blob_03_domain_mechanics".to_string(),
                 file: "domain_mechanics_bundle".to_string(),
             });
         }
 
-        Ok(packed)
+        Ok(merged)
     }
 
     fn compose_blob_body(test_body: String, ux_body: String) -> String {
-        format!(
-            "# Domain Mechanics\n\n## Test Intent\n{}\n\n## UX Contracts\n{}",
-            test_body.trim(),
-            ux_body.trim()
-        )
+        let mut body = String::new();
+        body.push_str("# Domain Mechanics\n\n## Test Intent\n");
+        body.push_str(test_body.trim());
+        body.push_str("\n\n## UX Contracts\n");
+        body.push_str(ux_body.trim());
+        body
     }
 }
 
 impl OpsBlueprintExtractor {
     pub async fn extract_blob(input: OpsInput<'_>) -> Result<ArtifactBlob, ExtractionError> {
         let payload = Self::extract(input).await?;
-        let mut sections = Vec::new();
-
-        for priority_path in ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"] {
-            if let Some(file) = payload.infra_files.iter().find(|file| file.path == priority_path) {
-                sections.push(format!("### {}\n{}\n", file.path, file.content.trim()));
-            }
+        if payload.infra_files.is_empty() {
+            return Ok(empty_artifact_blob("blob_07_ops_blueprint"));
         }
 
-        for file in payload
-            .infra_files
-            .iter()
-            .filter(|file| file.path.starts_with(".github/workflows/"))
-        {
-            sections.push(format!("### {}\n{}\n", file.path, file.content.trim()));
-        }
-
-        if sections.is_empty() {
-            return Err(ExtractionError::RequiredArtifactMissing {
-                artifact_type: "blob_07_ops_blueprint".to_string(),
-                candidates: "Dockerfile, docker-compose.yml, docker-compose.yaml, .github/workflows/*.yml".to_string(),
-            });
-        }
-
-        let packed = truncate_utf8(&sections.join("\n"), OPS_BLOB_MAX_CHARS, OPS_BLOB_MAX_CHARS);
-        if packed.trim().is_empty() {
-            return Err(ExtractionError::EmptyArtifact {
-                artifact_type: "blob_07_ops_blueprint".to_string(),
-                file: "ops_blueprint_bundle".to_string(),
-            });
+        let mut body = String::new();
+        for file in &payload.infra_files {
+            let _ = writeln!(body, "### {}", file.path);
+            let _ = writeln!(body, "{}", file.content.trim());
+            body.push('\n');
         }
 
         Ok(ArtifactBlob {
             artifact_type: "blob_07_ops_blueprint".to_string(),
-            payload_blob: packed.into_bytes(),
+            payload_blob: body.into_bytes(),
         })
     }
 
     pub async fn extract(input: OpsInput<'_>) -> Result<OpsPayload, ExtractionError> {
-        let root_targets = [
-            "Dockerfile",
-            "docker-compose.yml",
-            "docker-compose.yaml",
-            "Makefile",
-        ];
-
+        let root = input.repo_path.as_ref();
+        let files = collect_repo_files(root)?;
         let mut infra_files = Vec::new();
 
-        // 1. Root files
-        for &file_name in &root_targets {
-            let path = input.repo_path.join(file_name);
-            if let Some(infra) = Self::read_infra_file(&path, file_name).await? {
-                infra_files.push(infra);
-            }
-        }
-
-        // 2. Workflows (.github/workflows/) - Level 1 only
-        let workflows_path = input.repo_path.join(".github/workflows");
-        match fs::read_dir(&workflows_path).await {
-            Ok(mut entries) => {
-                while let Some(entry) = entries.next_entry().await.map_err(|e| ExtractionError::IoError {
-                    file: ".github/workflows".to_string(),
-                    reason: e.to_string(),
-                })? {
-                    let file_type = entry.file_type().await.map_err(|e| ExtractionError::IoError {
-                        file: entry.path().display().to_string(),
-                        reason: e.to_string(),
-                    })?;
-
-                    if file_type.is_file() {
-                        let file_name = entry.file_name().to_string_lossy().to_string();
-                        if file_name.ends_with(".yml") || file_name.ends_with(".yaml") {
-                            let path = entry.path();
-                            let rel_path = format!(".github/workflows/{}", file_name);
-                            if let Some(infra) = Self::read_infra_file(&path, &rel_path).await? {
-                                infra_files.push(infra);
-                            }
-                        }
-                    }
+        for path in files {
+            let rel_path = relative_display(root, &path);
+            if Self::is_ops_blueprint_path_allowed(&rel_path) {
+                if let Some(infra) = Self::read_infra_file(&path, &rel_path).await? {
+                    infra_files.push(infra);
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => {
-                return Err(ExtractionError::IoError {
-                    file: workflows_path.display().to_string(),
-                    reason: e.to_string(),
-                });
-            }
         }
+
+        infra_files.sort_by(|left, right| left.path.cmp(&right.path));
 
         if infra_files.is_empty() {
             Err(ExtractionError::NotFound)
@@ -1182,23 +1319,148 @@ impl OpsBlueprintExtractor {
         }
     }
 
+    fn is_ops_blueprint_path_allowed(rel_path: &str) -> bool {
+        let lower_rel = rel_path.replace('\\', "/").to_ascii_lowercase();
+        let file_name = Path::new(&lower_rel)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+
+        let is_yaml_like = lower_rel.ends_with(".yml") || lower_rel.ends_with(".yaml");
+        let is_json_like = lower_rel.ends_with(".json");
+        let is_hcl_like =
+            lower_rel.ends_with(".hcl") || lower_rel.ends_with(".tf") || lower_rel.ends_with(".tf.json");
+        let is_tfvars_like =
+            lower_rel.ends_with(".tfvars") || lower_rel.ends_with(".tfvars.json");
+
+        if file_name.starts_with("dockerfile")
+            || matches!(
+                file_name,
+                "containerfile"
+                    | "docker-compose.yml"
+                    | "docker-compose.yaml"
+                    | "compose.yml"
+                    | "compose.yaml"
+                    | "makefile"
+                    | "gnumakefile"
+                    | "justfile"
+                    | "jenkinsfile"
+                    | "earthfile"
+                    | "vagrantfile"
+                    | "tiltfile"
+                    | "docker-bake.hcl"
+                    | ".gitlab-ci.yml"
+                    | ".travis.yml"
+                    | ".drone.yml"
+                    | ".woodpecker.yml"
+                    | "bitbucket-pipelines.yml"
+                    | "appveyor.yml"
+                    | "azure-pipelines.yml"
+                    | "azure-pipelines.yaml"
+                    | "cmakelists.txt"
+                    | "build.zig"
+                    | "build.zig.zon"
+                    | "ansible.cfg"
+                    | "chart.yaml"
+                    | "helmfile.yaml"
+                    | "helmfile.yml"
+                    | "helmfile.yaml.gotmpl"
+                    | "helmfile.yml.gotmpl"
+                    | "kustomization.yaml"
+                    | "kustomization.yml"
+                    | "pulumi.yaml"
+                    | "pulumi.yml"
+                    | "terragrunt.hcl"
+                    | "skaffold.yaml"
+                    | "skaffold.yml"
+                    | "procfile"
+            )
+        {
+            return true;
+        }
+
+        if file_name.starts_with("taskfile.") && is_yaml_like {
+            return true;
+        }
+
+        if file_name.starts_with("pulumi.") && is_yaml_like {
+            return true;
+        }
+
+        if file_name.starts_with("values") && is_yaml_like {
+            return lower_rel.contains("/charts/")
+                || lower_rel.contains("/helm/")
+                || lower_rel.starts_with("charts/")
+                || lower_rel.starts_with("helm/");
+        }
+
+        if lower_rel.starts_with(".github/workflows/") && is_yaml_like {
+            return true;
+        }
+
+        if lower_rel.starts_with(".circleci/") && is_yaml_like {
+            return true;
+        }
+
+        if lower_rel.starts_with(".buildkite/") && is_yaml_like {
+            return true;
+        }
+
+        if lower_rel.starts_with(".azure-pipelines/") && is_yaml_like {
+            return true;
+        }
+
+        if lower_rel.starts_with("terraform/")
+            || lower_rel.starts_with("terragrunt/")
+            || lower_rel.starts_with("iac/")
+            || lower_rel.starts_with("infra/")
+        {
+            return is_hcl_like || is_tfvars_like;
+        }
+
+        if lower_rel.starts_with("ansible/")
+            || lower_rel.starts_with("playbooks/")
+            || lower_rel.starts_with("inventories/")
+            || lower_rel.starts_with("inventory/")
+            || lower_rel.starts_with("group_vars/")
+            || lower_rel.starts_with("host_vars/")
+            || lower_rel.starts_with("roles/")
+        {
+            return is_yaml_like
+                || lower_rel.ends_with(".ini")
+                || lower_rel.ends_with(".cfg")
+                || lower_rel.ends_with(".j2");
+        }
+
+        if lower_rel.starts_with("charts/") || lower_rel.starts_with("helm/") {
+            return is_yaml_like
+                || lower_rel.ends_with(".tpl")
+                || lower_rel.ends_with(".gotmpl");
+        }
+
+        if lower_rel.starts_with("k8s/")
+            || lower_rel.starts_with("kubernetes/")
+            || lower_rel.starts_with("manifests/")
+            || lower_rel.starts_with("deploy/")
+            || lower_rel.starts_with("deployment/")
+            || lower_rel.starts_with("argocd/")
+            || lower_rel.starts_with("flux/")
+            || lower_rel.starts_with("tekton/")
+        {
+            return is_yaml_like || is_json_like;
+        }
+
+        false
+    }
+
     async fn read_infra_file(path: &std::path::Path, rel_path: &str) -> Result<Option<InfraFile>, ExtractionError> {
-        let metadata = match fs::metadata(path).await {
-            Ok(m) => m,
+        match fs::metadata(path).await {
+            Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(ExtractionError::IoError {
                 file: rel_path.to_string(),
                 reason: e.to_string(),
             }),
-        };
-
-        let size = metadata.len();
-        if size > MAX_MANIFEST_SIZE {
-            return Err(ExtractionError::FileTooLarge {
-                file: rel_path.to_string(),
-                size_bytes: size,
-                limit_bytes: MAX_MANIFEST_SIZE,
-            });
         }
 
         let content = fs::read_to_string(path).await.map_err(|e| ExtractionError::IoError {
@@ -1219,31 +1481,30 @@ impl ManifestExtractor {
         tokio::task::spawn_blocking(move || {
             let files = collect_repo_files(&root)?;
             let mut blocks = Vec::new();
-            let mut manifest_files_seen = BTreeSet::<String>::new();
+            let mut manifest_kinds_seen = BTreeSet::<ManifestKind>::new();
 
-            for path in files.into_iter().filter(|path| Self::is_manifest_blob_target(path)) {
+            for path in files {
+                let Some(kind) = Self::manifest_kind_for_path(&path) else {
+                    continue;
+                };
                 let rel_path = relative_display(&root, &path);
-                let file_name = Path::new(&rel_path)
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or_default()
-                    .to_string();
-                if !file_name.is_empty() {
-                    manifest_files_seen.insert(file_name);
+                if Self::should_skip_manifest_fixture_path(&rel_path) {
+                    continue;
                 }
-                let metadata = std::fs::metadata(&path).map_err(|e| ExtractionError::IoError {
-                    file: rel_path.clone(),
-                    reason: e.to_string(),
-                })?;
-
-                let size = metadata.len();
-                if size > MAX_MANIFEST_SIZE {
-                    return Err(ExtractionError::FileTooLarge {
-                        file: rel_path,
-                        size_bytes: size,
-                        limit_bytes: MAX_MANIFEST_SIZE,
-                    });
-                }
+                manifest_kinds_seen.insert(kind);
+                let _size = match std::fs::metadata(&path) {
+                    Ok(metadata) => metadata,
+                    Err(e) => {
+                        warn!(
+                            artifact_type = "blob_02_dependency_manifest",
+                            manifest = %rel_path,
+                            abs_path = %path.display(),
+                            error = %e,
+                            "Falha ao ler metadata do manifesto; ignorando"
+                        );
+                        continue;
+                    }
+                };
 
                 info!(
                     artifact_type = "blob_02_dependency_manifest",
@@ -1251,33 +1512,36 @@ impl ManifestExtractor {
                     abs_path = %path.display(),
                     "Tentando ler manifesto"
                 );
-                let content = std::fs::read_to_string(&path).map_err(|e| {
+                let content = match std::fs::read_to_string(&path) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        warn!(
+                            artifact_type = "blob_02_dependency_manifest",
+                            manifest = %rel_path,
+                            abs_path = %path.display(),
+                            error = %e,
+                            "Falha ao ler manifesto; ignorando"
+                        );
+                        continue;
+                    }
+                };
+
+                if content.trim().is_empty() {
                     warn!(
                         artifact_type = "blob_02_dependency_manifest",
                         manifest = %rel_path,
                         abs_path = %path.display(),
-                        error = %e,
-                        "Falha ao ler manifesto"
+                        "Manifesto vazio; ignorando"
                     );
-                    ExtractionError::IoError {
-                        file: rel_path.clone(),
-                        reason: e.to_string(),
-                    }
-                })?;
-
-                if content.trim().is_empty() {
-                    return Err(ExtractionError::EmptyArtifact {
-                        artifact_type: "blob_02_dependency_manifest".to_string(),
-                        file: rel_path,
-                    });
+                    continue;
                 }
 
-                if let Some(block) = Self::extract_manifest_block(&rel_path, &content)? {
+                if let Some(block) = Self::extract_manifest_block(&rel_path, &content, kind)? {
                     blocks.push(block);
                 }
             }
 
-            let stack_base = Self::stack_base_from_manifest_files(&manifest_files_seen);
+            let stack_base = Self::stack_base_from_manifest_kinds(&manifest_kinds_seen);
 
             blocks.sort_by(|left, right| {
                 Self::manifest_blob_priority(&left.file_path)
@@ -1285,18 +1549,12 @@ impl ManifestExtractor {
                     .then_with(|| left.file_path.cmp(&right.file_path))
             });
 
-            let header = format!("stack_base: {}\n\n", stack_base);
-            let packed = if blocks.is_empty() {
-                "Nenhum manifesto detectado (Cargo.toml, package.json, pyproject.toml, requirements.txt, go.mod)."
-                    .to_string()
-            } else {
-                pack_scoped_text_blocks(&blocks, MANIFEST_BLOB_MAX_CHARS)
-            };
-            let mut final_text = format!("{}{}", header, packed);
-            final_text = truncate_chars(&final_text, MANIFEST_BLOB_MAX_CHARS);
-            if final_text.trim().is_empty() {
-                final_text = header;
+            if blocks.is_empty() {
+                return Ok(empty_artifact_blob("blob_02_dependency_manifest"));
             }
+
+            let header = format!("stack_base: {}\n\n", stack_base);
+            let final_text = format!("{}{}", header, render_scoped_text_blocks(&blocks));
 
             Ok(blob_from_text("blob_02_dependency_manifest", final_text))
         })
@@ -1307,55 +1565,104 @@ impl ManifestExtractor {
         })?
     }
 
-    fn is_manifest_blob_target(path: &Path) -> bool {
+    fn should_skip_manifest_fixture_path(rel_path: &str) -> bool {
+        const SKIP_DIRS: [&str; 7] = [
+            "tests",
+            "test",
+            "fixtures",
+            "vendor",
+            "node_modules",
+            "__mocks__",
+            "__tests__",
+        ];
+        let normalized = super::normalize_repo_path_key(rel_path);
+        super::normalized_path_has_any_segment(&normalized, &SKIP_DIRS)
+    }
+
+    fn is_manifest_lockfile_name(file_name: &str) -> bool {
+        let normalized = file_name.to_ascii_lowercase();
         matches!(
-            path.file_name().and_then(|name| name.to_str()),
-            Some("Cargo.toml" | "package.json" | "go.mod" | "pyproject.toml" | "requirements.txt")
+            normalized.as_str(),
+            "package-lock.json"
+                | "yarn.lock"
+                | "pnpm-lock.yaml"
+                | "cargo.lock"
+                | "poetry.lock"
+                | "pipfile.lock"
+                | "composer.lock"
+                | "mix.lock"
+                | "go.sum"
+                | "gemfile.lock"
+                | "packages.lock.json"
+                | "project.assets.json"
+                | "paket.lock"
         )
     }
 
+    fn manifest_kind_for_path(path: &Path) -> Option<ManifestKind> {
+        let file_name = path.file_name()?.to_str()?;
+        if Self::is_manifest_lockfile_name(file_name) {
+            return None;
+        }
+
+        match file_name {
+            "Cargo.toml" => Some(ManifestKind::CargoToml),
+            "package.json" => Some(ManifestKind::PackageJson),
+            "go.mod" => Some(ManifestKind::GoMod),
+            "pyproject.toml" => Some(ManifestKind::PyprojectToml),
+            "requirements.txt" => Some(ManifestKind::RequirementsTxt),
+            "Pipfile" => Some(ManifestKind::Pipfile),
+            "mix.exs" => Some(ManifestKind::MixExs),
+            "Gemfile" => Some(ManifestKind::Gemfile),
+            "composer.json" => Some(ManifestKind::ComposerJson),
+            "pom.xml" => Some(ManifestKind::PomXml),
+            "build.gradle" => Some(ManifestKind::BuildGradle),
+            "build.gradle.kts" => Some(ManifestKind::BuildGradleKts),
+            "CMakeLists.txt" => Some(ManifestKind::CMakeListsTxt),
+            "conanfile.txt" => Some(ManifestKind::ConanfileTxt),
+            "build.zig.zon" => Some(ManifestKind::BuildZigZon),
+            value if value.ends_with(".csproj") => Some(ManifestKind::Csproj),
+            _ => None,
+        }
+    }
+
     fn manifest_blob_priority(path: &str) -> (u8, usize) {
-        let file_name = Path::new(path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default();
-        let kind_score = match file_name {
-            "Cargo.toml" => 0,
-            "package.json" => 1,
-            "pyproject.toml" | "requirements.txt" => 2,
-            "go.mod" => 3,
-            _ => 9,
-        };
+        let kind_score = Self::manifest_kind_for_path(Path::new(path))
+            .map(ManifestKind::priority)
+            .unwrap_or(99);
         (kind_score, path.matches('/').count())
     }
 
-    fn extract_manifest_block(file_path: &str, content: &str) -> Result<Option<ScopedTextBlock>, ExtractionError> {
-        let file_name = Path::new(file_path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| ExtractionError::ParseError {
-                file: file_path.to_string(),
-                reason: "Nome do manifesto invalido".to_string(),
-            })?;
-
-        let names = match file_name {
-            "Cargo.toml" => Self::extract_cargo_dependency_names(content, file_path)?,
-            "package.json" => Self::extract_package_json_dependency_names(content, file_path)?,
-            "go.mod" => Self::extract_go_mod_dependency_names(content),
-            "requirements.txt" => Self::extract_requirements_dependency_names(content),
-            "pyproject.toml" => Self::extract_pyproject_dependency_names(content, file_path)?,
-            _ => Vec::new(),
+    fn extract_manifest_block(
+        file_path: &str,
+        content: &str,
+        kind: ManifestKind,
+    ) -> Result<Option<ScopedTextBlock>, ExtractionError> {
+        let names = match kind {
+            ManifestKind::CargoToml => Self::extract_cargo_dependency_names(content, file_path)?,
+            ManifestKind::PackageJson => Self::extract_package_json_dependency_names(content, file_path)?,
+            ManifestKind::GoMod => Self::extract_go_mod_dependency_names(content),
+            ManifestKind::RequirementsTxt => Self::extract_requirements_dependency_names(content),
+            ManifestKind::PyprojectToml => Self::extract_pyproject_dependency_names(content, file_path)?,
+            ManifestKind::Pipfile => Self::extract_pipfile_dependency_names(content, file_path)?,
+            ManifestKind::MixExs => Self::extract_mix_exs_dependency_names(content),
+            ManifestKind::Gemfile => Self::extract_gemfile_dependency_names(content),
+            ManifestKind::ComposerJson => Self::extract_composer_dependency_names(content, file_path)?,
+            ManifestKind::PomXml => Self::extract_pom_dependency_names(content),
+            ManifestKind::BuildGradle | ManifestKind::BuildGradleKts => {
+                Self::extract_gradle_dependency_names(content)
+            }
+            ManifestKind::Csproj => Self::extract_csproj_dependency_names(content),
+            ManifestKind::CMakeListsTxt => Self::extract_cmake_dependency_names(content),
+            ManifestKind::ConanfileTxt => Self::extract_conan_dependency_names(content),
+            ManifestKind::BuildZigZon => Self::extract_build_zig_dependency_names(content),
         };
 
         if names.is_empty() {
             return Ok(None);
         }
 
-        let total_names = names.len();
-        let mut limited_names = names;
-        limited_names.truncate(MANIFEST_MAX_DEPENDENCIES_PER_FILE);
-        let omitted_count = total_names.saturating_sub(limited_names.len());
-        let items = limited_names
+        let items = names
             .chunks(MANIFEST_DEPENDENCY_CHUNK_SIZE)
             .map(|chunk| chunk.join(", "))
             .collect::<Vec<_>>();
@@ -1363,7 +1670,7 @@ impl ManifestExtractor {
         Ok(Some(ScopedTextBlock {
             file_path: file_path.to_string(),
             items,
-            omitted_count,
+            omitted_count: 0,
         }))
     }
 
@@ -1539,17 +1846,258 @@ impl ManifestExtractor {
         Ok(info.dependencies.into_iter().map(|dep| dep.name).collect())
     }
 
-    fn stack_base_from_manifest_files(files: &BTreeSet<String>) -> String {
-        let has_cargo = files.iter().any(|name| name == "Cargo.toml");
-        let has_package = files.iter().any(|name| name == "package.json");
-        let has_go = files.iter().any(|name| name == "go.mod");
-        let has_python = files.iter().any(|name| name == "pyproject.toml" || name == "requirements.txt");
+    fn extract_pipfile_dependency_names(content: &str, file: &str) -> Result<Vec<String>, ExtractionError> {
+        let info = Self::parse_pipfile(content, file, content.len() as u64)?;
+        Ok(info
+            .dependencies
+            .into_iter()
+            .chain(info.dev_dependencies)
+            .map(|dep| dep.name)
+            .collect())
+    }
 
+    fn extract_mix_exs_dependency_names(content: &str) -> Vec<String> {
+        static DEP_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        let Some(re) = cached_regex(
+            &DEP_RE,
+            r#"\{\s*(?::([A-Za-z0-9_]+)|"([^"]+)"|'([^']+)')\s*,"#,
+        ) else {
+            return Vec::new();
+        };
+        let mut names = BTreeSet::new();
+        for captures in re.captures_iter(content) {
+            if let Some(name) = captures
+                .get(1)
+                .or_else(|| captures.get(2))
+                .or_else(|| captures.get(3))
+            {
+                names.insert(name.as_str().to_string());
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    fn extract_gemfile_dependency_names(content: &str) -> Vec<String> {
+        static GEM_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        let Some(re) = cached_regex(&GEM_RE, r#"(?m)^\s*gem\s+["']([^"']+)["']"#) else {
+            return Vec::new();
+        };
+        let mut names = BTreeSet::new();
+        for captures in re.captures_iter(content) {
+            if let Some(name) = captures.get(1) {
+                names.insert(name.as_str().to_string());
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    fn extract_composer_dependency_names(content: &str, file: &str) -> Result<Vec<String>, ExtractionError> {
+        let info = Self::parse_composer_json(content, file, content.len() as u64)?;
+        Ok(info
+            .dependencies
+            .into_iter()
+            .chain(info.dev_dependencies)
+            .map(|dep| dep.name)
+            .collect())
+    }
+
+    fn extract_pom_dependency_names(content: &str) -> Vec<String> {
+        static DEP_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        static GROUP_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        static ARTIFACT_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        let Some(dep_re) = cached_regex(&DEP_RE, r"(?s)<dependency>(.*?)</dependency>") else {
+            return Vec::new();
+        };
+        let Some(group_re) = cached_regex(&GROUP_RE, r"<groupId>\s*([^<\s]+)\s*</groupId>") else {
+            return Vec::new();
+        };
+        let Some(artifact_re) = cached_regex(&ARTIFACT_RE, r"<artifactId>\s*([^<\s]+)\s*</artifactId>") else {
+            return Vec::new();
+        };
+        let mut names = BTreeSet::new();
+        for dep in dep_re.captures_iter(content) {
+            let block = dep.get(1).map(|m| m.as_str()).unwrap_or_default();
+            let group = group_re
+                .captures(block)
+                .and_then(|cap| cap.get(1))
+                .map(|m| m.as_str().to_string());
+            let artifact = artifact_re
+                .captures(block)
+                .and_then(|cap| cap.get(1))
+                .map(|m| m.as_str().to_string());
+            if let Some(artifact) = artifact {
+                names.insert(match group {
+                    Some(group) => format!("{group}:{artifact}"),
+                    None => artifact,
+                });
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    fn extract_gradle_dependency_names(content: &str) -> Vec<String> {
+        static QUOTED_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        static PROJECT_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        let Some(quoted_re) = cached_regex(
+            &QUOTED_RE,
+            r#"(?m)^\s*(api|implementation|compileOnly|runtimeOnly|annotationProcessor|kapt|testImplementation|testCompileOnly|testRuntimeOnly|testFixturesImplementation|androidTestImplementation)\s*(?:\(\s*)?['"]([^'"]+)['"]"#,
+        ) else {
+            return Vec::new();
+        };
+        let Some(project_re) = cached_regex(
+            &PROJECT_RE,
+            r#"(?m)^\s*(api|implementation|compileOnly|runtimeOnly|annotationProcessor|kapt|testImplementation|testCompileOnly|testRuntimeOnly|testFixturesImplementation|androidTestImplementation)\s*(?:\(\s*)?project\(\s*['"]([^'"]+)['"]\s*\)"#,
+        ) else {
+            return Vec::new();
+        };
+        let mut names = BTreeSet::new();
+        for captures in quoted_re.captures_iter(content) {
+            if let Some(spec) = captures.get(2) {
+                names.insert(Self::normalize_gradle_dependency_name(spec.as_str()));
+            }
+        }
+        for captures in project_re.captures_iter(content) {
+            if let Some(project_name) = captures.get(2) {
+                names.insert(format!("project:{}", project_name.as_str()));
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    fn normalize_gradle_dependency_name(spec: &str) -> String {
+        let mut parts = spec.split(':');
+        let first = parts.next();
+        let second = parts.next();
+        match (first, second) {
+            (Some(group), Some(artifact)) => format!("{group}:{artifact}"),
+            _ => spec.to_string(),
+        }
+    }
+
+    fn extract_csproj_dependency_names(content: &str) -> Vec<String> {
+        static ATTR_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        static BLOCK_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        let Some(attr_re) = cached_regex(&ATTR_RE, r#"<PackageReference\b[^>]*(?:Include|Update)="([^"]+)""#) else {
+            return Vec::new();
+        };
+        let Some(block_re) = cached_regex(
+            &BLOCK_RE,
+            r#"(?s)<PackageReference\b[^>]*(?:Include|Update)="([^"]+)"[^>]*>.*?</PackageReference>"#,
+        ) else {
+            return Vec::new();
+        };
+        let mut names = BTreeSet::new();
+        for captures in attr_re.captures_iter(content) {
+            if let Some(name) = captures.get(1) {
+                names.insert(name.as_str().to_string());
+            }
+        }
+        for captures in block_re.captures_iter(content) {
+            if let Some(name) = captures.get(1) {
+                names.insert(name.as_str().to_string());
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    fn extract_cmake_dependency_names(content: &str) -> Vec<String> {
+        static FIND_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        static DECLARE_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        let Some(find_re) = cached_regex(&FIND_RE, r"(?im)^\s*find_package\s*\(\s*([A-Za-z0-9_+.\-]+)") else {
+            return Vec::new();
+        };
+        let Some(declare_re) = cached_regex(
+            &DECLARE_RE,
+            r"(?im)^\s*(?:CPMAddPackage|FetchContent_Declare)\s*\(\s*([A-Za-z0-9_+.\-]+)",
+        ) else {
+            return Vec::new();
+        };
+        let mut names = BTreeSet::new();
+        for captures in find_re.captures_iter(content) {
+            if let Some(name) = captures.get(1) {
+                names.insert(name.as_str().to_string());
+            }
+        }
+        for captures in declare_re.captures_iter(content) {
+            if let Some(name) = captures.get(1) {
+                names.insert(name.as_str().to_string());
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    fn extract_conan_dependency_names(content: &str) -> Vec<String> {
+        let mut names = BTreeSet::new();
+        let mut in_requires = false;
+        for raw_line in content.lines() {
+            let line = raw_line.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
+                continue;
+            }
+            if line.starts_with('[') && line.ends_with(']') {
+                in_requires = line.eq_ignore_ascii_case("[requires]");
+                continue;
+            }
+            if !in_requires {
+                continue;
+            }
+            names.insert(line.to_string());
+        }
+        names.into_iter().collect()
+    }
+
+    fn extract_build_zig_dependency_names(content: &str) -> Vec<String> {
+        static ENTRY_RE: OnceLock<Option<Regex>> = OnceLock::new();
+        let Some(entry_re) = cached_regex(&ENTRY_RE, r#"^\s*\.([A-Za-z0-9_][A-Za-z0-9_-]*)\s*="#) else {
+            return Vec::new();
+        };
+        let mut names = BTreeSet::new();
+        let mut in_dependencies = false;
+        let mut nesting_depth = 0i32;
+        for raw_line in content.lines() {
+            let line = raw_line.trim();
+            if !in_dependencies {
+                if line.contains(".dependencies") && line.contains(".{") {
+                    in_dependencies = true;
+                    nesting_depth = 1;
+                }
+                continue;
+            }
+            if nesting_depth == 1 {
+                if let Some(captures) = entry_re.captures(raw_line) {
+                    if let Some(name) = captures.get(1) {
+                        names.insert(name.as_str().to_string());
+                    }
+                }
+            }
+            nesting_depth += raw_line.matches('{').count() as i32;
+            nesting_depth -= raw_line.matches('}').count() as i32;
+            if nesting_depth <= 0 {
+                break;
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    fn stack_base_from_manifest_kinds(kinds: &BTreeSet<ManifestKind>) -> String {
         let mut stacks = Vec::new();
-        if has_python { stacks.push("Python"); }
-        if has_package { stacks.push("TypeScript"); }
-        if has_go { stacks.push("Go"); }
-        if has_cargo { stacks.push("Rust"); }
+        for label in [
+            "Python",
+            "TypeScript",
+            "Go",
+            "Rust",
+            "Elixir",
+            "Ruby",
+            "PHP",
+            "JVM",
+            "DotNet",
+            "C/C++",
+            "Zig",
+        ] {
+            if kinds.iter().any(|kind| kind.stack_label() == label) {
+                stacks.push(label);
+            }
+        }
         if stacks.is_empty() {
             "UNKNOWN".to_string()
         } else {
@@ -1558,88 +2106,100 @@ impl ManifestExtractor {
     }
 
     pub async fn extract(input: ManifestInput<'_>) -> Result<ManifestPayload, ExtractionError> {
-        let targets = [
-            "Cargo.toml",
-            "package.json",
-            "go.mod",
-            "pyproject.toml",
-            "requirements.txt",
-            "pom.xml",
-            "build.gradle",
-            "build.gradle.kts",
-        ];
+        let root = input.repo_path.as_ref().to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            let files = collect_repo_files(&root)?;
+            let mut manifests = Vec::new();
 
-        let mut manifests = Vec::new();
-
-        for &file_name in &targets {
-            let path = input.repo_path.join(file_name);
-            
-            let metadata = match fs::metadata(&path).await {
-                Ok(m) => m,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(e) => return Err(ExtractionError::IoError {
-                    file: file_name.to_string(),
-                    reason: e.to_string(),
-                }),
-            };
-
-            let size = metadata.len();
-            if size > MAX_MANIFEST_SIZE {
-                return Err(ExtractionError::FileTooLarge {
-                    file: file_name.to_string(),
-                    size_bytes: size,
-                    limit_bytes: MAX_MANIFEST_SIZE,
-                });
-            }
-
-            info!(
-                artifact_type = "manifest",
-                file = file_name,
-                abs_path = %path.display(),
-                "Tentando ler manifesto base"
-            );
-            let content = fs::read_to_string(&path).await.map_err(|e| {
-                warn!(
-                    artifact_type = "manifest",
-                    file = file_name,
-                    abs_path = %path.display(),
-                    error = %e,
-                    "Falha ao ler manifesto base"
-                );
-                ExtractionError::IoError {
-                    file: file_name.to_string(),
-                    reason: e.to_string(),
+            for path in files {
+                let Some(kind) = Self::manifest_kind_for_path(&path) else {
+                    continue;
+                };
+                let rel_path = relative_display(&root, &path);
+                if Self::should_skip_manifest_fixture_path(&rel_path) {
+                    continue;
                 }
-            })?;
 
-            if content.trim().is_empty() {
-                return Err(ExtractionError::EmptyArtifact {
-                    artifact_type: "manifest".to_string(),
-                    file: file_name.to_string(),
-                });
+                let size = std::fs::metadata(&path)
+                    .map(|metadata| metadata.len())
+                    .map_err(|e| ExtractionError::IoError {
+                        file: rel_path.clone(),
+                        reason: e.to_string(),
+                    })?;
+
+                info!(
+                    artifact_type = "manifest",
+                    file = %rel_path,
+                    abs_path = %path.display(),
+                    "Tentando ler manifesto base"
+                );
+                let content = std::fs::read_to_string(&path).map_err(|e| {
+                    warn!(
+                        artifact_type = "manifest",
+                        file = %rel_path,
+                        abs_path = %path.display(),
+                        error = %e,
+                        "Falha ao ler manifesto base"
+                    );
+                    ExtractionError::IoError {
+                        file: rel_path.clone(),
+                        reason: e.to_string(),
+                    }
+                })?;
+
+                if content.trim().is_empty() {
+                    return Err(ExtractionError::EmptyArtifact {
+                        artifact_type: "manifest".to_string(),
+                        file: rel_path,
+                    });
+                }
+
+                manifests.push(Self::parse_manifest_info(kind, &content, &rel_path, size)?);
             }
 
-            let info_res = match file_name {
-                "Cargo.toml" => Self::parse_cargo_toml(&content, file_name, size),
-                "package.json" => Self::parse_package_json(&content, file_name, size),
-                "go.mod" => Ok(Self::parse_go_mod(&content, file_name, size)),
-                "requirements.txt" => Ok(Self::parse_requirements_txt(&content, file_name, size)),
-                "pyproject.toml" => Self::parse_pyproject_toml(&content, file_name, size),
-                _ => Ok(ManifestInfo {
-                    file_name: file_name.to_string(),
-                    dependencies: Vec::new(),
-                    dev_dependencies: Vec::new(),
-                    file_size_bytes: size,
-                }),
-            };
+            manifests.sort_by(|left, right| {
+                Self::manifest_blob_priority(&left.file_name)
+                    .cmp(&Self::manifest_blob_priority(&right.file_name))
+                    .then_with(|| left.file_name.cmp(&right.file_name))
+            });
 
-            manifests.push(info_res?);
-        }
+            if manifests.is_empty() {
+                Err(ExtractionError::NotFound)
+            } else {
+                Ok(ManifestPayload { manifests })
+            }
+        })
+        .await
+        .map_err(|e| ExtractionError::IoError {
+            file: "manifest".to_string(),
+            reason: e.to_string(),
+        })?
+    }
 
-        if manifests.is_empty() {
-            Err(ExtractionError::NotFound)
-        } else {
-            Ok(ManifestPayload { manifests })
+    fn parse_manifest_info(
+        kind: ManifestKind,
+        content: &str,
+        file: &str,
+        size: u64,
+    ) -> Result<ManifestInfo, ExtractionError> {
+        match kind {
+            ManifestKind::CargoToml => Self::parse_cargo_toml(content, file, size),
+            ManifestKind::PackageJson => Self::parse_package_json(content, file, size),
+            ManifestKind::GoMod => Ok(Self::parse_go_mod(content, file, size)),
+            ManifestKind::RequirementsTxt => Ok(Self::parse_requirements_txt(content, file, size)),
+            ManifestKind::PyprojectToml => Self::parse_pyproject_toml(content, file, size),
+            ManifestKind::Pipfile => Self::parse_pipfile(content, file, size),
+            ManifestKind::MixExs => Ok(Self::parse_mix_exs(content, file, size)),
+            ManifestKind::Gemfile => Ok(Self::parse_gemfile(content, file, size)),
+            ManifestKind::ComposerJson => Self::parse_composer_json(content, file, size),
+            ManifestKind::PomXml => Ok(Self::parse_pom_xml(content, file, size)),
+            ManifestKind::BuildGradle | ManifestKind::BuildGradleKts => {
+                Ok(Self::parse_gradle(content, file, size))
+            }
+            ManifestKind::Csproj => Ok(Self::parse_csproj(content, file, size)),
+            ManifestKind::CMakeListsTxt => Ok(Self::parse_cmake_lists(content, file, size)),
+            ManifestKind::ConanfileTxt => Ok(Self::parse_conanfile_txt(content, file, size)),
+            ManifestKind::BuildZigZon => Ok(Self::parse_build_zig_zon(content, file, size)),
         }
     }
 
@@ -1799,26 +2359,275 @@ impl ManifestExtractor {
             file_size_bytes: size,
         })
     }
+
+    fn parse_pipfile(content: &str, file: &str, size: u64) -> Result<ManifestInfo, ExtractionError> {
+        let document: toml::Value = toml::from_str(content).map_err(|e| ExtractionError::ParseError {
+            file: file.to_string(),
+            reason: e.to_string(),
+        })?;
+        Ok(ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::map_toml_deps(
+                document
+                    .get("packages")
+                    .and_then(|packages| packages.as_table())
+                    .map(|table| table.clone().into_iter().collect()),
+            ),
+            dev_dependencies: Self::map_toml_deps(
+                document
+                    .get("dev-packages")
+                    .and_then(|packages| packages.as_table())
+                    .map(|table| table.clone().into_iter().collect()),
+            ),
+            file_size_bytes: size,
+        })
+    }
+
+    fn parse_mix_exs(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_mix_exs_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn parse_gemfile(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_gemfile_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn parse_composer_json(content: &str, file: &str, size: u64) -> Result<ManifestInfo, ExtractionError> {
+        let document: serde_json::Value = serde_json::from_str(content).map_err(|e| ExtractionError::ParseError {
+            file: file.to_string(),
+            reason: e.to_string(),
+        })?;
+        let Some(root) = document.as_object() else {
+            return Err(ExtractionError::ParseError {
+                file: file.to_string(),
+                reason: "composer.json precisa ser um objeto JSON".to_string(),
+            });
+        };
+        Ok(ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::map_json_dependency_entries(root.get("require"), file, "require")?,
+            dev_dependencies: Self::map_json_dependency_entries(root.get("require-dev"), file, "require-dev")?,
+            file_size_bytes: size,
+        })
+    }
+
+    fn map_json_dependency_entries(
+        value: Option<&serde_json::Value>,
+        file: &str,
+        section_name: &str,
+    ) -> Result<Vec<DependencyEntry>, ExtractionError> {
+        let Some(value) = value else {
+            return Ok(Vec::new());
+        };
+        let Some(object) = value.as_object() else {
+            return Err(ExtractionError::ParseError {
+                file: file.to_string(),
+                reason: format!("Secao '{}' precisa ser um objeto JSON", section_name),
+            });
+        };
+        Ok(object
+            .iter()
+            .map(|(name, value)| DependencyEntry {
+                name: name.clone(),
+                version_spec: value.as_str().unwrap_or("*").to_string(),
+            })
+            .collect())
+    }
+
+    fn parse_pom_xml(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_pom_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn parse_gradle(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_gradle_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn parse_csproj(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_csproj_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn parse_cmake_lists(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_cmake_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn parse_conanfile_txt(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_conan_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn parse_build_zig_zon(content: &str, file: &str, size: u64) -> ManifestInfo {
+        ManifestInfo {
+            file_name: file.to_string(),
+            dependencies: Self::dependency_entries_from_names(Self::extract_build_zig_dependency_names(content)),
+            dev_dependencies: Vec::new(),
+            file_size_bytes: size,
+        }
+    }
+
+    fn dependency_entries_from_names(names: Vec<String>) -> Vec<DependencyEntry> {
+        names.into_iter()
+            .map(|name| DependencyEntry {
+                name,
+                version_spec: "*".to_string(),
+            })
+            .collect()
+    }
 }
 
-pub fn truncate_community_meta_json<T: Serialize>(payload: &T) -> Result<Vec<u8>, ExtractionError> {
-    let json = serde_json::to_string(payload).map_err(|e| ExtractionError::ParseError {
-        file: "blob_09_community_meta".to_string(),
-        reason: e.to_string(),
-    })?;
-    let truncated = truncate_chars(&json, COMMUNITY_META_MAX_CHARS);
-    if truncated.trim().is_empty() {
-        return Err(ExtractionError::EmptyArtifact {
-            artifact_type: "blob_09_community_meta".to_string(),
-            file: "community_meta".to_string(),
-        });
+pub fn render_community_meta_dossier(
+    payload: &crate::harvester::community::CommunityMetaPayload,
+    fetch_error: Option<&str>,
+) -> Vec<u8> {
+    let mut text = String::from("# Community Meta\n");
+    text.push_str("\nextracted_at: ");
+    text.push_str(&payload.extracted_at.to_rfc3339());
+
+    if let Some(reason) = fetch_error {
+        text.push_str("\n\nfallback: true\nreason: ");
+        text.push_str(&sanitize_one_line(reason));
     }
-    Ok(truncated.into_bytes())
+
+    text.push_str("\n\nrepo:");
+    if let Some(full_name) = payload.full_name.as_deref().filter(|s| !s.trim().is_empty()) {
+        text.push_str("\n- full_name: ");
+        text.push_str(&sanitize_one_line(full_name));
+    }
+    if let Some(name) = payload.name.as_deref().filter(|s| !s.trim().is_empty()) {
+        text.push_str("\n- name: ");
+        text.push_str(&sanitize_one_line(name));
+    }
+    if let Some(desc) = payload.description.as_deref().filter(|s| !s.trim().is_empty()) {
+        text.push_str("\n- description: ");
+        text.push_str(&sanitize_one_line(desc));
+    }
+    text.push_str("\n- license: ");
+    text.push_str(&sanitize_one_line(&payload.licenca));
+
+    text.push_str("\n\nvanity:");
+    text.push_str("\n- stars: ");
+    text.push_str(&payload.stars_count.to_string());
+    text.push_str("\n- forks: ");
+    text.push_str(&payload.forks_count.to_string());
+    text.push_str("\n- open_issues: ");
+    text.push_str(&payload.open_issues_count.to_string());
+    text.push_str("\n- open_prs: ");
+    text.push_str(&payload.open_prs_count.to_string());
+
+    text.push_str("\n\nlast_commit:");
+    if let Some(sha) = payload.last_commit_sha.as_deref().filter(|s| !s.trim().is_empty()) {
+        text.push_str("\n- sha: ");
+        text.push_str(&sanitize_one_line(sha));
+    } else {
+        text.push_str("\n- sha: <unknown>");
+    }
+    if let Some(date) = payload.last_commit_date {
+        text.push_str("\n- date: ");
+        text.push_str(&date.to_rfc3339());
+    } else {
+        text.push_str("\n- date: <unknown>");
+    }
+
+    text.push_str("\n\ntop_open_issues:");
+    if payload.top_open_issues.is_empty() {
+        text.push_str("\n- <none>");
+    } else {
+        for issue in payload.top_open_issues.iter().take(7) {
+            text.push_str("\n- number: ");
+            text.push_str(&issue.number.to_string());
+            text.push_str("\n  title: ");
+            text.push_str(&sanitize_one_line(&issue.title));
+            if !issue.labels.is_empty() {
+                text.push_str("\n  labels: [");
+                text.push_str(
+                    &issue
+                        .labels
+                        .iter()
+                        .map(|label| sanitize_one_line(label))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+                text.push(']');
+            } else {
+                text.push_str("\n  labels: []");
+            }
+            text.push_str("\n  comments: ");
+            text.push_str(&issue.comments.to_string());
+            text.push_str("\n  reactions: ");
+            text.push_str(&issue.reactions.to_string());
+            if let Some(updated_at) = issue.updated_at {
+                text.push_str("\n  updated_at: ");
+                text.push_str(&updated_at.to_rfc3339());
+            }
+        }
+    }
+
+    text.push_str("\n\nrecent_prs:");
+    if payload.recent_prs.is_empty() {
+        text.push_str("\n- <none>");
+    } else {
+        for pr in payload.recent_prs.iter().take(5) {
+            text.push_str("\n- number: ");
+            text.push_str(&pr.number.to_string());
+            text.push_str("\n  status: ");
+            text.push_str(&sanitize_one_line(&pr.status));
+            text.push_str("\n  title: ");
+            text.push_str(&sanitize_one_line(&pr.title));
+            text.push_str("\n  updated_at: ");
+            text.push_str(&pr.updated_at.to_rfc3339());
+        }
+    }
+
+    text.push('\n');
+    text.into_bytes()
+}
+
+fn sanitize_one_line(value: &str) -> String {
+    value
+        .replace(['\n', '\r'], " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::harvester::detect::SingleStack;
     use tempfile::TempDir;
     use std::io::Write;
 
@@ -1858,9 +2667,9 @@ tempfile = "3"
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_truncates_readme() {
+    async fn test_local_static_extractor_preserves_full_readme_below_elastic_limit() {
         let dir = TempDir::new().unwrap();
-        let oversized = "a".repeat(README_MAX_CHARS + 25);
+        let oversized = "a".repeat(12_500);
         fs::write(dir.path().join("README.md"), oversized).await.unwrap();
 
         let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
@@ -1868,7 +2677,24 @@ tempfile = "3"
             .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
             .expect("README blob deve existir");
 
-        assert_eq!(String::from_utf8_lossy(&readme_blob.payload_blob).chars().count(), README_MAX_CHARS);
+        assert_eq!(String::from_utf8_lossy(&readme_blob.payload_blob).chars().count(), 12_500);
+    }
+
+    #[tokio::test]
+    async fn test_local_static_extractor_preserves_pathological_readme_sizes_without_truncation() {
+        let dir = TempDir::new().unwrap();
+        let oversized = "a".repeat(150_025);
+        fs::write(dir.path().join("README.md"), oversized).await.unwrap();
+
+        let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
+        let readme_blob = blobs.iter()
+            .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
+            .expect("README blob deve existir");
+
+        assert_eq!(
+            String::from_utf8_lossy(&readme_blob.payload_blob).chars().count(),
+            150_025
+        );
     }
 
     #[tokio::test]
@@ -1896,7 +2722,7 @@ Backend orchestration engine.
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_prunes_infra_readme_sections() {
+    async fn test_local_static_extractor_preserves_readme_narrative_sections() {
         let dir = TempDir::new().unwrap();
         let readme = r#"# Goose
 
@@ -1927,8 +2753,39 @@ Please open a PR.
         assert!(text.contains("Goose is an orchestration engine for local-first coding."));
         assert!(text.contains("It accelerates repository harvesting with deterministic blobs."));
         assert!(text.contains("## Features"));
-        assert!(!text.contains("## Installation"));
-        assert!(!text.contains("## Contributing"));
+        assert!(text.contains("## Installation"));
+        assert!(text.contains("## Contributing"));
+    }
+
+    #[tokio::test]
+    async fn test_local_static_extractor_removes_visual_html_but_keeps_text_and_code_fences() {
+        let dir = TempDir::new().unwrap();
+        let readme = r#"<div align="center"><h1>Goose</h1><p><strong>Fast</strong> harvesting <sup>v2</sup></p></div>
+
+<p>Deterministic extraction with <a href="https://example.com">official docs</a>.</p>
+
+```html
+<div class="demo">must stay raw inside code fence</div>
+```
+"#;
+        fs::write(dir.path().join("README.md"), readme).await.unwrap();
+
+        let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
+        let readme_blob = blobs.iter()
+            .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
+            .expect("README blob deve existir");
+        let text = String::from_utf8_lossy(&readme_blob.payload_blob);
+
+        assert!(text.contains("Goose"));
+        assert!(text.contains("harvesting"));
+        assert!(text.contains("v2"));
+        assert!(text.contains("Deterministic extraction"));
+        assert!(text.contains("official docs"));
+        assert!(text.contains("```html"));
+        assert!(text.contains(r#"<div class="demo">must stay raw inside code fence</div>"#));
+        assert!(!text.contains("<h1>"));
+        assert!(!text.contains("<strong>"));
+        assert!(!text.contains("<sup>"));
     }
 
     #[tokio::test]
@@ -2119,6 +2976,66 @@ require (
     }
 
     #[tokio::test]
+    async fn test_test_intent_extracts_polyglot_signatures_without_default_fallback() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("backend")).await.unwrap();
+        fs::create_dir_all(dir.path().join("frontend")).await.unwrap();
+        fs::create_dir_all(dir.path().join("python")).await.unwrap();
+        fs::create_dir_all(dir.path().join("elixir")).await.unwrap();
+        fs::write(
+            dir.path().join("backend/math_test.go"),
+            "package demo\nimport \"testing\"\nfunc TestSum(t *testing.T) { t.Run(\"adds positives\", func(t *testing.T) {}) }\n",
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("frontend/login.spec.ts"),
+            "describe(\"login flow\", () => { it(\"renders button\", () => {}); test.only(\"shows errors\", () => {}); });\n",
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("python/test_api.py"),
+            "async def test_async_healthcheck():\n    assert True\n",
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("elixir/user_test.exs"),
+            "describe \"create_user/1\" do\n  test \"persists valid payload\" do\n    assert true\n  end\nend\n",
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let body = TestIntentExtractor::extract_body(TestIntentInput {
+            repo_path: &repo_path,
+            profile: &StackProfile::Mixed(vec![
+                SingleStack::Go,
+                SingleStack::NodeJS,
+                SingleStack::Python,
+                SingleStack::Elixir,
+            ]),
+        })
+        .await
+        .unwrap();
+
+        assert!(!body.contains("Sem cobertura de testes explicita"));
+        assert!(body.contains("[backend/math_test.go]"));
+        assert!(body.contains("- func TestSum"));
+        assert!(body.contains(r#"- subtest "adds positives""#));
+        assert!(body.contains("[frontend/login.spec.ts]"));
+        assert!(body.contains(r#"- describe "login flow""#));
+        assert!(body.contains(r#"- it "renders button""#));
+        assert!(body.contains(r#"- test "shows errors""#));
+        assert!(body.contains("[python/test_api.py]"));
+        assert!(body.contains("- def test_async_healthcheck"));
+        assert!(body.contains("[elixir/user_test.exs]"));
+        assert!(body.contains(r#"- describe "create_user/1""#));
+        assert!(body.contains(r#"- test "persists valid payload""#));
+    }
+
+    #[tokio::test]
     async fn test_ux_contracts_skips_documentation_and_keeps_real_ui() {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("documentation/src/components")).await.unwrap();
@@ -2218,6 +3135,122 @@ require (
     }
 
     #[tokio::test]
+    async fn test_ux_contracts_extract_poliglot_frontend_flow_without_markup() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("src/routes")).await.unwrap();
+        fs::create_dir_all(dir.path().join("pages")).await.unwrap();
+
+        fs::write(
+            dir.path().join("src/routes/Counter.svelte"),
+            r#"<script lang="ts">
+interface CounterProps { count: number }
+let { count, onSave }: CounterProps = $props();
+let local = $state(count);
+const dispatch = createEventDispatcher<{ save: number }>();
+function CounterFlow(props: CounterProps) {
+  dispatch('save', local);
+}
+</script>
+
+<div class="p-4">{count}</div>
+
+<style>
+.p-4 { color: red; }
+</style>
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("pages/Dashboard.vue"),
+            r#"<script setup lang="ts">
+interface DashboardProps { mode?: string }
+const props = withDefaults(defineProps<DashboardProps>(), { mode: 'grid' });
+const emit = defineEmits(['submit']);
+const mutation = useMutation(saveDashboard);
+const routeData = useRouteLoaderData();
+emit('submit');
+mutation.mutate();
+</script>
+
+<template>
+  <section class="grid grid-cols-2"></section>
+</template>
+"#,
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("[src/routes/Counter.svelte]"));
+        assert!(text.contains("- interface CounterProps"));
+        assert!(text.contains("- props { count, onSave } = $props()"));
+        assert!(text.contains("- state local = $state()"));
+        assert!(text.contains("- event dispatch = createEventDispatcher()"));
+        assert!(text.contains("- event save()"));
+        assert!(text.contains("- fn CounterFlow(props: CounterProps)"));
+        assert!(text.contains("[pages/Dashboard.vue]"));
+        assert!(text.contains("- interface DashboardProps"));
+        assert!(text.contains("- props const props = withDefaults(defineProps<DashboardProps>(), { mode: 'grid' });"));
+        assert!(text.contains("- event const emit = defineEmits(['submit']);"));
+        assert!(text.contains("- input routeData = useRouteLoaderData()"));
+        assert!(text.contains("- mutation mutation = useMutation()"));
+        assert!(text.contains("- mutation mutation.mutate()"));
+        assert!(!text.contains("<template>"));
+        assert!(!text.contains("<section"));
+        assert!(!text.contains("grid-cols-2"));
+        assert!(!text.contains("<style>"));
+    }
+
+    #[tokio::test]
+    async fn test_ux_contracts_keeps_tail_sections_without_truncation() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("app")).await.unwrap();
+
+        for idx in 0..80 {
+            fs::write(
+                dir.path().join(format!("app/Panel{idx}.tsx")),
+                format!(
+                    "interface Panel{idx}Props {{ title: string }}\nconst Panel{idx} = (props: Panel{idx}Props) => {{ const [open, setOpen] = useState(false); return <main>{{props.title}}</main>; }};\n"
+                ),
+            )
+            .await
+            .unwrap();
+        }
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("[app/Panel0.tsx]"));
+        assert!(text.contains("[app/Panel79.tsx]"));
+        assert!(text.contains("- fn Panel79(props: Panel79Props)"));
+        assert!(text.contains("- mutation setOpen()"));
+        assert!(!text.contains("itens omitidos"));
+    }
+
+    #[tokio::test]
+    async fn test_ux_contracts_fail_soft_for_backend_puro() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("src/backend")).await.unwrap();
+        fs::write(
+            dir.path().join("src/backend/service.rs"),
+            "pub fn run() -> bool { true }\n",
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert_eq!(text, "[NO_UX_DETECTED_BACKEND_ONLY_TOPOLOGY]");
+    }
+
+    #[tokio::test]
     async fn test_extract_package_json() {
         let dir = TempDir::new().unwrap();
         let content = r#"{
@@ -2254,6 +3287,196 @@ require (
     }
 
     #[tokio::test]
+    async fn test_extract_blob_supports_polyglot_manifests_and_ignores_lockfiles() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("java")).await.unwrap();
+        fs::create_dir_all(dir.path().join("dotnet/App")).await.unwrap();
+        fs::create_dir_all(dir.path().join("cpp")).await.unwrap();
+        fs::create_dir_all(dir.path().join("zig")).await.unwrap();
+        fs::create_dir_all(dir.path().join("elixir")).await.unwrap();
+        fs::create_dir_all(dir.path().join("ruby")).await.unwrap();
+        fs::create_dir_all(dir.path().join("php")).await.unwrap();
+
+        fs::write(
+            dir.path().join("elixir/mix.exs"),
+            r#"
+defmodule Demo.MixProject do
+  use Mix.Project
+  defp deps do
+    [
+      {:phoenix, "~> 1.7"},
+      {:ecto_sql, "~> 3.11"}
+    ]
+  end
+end
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("ruby/Gemfile"),
+            r#"
+source "https://rubygems.org"
+gem "rails", "~> 7.1"
+gem "puma"
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("php/composer.json"),
+            r#"{
+  "require": { "laravel/framework": "^11.0" },
+  "require-dev": { "pestphp/pest": "^2.0" }
+}"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("java/pom.xml"),
+            r#"
+<project>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-core</artifactId>
+      <version>6.1.0</version>
+    </dependency>
+  </dependencies>
+</project>
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("java/build.gradle"),
+            r#"
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+    testImplementation "junit:junit:4.13.2"
+}
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("dotnet/App/App.csproj"),
+            r#"
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="3.1.0" />
+  </ItemGroup>
+</Project>
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("cpp/CMakeLists.txt"),
+            r#"
+find_package(OpenSSL REQUIRED)
+FetchContent_Declare(fmt)
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("cpp/conanfile.txt"),
+            "[requires]\nfmt/10.2.1\nopenssl/3.2.1\n",
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join("zig/build.zig.zon"),
+            r#"
+.{
+    .name = "demo",
+    .dependencies = .{
+        .known_folders = .{
+            .url = "https://example.com",
+        },
+        .httpz = .{
+            .url = "https://example.com/httpz",
+        },
+    },
+}
+"#,
+        )
+        .await
+        .unwrap();
+        fs::write(dir.path().join("package-lock.json"), "{}").await.unwrap();
+        fs::write(dir.path().join("Cargo.lock"), "version = 3").await.unwrap();
+        fs::write(dir.path().join("pnpm-lock.yaml"), "lockfileVersion: 9").await.unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let manifest = ManifestExtractor::extract(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "elixir/mix.exs"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "ruby/Gemfile"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "php/composer.json"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "java/pom.xml"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "java/build.gradle"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "dotnet/App/App.csproj"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "cpp/CMakeLists.txt"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "cpp/conanfile.txt"));
+        assert!(manifest.manifests.iter().any(|m| m.file_name == "zig/build.zig.zon"));
+        assert!(!manifest.manifests.iter().any(|m| m.file_name.ends_with("Cargo.lock")));
+        assert!(!manifest.manifests.iter().any(|m| m.file_name.ends_with("package-lock.json")));
+        assert!(!manifest.manifests.iter().any(|m| m.file_name.ends_with("pnpm-lock.yaml")));
+
+        assert!(text.contains("[elixir/mix.exs]"));
+        assert!(text.contains("ecto_sql"));
+        assert!(text.contains("phoenix"));
+        assert!(text.contains("[ruby/Gemfile]"));
+        assert!(text.contains("rails"));
+        assert!(text.contains("puma"));
+        assert!(text.contains("[php/composer.json]"));
+        assert!(text.contains("laravel/framework"));
+        assert!(text.contains("pestphp/pest"));
+        assert!(text.contains("[java/pom.xml]"));
+        assert!(text.contains("org.springframework:spring-core"));
+        assert!(text.contains("[java/build.gradle]"));
+        assert!(text.contains("org.jetbrains.kotlin:kotlin-stdlib"));
+        assert!(text.contains("[dotnet/App/App.csproj]"));
+        assert!(text.contains("Serilog"));
+        assert!(text.contains("[cpp/CMakeLists.txt]"));
+        assert!(text.contains("OpenSSL"));
+        assert!(text.contains("fmt"));
+        assert!(text.contains("[cpp/conanfile.txt]"));
+        assert!(text.contains("fmt/10.2.1"));
+        assert!(text.contains("[zig/build.zig.zon]"));
+        assert!(text.contains("known_folders"));
+        assert!(text.contains("httpz"));
+        assert!(!text.contains("package-lock.json"));
+        assert!(!text.contains("Cargo.lock"));
+        assert!(!text.contains("pnpm-lock.yaml"));
+    }
+
+    #[tokio::test]
+    async fn test_manifest_blob_preserves_all_declared_dependencies_without_omission() {
+        let dir = TempDir::new().unwrap();
+        let mut package_json = String::from("{\"dependencies\":{");
+        for index in 0..40 {
+            if index > 0 {
+                package_json.push(',');
+            }
+            package_json.push_str(&format!("\"dep-{index}\":\"^{index}.0.0\""));
+        }
+        package_json.push_str("}}");
+        fs::write(dir.path().join("package.json"), package_json).await.unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("dep-0"));
+        assert!(text.contains("dep-39"));
+        assert!(!text.contains("itens omitidos"));
+    }
+
+    #[tokio::test]
     async fn test_no_manifests() {
         let dir = TempDir::new().unwrap();
         let repo_path = RepoPath(dir.path().to_path_buf());
@@ -2262,22 +3485,20 @@ require (
     }
 
     #[tokio::test]
-    async fn test_file_too_large() {
+    async fn test_large_manifest_is_parsed_without_hard_limit() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("Cargo.toml");
-        
-        // Criar um arquivo com mais de 1MB
+
         let mut file = std::fs::File::create(&path).unwrap();
-        let buffer = vec![0u8; (MAX_MANIFEST_SIZE + 100) as usize];
-        file.write_all(&buffer).unwrap();
-        
+        let large_manifest = format!(
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[dependencies]\nserde = \"1\"\n#{}\n",
+            "a".repeat(1_200_000)
+        );
+        file.write_all(large_manifest.as_bytes()).unwrap();
+
         let repo_path = RepoPath(dir.path().to_path_buf());
-        let result = ManifestExtractor::extract(ManifestInput { repo_path: &repo_path }).await;
-        
-        match result {
-            Err(ExtractionError::FileTooLarge { file, .. }) => assert_eq!(file, "Cargo.toml"),
-            _ => panic!("Deveria ter falhado com FileTooLarge, mas retornou {:?}", result),
-        }
+        let result = ManifestExtractor::extract(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        assert!(result.manifests.iter().any(|manifest| manifest.file_name == "Cargo.toml"));
     }
 
     #[tokio::test]
@@ -2326,19 +3547,16 @@ require (
     }
 
     #[tokio::test]
-    async fn test_local_static_extractor_missing_required_blob_aborts() {
+    async fn test_local_static_extractor_missing_readme_returns_zero_byte() {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"demo\"").await.unwrap();
         fs::write(dir.path().join("Dockerfile"), "FROM rust:1.80").await.unwrap();
 
-        let result = LocalStaticExtractor::extract_all(dir.path()).await;
-
-        match result {
-            Err(ExtractionError::RequiredArtifactMissing { artifact_type, .. }) => {
-                assert_eq!(artifact_type, "blob_01_promessa_readme");
-            }
-            _ => panic!("Deveria ter falhado quando o README obrigatorio nao existe"),
-        }
+        let blobs = LocalStaticExtractor::extract_all(dir.path()).await.unwrap();
+        let readme_blob = blobs.iter()
+            .find(|blob| blob.artifact_type == "blob_01_promessa_readme")
+            .expect("README blob deve existir mesmo em fallback");
+        assert!(readme_blob.payload_blob.is_empty());
     }
 
     #[tokio::test]
@@ -2346,58 +3564,85 @@ require (
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("Dockerfile"), "FROM rust").await.unwrap();
         fs::write(dir.path().join("Makefile"), "build:").await.unwrap();
-        fs::write(dir.path().join("docker-compose.yml"), "version: '3'").await.unwrap();
+        fs::write(dir.path().join("compose.yaml"), "services: {}").await.unwrap();
+        fs::write(dir.path().join("Justfile"), "build:\n  cargo build").await.unwrap();
+        fs::write(dir.path().join("Jenkinsfile"), "pipeline { agent any }").await.unwrap();
         
         let repo_path = RepoPath(dir.path().to_path_buf());
         let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await.unwrap();
         
-        assert_eq!(result.infra_files.len(), 3);
         assert!(result.infra_files.iter().any(|f| f.path == "Dockerfile"));
         assert!(result.infra_files.iter().any(|f| f.path == "Makefile"));
+        assert!(result.infra_files.iter().any(|f| f.path == "compose.yaml"));
+        assert!(result.infra_files.iter().any(|f| f.path == "Justfile"));
+        assert!(result.infra_files.iter().any(|f| f.path == "Jenkinsfile"));
     }
 
     #[tokio::test]
-    async fn test_ops_extract_workflows_shallow() {
+    async fn test_ops_extract_allowlist_covers_ci_cd_and_iac_recursively() {
         let dir = TempDir::new().unwrap();
         let workflows_dir = dir.path().join(".github/workflows");
         fs::create_dir_all(&workflows_dir).await.unwrap();
+        fs::create_dir_all(dir.path().join(".circleci")).await.unwrap();
+        fs::create_dir_all(dir.path().join(".buildkite")).await.unwrap();
+        fs::create_dir_all(dir.path().join("terraform")).await.unwrap();
+        fs::create_dir_all(dir.path().join("ansible")).await.unwrap();
+        fs::create_dir_all(dir.path().join("charts/api/templates")).await.unwrap();
+        fs::create_dir_all(dir.path().join("k8s")).await.unwrap();
         
         fs::write(workflows_dir.join("ci.yml"), "name: CI").await.unwrap();
         fs::write(workflows_dir.join("deploy.yaml"), "name: Deploy").await.unwrap();
-        fs::write(workflows_dir.join("lint.yml"), "name: Lint").await.unwrap();
-        fs::write(workflows_dir.join("docker-release.yml"), "name: Docker Release").await.unwrap();
-        
-        // Criar subdiretório para provar que a recursão ignora
         let nested_dir = workflows_dir.join("nested");
         fs::create_dir_all(&nested_dir).await.unwrap();
-        fs::write(nested_dir.join("ignored.yml"), "should be ignored").await.unwrap();
+        fs::write(nested_dir.join("release.yml"), "name: Nested Release").await.unwrap();
+        fs::write(dir.path().join(".circleci/config.yml"), "version: 2.1").await.unwrap();
+        fs::write(dir.path().join(".buildkite/pipeline.yml"), "steps: []").await.unwrap();
+        fs::write(dir.path().join(".gitlab-ci.yml"), "stages: [test]").await.unwrap();
+        fs::write(dir.path().join("Taskfile.yml"), "version: '3'").await.unwrap();
+        fs::write(dir.path().join("CMakeLists.txt"), "cmake_minimum_required(VERSION 3.30)").await.unwrap();
+        fs::write(dir.path().join("build.zig"), "pub fn build(b: *std.Build) void {}").await.unwrap();
+        fs::write(dir.path().join("terraform/main.tf"), "terraform {}").await.unwrap();
+        fs::write(dir.path().join("ansible/site.yml"), "- hosts: all").await.unwrap();
+        fs::write(dir.path().join("charts/api/Chart.yaml"), "apiVersion: v2").await.unwrap();
+        fs::write(dir.path().join("charts/api/values.yaml"), "replicaCount: 2").await.unwrap();
+        fs::write(dir.path().join("charts/api/templates/deployment.yaml"), "kind: Deployment").await.unwrap();
+        fs::write(dir.path().join("k8s/kustomization.yaml"), "resources: []").await.unwrap();
         
         let repo_path = RepoPath(dir.path().to_path_buf());
         let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await.unwrap();
         
-        assert_eq!(result.infra_files.len(), 4);
         assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/deploy.yaml"));
-        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/docker-release.yml"));
         assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/ci.yml"));
-        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/lint.yml"));
-        assert!(!result.infra_files.iter().any(|f| f.path.contains("ignored.yml")));
+        assert!(result.infra_files.iter().any(|f| f.path == ".github/workflows/nested/release.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == ".circleci/config.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == ".buildkite/pipeline.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == ".gitlab-ci.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == "Taskfile.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == "CMakeLists.txt"));
+        assert!(result.infra_files.iter().any(|f| f.path == "build.zig"));
+        assert!(result.infra_files.iter().any(|f| f.path == "terraform/main.tf"));
+        assert!(result.infra_files.iter().any(|f| f.path == "ansible/site.yml"));
+        assert!(result.infra_files.iter().any(|f| f.path == "charts/api/Chart.yaml"));
+        assert!(result.infra_files.iter().any(|f| f.path == "charts/api/values.yaml"));
+        assert!(result.infra_files.iter().any(|f| f.path == "charts/api/templates/deployment.yaml"));
+        assert!(result.infra_files.iter().any(|f| f.path == "k8s/kustomization.yaml"));
     }
 
     #[tokio::test]
-    async fn test_ops_file_too_large() {
+    async fn test_ops_blob_preserves_full_payload_without_truncation() {
         let dir = TempDir::new().unwrap();
-        let path = dir.path().join("Dockerfile");
-        
-        let mut file = std::fs::File::create(&path).unwrap();
-        let buffer = vec![0u8; (MAX_MANIFEST_SIZE + 100) as usize];
-        file.write_all(&buffer).unwrap();
+        let long_content = format!(
+            "FROM rust:1.80\nRUN echo {}\n",
+            "X".repeat(PHASE1_HEAVY_BLOB_MAX_CHARS + 512)
+        );
+        fs::write(dir.path().join("Dockerfile"), &long_content).await.unwrap();
         
         let repo_path = RepoPath(dir.path().to_path_buf());
-        let result = OpsBlueprintExtractor::extract(OpsInput { repo_path: &repo_path }).await;
-        
-        match result {
-            Err(ExtractionError::FileTooLarge { file, .. }) => assert_eq!(file, "Dockerfile"),
-            _ => panic!("Deveria ter falhado com FileTooLarge para Dockerfile gigante"),
-        }
+        let result = OpsBlueprintExtractor::extract_blob(OpsInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8(result.payload_blob).unwrap();
+
+        assert!(text.contains("### Dockerfile"));
+        assert!(text.contains(&long_content.trim().replace('\r', "")));
+        assert!(text.len() > PHASE1_HEAVY_BLOB_MAX_CHARS);
     }
 }

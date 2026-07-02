@@ -2,23 +2,26 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::AsyncBufReadExt;
 use tokio::sync::{Mutex, Semaphore};
-use tokio::time::Instant;
 use tracing::{error, info, warn};
 
 use rand::rngs::OsRng;
 use rand::RngCore;
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
+use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
+use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
 type SheetsUpdateFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+
+const GOOGLE_MCP_TIMEOUT: Duration = Duration::from_secs(180);
 
 trait SheetsClient: Send + Sync {
     fn get_sheet_data<'a>(
@@ -39,143 +42,36 @@ trait SheetsClient: Send + Sync {
 struct SheetsMcpClient;
 
 impl SheetsMcpClient {
-    async fn poll_for_jsonrpc_response_from_reader<R>(
-        reader: R,
-        timeout: Duration,
-        expected_id: i64,
-    ) -> Result<Value, String>
-    where
-        R: tokio::io::AsyncBufRead + Unpin,
-    {
-        let started = Instant::now();
-        let mut lines = reader.lines();
-        loop {
-            if started.elapsed() > timeout {
-                return Err(format!(
-                    "Timeout: O servidor MCP (Sheets) não emitiu o payload após {} segundos.",
-                    timeout.as_secs()
-                ));
-            }
-
-            match tokio::time::timeout(Duration::from_millis(200), lines.next_line()).await {
-                Ok(Ok(Some(line))) => {
-                    if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                        let id_matches = match value.get("id") {
-                            Some(Value::Number(n)) => n.as_i64() == Some(expected_id),
-                            Some(Value::String(s)) => s.parse::<i64>().ok() == Some(expected_id),
-                            _ => false,
-                        };
-                        if id_matches {
-                            return Ok(value);
-                        }
-                    }
-                }
-                Ok(Ok(None)) => {
-                    tokio::time::sleep(Duration::from_millis(200)).await;
-                }
-                Ok(Err(e)) => return Err(format!("Falha ao ler stdout do MCP: {e}")),
-                Err(_) => {}
-            }
-        }
+    async fn read_values(
+        spreadsheet_id: &str,
+        sheet: &str,
+        range: &str,
+    ) -> Result<Vec<Vec<String>>, String> {
+        let result = genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+            spreadsheet_id,
+            sheet,
+            range,
+            "n0-daemon-watcher",
+            GOOGLE_MCP_TIMEOUT,
+        )
+        .await?;
+        extract_values_2d_strict(&result)
     }
 
-    fn normalize_mcp_tool_result(result: Value) -> Value {
-        let content = match result.get("content").and_then(|v| v.as_array()) {
-            Some(arr) => arr,
-            None => return result,
-        };
-        for item in content {
-            if let Some(json_val) = item.get("json") {
-                return json_val.clone();
-            }
-            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                    return parsed;
-                }
-            }
-        }
-        result
-    }
-
-    async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
-        use std::process::Stdio;
-        use tokio::io::{AsyncWriteExt, BufReader};
-        use tokio::process::Command;
-
-        let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-            .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-        let init_req = json!({
-            "jsonrpc": "2.0",
-            "id": 0,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": { "name": "n0-daemon-watcher", "version": "1.0.0" }
-            }
-        });
-        let initialized_notif = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
-        let mcp_request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": { "name": tool_name, "arguments": arguments }
-        });
-
-        let mut child = Command::new("mcp-google-sheets")
-            .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
-            .env("UV_NO_PROGRESS", "1")
-            .env("UV_QUIET", "1")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {e}"))?;
-
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "stdin indisponível".to_string())?;
-        stdin
-            .write_all(format!("{init_req}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
-        stdin
-            .write_all(format!("{initialized_notif}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
-        stdin
-            .write_all(format!("{mcp_request}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
-        drop(stdin);
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| "stdout indisponível".to_string())?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| "stderr indisponível".to_string())?;
-
-        let stdout_reader = BufReader::new(stdout);
-        let _stderr_reader = BufReader::new(stderr);
-        let msg =
-            Self::poll_for_jsonrpc_response_from_reader(stdout_reader, Duration::from_secs(20), 1)
-                .await?;
-
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-
-        if msg.get("error").is_some() {
-            return Err(format!("MCP retornou erro: {msg}"));
-        }
-        if let Some(result) = msg.get("result") {
-            return Ok(Self::normalize_mcp_tool_result(result.clone()));
-        }
-        Err("Resposta MCP inválida (sem campo result)".to_string())
+    async fn write_values(
+        spreadsheet_id: &str,
+        sheet: &str,
+        ranges: &serde_json::Map<String, Value>,
+    ) -> Result<(), String> {
+        genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+            spreadsheet_id,
+            sheet,
+            ranges,
+            "n0-daemon-watcher",
+            GOOGLE_MCP_TIMEOUT,
+        )
+        .await?;
+        Ok(())
     }
 }
 
@@ -234,6 +130,51 @@ async fn short_circuit_mark_sheet<S: SheetsClient>(
         .map_err(|e| format!("Falha ao atualizar status_fase=SHORT-CIRCUIT no Sheets: {e}"))
 }
 
+async fn mark_new_link_ok_sheet<S: SheetsClient>(
+    sheets: &S,
+    spreadsheet_id: &str,
+    status_atualizacao_idx: usize,
+    row_number_1based: u32,
+) -> Result<(), String> {
+    let col = col_idx_to_a1(status_atualizacao_idx);
+    let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+    let mut ranges = serde_json::Map::new();
+    ranges.insert(range, json!([["NOVO_LINK_OK"]]));
+    sheets
+        .batch_update_cells(spreadsheet_id, "MASTER_SOLUTIONS", Value::Object(ranges))
+        .await
+        .map_err(|e| format!("Falha ao atualizar status_atualizacao=NOVO_LINK_OK no Sheets: {e}"))
+}
+
+fn default_lote_id() -> String {
+    std::env::var("SODA_LOTE_ID_OVERRIDE")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "LOTE_01_ALPHA".to_string())
+}
+
+fn ensure_repositorios_schema(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS repositorios (
+            project_name TEXT PRIMARY KEY,
+            lote_id TEXT NOT NULL,
+            repo_url TEXT NOT NULL UNIQUE,
+            repo_analised_version TEXT,
+            repo_version TEXT,
+            ultima_versao_online TEXT,
+            soda_universal_uuid TEXT NOT NULL UNIQUE,
+            status_processamento TEXT NOT NULL,
+            timestamp_fase_1 INTEGER,
+            timestamp_fase_3 INTEGER,
+            retry_count INTEGER NOT NULL
+        )",
+        [],
+    )
+    .map_err(|e| format!("Falha ao garantir tabela repositorios: {e}"))?;
+    Ok(())
+}
+
 impl SheetsClient for SheetsMcpClient {
     fn get_sheet_data<'a>(
         &'a self,
@@ -241,19 +182,7 @@ impl SheetsClient for SheetsMcpClient {
         sheet: &'a str,
         range: String,
     ) -> SheetsDataFuture<'a> {
-        Box::pin(async move {
-            let result = Self::call_mcp(
-                "get_sheet_data",
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "sheet": sheet,
-                    "range": range,
-                    "include_grid_data": false
-                }),
-            )
-            .await?;
-            extract_values_2d_strict(&result)
-        })
+        Box::pin(async move { Self::read_values(spreadsheet_id, sheet, &range).await })
     }
 
     fn batch_update_cells<'a>(
@@ -263,15 +192,10 @@ impl SheetsClient for SheetsMcpClient {
         ranges: serde_json::Value,
     ) -> SheetsUpdateFuture<'a> {
         Box::pin(async move {
-            let _ = Self::call_mcp(
-                "batch_update_cells",
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "sheet": sheet,
-                    "ranges": ranges
-                }),
-            )
-            .await?;
+            let payload = ranges
+                .as_object()
+                .ok_or_else(|| "Ranges inválidos para write_values".to_string())?;
+            Self::write_values(spreadsheet_id, sheet, payload).await?;
             Ok(())
         })
     }
@@ -411,7 +335,7 @@ enum RouteDecision {
 
 fn route_for_status_atualizacao(raw: &str) -> RouteDecision {
     let s = raw.trim();
-    if s.is_empty() {
+    if s.is_empty() || s.eq_ignore_ascii_case("NOVO_LINK_OK") {
         return RouteDecision::N1;
     }
     if s.starts_with("REJEITADO_") {
@@ -434,11 +358,77 @@ trait Dispatcher: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<(), DispatchError>> + Send + 'a>>;
 }
 
+struct SqliteBootstrapDispatcher {
+    db_path: PathBuf,
+}
+
+impl SqliteBootstrapDispatcher {
+    fn new(db_path: PathBuf) -> Self {
+        Self { db_path }
+    }
+
+    fn upsert_new_link(&self, ctx: &RowCtx) -> Result<(), String> {
+        let db_path = self.db_path.clone();
+        let repo_url = ctx.repo_url.trim().to_string();
+        let project_name = if !ctx.project_name.trim().is_empty() {
+            ctx.project_name.trim().to_string()
+        } else {
+            try_extract_project_name_from_repo_url(&repo_url).ok_or_else(|| {
+                format!("N0: repo_url inválida para derivar project_name: '{}'", ctx.repo_url)
+            })?
+        };
+        let lote_id = ctx
+            .lote_id
+            .trim()
+            .to_string()
+            .chars()
+            .collect::<String>();
+        let lote_id = if lote_id.is_empty() {
+            default_lote_id()
+        } else {
+            lote_id
+        };
+        let uuid = format!("UUID-{project_name}");
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Falha ao abrir vault {}: {e}", db_path.display()))?;
+        ensure_repositorios_schema(&conn)?;
+        conn.execute(
+            "INSERT INTO repositorios (
+                project_name, lote_id, repo_url, soda_universal_uuid, status_processamento,
+                timestamp_fase_1, timestamp_fase_3, retry_count
+             ) VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, 0)
+             ON CONFLICT(project_name) DO UPDATE SET
+                lote_id = excluded.lote_id,
+                repo_url = excluded.repo_url,
+                status_processamento = excluded.status_processamento",
+            params![project_name, lote_id, repo_url, uuid, "PENDENTE"],
+        )
+        .map_err(|e| format!("Falha ao materializar repositorio no SQLite: {e}"))?;
+        Ok(())
+    }
+}
+
+impl Dispatcher for SqliteBootstrapDispatcher {
+    fn dispatch<'a>(
+        &'a self,
+        route: RouteDecision,
+        ctx: RowCtx,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DispatchError>> + Send + 'a>> {
+        Box::pin(async move {
+            match route {
+                RouteDecision::N1 => self.upsert_new_link(&ctx).map_err(DispatchError::Other),
+                _ => Ok(()),
+            }
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 struct RowCtx {
     row_number_1based: u32,
     repo_url: String,
     project_name: String,
+    lote_id: String,
     status_atualizacao: String,
     status_fase: String,
 }
@@ -457,21 +447,30 @@ struct Telemetry {
     erros_dispatch: usize,
 }
 
+fn should_colorize_telemetry() -> bool {
+    std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+}
+
 fn ansi_wrap(style: &str, text: &str) -> String {
     format!("\x1b[{style}m{text}\x1b[0m")
 }
 
-fn colored_kv(key: &str, value: usize, style: &str) -> String {
-    ansi_wrap(style, &format!("{key}={value}"))
+fn colored_kv(key: &str, value: usize, style: &str, enabled: bool) -> String {
+    if enabled {
+        ansi_wrap(style, &format!("{key}={value}"))
+    } else {
+        format!("{key}={value}")
+    }
 }
 
 fn format_telemetry_line(tel: &Telemetry) -> String {
-    let n1 = colored_kv("n1", tel.roteadas_n1, "97;44");
-    let n2 = colored_kv("n2", tel.roteadas_n2, "97;45");
-    let n3 = colored_kv("n3", tel.roteadas_n3, "30;42");
-    let n4 = colored_kv("n4", tel.roteadas_n4, "30;43");
-    let n5 = colored_kv("n5", tel.roteadas_n5, "30;46");
-    let n6 = colored_kv("n6", tel.roteadas_n6, "97;41");
+    let color = should_colorize_telemetry();
+    let n1 = colored_kv("n1", tel.roteadas_n1, "97;44", color);
+    let n2 = colored_kv("n2", tel.roteadas_n2, "97;45", color);
+    let n3 = colored_kv("n3", tel.roteadas_n3, "30;42", color);
+    let n4 = colored_kv("n4", tel.roteadas_n4, "30;43", color);
+    let n5 = colored_kv("n5", tel.roteadas_n5, "30;46", color);
+    let n6 = colored_kv("n6", tel.roteadas_n6, "97;41", color);
     format!(
         "N0: rodada concluída | linhas={} | {} {} {} {} {} {} | short_circuit={} | erros_sheets={} | erros_dispatch={}",
         tel.linhas_inspecionadas,
@@ -504,9 +503,10 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
     async fn run_once(&self, spreadsheet_id: &str) -> Telemetry {
         let mut tel = Telemetry::default();
 
+        let header_range = master_solutions_header_range();
         let header = match self
             .sheets
-            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string())
+            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone())
             .await
         {
             Ok(v) => v,
@@ -519,7 +519,7 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
         let header_row = header.first().cloned().unwrap_or_default();
         if header_row.is_empty() {
             tel.erros_sheets += 1;
-            error!("N0: header vazio em MASTER_SOLUTIONS!A1:CF1 (falha de leitura ou payload inesperado)");
+            error!(range = %header_range, "N0: header vazio em MASTER_SOLUTIONS (falha de leitura ou payload inesperado)");
             return tel;
         }
         let cols = match resolve_column_map(&header_row) {
@@ -559,6 +559,8 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
 
         let sem = Arc::new(Semaphore::new(self.config.max_parallel.max(1)));
         let mut tasks = Vec::new();
+        let mut prioritized = Vec::new();
+        let mut others = Vec::new();
         for (idx, row) in values.into_iter().enumerate() {
             tel.linhas_inspecionadas += 1;
             let row_number_1based = (idx as u32) + 2;
@@ -632,17 +634,46 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
                 }
                 continue;
             }
+            let item = (ctx, route);
+            if route == RouteDecision::N1 {
+                prioritized.push(item);
+            } else {
+                others.push(item);
+            }
+        }
 
+        prioritized.extend(others);
+        for (ctx, route) in prioritized {
             let permit = sem.clone().acquire_owned().await.unwrap();
             let dispatcher = self.dispatcher.clone();
             let guard = self.guard.clone();
+            let sheets = self.sheets.clone();
+            let spreadsheet_id = spreadsheet_id.to_string();
+            let status_atualizacao_idx = cols.status_atualizacao_idx;
             let max_attempts = self.config.max_attempts_per_line.max(1);
             tasks.push(tokio::spawn(async move {
                 let _permit = permit;
                 for attempt in 1..=max_attempts {
                     let res = dispatcher.dispatch(route, ctx.clone()).await;
                     match res {
-                        Ok(()) => return Ok::<(), DispatchError>(()),
+                        Ok(()) => {
+                            if route == RouteDecision::N1
+                                && !ctx
+                                    .status_atualizacao
+                                    .trim()
+                                    .eq_ignore_ascii_case("NOVO_LINK_OK")
+                            {
+                                mark_new_link_ok_sheet(
+                                    sheets.as_ref(),
+                                    &spreadsheet_id,
+                                    status_atualizacao_idx,
+                                    ctx.row_number_1based,
+                                )
+                                .await
+                                .map_err(DispatchError::Other)?;
+                            }
+                            return Ok::<(), DispatchError>(());
+                        }
                         Err(DispatchError::RateLimited) => {
                             warn!(
                                 row_number_1based = ctx.row_number_1based,
@@ -705,6 +736,7 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
 struct MasterColumns {
     repo_url_idx: usize,
     project_name_idx: usize,
+    lote_id_idx: Option<usize>,
     status_atualizacao_idx: usize,
     status_fase_idx: usize,
 }
@@ -732,6 +764,7 @@ impl MasterColumns {
             row_number_1based,
             repo_url,
             project_name: get(self.project_name_idx),
+            lote_id: self.lote_id_idx.map(get).unwrap_or_default(),
             status_atualizacao: get(self.status_atualizacao_idx),
             status_fase: get(self.status_fase_idx),
         })
@@ -756,6 +789,7 @@ fn resolve_column_map(header_row: &[String]) -> Result<MasterColumns, String> {
     let project_name_idx = *map
         .get("project_name")
         .ok_or_else(|| "Header missing project_name".to_string())?;
+    let lote_id_idx = map.get("lote_id").copied();
     let status_atualizacao_idx = *map
         .get("status_atualizacao")
         .ok_or_else(|| "Header missing status_atualizacao".to_string())?;
@@ -765,6 +799,7 @@ fn resolve_column_map(header_row: &[String]) -> Result<MasterColumns, String> {
     Ok(MasterColumns {
         repo_url_idx,
         project_name_idx,
+        lote_id_idx,
         status_atualizacao_idx,
         status_fase_idx,
     })
@@ -783,18 +818,11 @@ fn col_idx_to_a1(idx_0based: usize) -> String {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt()
-        .with_max_level(level)
-        .with_ansi(true)
-        .init();
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
@@ -802,7 +830,9 @@ async fn main() -> io::Result<()> {
 
     let watcher = DaemonWatcher {
         sheets: Arc::new(SheetsMcpClient),
-        dispatcher: Arc::new(NoopDispatcher),
+        dispatcher: Arc::new(SqliteBootstrapDispatcher::new(
+            workspace_root()?.join(".soda_data").join("soda_heuristic_vault.db"),
+        )),
         guard: BackoffGuard {
             policy: RetryPolicy {
                 backoff_base_ms: 1000,
@@ -840,18 +870,6 @@ async fn main() -> io::Result<()> {
 
     watcher.run_daemon(&spreadsheet_id).await;
     Ok(())
-}
-
-struct NoopDispatcher;
-
-impl Dispatcher for NoopDispatcher {
-    fn dispatch<'a>(
-        &'a self,
-        _route: RouteDecision,
-        _ctx: RowCtx,
-    ) -> Pin<Box<dyn Future<Output = Result<(), DispatchError>> + Send + 'a>> {
-        Box::pin(async move { Ok(()) })
-    }
 }
 
 #[cfg(test)]
@@ -935,6 +953,7 @@ mod tests {
     #[test]
     fn routing_catalog_is_deterministic_and_strict() {
         assert_eq!(route_for_status_atualizacao(""), RouteDecision::N1);
+        assert_eq!(route_for_status_atualizacao("NOVO_LINK_OK"), RouteDecision::N1);
         assert_eq!(
             route_for_status_atualizacao("INICIAR_TRIAGEM"),
             RouteDecision::N2

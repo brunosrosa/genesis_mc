@@ -1,10 +1,12 @@
 use crate::cognition::synthesizer::{
-    apply_phase4_block5, sheet_range_for_row, MasterSolutionsRow, MASTER_SOLUTIONS_CANONICAL_COLUMNS,
+    apply_phase4_block5, master_solutions_header_range, sheet_range_for_row, ArchitecturalCategory,
+    MasterSolutionsRow, MASTER_SOLUTIONS_CANONICAL_COLUMNS,
 };
+use crate::persist::google_workspace_mcp;
 use thiserror::Error;
 use serde_json::{json, Value};
 use rusqlite::{Connection, ErrorCode};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::future::Future;
 use std::pin::Pin;
@@ -28,8 +30,20 @@ pub enum SsotError {
 
 pub struct SsotInjector;
 
-const SSOT_EXPECTED_COLUMNS: usize = 84;
+const SSOT_EXPECTED_COLUMNS: usize = 82;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
+
+#[cfg(not(test))]
+const GOOGLE_SHEETS_HTTP_TIMEOUT: Duration = Duration::from_secs(180);
+#[cfg(test)]
+const GOOGLE_SHEETS_HTTP_TIMEOUT: Duration = Duration::from_millis(250);
+
+#[cfg(not(test))]
+const POST_ATOMIC_ROW_WRITE_DELAY: Duration = Duration::from_millis(1_000);
+#[cfg(test)]
+const POST_ATOMIC_ROW_WRITE_DELAY: Duration = Duration::from_millis(1);
+
+const GOOGLE_SHEETS_API_BASE_URL: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 
 pub type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -59,9 +73,9 @@ pub trait SheetsClient: Send + Sync {
     ) -> SheetsFuture<'a>;
 }
 
-pub struct McpGoogleSheetsClient;
+pub struct ReqwestGoogleWorkspaceSheetsClient;
 
-impl SheetsClient for McpGoogleSheetsClient {
+impl SheetsClient for ReqwestGoogleWorkspaceSheetsClient {
     fn get_sheet_data<'a>(
         &'a self,
         spreadsheet_id: &'a str,
@@ -69,84 +83,20 @@ impl SheetsClient for McpGoogleSheetsClient {
         range: String,
     ) -> SheetsDataFuture<'a> {
         Box::pin(async move {
-            use std::process::Stdio;
-            use tokio::io::AsyncWriteExt;
-            use tokio::process::Command;
-
-            let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-                .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-            let init_req = json!({
-                "jsonrpc": "2.0",
-                "id": 0,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": { "name": "soda-injector", "version": "1.0.0" }
-                }
-            });
-            let initialized_notif = json!({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            });
-            let mcp_request = json!({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "get_sheet_data",
-                    "arguments": {
-                        "spreadsheet_id": spreadsheet_id,
-                        "sheet": sheet,
-                        "range": range,
-                        "include_grid_data": false
-                    }
-                }
-            });
-
-            let mut child = Command::new("mcp-google-sheets")
-                .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
-                .env("UV_NO_PROGRESS", "1")
-                .env("UV_QUIET", "1")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {}", e))?;
-
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(format!("{}\n", init_req).as_bytes()).await;
-                let _ = stdin
-                    .write_all(format!("{}\n", initialized_notif).as_bytes())
-                    .await;
-                let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
-            }
-
-            let output = child
-                .wait_with_output()
+            let access_token = SsotInjector::google_workspace_access_token()
                 .await
-                .map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
-            let stdout_str = String::from_utf8_lossy(&output.stdout);
-            let stderr_str = String::from_utf8_lossy(&output.stderr);
-            if !output.status.success() {
-                return Err(format!(
-                    "MCP get_sheet_data falhou: status={} stderr={}",
-                    output.status, stderr_str
-                ));
-            }
-
-            let mut last_json: Option<Value> = None;
-            for line in stdout_str.lines() {
-                if let Ok(v) = serde_json::from_str::<Value>(line) {
-                    last_json = Some(v);
-                }
-            }
-            let Some(msg) = last_json else {
-                return Err("Resposta MCP inválida (stdout vazio)".to_string());
-            };
-            let values = SsotInjector::extract_values_2d(&msg).unwrap_or_default();
-            Ok(values)
+                .map_err(|e| e.to_string())?;
+            let a1_range = format!("{sheet}!{range}");
+            let url = SsotInjector::build_google_sheets_values_url(spreadsheet_id, &a1_range)?;
+            let client = SsotInjector::build_google_sheets_http_client()?;
+            let result = SsotInjector::send_google_sheets_json_request(
+                client
+                    .get(url)
+                    .bearer_auth(access_token),
+                "read_values",
+            )
+            .await?;
+            Ok(SsotInjector::extract_values_2d(&result).unwrap_or_default())
         })
     }
 
@@ -157,77 +107,24 @@ impl SheetsClient for McpGoogleSheetsClient {
         ranges: Value,
     ) -> SheetsFuture<'a> {
         Box::pin(async move {
-            use std::process::Stdio;
-            use tokio::io::AsyncWriteExt;
-            use tokio::process::Command;
-
-            let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-                .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-            let init_req = json!({
-                "jsonrpc": "2.0",
-                "id": 0,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": { "name": "soda-injector", "version": "1.0.0" }
-                }
-            });
-            let initialized_notif = json!({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            });
-            let mcp_request = json!({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "batch_update_cells",
-                    "arguments": {
-                        "spreadsheet_id": spreadsheet_id,
-                        "sheet": sheet,
-                        "ranges": ranges
-                    }
-                }
-            });
-
-            let mut child = Command::new("mcp-google-sheets")
-                .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
-                .env("UV_NO_PROGRESS", "1")
-                .env("UV_QUIET", "1")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {}", e))?;
-
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(format!("{}\n", init_req).as_bytes()).await;
-                let _ = stdin
-                    .write_all(format!("{}\n", initialized_notif).as_bytes())
-                    .await;
-                let _ = stdin.write_all(format!("{}\n", mcp_request).as_bytes()).await;
-            }
-
-            let output = child
-                .wait_with_output()
+            let access_token = SsotInjector::google_workspace_access_token()
                 .await
-                .map_err(|e| format!("Falha ao aguardar processo MCP: {}", e))?;
-            let stdout_str = String::from_utf8_lossy(&output.stdout);
-            let stderr_str = String::from_utf8_lossy(&output.stderr);
-
-            if stdout_str.contains("\"isError\":true") || stdout_str.contains("\"error\":") {
-                return Err(format!("MCP Retornou Erro: {}", stdout_str));
-            }
-
-            if !output.status.success() {
-                return Err(format!(
-                    "Falha no processo MCP. Exit {}. STDERR: {}",
-                    output.status, stderr_str
-                ));
-            }
-
+                .map_err(|e| e.to_string())?;
+            let map = ranges
+                .as_object()
+                .ok_or_else(|| "Chunk inválido para values:batchUpdate".to_string())?;
+            let url = SsotInjector::build_google_sheets_batch_update_url(spreadsheet_id)?;
+            let body = SsotInjector::build_google_sheets_batch_update_body(sheet, map)?;
+            let client = SsotInjector::build_google_sheets_http_client()?;
+            let result = SsotInjector::send_google_sheets_json_request(
+                client
+                    .post(url)
+                    .bearer_auth(access_token)
+                    .json(&body),
+                "values:batchUpdate",
+            )
+            .await?;
+            SsotInjector::validate_batch_update_result(map, &result)?;
             Ok(())
         })
     }
@@ -249,6 +146,561 @@ struct ValidatedSsotFields {
 }
 
 impl SsotInjector {
+    fn maybe_fix_mojibake(s: &str) -> String {
+        let s = s.trim();
+        if s.is_empty() {
+            return String::new();
+        }
+        let looks_like_mojibake =
+            s.contains('Ã') || s.contains('Â') || s.contains("â€") || s.contains("â€™") || s.contains("â€œ");
+        if !looks_like_mojibake {
+            return s.to_string();
+        }
+        fn marker_score(s: &str) -> usize {
+            s.matches('Ã').count() + s.matches('Â').count() + s.matches('â').count()
+        }
+
+        fn try_decode_latin1_as_utf8(s: &str) -> Option<String> {
+            let mut bytes: Vec<u8> = Vec::with_capacity(s.len());
+            for ch in s.chars() {
+                let cp = ch as u32;
+                if cp > 0xFF {
+                    return None;
+                }
+                bytes.push(cp as u8);
+            }
+            String::from_utf8(bytes).ok()
+        }
+
+        let mut out = s.to_string();
+        out = out.replace('Â', "");
+
+        for (from, to) in [
+            ("Ã\u{00A1}", "á"),
+            ("Ã\u{00A0}", "à"),
+            ("Ã\u{00A2}", "â"),
+            ("Ã\u{00A3}", "ã"),
+            ("Ã\u{00A4}", "ä"),
+            ("Ã\u{00A9}", "é"),
+            ("Ã\u{00A8}", "è"),
+            ("Ã\u{00AA}", "ê"),
+            ("Ã\u{00AB}", "ë"),
+            ("Ã\u{00AD}", "í"),
+            ("Ã\u{00AC}", "ì"),
+            ("Ã\u{00AE}", "î"),
+            ("Ã\u{00AF}", "ï"),
+            ("Ã\u{00B3}", "ó"),
+            ("Ã\u{00B2}", "ò"),
+            ("Ã\u{00B4}", "ô"),
+            ("Ã\u{00B5}", "õ"),
+            ("Ã\u{00B6}", "ö"),
+            ("Ã\u{00BA}", "ú"),
+            ("Ã\u{00B9}", "ù"),
+            ("Ã\u{00BB}", "û"),
+            ("Ã\u{00BC}", "ü"),
+            ("Ã\u{00A7}", "ç"),
+            ("Ã\u{00B1}", "ñ"),
+            ("â€™", "’"),
+            ("â€˜", "‘"),
+            ("â€œ", "“"),
+            ("â€�", "”"),
+            ("â€“", "–"),
+            ("â€”", "—"),
+            ("â€¦", "…"),
+            ("â€¢", "•"),
+        ] {
+            out = out.replace(from, to);
+        }
+
+        if marker_score(&out) > 0 {
+            let mut best = out.clone();
+            for _ in 0..2 {
+                let Some(decoded) = try_decode_latin1_as_utf8(&best) else {
+                    break;
+                };
+                if marker_score(&decoded) >= marker_score(&best) {
+                    break;
+                }
+                best = decoded;
+            }
+            out = best;
+        }
+
+        out
+    }
+
+    pub(crate) fn open_vault_connection() -> Result<Connection, SsotError> {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let root_dir = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+        Connection::open(&db_path).map_err(|e| SsotError::L2Failure(format!("Falha ao conectar no SQLite: {}", e)))
+    }
+
+    pub(crate) fn try_load_repo_heuristics_row(
+        repo_id: &str,
+    ) -> Result<Option<MasterSolutionsRow>, SsotError> {
+        let conn = Self::open_vault_connection()?;
+        Self::ensure_repo_heuristics_schema(&conn).map_err(SsotError::L2Failure)?;
+
+        let mut stmt = match conn.prepare(
+            "SELECT status_atualizacao, status_fase, project_name, repo_url,
+                    COALESCE(NULLIF(repo_analised_version, ''), NULLIF(repo_version, '')) AS repo_analised_version,
+                    ultima_versao_online, indicacao_otimista_canibalizacao, lote_id, data_ultima_analise, analise_origem,
+                    licenca, stack_base, declared_description, proposta_original_resumo,
+                    lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops,
+                    visao_do_enxame, justificativa_decisao, executive_verdict,
+                    risco_principal, risco_linha_vermelha, observacoes,
+                    ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem,
+                    categoria_nuance_tecnica, integracao_papel_exato,
+                    must_components_prod_ux, must_components_arq, must_components_ops,
+                    detected_toxic_deps, do_not_absorb, where_ai_should_not_enter,
+                    classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao,
+                    capability_nature_primary, architectural_topology, temporal_stability,
+                    bare_metal_fit, extractability_level, runtime_sovereignty_fit, local_first_fit,
+                    adoptability_level, longitudinal_sustainability,
+                    maintenance_burden, onboarding_friction, observability_operational, recoverability_level,
+                    degradation_behavior, curation_burden, evolution_cost, operability_level,
+                    abandonment_risk, time_to_first_clear_value, imperfection_tolerance,
+                    entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, regulatory_risk,
+                    score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability,
+                    score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value,
+                    score_ethics_safety, score_intrinsic_risk,
+                    score_final, score_fit_geral_soda,
+                    score_architectural_priority, score_human_product_priority, score_absorption_readiness,
+                    score_operational_priority, score_sustainability_adjusted_fit,
+                    valid_from, valid_to, embargo_status
+             FROM repo_heuristics
+             WHERE project_name = ?1
+             LIMIT 1",
+        ) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                return Err(SsotError::L2Failure(format!(
+                    "Falha ao preparar SELECT repo_heuristics: {e}"
+                )))
+            }
+        };
+
+        let json_val: Result<Value, _> = stmt.query_row(rusqlite::params![repo_id], |row| {
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "status_atualizacao".to_string(),
+                serde_json::json!(row.get::<_, String>(0)?),
+            );
+            obj.insert("status_fase".to_string(), serde_json::json!(row.get::<_, String>(1)?));
+            obj.insert("project_name".to_string(), serde_json::json!(row.get::<_, String>(2)?));
+            obj.insert("repo_url".to_string(), serde_json::json!(row.get::<_, String>(3)?));
+            obj.insert(
+                "repo_analised_version".to_string(),
+                serde_json::json!(row.get::<_, String>(4)?),
+            );
+            obj.insert(
+                "ultima_versao_online".to_string(),
+                serde_json::json!(row.get::<_, String>(5)?),
+            );
+            obj.insert(
+                "indicacao_otimista_canibalizacao".to_string(),
+                serde_json::json!(row.get::<_, String>(6)?),
+            );
+            obj.insert("lote_id".to_string(), serde_json::json!(row.get::<_, String>(7)?));
+            obj.insert(
+                "data_ultima_analise".to_string(),
+                serde_json::json!(row.get::<_, i64>(8)?),
+            );
+            obj.insert(
+                "analise_origem".to_string(),
+                serde_json::json!(row.get::<_, String>(9)?),
+            );
+            obj.insert("licenca".to_string(), serde_json::json!(row.get::<_, String>(10)?));
+            obj.insert(
+                "stack_base".to_string(),
+                serde_json::json!(row.get::<_, String>(11)?),
+            );
+            obj.insert(
+                "declared_description".to_string(),
+                serde_json::json!(row.get::<_, String>(12)?),
+            );
+            obj.insert("declared_description_ptbr".to_string(), serde_json::json!(""));
+            obj.insert(
+                "proposta_original_resumo".to_string(),
+                serde_json::json!(row.get::<_, String>(13)?),
+            );
+            obj.insert(
+                "lente_a_sentido_prod_ux".to_string(),
+                serde_json::json!(row.get::<_, String>(14)?),
+            );
+            obj.insert(
+                "lente_b_estrutura_arq".to_string(),
+                serde_json::json!(row.get::<_, String>(15)?),
+            );
+            obj.insert(
+                "lente_c_realidade_ops".to_string(),
+                serde_json::json!(row.get::<_, String>(16)?),
+            );
+            obj.insert(
+                "visao_do_enxame".to_string(),
+                serde_json::json!(row.get::<_, String>(17)?),
+            );
+            obj.insert(
+                "justificativa_decisao".to_string(),
+                serde_json::json!(row.get::<_, String>(18)?),
+            );
+            obj.insert(
+                "executive_verdict".to_string(),
+                serde_json::json!(row.get::<_, String>(19)?),
+            );
+            obj.insert(
+                "risco_principal".to_string(),
+                serde_json::json!(row.get::<_, String>(20)?),
+            );
+            obj.insert(
+                "risco_linha_vermelha".to_string(),
+                serde_json::json!(row.get::<_, String>(21)?),
+            );
+            obj.insert(
+                "observacoes".to_string(),
+                serde_json::json!(row.get::<_, String>(22)?),
+            );
+            obj.insert(
+                "ouro_a_extrair".to_string(),
+                serde_json::json!(row.get::<_, String>(23)?),
+            );
+            obj.insert(
+                "deep_pattern".to_string(),
+                serde_json::json!(row.get::<_, String>(24)?),
+            );
+            obj.insert(
+                "transplantable_core".to_string(),
+                serde_json::json!(row.get::<_, String>(25)?),
+            );
+            obj.insert(
+                "logic_math_heuristic".to_string(),
+                serde_json::json!(row.get::<_, String>(26)?),
+            );
+            obj.insert(
+                "real_structural_problem".to_string(),
+                serde_json::json!(row.get::<_, String>(27)?),
+            );
+            obj.insert(
+                "categoria_nuance_tecnica".to_string(),
+                serde_json::json!(row.get::<_, String>(28)?),
+            );
+            obj.insert(
+                "integracao_papel_exato".to_string(),
+                serde_json::json!(row.get::<_, String>(29)?),
+            );
+            obj.insert(
+                "must_components_prod_ux".to_string(),
+                serde_json::json!(row.get::<_, String>(30)?),
+            );
+            obj.insert(
+                "must_components_arq".to_string(),
+                serde_json::json!(row.get::<_, String>(31)?),
+            );
+            obj.insert(
+                "must_components_ops".to_string(),
+                serde_json::json!(row.get::<_, String>(32)?),
+            );
+            obj.insert(
+                "detected_toxic_deps".to_string(),
+                serde_json::json!(row.get::<_, String>(33)?),
+            );
+            obj.insert(
+                "do_not_absorb".to_string(),
+                serde_json::json!(row.get::<_, String>(34)?),
+            );
+            obj.insert(
+                "where_ai_should_not_enter".to_string(),
+                serde_json::json!(row.get::<_, String>(35)?),
+            );
+            obj.insert(
+                "classificacao_terminal".to_string(),
+                serde_json::json!(row.get::<_, String>(36)?),
+            );
+            obj.insert(
+                "acao_de_canibalizacao".to_string(),
+                serde_json::json!(row.get::<_, String>(37)?),
+            );
+            obj.insert(
+                "categoria_arquitetural".to_string(),
+                serde_json::json!(row.get::<_, String>(38)?),
+            );
+            obj.insert(
+                "horizonte_extracao".to_string(),
+                serde_json::json!(row.get::<_, String>(39)?),
+            );
+            obj.insert(
+                "tipo_integracao".to_string(),
+                serde_json::json!(row.get::<_, String>(40)?),
+            );
+            obj.insert(
+                "capability_nature_primary".to_string(),
+                serde_json::json!(row.get::<_, String>(41)?),
+            );
+            obj.insert(
+                "architectural_topology".to_string(),
+                serde_json::json!(row.get::<_, String>(42)?),
+            );
+            obj.insert(
+                "temporal_stability".to_string(),
+                serde_json::json!(row.get::<_, String>(43)?),
+            );
+            obj.insert(
+                "bare_metal_fit".to_string(),
+                serde_json::json!(row.get::<_, String>(44)?),
+            );
+            obj.insert(
+                "extractability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(45)?),
+            );
+            obj.insert(
+                "runtime_sovereignty_fit".to_string(),
+                serde_json::json!(row.get::<_, String>(46)?),
+            );
+            obj.insert(
+                "local_first_fit".to_string(),
+                serde_json::json!(row.get::<_, String>(47)?),
+            );
+            obj.insert(
+                "adoptability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(48)?),
+            );
+            obj.insert(
+                "longitudinal_sustainability".to_string(),
+                serde_json::json!(row.get::<_, String>(49)?),
+            );
+            obj.insert(
+                "maintenance_burden".to_string(),
+                serde_json::json!(row.get::<_, String>(50)?),
+            );
+            obj.insert(
+                "onboarding_friction".to_string(),
+                serde_json::json!(row.get::<_, String>(51)?),
+            );
+            obj.insert(
+                "observability_operational".to_string(),
+                serde_json::json!(row.get::<_, String>(52)?),
+            );
+            obj.insert(
+                "recoverability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(53)?),
+            );
+            obj.insert(
+                "degradation_behavior".to_string(),
+                serde_json::json!(row.get::<_, String>(54)?),
+            );
+            obj.insert(
+                "curation_burden".to_string(),
+                serde_json::json!(row.get::<_, String>(55)?),
+            );
+            obj.insert(
+                "evolution_cost".to_string(),
+                serde_json::json!(row.get::<_, String>(56)?),
+            );
+            obj.insert(
+                "operability_level".to_string(),
+                serde_json::json!(row.get::<_, String>(57)?),
+            );
+            obj.insert(
+                "abandonment_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(58)?),
+            );
+            obj.insert(
+                "time_to_first_clear_value".to_string(),
+                serde_json::json!(row.get::<_, String>(59)?),
+            );
+            obj.insert(
+                "imperfection_tolerance".to_string(),
+                serde_json::json!(row.get::<_, String>(60)?),
+            );
+            obj.insert(
+                "entropy_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(61)?),
+            );
+            obj.insert(
+                "design_misuse_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(62)?),
+            );
+            obj.insert(
+                "intrinsic_ethics_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(63)?),
+            );
+            obj.insert(
+                "discipline_dependency".to_string(),
+                serde_json::json!(row.get::<_, String>(64)?),
+            );
+            obj.insert(
+                "regulatory_risk".to_string(),
+                serde_json::json!(row.get::<_, String>(65)?),
+            );
+            obj.insert(
+                "score_philosophical_fit".to_string(),
+                serde_json::json!(row.get::<_, i64>(66)?),
+            );
+            obj.insert(
+                "score_bare_metal_fit".to_string(),
+                serde_json::json!(row.get::<_, i64>(67)?),
+            );
+            obj.insert(
+                "score_architectural_extractability".to_string(),
+                serde_json::json!(row.get::<_, i64>(68)?),
+            );
+            obj.insert(
+                "score_operability".to_string(),
+                serde_json::json!(row.get::<_, i64>(69)?),
+            );
+            obj.insert(
+                "score_creep_risk".to_string(),
+                serde_json::json!(row.get::<_, i64>(70)?),
+            );
+            obj.insert(
+                "score_runtime_sovereignty".to_string(),
+                serde_json::json!(row.get::<_, i64>(71)?),
+            );
+            obj.insert(
+                "score_model_logic_value".to_string(),
+                serde_json::json!(row.get::<_, i64>(72)?),
+            );
+            obj.insert(
+                "score_ethics_safety".to_string(),
+                serde_json::json!(row.get::<_, i64>(73)?),
+            );
+            obj.insert(
+                "score_intrinsic_risk".to_string(),
+                serde_json::json!(row.get::<_, i64>(74)?),
+            );
+            obj.insert(
+                "score_final".to_string(),
+                serde_json::json!(row.get::<_, f64>(75)?),
+            );
+            obj.insert(
+                "score_fit_geral_soda".to_string(),
+                serde_json::json!(row.get::<_, f64>(76)?),
+            );
+            obj.insert(
+                "score_architectural_priority".to_string(),
+                serde_json::json!(row.get::<_, f64>(77)?),
+            );
+            obj.insert(
+                "score_human_product_priority".to_string(),
+                serde_json::json!(row.get::<_, f64>(78)?),
+            );
+            obj.insert(
+                "score_absorption_readiness".to_string(),
+                serde_json::json!(row.get::<_, f64>(79)?),
+            );
+            obj.insert(
+                "score_operational_priority".to_string(),
+                serde_json::json!(row.get::<_, f64>(80)?),
+            );
+            obj.insert(
+                "score_sustainability_adjusted_fit".to_string(),
+                serde_json::json!(row.get::<_, f64>(81)?),
+            );
+            obj.insert(
+                "valid_from".to_string(),
+                serde_json::json!(row.get::<_, i64>(82)?),
+            );
+            obj.insert(
+                "valid_to".to_string(),
+                serde_json::json!(row.get::<_, Option<i64>>(83)?),
+            );
+            obj.insert(
+                "embargo_status".to_string(),
+                serde_json::json!(row.get::<_, i64>(84)?),
+            );
+            Ok(serde_json::Value::Object(obj))
+        });
+
+        match json_val {
+            Ok(value) => serde_json::from_value::<MasterSolutionsRow>(value)
+                .map(Some)
+                .map_err(|e| SsotError::L2Failure(format!("Falha ao decodificar MasterSolutionsRow do SQLite: {e}"))),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(SsotError::L2Failure(format!(
+                "Falha ao ler repo_heuristics do SQLite: {e}"
+            ))),
+        }
+    }
+
+    pub(crate) fn load_block3_justifications(
+        repo_id: &str,
+    ) -> Result<HashMap<String, String>, SsotError> {
+        let conn = Self::open_vault_connection()?;
+        Self::ensure_repo_heuristics_justifications_schema(&conn).map_err(SsotError::L2Failure)?;
+        let json_text: Result<String, _> = conn.query_row(
+            "SELECT justifications_json
+             FROM repo_heuristics_justifications
+             WHERE project_name = ?1 AND block = 3
+             LIMIT 1",
+            rusqlite::params![repo_id],
+            |row| row.get::<_, String>(0),
+        );
+        match json_text {
+            Ok(text) => Ok(serde_json::from_str::<HashMap<String, String>>(&text).unwrap_or_default()),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(HashMap::new()),
+            Err(e) => Err(SsotError::L2Failure(format!(
+                "Falha ao ler justifications do Bloco 3 no SQLite: {e}"
+            ))),
+        }
+    }
+
+    fn load_l2_curated_overrides(
+        repo_id: &str,
+    ) -> Result<(Option<String>, Option<String>), SsotError> {
+        let conn = Self::open_vault_connection()?;
+        let out: Result<(String, String), _> = conn.query_row(
+            "SELECT proposta_original_resumo, categoria_arquitetural
+             FROM repo_heuristics
+             WHERE project_name = ?1
+             LIMIT 1",
+            rusqlite::params![repo_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+        let (proposta, categoria) = match out {
+            Ok(v) => v,
+            Err(_) => return Ok((None, None)),
+        };
+        let proposta = proposta.trim().to_string();
+        let proposta = (!proposta.is_empty()).then_some(proposta);
+        let categoria = categoria.trim().to_string();
+        let categoria = (!categoria.is_empty() && !categoria.eq_ignore_ascii_case("unknown")).then_some(categoria);
+        Ok((proposta, categoria))
+    }
+
+    fn header_idx(header_row: &[String], canonical: &str) -> Option<usize> {
+        let idx = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .position(|name| *name == canonical)?;
+        let raw = header_row.get(idx)?;
+        (raw.trim() == canonical).then_some(idx)
+    }
+
+    async fn read_sheet_cell(
+        client: &dyn SheetsClient,
+        spreadsheet_id: &str,
+        sheet: &str,
+        row_number_1based: u32,
+        header_row: &[String],
+        canonical_col: &str,
+    ) -> Result<String, SsotError> {
+        let Some(idx) = Self::header_idx(header_row, canonical_col) else {
+            return Ok(String::new());
+        };
+        let col = Self::col_idx_to_a1(idx);
+        let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+        let values = client
+            .get_sheet_data(spreadsheet_id, sheet, range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        Ok(values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default())
+    }
     fn should_short_circuit(status_atualizacao: &str) -> bool {
         status_atualizacao.trim().starts_with("REJEITADO_")
     }
@@ -324,42 +776,127 @@ impl SsotInjector {
     ) -> Result<u32, SsotError> {
         let validated = Self::validate_payload(repo_id, &row)?;
 
-        // 1. Selagem L2 (Execução Durável)
-        // OBRIGATÓRIO: O banco deve ser atualizado ANTES da rede
         apply_phase4_block5(now_epoch, &mut row);
-        row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
-        Self::update_local_status(
-            repo_id,
-            row.status_atualizacao.as_str(),
-            &row,
-            &validated,
-            &block3_justifications,
-            now_epoch,
-        )
-            .map_err(SsotError::L2Failure)?;
 
-        // 2. Roteamento Dinâmico no Sheets (coluna D = repo_url, coluna G = lote_id)
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
-        let row_number_1based =
-            Self::resolve_row_number_by_repo_url(
-                &spreadsheet_id,
-                sheet,
-                &validated.repo_url,
-            )
-            .await?;
+        let row_number_1based = Self::resolve_row_number_by_repo_url_and_lote_id(
+            &spreadsheet_id,
+            sheet,
+            &validated.repo_url,
+            &validated.lote_id,
+        )
+        .await?;
 
-        // 3. Manobra Anti-503: Desmembramento e Agregação na RAM
-        let client = McpGoogleSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
+        let sheet_proposta = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "proposta_original_resumo",
+        )
+        .await?;
+        let sheet_categoria = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "categoria_arquitetural",
+        )
+        .await?;
+
+        if !sheet_proposta.is_empty() {
+            row.proposta_original_resumo = sheet_proposta.clone();
+        } else if let Some(v) = l2_proposta.as_deref() {
+            if !v.trim().is_empty() {
+                row.proposta_original_resumo = v.trim().to_string();
+            }
+        }
+        if !sheet_categoria.is_empty() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(&sheet_categoria) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        } else if let Some(v) = l2_categoria.as_deref() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(v) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        }
+        let lote_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
+            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
+        let lote_col = Self::col_idx_to_a1(lote_idx);
+        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
+        let lote_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let lote_cell = lote_values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let mut dynamic_skip: Vec<&'static str> = Vec::new();
+        if !lote_cell.is_empty() {
+            row.lote_id = lote_cell.clone();
+            dynamic_skip.push("lote_id");
+        }
+        if !sheet_proposta.is_empty() {
+            dynamic_skip.push("proposta_original_resumo");
+        }
+        if !sheet_categoria.is_empty() {
+            dynamic_skip.push("categoria_arquitetural");
+        }
         let batch_payload =
-            Self::prepare_batch_payload_dynamic(row_number_1based, &header_row, &row)?;
+            Self::prepare_batch_payload_dynamic_with_skip(row_number_1based, &header_row, &row, &dynamic_skip)?;
 
-        // 4. Despacho Atômico (Simulado conforme Phase C)
-        Self::dispatch_to_cloud(batch_payload).await?;
-
-        Ok(row_number_1based)
+        match Self::dispatch_to_cloud(batch_payload).await {
+            Ok(()) => {
+                Self::confirm_cloud_write_projection(
+                    &client,
+                    &spreadsheet_id,
+                    row_number_1based,
+                    &header_row,
+                    &row,
+                )
+                .await?;
+                row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Ok(row_number_1based)
+            }
+            Err(err) => {
+                row.status_fase = "FASE_4_CLOUD_FAILED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Err(err)
+            }
+        }
     }
 
     pub async fn inject_ssot_with_skip_columns(
@@ -372,190 +909,623 @@ impl SsotInjector {
         let validated = Self::validate_payload(repo_id, &row)?;
 
         apply_phase4_block5(now_epoch, &mut row);
-        row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
-        Self::update_local_status(
-            repo_id,
-            row.status_atualizacao.as_str(),
-            &row,
-            &validated,
-            &block3_justifications,
-            now_epoch,
-        )
-        .map_err(SsotError::L2Failure)?;
 
         let spreadsheet_id =
             env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
         let sheet = "MASTER_SOLUTIONS";
-        let row_number_1based =
-            Self::resolve_row_number_by_repo_url(&spreadsheet_id, sheet, &validated.repo_url).await?;
+        let row_number_1based = Self::resolve_row_number_by_repo_url_and_lote_id(
+            &spreadsheet_id,
+            sheet,
+            &validated.repo_url,
+            &validated.lote_id,
+        )
+        .await?;
 
-        let client = McpGoogleSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
+        let sheet_proposta = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "proposta_original_resumo",
+        )
+        .await?;
+        let sheet_categoria = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "categoria_arquitetural",
+        )
+        .await?;
+
+        if !sheet_proposta.is_empty() {
+            row.proposta_original_resumo = sheet_proposta.clone();
+        } else if let Some(v) = l2_proposta.as_deref() {
+            if !v.trim().is_empty() {
+                row.proposta_original_resumo = v.trim().to_string();
+            }
+        }
+        if !sheet_categoria.is_empty() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(&sheet_categoria) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        } else if let Some(v) = l2_categoria.as_deref() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(v) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        }
+        let lote_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
+            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
+        let lote_col = Self::col_idx_to_a1(lote_idx);
+        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
+        let lote_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let lote_cell = lote_values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let mut merged_skip: Vec<&'static str> = skip_columns.to_vec();
+        if !lote_cell.is_empty() && !merged_skip.contains(&"lote_id") {
+            row.lote_id = lote_cell.clone();
+            merged_skip.push("lote_id");
+        }
+        if !sheet_proposta.is_empty() && !merged_skip.contains(&"proposta_original_resumo") {
+            merged_skip.push("proposta_original_resumo");
+        }
+        if !sheet_categoria.is_empty() && !merged_skip.contains(&"categoria_arquitetural") {
+            merged_skip.push("categoria_arquitetural");
+        }
         let batch_payload = Self::prepare_batch_payload_dynamic_with_skip(
             row_number_1based,
             &header_row,
             &row,
-            skip_columns,
+            &merged_skip,
         )?;
 
-        Self::dispatch_to_cloud(batch_payload).await?;
-
-        Ok(row_number_1based)
+        match Self::dispatch_to_cloud(batch_payload).await {
+            Ok(()) => {
+                Self::confirm_cloud_write_projection(
+                    &client,
+                    &spreadsheet_id,
+                    row_number_1based,
+                    &header_row,
+                    &row,
+                )
+                .await?;
+                row.status_fase = "FASE_4_SHEETS_UPDATED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Ok(row_number_1based)
+            }
+            Err(err) => {
+                row.status_fase = "FASE_4_CLOUD_FAILED".to_string();
+                Self::update_local_status(
+                    repo_id,
+                    row.status_atualizacao.as_str(),
+                    &row,
+                    &validated,
+                    &block3_justifications,
+                    now_epoch,
+                )
+                .map_err(SsotError::L2Failure)?;
+                Err(err)
+            }
+        }
     }
 
-    async fn resolve_row_number_by_repo_url(
-        spreadsheet_id: &str,
-        sheet: &str,
-        repo_url: &str,
-    ) -> Result<u32, SsotError> {
-        let result = Self::call_mcp_google_sheets_tool(
-            "get_sheet_data",
-            json!({
-                "spreadsheet_id": spreadsheet_id,
-                "sheet": sheet,
-                "range": "D2:D",
-                "include_grid_data": false
-            }),
+    pub async fn inject_ssot_from_db(repo_id: &str, now_epoch: i64) -> Result<u32, SsotError> {
+        let Some(mut row) = Self::try_load_repo_heuristics_row(repo_id)? else {
+            return Err(SsotError::L2Failure(format!(
+                "Outbox ausente: repo_heuristics não encontrado para repo_id={}",
+                repo_id
+            )));
+        };
+        let block3_justifications = Self::load_block3_justifications(repo_id)?;
+
+        let validated = Self::validate_payload(repo_id, &row)?;
+        apply_phase4_block5(now_epoch, &mut row);
+
+        let spreadsheet_id =
+            env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
+        let sheet = "MASTER_SOLUTIONS";
+        let row_number_1based = Self::resolve_row_number_by_repo_url_and_lote_id(
+            &spreadsheet_id,
+            sheet,
+            &validated.repo_url,
+            &validated.lote_id,
         )
         .await?;
 
-        let values = Self::extract_values_2d(&result).unwrap_or_default();
-        let needle = repo_url.trim_end_matches('/').to_ascii_lowercase();
-        if let Some(found) = Self::resolve_row_number_from_repo_url_column(&values, &needle) {
+        let client = ReqwestGoogleWorkspaceSheetsClient;
+        let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
+        let sheet_proposta = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "proposta_original_resumo",
+        )
+        .await?;
+        let sheet_categoria = Self::read_sheet_cell(
+            &client,
+            &spreadsheet_id,
+            sheet,
+            row_number_1based,
+            &header_row,
+            "categoria_arquitetural",
+        )
+        .await?;
+
+        if !sheet_proposta.is_empty() {
+            row.proposta_original_resumo = sheet_proposta.clone();
+        } else if let Some(v) = l2_proposta.as_deref() {
+            if !v.trim().is_empty() {
+                row.proposta_original_resumo = v.trim().to_string();
+            }
+        }
+        if !sheet_categoria.is_empty() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(&sheet_categoria) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        } else if let Some(v) = l2_categoria.as_deref() {
+            if let Ok(cat) = ArchitecturalCategory::parse_strict(v) {
+                if !matches!(cat, ArchitecturalCategory::Unknown | ArchitecturalCategory::Unspecified) {
+                    row.categoria_arquitetural = cat;
+                }
+            }
+        }
+
+        let lote_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
+            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
+        let lote_col = Self::col_idx_to_a1(lote_idx);
+        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
+        let lote_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let lote_cell = lote_values
+            .first()
+            .and_then(|r| r.first())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let mut dynamic_skip: Vec<&'static str> = Vec::new();
+        if !lote_cell.is_empty() {
+            row.lote_id = lote_cell.clone();
+            dynamic_skip.push("lote_id");
+        }
+        if !sheet_proposta.is_empty() {
+            dynamic_skip.push("proposta_original_resumo");
+        }
+        if !sheet_categoria.is_empty() {
+            dynamic_skip.push("categoria_arquitetural");
+        }
+        let batch_payload =
+            Self::prepare_batch_payload_dynamic_with_skip(row_number_1based, &header_row, &row, &dynamic_skip)?;
+
+        {
+            let conn = Self::open_vault_connection()?;
+            Self::ensure_repo_heuristics_schema(&conn).map_err(SsotError::L2Failure)?;
+            let _ = conn.execute(
+                "UPDATE repo_heuristics
+                 SET score_final = ?2,
+                     score_fit_geral_soda = ?3,
+                     score_architectural_priority = ?4,
+                     score_human_product_priority = ?5,
+                     score_absorption_readiness = ?6,
+                     score_operational_priority = ?7,
+                     score_sustainability_adjusted_fit = ?8,
+                     valid_from = ?9,
+                     valid_to = ?10,
+                     embargo_status = ?11
+                 WHERE project_name = ?1",
+                rusqlite::params![
+                    repo_id,
+                    row.score_final,
+                    row.score_fit_geral_soda,
+                    row.score_architectural_priority,
+                    row.score_human_product_priority,
+                    row.score_absorption_readiness,
+                    row.score_operational_priority,
+                    row.score_sustainability_adjusted_fit,
+                    row.valid_from,
+                    row.valid_to,
+                    row.embargo_status
+                ],
+            );
+        }
+
+        match Self::dispatch_to_cloud(batch_payload).await {
+            Ok(()) => {
+                Self::confirm_cloud_write_projection(
+                    &client,
+                    &spreadsheet_id,
+                    row_number_1based,
+                    &header_row,
+                    &row,
+                )
+                .await?;
+                let conn = Self::open_vault_connection()?;
+                let _ = conn.execute(
+                    "UPDATE repo_heuristics
+                     SET status_atualizacao = ?2,
+                         status_fase = ?3
+                     WHERE project_name = ?1",
+                    rusqlite::params![repo_id, "CONCLUIDO_AGUARDANDO", "FASE_4_SHEETS_UPDATED"],
+                );
+                let _ = conn.execute(
+                    "UPDATE repositorios
+                     SET status_processamento = ?1
+                     WHERE project_name = ?2",
+                    rusqlite::params!["CONCLUIDO", repo_id],
+                );
+                let _ = Self::checkpoint_upsert_repo_heuristics_full(
+                    repo_id,
+                    &row,
+                    "CONCLUIDO_AGUARDANDO",
+                    "FASE_4_SHEETS_UPDATED",
+                    &block3_justifications,
+                    now_epoch,
+                );
+                Ok(row_number_1based)
+            }
+            Err(err) => {
+                let conn = Self::open_vault_connection()?;
+                let _ = conn.execute(
+                    "UPDATE repo_heuristics
+                     SET status_fase = ?2
+                     WHERE project_name = ?1",
+                    rusqlite::params![repo_id, "ERRO_FASE_4"],
+                );
+                let _ = conn.execute(
+                    "UPDATE repositorios
+                     SET status_processamento = ?1
+                     WHERE project_name = ?2",
+                    rusqlite::params!["ERRO_FASE_4", repo_id],
+                );
+                Err(err)
+            }
+        }
+    }
+
+    async fn resolve_row_number_by_repo_url_and_lote_id(
+        spreadsheet_id: &str,
+        sheet: &str,
+        repo_url: &str,
+        lote_id: &str,
+    ) -> Result<u32, SsotError> {
+        let client = ReqwestGoogleWorkspaceSheetsClient;
+        let header_row = Self::load_master_solutions_header(&client, spreadsheet_id).await?;
+        let repo_url_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (raw.trim() == "repo_url").then_some(idx))
+            .ok_or_else(|| {
+                SsotError::CloudFailure(format!(
+                    "Header missing repo_url (headers_len={})",
+                    header_row.len()
+                ))
+            })?;
+        let lote_id_idx = header_row
+            .iter()
+            .enumerate()
+            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
+            .ok_or_else(|| {
+                SsotError::CloudFailure(format!(
+                    "Header missing lote_id (headers_len={})",
+                    header_row.len()
+                ))
+            })?;
+        let min_idx = repo_url_idx.min(lote_id_idx);
+        let max_idx = repo_url_idx.max(lote_id_idx);
+        let start_col = Self::col_idx_to_a1(min_idx);
+        let end_col = Self::col_idx_to_a1(max_idx);
+        let range = format!("{start_col}2:{end_col}");
+        let values = client
+            .get_sheet_data(spreadsheet_id, sheet, range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+
+        if let Some(found) = Self::resolve_row_number_from_repo_locator_columns(
+            &values,
+            repo_url_idx.saturating_sub(min_idx),
+            lote_id_idx.saturating_sub(min_idx),
+            repo_url,
+            lote_id,
+        ) {
             return Ok(found);
         }
 
+        let mut non_empty_examples: Vec<String> = Vec::new();
+        for row in values.iter().take(500) {
+            let repo_v = row
+                .get(repo_url_idx.saturating_sub(min_idx))
+                .map(|s| s.trim())
+                .unwrap_or("");
+            let lote_v = row
+                .get(lote_id_idx.saturating_sub(min_idx))
+                .map(|s| s.trim())
+                .unwrap_or("");
+            if repo_v.is_empty() && lote_v.is_empty() {
+                continue;
+            }
+            non_empty_examples.push(format!("{repo_v} | lote={lote_v}"));
+            if non_empty_examples.len() >= 5 {
+                break;
+            }
+        }
         Err(SsotError::CloudFailure(format!(
-            "Linha SSOT não encontrada para repo_url='{}'. Append é proibido; abortando.",
-            repo_url
+            "Linha SSOT não encontrada por match robusto repo_url='{}' lote_id='{}' (repo_url_col={} lote_id_col={} repo_url_idx0={} headers_len={} examples={:?}). Append é proibido; abortando.",
+            repo_url,
+            lote_id,
+            Self::col_idx_to_a1(repo_url_idx),
+            Self::col_idx_to_a1(lote_id_idx),
+            repo_url_idx,
+            header_row.len(),
+            non_empty_examples
         )))
     }
 
-    fn resolve_row_number_from_repo_url_column(
-        values: &[Vec<String>],
-        repo_url_needle: &str,
-    ) -> Option<u32> {
-        for (idx, row) in values.iter().enumerate() {
-            let repo_cell = row.first().map(|s| s.trim()).unwrap_or("");
-            let repo_hay = repo_cell.trim_end_matches('/').to_ascii_lowercase();
-            if !repo_hay.is_empty() && repo_hay == repo_url_needle {
-                return Some((idx as u32) + 2);
-            }
+    fn try_extract_repo_id_from_repo_url(repo_url: &str) -> Option<String> {
+        let url = Url::parse(repo_url).ok()?;
+        let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+        if url.host_str() != Some("github.com") && !allow_host_override {
+            return None;
+        }
+        let mut segments = url
+            .path_segments()?
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim_end_matches(".git"))
+            .collect::<Vec<_>>();
+        if segments.len() < 2 {
+            return None;
+        }
+        let repo = segments.pop()?;
+        let owner = segments.pop()?;
+        Some(format!("{owner}/{repo}"))
+    }
+
+    fn normalize_repo_locator(raw: &str) -> String {
+        raw.trim().trim_end_matches('/').to_ascii_lowercase()
+    }
+
+    fn try_extract_repo_id_loose(raw: &str) -> Option<String> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Some(repo_id) = Self::try_extract_repo_id_from_repo_url(trimmed) {
+            return Some(repo_id.to_ascii_lowercase());
+        }
+        if trimmed.contains("://") {
+            return None;
+        }
+        let candidate = trimmed.replace(' ', "");
+        let parts: Vec<&str> = candidate.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.len() == 2 {
+            return Some(format!("{}/{}", parts[0], parts[1]).to_ascii_lowercase());
         }
         None
     }
 
-    async fn call_mcp_google_sheets_tool(
-        tool_name: &str,
-        arguments: Value,
-    ) -> Result<Value, SsotError> {
-        use std::process::Stdio;
-        use tokio::io::AsyncWriteExt;
-        use tokio::process::Command;
+    fn resolve_row_number_from_repo_locator_columns(
+        values: &[Vec<String>],
+        repo_url_idx: usize,
+        lote_id_idx: usize,
+        repo_url_needle: &str,
+        lote_id_needle: &str,
+    ) -> Option<u32> {
+        let repo_url_needle = Self::normalize_repo_locator(repo_url_needle);
+        let lote_id_needle = lote_id_needle.trim();
+        let repo_id_needle = Self::try_extract_repo_id_loose(repo_url_needle.as_str()).unwrap_or_default();
 
-        let creds = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-            .map_err(|_| SsotError::ConfigMissing("GOOGLE_APPLICATION_CREDENTIALS"))?;
-
-        let init_req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "clientInfo": { "name": "genesis-mc", "version": "1.0" },
-                "capabilities": {}
+        for (idx, row) in values.iter().enumerate() {
+            let repo_cell = row.get(repo_url_idx).map(|s| s.as_str()).unwrap_or("");
+            let lote_cell = row.get(lote_id_idx).map(|s| s.trim()).unwrap_or("");
+            let repo_hay = Self::normalize_repo_locator(repo_cell);
+            let repo_id_hay = Self::try_extract_repo_id_loose(repo_cell);
+            let repo_matches = (!repo_hay.is_empty() && repo_hay == repo_url_needle)
+                || (!repo_id_needle.is_empty()
+                    && repo_id_hay
+                        .as_deref()
+                        .map(|value| value == repo_id_needle)
+                        .unwrap_or(false));
+            if repo_matches && !lote_cell.is_empty() && lote_cell == lote_id_needle {
+                return Some((idx as u32) + 2);
             }
-        });
-        let initialized_notif = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-            "params": {}
-        });
-        let mcp_request = json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": { "name": tool_name, "arguments": arguments }
-        });
-
-        let mut child = Command::new("mcp-google-sheets")
-            .env("GOOGLE_APPLICATION_CREDENTIALS", &creds)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao spawnar mcp-google-sheets: {}", e)))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(format!("{}\n", init_req).as_bytes())
-                .await
-                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever init no MCP: {}", e)))?;
-            stdin
-                .write_all(format!("{}\n", initialized_notif).as_bytes())
-                .await
-                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever initialized no MCP: {}", e)))?;
-            stdin
-                .write_all(format!("{}\n", mcp_request).as_bytes())
-                .await
-                .map_err(|e| SsotError::NetworkFailure(format!("Falha ao escrever tools/call no MCP: {}", e)))?;
         }
 
-        let output = child
-            .wait_with_output()
-            .await
-            .map_err(|e| SsotError::NetworkFailure(format!("Falha ao aguardar processo MCP: {}", e)))?;
-        if !output.status.success() {
-            return Err(SsotError::NetworkFailure(format!(
-                "Falha no processo MCP. Exit {}. STDERR: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            )));
+        for (idx, row) in values.iter().enumerate() {
+            let repo_cell = row.get(repo_url_idx).map(|s| s.as_str()).unwrap_or("");
+            let repo_hay = Self::normalize_repo_locator(repo_cell);
+            let repo_id_hay = Self::try_extract_repo_id_loose(repo_cell);
+            let repo_matches = (!repo_hay.is_empty() && repo_hay == repo_url_needle)
+                || (!repo_id_needle.is_empty()
+                    && repo_id_hay
+                        .as_deref()
+                        .map(|value| value == repo_id_needle)
+                        .unwrap_or(false));
+            if repo_matches {
+                return Some((idx as u32) + 2);
+            }
         }
 
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
-        Self::parse_mcp_tool_stdout(&stdout_str, 2).map_err(SsotError::NetworkFailure)
+        None
     }
 
-    fn parse_mcp_tool_stdout(stdout: &str, expected_id: i64) -> Result<Value, String> {
-        for line in stdout.lines() {
-            let Ok(value) = serde_json::from_str::<Value>(line) else {
-                continue;
-            };
-            let id = value.get("id").and_then(|v| v.as_i64());
-            if id != Some(expected_id) {
-                continue;
-            }
-            if let Some(err) = value.get("error") {
-                return Err(format!("MCP error: {}", err));
-            }
-            let Some(result) = value.get("result") else {
-                return Err("MCP missing result".to_string());
-            };
-            if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-                let mut combined = String::new();
-                for part in content {
-                    if part.get("type").and_then(|t| t.as_str()) != Some("text") {
-                        continue;
-                    }
-                    let text = part.get("text").and_then(|t| t.as_str()).unwrap_or("");
-                    if !text.trim().is_empty() {
-                        if !combined.is_empty() {
-                            combined.push('\n');
-                        }
-                        combined.push_str(text);
-                    }
-                }
-                if !combined.trim().is_empty() {
-                    if let Ok(json_val) = serde_json::from_str::<Value>(&combined) {
-                        return Ok(json_val);
-                    }
-                    return Ok(json!({ "text": combined }));
-                }
-            }
-            return Ok(result.clone());
+    fn is_invalid_repo_analised_version_seed(raw: &str) -> bool {
+        let normalized = raw.trim().to_ascii_lowercase();
+        normalized.is_empty()
+            || normalized == "main"
+            || normalized == "master"
+            || normalized == "unknown"
+    }
+
+    async fn google_workspace_access_token() -> Result<String, SsotError> {
+        google_workspace_mcp::google_workspace_access_token_async()
+            .await
+            .map_err(SsotError::NetworkFailure)
+    }
+
+    fn google_sheets_api_base_url() -> String {
+        env::var("SODA_GOOGLE_SHEETS_API_BASE_URL")
+            .ok()
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| GOOGLE_SHEETS_API_BASE_URL.to_string())
+    }
+
+    fn build_google_sheets_http_client() -> Result<reqwest::Client, String> {
+        reqwest::Client::builder()
+            .timeout(GOOGLE_SHEETS_HTTP_TIMEOUT)
+            .user_agent("genesis-mc-sheets/1.0")
+            .build()
+            .map_err(|e| format!("Falha ao construir cliente HTTP do Google Sheets: {e}"))
+    }
+
+    fn build_google_sheets_values_url_with_base(
+        base_url: &str,
+        spreadsheet_id: &str,
+        a1_range: &str,
+    ) -> Result<String, String> {
+        let mut url = Url::parse(&format!("{}/", base_url.trim_end_matches('/')))
+            .map_err(|e| format!("Base URL inválida do Google Sheets: {e}"))?;
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .map_err(|_| "Base URL do Google Sheets não suporta path segments".to_string())?;
+            segments.pop_if_empty();
+            segments.push(spreadsheet_id);
+            segments.push("values");
+            segments.push(a1_range);
         }
-        Err("MCP tool response not found in stdout".to_string())
+        url.query_pairs_mut().append_pair("majorDimension", "ROWS");
+        Ok(url.to_string())
+    }
+
+    fn build_google_sheets_values_url(
+        spreadsheet_id: &str,
+        a1_range: &str,
+    ) -> Result<String, String> {
+        Self::build_google_sheets_values_url_with_base(
+            &Self::google_sheets_api_base_url(),
+            spreadsheet_id,
+            a1_range,
+        )
+    }
+
+    fn build_google_sheets_batch_update_url(spreadsheet_id: &str) -> Result<String, String> {
+        let mut url = Url::parse(&format!("{}/", Self::google_sheets_api_base_url()))
+            .map_err(|e| format!("Base URL inválida do Google Sheets: {e}"))?;
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .map_err(|_| "Base URL do Google Sheets não suporta path segments".to_string())?;
+            segments.pop_if_empty();
+            segments.push(spreadsheet_id);
+            segments.push("values:batchUpdate");
+        }
+        Ok(url.to_string())
+    }
+
+    fn build_google_sheets_batch_update_body(
+        sheet: &str,
+        ranges: &serde_json::Map<String, Value>,
+    ) -> Result<Value, String> {
+        if ranges.len() != 1 {
+            return Err(format!(
+                "Escrita no Sheets rejeitada: esperado 1 range atômico, recebeu {} ranges",
+                ranges.len()
+            ));
+        }
+        let (range, values) = ranges
+            .iter()
+            .next()
+            .ok_or_else(|| "Payload de ranges vazio para values:batchUpdate".to_string())?;
+        Ok(json!({
+            "valueInputOption": "RAW",
+            "data": [{
+                "range": format!("{sheet}!{range}"),
+                "majorDimension": "ROWS",
+                "values": values
+            }]
+        }))
+    }
+
+    async fn send_google_sheets_json_request(
+        request: reqwest::RequestBuilder,
+        operation: &str,
+    ) -> Result<Value, String> {
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("Falha HTTP no Google Sheets ({operation}): {e}"))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("Falha ao ler body do Google Sheets ({operation}): {e}"))?;
+        if !status.is_success() {
+            return Err(format!(
+                "Google Sheets ({operation}) respondeu HTTP {}: {}",
+                status,
+                body.trim()
+            ));
+        }
+        serde_json::from_str::<Value>(&body)
+            .map_err(|e| format!("Google Sheets ({operation}) retornou JSON inválido: {e}; body={body}"))
+    }
+
+    fn validate_batch_update_result(
+        ranges: &serde_json::Map<String, Value>,
+        result: &Value,
+    ) -> Result<(), String> {
+        if let Some(err) = result.get("error") {
+            return Err(format!("values:batchUpdate retornou erro: {}", err));
+        }
+        let responses = result
+            .get("responses")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| format!("values:batchUpdate sem responses: {}", result))?;
+        if responses.len() != ranges.len() {
+            return Err(format!(
+                "values:batchUpdate retornou {} responses, esperado {}",
+                responses.len(),
+                ranges.len()
+            ));
+        }
+        for ((range, _), response) in ranges.iter().zip(responses.iter()) {
+            Self::validate_write_values_result(range, response)?;
+        }
+        Ok(())
     }
 
     fn extract_values_2d(value: &Value) -> Option<Vec<Vec<String>>> {
@@ -632,10 +1602,9 @@ impl SsotInjector {
             "repo_analised_version",
             &payload.repo_analised_version,
         )?;
-        let repo_analised_version_lower = repo_analised_version.to_ascii_lowercase();
-        if repo_analised_version_lower == "main" || repo_analised_version_lower == "master" {
+        if Self::is_invalid_repo_analised_version_seed(&repo_analised_version) {
             return Err(SsotError::ValidationFailure(format!(
-                "repo_analised_version invalido (branch): '{}'",
+                "repo_analised_version invalido (branch/seed): '{}'",
                 repo_analised_version
             )));
         }
@@ -694,12 +1663,8 @@ impl SsotInjector {
         block3_justifications: &HashMap<String, String>,
         now_epoch: i64,
     ) -> Result<(), String> {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let root_dir = std::path::Path::new(manifest_dir).parent().unwrap_or_else(|| std::path::Path::new("."));
-        let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
-        
-        let conn = Connection::open(&db_path)
-            .map_err(|e| format!("Falha ao conectar no SQLite: {}", e))?;
+        let conn = Self::open_vault_connection()
+            .map_err(|e| format!("Falha ao conectar no SQLite: {e:?}"))?;
 
         Self::ensure_repo_heuristics_schema(&conn)?;
         Self::ensure_repo_heuristics_justifications_schema(&conn)?;
@@ -708,25 +1673,121 @@ impl SsotInjector {
             Self::status_fase_to_persist(&payload.status_atualizacao, &payload.status_fase)
                 .to_string();
 
+        Self::upsert_repo_heuristics_row_internal(
+            &conn,
+            repo_id,
+            payload,
+            validated,
+            payload.status_atualizacao.as_str(),
+            &status_fase_to_persist,
+            block3_justifications,
+            now_epoch,
+        )?;
+
+        // Atualizando o status em repositorios
+        let _ = conn.execute(
+            "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
+            rusqlite::params![status_value, repo_id],
+        )
+        .map_err(|e| format!("Falha ao executar UPDATE repositorios: {}", e))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn checkpoint_upsert_repo_heuristics_full(
+        repo_id: &str,
+        payload: &MasterSolutionsRow,
+        status_atualizacao: &str,
+        status_fase: &str,
+        block3_justifications: &HashMap<String, String>,
+        now_epoch: i64,
+    ) -> Result<(), SsotError> {
+        let validated = Self::validate_payload(repo_id, payload)?;
+        let conn = Self::open_vault_connection()?;
+        Self::ensure_repo_heuristics_schema(&conn).map_err(SsotError::L2Failure)?;
+        Self::ensure_repo_heuristics_justifications_schema(&conn).map_err(SsotError::L2Failure)?;
+        let status_fase_to_persist =
+            Self::status_fase_to_persist(status_atualizacao, status_fase).to_string();
+        Self::upsert_repo_heuristics_row_internal(
+            &conn,
+            repo_id,
+            payload,
+            &validated,
+            status_atualizacao,
+            &status_fase_to_persist,
+            block3_justifications,
+            now_epoch,
+        )
+        .map_err(SsotError::L2Failure)?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn upsert_repo_heuristics_row_internal(
+        conn: &Connection,
+        repo_id: &str,
+        payload: &MasterSolutionsRow,
+        validated: &ValidatedSsotFields,
+        status_atualizacao_to_persist: &str,
+        status_fase_to_persist: &str,
+        block3_justifications: &HashMap<String, String>,
+        now_epoch: i64,
+    ) -> Result<(), String> {
+        let repo_version_to_persist = {
+            let primary = payload.repo_analised_version.trim();
+            if !primary.is_empty() {
+                primary.to_string()
+            } else {
+                let fallback = payload.ultima_versao_online.trim();
+                if !fallback.is_empty() {
+                    fallback.to_string()
+                } else {
+                    "unknown".to_string()
+                }
+            }
+        };
+
+        let existing_curated: Result<(String, String), _> = conn.query_row(
+            "SELECT proposta_original_resumo, categoria_arquitetural
+             FROM repo_heuristics
+             WHERE project_name = ?1
+             LIMIT 1",
+            rusqlite::params![repo_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+        let mut proposta_original_resumo_to_persist = payload.proposta_original_resumo.trim().to_string();
+        let mut categoria_arquitetural_to_persist = payload.categoria_arquitetural.as_str().to_string();
+        if let Ok((proposta, categoria)) = existing_curated {
+            let proposta = proposta.trim();
+            if !proposta.is_empty() {
+                proposta_original_resumo_to_persist = proposta.to_string();
+            }
+            let categoria = categoria.trim();
+            if !categoria.is_empty() {
+                categoria_arquitetural_to_persist = categoria.to_string();
+            }
+        }
+
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
-                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status
+                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, repo_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status, indicacao_otimista_canibalizacao
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84, ?85, ?86
             )",
             rusqlite::params![
                 &validated.project_name,
-                &payload.status_atualizacao,
+                status_atualizacao_to_persist,
                 &status_fase_to_persist,
                 &validated.repo_url,
                 &validated.repo_analised_version,
+                &repo_version_to_persist,
                 &payload.ultima_versao_online,
                 &payload.lote_id,
                 payload.data_ultima_analise,
                 &payload.analise_origem,
                 &payload.declared_description,
-                &payload.proposta_original_resumo,
+                &proposta_original_resumo_to_persist,
                 &payload.stack_base,
                 &payload.licenca,
                 &payload.lente_a_sentido_prod_ux,
@@ -737,7 +1798,7 @@ impl SsotInjector {
                 &payload.executive_verdict,
                 payload.classificacao_terminal.as_str(),
                 payload.acao_de_canibalizacao.as_str(),
-                payload.categoria_arquitetural.as_str(),
+                &categoria_arquitetural_to_persist,
                 payload.horizonte_extracao.as_str(),
                 payload.tipo_integracao.as_str(),
                 &payload.categoria_nuance_tecnica,
@@ -800,6 +1861,7 @@ impl SsotInjector {
                 payload.valid_from,
                 payload.valid_to,
                 payload.embargo_status,
+                &payload.indicacao_otimista_canibalizacao,
             ],
         ).map_err(|e| format!("Falha ao executar INSERT repo_heuristics: {}", e))?;
 
@@ -810,7 +1872,7 @@ impl SsotInjector {
                 max_delay_ms: 400,
                 jitter_ms: 50,
             };
-            if let Err(err) = Self::cleanup_artefatos_brutos_for_repo_id(&conn, repo_id, policy) {
+            if let Err(err) = Self::cleanup_artefatos_brutos_for_repo_id(conn, repo_id, policy) {
                 info!(repo_id = %repo_id, error = %err, "SHORT-CIRCUIT: cleanup de blobs falhou (fail-soft)");
             }
         }
@@ -828,17 +1890,31 @@ impl SsotInjector {
             )
             .map_err(|e| format!("Falha ao persistir justifications do Bloco 3 em SQLite: {}", e))?;
         }
-
-        // Atualizando o status em repositorios
-        let _ = conn.execute(
-            "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
-            rusqlite::params![status_value, repo_id],
-        ).map_err(|e| format!("Falha ao executar UPDATE repositorios: {}", e))?;
-        
         Ok(())
     }
 
-    fn ensure_repo_heuristics_schema(conn: &Connection) -> Result<(), String> {
+    pub fn persist_phase3_snapshot(
+        repo_id: &str,
+        row: &MasterSolutionsRow,
+        block3_justifications: &HashMap<String, String>,
+        now_epoch: i64,
+    ) -> Result<(), SsotError> {
+        let mut snapshot = row.clone();
+        snapshot.status_atualizacao = "CONCLUIDO_AGUARDANDO".to_string();
+        snapshot.status_fase = "FASE_3_SYNTHESIZER_OK".to_string();
+        let validated = Self::validate_payload(repo_id, &snapshot)?;
+        Self::update_local_status(
+            repo_id,
+            snapshot.status_atualizacao.as_str(),
+            &snapshot,
+            &validated,
+            block3_justifications,
+            now_epoch,
+        )
+        .map_err(SsotError::L2Failure)
+    }
+
+    pub(crate) fn ensure_repo_heuristics_schema(conn: &Connection) -> Result<(), String> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS repo_heuristics (
                 project_name TEXT PRIMARY KEY,
@@ -848,6 +1924,7 @@ impl SsotInjector {
                 repo_analised_version TEXT NOT NULL,
                 repo_version TEXT,
                 ultima_versao_online TEXT,
+                indicacao_otimista_canibalizacao TEXT NOT NULL DEFAULT '',
                 lote_id TEXT NOT NULL,
                 data_ultima_analise INTEGER NOT NULL,
                 analise_origem TEXT NOT NULL,
@@ -942,6 +2019,7 @@ impl SsotInjector {
         let mut has_status_fase = false;
         let mut has_repo_analised_version = false;
         let mut has_repo_version = false;
+        let mut has_indicacao_otimista = false;
         while let Some(row) = rows
             .next()
             .map_err(|e| format!("Falha ao iterar PRAGMA table_info(repo_heuristics): {e}"))?
@@ -954,6 +2032,7 @@ impl SsotInjector {
                 "status_fase" => has_status_fase = true,
                 "repo_analised_version" => has_repo_analised_version = true,
                 "repo_version" => has_repo_version = true,
+                "indicacao_otimista_canibalizacao" => has_indicacao_otimista = true,
                 _ => {}
             }
         }
@@ -986,6 +2065,13 @@ impl SsotInjector {
             )
             .map_err(|e| format!("Falha ao adicionar coluna repo_version (legado): {e}"))?;
         }
+        if !has_indicacao_otimista {
+            conn.execute(
+                "ALTER TABLE repo_heuristics ADD COLUMN indicacao_otimista_canibalizacao TEXT NOT NULL DEFAULT ''",
+                [],
+            )
+            .map_err(|e| format!("Falha ao adicionar coluna indicacao_otimista_canibalizacao: {e}"))?;
+        }
 
         let _ = conn.execute(
             "UPDATE repo_heuristics
@@ -999,7 +2085,7 @@ impl SsotInjector {
         Ok(())
     }
 
-    fn ensure_repo_heuristics_justifications_schema(conn: &Connection) -> Result<(), String> {
+    pub(crate) fn ensure_repo_heuristics_justifications_schema(conn: &Connection) -> Result<(), String> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS repo_heuristics_justifications (
                 project_name TEXT NOT NULL,
@@ -1014,10 +2100,26 @@ impl SsotInjector {
         Ok(())
     }
 
-    fn normalize_header_cell(raw: &str) -> String {
-        raw.trim()
-            .to_ascii_lowercase()
-            .replace([' ', '-'], "_")
+    fn validate_master_solutions_header_exact(header_row: &[String]) -> Result<(), SsotError> {
+        if header_row.len() != SSOT_EXPECTED_COLUMNS {
+            return Err(SsotError::CloudFailure(format!(
+                "Header MASTER_SOLUTIONS inválido: esperado {} colunas, recebeu {}",
+                SSOT_EXPECTED_COLUMNS,
+                header_row.len(),
+            )));
+        }
+        for (idx, expected) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
+            let actual = header_row.get(idx).map(|s| s.trim()).unwrap_or_default();
+            if actual != *expected {
+                return Err(SsotError::CloudFailure(format!(
+                    "Header MASTER_SOLUTIONS divergente na coluna {}: esperado '{}', recebido '{}'",
+                    idx,
+                    expected,
+                    actual
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn col_idx_to_a1(idx_0based: usize) -> String {
@@ -1036,16 +2138,21 @@ impl SsotInjector {
         spreadsheet_id: &str,
     ) -> Result<Vec<String>, SsotError> {
         let raw = sheets
-            .get_sheet_data(spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A1:CF1".to_string())
+            .get_sheet_data(
+                spreadsheet_id,
+                MASTER_SOLUTIONS_SHEET,
+                master_solutions_header_range(),
+            )
             .await
             .map_err(SsotError::CloudFailure)?;
-        Ok(raw.first().cloned().unwrap_or_default())
+        let header_row = raw.first().cloned().unwrap_or_default();
+        Self::validate_master_solutions_header_exact(&header_row)?;
+        Ok(header_row)
     }
 
-    fn validate_sheet_row_values(row_values_by_name: &HashMap<&'static str, Value>) -> Result<(), SsotError> {
+    fn validate_sheet_row_values(row_values_by_name: &HashMap<&'static str, String>) -> Result<(), SsotError> {
         let valid_from_ok = row_values_by_name
             .get("valid_from")
-            .and_then(|v| v.as_str())
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false);
         if !valid_from_ok {
@@ -1055,7 +2162,6 @@ impl SsotInjector {
         }
         let valid_to_ok = row_values_by_name
             .get("valid_to")
-            .and_then(|v| v.as_str())
             .map(|s| s.trim().is_empty() || s.contains('-'))
             .unwrap_or(false);
         if !valid_to_ok {
@@ -1065,7 +2171,6 @@ impl SsotInjector {
         }
         let embargo_ok = row_values_by_name
             .get("embargo_status")
-            .and_then(|v| v.as_str())
             .map(|s| s == "LIVRE" || s == "EMBARGADO")
             .unwrap_or(false);
         if !embargo_ok {
@@ -1074,6 +2179,36 @@ impl SsotInjector {
             ));
         }
         Ok(())
+    }
+
+    fn validate_write_values_result(range: &str, result: &Value) -> Result<(), String> {
+        if let Some(err) = result.get("error") {
+            return Err(format!("write_values retornou erro para {}: {}", range, err));
+        }
+        let has_updated_range = result
+            .get("updatedRange")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        let has_updated_cells = result
+            .get("updatedCells")
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().and_then(|n| (n > 0).then_some(n as u64))))
+            .map(|n| n > 0)
+            .unwrap_or(false);
+        let has_updated_rows = result
+            .get("updatedRows")
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().and_then(|n| (n > 0).then_some(n as u64))))
+            .map(|n| n > 0)
+            .unwrap_or(false);
+        let ok_flag = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        if has_updated_range || has_updated_cells || has_updated_rows || ok_flag {
+            return Ok(());
+        }
+        Err(format!(
+            "write_values sem confirmação inequívoca para {}: {}",
+            range,
+            result
+        ))
     }
 
     fn prepare_batch_payload_dynamic(
@@ -1090,6 +2225,7 @@ impl SsotInjector {
         payload: &MasterSolutionsRow,
         skip_columns: &[&'static str],
     ) -> Result<Value, SsotError> {
+        Self::validate_master_solutions_header_exact(header_row)?;
         let row_values = payload.to_sheet_row();
         if row_values.len() != SSOT_EXPECTED_COLUMNS {
             return Err(SsotError::ValidationFailure(format!(
@@ -1099,50 +2235,62 @@ impl SsotInjector {
             )));
         }
 
-        let mut by_name: HashMap<&'static str, Value> = HashMap::with_capacity(SSOT_EXPECTED_COLUMNS);
+        let mut by_name: HashMap<&'static str, String> =
+            HashMap::with_capacity(SSOT_EXPECTED_COLUMNS);
         for (idx, name) in MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().enumerate() {
-            by_name.insert(*name, row_values[idx].clone());
-        }
-        if let Some(v) = by_name.get("repo_analised_version").cloned() {
-            by_name.insert("repo_version", v);
+            by_name.insert(*name, Self::maybe_fix_mojibake(&row_values[idx]));
         }
         Self::validate_sheet_row_values(&by_name)?;
-
-        let mut canonical_set: HashSet<&'static str> =
-            MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().copied().collect();
-        canonical_set.insert("repo_version");
-        let mut skip_set: HashSet<&'static str> = HashSet::new();
-        for s in skip_columns {
-            skip_set.insert(*s);
+        let write_columns = header_row.len();
+        if !skip_columns.is_empty() {
+            let unsupported: Vec<&str> = skip_columns
+                .iter()
+                .copied()
+                .filter(|name| {
+                    !matches!(
+                        *name,
+                        "lote_id" | "proposta_original_resumo" | "categoria_arquitetural"
+                    )
+                })
+                .collect();
+            if !unsupported.is_empty() {
+                return Err(SsotError::ValidationFailure(format!(
+                    "Skip de colunas não suportado para escrita atômica: {}",
+                    unsupported.join(", ")
+                )));
+            }
         }
+        if write_columns > SSOT_EXPECTED_COLUMNS {
+            return Err(SsotError::ValidationFailure(format!(
+                "Header excede colunas suportadas para escrita: {} > {}",
+                write_columns, SSOT_EXPECTED_COLUMNS
+            )));
+        }
+
+        let mut row_out: Vec<String> = Vec::with_capacity(write_columns);
+        for idx in 0..write_columns {
+            let canonical_name = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+                .get(idx)
+                .copied()
+                .ok_or_else(|| {
+                    SsotError::ValidationFailure(format!(
+                        "Header aponta para coluna fora do catálogo canônico: idx={}",
+                        idx
+                    ))
+                })?;
+            let value = by_name.get(canonical_name).cloned().unwrap_or_default();
+            row_out.push(value);
+        }
+
+        let end_col = Self::col_idx_to_a1(write_columns.saturating_sub(1));
+        let range = format!("A{}:{}{}", row_number_1based, end_col, row_number_1based);
         let mut map = serde_json::Map::new();
-        for (idx, raw) in header_row.iter().enumerate() {
-            let key = Self::normalize_header_cell(raw);
-            if key.is_empty() {
-                continue;
-            }
-            if !canonical_set.contains(key.as_str()) {
-                continue;
-            }
-            if skip_set.contains(key.as_str()) {
-                continue;
-            }
-            let Some(value) = by_name.get(key.as_str()) else { continue };
-            let col = Self::col_idx_to_a1(idx);
-            let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
-            map.insert(range, json!(vec![vec![value]]));
-        }
-
-        if map.is_empty() {
-            return Err(SsotError::ValidationFailure(
-                "HeaderResolver não encontrou colunas conhecidas para escrita".to_string(),
-            ));
-        }
+        map.insert(range, json!([row_out]));
 
         info!(
-            ranges = map.len(),
+            columns = write_columns,
             sheet_range = %sheet_range_for_row(row_number_1based),
-            "Payload dinâmico do Google Sheets montado (late-binding por header)"
+            "Payload do Google Sheets montado (1 range atômico por linha)"
         );
         Ok(Value::Object(map))
     }
@@ -1158,17 +2306,110 @@ impl SsotInjector {
         sheets
             .batch_update_cells(spreadsheet_id, MASTER_SOLUTIONS_SHEET, payload)
             .await
-            .map_err(SsotError::CloudFailure)
+            .map_err(SsotError::CloudFailure)?;
+        tokio::time::sleep(POST_ATOMIC_ROW_WRITE_DELAY).await;
+        Ok(())
+    }
+
+    pub async fn update_single_status_fase(
+        row_number_1based: u32,
+        new_status: &str,
+    ) -> Result<(), SsotError> {
+        let spreadsheet_id =
+            env::var("GOOGLE_SHEETS_ID").map_err(|_| SsotError::ConfigMissing("GOOGLE_SHEETS_ID"))?;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
+        let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
+        let status_idx = Self::header_idx(&header_row, "status_fase").ok_or_else(|| {
+            SsotError::CloudFailure("Header missing status_fase".to_string())
+        })?;
+        let col = Self::col_idx_to_a1(status_idx);
+        let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
+        client
+            .batch_update_cells(
+                &spreadsheet_id,
+                MASTER_SOLUTIONS_SHEET,
+                json!({
+                    range: [[new_status]]
+                }),
+            )
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        info!(
+            row_number = row_number_1based,
+            status_fase = new_status,
+            "SSOT: micro-sync de status_fase concluído"
+        );
+        Ok(())
     }
 
     async fn dispatch_to_cloud(payload: Value) -> Result<(), SsotError> {
         let sheets_id = env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| SsotError::CloudFailure("Missing GOOGLE_SHEETS_ID".to_string()))?;
-        let client = McpGoogleSheetsClient;
+        let client = ReqwestGoogleWorkspaceSheetsClient;
         client
             .batch_update_cells(&sheets_id, MASTER_SOLUTIONS_SHEET, payload)
             .await
-            .map_err(SsotError::CloudFailure)
+            .map_err(SsotError::CloudFailure)?;
+        tokio::time::sleep(POST_ATOMIC_ROW_WRITE_DELAY).await;
+        Ok(())
+    }
+
+    fn cell_text_for_confirmation(payload: &MasterSolutionsRow, canonical_col: &str) -> Option<String> {
+        let idx = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .position(|col| *col == canonical_col)?;
+        payload.to_sheet_row().get(idx).map(|value| Self::maybe_fix_mojibake(value))
+    }
+
+    fn parse_confirmation_number(raw: &str) -> Option<f64> {
+        raw.trim().replace(',', ".").parse::<f64>().ok()
+    }
+
+    fn confirmation_matches(canonical_col: &str, expected: &str, actual: &str) -> bool {
+        if expected == actual {
+            return true;
+        }
+        if canonical_col.starts_with("score_") {
+            if let (Some(lhs), Some(rhs)) = (
+                Self::parse_confirmation_number(expected),
+                Self::parse_confirmation_number(actual),
+            ) {
+                return (lhs - rhs).abs() < 0.000_001;
+            }
+        }
+        false
+    }
+
+    async fn confirm_cloud_write_projection(
+        client: &dyn SheetsClient,
+        spreadsheet_id: &str,
+        row_number_1based: u32,
+        header_row: &[String],
+        payload: &MasterSolutionsRow,
+    ) -> Result<(), SsotError> {
+        for canonical in ["project_name", "repo_url", "score_final", "analise_origem"] {
+            let Some(expected) = Self::cell_text_for_confirmation(payload, canonical) else {
+                continue;
+            };
+            let actual = Self::read_sheet_cell(
+                client,
+                spreadsheet_id,
+                MASTER_SOLUTIONS_SHEET,
+                row_number_1based,
+                header_row,
+                canonical,
+            )
+            .await?;
+            if !Self::confirmation_matches(canonical, &expected, &actual) {
+                return Err(SsotError::CloudFailure(format!(
+                    "Confirmação de escrita falhou para '{}': esperado '{}', recebido '{}'",
+                    canonical,
+                    expected,
+                    actual
+                )));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1182,10 +2423,18 @@ mod tests {
 
     #[test]
     fn resolve_row_number_never_returns_row_1() {
-        let values = vec![vec!["https://github.com/acme/widget".to_string()]];
-        let needle = "https://github.com/acme/widget".to_string();
-        let row =
-            SsotInjector::resolve_row_number_from_repo_url_column(&values, &needle).unwrap();
+        let values = vec![vec![
+            "https://github.com/acme/widget".to_string(),
+            "LOTE_01".to_string(),
+        ]];
+        let row = SsotInjector::resolve_row_number_from_repo_locator_columns(
+            &values,
+            0,
+            1,
+            "https://github.com/acme/widget",
+            "LOTE_01",
+        )
+        .unwrap();
         assert!(row >= 2);
         assert_eq!(row, 2);
     }
@@ -1193,32 +2442,109 @@ mod tests {
     #[test]
     fn resolve_row_number_returns_none_when_repo_url_not_found() {
         let values = vec![
-            vec!["https://github.com/acme/a".to_string()],
-            vec!["".to_string()],
+            vec!["https://github.com/acme/a".to_string(), "LOTE_A".to_string()],
+            vec!["".to_string(), "".to_string()],
         ];
-        let needle = "https://github.com/acme/unknown".to_string();
-        assert!(SsotInjector::resolve_row_number_from_repo_url_column(&values, &needle).is_none());
+        assert!(
+            SsotInjector::resolve_row_number_from_repo_locator_columns(
+                &values,
+                0,
+                1,
+                "https://github.com/acme/unknown",
+                "LOTE_A",
+            )
+            .is_none()
+        );
     }
 
     #[test]
-    fn test_prepare_batch_payload_is_84_columns_a_to_cf() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "CONCLUIDO".to_string();
-        row.status_fase = "F4".to_string();
-        row.project_name = "owner/repo".to_string();
-        row.repo_url = "https://github.com/owner/repo".to_string();
-        row.repo_analised_version = "v1.0.0".to_string();
-        row.ultima_versao_online = "v1.0.1".to_string();
-        row.lote_id = "LOTE_01".to_string();
-        row.data_ultima_analise = 1_715_000_000;
-        row.analise_origem = "SGR".to_string();
-        row.declared_description = "Descricao".to_string();
-        row.proposta_original_resumo = "Resumo".to_string();
-        row.stack_base = "Rust".to_string();
-        row.licenca = "MIT".to_string();
-        row.valid_from = 1_700_000_000;
-        row.valid_to = None;
-        row.embargo_status = 0;
+    fn resolve_row_number_accepts_case_whitespace_and_slash_with_lote_priority() {
+        let values = vec![
+            vec![
+                " https://github.com/Other/Repo/ ".to_string(),
+                "LOTE_X".to_string(),
+            ],
+            vec![
+                " ACME/Widget ".to_string(),
+                "LOTE_01".to_string(),
+            ],
+        ];
+        let row = SsotInjector::resolve_row_number_from_repo_locator_columns(
+            &values,
+            0,
+            1,
+            "https://github.com/acme/widget/",
+            "LOTE_01",
+        )
+        .unwrap();
+        assert_eq!(row, 3);
+    }
+
+    #[test]
+    fn validate_payload_rejects_main_master_and_unknown_repo_analised_version() {
+        for seed in ["main", " Master ", "unknown"] {
+            let row = MasterSolutionsRow {
+                status_atualizacao: "CONCLUIDO_AGUARDANDO".to_string(),
+                status_fase: "FASE_3_SYNTHESIZER_OK".to_string(),
+                project_name: "owner/repo".to_string(),
+                repo_url: "https://github.com/owner/repo".to_string(),
+                repo_analised_version: seed.to_string(),
+                ultima_versao_online: "v1.0.1".to_string(),
+                lote_id: "LOTE_01".to_string(),
+                data_ultima_analise: 1_715_000_000,
+                analise_origem: "SGR".to_string(),
+                declared_description: "Descricao".to_string(),
+                proposta_original_resumo: "Resumo".to_string(),
+                stack_base: "Rust".to_string(),
+                licenca: "MIT".to_string(),
+                valid_from: 1_700_000_000,
+                valid_to: None,
+                embargo_status: 0,
+                ..Default::default()
+            };
+            let err = SsotInjector::validate_payload("owner/repo", &row).unwrap_err();
+            assert!(matches!(err, SsotError::ValidationFailure(_)));
+        }
+    }
+
+    #[test]
+    fn maybe_fix_mojibake_repairs_common_ptbr_sequences() {
+        let input = "Orquestração Multiagente com MemÃ³ria Persistente via Code-as-Prompt";
+        let fixed = SsotInjector::maybe_fix_mojibake(input);
+        assert_eq!(
+            fixed,
+            "Orquestração Multiagente com Memória Persistente via Code-as-Prompt"
+        );
+    }
+
+    #[test]
+    fn maybe_fix_mojibake_is_noop_for_valid_ptbr() {
+        let input = "Orquestração Multiagente com Memória Persistente via Code-as-Prompt";
+        let fixed = SsotInjector::maybe_fix_mojibake(input);
+        assert_eq!(fixed, input);
+    }
+
+    #[test]
+    fn test_prepare_batch_payload_is_82_columns_a_to_cd() {
+        let row = MasterSolutionsRow {
+            status_atualizacao: "CONCLUIDO".to_string(),
+            status_fase: "F4".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
 
         let validated = SsotInjector::validate_payload("owner/repo", &row).unwrap();
         let header_row: Vec<String> = MASTER_SOLUTIONS_CANONICAL_COLUMNS
@@ -1227,30 +2553,159 @@ mod tests {
             .collect();
         let batch = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap();
         let obj = batch.as_object().unwrap();
+        let values = obj
+            .get("A2:CD2")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap();
+        assert_eq!(values.len(), 82);
 
+        let idx = |name: &str| MASTER_SOLUTIONS_CANONICAL_COLUMNS.iter().position(|c| *c == name).unwrap();
+        assert_eq!(values[idx("project_name")], json!("owner / repo"));
         assert_eq!(
-            obj.get("C2:C2").unwrap(),
-            &json!(vec![vec![json!("owner / repo")]])
+            values[idx("repo_url")],
+            json!("https://github.com/owner/repo")
         );
-        assert_eq!(
-            obj.get("D2:D2").unwrap(),
-            &json!(vec![vec![json!("https://github.com/owner/repo")]])
-        );
-        assert!(obj
-            .get("CD2:CD2")
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|v| v.as_str())
-            .map(|s| !s.trim().is_empty() && s.contains('-'))
-            .unwrap_or(false));
-        assert_eq!(obj.get("CE2:CE2").unwrap(), &json!(vec![vec![json!("")]]));
-        assert_eq!(
-            obj.get("CF2:CF2").unwrap(),
-            &json!(vec![vec![json!("LIVRE")]])
-        );
+        let valid_from = values[idx("valid_from")].as_str().unwrap_or_default();
+        assert!(!valid_from.trim().is_empty() && valid_from.contains('-'));
+        assert_eq!(values[idx("valid_to")], json!(""));
+        assert_eq!(values[idx("embargo_status")], json!("LIVRE"));
         assert_eq!(validated.project_name, "owner/repo");
+    }
+
+    #[test]
+    fn prepare_batch_payload_rejects_header_reordering() {
+        let row = MasterSolutionsRow {
+            status_atualizacao: "CONCLUIDO".to_string(),
+            status_fase: "F4".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            score_final: 9.4,
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
+        let mut header_row: Vec<String> = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let score_idx = header_row
+            .iter()
+            .position(|s| s == "score_final")
+            .expect("score_final missing in canonical header");
+        let score_col = header_row.remove(score_idx);
+        header_row.insert(10, score_col);
+
+        let err = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap_err();
+        assert!(matches!(err, SsotError::CloudFailure(_)));
+    }
+
+    #[test]
+    fn header_idx_requires_exact_name_and_position() {
+        let headers: Vec<String> = MASTER_SOLUTIONS_CANONICAL_COLUMNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(SsotInjector::header_idx(&headers, "declared_description"), Some(9));
+        assert_eq!(SsotInjector::header_idx(&headers, "score_final"), Some(72));
+        assert_eq!(SsotInjector::header_idx(&headers, "lote_id"), Some(4));
+        assert_eq!(SsotInjector::header_idx(&headers, "repo_url"), Some(1));
+        assert_eq!(SsotInjector::header_idx(&headers, "categoria_arquitetural"), Some(35));
+    }
+
+    #[test]
+    fn confirmation_accepts_decimal_comma_for_scores() {
+        assert!(SsotInjector::confirmation_matches("score_final", "4.3", "4,30"));
+        assert!(!SsotInjector::confirmation_matches(
+            "project_name",
+            "aaif-goose/goose",
+            "aaif-goose / goose"
+        ));
+    }
+
+    #[test]
+    fn prepare_batch_payload_rejects_alias_headers() {
+        let row = MasterSolutionsRow {
+            project_name: "owner/repo".to_string(),
+            declared_description: "Descricao forte".to_string(),
+            score_final: 8.5,
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
+        let header_row = vec![
+            "status_atualizacao".to_string(),
+            "status_fase".to_string(),
+            "description".to_string(),
+            "project_name".to_string(),
+            "repo_url".to_string(),
+        ];
+
+        let err = SsotInjector::prepare_batch_payload_dynamic(2, &header_row, &row).unwrap_err();
+        assert!(matches!(err, SsotError::CloudFailure(_)));
+    }
+
+    #[test]
+    fn validate_write_values_result_rejects_ambiguous_success() {
+        let err = SsotInjector::validate_write_values_result("A2:A2", &json!({"noop": true})).unwrap_err();
+        assert!(err.contains("sem confirmação inequívoca"));
+        assert!(SsotInjector::validate_write_values_result(
+            "A2:A2",
+            &json!({"updatedRange":"MASTER_SOLUTIONS!A2:A2","updatedCells":1})
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn google_sheets_values_url_encodes_a1_notation() {
+        let url = SsotInjector::build_google_sheets_values_url_with_base(
+            "https://example.test/v4/spreadsheets",
+            "sheet_123",
+            "MASTER_SOLUTIONS!A1:CD1",
+        )
+        .unwrap();
+        assert_eq!(
+            url,
+            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CD1?majorDimension=ROWS"
+        );
+    }
+
+    #[test]
+    fn google_sheets_batch_update_body_preserves_single_atomic_range() {
+        let mut ranges = serde_json::Map::new();
+        ranges.insert("A2:CD2".to_string(), json!([["owner / repo", "https://github.com/owner/repo"]]));
+        let body =
+            SsotInjector::build_google_sheets_batch_update_body(MASTER_SOLUTIONS_SHEET, &ranges).unwrap();
+        assert_eq!(body["valueInputOption"], json!("RAW"));
+        assert_eq!(body["data"][0]["range"], json!("MASTER_SOLUTIONS!A2:CD2"));
+        assert_eq!(body["data"][0]["majorDimension"], json!("ROWS"));
+        assert_eq!(
+            body["data"][0]["values"],
+            json!([["owner / repo", "https://github.com/owner/repo"]])
+        );
+    }
+
+    #[test]
+    fn google_sheets_batch_update_body_rejects_non_atomic_multi_range_payload() {
+        let mut ranges = serde_json::Map::new();
+        ranges.insert("A2:B2".to_string(), json!([["a", "b"]]));
+        ranges.insert("C2:D2".to_string(), json!([["c", "d"]]));
+        let err =
+            SsotInjector::build_google_sheets_batch_update_body(MASTER_SOLUTIONS_SHEET, &ranges).unwrap_err();
+        assert!(err.contains("1 range atômico"));
     }
 
     #[test]
@@ -1262,24 +2717,26 @@ mod tests {
 
     #[test]
     fn categoria_arquitetural_rejects_value_outside_10_enums_fail_closed() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "INICIAR_TRIAGEM".to_string();
-        row.status_fase = "FASE_-0.5_BATEDOR_OK".to_string();
-        row.project_name = "owner/repo".to_string();
-        row.repo_url = "https://github.com/owner/repo".to_string();
-        row.repo_analised_version = "v1.0.0".to_string();
-        row.ultima_versao_online = "v1.0.1".to_string();
-        row.lote_id = "LOTE_01".to_string();
-        row.data_ultima_analise = 1_715_000_000;
-        row.analise_origem = "SGR".to_string();
-        row.declared_description = "Descricao".to_string();
-        row.proposta_original_resumo = "Resumo".to_string();
-        row.stack_base = "Rust".to_string();
-        row.licenca = "MIT".to_string();
-        row.valid_from = 1_700_000_000;
-        row.valid_to = None;
-        row.embargo_status = 0;
-        row.categoria_arquitetural = crate::cognition::synthesizer::ArchitecturalCategory::Unknown;
+        let row = MasterSolutionsRow {
+            status_atualizacao: "INICIAR_TRIAGEM".to_string(),
+            status_fase: "FASE_-0.5_BATEDOR_OK".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            categoria_arquitetural: crate::cognition::synthesizer::ArchitecturalCategory::Unknown,
+            ..Default::default()
+        };
 
         let out = SsotInjector::validate_payload("owner/repo", &row);
         assert!(matches!(out, Err(SsotError::ValidationFailure(_))));
@@ -1456,23 +2913,25 @@ mod tests {
 
     #[tokio::test]
     async fn dispatch_uses_mock_sheets_client() {
-        let mut row = MasterSolutionsRow::default();
-        row.status_atualizacao = "CONCLUIDO".to_string();
-        row.status_fase = "F4".to_string();
-        row.project_name = "owner/repo".to_string();
-        row.repo_url = "https://github.com/owner/repo".to_string();
-        row.repo_analised_version = "v1.0.0".to_string();
-        row.ultima_versao_online = "v1.0.1".to_string();
-        row.lote_id = "LOTE_01".to_string();
-        row.data_ultima_analise = 1_715_000_000;
-        row.analise_origem = "SGR".to_string();
-        row.declared_description = "Descricao".to_string();
-        row.proposta_original_resumo = "Resumo".to_string();
-        row.stack_base = "Rust".to_string();
-        row.licenca = "MIT".to_string();
-        row.valid_from = 1_700_000_000;
-        row.valid_to = None;
-        row.embargo_status = 0;
+        let row = MasterSolutionsRow {
+            status_atualizacao: "CONCLUIDO".to_string(),
+            status_fase: "F4".to_string(),
+            project_name: "owner/repo".to_string(),
+            repo_url: "https://github.com/owner/repo".to_string(),
+            repo_analised_version: "v1.0.0".to_string(),
+            ultima_versao_online: "v1.0.1".to_string(),
+            lote_id: "LOTE_01".to_string(),
+            data_ultima_analise: 1_715_000_000,
+            analise_origem: "SGR".to_string(),
+            declared_description: "Descricao".to_string(),
+            proposta_original_resumo: "Resumo".to_string(),
+            stack_base: "Rust".to_string(),
+            licenca: "MIT".to_string(),
+            valid_from: 1_700_000_000,
+            valid_to: None,
+            embargo_status: 0,
+            ..Default::default()
+        };
 
         let sheets = MockSheetsClient::new();
         SsotInjector::dispatch_master_solutions_row(&sheets, "SHEET_ID", 2, &row)
@@ -1483,6 +2942,6 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "SHEET_ID");
         assert_eq!(calls[0].1, "MASTER_SOLUTIONS");
-        assert!(calls[0].2.get("D2:D2").is_some());
+        assert!(calls[0].2.get("A2:CD2").is_some());
     }
 }

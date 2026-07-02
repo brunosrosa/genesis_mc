@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -8,18 +8,28 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::Client;
+use rusqlite::{params, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 use url::Url;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tokio::time::Instant;
+#[cfg(test)]
 use tokio::io::AsyncBufReadExt;
+use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
+use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
 type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 type GithubTagFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Option<String>, String>> + Send + 'a>>;
+type RepoStoreFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+
+const GOOGLE_MCP_TIMEOUT: Duration = Duration::from_secs(180);
 
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
 
@@ -60,6 +70,15 @@ trait GithubClient: Send + Sync {
     ) -> GithubTagFuture<'a>;
 }
 
+trait RepoStore: Send + Sync {
+    fn persist_release_resolution<'a>(
+        &'a self,
+        project_name: &'a str,
+        repo_url: &'a str,
+        latest: &'a str,
+    ) -> RepoStoreFuture<'a>;
+}
+
 fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
     let values = if let Some(values) = result.get("values").and_then(|v| v.as_array()) {
         values
@@ -85,8 +104,85 @@ fn extract_values_2d(result: &Value) -> Option<Vec<Vec<String>>> {
 }
 
 struct SheetsMcpClient;
+struct SqliteRepoStore {
+    db_path: PathBuf,
+}
+
+impl SqliteRepoStore {
+    fn new(db_path: PathBuf) -> Self {
+        Self { db_path }
+    }
+}
+
+fn is_invalid_version_seed(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case("main")
+        || trimmed.eq_ignore_ascii_case("master")
+        || trimmed.eq_ignore_ascii_case("unknown")
+}
+
+impl RepoStore for SqliteRepoStore {
+    fn persist_release_resolution<'a>(
+        &'a self,
+        project_name: &'a str,
+        repo_url: &'a str,
+        latest: &'a str,
+    ) -> RepoStoreFuture<'a> {
+        let db_path = self.db_path.clone();
+        let project_name = project_name.trim().to_string();
+        let repo_url = repo_url.trim().to_string();
+        let latest = latest.trim().to_string();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || -> Result<(), String> {
+                if is_invalid_version_seed(&latest) {
+                    return Err(format!(
+                        "Guardião: versão resolvida inválida para persistência no SQLite: '{}'",
+                        latest
+                    ));
+                }
+                let conn = Connection::open(&db_path)
+                    .map_err(|e| format!("Guardião: falha ao abrir SQLite em {}: {}", db_path.display(), e))?;
+                let repo_key = if !project_name.is_empty() {
+                    project_name
+                } else {
+                    try_extract_project_name_from_repo_url(&repo_url).unwrap_or_default()
+                };
+                if repo_key.is_empty() {
+                    return Err(format!(
+                        "Guardião: não foi possível derivar project_name para persistir versão (repo_url={repo_url})"
+                    ));
+                }
+                let updated_rows = conn
+                .execute(
+                    "UPDATE repositorios
+                     SET ultima_versao_online = ?1,
+                         repo_version = ?1,
+                         repo_analised_version = CASE
+                             WHEN repo_analised_version IS NULL THEN ''
+                             WHEN lower(trim(repo_analised_version)) IN ('main','master','unknown') THEN ''
+                             ELSE trim(repo_analised_version)
+                         END
+                     WHERE project_name = ?2 OR repo_url = ?3",
+                    params![latest, repo_key, repo_url],
+                )
+                .map_err(|e| format!("Guardião: falha ao persistir versões em repositorios: {e}"))?;
+                if updated_rows == 0 {
+                    return Err(format!(
+                        "Guardião: nenhuma linha em repositorios foi atualizada para project_name='{}' repo_url='{}'",
+                        repo_key, repo_url
+                    ));
+                }
+                Ok(())
+            })
+            .await
+            .map_err(|e| format!("Guardião: join error ao persistir versão no SQLite: {e}"))?
+        })
+    }
+}
 
 impl SheetsMcpClient {
+    #[cfg(test)]
     async fn poll_for_jsonrpc_response_from_reader<R>(
         reader: R,
         timeout: Duration,
@@ -129,116 +225,42 @@ impl SheetsMcpClient {
         }
     }
 
-    async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
-        use tokio::io::{AsyncWriteExt, BufReader};
-        use tokio::process::Command;
-        use std::process::Stdio;
-
-        let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-            .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-        let init_req = json!({
-            "jsonrpc": "2.0",
-            "id": 0,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": { "name": "f-minus-1-guardian", "version": "1.0.0" }
-            }
-        });
-        let initialized_notif = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized"
-        });
-        let mcp_request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": arguments
-            }
-        });
-
-        let mut child = Command::new("mcp-google-sheets")
-            .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
-            .env("UV_NO_PROGRESS", "1")
-            .env("UV_QUIET", "1")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {e}"))?;
-
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "stdin indisponível".to_string())?;
-        stdin
-            .write_all(format!("{}\n", init_req).as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
-        stdin
-            .write_all(format!("{}\n", initialized_notif).as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
-        stdin
-            .write_all(format!("{}\n", mcp_request).as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
-        drop(stdin);
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| "stdout indisponível".to_string())?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| "stderr indisponível".to_string())?;
-
-        let stdout_reader = BufReader::new(stdout);
-        let _stderr_reader = BufReader::new(stderr);
-
-        let timeout = match tool_name {
-            "batch_update_cells" => Duration::from_secs(120),
-            _ => Duration::from_secs(20),
-        };
-        let msg = Self::poll_for_jsonrpc_response_from_reader(stdout_reader, timeout, 1).await?;
-
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-
-        if msg.get("error").is_some() {
-            return Err(format!("MCP retornou erro: {msg}"));
-        }
-        if let Some(result) = msg.get("result") {
-            return Ok(Self::normalize_mcp_tool_result(result.clone()));
-        }
-
-        Err("Resposta MCP inválida (sem campo result)".to_string())
+    async fn read_values(
+        spreadsheet_id: &str,
+        sheet: &str,
+        range: &str,
+    ) -> Result<Vec<Vec<String>>, String> {
+        let result = genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+            spreadsheet_id,
+            sheet,
+            range,
+            "f-minus-1-guardian",
+            GOOGLE_MCP_TIMEOUT,
+        )
+        .await?;
+        Ok(extract_values_2d(&result).unwrap_or_default())
     }
 
-    fn normalize_mcp_tool_result(result: Value) -> Value {
-        let content = match result.get("content").and_then(|v| v.as_array()) {
-            Some(arr) => arr,
-            None => return result,
-        };
-
-        for item in content {
-            if let Some(json_val) = item.get("json") {
-                return json_val.clone();
-            }
-            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                    return parsed;
-                }
-            }
+    async fn write_values(
+        spreadsheet_id: &str,
+        sheet: &str,
+        ranges: HashMap<String, Vec<Vec<String>>>,
+    ) -> Result<(), String> {
+        let mut payload_ranges = serde_json::Map::new();
+        for (range, values) in ranges {
+            payload_ranges.insert(range, json!(values));
         }
-
-        result
+        genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+            spreadsheet_id,
+            sheet,
+            &payload_ranges,
+            "f-minus-1-guardian",
+            GOOGLE_MCP_TIMEOUT,
+        )
+        .await?;
+        Ok(())
     }
+
 }
 
 impl SheetsClient for SheetsMcpClient {
@@ -248,19 +270,7 @@ impl SheetsClient for SheetsMcpClient {
         sheet: &'a str,
         range: String,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>> {
-        Box::pin(async move {
-            let result = Self::call_mcp(
-                "get_sheet_data",
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "sheet": sheet,
-                    "range": range,
-                    "include_grid_data": false
-                }),
-            )
-            .await?;
-            Ok(extract_values_2d(&result).unwrap_or_default())
-        })
+        Box::pin(async move { Self::read_values(spreadsheet_id, sheet, &range).await })
     }
 
     fn batch_update_cells<'a>(
@@ -269,22 +279,7 @@ impl SheetsClient for SheetsMcpClient {
         sheet: &'a str,
         ranges: HashMap<String, Vec<Vec<String>>>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
-        Box::pin(async move {
-            let mut payload_ranges = serde_json::Map::new();
-            for (range, values) in ranges {
-                payload_ranges.insert(range, json!(values));
-            }
-            let _ = Self::call_mcp(
-                "batch_update_cells",
-                json!({
-                    "spreadsheet_id": spreadsheet_id,
-                    "sheet": sheet,
-                    "ranges": Value::Object(payload_ranges)
-                }),
-            )
-            .await?;
-            Ok(())
-        })
+        Box::pin(async move { Self::write_values(spreadsheet_id, sheet, ranges).await })
     }
 }
 
@@ -662,7 +657,6 @@ fn should_skip_by_status_atualizacao(status_atualizacao: &str) -> bool {
         || up == "DESATUALIZADA"
         || up == "EM_PROCESSAMENTO"
         || up.starts_with("PENDENTE_")
-        || up == "NOVO_LINK_OK"
 }
 
 fn try_build_repo_url_from_project_name(project_name: &str) -> Option<String> {
@@ -679,16 +673,18 @@ fn try_build_repo_url_from_project_name(project_name: &str) -> Option<String> {
     Some(format!("https://github.com/{owner}/{repo}"))
 }
 
-struct Guardian<S: SheetsClient, G: GithubClient> {
+struct Guardian<S: SheetsClient, G: GithubClient, R: RepoStore> {
     sheets: Arc<S>,
     github: Arc<G>,
+    repo_store: Arc<R>,
 }
 
-impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
+impl<S: SheetsClient + 'static, G: GithubClient + 'static, R: RepoStore + 'static> Guardian<S, G, R> {
     async fn run_once(&self, spreadsheet_id: &str) -> Result<(), String> {
+        let header_range = master_solutions_header_range();
         let header = self
             .sheets
-            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string())
+            .get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range)
             .await?;
         let header_row = header.first().cloned().unwrap_or_default();
 
@@ -774,6 +770,74 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
 
         let inspected = values.len();
 
+        let mut priority_rows = Vec::new();
+        let mut normal_rows = Vec::new();
+        for ctx in rows {
+            if ctx
+                .status_atualizacao
+                .trim()
+                .eq_ignore_ascii_case("NOVO_LINK_OK")
+            {
+                priority_rows.push(ctx);
+            } else {
+                normal_rows.push(ctx);
+            }
+        }
+        let (mut rows, priority_mode) = if !priority_rows.is_empty() {
+            (priority_rows, true)
+        } else {
+            (normal_rows, false)
+        };
+
+        let max_rows_per_run = std::env::var("SODA_GUARDIAN_MAX_ROWS")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        if max_rows_per_run > 0 && rows.len() > max_rows_per_run {
+            rows.truncate(max_rows_per_run);
+        }
+
+        let max_parallel_github = std::env::var("SODA_GUARDIAN_GITHUB_PARALLEL")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(2)
+            .max(1);
+        let sem_github = Arc::new(Semaphore::new(max_parallel_github));
+        let mut urls_to_fetch = HashSet::<String>::new();
+        for ctx in &rows {
+            let is_new_link = ctx.status_atualizacao.trim().is_empty()
+                || ctx.status_atualizacao.trim().eq_ignore_ascii_case("NOVO_LINK_OK");
+            let drift_candidate = !ctx.repo_analised_version.trim().is_empty();
+            if is_new_link || drift_candidate {
+                urls_to_fetch.insert(ctx.repo_url.clone());
+            }
+        }
+
+        let mut latest_by_url: HashMap<String, Result<Option<String>, String>> = HashMap::new();
+        if !urls_to_fetch.is_empty() {
+            let mut join_set: JoinSet<(String, Result<Option<String>, String>)> = JoinSet::new();
+            for url in urls_to_fetch {
+                let sem = Arc::clone(&sem_github);
+                let github = Arc::clone(&self.github);
+                join_set.spawn(async move {
+                    let _permit = sem.acquire_owned().await.unwrap();
+                    let res = github.latest_release_tag(&url).await;
+                    (url, res)
+                });
+            }
+
+            while let Some(out) = join_set.join_next().await {
+                match out {
+                    Ok((url, res)) => {
+                        latest_by_url.insert(url, res);
+                    }
+                    Err(e) => {
+                        warn!(error = ?e, "Guardião: falha ao aguardar tarefa de GitHub (join)");
+                    }
+                }
+            }
+        }
+
         let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
         let status_fase_col = cols.status_fase_idx.map(col_idx_to_a1);
         let project_name_col = cols.project_name_idx.map(col_idx_to_a1);
@@ -821,22 +885,46 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
                 }
             }
 
-            let latest = match self.github.latest_release_tag(&ctx.repo_url).await {
-                Ok(v) => v,
-                Err(e) => {
-                    warn!(
-                        repo_url = %ctx.repo_url,
-                        error = %e,
-                        "Guardião: falha ao consultar GitHub; pulando linha"
-                    );
-                    continue;
+            let is_new_link = ctx.status_atualizacao.trim().is_empty()
+                || ctx.status_atualizacao.trim().eq_ignore_ascii_case("NOVO_LINK_OK");
+            let drift_candidate = !ctx.repo_analised_version.trim().is_empty();
+            let latest = if is_new_link || drift_candidate {
+                match latest_by_url.get(&ctx.repo_url) {
+                    Some(Ok(value)) => value.clone(),
+                    Some(Err(e)) => {
+                        warn!(
+                            repo_url = %ctx.repo_url,
+                            error = %e,
+                            "Guardião: falha ao consultar GitHub; pulando linha"
+                        );
+                        continue;
+                    }
+                    None => match self.github.latest_release_tag(&ctx.repo_url).await {
+                        Ok(value) => value,
+                        Err(e) => {
+                            warn!(
+                                repo_url = %ctx.repo_url,
+                                error = %e,
+                                "Guardião: falha ao consultar GitHub; pulando linha"
+                            );
+                            continue;
+                        }
+                    },
                 }
+            } else {
+                None
             };
             let Some(latest) = latest else { continue };
             let latest = latest.trim().to_string();
-            let is_new_link = ctx.status_atualizacao.trim().is_empty();
-            let drift = !ctx.repo_analised_version.trim().is_empty()
-                && has_drift(&ctx.repo_analised_version, &latest);
+            if latest.is_empty() {
+                continue;
+            }
+
+            self.repo_store
+                .persist_release_resolution(&ctx.project_name, &ctx.repo_url, &latest)
+                .await?;
+
+            let drift = drift_candidate && has_drift(&ctx.repo_analised_version, &latest);
             let should_write_latest = (is_new_link || drift) && ctx.ultima_versao_online.trim() != latest;
 
             if !is_new_link && !drift && !should_write_latest {
@@ -932,6 +1020,7 @@ impl<S: SheetsClient + 'static, G: GithubClient + 'static> Guardian<S, G> {
             inspected,
             drifted,
             updated,
+            priority_mode,
             "Guardião: rodada concluída (mutação somente com drift)"
         );
         Ok(())
@@ -955,15 +1044,11 @@ fn parse_cli_args() -> (Option<String>, bool) {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
@@ -981,6 +1066,9 @@ async fn main() -> io::Result<()> {
     let guardian = Guardian {
         sheets: Arc::new(SheetsMcpClient),
         github: Arc::new(ReqwestGithubClient::new().map_err(io::Error::other)?),
+        repo_store: Arc::new(SqliteRepoStore::new(
+            root_dir.join(".soda_data").join("soda_heuristic_vault.db"),
+        )),
     };
     guardian
         .run_once(&spreadsheet_id)
@@ -994,6 +1082,7 @@ async fn main() -> io::Result<()> {
 mod tests {
     use super::*;
     use mockito::Server;
+    use tempfile::NamedTempFile;
     use std::sync::OnceLock;
     use tokio::sync::Mutex;
     use tokio::io::{duplex, AsyncWriteExt, BufReader};
@@ -1029,7 +1118,7 @@ mod tests {
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>
         {
             Box::pin(async move {
-                if range.ends_with("1:CF1") {
+                if range == master_solutions_header_range() {
                     return Ok(self.header.clone());
                 }
                 Ok(self.data.clone())
@@ -1065,6 +1154,44 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct MockRepoStore {
+        persisted: Mutex<Vec<(String, String, String)>>,
+        fail_with: Option<String>,
+    }
+
+    impl RepoStore for MockRepoStore {
+        fn persist_release_resolution<'a>(
+            &'a self,
+            project_name: &'a str,
+            repo_url: &'a str,
+            latest: &'a str,
+        ) -> RepoStoreFuture<'a> {
+            Box::pin(async move {
+                if let Some(err) = &self.fail_with {
+                    return Err(err.clone());
+                }
+                self.persisted.lock().await.push((
+                    project_name.to_string(),
+                    repo_url.to_string(),
+                    latest.to_string(),
+                ));
+                Ok(())
+            })
+        }
+    }
+
+    fn build_mock_guardian(
+        sheets: Arc<MockSheets>,
+        github: MockGithub,
+    ) -> Guardian<MockSheets, MockGithub, MockRepoStore> {
+        Guardian {
+            sheets,
+            github: Arc::new(github),
+            repo_store: Arc::new(MockRepoStore::default()),
+        }
+    }
+
     #[test]
     fn plan_update_is_idempotent_when_versions_match() {
         assert!(!has_drift("v1.2.3", "1.2.3"));
@@ -1075,6 +1202,14 @@ mod tests {
     #[test]
     fn plan_update_detects_drift_and_returns_remote_normalized() {
         assert!(has_drift("1.2.2", "v1.2.3"));
+    }
+
+    #[test]
+    fn invalid_version_seed_rejects_main_master_unknown() {
+        assert!(is_invalid_version_seed("main"));
+        assert!(is_invalid_version_seed(" master "));
+        assert!(is_invalid_version_seed("UNKNOWN"));
+        assert!(!is_invalid_version_seed("v1.2.3"));
     }
 
     #[test]
@@ -1180,10 +1315,7 @@ mod tests {
             tag: Some("v1.2.3".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 0);
@@ -1214,10 +1346,7 @@ mod tests {
             tag: Some("v1.2.3".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
@@ -1262,10 +1391,7 @@ mod tests {
             tag: Some("v1.2.3".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
@@ -1292,10 +1418,7 @@ mod tests {
             tag: Some("v2.0.0".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
@@ -1348,16 +1471,13 @@ mod tests {
             tag: Some("v2.0.0".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
         assert_eq!(updates.len(), 1);
-        assert!(updates[0].get("A3:A3").is_some());
-        assert!(updates[0].get("B3:B3").is_some());
-        assert!(updates[0].get("F3:F3").is_some());
+        assert!(updates[0].contains_key("A3:A3"));
+        assert!(updates[0].contains_key("B3:B3"));
+        assert!(updates[0].contains_key("F3:F3"));
     }
 
     #[tokio::test]
@@ -1388,6 +1508,7 @@ mod tests {
         let guardian = Guardian {
             sheets,
             github: github.clone(),
+            repo_store: Arc::new(MockRepoStore::default()),
         };
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
@@ -1429,6 +1550,7 @@ mod tests {
         let guardian = Guardian {
             sheets,
             github: github.clone(),
+            repo_store: Arc::new(MockRepoStore::default()),
         };
         guardian.run_once("SHEET").await.unwrap();
         let updates = guardian.sheets.updates.lock().await;
@@ -1675,10 +1797,7 @@ mod tests {
             tag: Some("v2.0.0".to_string()),
             calls: std::sync::atomic::AtomicU64::new(0),
         };
-        let guardian = Guardian {
-            sheets,
-            github: Arc::new(github),
-        };
+        let guardian = build_mock_guardian(sheets, github);
         guardian.run_once("SHEET").await.unwrap();
 
         let updates = guardian.sheets.updates.lock().await;
@@ -1687,5 +1806,131 @@ mod tests {
         assert!(ranges.get("D2:D2").is_some());
         assert!(ranges.get("F2:F2").is_some());
         assert!(ranges.get("C2:C2").is_some());
+    }
+
+    #[tokio::test]
+    async fn sqlite_repo_store_persists_latest_and_clears_branch_seed() {
+        let tmp = NamedTempFile::new().unwrap();
+        let conn = Connection::open(tmp.path()).unwrap();
+        conn.execute(
+            "CREATE TABLE repositorios (
+                project_name TEXT PRIMARY KEY,
+                lote_id TEXT NOT NULL,
+                repo_url TEXT NOT NULL UNIQUE,
+                repo_analised_version TEXT,
+                repo_version TEXT,
+                ultima_versao_online TEXT,
+                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                status_processamento TEXT NOT NULL,
+                timestamp_fase_1 INTEGER,
+                timestamp_fase_3 INTEGER,
+                retry_count INTEGER NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (
+                project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
+                soda_universal_uuid, status_processamento, timestamp_fase_1, timestamp_fase_3, retry_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                "soxoj/maigret",
+                "LOTE_01_ALPHA",
+                "https://github.com/soxoj/maigret",
+                "main",
+                "master",
+                "main",
+                "UUID-soxoj/maigret",
+                "F2_OK",
+                1_i64,
+                1_i64,
+                0_i64
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = SqliteRepoStore::new(tmp.path().to_path_buf());
+        store
+            .persist_release_resolution("soxoj/maigret", "https://github.com/soxoj/maigret", "abc1234")
+            .await
+            .unwrap();
+
+        let conn = Connection::open(tmp.path()).unwrap();
+        let row: (String, String, String) = conn
+            .query_row(
+                "SELECT COALESCE(repo_analised_version, ''), COALESCE(repo_version, ''), COALESCE(ultima_versao_online, '')
+                 FROM repositorios WHERE project_name = 'soxoj/maigret'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "");
+        assert_eq!(row.1, "abc1234");
+        assert_eq!(row.2, "abc1234");
+    }
+
+    #[tokio::test]
+    async fn sqlite_repo_store_updates_by_repo_url_when_project_name_is_missing() {
+        let tmp = NamedTempFile::new().unwrap();
+        let conn = Connection::open(tmp.path()).unwrap();
+        conn.execute(
+            "CREATE TABLE repositorios (
+                project_name TEXT PRIMARY KEY,
+                lote_id TEXT NOT NULL,
+                repo_url TEXT NOT NULL UNIQUE,
+                repo_analised_version TEXT,
+                repo_version TEXT,
+                ultima_versao_online TEXT,
+                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                status_processamento TEXT NOT NULL,
+                timestamp_fase_1 INTEGER,
+                timestamp_fase_3 INTEGER,
+                retry_count INTEGER NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (
+                project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
+                soda_universal_uuid, status_processamento, timestamp_fase_1, timestamp_fase_3, retry_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                "yamadashy/repomix",
+                "LOTE_02",
+                "https://github.com/yamadashy/repomix",
+                "unknown",
+                "main",
+                "main",
+                "UUID-yamadashy/repomix",
+                "F2_OK",
+                1_i64,
+                1_i64,
+                0_i64
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = SqliteRepoStore::new(tmp.path().to_path_buf());
+        store
+            .persist_release_resolution("", "https://github.com/yamadashy/repomix", "v0.3.0")
+            .await
+            .unwrap();
+
+        let conn = Connection::open(tmp.path()).unwrap();
+        let row: (String, String, String) = conn
+            .query_row(
+                "SELECT COALESCE(repo_analised_version, ''), COALESCE(repo_version, ''), COALESCE(ultima_versao_online, '')
+                 FROM repositorios WHERE repo_url = 'https://github.com/yamadashy/repomix'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "");
+        assert_eq!(row.1, "v0.3.0");
+        assert_eq!(row.2, "v0.3.0");
     }
 }

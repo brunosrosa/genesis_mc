@@ -186,7 +186,7 @@ impl FastCloudCascade {
             .choices
             .first()
             .map(|c| c.message.content.clone())
-            .ok_or_else(|| CascadeError::InvalidInput)
+            .ok_or(CascadeError::InvalidInput)
     }
 }
 

@@ -4,14 +4,14 @@
 **Status:** ATIVO E INEGOCIÁVEL
 **Alvo da Leitura:** Engenheiros de Machine Learning, Desenvolvedores Rust, Agentes Orquestradores (Antigravity).
 
-## 1. A TERMODINÂMICA DA INFERÊNCIA E O "LLAMA-SWAP"
+## 1. A TERMODINÂMICA DA INFERÊNCIA E O "CANDLE-FIRST"
 
 O Genesis Mission Control (SODA) opera em uma zona de assimetria de hardware extrema: um processador veloz (Intel Core i9 com AVX2) e muita RAM estática (32GB), porém estrangulado por uma dGPU (NVIDIA RTX 2060m) com um teto de **6GB de VRAM**.
 
-Manter múltiplos modelos grandes carregados na placa de vídeo é fisicamente impossível. O SODA adota o paradigma de **Desagregação Computacional** via `llama.cpp` nativo (utilizando o crate `llama_cpp_rs` no backend Rust):
+Manter múltiplos modelos grandes carregados na placa de vídeo é fisicamente impossível. O SODA adota o paradigma de **Desagregação Computacional** com o **Candle** como motor central de inferência em Rust puro, preservando o controle bare-metal do pipeline:
 
 - **Repouso Quente (Hot Repose):** Os pesos quantizados (GGUF em 4-bits - `Q4_K_M`) dos modelos especialistas ficam armazenados nos 32GB de RAM do sistema principal.
-- **Injeção Llama-swap:** Quando uma tarefa exige a dGPU, o daemon Rust ativa a flag `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1`. Os tensores fluem da RAM para os 6GB da VRAM via barramento PCIe em questão de milissegundos, processam a inferência e são sumariamente expurgados de volta para a RAM (evicção), devolvendo a GPU para o sistema operacional.
+- **Injeção Candle-First:** Quando uma tarefa exige a dGPU, o daemon Rust desloca os tensores do worker soberano para os 6GB da VRAM de forma efêmera, processa a inferência e expurga o estado quente assim que a tarefa termina, devolvendo a GPU ao restante do sistema.
 
 ## 2. ROTEAMENTO MECANICISTA (A MORTE DA BUSCA SEMÂNTICA CEGA)
 
@@ -37,7 +37,7 @@ O SODA não possui um "LLM Único". Ele é uma Mistura de Especialistas (MoE) or
 ### Nível 1: Executores Especialistas (dGPU)
 
 - **Modelos:** _DeepSeek-R1-Distill-Qwen (7B)_ para raciocínio denso e _Rnj-1 8B_ para codificação (Fill-in-the-middle).
-- **Alocação:** NVIDIA RTX 2060m (6GB VRAM) via invocação _Llama-swap_.
+- **Alocação:** NVIDIA RTX 2060m (6GB VRAM) via worker soberano baseado em **Candle**.
 - **Missão:** Executar raciocínio "Sistema 2" de forma local, privada e segura.
 
 ### Nível 2: Cloud Fallback (Subscription Hacking / ParetoBandit)
@@ -50,6 +50,16 @@ O SODA não possui um "LLM Único". Ele é uma Mistura de Especialistas (MoE) or
 A memória operacional do modelo (KV Cache) cresce linearmente e devora a VRAM em sessões longas. Para sobreviver ao teto de 6GB, o SODA implementa compressão atômica:
 
 - **Arquiteturas de Ponta:** Obrigatoriedade de uso de modelos baseados em **Multi-head Latent Attention (MLA)** (ex: arquiteturas derivadas do DeepSeek) ou integração de tensores **HISA (Hierarchical Indexed Sparse Attention)** no motor nativo.
-- **Tolerância a Contexto:** A quantização do KV Cache para formatos INT8/FP8 dentro do `llama.cpp` é inegociável, permitindo que o ambiente processe contextos úteis superiores a 16.000 tokens sem sofrer falhas fatais de _Out-Of-Memory (OOM)_.
+- **Tolerância a Contexto:** A gestão do KV Cache e a compressão do contexto longo devem permanecer sob o motor nativo em Rust, priorizando **Candle** no caminho central. `llama-cpp-4` pode sobreviver apenas como bisturi isolado de *Logit Probing*, nunca como pilar do fluxo gerativo principal.
+
+## 5. LEIS DE INFERÊNCIA E SGR (DEEPSEEK V4 PRO NO OPENROUTER)
+
+Estas leis são obrigatórias para qualquer requisição HTTP ao OpenRouter usando **deepseek/deepseek-v4-pro** em tarefas de Structured Outputs / Schema-Guided Reasoning (SGR).
+
+- **LEI 1 (O Gatilho Semântico):** A palavra **"JSON"** DEVE estar explicitamente presente no `system_prompt` ou no `user_prompt`. Sem isso, o modelo tende a ignorar o contrato e degradar a resposta.
+- **LEI 2 (Strict Schema):** A requisição HTTP DEVE usar `response_format` com `{"type":"json_schema"}` e a flag `"strict": true` (com `additionalProperties: false` e `required` completo). JSON Mode básico é frágil em payloads densos.
+- **LEI 3 (Controle de Truncamento):** `max_tokens` DEVE ser suficientemente amplo para acomodar a sintaxe completa do JSON (chaves, aspas, vírgulas, colchetes). Faixa típica: **1500 a 16000**, calibrada pelo tamanho do schema e número de campos.
+- **LEI 4 (Cognição Preservada):** É PROIBIDO forçar `reasoning_effort="low"` ao pedir ENUMs ou lógica densa. Use `high`/`xhigh` (ou o padrão do provedor) para o modelo conseguir planejar o JSON corretamente.
+- **LEI 5 (Supressão de Transporte / Caminho do Meio):** Para evitar timeouts de rede e tráfego inútil de raciocínio, a requisição DEVE suprimir os tokens de pensamento no transporte. Aplique sempre `reasoning: { "exclude": true }` e/ou `include_reasoning: false`. O modelo pensa na nuvem, mas o cliente faz download APENAS do JSON final.
 
 _Fim da Especificação de Inferência. O Motor Híbrido está calibrado sob leis termodinâmicas locais._

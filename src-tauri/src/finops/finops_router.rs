@@ -33,26 +33,6 @@ pub enum FinOpsRouterError {
 const GREEN_THRESHOLD: usize = 16_000;
 const YELLOW_MAX: usize = 64_000;
 
-fn qwen_model_path() -> String {
-    std::env::var("SODA_QWEN_MODEL_PATH").unwrap_or_else(|_| {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join(".soda_data")
-            .join("models")
-            .join("Qwen3.5-4B-Q4_K_M.gguf")
-            .to_string_lossy()
-            .to_string()
-    })
-}
-
-fn is_factory_cloud_only() -> bool {
-    match std::env::var("SODA_FACTORY_CLOUD_ONLY") {
-        Ok(val) => val.eq_ignore_ascii_case("true") || val == "1",
-        Err(_) => false,
-    }
-}
-
 pub struct FinOpsRouter;
 
 impl FinOpsRouter {
@@ -61,33 +41,35 @@ impl FinOpsRouter {
             .map_err(|e| FinOpsRouterError::FileReadError(e.to_string()))?;
 
         let token_count = tiktoken_count(&content)?;
+        Ok(decision_for_token_count(token_count))
+    }
 
-        let (zone, destination) = if token_count < GREEN_THRESHOLD {
-            (RoutingZone::Green, RoutingDestination::PassThrough)
-        } else if token_count <= YELLOW_MAX {
-            if is_factory_cloud_only() {
-                (RoutingZone::Yellow, RoutingDestination::CloudCascade)
-            } else {
-                (
-                    RoutingZone::Yellow,
-                    RoutingDestination::LocalModel {
-                        path: qwen_model_path(),
-                    },
-                )
-            }
-        } else {
-            (RoutingZone::Red, RoutingDestination::CloudCascade)
-        };
+    pub fn classify_text(text: &str) -> Result<RoutingDecision, FinOpsRouterError> {
+        let token_count = tiktoken_count(text)?;
+        Ok(decision_for_token_count(token_count))
+    }
+}
 
-        Ok(RoutingDecision { token_count, zone, destination })
+fn decision_for_token_count(token_count: usize) -> RoutingDecision {
+    let (zone, destination) = if token_count < GREEN_THRESHOLD {
+        (RoutingZone::Green, RoutingDestination::PassThrough)
+    } else if token_count <= YELLOW_MAX {
+        (RoutingZone::Yellow, RoutingDestination::CloudCascade)
+    } else {
+        (RoutingZone::Red, RoutingDestination::CloudCascade)
+    };
+
+    RoutingDecision {
+        token_count,
+        zone,
+        destination,
     }
 }
 
 fn tiktoken_count(text: &str) -> Result<usize, FinOpsRouterError> {
     let encoding = tiktoken_rs::cl100k_base()
         .map_err(|e| FinOpsRouterError::TiktokenError(e.to_string()))?;
-    let tokens = encoding.encode_ordinary(text);
-    Ok(tokens.len())
+    Ok(encoding.encode_ordinary(text).len())
 }
 
 #[cfg(test)]
@@ -95,17 +77,11 @@ mod tests {
     use super::*;
     use std::fs;
     use std::sync::atomic::{AtomicU32, Ordering};
-    use std::sync::{Mutex, OnceLock};
 
     static TEST_ID: AtomicU32 = AtomicU32::new(0);
-    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
     fn next_test_id() -> u32 {
         TEST_ID.fetch_add(1, Ordering::SeqCst)
-    }
-
-    fn env_lock() -> &'static Mutex<()> {
-        ENV_MUTEX.get_or_init(|| Mutex::new(()))
     }
 
     fn create_temp_blob(content: &str) -> PathBuf {
@@ -122,7 +98,6 @@ mod tests {
 
     #[test]
     fn test_10k_tokens_returns_green_zone() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
         let content = generate_tokens(10_000);
         let path = create_temp_blob(&content);
 
@@ -136,20 +111,14 @@ mod tests {
     }
 
     #[test]
-    fn test_30k_tokens_returns_yellow_zone_with_qwen() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
+    fn test_30k_tokens_returns_yellow_zone_with_cloud_cascade() {
         let content = generate_tokens(30_000);
         let path = create_temp_blob(&content);
 
         let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
 
         assert_eq!(decision.zone, RoutingZone::Yellow);
-        match decision.destination {
-            RoutingDestination::LocalModel { ref path } => {
-                assert!(path.contains("Qwen3.5-4B-Q4_K_M.gguf"));
-            }
-            _ => panic!("Expected LocalModel destination for Yellow zone"),
-        }
+        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
         assert!(decision.token_count >= 28_000 && decision.token_count <= 32_000);
 
         fs::remove_file(path).ok();
@@ -157,7 +126,6 @@ mod tests {
 
     #[test]
     fn test_70k_tokens_returns_red_zone_with_cloud_cascade() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
         let content = generate_tokens(70_000);
         let path = create_temp_blob(&content);
 
@@ -243,9 +211,7 @@ mod tests {
 
                 let destination = match zone {
                     RoutingZone::Green => RoutingDestination::PassThrough,
-                    RoutingZone::Yellow => RoutingDestination::LocalModel {
-                        path: qwen_model_path(),
-                    },
+                    RoutingZone::Yellow => RoutingDestination::CloudCascade,
                     RoutingZone::Red => RoutingDestination::CloudCascade,
                 };
 
@@ -276,106 +242,11 @@ mod tests {
     }
 
     #[test]
-    fn test_30k_yellow_without_bypass_routes_to_local() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
-        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
-
+    fn test_classify_text_routes_yellow_to_cloud_cascade() {
         let content = generate_tokens(30_000);
-        let path = create_temp_blob(&content);
-
-        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
-
-        assert_eq!(decision.zone, RoutingZone::Yellow);
-        match decision.destination {
-            RoutingDestination::LocalModel { ref path } => {
-                assert!(path.contains("Qwen3.5-4B-Q4_K_M.gguf"));
-            }
-            _ => panic!("Expected LocalModel destination for Yellow zone without bypass"),
-        }
-
-        fs::remove_file(path).ok();
-    }
-
-    #[test]
-    fn test_30k_yellow_with_bypass_true_routes_to_cloud() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
-        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
-
-        let content = generate_tokens(30_000);
-        let path = create_temp_blob(&content);
-
-        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
+        let decision = FinOpsRouter::classify_text(&content).expect("Should succeed");
 
         assert_eq!(decision.zone, RoutingZone::Yellow);
         assert_eq!(decision.destination, RoutingDestination::CloudCascade);
-
-        fs::remove_file(path).ok();
-        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
-    }
-
-    #[test]
-    fn test_30k_yellow_with_bypass_1_routes_to_cloud() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
-        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "1");
-
-        let content = generate_tokens(30_000);
-        let path = create_temp_blob(&content);
-
-        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
-
-        assert_eq!(decision.zone, RoutingZone::Yellow);
-        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
-
-        fs::remove_file(path).ok();
-        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
-    }
-
-    #[test]
-    fn test_70k_red_ignores_bypass() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
-        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
-
-        let content = generate_tokens(70_000);
-        let path = create_temp_blob(&content);
-
-        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
-
-        assert_eq!(decision.zone, RoutingZone::Red);
-        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
-
-        fs::remove_file(path).ok();
-        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
-    }
-
-    #[test]
-    fn test_10k_green_ignores_bypass() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
-        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "true");
-
-        let content = generate_tokens(10_000);
-        let path = create_temp_blob(&content);
-
-        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
-
-        assert_eq!(decision.zone, RoutingZone::Green);
-        assert_eq!(decision.destination, RoutingDestination::PassThrough);
-
-        fs::remove_file(path).ok();
-        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
-    }
-
-    #[test]
-    fn test_bypass_case_insensitive_true() {
-        let _guard = env_lock().lock().expect("env mutex poisoned");
-        std::env::set_var("SODA_FACTORY_CLOUD_ONLY", "TRUE");
-
-        let content = generate_tokens(30_000);
-        let path = create_temp_blob(&content);
-
-        let decision = FinOpsRouter::classify_blob(&path).expect("Should succeed");
-        assert_eq!(decision.destination, RoutingDestination::CloudCascade);
-
-        fs::remove_file(path).ok();
-        std::env::remove_var("SODA_FACTORY_CLOUD_ONLY");
     }
 }

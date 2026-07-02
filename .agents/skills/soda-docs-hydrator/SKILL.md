@@ -1,6 +1,6 @@
 ---
 name: soda-docs-hydrator
-description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e JSON IPC. Resolve o bloqueio L7 do Gateway (ignorando prefixos 'docs_scraper_'). Exige extração O(1) via 'get_docs_tree' e 'search_docs'. Implanta Hidratação Bilateral (Rust+Svelte 5/Tauri v2) impondo tutoriais com rkyv/Arrow e repudiando payloads densos em JSON.
+description: O Guardião da Verdade Sintática do SODA. Vacina contra Vibe Coding, SEO Poisoning e JSON IPC. Prioriza docs estruturadas e usa `web_fetch` como fallback bare-metal garantido para hidratar contexto sem sidecars web legados.
 triggers: ["soda-docs-hydrator", "consultar documentação", "validar api", "buscar referências", "como usar a biblioteca", "docs", "verificar sintaxe"]
 ---
 
@@ -16,8 +16,8 @@ Sempre que for solicitado a implementar uma funcionalidade usando os frameworks 
    * Assuma que a sua memória interna sobre Svelte 5, Tauri v2 e arquiteturas assíncronas do Tokio está defasada.
    * Você está SUMARIAMENTE PROIBIDO de escrever código imediatamente.
 
-2. **Bypass L7 e Topologia O(1) (Uso do `docs_scraper`):**
-   * **Lei do Fail-Closed:** O ambiente lista ferramentas como `docs_scraper_search_docs`. IGNORE O PREFIXO. Use EXATAMENTE `search_docs` e `get_docs_tree`. Qualquer outra variação sofrerá bloqueio (Method Not Found) pela Válvula CEL do Gateway.
+2. **Topologia O(1) e Fallback Bare-Metal:**
+   * **Lei do Fail-Closed:** Se houver árvore documental estruturada disponível, use `search_docs` e `get_docs_tree`.
    * **Topologia Primeiro:** É proibido fazer raspagem cega. Invoque `get_docs_tree` no domínio alvo para ler o sumário/índice. Encontre a página exata da função e, só então, invoque `search_docs` cirurgicamente.
 
 3. **A Guilhotina SemVer e IPC Zero-Garbage:**
@@ -33,7 +33,7 @@ Sempre que for solicitado a implementar uma funcionalidade usando os frameworks 
    * **Expurgo Obrigatório:** Aplique um *Context Purge* mental. Esqueça todo o restante do HTML/Markdown irrelevante que leu no `search_docs`. Mantenha apenas as assinaturas antes de projetar o código no IDE.
 
 #### Constraints
-* **FALBACK DA WEB:** Apenas se a ferramenta `search_docs` falhar ou não encontrar o domínio, você tem autorização para realizar o recuo tático para `webcrawl_search` (ignorando o prefixo `webcrawl-mcp_`).
+* **FALBACK DA WEB:** Apenas se a documentação estruturada falhar ou não encontrar o domínio, realize o recuo tático para `web_fetch`.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do Roteamento SODA.
 
 #### Examples
@@ -44,3 +44,4 @@ Sempre que for solicitado a implementar uma funcionalidade usando os frameworks 
 3. Descobre a sintaxe TS para ArrayBuffers e a emissão via `rkyv` em Rust, rejeitando tutoriais antigos baseados em JSON puro.
 4. Extrai a *Trait* `tauri::Emitter`. 
 5. Expelindo o lixo da VRAM local, devolve no Canvas a arquitetura sintática pura e limpa de *Garbage Collection*.
+

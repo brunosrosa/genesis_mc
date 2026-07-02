@@ -9,9 +9,10 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 #[cfg(not(target_os = "windows"))]
 use tokio::time::timeout;
 use super::ramdisk::RamdiskHandle;
+use super::github_tracker;
 #[cfg(not(target_os = "windows"))]
 use super::sandbox::kill_process_tree_by_pid;
-use tracing::info;
+use tracing::{info, warn};
 #[cfg(target_os = "windows")]
 use serde::Deserialize;
 #[cfg(target_os = "windows")]
@@ -59,17 +60,46 @@ pub enum CloneError {
 
 #[cfg(target_os = "windows")]
 fn github_auth_header_value() -> Option<HeaderValue> {
-    let token = std::env::var("GITHUB_TOKEN")
+    let token = std::env::var("GITHUB_PAT")
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            std::env::var("GITHUB_PAT")
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-        })?;
+        .or_else(|| read_local_env_var("GITHUB_PAT"))
+        .filter(|s| !s.is_empty())?;
     HeaderValue::from_str(&format!("Bearer {}", token)).ok()
+}
+
+#[cfg(target_os = "windows")]
+fn read_local_env_var(key: &str) -> Option<String> {
+    let candidates = [
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent()?.join(".env"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"),
+    ];
+    for candidate in candidates {
+        let Ok(content) = std::fs::read_to_string(candidate) else {
+            continue;
+        };
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let Some((name, value)) = trimmed.split_once('=') else {
+                continue;
+            };
+            if name.trim() == key {
+                return Some(
+                    value
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string(),
+                )
+                .filter(|value| !value.is_empty());
+            }
+        }
+    }
+    None
 }
 
 pub struct BloblessCloner;
@@ -81,6 +111,15 @@ struct GitHubRepoMetadata {
 }
 
 impl BloblessCloner {
+    #[cfg(target_os = "windows")]
+    fn is_retryable_github_zip_error(reason: &str) -> bool {
+        let lower = reason.to_ascii_lowercase();
+        lower.contains("error decoding response body")
+            || lower.contains("could not find eocd")
+            || lower.contains("invalid zip")
+            || lower.contains("snapshot não-zip")
+    }
+
     fn repo_workspace_destination(workspace: &RamdiskHandle, repo_url: &Url) -> PathBuf {
         let mut segments = repo_url
             .path_segments()
@@ -177,6 +216,52 @@ impl BloblessCloner {
     async fn fetch_github_archive_bytes(
         repo_url: &Url,
     ) -> Result<(Vec<u8>, String, String), CloneError> {
+        fn is_probably_zip(bytes: &[u8]) -> bool {
+            bytes.starts_with(b"PK\x03\x04")
+                || bytes.starts_with(b"PK\x05\x06")
+                || bytes.starts_with(b"PK\x07\x08")
+        }
+
+        fn preview_bytes_lossy(bytes: &[u8]) -> String {
+            let head_len = bytes.len().min(240);
+            let head = &bytes[..head_len];
+            let mut s = String::from_utf8_lossy(head).to_string();
+            s = s.replace(['\r', '\n'], " ");
+            if bytes.len() > head_len {
+                s.push_str(" …");
+            }
+            s
+        }
+
+        async fn download_zip_bytes(
+            client: &reqwest::Client,
+            url: &str,
+        ) -> Result<Vec<u8>, CloneError> {
+            let resp = client.get(url).send().await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao baixar snapshot compactado do GitHub: {}", e),
+            })?;
+            let status = resp.status();
+            let resp = resp.error_for_status().map_err(|e| CloneError::NetworkError {
+                reason: format!("GitHub respondeu erro ao baixar snapshot compactado: {}", e),
+            })?;
+            let bytes = resp.bytes().await.map_err(|e| CloneError::NetworkError {
+                reason: format!("Falha ao ler bytes do snapshot GitHub: {}", e),
+            })?;
+            let raw = bytes.to_vec();
+            if !is_probably_zip(&raw) {
+                return Err(CloneError::NetworkError {
+                    reason: format!(
+                        "ProjFS: snapshot não-ZIP recebido (status={}) bytes={} preview='{}' url={}",
+                        status,
+                        raw.len(),
+                        preview_bytes_lossy(&raw),
+                        url
+                    ),
+                });
+            }
+            Ok(raw)
+        }
+
         let (owner, repo) = Self::github_owner_repo(repo_url)?;
         let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
             .unwrap_or_else(|_| "https://api.github.com".to_string());
@@ -185,7 +270,7 @@ impl BloblessCloner {
             headers.insert(AUTHORIZATION, value);
         }
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(120))
             .user_agent("genesis-mc-harvester-projfs/1.0")
             .default_headers(headers)
             .build()
@@ -241,64 +326,84 @@ impl BloblessCloner {
             _ => None,
         };
 
-        let commits_url = format!(
-            "{}/repos/{owner}/{repo}/commits?sha={}&per_page=1",
-            github_api_base.trim_end_matches('/'),
-            metadata.default_branch
-        );
-        info!(url = %commits_url, "ProjFS: consultando SHA do commit HEAD");
-        let commits_resp = client
-            .get(&commits_url)
-            .send()
-            .await
-            .map_err(|e| CloneError::NetworkError {
+        let mut candidate_branches = vec![metadata.default_branch.clone()];
+        if metadata.default_branch.eq_ignore_ascii_case("main") {
+            candidate_branches.push("master".to_string());
+        } else if metadata.default_branch.eq_ignore_ascii_case("master") {
+            candidate_branches.push("main".to_string());
+        }
+
+        let mut selected_branch: Option<String> = None;
+        let mut head_sha: Option<String> = None;
+        for branch in candidate_branches.iter() {
+            let commits_url = format!(
+                "{}/repos/{owner}/{repo}/commits?sha={}&per_page=1",
+                github_api_base.trim_end_matches('/'),
+                branch
+            );
+            info!(url = %commits_url, "ProjFS: consultando SHA do commit HEAD");
+            let commits_resp = client.get(&commits_url).send().await.map_err(|e| CloneError::NetworkError {
                 reason: format!("Falha ao consultar commits do GitHub: {}", e),
             })?;
-        let commits_resp = commits_resp.error_for_status().map_err(|e| CloneError::NetworkError {
-            reason: format!("GitHub respondeu erro ao consultar commits: {}", e),
-        })?;
-        let commits = commits_resp
-            .json::<Vec<GithubCommit>>()
-            .await
-            .map_err(|e| CloneError::NetworkError {
+            if commits_resp.status() == reqwest::StatusCode::NOT_FOUND {
+                continue;
+            }
+            let commits_resp = commits_resp.error_for_status().map_err(|e| CloneError::NetworkError {
+                reason: format!("GitHub respondeu erro ao consultar commits: {}", e),
+            })?;
+            let commits = commits_resp.json::<Vec<GithubCommit>>().await.map_err(|e| CloneError::NetworkError {
                 reason: format!("Falha ao decodificar commits do GitHub: {}", e),
             })?;
-        let head_sha = commits
-            .first()
-            .map(|c| c.sha.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| CloneError::NetworkError {
-                reason: "GitHub retornou lista de commits vazia; impossível extrair SHA".to_string(),
-            })?;
+            let sha = commits
+                .first()
+                .map(|c| c.sha.trim().to_string())
+                .filter(|s| !s.is_empty());
+            if let Some(sha) = sha {
+                selected_branch = Some(branch.clone());
+                head_sha = Some(sha);
+                break;
+            }
+        }
+
+        let selected_branch = selected_branch.ok_or_else(|| CloneError::NetworkError {
+            reason: "GitHub não retornou commits válidos (main/master); impossível extrair SHA".to_string(),
+        })?;
+        let head_sha = head_sha.ok_or_else(|| CloneError::NetworkError {
+            reason: "GitHub não retornou SHA válido; impossível extrair SHA".to_string(),
+        })?;
         let short_sha = head_sha.chars().take(7).collect::<String>();
         let repo_version = release_tag.clone().unwrap_or_else(|| short_sha.clone());
         let ultima_versao_online = release_tag.unwrap_or(short_sha);
 
-        let archive_url = format!(
+        let api_archive_url = format!(
             "{}/repos/{owner}/{repo}/zipball/{}",
             github_api_base.trim_end_matches('/'),
-            metadata.default_branch
+            selected_branch
         );
         info!(
-            url = %archive_url,
+            url = %api_archive_url,
             default_branch = %metadata.default_branch,
+            selected_branch = %selected_branch,
             "ProjFS: baixando snapshot compactado do repositório"
         );
-        let archive_response = client
-            .get(&archive_url)
-            .send()
-            .await
-            .map_err(|e| CloneError::NetworkError {
-                reason: format!("Falha ao baixar snapshot compactado do GitHub: {}", e),
-            })?;
-        let archive_response = archive_response.error_for_status().map_err(|e| CloneError::NetworkError {
-            reason: format!("GitHub respondeu erro ao baixar snapshot compactado: {}", e),
-        })?;
-        let bytes = archive_response.bytes().await.map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha ao ler bytes do snapshot GitHub: {}", e),
-        })?;
-        info!(archive_bytes = bytes.len(), "ProjFS: snapshot compactado recebido em memória");
-        Ok((bytes.to_vec(), repo_version, ultima_versao_online))
+
+        let bytes = match download_zip_bytes(&client, &api_archive_url).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let codeload_url = format!(
+                    "https://codeload.github.com/{owner}/{repo}/zip/refs/heads/{selected_branch}"
+                );
+                warn!(
+                    url = %repo_url,
+                    error = %e,
+                    fallback_url = %codeload_url,
+                    "ProjFS: fallback para codeload (ZIP) após falha no endpoint zipball"
+                );
+                download_zip_bytes(&client, &codeload_url).await?
+            }
+        };
+        info!(archive_bytes = bytes.len(), "ProjFS: snapshot ZIP recebido em memória");
+        Ok((bytes, repo_version, ultima_versao_online))
     }
 
     #[cfg(target_os = "windows")]
@@ -336,32 +441,17 @@ impl BloblessCloner {
         ProjectedRepoSnapshot::from_files(files).map_err(|reason| CloneError::NetworkError { reason })
     }
 
+    #[cfg(target_os = "windows")]
+    async fn git_clone_fallback(repo_url: &Url, dest: &Path) -> Result<(), CloneError> {
+        github_tracker::clone_or_fetch_to_workspace(repo_url, dest)
+            .await
+            .map(|_| ())
+    }
+
     pub async fn clone(
         repo_url: &Url,
         ramdisk: &mut RamdiskHandle,
     ) -> Result<RepoPath, CloneError> {
-        #[cfg(not(target_os = "windows"))]
-        let clone_started = Instant::now();
-        #[cfg(not(target_os = "windows"))]
-        // 1. Verificação preliminar e assíncrona se o Git está instalado
-        match tokio::process::Command::new("git")
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .await
-        {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(CloneError::GitNotInstalled);
-            }
-            Err(e) => {
-                return Err(CloneError::NetworkError {
-                    reason: format!("Erro ao tentar verificar presença do git no sistema: {}", e),
-                });
-            }
-        }
-
         // 2. Workspace efemero com hint de cache temporario nativo para esta execucao.
         let dest = Self::repo_workspace_destination(ramdisk, repo_url);
         info!(
@@ -386,221 +476,142 @@ impl BloblessCloner {
         #[cfg(target_os = "windows")]
         {
             let archive_started = Instant::now();
-            let (archive_bytes, repo_version, ultima_versao_online) =
-                Self::fetch_github_archive_bytes(repo_url).await?;
-            let snapshot = tokio::task::spawn_blocking(move || Self::build_projfs_snapshot(archive_bytes))
-                .await
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!("Falha ao aguardar montagem do snapshot ProjFS: {}", e),
-                })??;
+            let max_attempts: u32 = 4;
+            let mut last_error: Option<CloneError> = None;
+            let mut last_repo_version: Option<String> = None;
+            let mut last_ultima_versao_online: Option<String> = None;
 
-            let (projected_files, projected_bytes) = ramdisk
-                .mount_projected_repo(&dest, snapshot)
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!("Falha ao iniciar projeção ProjFS do repositório: {}", e),
-                })?;
-            tokio::fs::write(dest.join(".soda_repo_version"), repo_version)
-                .await
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!("Falha ao persistir repo_version no workspace ProjFS: {}", e),
-                })?;
-            tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online)
-                .await
-                .map_err(|e| CloneError::NetworkError {
-                    reason: format!(
-                        "Falha ao persistir ultima_versao_online no workspace ProjFS: {}",
-                        e
-                    ),
-                })?;
-            info!(
-                url = %repo_url,
-                dest = %dest.display(),
-                projected_files,
-                projected_bytes,
-                elapsed_ms = archive_started.elapsed().as_millis(),
-                "Clone virtual via ProjFS concluido"
-            );
-            return Ok(RepoPath(dest));
+            for attempt in 1..=max_attempts {
+                let (archive_bytes, repo_version, ultima_versao_online) =
+                    match Self::fetch_github_archive_bytes(repo_url).await {
+                        Ok(value) => value,
+                        Err(e) => {
+                            let retry = matches!(&e, CloneError::NetworkError { reason } if Self::is_retryable_github_zip_error(reason));
+                            if attempt < max_attempts && retry {
+                                warn!(
+                                    url = %repo_url,
+                                    attempt,
+                                    error = %e,
+                                    "ProjFS: falha transitória ao baixar ZIP; aplicando retry"
+                                );
+                                let backoff_ms = (2_000_u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6))))
+                                    .min(120_000);
+                                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                                last_error = Some(e);
+                                continue;
+                            }
+                            return Err(e);
+                        }
+                    };
+                last_repo_version = Some(repo_version.clone());
+                last_ultima_versao_online = Some(ultima_versao_online.clone());
+
+                let snapshot = match tokio::task::spawn_blocking(move || Self::build_projfs_snapshot(archive_bytes))
+                    .await
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!("Falha ao aguardar montagem do snapshot ProjFS: {}", e),
+                    }) {
+                    Ok(Ok(snapshot)) => snapshot,
+                    Ok(Err(e)) => {
+                        let retry = matches!(&e, CloneError::NetworkError { reason } if Self::is_retryable_github_zip_error(reason));
+                        if attempt < max_attempts && retry {
+                            warn!(
+                                url = %repo_url,
+                                attempt,
+                                error = %e,
+                                "ProjFS: snapshot ZIP inválido/corrompido; aplicando retry"
+                            );
+                            let backoff_ms = (2_000_u64.saturating_mul(1u64 << (attempt.saturating_sub(1).min(6))))
+                                .min(120_000);
+                            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                            last_error = Some(e);
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                    Err(e) => return Err(e),
+                };
+
+                let (projected_files, projected_bytes) = ramdisk
+                    .mount_projected_repo(&dest, snapshot)
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!("Falha ao iniciar projeção ProjFS do repositório: {}", e),
+                    })?;
+                tokio::fs::write(dest.join(".soda_repo_version"), repo_version)
+                    .await
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!("Falha ao persistir repo_version no workspace ProjFS: {}", e),
+                    })?;
+                tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online)
+                    .await
+                    .map_err(|e| CloneError::NetworkError {
+                        reason: format!(
+                            "Falha ao persistir ultima_versao_online no workspace ProjFS: {}",
+                            e
+                        ),
+                    })?;
+                info!(
+                    url = %repo_url,
+                    dest = %dest.display(),
+                    projected_files,
+                    projected_bytes,
+                    elapsed_ms = archive_started.elapsed().as_millis(),
+                    "Clone virtual via ProjFS concluido"
+                );
+                return Ok(RepoPath(dest));
+            }
+
+            if let Some(err) = last_error.clone() {
+                let should_try_git = matches!(
+                    &err,
+                    CloneError::NetworkError { reason } if Self::is_retryable_github_zip_error(reason)
+                );
+                if should_try_git {
+                    warn!(
+                        url = %repo_url,
+                        error = %err,
+                        "ProjFS: retries esgotados; aplicando fallback para git clone (main/master)"
+                    );
+                    let repo_version = last_repo_version.unwrap_or_default();
+                    let ultima_versao_online = last_ultima_versao_online.unwrap_or_default();
+                    Self::git_clone_fallback(repo_url, &dest).await?;
+                    if !repo_version.is_empty() {
+                        tokio::fs::write(dest.join(".soda_repo_version"), repo_version)
+                            .await
+                            .map_err(|e| CloneError::NetworkError {
+                                reason: format!("Falha ao persistir repo_version no workspace: {}", e),
+                            })?;
+                    }
+                    if !ultima_versao_online.is_empty() {
+                        tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online)
+                            .await
+                            .map_err(|e| CloneError::NetworkError {
+                                reason: format!("Falha ao persistir ultima_versao_online no workspace: {}", e),
+                            })?;
+                    }
+                    return Ok(RepoPath(dest));
+                }
+                return Err(err);
+            }
+            return Err(CloneError::NetworkError {
+                reason: "ProjFS: falha inesperada (loop de retries encerrou sem erro registrado)".to_string(),
+            });
         }
 
         #[cfg(not(target_os = "windows"))]
         {
-            // 3. Spawning do comando git clone de forma assíncrona com as flags otimizadas do SODA
-            info!(url = %repo_url, dest = %dest.display(), "Iniciando git clone blobless");
-            let mut child = match tokio::process::Command::new("git")
-                .arg("clone")
-                .arg("--filter=blob:none")
-                .arg("--single-branch")
-                .arg("--no-tags")
-                .arg("--quiet")
-                .arg(repo_url.as_str())
-                .arg(&dest)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .kill_on_drop(true)
-                .spawn()
-            {
-                Ok(c) => c,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    return Err(CloneError::GitNotInstalled);
-                }
-                Err(e) => {
-                    return Err(CloneError::NetworkError {
-                        reason: format!("Falha ao spawnar processo git clone: {}", e),
-                    });
-                }
-            };
-
-            // Extrai o stream do stderr para leitura concorrente (evita mover child)
-            let mut stderr_stream = child.stderr.take().ok_or_else(|| {
-                CloneError::NetworkError {
-                    reason: "Não foi possível capturar stderr do processo Git".to_string(),
-                }
-            })?;
-
-            // 4. Executar concorrentemente wait() e leitura de stderr com Timeout de 600s
-            let mut stderr_buffer = Vec::new();
-            let run_fut = async {
-                use tokio::io::AsyncReadExt;
-                let status = child.wait().await;
-                let _ = stderr_stream.read_to_end(&mut stderr_buffer).await;
-                status
-            };
-
-            const CLONE_TIMEOUT_SECONDS: u64 = 600;
-            let wait_result = timeout(Duration::from_secs(CLONE_TIMEOUT_SECONDS), run_fut).await;
-
-            if wait_result.is_err() {
-                // Timeout expirou! Matamos o processo de forma assíncrona
-                if let Some(pid) = child.id() {
-                    kill_process_tree_by_pid(pid).await;
-                } else {
-                    let _ = child.kill().await;
-                }
-                // PT-3: Limpa o diretório parcial sem bloquear o Event Loop
-                let _ = tokio::fs::remove_dir_all(&dest).await;
-                return Err(CloneError::Timeout);
-            }
-
-            let status = match wait_result.unwrap() {
-                Ok(s) => s,
-                Err(e) => {
-                    // PT-3: Limpeza assíncrona em caso de erro de I/O
-                    let _ = tokio::fs::remove_dir_all(&dest).await;
-                    return Err(CloneError::NetworkError {
-                        reason: format!("Erro de I/O ao aguardar término do processo git: {}", e),
-                    });
-                }
-            };
-
-            // 5. Analisar o resultado do processo
-            if !status.success() {
-                let stderr = String::from_utf8_lossy(&stderr_buffer);
-
-                // PT-3: Limpa o diretório de clone parcial sem bloquear o Event Loop
-                let _ = tokio::fs::remove_dir_all(&dest).await;
-
-                let stderr_lower = stderr.to_lowercase();
-                if stderr_lower.contains("repository") && stderr_lower.contains("not found") {
-                    return Err(CloneError::RepositoryNotFound {
-                        url: repo_url.as_str().to_string(),
-                    });
-                } else if stderr_lower.contains("no space left") || stderr_lower.contains("disk full") {
-                    return Err(CloneError::RamdiskFull {
-                        path: dest.display().to_string(),
-                    });
-                } else if stderr_lower.contains("could not resolve host") || stderr_lower.contains("connection refused") {
-                    return Err(CloneError::NetworkError {
-                        reason: format!("Erro de rede/resolução de DNS: {}", stderr.trim()),
-                    });
-                } else {
-                    return Err(CloneError::NetworkError {
-                        reason: format!("Git falhou com código {:?}: {}", status.code(), stderr.trim()),
-                    });
-                }
-            }
-
-            #[derive(Deserialize)]
-            struct GithubRelease {
-                tag_name: Option<String>,
-            }
-
-            let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
-            let should_try_github_api = repo_url.host_str() == Some("github.com") || allow_host_override;
-            let mut release_tag: Option<String> = None;
-            if should_try_github_api {
-                let mut segments = repo_url
-                    .path_segments()
-                    .map(|parts| parts.collect::<Vec<_>>())
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|segment| !segment.is_empty())
-                    .map(|segment| segment.trim_end_matches(".git").to_string())
-                    .collect::<Vec<_>>();
-                if segments.len() >= 2 {
-                    let repo = segments.pop().unwrap_or_else(|| "repo".to_string());
-                    let owner = segments.pop().unwrap_or_else(|| "owner".to_string());
-                    let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
-                        .unwrap_or_else(|_| "https://api.github.com".to_string());
-                    let mut headers = HeaderMap::new();
-                    if let Some(value) = github_auth_header_value() {
-                        headers.insert(AUTHORIZATION, value);
-                    }
-                    if let Ok(client) = reqwest::Client::builder()
-                        .user_agent("genesis-mc-harvester-git/1.0")
-                        .default_headers(headers)
-                        .build()
-                    {
-                        let release_url = format!(
-                            "{}/repos/{owner}/{repo}/releases/latest",
-                            github_api_base.trim_end_matches('/')
-                        );
-                        if let Ok(resp) = client.get(&release_url).send().await {
-                            if resp.status() == reqwest::StatusCode::NOT_FOUND {
-                                release_tag = None;
-                            } else if resp.status().is_success() {
-                                if let Ok(release) = resp.json::<GithubRelease>().await {
-                                    release_tag = release
-                                        .tag_name
-                                        .map(|s| s.trim().to_string())
-                                        .filter(|s| !s.is_empty());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            let short_sha = match tokio::process::Command::new("git")
-                .arg("-C")
-                .arg(&dest)
-                .arg("rev-parse")
-                .arg("--short")
-                .arg("HEAD")
-                .output()
-                .await
-            {
-                Ok(out) if out.status.success() => {
-                    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                    if value.is_empty() { None } else { Some(value) }
-                }
-                _ => None,
-            }
-            .unwrap_or_else(|| "UNKNOWN".to_string());
-
-            let repo_version = release_tag.clone().unwrap_or_else(|| short_sha.clone());
-            let ultima_versao_online = release_tag.unwrap_or(short_sha);
-
-            let _ = tokio::fs::write(dest.join(".soda_repo_version"), repo_version).await;
-            let _ = tokio::fs::write(dest.join(".soda_ultima_versao_online"), ultima_versao_online).await;
-
+            let clone_started = Instant::now();
+            info!(url = %repo_url, dest = %dest.display(), "Iniciando clone gitoxide nativo");
+            let outcome = github_tracker::clone_or_fetch_to_workspace(repo_url, &dest).await?;
+            let _ = tokio::fs::write(dest.join(".soda_repo_version"), &outcome.head_short_sha).await;
+            let _ = tokio::fs::write(dest.join(".soda_ultima_versao_online"), &outcome.head_short_sha).await;
             Self::detach_git_metadata(&dest).await?;
-
             info!(
                 url = %repo_url,
                 dest = %dest.display(),
+                cache = %outcome.cache_path.display(),
                 elapsed_ms = clone_started.elapsed().as_millis(),
-                "Clone blobless concluido"
+                "Clone gitoxide concluido"
             );
             return Ok(RepoPath(dest));
         }

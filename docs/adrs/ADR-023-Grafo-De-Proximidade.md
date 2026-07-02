@@ -9,7 +9,7 @@ Durante investigações em repositórios complexos e acompanhamento de tarefas c
 ## Decisão
 Estabelecer o **LadybugDB** como a camada nativa de grafos local do SODA, atuando ativamente como o **Proximity Agent (Agente de Proximidade)** governado pelo ecossistema Rust:
 1. **Ativação por Proximidade Relacional:** As buscas de contexto não dependem puramente de busca vetorial densa. O LadybugDB calcula caminhos geodésicos no grafo de conhecimento local para ativar nós que possuem dependências causais diretas com o assunto abordado, montando uma árvore relacional inquebrável.
-2. **Especialização CROW (Code Reasoning Ontological Weaver):** Focado na costura ontológica profunda do código-fonte. Mapeia a hierarquia de herança, cadeias de chamadas de métodos e imports da AST gerados pelo `jcodemunch`, blindando o raciocínio sintático profundo.
+2. **Especialização CROW (Code Reasoning Ontological Weaver):** Focado na costura ontológica profunda do código-fonte. Mapeia a hierarquia de herança, cadeias de chamadas de métodos e imports da AST gerados pelo parser AST nativo, blindando o raciocínio sintático profundo.
 3. **Especialização FALCON (Fast Access Logical Context Network):** Rede de indexação ultrarrápida na CPU focada no mapeamento de intenções de conversação do usuário, links locais e tarefas em andamento. Executa varreduras sub-milissegundo cruzando dados com o SQLite L2 para sanar dúvidas instantâneas e bloquear desvios focais.
 4. **Resiliência Bayesiana contra Poisoning:** A costura e criação de novos nós de memória semântica no LadybugDB passam por uma avaliação Bayesiana de coerência antes de serem gravados definitivamente, impedindo o envenenamento do RAG por alucinações repetidas dos modelos de inferência estocásticos da nuvem.
 

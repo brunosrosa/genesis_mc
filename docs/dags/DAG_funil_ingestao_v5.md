@@ -131,7 +131,7 @@ flowchart TD
 
 | Input (Gatilho) | Ação (Mecânica/IA) | Output (Novo Status) |
 |---|---|---|
-| `status_atualizacao = APROVADO_PARA_ENXAME` | Fase 1: Destilador → Fase 2: Enxame → Fase 3: Sintetizador (saída estruturada) → Fase 4: `batch_update_cells` | Atualizações de conteúdo no Sheets + `status_fase = FASE_4_SHEETS_UPDATED` |
+| `status_atualizacao = APROVADO_PARA_ENXAME` | Fase 1: Destilador → Fase 2: Enxame → Fase 3: Sintetizador (saída estruturada + checkpoint no SQLite) → Fase 4: `write_values` em micro-lotes via `mcp-google-workspace` | Atualizações de conteúdo no Sheets + `status_fase = FASE_4_SHEETS_UPDATED` |
 
 Regra FinOps: o Sintetizador deve tratar `proposta_original_resumo` e `categoria_arquitetural` como **read-only** quando já preenchidas pelo N2, evitando re-geração.
 

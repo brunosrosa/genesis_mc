@@ -27,6 +27,7 @@ Todo código gerado para o ecossistema SODA deve obedecer irrestritamente a este
 
 - **Zero Interpretadores em Background:** É terminantemente **PROIBIDA** a execução de daemons contínuos em Node.js, Python, Electron ou Java. Eles geram _Daemon Bloat_ e engasgam a CPU com _Garbage Collection_.
 - **O Núcleo é Rust:** Todo o backend, roteamento, interceptação L7 e persistência de dados rodam em **Rust assíncrono (Tokio)**. O bloqueio da thread principal (Event Loop Starvation) é uma falha inaceitável.
+- **Inferência Bare-Metal Canônica:** O motor central de inferência em produção é o **Candle** em Rust puro. `llama-cpp-4` não é motor gerativo principal; ele sobrevive estritamente isolado no Hipocampo Epistêmico para _Logit Probing_ em background.
 - **Zero-Copy IPC:** A comunicação entre o cérebro (Rust) e a interface (SvelteKit) trafega dados binários puros. A serialização JSON pesada está banida das vias expressas.
 
 ### II. Hipocampo: Memória Neuro-Sintética (MNS)

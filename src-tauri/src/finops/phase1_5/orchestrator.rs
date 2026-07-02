@@ -63,7 +63,7 @@ pub struct BlobRecord {
 
 pub struct Phase1_5Orchestrator<R: Router, D: Distiller, C: CloudCascadeTrait, Reader: DbReader, Writer: DbWriter> {
     router: R,
-    local_distiller: D,
+    _local_distiller: D,
     cloud_cascade: C,
     db_reader: Reader,
     db_writer: Writer,
@@ -81,7 +81,7 @@ impl<R: Router, D: Distiller, C: CloudCascadeTrait, Reader: DbReader, Writer: Db
     ) -> Self {
         Phase1_5Orchestrator {
             router,
-            local_distiller,
+            _local_distiller: local_distiller,
             cloud_cascade,
             db_reader,
             db_writer,
@@ -113,8 +113,8 @@ impl<R: Router, D: Distiller, C: CloudCascadeTrait, Reader: DbReader, Writer: Db
                 }
                 RoutingZone::Yellow => {
                     let result = self
-                        .local_distiller
-                        .distill(&blob.payload_blob, "Distil this repository artifact");
+                        .cloud_cascade
+                        .cascade_distill(&blob.payload_blob, "Distil this repository artifact");
                     match result {
                         Ok(essence) => (essence, "Yellow".to_string()),
                         Err(e) => {
@@ -164,6 +164,9 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
+
+    type EssenceInsertRecord = (String, String, usize, String);
+    type SharedEssenceRecords = Arc<Mutex<Vec<EssenceInsertRecord>>>;
 
     struct MockRouter {
         decisions: Vec<RoutingDecision>,
@@ -260,7 +263,7 @@ mod tests {
     }
 
     struct MockDbWriter {
-        essences: Arc<Mutex<Vec<(String, String, usize, String)>>>,
+        essences: SharedEssenceRecords,
         insert_count: Arc<AtomicUsize>,
     }
 
@@ -283,7 +286,7 @@ mod tests {
         fn get_insert_count(&self) -> usize {
             self.insert_count.load(Ordering::SeqCst)
         }
-        fn get_essences(&self) -> Vec<(String, String, usize, String)> {
+        fn get_essences(&self) -> Vec<EssenceInsertRecord> {
             self.essences.lock().unwrap().clone()
         }
     }
@@ -403,14 +406,14 @@ mod tests {
     }
 
     #[test]
-    fn test_zone_routing_yellow_routes_to_local_distiller() {
+    fn test_zone_routing_yellow_bypasses_local_and_routes_to_cloud_cascade() {
         let writer = MockDbWriter::new();
 
         let router = MockRouter::new(vec![RoutingDecision {
             token_count: 30_000,
             zone: RoutingZone::Yellow,
         }]);
-        let distiller = MockDistiller::new(vec![Ok("local_distilled".to_string())]);
+        let distiller = MockDistiller::new(vec![Err("local should not run".to_string())]);
         let cloud = MockCloudCascade::new(vec![Ok("cloud".to_string())]);
         let reader = MockDbReader::new(vec![BlobRecord {
             artifact_type: "blob_01".to_string(),
@@ -459,7 +462,7 @@ mod tests {
             zone: RoutingZone::Yellow,
         }]);
         let distiller = MockDistiller::new(vec![Err("GPU OOM".to_string())]);
-        let cloud = MockCloudCascade::new(vec![Ok("cloud".to_string())]);
+        let cloud = MockCloudCascade::new(vec![Err("GPU OOM".to_string())]);
         let reader = MockDbReader::new(vec![BlobRecord {
             artifact_type: "blob_01".to_string(),
             payload_blob: "content".to_string(),

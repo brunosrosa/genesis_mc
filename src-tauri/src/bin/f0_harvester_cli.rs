@@ -6,11 +6,14 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Utc};
 use genesis_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
+use genesis_mc_lib::harvester::router::{BlobSelection, PHASE0_BLOB_TYPES};
 use genesis_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use genesis_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
-use rusqlite::{params, Connection};
+use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use reqwest::Client;
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::Deserialize;
 use serde_json::{json, Value};
-use tokio::io::AsyncBufReadExt;
 use tracing::{error, info, warn};
 use url::Url;
 use rand::rngs::OsRng;
@@ -20,20 +23,8 @@ const STATUS_GATE_HARVESTER: &str = "APROVADO_PARA_HARVESTER";
 const STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO: &str = "CONCLUIDO_AGUARDANDO";
 const STATUS_FASE_F0_OK: &str = "FASE_0_HARVESTER_OK";
 const STATUS_ERRO_F0: &str = "ERRO_F0";
-
-const EXPECTED_F0_BLOBS: [&str; 11] = [
-    "blob_01_promessa_readme",
-    "blob_02_dependency_manifest",
-    "blob_03_test_intent",
-    "blob_04_repo_outline",
-    "blob_05_architecture_map",
-    "blob_06_unsafe_hotspots",
-    "blob_07_ops_blueprint",
-    "blob_08_health_report",
-    "blob_09_community_meta",
-    "blob_10_soda_canon_context",
-    "blob_11_ux_contracts",
-];
+const STATUS_DEGRADADO_F0: &str = "DEGRADADO_F0";
+const STATUS_FASE_F0_DEGRADADA: &str = "FASE_0_DEGRADADA";
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -142,7 +133,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
         params![
             CANON_GLOBAL_REPO_ID,
             "CANON_CACHE",
-            "https://notebooklm.google.com/",
+            "file://local/docs/SODA_CANON_MANIFEST.md",
             "UUID-SODA-CANON-GLOBAL",
             "CACHE_GLOBAL",
             0_i64,
@@ -197,14 +188,8 @@ fn write_f0_report(
         report.push_str(&format!("{}\t{}\n", artifact_type, payload_len));
     }
 
-    use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&report_path)
-        .map_err(|e| io::Error::other(format!("Falha ao abrir relatório ETL {}: {}", report_path.display(), e)))?;
-    file.write_all(report.as_bytes())
-        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL: {}", e)))?;
+    append_plaintext_report(&report_path, &report)
+        .map_err(|e| io::Error::other(format!("Falha ao anexar relatório ETL {}: {}", report_path.display(), e)))?;
 
     Ok(report_path)
 }
@@ -213,9 +198,11 @@ fn write_f0_report(
 struct CliArgs {
     repo_id: Option<String>,
     batch: bool,
+    direct: bool,
+    only_blobs: Option<BlobSelection>,
 }
 
-fn parse_cli_args_from<I>(args: I) -> CliArgs
+fn parse_cli_args_from<I>(args: I) -> Result<CliArgs, String>
 where
     I: IntoIterator<Item = String>,
 {
@@ -223,14 +210,34 @@ where
     it.next();
     let mut repo_id: Option<String> = None;
     let mut batch = false;
+    let mut direct = false;
+    let mut only_blobs: Option<BlobSelection> = None;
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--repo" => repo_id = it.next(),
             "--batch" => batch = true,
+            "--direct" => direct = true,
+            "--only-blobs" => {
+                let raw = it
+                    .next()
+                    .ok_or_else(|| "A flag --only-blobs exige uma lista, por exemplo: 06,08".to_string())?;
+                only_blobs = Some(BlobSelection::from_csv(&raw)?);
+            }
             _ => {}
         }
     }
-    CliArgs { repo_id, batch }
+    Ok(CliArgs {
+        repo_id,
+        batch,
+        direct,
+        only_blobs,
+    })
+}
+
+fn expected_f0_blobs(requested_blobs: Option<&BlobSelection>) -> Vec<String> {
+    requested_blobs
+        .map(BlobSelection::expected_artifact_types)
+        .unwrap_or_else(|| PHASE0_BLOB_TYPES.iter().map(|s| (*s).to_string()).collect())
 }
 
 fn normalize_repo_url_for_match(raw: &str) -> String {
@@ -324,22 +331,342 @@ fn read_repo_blobs_present(conn: &Connection, repo_id: &str) -> io::Result<Vec<S
     Ok(out)
 }
 
-fn compute_missing_blobs(present: &[String]) -> Vec<String> {
+fn read_repo_blob_text(conn: &Connection, repo_id: &str, artifact_type: &str) -> io::Result<Option<String>> {
+    conn.query_row(
+        "SELECT CAST(payload_blob AS TEXT)
+         FROM artefatos_brutos
+         WHERE repo_id = ?1 AND artifact_type = ?2
+         LIMIT 1",
+        params![repo_id, artifact_type],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(io::Error::other)
+}
+
+fn is_content_repo_kind_text(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("kind: skilllibrary") || lower.contains("kind: contentrepo")
+}
+
+fn is_no_source_files_like_text(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("no source files") || lower.contains("no source file")
+}
+
+fn looks_like_knowledge_repo(conn: &Connection, repo_id: &str) -> bool {
+    let readme_ok = read_repo_blob_text(conn, repo_id, "blob_01_promessa_readme")
+        .ok()
+        .flatten()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    if !readme_ok {
+        return false;
+    }
+
+    let manifest = match read_repo_blob_text(conn, repo_id, "blob_02_dependency_manifest") {
+        Ok(Some(value)) => value,
+        Ok(None) => String::new(),
+        Err(_) => return false,
+    };
+    let stack_unknown = manifest.contains("stack_base: UNKNOWN")
+        || manifest.contains("stack_base: unknown")
+        || manifest.contains("stack_base: N/A")
+        || manifest.contains("stack_base: n/a");
+
+    let ux = match read_repo_blob_text(conn, repo_id, "blob_11_ux_contracts") {
+        Ok(Some(value)) => value,
+        Ok(None) => String::new(),
+        Err(_) => return false,
+    };
+    let ux_skipped = ux.contains("package.json ausente") || ux.contains("foi pulada");
+
+    stack_unknown && ux_skipped
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubReleaseTag {
+    tag_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubRepoMetadata {
+    default_branch: Option<String>,
+}
+
+fn is_invalid_version_seed(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case("main")
+        || trimmed.eq_ignore_ascii_case("master")
+        || trimmed.eq_ignore_ascii_case("unknown")
+}
+
+fn load_repo_versions(conn: &Connection, repo_id: &str) -> io::Result<(String, String, String)> {
+    conn.query_row(
+        "SELECT COALESCE(repo_analised_version, ''), COALESCE(repo_version, ''), COALESCE(ultima_versao_online, '')
+         FROM repositorios
+         WHERE project_name = ?1",
+        params![repo_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
+    .map_err(|e| io::Error::other(format!("Falha ao ler versões atuais em repositorios: {e}")))
+}
+
+async fn resolve_release_seed_for_repo_url(repo_url: &Url) -> io::Result<String> {
+    let mut segments = repo_url
+        .path_segments()
+        .ok_or_else(|| io::Error::other("repo_url sem path segments para resolver versão"))?
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| segment.trim_end_matches(".git").to_string())
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return Err(io::Error::other("repo_url sem owner/repo para resolver versão"));
+    }
+    let repo = segments
+        .pop()
+        .ok_or_else(|| io::Error::other("repo_url sem repo para resolver versão"))?;
+    let owner = segments
+        .pop()
+        .ok_or_else(|| io::Error::other("repo_url sem owner para resolver versão"))?;
+    let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "https://api.github.com".to_string());
+    let base = github_api_base.trim_end_matches('/');
+    let repo_endpoint = format!("{base}/repos/{owner}/{repo}");
+    let release_endpoint = format!("{repo_endpoint}/releases/latest");
+    let tags_endpoint = format!("{repo_endpoint}/tags?per_page=1");
+    let client = Client::builder()
+        .user_agent("f0-harvester-cli/1.0")
+        .build()
+        .map_err(|e| io::Error::other(format!("Falha ao criar client HTTP do reparo de versão: {e}")))?;
+    let auth_token = std::env::var("GITHUB_PAT")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+
+    let with_auth = |req: reqwest::RequestBuilder| {
+        if let Some(token) = auth_token.as_deref() {
+            req.bearer_auth(token)
+        } else {
+            req
+        }
+    };
+
+    let release_resp = with_auth(client.get(&release_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar latest release: {e}")))?;
+    if release_resp.status().is_success() {
+        let parsed = release_resp
+            .json::<GithubReleaseTag>()
+            .await
+            .map_err(|e| io::Error::other(format!("Falha ao parsear latest release: {e}")))?;
+        if let Some(tag) = parsed
+            .tag_name
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .filter(|v| !is_invalid_version_seed(v))
+        {
+            return Ok(tag);
+        }
+    }
+
+    let tags_resp = with_auth(client.get(&tags_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar tags: {e}")))?;
+    if tags_resp.status().is_success() {
+        let tags = tags_resp
+            .json::<Vec<Value>>()
+            .await
+            .map_err(|e| io::Error::other(format!("Falha ao parsear tags: {e}")))?;
+        if let Some(tag) = tags
+            .iter()
+            .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
+            .map(|s| s.trim().to_string())
+            .find(|v| !v.is_empty() && !is_invalid_version_seed(v))
+        {
+            return Ok(tag);
+        }
+    }
+
+    let repo_resp = with_auth(client.get(&repo_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar metadata do repo: {e}")))?;
+    let repo_meta = repo_resp
+        .json::<GithubRepoMetadata>()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha ao parsear metadata do repo: {e}")))?;
+
+    if let Some(branch) = repo_meta
+        .default_branch
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        let commit_endpoint = format!("{repo_endpoint}/commits/{branch}");
+        let commit_resp = with_auth(client.get(&commit_endpoint))
+            .send()
+            .await
+            .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar commit do branch default: {e}")))?;
+        if commit_resp.status().is_success() {
+            let commit = commit_resp
+                .json::<Value>()
+                .await
+                .map_err(|e| io::Error::other(format!("Falha ao parsear commit do branch default: {e}")))?;
+            if let Some(short) = commit
+                .get("sha")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|sha| sha.chars().take(7).collect::<String>())
+                .filter(|v| !v.is_empty())
+            {
+                return Ok(short);
+            }
+        }
+    }
+
+    let commits_endpoint = format!("{repo_endpoint}/commits?per_page=1");
+    let commits_resp = with_auth(client.get(&commits_endpoint))
+        .send()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha HTTP ao consultar lista de commits: {e}")))?;
+    let commits = commits_resp
+        .json::<Vec<Value>>()
+        .await
+        .map_err(|e| io::Error::other(format!("Falha ao parsear lista de commits: {e}")))?;
+    commits
+        .first()
+        .and_then(|c| c.get("sha"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|sha| sha.chars().take(7).collect::<String>())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| io::Error::other("Falha ao resolver versão por release/tag/SHA curto"))
+}
+
+async fn repair_repo_versions_if_needed(
+    conn: Arc<Mutex<Connection>>,
+    repo_id: &str,
+    repo_url: &Url,
+) -> io::Result<()> {
+    let current = {
+        let conn_lock = conn
+            .lock()
+            .map_err(|e| io::Error::other(format!("Falha ao adquirir lock do banco para validar versões: {e}")))?;
+        load_repo_versions(&conn_lock, repo_id)?
+    };
+    let (repo_analised_version, repo_version, ultima_versao_online) = current;
+    if !is_invalid_version_seed(&repo_analised_version)
+        && !is_invalid_version_seed(&repo_version)
+        && !is_invalid_version_seed(&ultima_versao_online)
+    {
+        return Ok(());
+    }
+
+    let resolved = resolve_release_seed_for_repo_url(repo_url).await?;
+    if is_invalid_version_seed(&resolved) {
+        return Err(io::Error::other(format!(
+            "Reparo F0(direct): resolvedor retornou versão inválida: {resolved}"
+        )));
+    }
+
+    let conn_lock = conn
+        .lock()
+        .map_err(|e| io::Error::other(format!("Falha ao adquirir lock do banco para reparar versões: {e}")))?;
+    let updated_rows = conn_lock
+        .execute(
+            "UPDATE repositorios
+             SET repo_analised_version = ?1,
+                 repo_version = ?1,
+                 ultima_versao_online = ?1
+             WHERE project_name = ?2",
+            params![resolved, repo_id],
+        )
+        .map_err(|e| io::Error::other(format!("Falha ao reparar versões no SQLite após F0(direct): {e}")))?;
+    if updated_rows == 0 {
+        return Err(io::Error::other(format!(
+            "Reparo F0(direct): nenhuma linha atualizada em repositorios para {repo_id}"
+        )));
+    }
+    info!(
+        repo_id = %repo_id,
+        resolved_version = %resolved,
+        updated_rows,
+        "F0(direct): reparo de versões no SQLite concluído"
+    );
+    Ok(())
+}
+
+fn detect_degraded_blobs(conn: &Connection, repo_id: &str) -> io::Result<Vec<String>> {
+    let mut degraded = Vec::new();
+
+    let outline = read_repo_blob_text(conn, repo_id, "blob_04_repo_outline")?;
+    let arch_map = read_repo_blob_text(conn, repo_id, "blob_05_architecture_map")?;
+    let is_content_repo = outline
+        .as_deref()
+        .map(is_content_repo_kind_text)
+        .unwrap_or(false)
+        || arch_map
+            .as_deref()
+            .map(is_content_repo_kind_text)
+            .unwrap_or(false);
+    let is_knowledge_repo = is_content_repo || looks_like_knowledge_repo(conn, repo_id);
+
+    if let Some(text) = outline {
+        if text.contains("Fallback:")
+            && !(is_knowledge_repo || is_no_source_files_like_text(&text))
+        {
+            degraded.push("blob_04_repo_outline".to_string());
+        }
+    }
+    if let Some(text) = arch_map {
+        let is_empty_topology = text.contains("index nao gerou relacoes topologicas internas");
+        if text.contains("Fallback:")
+            && !(is_knowledge_repo || is_no_source_files_like_text(&text) || is_empty_topology)
+        {
+            degraded.push("blob_05_architecture_map".to_string());
+        }
+    }
+    if let Some(text) = read_repo_blob_text(conn, repo_id, "blob_08_health_report")? {
+        let has_fallback = text.contains("\"fallback\":true") || text.contains("\"fallback\": true");
+        let is_skipped = text.to_ascii_lowercase().contains("foi pulado")
+            || text.to_ascii_lowercase().contains("pulado pelo roteamento")
+            || text.to_ascii_lowercase().contains("static analysis (semgrep) foi pulado");
+        if !is_knowledge_repo && has_fallback && !is_skipped
+        {
+            degraded.push("blob_08_health_report".to_string());
+        }
+    }
+
+    Ok(degraded)
+}
+
+fn compute_missing_blobs(present: &[String], expected: &[String]) -> Vec<String> {
     let set = present.iter().cloned().collect::<BTreeSet<_>>();
-    EXPECTED_F0_BLOBS
+    expected
         .iter()
-        .filter(|t| !set.contains(**t))
-        .map(|t| t.to_string())
+        .filter(|t| !set.contains(*t))
+        .cloned()
         .collect()
 }
 
 async fn fetch_harvester_batch_candidates(
     spreadsheet_id: &str,
 ) -> Result<(Vec<BatchCandidate>, MasterCols), String> {
-    let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string()).await?;
-    let header_row = header.first().cloned().unwrap_or_default();
+    let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone()).await?;
+    let header_row = header
+        .first()
+        .cloned()
+        .ok_or_else(|| format!("Header vazio em MASTER_SOLUTIONS!{header_range}"))?;
     if header_row.is_empty() {
-        return Err("Header vazio em MASTER_SOLUTIONS!A1:CF1".to_string());
+        return Err(format!("Header vazio em MASTER_SOLUTIONS!{}", header_range));
     }
     let cols = resolve_master_cols(&header_row)?;
     let required = [cols.repo_url_idx, cols.status_atualizacao_idx, cols.status_fase_idx];
@@ -362,7 +689,10 @@ fn select_batch_candidates_from_values(
     for (i, row) in values.iter().enumerate() {
         let get = |abs_idx: usize| -> String {
             let rel = abs_idx.saturating_sub(min_idx);
-            row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+            match row.get(rel) {
+                Some(value) => value.trim().to_string(),
+                None => String::new(),
+            }
         };
         let status = get(cols.status_atualizacao_idx);
         if status.trim() != STATUS_GATE_HARVESTER {
@@ -383,6 +713,7 @@ fn select_batch_candidates_from_values(
     out
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_one_repo_f0(
     root_dir: &Path,
     db_path: &Path,
@@ -391,8 +722,10 @@ async fn process_one_repo_f0(
     repo_id: &str,
     row_number_1based: u32,
     batch_index: Option<(usize, usize)>,
+    requested_blobs: Option<&BlobSelection>,
 ) -> RepoBatchSummary {
     let started = Instant::now();
+    let expected_blobs = expected_f0_blobs(requested_blobs);
     if let Some((idx, total)) = batch_index {
         info!(
             repo_id = %repo_id,
@@ -405,9 +738,22 @@ async fn process_one_repo_f0(
         info!(repo_id = %repo_id, row_number = row_number_1based, "F0: iniciando");
     }
 
-    let status_atualizacao = read_status_atualizacao_at_row(spreadsheet_id, row_number_1based, cols)
-        .await
-        .unwrap_or_default();
+    let status_atualizacao =
+        match read_status_atualizacao_at_row(spreadsheet_id, row_number_1based, cols).await {
+            Ok(value) => value,
+            Err(e) => {
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: Vec::new(),
+                    blobs_missing: expected_blobs.clone(),
+                    report_path: None,
+                    error: Some(e),
+                };
+            }
+        };
     if status_atualizacao.trim() != STATUS_GATE_HARVESTER {
         info!(
             repo_id = %repo_id,
@@ -422,7 +768,7 @@ async fn process_one_repo_f0(
             outcome: RepoOutcome::Skipped,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: None,
         };
@@ -437,7 +783,7 @@ async fn process_one_repo_f0(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -450,7 +796,7 @@ async fn process_one_repo_f0(
             outcome: RepoOutcome::Error,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+            blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: Some(e.to_string()),
         };
@@ -466,7 +812,7 @@ async fn process_one_repo_f0(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -481,7 +827,7 @@ async fn process_one_repo_f0(
                 outcome: RepoOutcome::Error,
                 elapsed_ms: started.elapsed().as_millis(),
                 blobs_present: Vec::new(),
-                blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
                 report_path: None,
                 error: Some(e.to_string()),
             };
@@ -530,7 +876,7 @@ async fn process_one_repo_f0(
             outcome: RepoOutcome::Error,
             elapsed_ms: started.elapsed().as_millis(),
             blobs_present: Vec::new(),
-            blobs_missing: EXPECTED_F0_BLOBS.iter().map(|s| s.to_string()).collect(),
+                blobs_missing: expected_blobs.clone(),
             report_path: None,
             error: Some(msg),
         };
@@ -557,7 +903,14 @@ async fn process_one_repo_f0(
     let mut attempt: u32 = 0;
     let mut res: Result<(), genesis_mc_lib::harvester::orchestrator::OrchestratorError> = Ok(());
     while attempt < max_attempts {
-        match HarvesterOrchestrator::run(repo_id, &repo_url, Arc::clone(&conn_arc)).await {
+        match HarvesterOrchestrator::run(
+            repo_id,
+            &repo_url,
+            Arc::clone(&conn_arc),
+            requested_blobs.cloned(),
+        )
+        .await
+        {
             Ok(()) => {
                 res = Ok(());
                 break;
@@ -585,18 +938,28 @@ async fn process_one_repo_f0(
     }
     hb.abort();
 
+    let mut pre_error: Option<String> = None;
     let (mut blobs_present, mut blobs_missing) = {
         let present = match conn_arc.lock() {
-            Ok(conn_lock) => read_repo_blobs_present(&conn_lock, repo_id).unwrap_or_default(),
-            Err(_) => Vec::new(),
+            Ok(conn_lock) => match read_repo_blobs_present(&conn_lock, repo_id) {
+                Ok(value) => value,
+                Err(e) => {
+                    pre_error = Some(format!("Falha ao ler blobs presentes após F0: {e}"));
+                    Vec::new()
+                }
+            },
+            Err(e) => {
+                pre_error = Some(format!("Falha ao adquirir lock do banco após F0: {e}"));
+                Vec::new()
+            }
         };
-        let missing = compute_missing_blobs(&present);
+        let missing = compute_missing_blobs(&present, &expected_blobs);
         (present, missing)
     };
 
     match res {
         Ok(_) => {
-            let mut post_error: Option<String> = None;
+            let mut post_error: Option<String> = pre_error.take();
             if let Ok(conn_lock) = conn_arc.lock() {
                 match now_epoch_secs() {
                     Ok(now) => {
@@ -623,15 +986,65 @@ async fn process_one_repo_f0(
                     None
                 }
             };
-            update_status_atualizacao_e_fase(
-                spreadsheet_id,
-                row_number_1based,
-                cols,
-                STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO,
-                STATUS_FASE_F0_OK,
-            )
-            .await
-            .ok();
+            let degraded_blobs = match conn_arc.lock() {
+                Ok(conn_lock) => match detect_degraded_blobs(&conn_lock, repo_id) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        post_error = Some(format!("Falha ao detectar blobs degradados: {e}"));
+                        Vec::new()
+                    }
+                },
+                Err(e) => {
+                    post_error = Some(format!("Falha ao adquirir lock do banco para detectar degradação: {e}"));
+                    Vec::new()
+                }
+            };
+            if !degraded_blobs.is_empty() {
+                let msg = format!(
+                    "F0 degradada: blobs com fallback detectado: {}",
+                    degraded_blobs.join(", ")
+                );
+                error!(
+                    repo_id = %repo_id,
+                    row_number = row_number_1based,
+                    degraded = ?degraded_blobs,
+                    "F0: degradação detectada; bloqueando avanço"
+                );
+                if let Ok(conn_lock) = conn_arc.lock() {
+                    let _ = conn_lock.execute(
+                        "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
+                        params![STATUS_DEGRADADO_F0, repo_id],
+                    );
+                }
+                let _ = update_status_atualizacao_e_fase(
+                    spreadsheet_id,
+                    row_number_1based,
+                    cols,
+                    STATUS_DEGRADADO_F0,
+                    STATUS_FASE_F0_DEGRADADA,
+                )
+                .await;
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: std::mem::take(&mut blobs_present),
+                    blobs_missing: std::mem::take(&mut blobs_missing),
+                    report_path,
+                    error: Some(msg),
+                };
+            } else {
+                update_status_atualizacao_e_fase(
+                    spreadsheet_id,
+                    row_number_1based,
+                    cols,
+                    STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO,
+                    STATUS_FASE_F0_OK,
+                )
+                .await
+                .ok();
+            }
             if let Some(ref path) = report_path {
                 info!(
                     repo_id = %repo_id,
@@ -648,7 +1061,7 @@ async fn process_one_repo_f0(
                     "F0: concluído (sem relatório)"
                 );
             }
-            return RepoBatchSummary {
+            RepoBatchSummary {
                 repo_id: repo_id.to_string(),
                 row_number_1based,
                 outcome: RepoOutcome::Success,
@@ -657,7 +1070,7 @@ async fn process_one_repo_f0(
                 blobs_missing: std::mem::take(&mut blobs_missing),
                 report_path,
                 error: post_error,
-            };
+            }
         }
         Err(e) => {
             error!(
@@ -680,7 +1093,7 @@ async fn process_one_repo_f0(
                 STATUS_ERRO_F0,
             )
             .await;
-            return RepoBatchSummary {
+            RepoBatchSummary {
                 repo_id: repo_id.to_string(),
                 row_number_1based,
                 outcome: RepoOutcome::Error,
@@ -689,153 +1102,329 @@ async fn process_one_repo_f0(
                 blobs_missing: std::mem::take(&mut blobs_missing),
                 report_path: None,
                 error: Some(e.to_string()),
+            }
+        }
+    }
+}
+
+async fn process_one_repo_f0_direct(
+    root_dir: &Path,
+    db_path: &Path,
+    repo_id: &str,
+    requested_blobs: Option<&BlobSelection>,
+) -> RepoBatchSummary {
+    let started = Instant::now();
+    let expected_blobs = expected_f0_blobs(requested_blobs);
+    info!(repo_id = %repo_id, "F0(direct): iniciando (sem Sheets)");
+
+    let conn = match Connection::open(db_path).map_err(io::Error::other) {
+        Ok(conn) => conn,
+        Err(e) => {
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based: 0,
+                outcome: RepoOutcome::Error,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: Vec::new(),
+                blobs_missing: expected_blobs.clone(),
+                report_path: None,
+                error: Some(e.to_string()),
             };
         }
     };
-}
-
-async fn poll_for_jsonrpc_response_from_reader<R>(
-    reader: R,
-    timeout: std::time::Duration,
-    expected_id: i64,
-) -> Result<Value, String>
-where
-    R: tokio::io::AsyncBufRead + Unpin,
-{
-    let started = Instant::now();
-    let mut lines = reader.lines();
-    loop {
-        if started.elapsed() > timeout {
-            return Err(format!(
-                "Timeout: O servidor MCP (Sheets) não emitiu o payload após {} segundos.",
-                timeout.as_secs()
-            ));
-        }
-        match tokio::time::timeout(std::time::Duration::from_millis(200), lines.next_line()).await {
-            Ok(Ok(Some(line))) => {
-                if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                    let id_matches = match value.get("id") {
-                        Some(Value::Number(n)) => n.as_i64() == Some(expected_id),
-                        Some(Value::String(s)) => s.parse::<i64>().ok() == Some(expected_id),
-                        _ => false,
-                    };
-                    if id_matches {
-                        return Ok(value);
-                    }
-                }
-            }
-            Ok(Ok(None)) => tokio::time::sleep(std::time::Duration::from_millis(200)).await,
-            Ok(Err(e)) => return Err(format!("Falha ao ler stdout do MCP: {e}")),
-            Err(_) => {}
-        }
+    if let Err(e) = ensure_phase1_schema(&conn) {
+        return RepoBatchSummary {
+            repo_id: repo_id.to_string(),
+            row_number_1based: 0,
+            outcome: RepoOutcome::Error,
+            elapsed_ms: started.elapsed().as_millis(),
+            blobs_present: Vec::new(),
+            blobs_missing: expected_blobs.clone(),
+            report_path: None,
+            error: Some(e.to_string()),
+        };
     }
-}
 
-fn normalize_mcp_tool_result(result: Value) -> Value {
-    let content = match result.get("content").and_then(|v| v.as_array()) {
-        Some(arr) => arr,
-        None => return result,
+    let repo_url_str = format!("https://github.com/{}", repo_id);
+    let repo_url = match Url::parse(&repo_url_str).map_err(io::Error::other) {
+        Ok(url) => url,
+        Err(e) => {
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based: 0,
+                outcome: RepoOutcome::Error,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: Vec::new(),
+                blobs_missing: expected_blobs.clone(),
+                report_path: None,
+                error: Some(e.to_string()),
+            };
+        }
     };
-    for item in content {
-        if let Some(json_val) = item.get("json") {
-            return json_val.clone();
+    let now = match now_epoch_secs() {
+        Ok(now) => now,
+        Err(e) => {
+            return RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based: 0,
+                outcome: RepoOutcome::Error,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: Vec::new(),
+                blobs_missing: expected_blobs.clone(),
+                report_path: None,
+                error: Some(e.to_string()),
+            };
         }
-        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                return parsed;
-            }
-        }
+    };
+
+    if let Err(e) = conn.execute(
+        "INSERT INTO repositorios (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(project_name) DO UPDATE SET
+            repo_url = excluded.repo_url,
+            status_processamento = excluded.status_processamento,
+            timestamp_fase_1 = excluded.timestamp_fase_1",
+        params![
+            repo_id,
+            std::env::var("SODA_LOTE_ID_OVERRIDE")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| "LOTE_01_ALPHA".to_string()),
+            &repo_url_str,
+            format!("UUID-{}", repo_id),
+            "PENDENTE",
+            now,
+            0
+        ],
+    ) {
+        let msg = format!("Falha ao inserir/atualizar repositorios: {e}");
+        return RepoBatchSummary {
+            repo_id: repo_id.to_string(),
+            row_number_1based: 0,
+            outcome: RepoOutcome::Error,
+            elapsed_ms: started.elapsed().as_millis(),
+            blobs_present: Vec::new(),
+            blobs_missing: expected_blobs.clone(),
+            report_path: None,
+            error: Some(msg),
+        };
     }
-    result
-}
 
-async fn call_mcp(tool_name: &str, arguments: Value) -> Result<Value, String> {
-    use std::process::Stdio;
-    use tokio::io::AsyncWriteExt;
-    use tokio::process::Command;
-
-    let creds = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-        .map_err(|_| "Missing GOOGLE_APPLICATION_CREDENTIALS".to_string())?;
-
-    let init_req = json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": { "name": "f0-harvester-cli", "version": "1.0.0" }
-        }
-    });
-    let initialized_notif = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
-    let mcp_request = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": { "name": tool_name, "arguments": arguments }
-    });
-
-    let mut child = Command::new("mcp-google-sheets")
-        .env("GOOGLE_APPLICATION_CREDENTIALS", creds)
-        .env("UV_NO_PROGRESS", "1")
-        .env("UV_QUIET", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Falha ao spawnar mcp-google-sheets: {e}"))?;
-
-    let msg_res: Result<Value, String> = async {
-        let mut stdin = child.stdin.take().ok_or_else(|| "stdin indisponível".to_string())?;
-        stdin
-            .write_all(format!("{init_req}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever init_req: {e}"))?;
-        stdin
-            .write_all(format!("{initialized_notif}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever initialized: {e}"))?;
-        stdin
-            .write_all(format!("{mcp_request}\n").as_bytes())
-            .await
-            .map_err(|e| format!("Falha ao escrever tools/call: {e}"))?;
-        drop(stdin);
-
-        let stdout = child.stdout.take().ok_or_else(|| "stdout indisponível".to_string())?;
-        poll_for_jsonrpc_response_from_reader(
-            tokio::io::BufReader::new(stdout),
-            std::time::Duration::from_secs(20),
-            1,
+    let conn_arc = Arc::new(Mutex::new(conn));
+    let max_attempts: u32 = 4;
+    let mut attempt: u32 = 0;
+    let mut res: Result<(), genesis_mc_lib::harvester::orchestrator::OrchestratorError> = Ok(());
+    while attempt < max_attempts {
+        match HarvesterOrchestrator::run(
+            repo_id,
+            &repo_url,
+            Arc::clone(&conn_arc),
+            requested_blobs.cloned(),
         )
         .await
+        {
+            Ok(()) => {
+                res = Ok(());
+                break;
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                if is_rate_limit_error_text(&msg) && attempt + 1 < max_attempts {
+                    let mut rng = OsRng;
+                    let backoff_ms = backoff_ms_from_attempt(attempt, rng.next_u32());
+                    warn!(
+                        repo_id = %repo_id,
+                        attempt = attempt + 1,
+                        backoff_ms,
+                        error = %msg,
+                        "F0(direct): rate limit detectado; aplicando backoff e retry"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                    attempt += 1;
+                    continue;
+                }
+                res = Err(e);
+                break;
+            }
+        }
     }
-    .await;
 
-    let _ = child.kill().await;
-    let _ = child.wait().await;
+    let (mut blobs_present, mut blobs_missing) = {
+        let present = match conn_arc.lock() {
+            Ok(conn_lock) => match read_repo_blobs_present(&conn_lock, repo_id) {
+                Ok(value) => value,
+                Err(e) => {
+                    return RepoBatchSummary {
+                        repo_id: repo_id.to_string(),
+                        row_number_1based: 0,
+                        outcome: RepoOutcome::Error,
+                        elapsed_ms: started.elapsed().as_millis(),
+                        blobs_present: Vec::new(),
+                        blobs_missing: expected_blobs.clone(),
+                        report_path: None,
+                        error: Some(format!("Falha ao ler blobs presentes após F0(direct): {e}")),
+                    };
+                }
+            },
+            Err(e) => {
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based: 0,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: Vec::new(),
+                    blobs_missing: expected_blobs.clone(),
+                    report_path: None,
+                    error: Some(format!("Falha ao adquirir lock do banco após F0(direct): {e}")),
+                };
+            }
+        };
+        let missing = compute_missing_blobs(&present, &expected_blobs);
+        (present, missing)
+    };
 
-    let msg = msg_res?;
+    match res {
+        Ok(_) => {
+            if let Err(e) = repair_repo_versions_if_needed(Arc::clone(&conn_arc), repo_id, &repo_url).await {
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based: 0,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: std::mem::take(&mut blobs_present),
+                    blobs_missing: std::mem::take(&mut blobs_missing),
+                    report_path: None,
+                    error: Some(e.to_string()),
+                };
+            }
+            if let Ok(conn_lock) = conn_arc.lock() {
+                if let Ok(now) = now_epoch_secs() {
+                    let _ = conn_lock.execute(
+                        "UPDATE repositorios
+                         SET status_processamento = ?1,
+                             timestamp_fase_1 = ?2
+                         WHERE project_name = ?3",
+                        params!["F0_OK", now, repo_id],
+                    );
+                }
+            }
 
-    if msg.get("error").is_some() {
-        return Err(format!("MCP retornou erro: {msg}"));
+            let report_path = write_f0_report(root_dir, &conn_arc, repo_id).ok();
+
+            let degraded_blobs = match conn_arc.lock() {
+                Ok(conn_lock) => match detect_degraded_blobs(&conn_lock, repo_id) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        return RepoBatchSummary {
+                            repo_id: repo_id.to_string(),
+                            row_number_1based: 0,
+                            outcome: RepoOutcome::Error,
+                            elapsed_ms: started.elapsed().as_millis(),
+                            blobs_present: std::mem::take(&mut blobs_present),
+                            blobs_missing: std::mem::take(&mut blobs_missing),
+                            report_path,
+                            error: Some(format!("Falha ao detectar blobs degradados: {e}")),
+                        };
+                    }
+                },
+                Err(e) => {
+                    return RepoBatchSummary {
+                        repo_id: repo_id.to_string(),
+                        row_number_1based: 0,
+                        outcome: RepoOutcome::Error,
+                        elapsed_ms: started.elapsed().as_millis(),
+                        blobs_present: std::mem::take(&mut blobs_present),
+                        blobs_missing: std::mem::take(&mut blobs_missing),
+                        report_path,
+                        error: Some(format!("Falha ao adquirir lock do banco para detectar degradação: {e}")),
+                    };
+                }
+            };
+            if !degraded_blobs.is_empty() {
+                let msg = format!(
+                    "F0 degradada: blobs com fallback detectado: {}",
+                    degraded_blobs.join(", ")
+                );
+                if let Ok(conn_lock) = conn_arc.lock() {
+                    let _ = conn_lock.execute(
+                        "UPDATE repositorios SET status_processamento = ?1 WHERE project_name = ?2",
+                        params![STATUS_DEGRADADO_F0, repo_id],
+                    );
+                }
+                return RepoBatchSummary {
+                    repo_id: repo_id.to_string(),
+                    row_number_1based: 0,
+                    outcome: RepoOutcome::Error,
+                    elapsed_ms: started.elapsed().as_millis(),
+                    blobs_present: std::mem::take(&mut blobs_present),
+                    blobs_missing: std::mem::take(&mut blobs_missing),
+                    report_path,
+                    error: Some(msg),
+                };
+            }
+
+            info!(
+                repo_id = %repo_id,
+                elapsed_ms = started.elapsed().as_millis(),
+                blobs = blobs_present.len(),
+                missing = blobs_missing.len(),
+                missing_list = ?blobs_missing,
+                report = ?report_path.as_ref().map(|p| p.display().to_string()),
+                "F0(direct): concluído"
+            );
+            RepoBatchSummary {
+                repo_id: repo_id.to_string(),
+                row_number_1based: 0,
+                outcome: RepoOutcome::Success,
+                elapsed_ms: started.elapsed().as_millis(),
+                blobs_present: std::mem::take(&mut blobs_present),
+                blobs_missing: std::mem::take(&mut blobs_missing),
+                report_path,
+                error: None,
+            }
+        }
+        Err(e) => RepoBatchSummary {
+            repo_id: repo_id.to_string(),
+            row_number_1based: 0,
+            outcome: RepoOutcome::Error,
+            elapsed_ms: started.elapsed().as_millis(),
+            blobs_present: std::mem::take(&mut blobs_present),
+            blobs_missing: std::mem::take(&mut blobs_missing),
+            report_path: None,
+            error: Some(e.to_string()),
+        },
     }
-    if let Some(result) = msg.get("result") {
-        return Ok(normalize_mcp_tool_result(result.clone()));
-    }
-    Err("Resposta MCP inválida (sem campo result)".to_string())
+}
+
+async fn read_sheet_values(spreadsheet_id: &str, sheet: &str, range: &str) -> Result<Value, String> {
+    genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+        spreadsheet_id,
+        sheet,
+        range,
+        "f0-harvester-cli",
+        std::time::Duration::from_secs(180),
+    )
+    .await
+}
+
+async fn write_sheet_ranges(
+    spreadsheet_id: &str,
+    sheet: &str,
+    ranges: &serde_json::Map<String, Value>,
+) -> Result<Value, String> {
+    genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+        spreadsheet_id,
+        sheet,
+        ranges,
+        "f0-harvester-cli",
+        std::time::Duration::from_secs(180),
+    )
+    .await
 }
 
 async fn get_sheet_data(spreadsheet_id: &str, sheet: &str, range: String) -> Result<Vec<Vec<String>>, String> {
-    let result = call_mcp(
-        "get_sheet_data",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": sheet,
-            "range": range,
-            "include_grid_data": false
-        }),
-    )
-    .await?;
+    let result = read_sheet_values(spreadsheet_id, sheet, &range).await?;
     extract_values_2d_strict(&result)
 }
 
@@ -871,10 +1460,14 @@ fn resolve_master_cols(header_row: &[String]) -> Result<MasterCols, String> {
 }
 
 async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<(u32, MasterCols, usize), String> {
-    let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", "A1:CF1".to_string()).await?;
-    let header_row = header.first().cloned().unwrap_or_default();
+    let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone()).await?;
+    let header_row = header
+        .first()
+        .cloned()
+        .ok_or_else(|| format!("Header vazio em MASTER_SOLUTIONS!{header_range}"))?;
     if header_row.is_empty() {
-        return Err("Header vazio em MASTER_SOLUTIONS!A1:CF1".to_string());
+        return Err(format!("Header vazio em MASTER_SOLUTIONS!{}", header_range));
     }
     let cols = resolve_master_cols(&header_row)?;
 
@@ -890,7 +1483,10 @@ async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<
     for (i, row) in values.iter().enumerate() {
         let get = |abs_idx: usize| -> String {
             let rel = abs_idx.saturating_sub(min_idx);
-            row.get(rel).map(|s| s.trim().to_string()).unwrap_or_default()
+            match row.get(rel) {
+                Some(value) => value.trim().to_string(),
+                None => String::new(),
+            }
         };
         let repo_url = normalize_repo_url_for_match(&get(cols.repo_url_idx));
         if repo_url.is_empty() {
@@ -898,11 +1494,8 @@ async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<
         }
         if repo_url == expected {
             let status = get(cols.status_atualizacao_idx);
-            return Ok(((i as u32) + 2, cols, min_idx))
-                .and_then(|x| {
-                    let _ = status;
-                    Ok(x)
-                });
+            let _ = status;
+            return Ok(((i as u32) + 2, cols, min_idx));
         }
     }
     Err(format!(
@@ -919,11 +1512,11 @@ async fn read_status_atualizacao_at_row(
     let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
     let range = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
     let values = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", range).await?;
-    Ok(values
+    values
         .first()
-        .and_then(|r| r.first())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default())
+        .and_then(|row| row.first())
+        .map(|value| value.trim().to_string())
+        .ok_or_else(|| "Sheets: célula status_atualizacao vazia".to_string())
 }
 
 async fn update_status_atualizacao_e_fase(
@@ -937,44 +1530,32 @@ async fn update_status_atualizacao_e_fase(
     let fase_col = col_idx_to_a1(cols.status_fase_idx);
     let status_range = format!("{status_col}{row_number_1based}:{status_col}{row_number_1based}");
     let fase_range = format!("{fase_col}{row_number_1based}:{fase_col}{row_number_1based}");
-    let _ = call_mcp(
-        "batch_update_cells",
-        json!({
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": "MASTER_SOLUTIONS",
-            "ranges": {
-                status_range: [[status_atualizacao]],
-                fase_range: [[status_fase]]
-            }
-        }),
-    )
-    .await?;
+    let mut ranges = serde_json::Map::new();
+    ranges.insert(status_range, json!([[status_atualizacao]]));
+    ranges.insert(fase_range, json!([[status_fase]]));
+    let _ = write_sheet_ranges(spreadsheet_id, "MASTER_SOLUTIONS", &ranges).await?;
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    let _ = enable_ansi_support::enable_ansi_support();
+    enable_virtual_terminal();
     dotenvy::dotenv().ok();
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let level = match rust_log.to_ascii_lowercase().as_str() {
-        "trace" => tracing::Level::TRACE,
-        "debug" => tracing::Level::DEBUG,
-        "warn" => tracing::Level::WARN,
-        "error" => tracing::Level::ERROR,
-        _ => tracing::Level::INFO,
-    };
-    tracing_subscriber::fmt().with_max_level(level).init();
+    let level = parse_log_level_from_env();
+    init_cli_tracing(level);
 
     let root_dir = workspace_root()?;
     let soda_data_dir = root_dir.join(".soda_data");
     tokio::fs::create_dir_all(&soda_data_dir).await?;
 
     let db_path = soda_data_dir.join("soda_heuristic_vault.db");
-    let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
-        .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    let args = parse_cli_args_from(std::env::args());
+    let args = parse_cli_args_from(std::env::args()).map_err(io::Error::other)?;
 
     if args.batch {
+        let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+            .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
         info!(
             gate = STATUS_GATE_HARVESTER,
             "SODA F0 (Harvester/Zero-IA): modo batch sequencial"
@@ -994,6 +1575,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &item.repo_id,
                 item.row_number_1based,
                 Some((idx + 1, total)),
+                args.only_blobs.as_ref(),
             )
             .await;
             results.push(summary);
@@ -1029,7 +1611,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!(
             total_candidates = total,
             ok = ok_count,
-            error = error_count,
+            error_count,
             skipped = skipped_count,
             total_elapsed_ms,
             avg_ms,
@@ -1079,6 +1661,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .repo_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "aaif-goose/goose".to_string());
+    if args.direct {
+        info!("SODA F0 (Harvester/Zero-IA): execução direta (sem Sheets)");
+        let summary = process_one_repo_f0_direct(&root_dir, &db_path, &repo_id, args.only_blobs.as_ref()).await;
+        if summary.outcome == RepoOutcome::Error {
+            let detail = summary
+                .error
+                .unwrap_or_else(|| "Erro não especificado".to_string());
+            return Err(io::Error::other(format!("F0(direct) falhou para {}: {}", summary.repo_id, detail)).into());
+        }
+        return Ok(());
+    }
+
+    let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
+        .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
     info!("SODA F0 (Harvester/Zero-IA): execução isolada (1 repo)");
     let (row_number, cols, _min_idx) =
         gate_harvester_by_sheet(&spreadsheet_id, &repo_id).await.map_err(io::Error::other)?;
@@ -1090,6 +1686,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &repo_id,
         row_number,
         None,
+        args.only_blobs.as_ref(),
     )
     .await;
     if summary.outcome == RepoOutcome::Error {
@@ -1113,20 +1710,45 @@ mod tests {
             "acme/widgets".to_string(),
         ];
         assert_eq!(
-            parse_cli_args_from(args),
+            parse_cli_args_from(args).unwrap(),
             CliArgs {
                 repo_id: Some("acme/widgets".to_string()),
-                batch: false
+                batch: false,
+                direct: false,
+                only_blobs: None,
             }
         );
 
         let args = vec!["bin".to_string(), "--batch".to_string()];
         assert_eq!(
-            parse_cli_args_from(args),
+            parse_cli_args_from(args).unwrap(),
             CliArgs {
                 repo_id: None,
-                batch: true
+                batch: true,
+                direct: false,
+                only_blobs: None,
             }
+        );
+    }
+
+    #[test]
+    fn parse_cli_args_reads_only_blobs_filter() {
+        let args = vec![
+            "bin".to_string(),
+            "--repo".to_string(),
+            "acme/widgets".to_string(),
+            "--only-blobs".to_string(),
+            "06,08".to_string(),
+        ];
+
+        let parsed = parse_cli_args_from(args).unwrap();
+        assert_eq!(parsed.repo_id.as_deref(), Some("acme/widgets"));
+        assert_eq!(
+            parsed.only_blobs.unwrap().expected_artifact_types(),
+            vec![
+                "blob_06_unsafe_hotspots".to_string(),
+                "blob_08_health_report".to_string(),
+            ]
         );
     }
 

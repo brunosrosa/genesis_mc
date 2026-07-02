@@ -8,6 +8,8 @@ param(
     [switch]$Yes,
     [string]$RepoId = ""
 )
+[console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+$PSStyle.OutputRendering = 'ANSI'
 try { Clear-Host } catch {}
 
 Write-Host "================================================================" -ForegroundColor Cyan
@@ -67,7 +69,7 @@ if ($PSBoundParameters.ContainsKey('DryRun')) {
     if ($envDry -and ($envDry -match '^(1|true|yes|y|sim|s)$')) {
         $isDryRun = $true
     } elseif (-not $PSBoundParameters.ContainsKey('Yes')) {
-        $mode = Read-Host "Modo de execução: [1] Normal  [2] Dry-run (1 rodada)"
+        $mode = Read-Host "Modo de execução: [ENTER] Normal  [2] Dry-run (1 rodada)"
         $isDryRun = ($mode -match '^\s*2\s*$')
     }
 }
@@ -84,7 +86,7 @@ Write-Host "----------------------------------------------------------------" -F
 Write-Host " [0] 👁️  N0 - Daemon Watcher (Cron Job)" -ForegroundColor White
 Write-Host "             (Acorda o Olheiro Assíncrono para verificar novos links)"
 Write-Host " [1] 🛡️  N1 - Guardião (Fase -1)" -ForegroundColor White
-Write-Host "             (Puxa nomes oficiais e versões do GitHub via Idempotência) (Custo Zero)"
+Write-Host "             (Prioriza NOVO_LINK_OK; depois roda o batch amplo) (Custo Zero)"
 Write-Host " [2] 🛰️  N2 - Batedor FinOps (Fase -0.5) (IA Flash)" -ForegroundColor White
 Write-Host "             (Busca README truncado + JSON Mode barato + Triagem Estruturada)"
 Write-Host " [3] 🚜  N3 - Harvester Local (Fase 0)" -ForegroundColor White
@@ -130,21 +132,48 @@ switch ($choice) {
             $binArgs = @("--repo", $effectiveRepo)
             $phaseName = "Fase 0 (HARVESTER LOCAL)"
         } else {
+            $loteCustom = Read-Host "Informe o nome do Lote (Ex: LOTE_01_UX) ou deixe em branco para o padrao"
             $binArgs = @("--batch")
+            if (-not [string]::IsNullOrWhiteSpace($loteCustom)) {
+                $binArgs += "--lote-id"
+                $binArgs += $loteCustom
+            }
             $phaseName = "Fase 0 (HARVESTER LOCAL) [BATCH]"
         }
     }
     '4' {
         $bin = "f3_synthesizer_cli"
         $effectiveRepo = $RepoId
-        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
-        $binArgs = @("--repo", $effectiveRepo, "--e2e-full", "--skip-harvester")
-        $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO)"
+        if ($effectiveRepo) {
+            $binArgs = @("--repo", $effectiveRepo, "--e2e-full", "--skip-harvester")
+            $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO)"
+        } else {
+            $loteCustom = Read-Host "Informe o nome do Lote (Ex: LOTE_02_INFRA) ou deixe em branco para o padrao"
+            $binArgs = @("--batch", "--e2e-full", "--skip-harvester")
+            if (-not [string]::IsNullOrWhiteSpace($loteCustom)) {
+                $binArgs += "--lote-id"
+                $binArgs += $loteCustom
+            }
+            $phaseName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO) [BATCH Sheets]"
+        }
     }
     '5' {
         $bin = "f3_synthesizer_cli"
         $effectiveRepo = $RepoId
-        if (-not $effectiveRepo) { $effectiveRepo = Read-Host "RepoId (owner/repo)" }
+        if ($effectiveRepo -and $effectiveRepo.Trim().ToUpperInvariant() -eq "BATCH") {
+            $binArgs = @("--batch", "--resume-f3")
+            $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO) [BATCH RESUME_F3]"
+            break
+        }
+        if (-not $effectiveRepo) {
+            $mode = Read-Host "BATCH (Enter) ou RepoId (owner/repo)"
+            if ([string]::IsNullOrWhiteSpace($mode) -or $mode.Trim().ToUpperInvariant() -eq "BATCH") {
+                $binArgs = @("--batch", "--resume-f3")
+                $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO) [BATCH RESUME_F3]"
+                break
+            }
+            $effectiveRepo = $mode
+        }
         $binArgs = @("--repo", $effectiveRepo)
         $phaseName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO)"
     }
@@ -169,26 +198,23 @@ switch ($choice) {
 }
 
 Write-Host "`n================================================================" -ForegroundColor Cyan
-$confirmation = "N"
-if ($PSBoundParameters.ContainsKey('Yes')) {
-    $confirmation = "S"
-} else {
-    $confirmation = Read-Host "🔥 Autoriza a ativação do motor para [$phaseName]? (S/N)"
-}
+Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
+Push-Location $PSScriptRoot
 
-if ($confirmation -match "^[sS]$") {
-    Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
-    Push-Location $PSScriptRoot
-    try {
-        $env:CARGO_INCREMENTAL = "0"
-        if ($binArgs.Count -gt 0) {
-            & cargo run --manifest-path $cargoManifest --bin $bin -- @binArgs
-        } else {
-            & cargo run --manifest-path $cargoManifest --bin $bin
-        }
-    } finally {
-        Pop-Location
+try {
+    $env:CARGO_INCREMENTAL = "0"
+    if ($binArgs.Count -gt 0) {
+        & cargo run --manifest-path $cargoManifest --bin $bin -- @binArgs
+    } else {
+        & cargo run --manifest-path $cargoManifest --bin $bin
     }
-} else {
-    Write-Host "`n🛑 Execução cancelada pelo Arquiteto (HITL)." -ForegroundColor Yellow
+    
+    # Trava de Segurança do Exit Code
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`n[FALHA LETAL] O Motor Rust abortou com Exit Code $LASTEXITCODE." -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+    
+} finally {
+    Pop-Location
 }
