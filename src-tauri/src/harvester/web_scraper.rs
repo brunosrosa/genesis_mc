@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use html_to_markdown_rs::convert;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_LANGUAGE, USER_AGENT};
 use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
+
 
 const ETHICAL_BROWSER_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
@@ -293,14 +293,127 @@ async fn fetch_via_firecrawl(url: &Url, api_key: &str) -> Result<String, WebScra
     ensure_useful_markdown(url, "firecrawl", markdown)
 }
 
+/// Converte HTML bruto em Markdown preservando a malha de hiperlinks.
+///
+/// Walker recursivo O(n) sobre a estrutura do VDom do `astral-tl` para manter correto o escopo
+/// de tags de ruído (in_noise) sem vazamento de estado, preservando a semântica de árvore:
+/// - `Node::Raw`  → texto puro emitido como-está se não estiver em tags de ruído
+/// - `Node::Tag("a")` → `[texto](href)` — sem perda de dados
+/// - Tags de bloco → quebra de linha/prefixo antes dos filhos
+/// - Tags de ruído (`script`, `style`, `noscript`, `head`, `svg`, `footer`, `nav`) → suprimem recursivamente seus filhos
 fn html_to_markdown(url: &Url, html: &str) -> Result<String, WebScraperError> {
-    convert(html, None)
-        .map(|value| normalize_markdown(&value))
-        .map_err(|err| WebScraperError::HtmlToMarkdown {
+    let dom = tl::parse(html, tl::ParserOptions::default()).map_err(|err| {
+        WebScraperError::HtmlToMarkdown {
             url: url.to_string(),
             reason: err.to_string(),
-        })
+        }
+    })?;
+    let parser = dom.parser();
+    let mut out = String::with_capacity(html.len() / 4);
+
+    for child_handle in dom.children() {
+        walk_tree(*child_handle, parser, &mut out, false);
+    }
+
+    Ok(normalize_markdown(&out))
 }
+
+fn walk_tree(
+    node_handle: tl::NodeHandle,
+    parser: &tl::Parser,
+    out: &mut String,
+    mut in_noise: bool,
+) {
+    let Some(node) = node_handle.get(parser) else {
+        return;
+    };
+
+    match node {
+        tl::Node::Tag(tag) => {
+            let name = tag.name().as_utf8_str();
+            let name_lc = name.to_ascii_lowercase();
+
+            const NOISE_TAGS: &[&str] = &[
+                "script", "style", "noscript", "head", "meta", "link", "svg",
+                "footer", "nav",
+            ];
+            const BLOCK_TAGS: &[&str] = &[
+                "h1", "h2", "h3", "h4", "h5", "h6",
+                "p", "li", "dt", "dd", "tr", "br", "hr", "blockquote", "pre",
+                "article", "section", "div", "main",
+            ];
+
+            if NOISE_TAGS.contains(&name_lc.as_str()) {
+                in_noise = true;
+            }
+
+            if !in_noise {
+                if BLOCK_TAGS.contains(&name_lc.as_str()) {
+                    if !out.is_empty() && !out.ends_with('\n') {
+                        out.push('\n');
+                    }
+                    match name_lc.as_str() {
+                        "h1" => out.push_str("# "),
+                        "h2" => out.push_str("## "),
+                        "h3" => out.push_str("### "),
+                        "h4" => out.push_str("#### "),
+                        "h5" => out.push_str("##### "),
+                        "h6" => out.push_str("###### "),
+                        "li" => out.push_str("- "),
+                        _ => {}
+                    }
+                }
+
+                if name_lc == "a" {
+                    let href = tag
+                        .attributes()
+                        .get("href")
+                        .flatten()
+                        .map(|b| b.as_utf8_str())
+                        .unwrap_or_default();
+                    let link_text = tag.inner_text(parser);
+                    let link_text = link_text.trim();
+                    if !link_text.is_empty() {
+                        if href.is_empty()
+                            || href.starts_with('#')
+                            || href.starts_with("javascript:")
+                        {
+                            out.push_str(link_text);
+                        } else {
+                            out.push('[');
+                            out.push_str(link_text);
+                            out.push_str("](");
+                            out.push_str(&href);
+                            out.push(')');
+                        }
+                    }
+                    // Evita recursar nos filhos da tag `a` para não duplicar texto
+                    return;
+                }
+            }
+
+            for child_handle in tag.children().top().iter() {
+                walk_tree(*child_handle, parser, out, in_noise);
+            }
+        }
+
+        tl::Node::Raw(bytes) => {
+            if !in_noise {
+                let text = bytes.as_utf8_str();
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    out.push_str(trimmed);
+                    out.push(' ');
+                }
+            }
+        }
+
+        tl::Node::Comment(_) => {}
+    }
+}
+
+
+
 
 fn ensure_useful_markdown(
     url: &Url,

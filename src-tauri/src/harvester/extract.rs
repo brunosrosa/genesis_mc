@@ -5,8 +5,7 @@ use oxc::{
     parser::{ParseOptions, Parser},
     span::{GetSpan, SourceType, Span},
 };
-use html_to_markdown_rs::{convert, CodeBlockStyle, ConversionOptions, HeadingStyle};
-use pulldown_cmark::{html, Options as MarkdownOptions, Parser as MarkdownParser};
+
 use regex::Regex;
 use tokio::fs;
 use thiserror::Error;
@@ -376,39 +375,7 @@ fn strip_empty_markdown_links(content: &str) -> String {
     re.replace_all(content, "").into_owned()
 }
 
-fn readme_markdown_render_options() -> MarkdownOptions {
-    let mut options = MarkdownOptions::empty();
-    options.insert(MarkdownOptions::ENABLE_TABLES);
-    options.insert(MarkdownOptions::ENABLE_TASKLISTS);
-    options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
-    options.insert(MarkdownOptions::ENABLE_FOOTNOTES);
-    options
-}
 
-fn render_markdown_document_to_html(content: &str) -> String {
-    let parser = MarkdownParser::new_ext(content, readme_markdown_render_options());
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
-    html_output
-}
-
-fn readme_html_to_markdown_options() -> ConversionOptions {
-    ConversionOptions {
-        heading_style: HeadingStyle::Atx,
-        code_block_style: CodeBlockStyle::Backticks,
-        bullets: "-".to_string(),
-        wrap: false,
-        skip_images: true,
-        strip_tags: vec![
-            "script".to_string(),
-            "style".to_string(),
-            "meta".to_string(),
-            "link".to_string(),
-            "svg".to_string(),
-        ],
-        ..Default::default()
-    }
-}
 
 fn normalize_markdown_document(content: &str) -> String {
     let normalized = content.replace("\r\n", "\n");
@@ -447,15 +414,10 @@ fn normalize_markdown_document(content: &str) -> String {
     lines.join("\n").trim().to_string()
 }
 
-fn sanitize_readme_blob(content: &str, source_name: &str) -> Result<String, ExtractionError> {
-    let rendered_html = render_markdown_document_to_html(content);
-    let converted = convert(&rendered_html, Some(readme_html_to_markdown_options())).map_err(|err| {
-        ExtractionError::ParseError {
-            file: source_name.to_string(),
-            reason: format!("Falha ao converter README HTML->Markdown: {err}"),
-        }
-    })?;
-    let without_badges = strip_markdown_badges(&converted);
+fn sanitize_readme_blob(content: &str, _source_name: &str) -> Result<String, ExtractionError> {
+    // Sem roundtrip HTML — processa o Markdown original diretamente.
+    // A antiga pipeline MD→HTML→MD (via html_to_markdown_rs) foi extirpada.
+    let without_badges = strip_markdown_badges(content);
     let without_images = strip_markdown_images(&without_badges);
     let without_empty_links = strip_empty_markdown_links(&without_images);
     Ok(normalize_markdown_document(&without_empty_links))

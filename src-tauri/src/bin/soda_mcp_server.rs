@@ -16,13 +16,13 @@ use genesis_mc_lib::harvester::repo_radar;
 use genesis_mc_lib::harvester::web_scraper;
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
-use scraper::{Html, Selector};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlparser::ast::Statement as SqlStatement;
 use sqlparser::dialect::SQLiteDialect;
 use sqlparser::parser::Parser;
 use url::Url;
+
 
 const MCP_SESSION_ID_HEADER: &str = "Mcp-Session-Id";
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -590,36 +590,62 @@ fn parse_duckduckgo_results(
     html: &str,
     max_results: usize,
 ) -> Result<Vec<DuckDuckGoSearchResult>, RpcError> {
-    let document = Html::parse_document(html);
-    let result_selector = parse_selector("div.result")?;
-    let title_selector = parse_selector("a.result__a")?;
-    let snippet_selector = parse_selector(".result__snippet")?;
+    // astral-tl: zero-copy parse — sem Rc<RefCell<Node>>
+    let dom = tl::parse(html, tl::ParserOptions::default()).map_err(|e| RpcError {
+        code: -32026,
+        message: "Falha ao parsear HTML do DuckDuckGo".to_string(),
+        data: Some(json!({ "reason": e.to_string() })),
+    })?;
+    let parser = dom.parser();
 
-    let mut results = Vec::new();
-    for result in document.select(&result_selector) {
-        if results.len() >= max_results {
-            break;
-        }
+    let result_nodes: Vec<_> = dom
+        .query_selector("div.result")
+        .into_iter()
+        .flatten()
+        .take(max_results)
+        .collect();
 
-        let Some(title_node) = result.select(&title_selector).next() else {
+    let mut results: Vec<DuckDuckGoSearchResult> = Vec::with_capacity(result_nodes.len());
+
+    for result_handle in result_nodes {
+        let Some(result_tag) = result_handle.get(parser).and_then(|n| n.as_tag()) else {
             continue;
         };
 
-        let title = collapse_html_text(title_node.text());
+        // Extrai <a class="result__a"> — primeiro descendente que satisfaz o seletor
+        let title_and_href: Option<(String, String)> = result_tag
+            .query_selector(parser, "a.result__a")
+            .and_then(|mut it| it.next())
+            .and_then(|h| h.get(parser))
+            .and_then(|n| n.as_tag())
+            .map(|a_tag| {
+                let title: std::borrow::Cow<str> = a_tag.inner_text(parser);
+                let href = a_tag
+                    .attributes()
+                    .get("href")
+                    .flatten()
+                    .map(|b| b.as_utf8_str().into_owned())
+                    .unwrap_or_default();
+                (title.trim().to_string(), href)
+            });
+
+        let Some((title, raw_href)) = title_and_href else {
+            continue;
+        };
         if title.is_empty() {
             continue;
         }
-
-        let raw_href = title_node.value().attr("href").unwrap_or_default();
-        let normalized_url = normalize_duckduckgo_result_url(raw_href);
+        let normalized_url = normalize_duckduckgo_result_url(&raw_href);
         if normalized_url.is_empty() {
             continue;
         }
 
-        let snippet = result
-            .select(&snippet_selector)
-            .next()
-            .map(|node| collapse_html_text(node.text()))
+        let snippet: String = result_tag
+            .query_selector(parser, ".result__snippet")
+            .and_then(|mut it| it.next())
+            .and_then(|h| h.get(parser))
+            .and_then(|n| n.as_tag())
+            .map(|node| node.inner_text(parser).trim().to_string())
             .unwrap_or_default();
 
         results.push(DuckDuckGoSearchResult {
@@ -630,17 +656,6 @@ fn parse_duckduckgo_results(
     }
 
     Ok(results)
-}
-
-fn parse_selector(selector: &str) -> Result<Selector, RpcError> {
-    Selector::parse(selector).map_err(|e| RpcError {
-        code: -32026,
-        message: "Falha ao compilar seletor HTML nativo".to_string(),
-        data: Some(json!({
-            "selector": selector,
-            "reason": e.to_string()
-        })),
-    })
 }
 
 fn normalize_duckduckgo_result_url(raw_href: &str) -> String {
@@ -673,13 +688,6 @@ fn normalize_duckduckgo_result_url(raw_href: &str) -> String {
     candidate
 }
 
-fn collapse_html_text<'a>(segments: impl Iterator<Item = &'a str>) -> String {
-    segments
-        .map(str::trim)
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
-}
 
 fn format_time_markdown(payload: &SodaTimePayload) -> String {
     let mut out = String::new();
