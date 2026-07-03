@@ -17,23 +17,23 @@ O fluxo obrigatório para novas lógicas é usar o comando `/grill-me` antes de 
 As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em `.agents/skills/`. Invoque-as de forma semântica apenas quando precisar. Não assuma regras além das descritas neste arquivo sem consultar suas Skills.
 
 # lean-ctx — Context Engineering Layer
-<!-- lean-ctx-rules-v9 -->
+<!-- lean-ctx-rules-v10 -->
 
-CRITICAL: ALWAYS use lean-ctx MCP tools instead of native equivalents. This is NOT optional.
+CRITICAL: **ALWAYS** use lean-ctx MCP tools instead of native equivalents. This is NOT optional.
 
 | ALWAYS USE | NEVER USE | Why |
 |------------|-----------|-----|
-| `ctx_read(path, mode)` | `Read` / `cat` / `head` / `tail` | Cached, 10 read modes, re-reads ~13 tokens |
-| `ctx_shell(command)` | `Shell` / `bash` / terminal | Pattern compression for git/npm/cargo output |
-| `ctx_search(pattern, path)` | `Grep` / `rg` | Compact, token-efficient results |
-| `ctx_tree(path, depth)` | `ls` / `find` | Compact directory maps |
+| `lean_ctx_read(path, mode)` | `Read` / `cat` / `head` / `tail` | Cached, 10 read modes, re-reads ~13 tokens |
+| `lean_ctx_shell(command)` | `Shell` / `bash` / terminal | Pattern compression for git/npm/cargo output |
+| `lean_ctx_search(pattern, path)` | `Grep` / `rg` | Compact, token-efficient results |
+| `lean_ctx_tree(path, depth)` | `ls` / `find` | Compact directory maps |
 
-Compatibility: ctx_read replaces READ operations only. Your native Edit/Write/StrReplace tools remain unchanged — keep using them for editing. If your rules say "use Edit or Write tools only", that is compatible: lean-ctx only replaces how you READ files, not how you EDIT them.
+Compatibility: `lean_ctx_read` replaces READ operations only. Your native Edit/Write/StrReplace tools remain unchanged — keep using them for editing. If your rules say "use Edit or Write tools only", that is compatible: lean-ctx only replaces how you READ files, not how you EDIT them.
 
-If Edit requires native Read and Read is unavailable, use `ctx_edit(path, old_string, new_string)` instead.
-Write, Delete, Glob → use normally. NEVER loop on Edit failures — switch to ctx_edit immediately.
+If Edit requires native Read and Read is unavailable, use `lean_ctx_edit(path, old_string, new_string)` instead.
+Write, Delete, Glob → use normally. NEVER loop on Edit failures — switch to `lean_ctx_edit` immediately.
 
-Preferred workflow control: use `ctx_workflow` to track states + enforce tool gates + evidence.
+Preferred workflow control: use `lean_ctx_workflow` to track states + enforce tool gates + evidence.
 
 Fallback only if a lean-ctx tool is unavailable: use native equivalents.
 <!-- /lean-ctx -->

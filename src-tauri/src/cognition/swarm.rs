@@ -471,7 +471,7 @@ impl LensInvoker for HttpLensInvoker {
 
             #[cfg(not(test))]
             {
-                let jitter_ms = rand::random::<u64>() % 2500;
+                let jitter_ms = fastrand::u64(0..2500);
                 tokio::time::sleep(tokio::time::Duration::from_millis(jitter_ms)).await;
             }
 

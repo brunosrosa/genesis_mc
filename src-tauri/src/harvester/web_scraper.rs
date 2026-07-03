@@ -3,7 +3,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use html_to_markdown_rs::convert;
-use rand::Rng;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_LANGUAGE, USER_AGENT};
 use serde::Deserialize;
 use thiserror::Error;
@@ -136,7 +135,7 @@ async fn apply_domain_jitter(url: &Url) {
     };
 
     if should_jitter {
-        let jitter_secs = rand::thread_rng().gen_range(2..=5);
+        let jitter_secs = fastrand::u64(2..=5);
         tokio::time::sleep(Duration::from_secs(jitter_secs)).await;
     }
 }

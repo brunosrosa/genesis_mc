@@ -7,11 +7,9 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 
-use rand::rngs::OsRng;
-use rand::RngCore;
 use rusqlite::{params, Connection};
 use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
 use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
@@ -248,11 +246,11 @@ struct JitterPolicy {
 }
 
 impl JitterPolicy {
-    fn compute_sleep<R: RngCore>(&self, rng: &mut R) -> Duration {
+    fn compute_sleep(&self) -> Duration {
         let jitter = if self.jitter_max_ms == 0 {
             0
         } else {
-            rng.next_u64() % (self.jitter_max_ms.saturating_add(1))
+            fastrand::u64(0..=self.jitter_max_ms)
         };
         Duration::from_millis(self.base_ms.saturating_add(jitter))
     }
@@ -285,7 +283,6 @@ impl Sleeper for TokioSleeper {
 
 struct BackoffGuard<S: Sleeper> {
     policy: RetryPolicy,
-    rng: Arc<Mutex<OsRng>>,
     sleeper: Arc<S>,
 }
 
@@ -295,8 +292,7 @@ impl<S: Sleeper> BackoffGuard<S> {
         let jitter = if self.policy.jitter_max_ms == 0 {
             0
         } else {
-            let mut rng = self.rng.lock().await;
-            rng.next_u64() % (self.policy.jitter_max_ms.saturating_add(1))
+            fastrand::u64(0..=self.policy.jitter_max_ms)
         };
         let delay = Duration::from_millis(base.saturating_add(jitter));
         self.sleeper.sleep(delay).await;
@@ -307,7 +303,6 @@ impl<S: Sleeper> Clone for BackoffGuard<S> {
     fn clone(&self) -> Self {
         Self {
             policy: self.policy,
-            rng: self.rng.clone(),
             sleeper: self.sleeper.clone(),
         }
     }
@@ -722,11 +717,10 @@ impl<S: SheetsClient + 'static, D: Dispatcher + 'static, Sl: Sleeper + 'static> 
     }
 
     async fn run_daemon(&self, spreadsheet_id: &str) {
-        let mut rng = OsRng;
         loop {
             let tel = self.run_once(spreadsheet_id).await;
             info!("{}", format_telemetry_line(&tel));
-            let sleep = self.config.scan_sleep.compute_sleep(&mut rng);
+            let sleep = self.config.scan_sleep.compute_sleep();
             tokio::time::sleep(sleep).await;
         }
     }
@@ -838,7 +832,6 @@ async fn main() -> io::Result<()> {
                 backoff_base_ms: 1000,
                 jitter_max_ms: 1000,
             },
-            rng: Arc::new(Mutex::new(OsRng)),
             sleeper: Arc::new(TokioSleeper),
         },
         config: DaemonConfig {
@@ -875,7 +868,6 @@ async fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::mock::StepRng;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::sync::Mutex as TokioMutex;
 
@@ -938,13 +930,13 @@ mod tests {
 
     #[test]
     fn jitter_respects_base_plus_random_fluctuation() {
+        fastrand::seed(42);
         let p = JitterPolicy {
             base_ms: 100,
             jitter_max_ms: 50,
         };
-        let mut rng = StepRng::new(0, 1);
-        let a = p.compute_sleep(&mut rng);
-        let b = p.compute_sleep(&mut rng);
+        let a = p.compute_sleep();
+        let b = p.compute_sleep();
         assert!(a >= Duration::from_millis(100) && a <= Duration::from_millis(150));
         assert!(b >= Duration::from_millis(100) && b <= Duration::from_millis(150));
         assert_ne!(a, b);
@@ -1039,7 +1031,6 @@ mod tests {
                     backoff_base_ms: 100,
                     jitter_max_ms: 0,
                 },
-                rng: Arc::new(Mutex::new(OsRng)),
                 sleeper: sleeper.clone(),
             },
             config: DaemonConfig {

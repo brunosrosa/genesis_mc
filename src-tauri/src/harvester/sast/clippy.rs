@@ -92,6 +92,24 @@ pub fn rust_clippy_manifest_path(execution_root: &Path) -> PathBuf {
     execution_root.join("Cargo.toml")
 }
 
+pub fn find_cargo_workspace_root(repo_path: &Path, execution_root: &Path) -> PathBuf {
+    let mut current = execution_root.to_path_buf();
+    let mut workspace_root = execution_root.to_path_buf();
+
+    while current.starts_with(repo_path) {
+        if current.join("Cargo.toml").is_file() {
+            workspace_root = current.clone();
+        }
+        if current == repo_path {
+            break;
+        }
+        if !current.pop() {
+            break;
+        }
+    }
+    workspace_root
+}
+
 pub fn rust_clippy_preflight_timeout_secs(timeout_secs: u64) -> u64 {
     timeout_secs.clamp(60, 180)
 }
@@ -532,7 +550,9 @@ mod tests {
         assert!(!payload.bytes.is_empty());
         assert!(calls[0].starts_with("cargo fetch --locked --manifest-path "));
         assert!(calls[1].starts_with("cargo metadata --format-version 1 --locked --offline --manifest-path "));
-        assert!(calls[2].starts_with("cargo clippy --message-format=json --workspace --offline --frozen -p sdk -- --no-deps"));
+        assert!(calls[2].starts_with("cargo clippy --manifest-path "));
+        assert!(calls[2].contains("-p sdk"));
+        assert!(calls[2].contains("--no-deps"));
         assert!(!cache_root.exists());
         assert!(!cargo_home.exists());
     }

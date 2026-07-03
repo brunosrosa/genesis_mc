@@ -740,7 +740,7 @@ impl SsotInjector {
                     }
 
                     let jitter = if policy.jitter_ms > 0 {
-                        rand::random::<u64>() % (policy.jitter_ms + 1)
+                        fastrand::u64(0..=policy.jitter_ms)
                     } else {
                         0
                     };

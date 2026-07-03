@@ -1783,6 +1783,17 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                 } else {
                     Ok(sanitized_stdout)
                 }
+            } else if binary == "ruff" && exit_code == 2 {
+                let stdout_hint = stdout_preview(&sanitized_stdout, 400);
+                warn!(
+                    binary = %binary,
+                    exit_code,
+                    stderr = %sanitized_stderr,
+                    stdout = %stdout_hint,
+                    semantic_outcome = "informational_non_zero",
+                    "Ruff falhou devido a erro de configuracao (Fail-Soft)"
+                );
+                Ok(b"[]".to_vec())
             } else {
                 let stdout_hint = stdout_preview(&sanitized_stdout, 400);
                 if classify_sidecar_observability(exit_code, &sanitized_stdout)
@@ -2027,18 +2038,45 @@ async fn run_sast_blade<E: SandboxExecutor>(
                 bytes,
             });
     }
+    let workspace_root = if blade == StaticAnalysisBlade::RustClippy {
+        clippy::find_cargo_workspace_root(executor.repo_path(), execution_root)
+    } else {
+        execution_root.to_path_buf()
+    };
+
     let result = if blade == StaticAnalysisBlade::RustClippy {
-        match clippy::run_rust_clippy_preflight(executor, execution_root, timeout_secs).await {
+        match clippy::run_rust_clippy_preflight(executor, &workspace_root, timeout_secs).await {
             Ok(()) => {
                 let (binary, args) = blade_command(blade, scan_targets, command_args);
-                let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+                let manifest_path = workspace_root.join("Cargo.toml");
+                let manifest_path_str = manifest_path.display().to_string();
+                
+                let mut final_args = Vec::new();
+                for arg in args {
+                    final_args.push(arg);
+                    if final_args.last().map(|s| s.as_str()) == Some("clippy") {
+                        final_args.push("--manifest-path".to_string());
+                        final_args.push(manifest_path_str.clone());
+                    }
+                }
+                
+                if !final_args.iter().any(|arg| arg == "--no-deps") {
+                    if let Some(pos) = final_args.iter().position(|arg| arg == "--") {
+                        final_args.insert(pos + 1, "--no-deps".to_string());
+                    } else {
+                        final_args.push("--".to_string());
+                        final_args.push("--no-deps".to_string());
+                    }
+                }
+                
+                let arg_refs = final_args.iter().map(String::as_str).collect::<Vec<_>>();
                 execute_sidecar_in_dir(
                     executor,
                     binary,
                     &arg_refs,
                     timeout_secs,
                     SidecarExitPolicy::AllowFindingsExitOne,
-                    execution_root,
+                    &workspace_root,
                 )
                 .await
                 .map(|bytes| SastBladeResult {
@@ -2102,7 +2140,7 @@ async fn run_sast_blade<E: SandboxExecutor>(
         })
     };
     if blade == StaticAnalysisBlade::RustClippy {
-        cleanup_rust_cargo_sandbox_state(execution_root).await;
+        cleanup_rust_cargo_sandbox_state(&workspace_root).await;
     }
     result
 }

@@ -44,6 +44,7 @@ pub fn ruff_args(scan_targets: &[String]) -> Vec<String> {
         "--ignore".to_string(),
         "D,F401,UP,W".to_string(),
         "--force-exclude".to_string(),
+        "--isolated".to_string(),
     ];
     for exclude in CLI_PATH_EXCLUDES {
         args.push("--exclude".to_string());
