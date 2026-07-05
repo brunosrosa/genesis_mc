@@ -1,0 +1,64 @@
+_WOKSPACE_MAP Gerado em: 2026-07-05 03:55:44
+
+### ====================================================================================================
+ARQUIVO: _WOKSPACE_MAP.txt
+CAMINHO: Z:\genesis_mc\_WOKSPACE_MAP.txt
+---
+# ==============================================================================
+# SODA WORKSPACE MAP & TERRITORIAL GOVERNANCE (CANON V5.0 - REVISADO)
+# ==============================================================================
+# REGRA MATRIZ (FAIL-CLOSED):
+# É terminantemente proibido criar novas pastas ou ejetar arquivos fora das
+# zonas delimitadas abaixo. A árvore é estática e monitorada contra entropia.
+# ==============================================================================
+[ZONA 1: A FÁBRICA & AMBIENTE DO AGENTE] (Ignorados no Git Principal)
+- .agents/ -> Armazenamento global das engrenagens da IA.
+- .agents/rules/ -> Diretrizes e manifestos de contexto (DESIGN, tech-stack).
+- .agents/sidecars/ -> Dockerfiles e isolamentos efêmeros de desenvolvimento.
+- .agents/skills/ -> Servidores MCP locais e customizados (native-ast-parser, sheets).
+- .trae/ -> Habilidades e configurações exclusivas da IDE Trae PRO+.
+- .antigravitycli/ -> Logs de execução e sessões do Antigravity CLI.
+- .vscode/ -> Perfis de workspace, tarefas e debugger local.
+[ZONA 2: ESTADO DA MÁQUINA E CACHE] (Ignorados no Git Principal)
+- .soda_data/ -> [L2/L3 Memory] SQLite transacional e LanceDB vetorial.
+- .soda_cache/ -> Chunks temporários, hashes de arquivos e tokens.
+- .soda_sandbox/ -> Sandboxing para execução segura de módulos externos.
+- .soda_scratchpad/reports/ -> OBRIGATÓRIO: Destino exclusivo de outputs textuais da IA
+    (Ex: os relatórios de execução _PHASE_REPORT_...txt).
+[ZONA 3: O CÂNONE E MEMÓRIA DE PRODUTO] (Repositório Rígido de Documentação)
+- .archive/ -> Arquivo Frio / Histórico Forense do workspace. Destino legítimo para
+    relatórios congelados, scripts órfãos desativados, dumps de contexto e artefatos
+    históricos fora do caminho crítico do Produto.
+- docs/.audits/ -> Relatórios de segurança, vulnerabilidades e semgrep.
+- docs/adrs/ -> Architecture Decision Records (O Por Quê).
+- docs/architecture/ -> Manuais macro e visões de engenharia (Inference, Memory).
+- docs/dags/ -> Grafos Acíclicos Dirigidos das Fases (O Como).
+- docs/prds/ -> Especificações atômicas ativas para execução TDD.
+- docs/prds/archive/ -> PRDs finalizados e comitados com sucesso.
+- docs/specs/ -> Contratos frios de dados (Ex: DATABASE_SCHEMA_DIC.csv).
+- docs/state/ -> Fotografia temporal do projeto (CONTEXT_POINTERS.md).
+[ZONA 4: O PRODUTO BARE-METAL - BACKEND RUST]
+- src-tauri/capabilities/ -> Manifestos de permissões nativas e segurança do Tauri.
+- src-tauri/examples/ -> Códigos isolados de testes de estresse de hardware.
+- src-tauri/semgrep/ -> Regras estáticas de validação e governança de código.
+- src-tauri/src/bin/ -> CLIs utilitários executáveis das fases (harvester_cli, etc).
+- src-tauri/src/cognition/ -> Orquestração de SLMs locais e gerenciamento de contexto.
+- src-tauri/src/finops/ -> Roteadores em cascata e controle orçamentário (Iron Cost).
+- src-tauri/src/harvester/ -> Motor determinístico O(1) de clonagem e extração AST.
+- src-tauri/src/ipc/ -> APENAS contratos DTO e pipelines de memória Zero-Copy.
+- src-tauri/src/persist/ -> Camada transacional de leitura/escrita para a Zona 2.
+- src-tauri/tests/ -> Testes de Integração e E2E. A Alfândega de Release.
+[ZONA 5: A JANELA DE VIDRO - FRONTEND SVELTE 5]
+- src/components/ -> Componentes visuais passivos (Svelte Runes). Sem lógica.
+- src/lib/ -> Tipagem TypeScript e invocadores assíncronos do Tauri.
+- src/routes/ -> Telas e roteamento estático da interface.
+[ZONA 6: ZONA EXTERNA EFÊMERA (HOST %TEMP%)] (Ignorada no Git Principal)
+- %TEMP%/.souls_workspaces/ -> Raízes efêmeras do ProjFS e workspaces de extração (exigem NTFS/mini-filtro).
+- Criação: Zero-Config via std::env::temp_dir() + std::fs::create_dir_all.
+- Teardown: deleção não-bloqueante via spawn_detached_delete_process (fora do repositório host).
+# ==============================================================================
+# REGRAS DE FORMA E HIGIENE DIGITAL
+# ==============================================================================
+- PRDs em andamento na pasta prds devem adotar o prefixo da Fase Temporal correspondente
+    (Ex: PRD_00X_Fase_X_...).
+- O arquivo '_WOKSPACE_MAP.txt' deve ser lido pelo agente no início de cada sessão.

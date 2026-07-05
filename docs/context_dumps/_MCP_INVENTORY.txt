@@ -1,0 +1,280 @@
+_MCP_INVENTORY Gerado em: 2026-07-05 03:55:44
+
+### ====================================================================================================
+ARQUIVO: souls MCP Inventory
+CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
+---
+=== MCP SERVER INVENTORY + SMOKE TEST ===
+SERVER_NAME: souls
+LEGACY_REPORT_PATH: Z:\genesis_mc\.soda_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt
+SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
+TOOL_COUNT: 52
+SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .soda_scratchpad/reports.
+
+=== SUMMARY ===
+OK_COUNT: 52
+WARN_COUNT: 0
+FAIL_COUNT: 0
+OVERALL_STATUS: HEALTHY
+
+=== TOOLS ===
+NAME: core_db_query
+DESCRIPTION: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_repo_ast
+DESCRIPTION: Extrai o blueprint AST do repositório usando o parser nativo em Rust.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_repo_meta
+DESCRIPTION: Extrai metadados GitHub nativos via octocrab para owner/repo.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_sys_time
+DESCRIPTION: Retorna data/hora local, UTC e fuso atual via chrono nativo.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_web_fetch
+DESCRIPTION: Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_web_search
+DESCRIPTION: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_agent
+DESCRIPTION: Multi-agent coordination (shared message bus + persistent diaries). Actions: register (join with agent_type+role), post (broadcast or direct message with category), read (poll messages), status (update state: active|idle|finished), handoff (transfer task to another agent with summary), sync (overview of all agents + pending messages + shared contexts), diary (log discovery/decision/blocker/progress/insight — persisted across sessions), recall_diary (read agent diary), diaries (list all agent diaries), list, info.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_analyze
+DESCRIPTION: Entropy analysis — recommends optimal compression mode for a file.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_architecture
+DESCRIPTION: Graph-based architecture analysis. Actions: overview|clusters|layers|cycles|entrypoints|module.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_benchmark
+DESCRIPTION: Benchmark compression modes for a file or project.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_cache
+DESCRIPTION: Cache ops: status|clear|invalidate.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_callees
+DESCRIPTION: Find all functions/methods called by a given symbol. Returns callee name, file, and line.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_callers
+DESCRIPTION: Find all symbols that call a given function/method. Returns caller file, symbol, and line.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_compress
+DESCRIPTION: Context checkpoint for long conversations.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_compress_memory
+DESCRIPTION: Compress a memory/config file (CLAUDE.md, .cursorrules, etc.) to save tokens on every session start. Preserves code blocks, URLs, paths, headings, tables. Creates .original.md backup.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_context
+DESCRIPTION: Session context overview — cached files, seen files, session state.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_cost
+DESCRIPTION: Cost attribution (local-first). Actions: report|agent|tools|json|reset.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_dedup
+DESCRIPTION: Cross-file dedup: analyze or apply shared block references.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_delta
+DESCRIPTION: Incremental diff — sends only changed lines since last read.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_discover
+DESCRIPTION: Find missed compression opportunities in shell history.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_edit
+DESCRIPTION: Edit a file via search-and-replace. Works without native Read/Edit tools. Use this when the IDE's Edit tool requires Read but Read is unavailable.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_execute
+DESCRIPTION: Run code in sandbox (11 languages). Only stdout enters context. Raw data never leaves subprocess. Languages: javascript, typescript, python, shell, ruby, go, rust, php, perl, r, elixir.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_feedback
+DESCRIPTION: Harness feedback for LLM output tokens/latency (local-first). Actions: record|report|json|reset|status.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_fill
+DESCRIPTION: Budget-aware context fill — auto-selects compression per file within token limit.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_gain
+DESCRIPTION: Gain report.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_graph
+DESCRIPTION: Code dependency graph. Actions: build (index project), related (find files connected to path), symbol (lookup definition/usages as file::name), impact (blast radius of changes to path), status (index stats).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_graph_diagram
+DESCRIPTION: Generate a Mermaid diagram of the dependency or call graph. Useful for understanding architecture.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_handoff
+DESCRIPTION: Context Ledger Protocol (hashed, deterministic, local-first). Actions: create|show|list|pull|clear.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_heatmap
+DESCRIPTION: File access heatmap (local-first). Actions: status|directory|cold|json.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_impact
+DESCRIPTION: Graph-based impact analysis. Actions: analyze|chain|build|status.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_intent
+DESCRIPTION: Structured intent input (optional) — submit compact JSON or short text; server also infers intents automatically from tool calls.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_knowledge
+DESCRIPTION: Persistent project knowledge (survives sessions). Actions: remember (store fact with temporal tracking + contradiction detection), recall (search), pattern (record convention), consolidate (extract session findings), gotcha (record a bug/mistake to never repeat — trigger+resolution required), timeline (view fact history for a category), rooms (list knowledge categories), search (cross-session search across ALL projects), wakeup (compact AAAK briefing), status (list all), remove, export, embeddings_status|embeddings_reset|embeddings_reindex (local semantic index management for recall).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_metrics
+DESCRIPTION: Session token stats, cache rates, per-tool savings.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_multi_read
+DESCRIPTION: Batch read files in one call. Same modes as ctx_read.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_outline
+DESCRIPTION: List all symbols in a file (functions, structs, classes, methods) with signatures. Much fewer tokens than reading the full file.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_overview
+DESCRIPTION: Task-relevant project map — use at session start.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_prefetch
+DESCRIPTION: Predictive prefetch — prewarm cache for blast radius files (graph + task signals) within budgets.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_preload
+DESCRIPTION: Proactive context loader — caches task-relevant files, returns L-curve-optimized summary (~50-100 tokens vs ~5000 for individual reads).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_read
+DESCRIPTION: Read file (cached, compressed). Re-reads ~13 tok. Auto-selects optimal mode. Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fresh=true re-reads.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_response
+DESCRIPTION: Compress LLM response text (remove filler, apply TDD).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_routes
+DESCRIPTION: List HTTP routes/endpoints extracted from the project. Supports Express, Flask, FastAPI, Actix, Spring, Rails, Next.js.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_search
+DESCRIPTION: Regex code search (.gitignore aware, compact results).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_semantic_search
+DESCRIPTION: Semantic code search (BM25 + optional embeddings/hybrid). action=reindex to rebuild.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_session
+DESCRIPTION: Cross-session memory (CCP). Actions: load (restore previous session ~400 tok), save, status, task (set current task), finding (record discovery), decision (record choice), reset, list (show sessions), cleanup.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_share
+DESCRIPTION: Share cached file contexts between agents. Actions: push (share files from your cache to another agent), pull (receive files shared by other agents), list (show all shared contexts), clear (remove your shared contexts).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_shell
+DESCRIPTION: Run shell command (compressed output, 90+ patterns). Use raw=true to skip compression. cwd sets working directory (persists across calls via cd tracking).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_smart_read
+DESCRIPTION: Auto-select optimal read mode for a file.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_symbol
+DESCRIPTION: Read a specific symbol (function, struct, class) by name. Returns only the symbol code block instead of the entire file. 90-97% fewer tokens than full file read.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_task
+DESCRIPTION: Multi-agent task orchestration. Actions: create|update|list|get|cancel|message|info.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_tree
+DESCRIPTION: Directory listing with file counts.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_workflow
+DESCRIPTION: Workflow rails (state machine + evidence). Actions: start|status|transition|complete|evidence_add|evidence_list|stop.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: lean_ctx_wrapped
+DESCRIPTION: Savings report card. Periods: week|month|all.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---

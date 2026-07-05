@@ -3,8 +3,6 @@ base64 v0.21.7
     └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 
 base64 v0.22.1
-├── html-to-markdown-rs v2.30.0
-│   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 ├── hyper-util v0.1.20
 │   ├── axum v0.7.9
 │   │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
@@ -217,6 +215,24 @@ block-buffer v0.12.1
         [build-dependencies]
         └── tree-sitter-language-pack v1.12.2 (*)
 
+byteorder v1.5.0
+└── hash32 v0.3.1
+    └── heapless v0.8.0
+        └── faster-hex v0.10.0
+            ├── gix-hash v0.25.1 (*)
+            └── gix-packetline v0.21.5
+                ├── gix-filter v0.31.0 (*)
+                └── gix-transport v0.57.2
+                    ├── gix v0.84.0 (*)
+                    └── gix-protocol v0.62.0 (*)
+
+byteorder v1.5.0
+├── cfb v0.7.3
+│   └── infer v0.19.0
+│       └── tauri-utils v2.9.3 (*)
+└── socks v0.3.4
+    └── ureq v3.3.0 (*)
+
 cargo-platform v0.1.9
 └── cargo_metadata v0.19.2
     └── tauri-utils v2.9.3 (*)
@@ -268,17 +284,6 @@ crypto-common v0.1.6
 crypto-common v0.2.2
 └── digest v0.11.3 (*)
 
-cssparser v0.35.0
-├── scraper v0.24.0
-│   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-└── selectors v0.31.0
-    └── scraper v0.24.0 (*)
-
-cssparser v0.36.0
-├── dom_query v0.27.0 (*)
-└── selectors v0.36.1
-    └── dom_query v0.27.0 (*)
-
 digest v0.10.7 (*)
 
 digest v0.11.3 (*)
@@ -287,17 +292,17 @@ fastrand v2.4.1
 └── phf_generator v0.13.1
     ├── phf_codegen v0.13.1
     │   [build-dependencies]
-    │   ├── selectors v0.36.1 (*)
+    │   ├── selectors v0.36.1
+    │   │   └── dom_query v0.27.0 (*)
     │   └── web_atoms v0.2.5
-    │       ├── markup5ever v0.38.0
-    │       │   └── html5ever v0.38.0
-    │       │       └── dom_query v0.27.0 (*)
-    │       └── markup5ever v0.39.0
-    │           └── html5ever v0.39.0
-    │               └── html-to-markdown-rs v2.30.0 (*)
+    │       └── markup5ever v0.38.0
+    │           └── html5ever v0.38.0
+    │               └── dom_query v0.27.0 (*)
     ├── phf_macros v0.13.1 (proc-macro)
     │   └── phf v0.13.1
-    │       ├── cssparser v0.36.0 (*)
+    │       ├── cssparser v0.36.0
+    │       │   ├── dom_query v0.27.0 (*)
+    │       │   └── selectors v0.36.1 (*)
     │       ├── oxc_ast_macros v0.120.0 (proc-macro)
     │       │   ├── oxc_ast v0.120.0
     │       │   │   ├── oxc v0.120.0
@@ -398,9 +403,7 @@ fastrand v2.4.1
 │   │   ├── gix-protocol v0.62.0 (*)
 │   │   ├── gix-ref v0.64.0 (*)
 │   │   ├── gix-status v0.31.0 (*)
-│   │   ├── gix-transport v0.57.2
-│   │   │   ├── gix v0.84.0 (*)
-│   │   │   └── gix-protocol v0.62.0 (*)
+│   │   ├── gix-transport v0.57.2 (*)
 │   │   ├── gix-worktree-state v0.31.0 (*)
 │   │   └── gix-worktree-stream v0.33.0 (*)
 │   ├── gix-filter v0.31.0 (*)
@@ -442,8 +445,6 @@ foldhash v0.2.0
 ├── hashbrown v0.16.1
 │   ├── clru v0.6.3
 │   │   └── gix-pack v0.71.0 (*)
-│   ├── lru v0.16.4
-│   │   └── html-to-markdown-rs v2.30.0 (*)
 │   ├── oxc_allocator v0.120.0
 │   │   ├── oxc v0.120.0 (*)
 │   │   ├── oxc_ast v0.120.0 (*)
@@ -510,7 +511,6 @@ getrandom v0.2.17
             │   └── hashlink v0.9.1
             │       └── rusqlite v0.31.0
             │           └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-            ├── html-to-markdown-rs v2.30.0 (*)
             └── tree-sitter-language-pack v1.12.2 (*)
 
 getrandom v0.2.17
@@ -592,13 +592,6 @@ hashbrown v0.16.1 (*)
 
 hashbrown v0.17.1 (*)
 
-html5ever v0.35.0
-└── scraper v0.24.0 (*)
-
-html5ever v0.38.0 (*)
-
-html5ever v0.39.0 (*)
-
 httparse v1.10.1
 └── ureq-proto v0.6.0 (*)
 
@@ -622,17 +615,11 @@ log v0.4.33
 ├── globset v0.4.18
 │   └── ignore v0.4.27
 │       └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-├── html5ever v0.35.0 (*)
-├── html5ever v0.39.0 (*)
 ├── hyper-rustls v0.27.9 (*)
 ├── ignore v0.4.27 (*)
-├── markup5ever v0.35.0
-│   └── html5ever v0.35.0 (*)
-├── markup5ever v0.39.0 (*)
 ├── mockito v1.7.2 (*)
 ├── reqwest v0.12.28 (*)
 ├── rustls v0.23.41 (*)
-├── selectors v0.31.0 (*)
 ├── sqlparser v0.62.0 (*)
 ├── tracing v0.1.44
 │   ├── axum v0.7.9 (*)
@@ -658,17 +645,10 @@ log v0.4.33
 └── zopfli v0.8.3
     └── zip v2.4.2 (*)
 
-markup5ever v0.35.0 (*)
-
-markup5ever v0.38.0 (*)
-
-markup5ever v0.39.0 (*)
-
 once_cell v1.21.4
 ├── ahash v0.8.12 (*)
 ├── dashmap v6.2.1 (*)
 ├── gix-features v0.48.1 (*)
-├── html-to-markdown-rs v2.30.0 (*)
 ├── rustls v0.23.41 (*)
 ├── sysinfo v0.30.13
 │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
@@ -681,53 +661,6 @@ once_cell v1.21.4
 
 once_cell v1.21.4
 └── const-random-macro v0.1.16 (proc-macro) (*)
-
-phf v0.11.3
-├── cssparser v0.35.0 (*)
-├── selectors v0.31.0 (*)
-└── web_atoms v0.1.3
-    └── markup5ever v0.35.0 (*)
-
-phf v0.13.1 (*)
-
-phf_codegen v0.11.3
-[build-dependencies]
-├── selectors v0.31.0 (*)
-└── web_atoms v0.1.3 (*)
-
-phf_codegen v0.13.1 (*)
-
-phf_generator v0.11.3
-├── phf_codegen v0.11.3 (*)
-├── phf_macros v0.11.3 (proc-macro)
-│   └── phf v0.11.3 (*)
-└── string_cache_codegen v0.5.4
-    [build-dependencies]
-    └── web_atoms v0.1.3 (*)
-
-phf_generator v0.13.1 (*)
-
-phf_macros v0.11.3 (proc-macro) (*)
-
-phf_macros v0.13.1 (proc-macro) (*)
-
-phf_shared v0.11.3
-├── phf v0.11.3 (*)
-├── phf_codegen v0.11.3 (*)
-├── phf_generator v0.11.3 (*)
-├── phf_macros v0.11.3 (proc-macro) (*)
-├── string_cache v0.8.9
-│   └── web_atoms v0.1.3 (*)
-└── string_cache_codegen v0.5.4 (*)
-
-phf_shared v0.13.1
-├── phf v0.13.1 (*)
-├── phf_codegen v0.13.1 (*)
-├── phf_generator v0.13.1 (*)
-├── phf_macros v0.13.1 (proc-macro) (*)
-├── string_cache v0.9.0
-│   └── web_atoms v0.2.5 (*)
-└── string_cache_codegen v0.6.1 (*)
 
 proc-macro2 v1.0.106
 ├── async-trait v0.1.89 (proc-macro)
@@ -745,7 +678,6 @@ proc-macro2 v1.0.106
 │       └── darling v0.23.0 (*)
 ├── derive_more-impl v2.1.1 (proc-macro)
 │   └── derive_more v2.1.1
-│       ├── selectors v0.31.0 (*)
 │       └── selectors v0.36.1 (*)
 ├── displaydoc v0.2.6 (proc-macro)
 │   ├── icu_collections v2.2.0
@@ -788,8 +720,6 @@ proc-macro2 v1.0.106
 │       ├── reqwest v0.12.28 (*)
 │       ├── tower v0.5.3 (*)
 │       └── tower-http v0.6.11 (*)
-├── match_token v0.35.0 (proc-macro)
-│   └── html5ever v0.35.0 (*)
 ├── maybe-async v0.2.11 (proc-macro)
 │   └── gix-protocol v0.62.0 (*)
 ├── oxc-miette-derive v2.7.1 (proc-macro)
@@ -801,7 +731,6 @@ proc-macro2 v1.0.106
 │       │   └── oxc_regular_expression v0.120.0 (*)
 │       └── oxc_span v0.120.0 (*)
 ├── oxc_ast_macros v0.120.0 (proc-macro) (*)
-├── phf_macros v0.11.3 (proc-macro) (*)
 ├── phf_macros v0.13.1 (proc-macro) (*)
 ├── pin-project-internal v1.1.13 (proc-macro)
 │   └── pin-project v1.1.13
@@ -809,7 +738,6 @@ proc-macro2 v1.0.106
 ├── quote v1.0.46
 │   ├── async-trait v0.1.89 (proc-macro) (*)
 │   ├── cssparser-macros v0.6.1 (proc-macro)
-│   │   ├── cssparser v0.35.0 (*)
 │   │   └── cssparser v0.36.0 (*)
 │   ├── curve25519-dalek-derive v0.1.1 (proc-macro) (*)
 │   ├── darling_core v0.23.0 (*)
@@ -818,11 +746,9 @@ proc-macro2 v1.0.106
 │   ├── displaydoc v0.2.6 (proc-macro) (*)
 │   ├── futures-macro v0.3.32 (proc-macro) (*)
 │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   ├── match_token v0.35.0 (proc-macro) (*)
 │   ├── maybe-async v0.2.11 (proc-macro) (*)
 │   ├── oxc-miette-derive v2.7.1 (proc-macro) (*)
 │   ├── oxc_ast_macros v0.120.0 (proc-macro) (*)
-│   ├── phf_macros v0.11.3 (proc-macro) (*)
 │   ├── phf_macros v0.13.1 (proc-macro) (*)
 │   ├── pin-project-internal v1.1.13 (proc-macro) (*)
 │   ├── recursive-proc-macro-impl v0.1.1 (proc-macro)
@@ -855,7 +781,6 @@ proc-macro2 v1.0.106
 │   │   │   │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 │   │   │   │   └── octocrab v0.53.1 (*)
 │   │   │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   │   │   ├── html-to-markdown-rs v2.30.0 (*)
 │   │   │   ├── http-serde v2.1.1
 │   │   │   │   └── octocrab v0.53.1 (*)
 │   │   │   ├── jsonwebtoken v10.4.0 (*)
@@ -873,7 +798,6 @@ proc-macro2 v1.0.106
 │   │   │   │   ├── mockito v1.7.2 (*)
 │   │   │   │   ├── octocrab v0.53.1 (*)
 │   │   │   │   └── reqwest v0.12.28 (*)
-│   │   │   ├── string_cache v0.8.9 (*)
 │   │   │   ├── toml v0.8.2 (*)
 │   │   │   ├── toml_datetime v0.6.3
 │   │   │   │   ├── toml v0.8.2 (*)
@@ -887,7 +811,6 @@ proc-macro2 v1.0.106
 │   ├── snafu-derive v0.8.9 (proc-macro)
 │   │   └── snafu v0.8.9
 │   │       └── octocrab v0.53.1 (*)
-│   ├── string_cache_codegen v0.5.4 (*)
 │   ├── string_cache_codegen v0.6.1 (*)
 │   ├── syn v2.0.118
 │   │   ├── async-trait v0.1.89 (proc-macro) (*)
@@ -898,11 +821,9 @@ proc-macro2 v1.0.106
 │   │   ├── derive_more-impl v2.1.1 (proc-macro) (*)
 │   │   ├── displaydoc v0.2.6 (proc-macro) (*)
 │   │   ├── futures-macro v0.3.32 (proc-macro) (*)
-│   │   ├── match_token v0.35.0 (proc-macro) (*)
 │   │   ├── maybe-async v0.2.11 (proc-macro) (*)
 │   │   ├── oxc-miette-derive v2.7.1 (proc-macro) (*)
 │   │   ├── oxc_ast_macros v0.120.0 (proc-macro) (*)
-│   │   ├── phf_macros v0.11.3 (proc-macro) (*)
 │   │   ├── phf_macros v0.13.1 (proc-macro) (*)
 │   │   ├── pin-project-internal v1.1.13 (proc-macro) (*)
 │   │   ├── recursive-proc-macro-impl v0.1.1 (proc-macro) (*)
@@ -963,9 +884,7 @@ proc-macro2 v1.0.106
 │   │   │       ├── gix-object v0.61.0 (*)
 │   │   │       ├── gix-odb v0.81.0 (*)
 │   │   │       ├── gix-pack v0.71.0 (*)
-│   │   │       ├── gix-packetline v0.21.5
-│   │   │       │   ├── gix-filter v0.31.0 (*)
-│   │   │       │   └── gix-transport v0.57.2 (*)
+│   │   │       ├── gix-packetline v0.21.5 (*)
 │   │   │       ├── gix-path v0.12.1
 │   │   │       │   ├── gix v0.84.0 (*)
 │   │   │       │   ├── gix-attributes v0.33.2 (*)
@@ -1014,7 +933,6 @@ proc-macro2 v1.0.106
 │   │   │       ├── gix-traverse v0.58.0 (*)
 │   │   │       ├── gix-url v0.36.1 (*)
 │   │   │       ├── gix-worktree-state v0.31.0 (*)
-│   │   │       ├── html-to-markdown-rs v2.30.0 (*)
 │   │   │       ├── oxc-miette v2.7.1 (*)
 │   │   │       ├── simple_asn1 v0.6.4
 │   │   │       │   └── jsonwebtoken v10.4.0 (*)
@@ -1109,7 +1027,6 @@ proc-macro2 v1.0.106
 ├── serde_derive_internals v0.29.1 (*)
 ├── serde_with_macros v3.21.0 (proc-macro) (*)
 ├── snafu-derive v0.8.9 (proc-macro) (*)
-├── string_cache_codegen v0.5.4 (*)
 ├── string_cache_codegen v0.6.1 (*)
 ├── syn v2.0.118 (*)
 ├── synstructure v0.13.2 (*)
@@ -1135,17 +1052,11 @@ quick-xml v0.39.4
 
 rand v0.8.6 (*)
 
-rand v0.8.6
-└── phf_generator v0.11.3 (*)
-
 rand v0.9.4 (*)
 
 rand_chacha v0.3.1 (*)
 
 rand_chacha v0.9.0 (*)
-
-rand_core v0.6.4
-└── rand v0.8.6 (*)
 
 rand_core v0.6.4 (*)
 
@@ -1159,10 +1070,6 @@ rustc-hash v2.1.3
 ├── oxc_parser v0.120.0 (*)
 ├── oxc_regular_expression v0.120.0 (*)
 └── selectors v0.36.1 (*)
-
-selectors v0.31.0 (*)
-
-selectors v0.36.1 (*)
 
 serde v1.0.228 (*)
 
@@ -1204,9 +1111,7 @@ serde_core v1.0.228
 ├── toml_datetime v1.1.1+spec-1.1.0
 │   └── toml v1.1.2+spec-1.1.0 (*)
 └── uuid v1.23.4
-    ├── cfb v0.7.3
-    │   └── infer v0.19.0
-    │       └── tauri-utils v2.9.3 (*)
+    ├── cfb v0.7.3 (*)
     ├── schemars v0.8.22 (*)
     └── tauri-utils v2.9.3 (*)
 
@@ -1216,7 +1121,6 @@ serde_core v1.0.228
 │   ├── assert-json-diff v2.0.2 (*)
 │   ├── axum v0.7.9 (*)
 │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   ├── html-to-markdown-rs v2.30.0 (*)
 │   ├── jsonwebtoken v10.4.0 (*)
 │   ├── mockito v1.7.2 (*)
 │   ├── octocrab v0.53.1 (*)
@@ -1250,7 +1154,6 @@ smallvec v1.15.2
 └── selectors v0.36.1 (*)
 
 smallvec v1.15.2
-├── cssparser v0.35.0 (*)
 ├── gix v0.84.0 (*)
 ├── gix-attributes v0.33.2 (*)
 ├── gix-blame v0.14.0 (*)
@@ -1278,35 +1181,25 @@ smallvec v1.15.2
 │       ├── gix-worktree-stream v0.33.0 (*)
 │       ├── prodash v31.0.0
 │       │   └── gix-features v0.48.1 (*)
-│       ├── string_cache v0.8.9 (*)
-│       ├── string_cache v0.9.0 (*)
+│       ├── string_cache v0.9.0
+│       │   └── web_atoms v0.2.5 (*)
 │       ├── tiktoken-rs v0.5.9 (*)
 │       ├── tokio v1.52.3 (*)
 │       └── windows-projfs v0.1.8 (*)
 ├── rusqlite v0.31.0 (*)
-├── selectors v0.31.0 (*)
 └── tracing-subscriber v0.3.23 (*)
 
-string_cache v0.8.9 (*)
+stable_deref_trait v1.2.1
+├── heapless v0.8.0 (*)
+└── yoke v0.8.3 (*)
 
-string_cache v0.9.0 (*)
-
-string_cache_codegen v0.5.4 (*)
-
-string_cache_codegen v0.6.1 (*)
-
-syn v2.0.118 (*)
+stable_deref_trait v1.2.1
+└── servo_arc v0.4.3
+    └── selectors v0.36.1 (*)
 
 syn v2.0.118 (*)
 
-tendril v0.4.3
-├── markup5ever v0.35.0 (*)
-└── scraper v0.24.0 (*)
-
-tendril v0.5.0
-├── dom_query v0.27.0 (*)
-├── markup5ever v0.38.0 (*)
-└── markup5ever v0.39.0 (*)
+syn v2.0.118 (*)
 
 thiserror v1.0.69 (*)
 
@@ -1343,10 +1236,6 @@ typenum v1.20.1
     ├── block-buffer v0.12.1 (*)
     └── crypto-common v0.2.2 (*)
 
-web_atoms v0.1.3 (*)
-
-web_atoms v0.2.5 (*)
-
 winapi v0.3.9
 ├── io-close v0.3.7
 │   └── gix-worktree-state v0.31.0 (*)
@@ -1354,8 +1243,7 @@ winapi v0.3.9
     └── sysinfo v0.30.13 (*)
 
 winapi v0.3.9
-└── socks v0.3.4
-    └── ureq v3.3.0 (*)
+└── socks v0.3.4 (*)
 
 windows v0.52.0
 └── sysinfo v0.30.13 (*)
