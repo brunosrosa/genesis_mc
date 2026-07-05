@@ -1,9 +1,3 @@
-_WOKSPACE_MAP Gerado em: 2026-07-05 04:06:54
-
-### ====================================================================================================
-ARQUIVO: _WORKSPACE_MAP.md
-CAMINHO: Z:\genesis_mc\_WORKSPACE_MAP.md
----
 ---
 version: 5.1
 description: SODA Workspace Map & Territorial Governance (Canon v5.1 - Revisado)

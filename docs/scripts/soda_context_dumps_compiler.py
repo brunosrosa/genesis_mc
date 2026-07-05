@@ -209,7 +209,7 @@ def compile_skills_in_ides(output_dir):
                         outfile.write("\n")
 
 def compile_workspace_map(output_dir):
-    map_file = r"Z:\genesis_mc\_WOKSPACE_MAP.txt"
+    map_file = r"Z:\genesis_mc\_WORKSPACE_MAP.md"
     output_path = os.path.join(output_dir, "_WOKSPACE_MAP.txt")
     delete_if_exists(output_path)
     timestamp = get_timestamp()
@@ -217,7 +217,7 @@ def compile_workspace_map(output_dir):
     with open(output_path, "w", encoding="utf-8") as outfile:
         outfile.write(f"_WOKSPACE_MAP Gerado em: {timestamp}\n")
         if os.path.exists(map_file):
-            write_header(outfile, "_WOKSPACE_MAP.txt", os.path.abspath(map_file))
+            write_header(outfile, "_WORKSPACE_MAP.md", os.path.abspath(map_file))
             with open(map_file, "r", encoding="utf-8") as infile:
                 content = infile.read()
             outfile.write(content)
