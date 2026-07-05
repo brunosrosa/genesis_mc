@@ -1,3 +1,12 @@
+---
+id: "ADR-024"
+title: "ADR-024-Engenharia-Performance-SAST"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Implementa travas de performance no pipeline de análise estática de código (SAST) para evitar saturação de CPU/Ramdisk."
+---
+
 # ADR-024-Engenharia-Performance-SAST
 
 ## Status

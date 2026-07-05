@@ -1,3 +1,12 @@
+---
+id: "ADR-014"
+title: "ADR-014-Friccao-Produtiva"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição"
+description: "Introduz atrasos deliberados e feedbacks sutis na UI para evitar submissão cognitiva às sugestões da IA."
+---
+
 # ADR-014-Friccao-Produtiva
 
 ## Status

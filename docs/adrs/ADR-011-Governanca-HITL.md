@@ -1,3 +1,12 @@
+---
+id: "ADR-011"
+title: "ADR-011-Governanca-HITL"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Requer a aprovação humana (Human-In-The-Loop) para operações destrutivas ou com alto Blast Radius."
+---
+
 # ADR-011-Governanca-HITL
 
 ## Status

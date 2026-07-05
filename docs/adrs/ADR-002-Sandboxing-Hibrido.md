@@ -1,3 +1,12 @@
+---
+id: "ADR-002"
+title: "ADR-002-Sandboxing-Hibrido"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Sandboxing"
+description: "Define o uso de Wasmtime para isolamento de lógicas puras e kernel sandboxing (AppContainer/Landlock) para sidecars de host."
+---
+
 # ADR-002-Sandboxing-Hibrido
 
 ## Status

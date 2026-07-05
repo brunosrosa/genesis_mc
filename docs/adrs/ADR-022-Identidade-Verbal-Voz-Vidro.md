@@ -1,3 +1,12 @@
+---
+id: "ADR-022"
+title: "ADR-022-Identidade-Verbal-Voz-Vidro"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição"
+description: "Padroniza a persona verbal do SODA (voz e estilo) baseando-se em concisão e pessimismo pragmático."
+---
+
 # ADR-022-Identidade-Verbal-Voz-Vidro
 
 ## Status

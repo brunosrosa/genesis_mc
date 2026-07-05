@@ -1,7 +1,12 @@
 ---
-aliases:
-  - "ADR-027: Motor de Inferência Híbrido Isolado e Termodinâmica da VRAM"
+id: "ADR-027"
+title: "ADR-027: Arquitetura de Motor de Inferência Híbrido Isolado e Termodinâmica da VRAM"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição"
+description: "Governa a termodinâmica da VRAM de 6GB, limitando o spillover de PCIe com micro-SLMs quantizados locais."
 ---
+
 # ADR-027: Arquitetura de Motor de Inferência Híbrido Isolado e Termodinâmica da VRAM
 
 ## Status

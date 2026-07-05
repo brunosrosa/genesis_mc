@@ -1,3 +1,12 @@
+---
+id: "ADR-017"
+title: "ADR-017-Sovereign-Sync"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Memória"
+description: "Define o protocolo de sincronização eventual assíncrona entre o banco relacional SQLite e o Google Sheets."
+---
+
 # ADR-017-Sovereign-Sync
 
 ## Status

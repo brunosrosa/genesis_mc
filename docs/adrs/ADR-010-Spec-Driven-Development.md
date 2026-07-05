@@ -1,3 +1,12 @@
+---
+id: "ADR-010"
+title: "ADR-010-Spec-Driven-Development"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Impõe o SDD e TDD como metodologia de desenvolvimento, bloqueando novas lógicas sem plano arquitetural aprovado."
+---
+
 # ADR-010-Spec-Driven-Development
 
 ## Status

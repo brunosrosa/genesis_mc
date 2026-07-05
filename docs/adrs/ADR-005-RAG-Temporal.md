@@ -1,3 +1,12 @@
+---
+id: "ADR-005"
+title: "ADR-005-RAG-Temporal"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Memória"
+description: "Define a arquitetura RAG com estabilidade temporal, aplicando decaimento e validade (valid_from/valid_to) nos embeddings."
+---
+
 # ADR-005-RAG-Temporal
 
 ## Status

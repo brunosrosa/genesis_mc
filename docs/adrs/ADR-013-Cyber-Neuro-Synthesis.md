@@ -1,3 +1,12 @@
+---
+id: "ADR-013"
+title: "ADR-013-Cyber-Neuro-Synthesis"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição"
+description: "Define a interface de co-adaptação e feedback háptico/mecânico voltada a mentes neurodivergentes."
+---
+
 # ADR-013-Cyber-Neuro-Synthesis
 
 ## Status

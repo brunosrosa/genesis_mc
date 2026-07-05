@@ -1,3 +1,12 @@
+---
+id: "ADR-001"
+title: "ADR-001-Core-Stack-Restrita"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Restringe a stack tecnológica do produto final ao Rust (Tokio) e Svelte 5/Tauri v2 para garantir eficiência e latência mínima."
+---
+
 # ADR-001-Core-Stack-Restrita
 
 ## Status

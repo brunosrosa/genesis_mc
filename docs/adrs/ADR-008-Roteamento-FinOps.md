@@ -1,3 +1,12 @@
+---
+id: "ADR-008"
+title: "ADR-008-Roteamento-FinOps"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "FinOps"
+description: "Governa o roteamento de inferência baseado no ParetoBandit, balanceando custo, latência e inteligência (nuvem vs local)."
+---
+
 # ADR-008-Roteamento-FinOps
 
 ## Status

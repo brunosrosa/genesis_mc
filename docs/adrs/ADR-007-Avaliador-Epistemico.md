@@ -1,3 +1,12 @@
+---
+id: "ADR-007"
+title: "ADR-007-Avaliador-Epistemico"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição"
+description: "Estabelece o motor de avaliação de plausibilidade (Avaliador Epistêmico) no core Rust usando CPU e logit probing."
+---
+
 # ADR-007-Avaliador-Epistemico
 
 ## Status

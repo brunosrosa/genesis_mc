@@ -1,3 +1,12 @@
+---
+id: "ADR-003"
+title: "ADR-003-Zero-Copy-IPC"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "IPC"
+description: "Adota buffers binários estruturados (rkyv/Arrow) para comunicação IPC de alta performance, eliminando o garbage collection do V8."
+---
+
 # ADR-003-Zero-Copy-IPC
 
 ## Status

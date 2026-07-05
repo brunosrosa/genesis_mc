@@ -1,6 +1,10 @@
 ---
-aliases:
-  - "ADR-029: Visão Cognitiva O(1) e Navegação Bare-Metal"
+id: "ADR-029"
+title: "ADR-029-Visão-Cognitiva-O(1)-e-Navegação-Bare-Metal"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Prioriza os comandos de leitura O(1) do gateway Rust sobre sidecars web legados e pontes interpretadas."
 ---
 
 # ADR-029: Visão Cognitiva O(1) e Navegação Bare-Metal

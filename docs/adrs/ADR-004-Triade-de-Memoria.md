@@ -1,3 +1,12 @@
+---
+id: "ADR-004"
+title: "ADR-004-Triade-de-Memoria"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Memória"
+description: "Estabelece as camadas L1 (diários), L2 (banco relacional SQLite), L3 (banco vetorial LanceDB) e L4 (grafos LadybugDB) da memória do SODA."
+---
+
 # ADR-004-Triade-de-Memoria
 
 ## Status

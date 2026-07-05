@@ -1,3 +1,12 @@
+---
+id: "ADR-018"
+title: "ADR-018-Paradigma-NextPlaid"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Memória"
+description: "Adota o fatiamento de código baseado em AST para evitar amnésia e perda de dados em contextos longos de RAG."
+---
+
 # ADR-018-Paradigma-NextPlaid
 
 ## Status

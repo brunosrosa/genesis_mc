@@ -1,4 +1,4 @@
-# ADR-026 MCP Nomenclature Audit
+# MCP Nomenclature Audit Transition Zero Brand
 
 ## Escopo
 
@@ -175,7 +175,3 @@ Renomes textuais esperados nas skills:
 - Fase 3: regenerar inventario MCP.
 - Fase 4: sincronizar todas as `SKILL.md`.
 - Fase 5: invalidar cache MCP da IDE e recapturar a exposicao real.
-
-## Pergunta De Gate
-
-Arquiteto, a matriz de renomeacao esta homologada para iniciarmos a refatoracao atomica?

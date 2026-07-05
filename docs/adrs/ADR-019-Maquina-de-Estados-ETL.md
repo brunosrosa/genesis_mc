@@ -1,3 +1,12 @@
+---
+id: "ADR-019"
+title: "ADR-019-Maquina-de-Estados-ETL"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Formaliza as fases sequenciais (de N0 a N6) para processamento, ingestão e estruturação de novos repositórios."
+---
+
 # ADR-019-Maquina-de-Estados-ETL
 
 ## Status

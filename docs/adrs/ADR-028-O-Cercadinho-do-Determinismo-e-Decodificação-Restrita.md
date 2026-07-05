@@ -1,6 +1,10 @@
 ---
-aliases:
-  - "ADR-028: O Cercadinho do Determinismo e Decodificação Restrita"
+id: "ADR-028"
+title: "ADR-028-O-Cercadinho-do-Determinismo-e-Decodificação-Restrita"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição"
+description: "Garante decodificação estruturada determinística com llguidance isolado em thread dedicada do pool Rust."
 ---
 
 # ADR-028: O Cercadinho do Determinismo e Decodificação Restrita

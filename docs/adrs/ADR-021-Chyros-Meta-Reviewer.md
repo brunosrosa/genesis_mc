@@ -1,3 +1,12 @@
+---
+id: "ADR-021"
+title: "ADR-021-Chyros-Meta-Reviewer"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Define o daemon em Rust encarregado de higienizar memória e auditar o código antes do merge."
+---
+
 # ADR-021-Chyros-Meta-Reviewer
 
 ## Status
