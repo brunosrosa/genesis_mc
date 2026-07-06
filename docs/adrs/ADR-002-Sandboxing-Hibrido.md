@@ -1,37 +1,47 @@
 ---
 id: "ADR-002"
 title: "ADR-002-Sandboxing-Hibrido"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Sandboxing"
-description: "Define o uso de Wasmtime para isolamento de lógicas puras e kernel sandboxing (AppContainer/Landlock) para sidecars de host."
+description: "Institui a matriz de contenção bare-metal: Wasmtime para lógica pura, AppContainer/LPAC (Windows) e Landlock (Linux) para sidecars nativos, e WSB/ProjFS para workspaces efêmeros."
 ---
 
-# ADR-002-Sandboxing-Hibrido
+### ADR-002: Sandboxing Híbrido e Matriz de Contenção Bare-Metal
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para SODA V4)
 
-## Contexto
-O SODA permite que agentes de IA gerem e executem código, além de interagir com ferramentas externas de terceiros via barramento MCP. Executar código dinamicamente gerado ou bibliotecas não auditadas diretamente no sistema do usuário viola o princípio de segurança Zero-Trust e abre brechas críticas de segurança (ex: execução remota de código - RCE, leitura e deleção arbitrária de arquivos do host). O isolamento não pode introduzir hypervisores pesados ou VMs lentas (ex: QEMU, Firecracker) que asfixiem a CPU i9 e devorem a RAM de 32GB.
+#### Contexto Técnico e Ameaça Operacional
+O ecossistema SODA permite que agentes de IA autônomos planejem, gerem e executem códigos, *scripts* e ferramentas (MCPs) interagindo diretamente com o sistema operacional hospedeiro [1]. Deixar essa execução livre representa o risco máximo de *Remote Code Execution* (RCE), deleção arbitrária de arquivos do host, corrupção silenciosa de dados e vazamento de chaves de API [1]. 
 
-## Decisão
-Implementar uma arquitetura de **Sandboxing Híbrido Tripartite** governada pelo núcleo Rust:
-1. **Lógicas Puras e Scripts Leves (Sem Estado):** Rodam estritamente dentro da engine **Wasmtime (WASI v0.2/v0.3)** compilada nativamente no core. A sandbox Wasm possui acesso zero a disco ou rede do host, exceto via canais IPC virtuais explícitos.
-2. **Sidecars Efêmeros Pesados e Binários do Host:** Processos que precisam interagir com recursos físicos ou bibliotecas complexas (ex: Python OCR/Docling) rodam enjaulados pelo Sandboxing nativo do Kernel:
-   - **Windows:** Isolamento rigoroso via **AppContainer e LPAC (Low Privilege AppContainer)** (utilizando a crate `rappct`), associado a Windows Job Objects para limitar recursos de CPU/RAM.
-   - **Linux:** Enjaulamento via **Landlock LSM** e namespaces (`unshare`), associado a `Cgroups v2`.
-3. **Guilhotina Atômica:** Todo sidecar gerado implementa o padrão de `Drop trait` do Rust. Quando a tarefa finaliza, sofre timeout ou o canal IPC é quebrado, o core Rust emite um sinal atômico `SIGKILL` garantindo que nenhum processo zumbi sobreviva na RAM.
+Em contrapartida, utilizar Hypervisors pesados, conteinerização de mercado baseada em *daemons* (como Docker completo) ou Máquinas Virtuais tradicionais (ex: QEMU, Firecracker) para estabelecer esse isolamento "sufocaria" irremediavelmente o hardware do usuário (Intel i9 / 32GB RAM) [1]. Isso introduziria concorrência desleal pelo barramento PCIe e disputaria recursos de CPU com a dGPU (RTX 2060m) durante a inferência [1]. O sistema de segurança do SODA não pode introduzir *Flow-Debt* (micro-congelamentos na UX) provocado pela inicialização de contêineres obesos e ineficientes [1, 2]. 
 
-## Consequências
-- **Segurança Robusta:** Códigos gerados por IA e ferramentas MCP externas não possuem permissões físicas para ler ou corromper arquivos fora das pastas autorizadas.
-- **Latência de Inicialização:** Wasmtime inicia sandboxes em menos de **5ms**, e sidecars AppContainer/Landlock herdam o tempo de fork nativo do kernel (~10ms), dispensando o atraso de boot de micro-VMs convencionais.
-- **Rigor de Desenvolvimento:** Bibliotecas de terceiros complexas não podem ser injetadas levianamente; devem ser compiladas para WASM ou devidamente encapsuladas nos manifestos de capacidade do sidecar.
+#### Decisão Arquitetural (A Matriz de Contenção Híbrida)
+Fica decretado o abandono sumário de estratégias genéricas de isolamento. O SODA institui uma barreira de quatro camadas executada estritamente no nível do *kernel* do sistema operacional e no tempo de compilação, pautada exclusivamente no "Pessimismo da Razão" [2, 3]:
 
-## Restrições Bare-Metal
-- **Teto de RAM por Sandbox Wasm:** Máximo de **256MB** alocados estritamente na RAM, gerenciados por limites de memória da engine Wasmtime.
-- **Teto de CPU por Sidecar:** Limitação física a no máximo **2 threads lógicas** via Job Objects/Cgroups para impedir o congelamento das threads críticas de UI e inferência na CPU i9.
-- **Terminação:** O ciclo de vida do sidecar é monitorado por um watchdog assíncrono do Tokio; o `SIGKILL` deve ser disparado em no máximo **100ms** após o timeout da tarefa.
-- **Escopo do Wasmtime (WASI 0.2):** Wasmtime é exclusivo para lógica pura sem estado; ferramentas pesadas (ex: Python/PyTorch/OCR) são proibidas em Wasmtime e devem rodar em Micro-VMs.
-- **Micro-VMs (Clone VMM / CoW):** Ferramentas pesadas devem usar Micro-VMs KVM via **Clone VMM (Copy-on-Write)**, permitindo forks pré-aquecidos em $< 20ms$ compartilhando RAM.
-- **GCR (Shadow Execution):** É obrigatório usar **Shadow Execution** na CPU hospedeira via `cgroups v2` para rastrear matematicamente as *dirty pages* da VRAM e transferir apenas o delta mínimo; abordagens ingênuas de checkpoint/restore que trafeguem grandes volumes via DDR4 são proibidas.
+**Módulo 1: O Enjaulamento de Lógica Pura (Wasmtime e WASI 0.3)**
+*   Todo processamento lógico determinístico, *parsers* propensos a riscos e falhas de memória (ex: gramáticas C/C++ carregadas pelo `tree-sitter`) e execução de *plugins* de terceiros ou gerados dinamicamente pela IA devem ser estritamente enjaulados em WebAssembly [2, 4].
+*   O *runtime* adotado é o `wasmtime`, operando sob os padrões do *WebAssembly Component Model* (WASI 0.2/0.3) [2, 4].
+*   A inicialização destas sandboxes Wasm ocorre em menos de `5ms`, isolando falhas de segmentação (*segfaults*) e pânicos lógicos que, de outra forma, derrubariam o *Event Loop* do Tokio no núcleo do Rust [2, 5]. O ambiente opera sob a política *Zero-Trust*, com negação de acesso à rede e ao disco por padrão, exigindo injeção explícita de *Capabilities* [4, 5].
+
+**Módulo 2: Isolamento de Sidecars Nativos (AppContainer/LPAC e Landlock)**
+*   Processos binários nativos ou interpretadores inevitáveis (como Python local) que precisem ser instanciados pelo SODA atuarão como *Sidecars Efêmeros*, governados pela regra do Menor Privilégio Imposto pelo Kernel [5, 6].
+*   **No Windows (Host Primário):** É OBRIGATÓRIA a adoção de `AppContainer` com restrição cirúrgica de tokens SID através de **LPAC** (*Less Privileged AppContainer*) e **MXC** (*Microsoft Execution Containers*) [2, 3]. Essas invocações são feitas de forma nativa via API Win32 [3]. Qualquer acesso à rede externa ou a discos globais é bloqueado fisicamente pelo kernel do Windows [2].
+*   **No Linux:** Adoção de auto-enjaulamento nativo via `Landlock` (Linux Security Module). As restrições de caminhos de arquivos são aplicadas monotonicamente logo no boot do processo, garantindo tempo atômico de resposta [2, 5]. 
+
+**Módulo 3: Workspaces Efêmeros e Preservação SSD (ProjFS e RAMDisk)**
+*   Agentes de IA estão terminantemente proibidos de realizar mutações de E/S diretamente nos repositórios produtivos reais do usuário sem passar pelo funil de aprovação na *Agent Inbox* (*Human-In-The-Loop*) [7, 8].
+*   Para o desenvolvimento autônomo, o SODA instanciará *Shadow Workspaces* virtuais e transientes utilizando o **ProjFS** (*Projected File System* - Windows/NTFS) [9, 10]. 
+*   Para proteger o tempo de vida útil do hardware e evitar o desgaste de células físicas de SSD (economia de *Terabytes Written* - TBW), os clones e edições efêmeras dos repositórios ocorrerão em um disco virtual montado na RAM (**RAMDisk / ImDisk**) dinamicamente alocado pelo Daemon Rust [10]. 
+*   O estado mutável utiliza arquitetura *Copy-on-Write* (CoW); se o agente falhar ou sofrer a guilhotina do `SIGKILL`, o RAMDisk é desmontado e a sessão "vira fumaça" sem corromper a matriz original do usuário [9, 11].
+
+**Módulo 4: Quarentena Dinâmica de Código Hostil (Windows Sandbox - WSB)**
+*   Para a auditoria de *linters* pesados não confiáveis ou na execução compulsória de código *vibecoded* de extrema hostilidade por parte dos agentes, a execução *bare-metal* será vetada na raiz [2, 12].
+*   O SODA orquestrará a geração dinâmica de arquivos XML `.wsb` via código Rust para invocar instantaneamente o **Windows Sandbox (Hyper-V)** [2, 12].
+*   Esta micro-VM descartável embute os diretórios do repositório de análise mapeados estritamente no modo *Read-Only* (Somente-Leitura). O tempo de *boot* gira em torno de ~2 segundos [12].
+*   Ao encerrar o escopo da tarefa, o Rust destrói a instância do Sandbox; o sistema aniquila completamente os resquícios em nível de hipervisor, garantindo a esterilização terminal de eventuais persistências malignas [6, 12].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** O risco de Execução Remota de Código (RCE) no hospedeiro cai para virtualmente zero. As taxas de sobrecarga na CPU i9 e a ocupação da RAM de 32GB advindas da adoção do *Wasmtime* e das amarras do *Landlock/LPAC* são matematicamente invisíveis ($\mathcal{O}(1)$), erradicando qualquer atrito com o barramento do núcleo de inferência da GPU RTX 2060m [2, 6]. Os *sidecars* morrem de forma atômica e limpa.
+*   **Impacto Negativo (Rigidez):** O esforço contínuo de manutenção da infraestrutura exige domínio profundo de engenharia de chamadas de baixo nível (*low-level Syscalls*) e domínio contínuo da API Win32 para a alocação dos tokens de segurança (LPAC/MXC) [3]. *Plugins* ou ferramentas criadas por desenvolvedores que não declararem perfeitamente seus manifestos de rede ou acesso a pastas tomarão bloqueios letais irreversíveis por parte do kernel (código de erro `-EPERM` / *Access Denied*), demandando uma engenharia de *Capabilities* extremamente engessada e disciplinada.

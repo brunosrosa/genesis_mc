@@ -1,38 +1,41 @@
 ---
 id: "ADR-005"
 title: "ADR-005-RAG-Temporal"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Memória"
-description: "Define a arquitetura RAG com estabilidade temporal, aplicando decaimento e validade (valid_from/valid_to) nos embeddings."
+description: "Erradica GraphRAGs pesados. Adota B-Trees no LanceDB, tags STABLE/EVOLVING e extração matemática O(1) na CPU contra a Cegueira Temporal."
 ---
 
-# ADR-005-RAG-Temporal
+### ADR-005: RAG Temporal, Filtros Escalares e Combate à Cegueira Temporal
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-A busca vetorial ingênua em RAG convencional sofre de "Recency Bias" (Viés de Recorrência) e contaminação de ruído semântico. Além disso, índices de busca aproximada por vizinho mais próximo (ANN) sofrem de perda severa de precisão (recall) quando filtros de metadados estreitos são aplicados pós-busca ou quando o volume total pesquisado na janela temporal é muito pequeno. Para mentes neurodivergentes, a IA necessita recuperar com precisão cirúrgica referências exatas de datas, e-mails e trechos específicos sem misturar contextos passados obsoletos.
+#### Contexto Técnico e Ameaça Operacional (A Cegueira Temporal)
+A busca vetorial ingênua em RAG (Retrieval-Augmented Generation) convencional sofre de "Cegueira Temporal" e "Recency Bias" (Viés de Recência). Em um RAG puramente baseado em similaridade de cosseno, um documento obsoleto de três anos atrás pode obter uma pontuação semântica maior do que uma regra atualizada ontem, envenenando fatalmente a resposta do agente [2]. 
 
-## Decisão
-Implementar a arquitetura de **RAG Temporal Híbrido** no SODA:
-1. **Taxonomia de Sobrevivência:** Todo chunk de informação ingerido recebe compulsoriamente a marcação `STABLE` (regras estruturais, chaves de arquitetura e conceitos lógicos imutáveis que não sofrem degradação temporal) ou `EVOLVING` (logs de sessão, conversas passadas e estados voláteis suscetíveis a obsolescência).
-2. **Pré-Filtragem Hard SQL B-Tree:** Antes de acionar qualquer motor de busca vetorial aproximada (ANN), o motor em Rust executa uma pré-filtragem rígida em SQL utilizando índices B-Tree no SQLite/LanceDB. A string temporal de entrada (ex: "semana passada") é previamente convertida em offsets absolutos pela CPU na camada de parsing lógico local.
-3. **Trava de Proteção de Índice (bypass_vector_index):** Se a janela temporal filtrada retornar **menos de 1000 linhas**, fica estabelecida a obrigatoriedade de ignorar o índice vetorial aproximado e invocar `bypass_vector_index()`. O motor executa uma busca linear exata (kNN Exato) na dGPU/CPU, prevenindo falsos negativos de indexes aproximados sub-populados.
-4. **Decaimento Orgânico via Dinâmica de Langevin:** Na inatividade noturna, o **Chyros Daemon** executa a consolidação de memória em CPU i9. Ele aplica a Dinâmica de Langevin (*Poincaré Gradient Descent*) para empurrar chunks `EVOLVING` frios e ociosos em direção às bordas topológicas de compressão, aglutinando-os em sumários ontológicos ontogenéticos densos, reduzindo a pegada física no banco. Chunks `STABLE` são blindados e imunes ao decaimento.
-5. **Compressão de Cemitério:** Dados arquivados pela Dinâmica de Langevin não podem consumir IOPS úteis do SSD. Devem ser obrigatoriamente comprimidos usando a crate nativa **zstd** (Zstandard Zero-Copy). Embeddings inativos sofrem **Quantização Extrema 2-bits (Polar)** para minimizar o footprint de armazenamento.
+A literatura acadêmica tenta mitigar isso introduzindo redes neurais monstruosas como *Temporal Graph RAG* (TG-RAG) ou *TimeRAG*, que delegam ao LLM a tarefa de organizar cronologias [1, 2]. Executar enxames de agentes para montar grafos temporais apenas para calcular fusos horários é um *overengineering* patético que asfixia os 6GB de VRAM da RTX 2060m e bloqueia o *Event Loop* do Tokio [1]. O SODA necessita de precisão cronológica cirúrgica, em milissegundos, sem estressar a dGPU.
 
-## Consequências
-- **Recuperação Cirúrgica:** Erradicação total de alucinações e perda de precisão em consultas contendo filtros de datas específicas.
-- **Redução do Context Rot:** O contexto injetado para o LLM contém apenas "ouro matemático" sumarizado de forma limpa, poupando a VRAM termodinâmica.
-- **Higiene Semântica:** Expurgo contínuo de lixo cognitivo e repetições caóticas sem perda de informações estruturais e pilares de decisão.
+#### Decisão Arquitetural (A Matriz Temporal O(1))
+Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação primária de tempo. O SODA transforma o tempo em uma propriedade física filtrável, adotando as seguintes camadas pragmáticas:
 
-## Restrições Bare-Metal
-- **Bypass Trigger:** Execução obrigatória do `bypass_vector_index()` para qualquer volume sob busca filtrada $< 1000$ nós.
-- **Latência de Parsing Temporal:** A conversão de termos linguísticos para offsets absolutos no parser local de tempo em Rust deve executar em menos de **2ms**.
-- **Custo Computacional Noturno:** A rotina do Chyros Daemon limita o consumo de energia da CPU i9 a no máximo **40% de utilização** térmica, operando estritamente em segundo plano.
-- **Manutenção LanceDB em Background:** Compactação de blocos e ordenação vetorial do LanceDB são proibidas no Event Loop do Tokio; devem ocorrer exclusivamente em Background Worker Threads com prioridade mínima.
-- **Persistência Transacional (L2):** A camada transacional é estritamente o **FrankenSQLite** operando com *MVCC* e **Serializable Snapshot Isolation (SSI)**; motores relacionais externos e locks de I/O que induzam `SQLITE_BUSY` são proibidos.
-- **Compressão de Cemitério (zstd):** Dados arquivados pela Dinâmica de Langevin devem ser armazenados comprimidos com **zstd** (Zero-Copy) para não consumir IOPS úteis do SSD.
-- **Quantização Extrema (2-bits Polar):** Embeddings inativos devem sofrer quantização extrema de **2-bits (Polar)** para minimizar o footprint persistente.
+**Módulo 1: Extração Temporal Nativa na CPU**
+*   Toda inferência de datas a partir de linguagem natural (ex: "semana passada", "ontem") será resolvida estritamente na CPU (Intel i9) utilizando código Rust de altíssima performance.
+*   Fica mandatória a adoção de bibliotecas matemáticas nativas como `temps` e `natural-date-parser` para garantir latência de extração de `1ms` em $\mathcal{O}(1)$ [4].
+*   O SLM local (ex: Phi-4-mini) será acionado via chamadas de ferramentas (`<|tool|>`) exclusivamente como *fallback* de segurança em casos de ambiguidade extrema que os parsers estáticos não consigam resolver [4].
+
+**Módulo 2: B-Trees Escalares e Bypass Vetorial (LanceDB)**
+*   A linha do tempo do usuário será ancorada fisicamente no banco de dados. Fica imposto o uso de índices **BTREE** nas colunas de data do **LanceDB** [4].
+*   A busca deverá executar pré-filtros *Hard SQL* escalares *antes* da comparação vetorial.
+*   Para fatias de tempo muito restritas, onde a filtragem prévia deixa poucos vetores (causando colapso de índice no ANN), é **obrigatória** a chamada da função `bypass_vector_index()`, forçando uma varredura exata de similaridade (k-NN exato) na fatia restante, garantindo 100% de recall [4, 5].
+
+**Módulo 3: Imunidade ao Viés de Recência (STABLE vs EVOLVING)**
+*   Para evitar que fofocas ou informações voláteis sobreponham conhecimentos fundacionais, o sistema de indexação adotará uma categorização dicotômica estrita.
+*   Conhecimentos consolidados receberão a tag **`STABLE`**, garantindo permanência no contexto [5].
+*   Conhecimentos transitórios ou dinâmicos receberão a tag **`EVOLVING`**, sujeitos ao decaimento temporal e poda orgânica [5].
+*   A ingestão de novos documentos utilizará Busca Híbrida e "Contextual Chunks" para enriquecer o payload no banco [4].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** Consumo de VRAM zerado para cálculos temporais, liberando a placa de vídeo exclusivamente para raciocínio semântico [6]. A precisão de resposta a perguntas temporais atinge o estado da arte sem alucinação, já que a filtragem é matemática e não generativa. O tempo de resposta permanece sub-milissegundo na CPU.
+*   **Impacto Negativo (Rigidez de Ingestão):** O *pipeline* de ETL cognitivo (Fase 0/1) se torna brutalmente mais engessado. Para o sistema funcionar, cada documento, arquivo ou *log* obrigatoriamente deve ter suas datas "parseadas" e estruturadas impecavelmente *antes* da inserção no LanceDB. Se o parser falhar na ingestão, o arquivo ficará fora do tempo.

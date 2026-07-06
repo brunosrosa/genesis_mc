@@ -1,34 +1,41 @@
 ---
 id: "ADR-007"
 title: "ADR-007-Avaliador-Epistemico"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Cognição"
-description: "Estabelece o motor de avaliação de plausibilidade (Avaliador Epistêmico) no core Rust usando CPU e logit probing."
+description: "Formaliza o Hipocampo Epistêmico via Logit Probing em Forward Pass. SLMs na CPU (AVX2) avaliam risco e ambiguidade em <150ms sem gerar texto."
 ---
 
-# ADR-007-Avaliador-Epistemico
+### ADR-007: Avaliador Epistêmico, Logit Probing e o Hipocampo na CPU
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-Avaliar se um prompt do usuário possui ambiguidades de intenção, analisar o risco relacional de uma operação destrutiva ou classificar logs de erros do compilador gerando longas respostas em texto por meio de LLMs na GPU é um gargalo duplo inaceitável. Consome VRAM crítica de 6GB da RTX 2060m, introduz latências estocásticas de segundos e drena recursos térmicos do hardware local hospedeiro de forma ineficiente.
+#### Contexto Técnico e o Gargalo do Raciocínio Reflexivo
+Em sistemas agênticos, antes de delegar uma execução (ex: mutação de código, leitura pesada) ao modelo principal, a máquina precisa avaliar o "Risco Relacional", a "Ambiguidade" e a probabilidade da ação ser destrutiva [5].
+Realizar essa triagem invocando o LLM primário na placa de vídeo gera um gargalo duplo letal:
+1. Força a geração autorregressiva de texto (ex: forçar a IA a responder "SIM" ou "NÃO" passo a passo), o que drena recursos e tempo calculando a decodificação sequencial de *tokens* [4].
+2. Concorre diretamente pela VRAM crítica (6GB) da dGPU RTX 2060m e asfixia o barramento PCIe, criando um severo "Flow-Debt" termodinâmico [1].
 
-## Decisão
-Implementar a arquitetura do **Avaliador Epistêmico (Hipocampo Epistêmico)** no SODA:
-1. **O Bisturi Epistêmico:** Fica banida a geração de texto explicativo para avaliar riscos ou lógicas transientes de sessão. A avaliação utiliza Small Language Models (SLMs) quantizados ultraleves (ex: SmolLM2-135M / Gemma-2B) rodando estritamente na CPU Intel i9 através de instruções AVX2.
-2. **Classification Head Trimming:** A fim de poupar memória e otimizar processamento, as cabeças de vocabulário generativas dos modelos são extirpadas no Unsloth (Classification Head Trimming), economizando $\approx 1$GB de RAM física.
-3. **Logit Probing em Forward Pass:** O avaliador executa unicamente passagens diretas (*forward passes*) na rede neural. O SODA lê e avalia diretamente as probabilidades matemáticas e ativações brutas (*logits*) das camadas ocultas da rede em tokens específicos de decisão (ex: "seguro/perigoso", "ambíguo/claro"), resolvendo a classificação em menos de **150ms** com consumo energético marginal zero.
-4. **Isolamento de Threads Dedicadas:** Para evitar o colapso e o travamento do motor assíncrono Tokio (Event Loop Starvation), o processamento do avaliador epistêmico roda obrigatoriamente dentro de **Dedicated Worker Threads** em Rust, comunicando-se com a thread principal assíncrona por meio de canais MPSC (*Multi-Producer Single-Consumer*).
+#### Decisão Arquitetural (O Hipocampo Híbrido O(1))
+Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "Avaliação Rápida" (CPU). O SODA institui a figura do "Hipocampo Epistêmico", operando sob as seguintes leis imutáveis:
 
-## Consequências
-- **Latência de Decisão Mínima:** Classificação de intenções e segurança de operações decidida quase instantaneamente, permitindo interações tótens e fluidas na interface.
-- **VRAM Totalmente Livre:** A dGPU permanece intocada durante a fase de triagem intelectual do prompt do usuário.
-- **Higiene Concorrente:** O core Rust pode paralelizar dezenas de varreduras epistêmicas sem degradar a estabilidade do sistema de janelas Tauri.
+**Módulo 1: O Fim da Geração Autorregressiva para Triagem**
+*   É sumariamente proibido usar ciclos de decodificação para classificar se um comando inicial é seguro, ambíguo ou necessita de intervenção [4].
+*   O motor de avaliação de risco deve interromper a sua operação de forma compulsória no exato nanossegundo em que a fase de *prefill* (leitura em bloco do *prompt*) é concluída [4].
 
-## Restrições Bare-Metal
-- **Latência de Logit Probing:** O tempo máximo para execução do forward pass e leitura de logits na CPU i9 é limitado ao teto estrito de **150ms**.
-- **Consumo de CPU Dedicada:** O isolamento em Dedicated Worker Threads não pode utilizar mais de **2 cores físicos** da CPU principal.
-- **Custo Computacional de Roteamento:** O avaliador epistêmico atua como Nível 0 do disjuntor semântico local; operações que reprovarem no teste de segurança são congeladas e enviadas à Agent Inbox.
-- **Proibição de `tokio::spawn_blocking`:** Inferência SLM na CPU (AVX2) é proibida em `tokio::spawn_blocking`; deve operar em **Dedicated Worker Threads** via `std::thread::spawn`, comunicando-se com o Tokio exclusivamente por canais **MPSC**.
+**Módulo 2: Extração Numérica via Logit Probing (Forward Pass)**
+*   O sistema implementará o paradigma *ProbeLogits* [4].
+*   No final do *Forward Pass* único, o núcleo Rust lerá diretamente a matriz de distribuição de *logits* residindo na memória RAM [4].
+*   Medindo o delta da probabilidade estrita de *tokens* âncora (ex: calculando a diferença angular/matemática de ativação entre os *logits* mapeados para risco vs. segurança), o SODA extrai a certeza da IA de forma determinística, sem nunca decodificar uma string.
+
+**Módulo 3: Isolamento Físico na CPU (AVX2)**
+*   Este motor validador será suportado por SLMs ultra-quantizados (ex: Phi-4-mini ou famílias hiper-leves). Eles estão terminantemente proibidos de tocar na placa de vídeo [6].
+*   A execução dessas matrizes matemáticas ocorrerá unicamente na CPU (Intel i9) utilizando o poder intrínseco das instruções vetoriais **AVX2** [2, 3].
+*   Para prover acesso direto aos ponteiros da memória de *logits*, o SODA fará o uso cirurgicamente algemado de bibliotecas focadas em *prefill* (ex: via injeção C-FFI de `llama-cpp-4` contida ou suporte especializado), assegurando extrações atômicas [2, 6, 7].
+*   O limite máximo de latência orçamentado para esse "reflexo epistêmico" é estritamente **< 150ms** [2, 6].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** Desoneração de 100% da dGPU (RTX 2060m) durante os processos de triagem e *guardrails* [1]. A resposta do sistema perante intenções hostis ou ambíguas adquire latência sobre-humana, abortando ciclos inúteis de processamento longo em menos de 150 milissegundos e protegendo o motor de inferência massiva [2, 5].
+*   **Impacto Negativo (Complexidade C-FFI e Dados):** A manipulação direta de tensores de saída introduz o risco do gerenciamento C-FFI (`llama-cpp-4`) no Rust, obrigando contenção paranoica contra *segfaults* para não contaminar o Tokio [7]. Adicionalmente, este módulo exigirá no futuro a aplicação do Epic 7.1, demandando o preparo artesanal de *Golden Datasets* e *Fine-Tuning* de adaptadores LoRA direcionados estritamente ao comportamento dessas respostas matemáticas de probabilidade [8, 9].

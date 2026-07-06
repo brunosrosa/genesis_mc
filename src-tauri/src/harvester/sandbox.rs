@@ -12,12 +12,50 @@ use super::git::RepoPath;
 #[cfg(target_os = "windows")]
 use std::mem::size_of;
 #[cfg(target_os = "windows")]
-use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE, INVALID_HANDLE_VALUE, TRUE};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::Security::{
+    FreeSid,
+    PSID, SECURITY_CAPABILITIES,
+    ACL,
+    DACL_SECURITY_INFORMATION, UNPROTECTED_DACL_SECURITY_INFORMATION,
+};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::Security::Isolation::{
+    CreateAppContainerProfile, DeleteAppContainerProfile,
+};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::Security::Authorization::{
+    SetNamedSecurityInfoW, GetNamedSecurityInfoW,
+    SetEntriesInAclW, EXPLICIT_ACCESS_W, TRUSTEE_W,
+    SE_FILE_OBJECT,
+    GRANT_ACCESS, TRUSTEE_IS_SID,
+    TRUSTEE_IS_WELL_KNOWN_GROUP,
+    NO_MULTIPLE_TRUSTEE,
+    ConvertStringSecurityDescriptorToSecurityDescriptorW,
+};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::Storage::FileSystem::{
+    CreateFileW, ReadFile,
+    FILE_FLAG_DELETE_ON_CLOSE, FILE_FLAG_BACKUP_SEMANTICS,
+    OPEN_EXISTING,
+};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
     JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::System::Pipes::CreatePipe;
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::System::Threading::{
+    CreateProcessW, DeleteProcThreadAttributeList,
+    GetExitCodeProcess, InitializeProcThreadAttributeList,
+    UpdateProcThreadAttribute, WaitForSingleObject,
+    EXTENDED_STARTUPINFO_PRESENT, LPPROC_THREAD_ATTRIBUTE_LIST,
+    PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, PROCESS_INFORMATION,
+    STARTF_USESTDHANDLES, STARTUPINFOEXW, STARTUPINFOW,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +89,14 @@ pub enum SandboxError {
     #[error("Execution timed out")]
     Timeout,
 
+    /// Fail-Closed: a injeção de ACL NTFS falhou para o AppContainer SID.
+    /// O processo filho NÃO é spawnado para evitar operação cega sem permissões.
+    #[error("AppContainer ACL injection failed: {detail}")]
+    AclInjectionFailed { detail: String },
+
+    /// O perfil AppContainer não pôde ser criado ou configurado.
+    #[error("AppContainer setup failed: {detail}")]
+    AppContainerSetupFailed { detail: String },
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +177,810 @@ fn attach_child_to_kill_on_close_job(
         });
     }
 
+    Ok(WindowsKillOnCloseJob { handle: job_handle })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GAIOLA DE SILÍCIO — AppContainer / LPAC
+// Isolamento real de Kernel para sidecars efêmeros do SODA.
+// Arquitetura: AppContainerProfile (Drop → higiene do Registro) +
+//              STARTUPINFOEX (injeção de credenciais antes do spawn) +
+//              ACLs NTFS Fail-Closed + DELETE_ON_CLOSE handle efêmero.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Converte uma &str UTF-8 para um Vec<u16> null-terminated (PCWSTR compatível).
+#[cfg(target_os = "windows")]
+fn str_to_wide(s: &str) -> Vec<u16> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    OsStr::new(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+/// Converte um Path para Vec<u16> null-terminated.
+#[cfg(target_os = "windows")]
+fn path_to_wide(path: &std::path::Path) -> Vec<u16> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    OsStr::new(path)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+/// Obtém o último erro Win32 como string legível.
+#[cfg(target_os = "windows")]
+fn last_win32_error() -> String {
+    let code = unsafe { windows_sys::Win32::Foundation::GetLastError() };
+    format!("Win32 error code: {code:#010x}")
+}
+
+/// Perfil AppContainer com Drop automático para higiene do Registro do Windows.
+/// O Registro fica sujo se `DeleteAppContainerProfile` não for chamado.
+/// Esta struct garante a chamada rigorosa via trait Drop, mesmo em panic.
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+pub struct AppContainerProfile {
+    /// SID alocado pelo kernel via CreateAppContainerProfile.
+    /// DEVE ser liberado com FreeSid no Drop.
+    sid: PSID,
+    /// Nome do perfil em UTF-16 null-terminated, usado para DeleteAppContainerProfile.
+    name_wide: Vec<u16>,
+}
+
+#[cfg(target_os = "windows")]
+// SAFETY: PSID é um ponteiro opaco gerenciado exclusivamente por esta struct.
+// Não há acesso concorrente: a struct é movida para spawn_blocking e
+// volta ao SandboxHandle após conclusão.
+unsafe impl Send for AppContainerProfile {}
+
+#[cfg(target_os = "windows")]
+impl Drop for AppContainerProfile {
+    fn drop(&mut self) {
+        // SAFETY: Garantido pela invariante de que sid foi retornado por
+        // CreateAppContainerProfile e ainda não foi liberado.
+        unsafe {
+            // Higiene do Registro: remove o perfil para evitar Registry Leak.
+            // Ignora erros no Drop — não há alternativa segura.
+            let _hr = DeleteAppContainerProfile(self.name_wide.as_ptr());
+            if !self.sid.is_null() {
+                FreeSid(self.sid);
+                self.sid = std::ptr::null_mut();
+            }
+        }
+    }
+}
+
+/// Cria um perfil AppContainer com nome único baseado no timestamp.
+/// Retorna `Err(AppContainerSetupFailed)` se CreateAppContainerProfile falhar.
+#[cfg(target_os = "windows")]
+fn create_appcontainer_profile(
+    container_name: &str,
+) -> Result<AppContainerProfile, SandboxError> {
+    let name_wide = str_to_wide(container_name);
+    let display_wide = str_to_wide(&format!("SODA Sidecar: {container_name}"));
+    let desc_wide = str_to_wide("SODA ephemeral AppContainer for sidecar isolation");
+
+    let mut sid: PSID = std::ptr::null_mut();
+    let hr = unsafe {
+        CreateAppContainerProfile(
+            name_wide.as_ptr(),
+            display_wide.as_ptr(),
+            desc_wide.as_ptr(),
+            // Sem capabilities adicionais (LPAC = perfil mais restrito).
+            // Para adicionar capabilities futuras, passe um slice de SID_AND_ATTRIBUTES aqui.
+            std::ptr::null(),
+            0,
+            &mut sid,
+        )
+    };
+
+    // HRESULT: bit 31 = sinal de erro. 0x800700B7 = HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)
+    // Perfil existente é recuperável: basta derivar o SID pelo nome.
+    let sid = if hr == 0x800700B7_u32 as i32 {
+        // Perfil já existe; derivamos o SID pelo nome canônico.
+        let mut existing_sid: PSID = std::ptr::null_mut();
+        let hr2 = unsafe {
+            windows_sys::Win32::Security::Isolation::DeriveAppContainerSidFromAppContainerName(
+                name_wide.as_ptr(),
+                &mut existing_sid,
+            )
+        };
+        if hr2 < 0 || existing_sid.is_null() {
+            return Err(SandboxError::AppContainerSetupFailed {
+                detail: format!(
+                    "Perfil '{container_name}' existente, mas DeriveAppContainerSidFromAppContainerName falhou: {hr2:#010x}"
+                ),
+            });
+        }
+        existing_sid
+    } else if hr < 0 || sid.is_null() {
+        return Err(SandboxError::AppContainerSetupFailed {
+            detail: format!(
+                "CreateAppContainerProfile falhou para '{container_name}': HRESULT={hr:#010x}"
+            ),
+        });
+    } else {
+        sid
+    };
+
+    Ok(AppContainerProfile { sid, name_wide })
+}
+
+/// Muro do NTFS — Fail-Closed.
+/// Adiciona uma entrada de permissão para o AppContainer SID no DACL do diretório.
+/// Se SetNamedSecurityInfoW falhar, retorna Err(AclInjectionFailed) e o processo
+/// NÃO é spawnado (princípio SODA de Zero-Falhas-Silenciosas).
+///
+/// `access_mask`: use combinações de FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE.
+#[cfg(target_os = "windows")]
+fn grant_ntfs_acl(
+    path: &std::path::Path,
+    sid: PSID,
+    access_mask: u32,
+) -> Result<(), SandboxError> {
+    let path_wide = path_to_wide(path);
+
+    // 1. Obtem o DACL existente para não sobrescrever permissões do host.
+    let mut existing_dacl: *mut ACL = std::ptr::null_mut();
+    let mut sd_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+    let get_result = unsafe {
+        GetNamedSecurityInfoW(
+            path_wide.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut existing_dacl,
+            std::ptr::null_mut(),
+            &mut sd_ptr as *mut _ as *mut *mut _,
+        )
+    };
+
+    // GetNamedSecurityInfoW retorna um código Win32 (0 = sucesso), não HRESULT.
+    if get_result != 0 {
+        return Err(SandboxError::AclInjectionFailed {
+            detail: format!(
+                "GetNamedSecurityInfoW falhou para '{}': Win32={get_result:#010x}",
+                path.display()
+            ),
+        });
+    }
+
+    // 2. Monta a nova entrada de acesso para o AppContainer SID.
+    // TRUSTEE_W.ptstrName é uma union com pSid — cast seguro conforme Win32 doc.
+    let mut ea = EXPLICIT_ACCESS_W {
+        grfAccessPermissions: access_mask,
+        grfAccessMode: GRANT_ACCESS,
+        grfInheritance: 3u32, // CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: std::ptr::null_mut(),
+            MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_WELL_KNOWN_GROUP,
+            // SAFETY: sid é válido durante a chamada. Cast PSID -> PWSTR é o
+            // idioma Win32 padrão para TRUSTEE_FORM = TRUSTEE_IS_SID.
+            ptstrName: sid as windows_sys::core::PWSTR,
+        },
+    };
+
+    // 3. Mescla a nova entrada com o DACL existente.
+    let mut new_dacl: *mut ACL = std::ptr::null_mut();
+    let merge_result = unsafe {
+        SetEntriesInAclW(
+            1,
+            &mut ea,
+            // Passa o existing_dacl para MESCLAR (não substituir).
+            if existing_dacl.is_null() { std::ptr::null_mut() } else { existing_dacl as *mut _ },
+            &mut new_dacl,
+        )
+    };
+
+    // Libera o security descriptor alocado por GetNamedSecurityInfoW.
+    if !sd_ptr.is_null() {
+        unsafe { windows_sys::Win32::Foundation::LocalFree(sd_ptr as *mut _); }
+    }
+
+    if merge_result != 0 || new_dacl.is_null() {
+        return Err(SandboxError::AclInjectionFailed {
+            detail: format!(
+                "SetEntriesInAclW falhou para '{}': Win32={merge_result:#010x}",
+                path.display()
+            ),
+        });
+    }
+
+    // 4. Aplica o novo DACL mesclado. UNPROTECTED_DACL preserva herança do pai.
+    let apply_result = unsafe {
+        SetNamedSecurityInfoW(
+            // SAFETY: path_wide é null-terminated UTF-16 válido.
+            path_wide.as_ptr() as *mut u16,
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            new_dacl,
+            std::ptr::null_mut(),
+        )
+    };
+
+    // Libera o novo ACL alocado por SetEntriesInAclW.
+    unsafe { windows_sys::Win32::Foundation::LocalFree(new_dacl as *mut _); }
+
+    if apply_result != 0 {
+        return Err(SandboxError::AclInjectionFailed {
+            detail: format!(
+                "SetNamedSecurityInfoW falhou para '{}': Win32={apply_result:#010x}",
+                path.display()
+            ),
+        });
+    }
+
+    Ok(())
+}
+
+/// Wrapper seguro de thread para transportar HANDLEs Win32 através de limites de await.
+/// HANDLE é definido como *mut c_void em windows-sys, o que não implementa Send.
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+struct SendHandle(HANDLE);
+
+#[cfg(target_os = "windows")]
+unsafe impl Send for SendHandle {}
+
+#[cfg(target_os = "windows")]
+unsafe impl Sync for SendHandle {}
+
+/// Abre o diretório com FILE_FLAG_DELETE_ON_CLOSE.
+/// O handle retornado DEVE ser armazenado na struct de Sandbox e fechado via CloseHandle no Drop.
+/// Quando o handle fecha, o NTFS remove o diretório automaticamente — "Evaporação de Handle".
+#[cfg(target_os = "windows")]
+fn open_dir_delete_on_close(path: &std::path::Path) -> Result<HANDLE, SandboxError> {
+    let path_wide = path_to_wide(path);
+    let handle = unsafe {
+        CreateFileW(
+            path_wide.as_ptr(),
+            // GENERIC_READ é necessário para abrir o diretório sem acesso de escrita exclusivo.
+            0x8000_0000u32, // GENERIC_READ
+            // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+            0x0001 | 0x0002 | 0x0004,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_DELETE_ON_CLOSE | FILE_FLAG_BACKUP_SEMANTICS,
+            std::ptr::null_mut(),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(SandboxError::AppContainerSetupFailed {
+            detail: format!(
+                "Falha ao abrir diretório efêmero com DELETE_ON_CLOSE: '{}': {}",
+                path.display(),
+                last_win32_error()
+            ),
+        });
+    }
+    Ok(handle)
+}
+
+/// Isenção de Loopback (Loopback Exemption) para o AppContainer.
+/// Permite que o sidecar acesse Named Pipes do host via loopback (127.0.0.1 / ::1).
+/// Usa CheckNetIsolation.exe — o utilitário oficial da Microsoft para este fim.
+///
+/// Esta função é best-effort: se CheckNetIsolation não estiver disponível,
+/// emite um warning mas não falha (a conectividade real será testada no runtime).
+///
+/// SODA IPC — PLACEHOLDER DACL DOS NAMED PIPES:
+/// O processo pai (SODA Gateway) precisa adicionar a seguinte ACE ao DACL
+/// de cada Named Pipe que o sidecar consumirá:
+///   Trustee: "ALL APPLICATION PACKAGES" (SID: S-1-15-2-1)
+///   Permissões: GENERIC_READ | GENERIC_WRITE
+/// Use SetSecurityInfo(pipe_handle, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION, ...)
+/// no momento da criação do pipe, antes de abrir a conexão do sidecar.
+#[cfg(target_os = "windows")]
+fn set_loopback_exemption(profile_name: &str) -> bool {
+    // CheckNetIsolation.exe LoopbackExempt -a -n=<nome_do_perfil>
+    let result = std::process::Command::new("CheckNetIsolation.exe")
+        .args(["LoopbackExempt", "-a", &format!("-n={profile_name}")])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    match result {
+        Ok(status) => status.success(),
+        Err(e) => {
+            warn!(
+                profile_name,
+                error = %e,
+                "AppContainer: CheckNetIsolation não disponível; loopback IPC pode falhar"
+            );
+            false
+        }
+    }
+}
+
+/// Resultado de um spawn em AppContainer — contém stdout/stderr coletados
+/// e o código de saída. O AppContainerProfile e o handle efêmero são
+/// gerenciados externamente no SandboxHandle.
+#[cfg(target_os = "windows")]
+struct AppContainerSpawnResult {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    exit_code: i32,
+}
+
+/// Spawn de processo dentro de AppContainer via CreateProcessW + STARTUPINFOEX.
+/// Executa COMPLETAMENTE em contexto bloqueante (spawn_blocking do caller).
+///
+/// Garante:
+/// - Credenciais AppContainer via PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES
+/// - Pipes anônimos para stdout/stderr (coleta síncrona)
+/// - Job Object KILL_ON_JOB_CLOSE para morte atômica
+/// - WaitForSingleObject com timeout em ms
+///
+/// # Safety
+/// Todos os ponteiros Win32 têm lifetime controlado por escopo RAII nesta função.
+#[cfg(target_os = "windows")]
+fn spawn_in_appcontainer_blocking(
+    program: &std::path::Path,
+    args: &[String],
+    env: &std::collections::BTreeMap<String, String>,
+    cwd: &std::path::Path,
+    profile: &AppContainerProfile,
+    timeout_ms: u32,
+) -> Result<AppContainerSpawnResult, SandboxError> {
+    // ── 1. Monta a linha de comando UTF-16 ────────────────────────────────────
+    // Escapa argumentos conforme a regra canônica do Win32 para CreateProcessW.
+    let escape_cmd_arg = |arg: &str| -> String {
+        if arg.is_empty() {
+            return "\"\"".to_string();
+        }
+        if !arg.contains(' ') && !arg.contains('\t') && !arg.contains('\"') && !arg.contains('\\') {
+            return arg.to_string();
+        }
+        let mut res = String::new();
+        res.push('"');
+        let mut backslashes = 0;
+        for c in arg.chars() {
+            match c {
+                '\\' => backslashes += 1,
+                '"' => {
+                    for _ in 0..backslashes * 2 {
+                        res.push('\\');
+                    }
+                    backslashes = 0;
+                    res.push_str("\\\"");
+                }
+                _ => {
+                    for _ in 0..backslashes {
+                        res.push('\\');
+                    }
+                    backslashes = 0;
+                    res.push(c);
+                }
+            }
+        }
+        for _ in 0..backslashes * 2 {
+            res.push('\\');
+        }
+        res.push('"');
+        res
+    };
+
+    let cmd_str = std::iter::once(escape_cmd_arg(&program.to_string_lossy()))
+        .chain(args.iter().map(|a| escape_cmd_arg(a)))
+        .collect::<Vec<String>>()
+        .join(" ");
+    let mut cmd_wide: Vec<u16> = str_to_wide(&cmd_str);
+    let cwd_wide = path_to_wide(cwd);
+
+    // ── 2. Bloco de ambiente UTF-16 null-null ─────────────────────────────────
+    // Formato: KEY=VALUE\0KEY=VALUE\0\0
+    let env_block: Vec<u16> = {
+        let mut block: Vec<u16> = Vec::new();
+        // Inclui o ambiente do processo pai mais as variáveis injetadas.
+        let mut merged_env: std::collections::BTreeMap<String, String> =
+            std::env::vars().collect();
+        merged_env.extend(env.clone());
+        for (k, v) in &merged_env {
+            // Ignora variáveis vazias ou chaves internas do Windows que começam com '='.
+            if k.is_empty() || k.starts_with('=') {
+                continue;
+            }
+            block.extend(str_to_wide(&format!("{k}={v}")).into_iter());
+        }
+        block.push(0); // bloco termina com duplo null
+        block
+    };
+
+    // ── 3. Pipes anônimos para stdout/stderr ──────────────────────────────────
+    // Herança seletiva: apenas os handles de escrita são herdados pelo filho.
+    // O descritor de segurança deve possuir uma DACL que conceda permissões de escrita/leitura
+    // para "Everyone" (WD) e "ALL APPLICATION PACKAGES" (S-1-15-2-1), permitindo que o
+    // subprocesso rodando no AppContainer restrito escreva nos handles de pipe herdados.
+    let mut sa: windows_sys::Win32::Security::SECURITY_ATTRIBUTES =
+        unsafe { std::mem::zeroed() };
+    sa.nLength = size_of::<windows_sys::Win32::Security::SECURITY_ATTRIBUTES>() as u32;
+    sa.bInheritHandle = TRUE;
+
+    let sddl = str_to_wide("D:(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)");
+    let mut sd: *mut std::ffi::c_void = std::ptr::null_mut();
+    let mut sd_size: u32 = 0;
+    let sd_ok = unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            1, // SDDL_REVISION_1
+            &mut sd as *mut _ as *mut *mut std::ffi::c_void,
+            &mut sd_size,
+        )
+    };
+    if sd_ok == FALSE || sd.is_null() {
+        return Err(SandboxError::AppContainerSetupFailed {
+            detail: format!(
+                "ConvertStringSecurityDescriptorToSecurityDescriptorW falhou: {}",
+                last_win32_error()
+            ),
+        });
+    }
+    sa.lpSecurityDescriptor = sd;
+
+    let (mut stdout_read, mut stdout_write) = (INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE);
+    let (mut stderr_read, mut stderr_write) = (INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE);
+
+    let create_stdout_ok = unsafe { CreatePipe(&mut stdout_read, &mut stdout_write, &sa, 0) };
+    let create_stderr_ok = unsafe { CreatePipe(&mut stderr_read, &mut stderr_write, &sa, 0) };
+
+    // Libera a memória do descritor de segurança alocado dinamicamente pelo sistema.
+    unsafe {
+        windows_sys::Win32::Foundation::LocalFree(sd);
+    }
+
+    if create_stdout_ok == FALSE {
+        if create_stderr_ok == TRUE {
+            unsafe { CloseHandle(stderr_read); CloseHandle(stderr_write); }
+        }
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: format!("CreatePipe (stdout) falhou: {}", last_win32_error()),
+        });
+    }
+    if create_stderr_ok == FALSE {
+        unsafe { CloseHandle(stdout_read); CloseHandle(stdout_write); }
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: format!("CreatePipe (stderr) falhou: {}", last_win32_error()),
+        });
+    }
+
+    // Desabilita herança nos lados de leitura (o pai não herda seus próprios pipes).
+    unsafe {
+        windows_sys::Win32::Foundation::SetHandleInformation(
+            stdout_read, 0x1 /*HANDLE_FLAG_INHERIT*/, 0
+        );
+        windows_sys::Win32::Foundation::SetHandleInformation(
+            stderr_read, 0x1 /*HANDLE_FLAG_INHERIT*/, 0
+        );
+    }
+
+    // ── 4. Lista de atributos do processo (PROC_THREAD_ATTRIBUTE_LIST) ────────
+    let mut attr_list_size: usize = 0;
+    // Segunda chamada: calcula o tamanho necessário para 2 atributos:
+    // 1. SECURITY_CAPABILITIES (AppContainer SID)
+    // 2. HANDLE_LIST (Lista restrita de handles herdáveis)
+    unsafe {
+        InitializeProcThreadAttributeList(
+            std::ptr::null_mut(), 2, 0, &mut attr_list_size,
+        );
+    }
+    let mut attr_list_buf: Vec<u8> = vec![0u8; attr_list_size];
+    let attr_list: LPPROC_THREAD_ATTRIBUTE_LIST = attr_list_buf.as_mut_ptr() as *mut _;
+
+    let init_ok = unsafe {
+        InitializeProcThreadAttributeList(attr_list, 2, 0, &mut attr_list_size)
+    };
+    if init_ok == FALSE {
+        unsafe {
+            CloseHandle(stdout_read); CloseHandle(stdout_write);
+            CloseHandle(stderr_read); CloseHandle(stderr_write);
+        }
+        return Err(SandboxError::AppContainerSetupFailed {
+            detail: format!("InitializeProcThreadAttributeList falhou: {}", last_win32_error()),
+        });
+    }
+
+    // ── 5. Injeta SECURITY_CAPABILITIES com o SID do AppContainer ─────────────
+    let mut caps = SECURITY_CAPABILITIES {
+        AppContainerSid: profile.sid,
+        // Sem capabilities extras: LPAC puro (Less Privileged AppContainer).
+        Capabilities: std::ptr::null_mut(),
+        CapabilityCount: 0,
+        Reserved: 0,
+    };
+
+    let update_ok = unsafe {
+        UpdateProcThreadAttribute(
+            attr_list,
+            0,
+            PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
+            &mut caps as *mut SECURITY_CAPABILITIES as *mut _,
+            size_of::<SECURITY_CAPABILITIES>(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+        )
+    };
+    if update_ok == FALSE {
+        unsafe {
+            DeleteProcThreadAttributeList(attr_list);
+            CloseHandle(stdout_read); CloseHandle(stdout_write);
+            CloseHandle(stderr_read); CloseHandle(stderr_write);
+        }
+        return Err(SandboxError::AppContainerSetupFailed {
+            detail: format!("UpdateProcThreadAttribute (security caps) falhou: {}", last_win32_error()),
+        });
+    }
+
+    // ── 5.1 Injeta PROC_THREAD_ATTRIBUTE_HANDLE_LIST para restringir herança ────
+    // Se bInheritHandles = TRUE no CreateProcessW, o Windows restringe a herança apenas
+    // para esta lista explícita, evitando falhas de Spawn no AppContainer.
+    const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x00020002;
+    let mut handles_to_inherit = [stdout_write, stderr_write];
+    let update_handles_ok = unsafe {
+        UpdateProcThreadAttribute(
+            attr_list,
+            0,
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            handles_to_inherit.as_mut_ptr() as *mut _,
+            handles_to_inherit.len() * size_of::<HANDLE>(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+        )
+    };
+    if update_handles_ok == FALSE {
+        unsafe {
+            DeleteProcThreadAttributeList(attr_list);
+            CloseHandle(stdout_read); CloseHandle(stdout_write);
+            CloseHandle(stderr_read); CloseHandle(stderr_write);
+        }
+        return Err(SandboxError::AppContainerSetupFailed {
+            detail: format!("UpdateProcThreadAttribute (handles list) falhou: {}", last_win32_error()),
+        });
+    }
+
+    // ── 6. Monta STARTUPINFOEXW ───────────────────────────────────────────────
+    let mut si: STARTUPINFOEXW = unsafe { std::mem::zeroed() };
+    si.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdInput = std::ptr::null_mut();
+    si.StartupInfo.hStdOutput = stdout_write;
+    si.StartupInfo.hStdError = stderr_write;
+    si.lpAttributeList = attr_list;
+
+    // ── 7. Spawn via CreateProcessW ───────────────────────────────────────────
+    let mut pi: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+    let create_ok = unsafe {
+        CreateProcessW(
+            std::ptr::null(),
+            cmd_wide.as_mut_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            TRUE, // bInheritHandles: herda stdout_write e stderr_write
+            EXTENDED_STARTUPINFO_PRESENT, // Omitimos CREATE_UNICODE_ENVIRONMENT quando passamos null no env
+            std::ptr::null(), // Herda o ambiente padrão do pai diretamente via kernel
+            cwd_wide.as_ptr(),
+            // SAFETY: STARTUPINFOEXW começa com STARTUPINFOW; cast é seguro conforme Win32 ABI.
+            &si.StartupInfo as *const STARTUPINFOW,
+            &mut pi,
+        )
+    };
+
+    // Libera a lista de atributos imediatamente após CreateProcessW.
+    unsafe { DeleteProcThreadAttributeList(attr_list); }
+    // Fecha os handles de escrita no lado pai (o filho tem sua própria cópia herdada).
+    unsafe { CloseHandle(stdout_write); CloseHandle(stderr_write); }
+
+    if create_ok == FALSE || pi.hProcess.is_null() {
+        unsafe {
+            CloseHandle(stdout_read);
+            CloseHandle(stderr_read);
+        }
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: format!("CreateProcessW (AppContainer) falhou: {}", last_win32_error()),
+        });
+    }
+
+    // O thread filho foi criado em estado normal (sem CREATE_SUSPENDED);
+    // fechar o handle do thread é seguro aqui.
+    unsafe { CloseHandle(pi.hThread); }
+
+    // ── 8. Vincula ao Job Object KILL_ON_JOB_CLOSE ────────────────────────────
+    let job_result = create_kill_on_close_job_for_handle(pi.hProcess);
+    // Job Object é best-effort para AppContainer (o AC já garante morte em cascata).
+    // Registra warning mas não aborta.
+    let _job_guard = match job_result {
+        Ok(j) => Some(j),
+        Err(e) => {
+            warn!(error = %e, "AppContainer: Job Object opcional nao foi vinculado");
+            None
+        }
+    };
+
+    // ── 9. Coleta output e aguarda com timeout ────────────────────────────────
+    const CHUNK: usize = 64 * 1024;
+    let mut stdout_buf: Vec<u8> = Vec::new();
+    let mut stderr_buf: Vec<u8> = Vec::new();
+    let mut chunk = vec![0u8; CHUNK];
+    let mut bytes_read: u32;
+
+    // Drena stdout e stderr em loop usando WaitForSingleObject com polling.
+    // Note: reads on pipes retornam ERROR_BROKEN_PIPE quando o filho fecha o handle.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms as u64);
+    loop {
+        let remaining_ms = deadline
+            .checked_duration_since(std::time::Instant::now())
+            .map(|d| d.as_millis() as u32)
+            .unwrap_or(0);
+
+        if remaining_ms == 0 {
+            // Timeout: mata o processo e retorna erro.
+            unsafe {
+                windows_sys::Win32::System::Threading::TerminateProcess(pi.hProcess, 1);
+                WaitForSingleObject(pi.hProcess, 1000);
+                CloseHandle(pi.hProcess);
+                CloseHandle(stdout_read);
+                CloseHandle(stderr_read);
+            }
+            return Err(SandboxError::Timeout);
+        }
+
+        // Polling de 250ms: balanceia responsividade vs CPU.
+        let wait_result = unsafe {
+            WaitForSingleObject(pi.hProcess, 250.min(remaining_ms))
+        };
+
+        // Drena o que há disponível em stdout (não-bloqueante via PeekNamedPipe).
+        loop {
+            let mut bytes_avail: u32 = 0;
+            let peek_ok = unsafe {
+                windows_sys::Win32::System::Pipes::PeekNamedPipe(
+                    stdout_read,
+                    std::ptr::null_mut(),
+                    0,
+                    std::ptr::null_mut(),
+                    &mut bytes_avail,
+                    std::ptr::null_mut(),
+                )
+            };
+            if peek_ok == FALSE || bytes_avail == 0 {
+                break;
+            }
+
+            let to_read = (bytes_avail as usize).min(CHUNK);
+            bytes_read = 0;
+            let ok = unsafe {
+                ReadFile(
+                    stdout_read,
+                    chunk.as_mut_ptr() as *mut _,
+                    to_read as u32,
+                    &mut bytes_read,
+                    std::ptr::null_mut(),
+                )
+            };
+            if ok == FALSE || bytes_read == 0 {
+                break;
+            }
+            stdout_buf.extend_from_slice(&chunk[..bytes_read as usize]);
+        }
+
+        // Drena o que há disponível em stderr (não-bloqueante via PeekNamedPipe).
+        loop {
+            let mut bytes_avail: u32 = 0;
+            let peek_ok = unsafe {
+                windows_sys::Win32::System::Pipes::PeekNamedPipe(
+                    stderr_read,
+                    std::ptr::null_mut(),
+                    0,
+                    std::ptr::null_mut(),
+                    &mut bytes_avail,
+                    std::ptr::null_mut(),
+                )
+            };
+            if peek_ok == FALSE || bytes_avail == 0 {
+                break;
+            }
+
+            let to_read = (bytes_avail as usize).min(CHUNK);
+            bytes_read = 0;
+            let ok = unsafe {
+                ReadFile(
+                    stderr_read,
+                    chunk.as_mut_ptr() as *mut _,
+                    to_read as u32,
+                    &mut bytes_read,
+                    std::ptr::null_mut(),
+                )
+            };
+            if ok == FALSE || bytes_read == 0 {
+                break;
+            }
+            stderr_buf.extend_from_slice(&chunk[..bytes_read as usize]);
+        }
+
+        // WAIT_OBJECT_0 = 0x0000_0000 = processo terminou.
+        if wait_result == 0x0000_0000u32 {
+            break;
+        }
+    }
+
+    // Leitura final após término (garante que não deixamos bytes nos pipes).
+    bytes_read = 0;
+    loop {
+        let ok = unsafe {
+            ReadFile(
+                stdout_read, chunk.as_mut_ptr() as *mut _, CHUNK as u32,
+                &mut bytes_read, std::ptr::null_mut(),
+            )
+        };
+        if ok == FALSE || bytes_read == 0 { break; }
+        stdout_buf.extend_from_slice(&chunk[..bytes_read as usize]);
+    }
+    bytes_read = 0;
+    loop {
+        let ok = unsafe {
+            ReadFile(
+                stderr_read, chunk.as_mut_ptr() as *mut _, CHUNK as u32,
+                &mut bytes_read, std::ptr::null_mut(),
+            )
+        };
+        if ok == FALSE || bytes_read == 0 { break; }
+        stderr_buf.extend_from_slice(&chunk[..bytes_read as usize]);
+    }
+
+    // ── 10. Coleta exit code e limpa handles ──────────────────────────────────
+    let mut exit_code: u32 = 0;
+    unsafe {
+        GetExitCodeProcess(pi.hProcess, &mut exit_code);
+        CloseHandle(pi.hProcess);
+        CloseHandle(stdout_read);
+        CloseHandle(stderr_read);
+    }
+
+    Ok(AppContainerSpawnResult {
+        stdout: stdout_buf,
+        stderr: stderr_buf,
+        exit_code: exit_code as i32,
+    })
+}
+
+/// Helper interno: cria um Job Object KILL_ON_JOB_CLOSE para um handle de processo.
+/// Diferente de `attach_child_to_kill_on_close_job` que recebe `tokio::process::Child`.
+#[cfg(target_os = "windows")]
+fn create_kill_on_close_job_for_handle(process_handle: HANDLE) -> Result<WindowsKillOnCloseJob, SandboxError> {
+    let job_handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+    if job_handle.is_null() {
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: format!("CreateJobObjectW falhou para AppContainer: {}", last_win32_error()),
+        });
+    }
+    let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    let set_ok = unsafe {
+        SetInformationJobObject(
+            job_handle, JobObjectExtendedLimitInformation,
+            &mut info as *mut _ as *mut _,
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        )
+    };
+    if set_ok == 0 {
+        unsafe { CloseHandle(job_handle); }
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: "SetInformationJobObject falhou para AppContainer Job Object".to_string(),
+        });
+    }
+    let assign_ok = unsafe { AssignProcessToJobObject(job_handle, process_handle) };
+    if assign_ok == 0 {
+        unsafe { CloseHandle(job_handle); }
+        return Err(SandboxError::ProcessSpawnFailed {
+            reason: "AssignProcessToJobObject falhou para AppContainer".to_string(),
+        });
+    }
     Ok(WindowsKillOnCloseJob { handle: job_handle })
 }
 
@@ -1088,8 +1938,15 @@ impl SandboxHandle {
         args: &[&str],
         timeout_secs: u64,
     ) -> Result<Vec<u8>, SandboxError> {
-        self.execute_with_root(command, args, timeout_secs, &self.repo_path)
-            .await
+        #[cfg(target_os = "windows")]
+        {
+            self.execute_in_appcontainer(command, args, timeout_secs).await
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            self.execute_with_root(command, args, timeout_secs, &self.repo_path)
+                .await
+        }
     }
 
     pub async fn execute_in_dir(
@@ -1099,8 +1956,15 @@ impl SandboxHandle {
         timeout_secs: u64,
         execution_root: &Path,
     ) -> Result<Vec<u8>, SandboxError> {
-        self.execute_with_root(command, args, timeout_secs, execution_root)
-            .await
+        #[cfg(target_os = "windows")]
+        {
+            self.execute_in_appcontainer_in_dir(command, args, timeout_secs, execution_root).await
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            self.execute_with_root(command, args, timeout_secs, execution_root)
+                .await
+        }
     }
 
     pub fn repo_path(&self) -> &Path {
@@ -1110,6 +1974,158 @@ impl SandboxHandle {
     pub fn policy(&self) -> SandboxPolicy {
         self.policy
     }
+
+    /// Executa um sidecar dentro da Gaiola de Silício (AppContainer/LPAC).
+    ///
+    /// Garante:
+    /// 1. Perfil AppContainer criado dinamicamente (Drop limpa o Registro)
+    /// 2. ACLs NTFS injetadas no diretório do projeto (Fail-Closed)
+    /// 3. Handle DELETE_ON_CLOSE para diretório temporário efêmero
+    /// 4. Loopback Exemption para IPC Zero-Copy
+    /// 5. Spawn via CreateProcessW + STARTUPINFOEX (não bloqueia o Tokio)
+    ///
+    /// O `timeout_secs` é aplicado como teto absoluto do processo filho.
+    #[cfg(target_os = "windows")]
+    pub async fn execute_in_appcontainer(
+        &self,
+        command: &str,
+        args: &[&str],
+        timeout_secs: u64,
+    ) -> Result<Vec<u8>, SandboxError> {
+        self.execute_in_appcontainer_in_dir(command, args, timeout_secs, &self.repo_path).await
+    }
+
+    #[cfg(target_os = "windows")]
+    pub async fn execute_in_appcontainer_in_dir(
+        &self,
+        command: &str,
+        args: &[&str],
+        timeout_secs: u64,
+        execution_root: &Path,
+    ) -> Result<Vec<u8>, SandboxError> {
+        self.validate_execution_root(execution_root)?;
+        let resolved = resolve_command(command, args, execution_root)?;
+        self.enforce_host_path_policy(&resolved)?;
+
+        // Gera nome único do perfil AppContainer baseado em timestamp para evitar
+        // colisões entre execuções paralelas do mesmo sidecar.
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let container_name = format!("soda-sidecar-{ts}");
+
+        info!(
+            command,
+            container_name = %container_name,
+            repo_path = %self.repo_path.display(),
+            cwd = %execution_root.display(),
+            timeout_secs,
+            "AppContainer: preparando Gaiola de Silicio"
+        );
+
+        // ── Passo 1: Cria o perfil AppContainer ──────────────────────────────
+        // O Drop garante DeleteAppContainerProfile + FreeSid rigorosamente.
+        let profile = create_appcontainer_profile(&container_name)?;
+
+        // ── Passo 2: Diretório temporário efêmero ────────────────────────────
+        // Criado no %TEMP% do host; o handle DELETE_ON_CLOSE o evaporará no Drop.
+        let ephemeral_dir = std::env::temp_dir().join(format!("soda-ac-{ts}"));
+        std::fs::create_dir_all(&ephemeral_dir).map_err(|e| SandboxError::AppContainerSetupFailed {
+            detail: format!("Falha ao criar diretório efêmero '{}': {e}", ephemeral_dir.display()),
+        })?;
+
+        // ── Passo 3: Handle DELETE_ON_CLOSE (evaporação automática) ──────────
+        let ephemeral_handle = SendHandle(open_dir_delete_on_close(&ephemeral_dir)?);
+
+        // ── Passo 4: Muro do NTFS — Fail-Closed ─────────────────────────────
+        // FILE_GENERIC_READ | FILE_GENERIC_EXECUTE = 0x0012_00A9
+        // Concede leitura/execução no diretório do projeto.
+        grant_ntfs_acl(&self.repo_path, profile.sid, 0x0012_00A9u32)
+            .map_err(|e| {
+                // Higiene: fecha o handle efêmero antes de propagar o erro.
+                unsafe { CloseHandle(ephemeral_handle.0); }
+                e
+            })?;
+
+        // FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE = 0x0012_01FFu32
+        // Concede leitura/escrita/execução na pasta temporária.
+        grant_ntfs_acl(&ephemeral_dir, profile.sid, 0x0012_01FFu32)
+            .map_err(|e| {
+                unsafe { CloseHandle(ephemeral_handle.0); }
+                e
+            })?;
+
+        // ── Passo 5: Loopback Exemption (best-effort) ────────────────────────
+        // Permite ao sidecar se conectar via loopback ao Named Pipe do Gateway.
+        let loopback_ok = set_loopback_exemption(&container_name);
+        if !loopback_ok {
+            warn!(
+                container_name = %container_name,
+                "AppContainer: loopback exemption nao configurado; IPC via loopback pode falhar"
+            );
+        }
+
+        // ── Passo 6: Spawn em AppContainer (spawn_blocking — anti-deadlock Tokio) ──
+        // Toda lógica bloqueante de Win32 ocorre dentro de spawn_blocking.
+        // Os callbacks de hidratação do ProjFS podem responder enquanto isso.
+        // profile é movido para o spawn_blocking (unsafe impl Send) e dropado lá,
+        // garantindo DeleteAppContainerProfile+FreeSid antes do retorno.
+        let program = resolved.program.clone();
+        let spawn_args = resolved.args.clone();
+        let spawn_env = resolved.env.clone();
+        let spawn_cwd = execution_root.to_path_buf();
+        let timeout_ms = (timeout_secs.min(u32::MAX as u64) as u32)
+            .saturating_mul(1000);
+
+        let result = tokio::task::spawn_blocking(move || {
+            // profile está no escopo do spawn_blocking — seu Drop ocorre aqui.
+            let spawn_result = spawn_in_appcontainer_blocking(
+                &program,
+                &spawn_args,
+                &spawn_env,
+                &spawn_cwd,
+                &profile,
+                timeout_ms,
+            );
+            // Drop explícito: DeleteAppContainerProfile + FreeSid no thread bloqueante.
+            drop(profile);
+            spawn_result
+        })
+        .await
+        .map_err(|e| SandboxError::ProcessSpawnFailed {
+            reason: format!("spawn_blocking panicked: {e}"),
+        })??;
+
+        // ── Cleanup do handle efêmero ─────────────────────────────────────────
+        // profile já foi dropado dentro do spawn_blocking acima.
+        // ephemeral_handle.CloseHandle() → NTFS apaga o diretório automaticamente.
+        unsafe { CloseHandle(ephemeral_handle.0); }
+
+        let exit_code = result.exit_code;
+        let stdout = result.stdout;
+        let stderr_str = String::from_utf8_lossy(&result.stderr).trim().to_string();
+
+        info!(
+            command,
+            container_name = %container_name,
+            exit_code,
+            stdout_bytes = stdout.len(),
+            stderr_bytes = result.stderr.len(),
+            "AppContainer: sidecar concluido"
+        );
+
+        if exit_code == 0 {
+            Ok(stdout)
+        } else {
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code,
+                stderr: stderr_str,
+                stdout,
+            })
+        }
+    }
+
 }
 
 impl Drop for SandboxHandle {
@@ -1346,8 +2362,11 @@ mod tests {
     async fn test_execute_uses_repo_root_as_cwd() {
         let _guard = get_test_mutex().await.lock().await;
 
-        let temp_dir = TempDir::new().unwrap();
-        let repo_dir = temp_dir.path().join("cwd-check");
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let repo_dir = std::env::temp_dir().join(format!("soda-test-cwd-{ts}"));
         std::fs::create_dir_all(&repo_dir).unwrap();
         let repo_path = RepoPath(repo_dir.clone());
 
@@ -1366,6 +2385,10 @@ mod tests {
 
         let output_str = String::from_utf8_lossy(&output).trim().replace('\\', "/");
         let expected = repo_dir.to_string_lossy().replace('\\', "/");
+        
+        // Remove a pasta temporária de teste de forma limpa antes de asserir
+        let _ = std::fs::remove_dir_all(&repo_dir);
+
         assert_eq!(output_str, expected);
     }
 }

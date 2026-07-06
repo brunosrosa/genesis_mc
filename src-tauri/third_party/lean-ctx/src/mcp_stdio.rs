@@ -220,12 +220,19 @@ fn try_parse_with_compatibility<T: DeserializeOwned>(
         match serde_json::from_slice(payload) {
             Ok(item) => Ok(Some(item)),
             Err(error) => {
-                if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(line_str) {
+                if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(line_str) {
                     if let Some(method) =
                         json_value.get("method").and_then(serde_json::Value::as_str)
                     {
                         if should_ignore_notification(&json_value, method) {
                             return Ok(None);
+                        }
+
+                        if json_value.get("params").is_none() {
+                            json_value["params"] = serde_json::json!({});
+                            if let Ok(item) = serde_json::from_value::<T>(json_value) {
+                                return Ok(Some(item));
+                            }
                         }
                     }
                 }

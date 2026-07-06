@@ -102,6 +102,10 @@ async fn handle_mcp(
         .and_then(Value::as_str)
         .unwrap_or_default();
 
+    if payload.get("id").is_none() && method != "notifications/initialized" {
+        return StatusCode::OK.into_response();
+    }
+
     match method {
         "initialize" => {
             let session_id = state.next_session_id();

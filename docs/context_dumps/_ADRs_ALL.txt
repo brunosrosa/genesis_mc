@@ -1,4 +1,4 @@
-_ADRs_ALL Gerado em: 2026-07-05 04:21:28
+_ADRs_ALL Gerado em: 2026-07-05 20:51:21
 
 ### ====================================================================================================
 ARQUIVO: ADR-001-Core-Stack-Restrita.md
@@ -43,40 +43,50 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-002-Sandboxing-Hibrido.md
 ---
 id: "ADR-002"
 title: "ADR-002-Sandboxing-Hibrido"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Sandboxing"
-description: "Define o uso de Wasmtime para isolamento de lógicas puras e kernel sandboxing (AppContainer/Landlock) para sidecars de host."
+description: "Institui a matriz de contenção bare-metal: Wasmtime para lógica pura, AppContainer/LPAC (Windows) e Landlock (Linux) para sidecars nativos, e WSB/ProjFS para workspaces efêmeros."
 ---
 
-# ADR-002-Sandboxing-Hibrido
+### ADR-002: Sandboxing Híbrido e Matriz de Contenção Bare-Metal
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para SODA V4)
 
-## Contexto
-O SODA permite que agentes de IA gerem e executem código, além de interagir com ferramentas externas de terceiros via barramento MCP. Executar código dinamicamente gerado ou bibliotecas não auditadas diretamente no sistema do usuário viola o princípio de segurança Zero-Trust e abre brechas críticas de segurança (ex: execução remota de código - RCE, leitura e deleção arbitrária de arquivos do host). O isolamento não pode introduzir hypervisores pesados ou VMs lentas (ex: QEMU, Firecracker) que asfixiem a CPU i9 e devorem a RAM de 32GB.
+#### Contexto Técnico e Ameaça Operacional
+O ecossistema SODA permite que agentes de IA autônomos planejem, gerem e executem códigos, *scripts* e ferramentas (MCPs) interagindo diretamente com o sistema operacional hospedeiro [1]. Deixar essa execução livre representa o risco máximo de *Remote Code Execution* (RCE), deleção arbitrária de arquivos do host, corrupção silenciosa de dados e vazamento de chaves de API [1]. 
 
-## Decisão
-Implementar uma arquitetura de **Sandboxing Híbrido Tripartite** governada pelo núcleo Rust:
-1. **Lógicas Puras e Scripts Leves (Sem Estado):** Rodam estritamente dentro da engine **Wasmtime (WASI v0.2/v0.3)** compilada nativamente no core. A sandbox Wasm possui acesso zero a disco ou rede do host, exceto via canais IPC virtuais explícitos.
-2. **Sidecars Efêmeros Pesados e Binários do Host:** Processos que precisam interagir com recursos físicos ou bibliotecas complexas (ex: Python OCR/Docling) rodam enjaulados pelo Sandboxing nativo do Kernel:
-   - **Windows:** Isolamento rigoroso via **AppContainer e LPAC (Low Privilege AppContainer)** (utilizando a crate `rappct`), associado a Windows Job Objects para limitar recursos de CPU/RAM.
-   - **Linux:** Enjaulamento via **Landlock LSM** e namespaces (`unshare`), associado a `Cgroups v2`.
-3. **Guilhotina Atômica:** Todo sidecar gerado implementa o padrão de `Drop trait` do Rust. Quando a tarefa finaliza, sofre timeout ou o canal IPC é quebrado, o core Rust emite um sinal atômico `SIGKILL` garantindo que nenhum processo zumbi sobreviva na RAM.
+Em contrapartida, utilizar Hypervisors pesados, conteinerização de mercado baseada em *daemons* (como Docker completo) ou Máquinas Virtuais tradicionais (ex: QEMU, Firecracker) para estabelecer esse isolamento "sufocaria" irremediavelmente o hardware do usuário (Intel i9 / 32GB RAM) [1]. Isso introduziria concorrência desleal pelo barramento PCIe e disputaria recursos de CPU com a dGPU (RTX 2060m) durante a inferência [1]. O sistema de segurança do SODA não pode introduzir *Flow-Debt* (micro-congelamentos na UX) provocado pela inicialização de contêineres obesos e ineficientes [1, 2]. 
 
-## Consequências
-- **Segurança Robusta:** Códigos gerados por IA e ferramentas MCP externas não possuem permissões físicas para ler ou corromper arquivos fora das pastas autorizadas.
-- **Latência de Inicialização:** Wasmtime inicia sandboxes em menos de **5ms**, e sidecars AppContainer/Landlock herdam o tempo de fork nativo do kernel (~10ms), dispensando o atraso de boot de micro-VMs convencionais.
-- **Rigor de Desenvolvimento:** Bibliotecas de terceiros complexas não podem ser injetadas levianamente; devem ser compiladas para WASM ou devidamente encapsuladas nos manifestos de capacidade do sidecar.
+#### Decisão Arquitetural (A Matriz de Contenção Híbrida)
+Fica decretado o abandono sumário de estratégias genéricas de isolamento. O SODA institui uma barreira de quatro camadas executada estritamente no nível do *kernel* do sistema operacional e no tempo de compilação, pautada exclusivamente no "Pessimismo da Razão" [2, 3]:
 
-## Restrições Bare-Metal
-- **Teto de RAM por Sandbox Wasm:** Máximo de **256MB** alocados estritamente na RAM, gerenciados por limites de memória da engine Wasmtime.
-- **Teto de CPU por Sidecar:** Limitação física a no máximo **2 threads lógicas** via Job Objects/Cgroups para impedir o congelamento das threads críticas de UI e inferência na CPU i9.
-- **Terminação:** O ciclo de vida do sidecar é monitorado por um watchdog assíncrono do Tokio; o `SIGKILL` deve ser disparado em no máximo **100ms** após o timeout da tarefa.
-- **Escopo do Wasmtime (WASI 0.2):** Wasmtime é exclusivo para lógica pura sem estado; ferramentas pesadas (ex: Python/PyTorch/OCR) são proibidas em Wasmtime e devem rodar em Micro-VMs.
-- **Micro-VMs (Clone VMM / CoW):** Ferramentas pesadas devem usar Micro-VMs KVM via **Clone VMM (Copy-on-Write)**, permitindo forks pré-aquecidos em $< 20ms$ compartilhando RAM.
-- **GCR (Shadow Execution):** É obrigatório usar **Shadow Execution** na CPU hospedeira via `cgroups v2` para rastrear matematicamente as *dirty pages* da VRAM e transferir apenas o delta mínimo; abordagens ingênuas de checkpoint/restore que trafeguem grandes volumes via DDR4 são proibidas.
+**Módulo 1: O Enjaulamento de Lógica Pura (Wasmtime e WASI 0.3)**
+*   Todo processamento lógico determinístico, *parsers* propensos a riscos e falhas de memória (ex: gramáticas C/C++ carregadas pelo `tree-sitter`) e execução de *plugins* de terceiros ou gerados dinamicamente pela IA devem ser estritamente enjaulados em WebAssembly [2, 4].
+*   O *runtime* adotado é o `wasmtime`, operando sob os padrões do *WebAssembly Component Model* (WASI 0.2/0.3) [2, 4].
+*   A inicialização destas sandboxes Wasm ocorre em menos de `5ms`, isolando falhas de segmentação (*segfaults*) e pânicos lógicos que, de outra forma, derrubariam o *Event Loop* do Tokio no núcleo do Rust [2, 5]. O ambiente opera sob a política *Zero-Trust*, com negação de acesso à rede e ao disco por padrão, exigindo injeção explícita de *Capabilities* [4, 5].
+
+**Módulo 2: Isolamento de Sidecars Nativos (AppContainer/LPAC e Landlock)**
+*   Processos binários nativos ou interpretadores inevitáveis (como Python local) que precisem ser instanciados pelo SODA atuarão como *Sidecars Efêmeros*, governados pela regra do Menor Privilégio Imposto pelo Kernel [5, 6].
+*   **No Windows (Host Primário):** É OBRIGATÓRIA a adoção de `AppContainer` com restrição cirúrgica de tokens SID através de **LPAC** (*Less Privileged AppContainer*) e **MXC** (*Microsoft Execution Containers*) [2, 3]. Essas invocações são feitas de forma nativa via API Win32 [3]. Qualquer acesso à rede externa ou a discos globais é bloqueado fisicamente pelo kernel do Windows [2].
+*   **No Linux:** Adoção de auto-enjaulamento nativo via `Landlock` (Linux Security Module). As restrições de caminhos de arquivos são aplicadas monotonicamente logo no boot do processo, garantindo tempo atômico de resposta [2, 5]. 
+
+**Módulo 3: Workspaces Efêmeros e Preservação SSD (ProjFS e RAMDisk)**
+*   Agentes de IA estão terminantemente proibidos de realizar mutações de E/S diretamente nos repositórios produtivos reais do usuário sem passar pelo funil de aprovação na *Agent Inbox* (*Human-In-The-Loop*) [7, 8].
+*   Para o desenvolvimento autônomo, o SODA instanciará *Shadow Workspaces* virtuais e transientes utilizando o **ProjFS** (*Projected File System* - Windows/NTFS) [9, 10]. 
+*   Para proteger o tempo de vida útil do hardware e evitar o desgaste de células físicas de SSD (economia de *Terabytes Written* - TBW), os clones e edições efêmeras dos repositórios ocorrerão em um disco virtual montado na RAM (**RAMDisk / ImDisk**) dinamicamente alocado pelo Daemon Rust [10]. 
+*   O estado mutável utiliza arquitetura *Copy-on-Write* (CoW); se o agente falhar ou sofrer a guilhotina do `SIGKILL`, o RAMDisk é desmontado e a sessão "vira fumaça" sem corromper a matriz original do usuário [9, 11].
+
+**Módulo 4: Quarentena Dinâmica de Código Hostil (Windows Sandbox - WSB)**
+*   Para a auditoria de *linters* pesados não confiáveis ou na execução compulsória de código *vibecoded* de extrema hostilidade por parte dos agentes, a execução *bare-metal* será vetada na raiz [2, 12].
+*   O SODA orquestrará a geração dinâmica de arquivos XML `.wsb` via código Rust para invocar instantaneamente o **Windows Sandbox (Hyper-V)** [2, 12].
+*   Esta micro-VM descartável embute os diretórios do repositório de análise mapeados estritamente no modo *Read-Only* (Somente-Leitura). O tempo de *boot* gira em torno de ~2 segundos [12].
+*   Ao encerrar o escopo da tarefa, o Rust destrói a instância do Sandbox; o sistema aniquila completamente os resquícios em nível de hipervisor, garantindo a esterilização terminal de eventuais persistências malignas [6, 12].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** O risco de Execução Remota de Código (RCE) no hospedeiro cai para virtualmente zero. As taxas de sobrecarga na CPU i9 e a ocupação da RAM de 32GB advindas da adoção do *Wasmtime* e das amarras do *Landlock/LPAC* são matematicamente invisíveis ($\mathcal{O}(1)$), erradicando qualquer atrito com o barramento do núcleo de inferência da GPU RTX 2060m [2, 6]. Os *sidecars* morrem de forma atômica e limpa.
+*   **Impacto Negativo (Rigidez):** O esforço contínuo de manutenção da infraestrutura exige domínio profundo de engenharia de chamadas de baixo nível (*low-level Syscalls*) e domínio contínuo da API Win32 para a alocação dos tokens de segurança (LPAC/MXC) [3]. *Plugins* ou ferramentas criadas por desenvolvedores que não declararem perfeitamente seus manifestos de rede ou acesso a pastas tomarão bloqueios letais irreversíveis por parte do kernel (código de erro `-EPERM` / *Access Denied*), demandando uma engenharia de *Capabilities* extremamente engessada e disciplinada.
 
 ### ====================================================================================================
 ARQUIVO: ADR-003-Zero-Copy-IPC.md
@@ -85,38 +95,41 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-003-Zero-Copy-IPC.md
 ---
 id: "ADR-003"
 title: "ADR-003-Zero-Copy-IPC"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "IPC"
-description: "Adota buffers binários estruturados (rkyv/Arrow) para comunicação IPC de alta performance, eliminando o garbage collection do V8."
+description: "Impõe a adoção do iceoryx2 (Lock-Free O(1)) para o Data Plane e UDS/stdio para o Control Plane de MCPs, erradicando o JSON e a alocação dinâmica no núcleo."
 ---
 
-# ADR-003-Zero-Copy-IPC
+### ADR-003: Comunicação Zero-Copy IPC e Arquitetura de Data/Control Plane
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-Durante o fluxo de inferência local e telemetria profunda, o core Rust despeja fluxos contínuos e massivos de dados (estados de grafos, logs estruturados da CPU e chunks de texto de SLMs). Serializar essa montanha de dados em strings JSON no Rust e fazer o parse no JavaScript (V8) gera gargalos de I/O drásticos, asfixiando a thread principal da interface. Mais criticamente, a constante alocação e desalocação de strings curtas e objetos JSON no motor de JavaScript aciona ciclos agressivos do *Garbage Collector* (GC) do navegador, causando micro-congelamentos de tela ("Flow-Debt") intoleráveis para a interface reativa e neuro-inclusiva do SODA.
+#### Contexto Técnico e o Gargalo de Serialização
+Durante o fluxo de inferência local e telemetria profunda, o núcleo Rust do SODA despeja fluxos contínuos e massivos de dados (estados de grafos, logs estruturados e blocos de AST/texto de modelos SLM). Serializar essa montanha de dados em cadeias de texto JSON para transportá-los até a interface gráfica (Svelte 5 / Tauri) ou entre agentes gera gargalos drásticos de I/O [2]. 
 
-## Decisão
-Fica decretado que toda comunicação IPC de alto throughput e transmissão contínua de dados entre a base Rust e a Janela de Vidro (Svelte 5/Tauri v2) deve operar estritamente sobre buffers binários estruturados:
-1. **Dados Tabulares e Histórico de Telemetria:** Serializados e empacotados usando o formato colunar **Apache Arrow** no Rust.
-2. **Mensagens Estruturadas e DTOs Complexos:** Serializados com a biblioteca **rkyv** em Rust, gerando buffers estruturados baseados em offsets binários exatos.
-3. **Mecânica de Transporte e Consumo JS:** O Tauri v2 encaminhará os dados brutos como `ArrayBuffer`. Web Workers no JavaScript interceptam esses buffers e utilizam a semântica de **Transferable Objects** para transferir a propriedade de memória física para a thread do Svelte sem cópia real de dados. A desserialização é executada sob demanda por offsets binários de leitura instantânea ($\mathcal{O}(1)$), bloqueando alocações supérfluas no heap do JavaScript.
+A constante alocação e desalocação de objetos JSON no motor JavaScript aciona ciclos agressivos do *Garbage Collector* (GC) do V8. Na dGPU RTX 2060m e CPU i9 sob estresse máximo, esse overhead de memória não-nativa se converte em "Flow-Debt" (micro-congelamentos de tela e engasgos operacionais), o que é intolerável para a interface reativa e neuro-inclusiva do SODA [2, 6].
 
-## Consequências
-- **Eliminação de Latência IPC:** Desserialização praticamente instantânea, mitigando o tempo de processamento IPC a quase zero.
-- **Zero Pressão no GC:** Redução dramática na taxa de alocações na RAM no frontend V8, erradicando micro-congelamentos de tela.
-- **Padrão Estrito de Interfaces:** Fica estritamente proibido o envio de strings ou payloads JSON massivos para a camada IPC principal. A tipagem das mensagens de comunicação deve ser definida por esquemas binários compartilhados.
+#### Decisão Arquitetural (A Separação Data Plane / Control Plane)
+Fica decretada a extinção da serialização JSON nas rotinas centrais de alta performance do *runtime*, adotando um modelo estrito e bipartido de comunicação *Inter-Process Communication* (IPC):
 
-## Restrições Bare-Metal
-- **IPC Zero-Copy Real:** É obrigatório usar **iceoryx2** (POSIX Shared Memory) como transporte Zero-Copy; é proibido introduzir dupla serialização via Arrow FFI (o frontend recebe apenas descritores/offsets para buffers).
-- **Purificação Reativa (Svelte 5):** Antes de qualquer tráfego IPC, objetos complexos devem ser materializados via `$state.snapshot()`; é proibido trafegar Proxies reativos do Svelte/V8.
-- **Transferable Objects (Web Workers):** Buffers binários devem atravessar Workers $\rightarrow$ Main Thread exclusivamente como **Transferable Objects**, evitando cópias e instâncias massivas no heap do V8.
-- **Latência de Desserialização JavaScript:** Leituras estruturadas sobre o buffer rkyv/Arrow de tamanho normal no JS devem executar em menos de **1ms**.
-- **Cópia na RAM:** O número de cópias físicas de buffers de dados superiores a **10KB** na passagem Rust $\rightarrow$ JS deve ser zero.
-- **Frequência de Reflow:** O batching na interface gráfica deve limitar atualizações IPC a no máximo **60 vezes por segundo**, atrelado dinamicamente ao `requestAnimationFrame` (rAF) do navegador.
+**Módulo 1: O Data Plane Absoluto (`iceoryx2`)**
+*   Para transporte de cargas massivas (como tensores, grandes grafos do *LadybugDB*, matrizes do *LanceDB* e árvores de sintaxe vetorial), impõe-se a adoção da crate **`iceoryx2`** [4].
+*   Esta tecnologia provê um *middleware* *Lock-Free* verdadeiro baseado em memória compartilhada POSIX, garantindo latência de transporte $\mathcal{O}(1)$ inferior a 1 microssegundo, independentemente do tamanho do payload [4].
+*   O formato binário bruto dos dados trafegados na memória compartilhada será estritamente mapeado via **Apache Arrow** (para matrizes e métricas) ou **`rkyv`** (para serialização atômica zero-copy de estruturas Rust) [1, 2].
+
+**Módulo 2: O Control Plane Restrito (UDS / stdio)**
+*   Para evitar a fragmentação excessiva da memória física e do *kernel* com múltiplas tabelas de páginas (*mmap*), o `iceoryx2` fica PROIBIDO para a passagem de mensagens simples e sinais de controle [5].
+*   A sinalização de estado de agentes (acordar, dormir, telemetria leve) utilizará **Unix Domain Sockets (UDS) não bloqueantes** suportados por primitivas de evento do SO (*epoll/eventfd* no Linux, Named Pipes no Windows) [3].
+*   **A Alfândega MCP:** Para a integração com ferramentas e servidores do ecossistema *Model Context Protocol* (MCP), o SODA operará os fluxos de controle através de **`stdio`** e JSON-RPC 2.0 [5, 7]. A fronteira do JSON fica restrita exclusivamente à "alfândega externa" do sistema, isolada do barramento de dados principal.
+
+**Módulo 3: Expurgo de Filas e Message Brokers Obesos**
+*   Fica terminantemente banido o uso de *message brokers* genéricos (como NATS JetStream, RabbitMQ) para IPC local intra-sistema [5, 8]. Tais sistemas incorrem em *overhead* de *loopback* de rede desnecessário. Adicionalmente, implementações instáveis de canais baseadas em experimentação (como `shaq` ou `Promisqs`) são reprovadas em favor da maturidade automotiva do `iceoryx2` [8].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** Desoneração total do *Garbage Collector* do V8 [2]. A latência de transporte se torna estritamente matemática e isolada. Prevenção absoluta contra engasgos de tela (Flow-Debt), garantindo a estabilidade mental e operacional do usuário final [6].
+*   **Impacto Negativo (Rigidez e Debug):** A programação com o `iceoryx2` e memória compartilhada *lock-free* não tolera o menor descuido. Vazamentos de memória não serão limpos por GC e problemas de dessincronização de ponteiros de leitura/escrita podem corromper os dados (exigindo extrema cautela com *unsafe Rust* nas bordas do *framework*). Ferramentas tradicionais de debug baseadas em interceptação de rede local (como Wireshark) tornam-se cegas, exigindo *profilers* nativos e ferramentas de DTrace/eBPF.
 
 ### ====================================================================================================
 ARQUIVO: ADR-004-Triade-de-Memoria.md
@@ -125,39 +138,41 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-004-Triade-de-Memoria.md
 ---
 id: "ADR-004"
 title: "ADR-004-Triade-de-Memoria"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Memória"
-description: "Estabelece as camadas L1 (diários), L2 (banco relacional SQLite), L3 (banco vetorial LanceDB) e L4 (grafos LadybugDB) da memória do SODA."
+description: "Institui a Tríade de Memória isolada (SQLite, LanceDB, LadybugDB) operando estritamente via Event Sourcing (WAL Append-Only) e compressão zstd para preservação do SSD."
 ---
 
-# ADR-004-Triade-de-Memoria
+### ADR-004: Tríade de Memória, Event Sourcing e Compressão Bare-Metal
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-O *Context Rot* (Apodrecimento de Contexto) e a amnésia sistêmica são problemas endêmicos em assistentes de IA que operam injetando logs extensos e arquivos cru via prompts monolíticos. Esse padrão de RAG ingênuo inunda a VRAM estrita de 6GB da RTX 2060m, gerando perda severa de atenção no modelo e falhas catastróficas de Out-of-Memory (OOM). Adicionalmente, bancos de dados corporativos tradicionais em nuvem ou rodando via contêineres pesados (ex: PostgreSQL, Redis, Neo4j, FAISS) impõem contenção térmica, latência de rede e grande sobrecarga de RAM local.
+#### Contexto Técnico e Ameaça Operacional (O Gargalo Físico)
+Sistemas agênticos convencionais tentam combater a "Amnésia Sistêmica" (Context Rot) utilizando bancos de dados únicos e monolíticos para armazenar metadados, grafos e vetores massivos de embeddings. Quando operando no host do usuário, o disparo contínuo de milhares de micro-transações geradas por agentes (logs, reflexões, RAG) resulta em esquizofrenia de I/O.
+Na prática, o uso ingênuo de comandos `UPDATE` e `DELETE` frequentes asfixia a taxa de transferência do disco, eleva o bloqueio de threads e, criticamente, destrói a vida útil física (Terabytes Written - TBW) do SSD NVMe do usuário. Além disso, o uso de algoritmos de compressão legados (como `zip`) para o arquivamento de vetores antigos ("arquivo frio") penaliza a CPU com ciclos de Garbage Collection e alocações dinâmicas inaceitáveis.
 
-## Decisão
-Implementar a **Memória Neuro-Sintética (MNS)** do SODA como uma arquitetura tripartite em disco e RAM, estritamente embutida e local-first:
-1. **L1 (Efêmera - Pointer Index Layer):** Alocada na RAM transiente. Não retém arquivos densos; gerencia apenas um índice raso de ponteiros e offsets geográficos ($\approx 150$ caracteres por pointer) apontando cirurgicamente para as camadas de disco.
-2. **L2 (Episódica - FrankenSQLite):** Banco de dados **SQLite** em modo **WAL (Write-Ahead Logging)** com extensão **FTS5** ativa para buscas textuais. Opera rigidamente sob o paradigma de **Event Sourcing** (Append-only). Ficam expressamente proibidas operações de `UPDATE` e `DELETE` no núcleo da memória para evitar o apagamento do histórico e do raciocínio causal da máquina.
-3. **L3 (Semântica e Ontológica - LanceDB & LadybugDB):**
-   - **LanceDB:** Embutido nativamente no Rust para similaridade vetorial via Apache Arrow, efetuando buscas diretamente no SSD (Zero-Copy) sem consumir o cache de alocação da CPU i9.
-   - **LadybugDB:** Banco de grafos 100% Rust para mapeamento de conexões semânticas cruzadas e dependências sistêmicas.
-4. **Métrica de Similaridade:** Fica decretado o banimento da Similaridade de Cosseno no cálculo de vetores compactados. O SODA utilizará a **Distância de Fisher-Rao Quantizada (FRQAD)** para penalizar desvios estatísticos na compressão semântica agresiva, mantendo precisão matemática em cenários nos quais a métrica de cosseno falharia.
+#### Decisão Arquitetural (A Matriz de Persistência O(1))
+Fica decretado o uso da "Tríade de Memória" segmentada, operada sob regras rígidas de acesso e compressão, desenhadas para garantir longevidade de hardware:
 
-## Consequências
-- **Amnésia Zero:** A IA reconstrói e audita sua própria trilha histórica de pensamentos passados com consistência transacional absoluta.
-- **Eficiência Computacional:** Sem daemons adicionais rodando em background; a persistência em disco consome 0 bytes de memória de trabalho quando ociosa.
-- **Rigor de Dados:** O modelo de dados evolui puramente por snapshots de eventos adicionais, blindando as trilhas de dados contra corrupção silenciosa de dados (SDC).
+**Módulo 1: Segmentação Obrigatória (A Tríade)**
+*   **LadybugDB:** Assume exclusivamente a topologia causal e as relações gráficas estruturais da ontologia do usuário.
+*   **LanceDB:** Opera como banco vetorial mapeado diretamente na memória física (via `mmap`), dispensando o carregamento integral dos índices na RAM do sistema.
+*   **FrankenSQLite:** Atua como o cofre transacional e relacional absoluto para metadados, estados de tarefas (Kanban) e telemetria profunda.
 
-## Restrições Bare-Metal
-- **Latência de Recuperação L2/L3 Híbrida:** A união entre busca textual SQLite FTS5 e busca vetorial LanceDB SSD deve executar em menos de **20ms**.
-- **Segurança de Gravação SQLite:** O FrankenSQLite opera estritamente com *MVCC* e **Serializable Snapshot Isolation (SSI)** para evitar contenção por escrita concorrente e mitigar `SQLITE_BUSY`.
-- **Manutenção LanceDB em Background:** Compactação de blocos e ordenação vetorial do LanceDB são proibidas no Event Loop do Tokio; devem ocorrer exclusivamente em Background Worker Threads com prioridade mínima.
-- **Reserva de Memória L3:** As operações com LanceDB em memória transiente são limitadas ao teto máximo rígido de **512MB** de memória RAM ativa.
+**Módulo 2: O Motor de Event Sourcing e Proteção de SSD**
+*   Para acomodar o tráfego de alta frequência de logs agênticos sem matar o SSD, o **FrankenSQLite** deve operar rigorosamente no modo **WAL (Write-Ahead Logging)** acoplado à arquitetura de **Event Sourcing (Append-Only)**.
+*   É estritamente **PROIBIDO** o uso de comandos destrutivos diretos (`UPDATE` ou `DELETE`) nas tabelas primárias de eventos da IA. Os dados devem nascer como registros históricos imutáveis.
+*   **O Pipeline MPSC:** A escrita em disco não deve bloquear o *Event Loop* do Tokio. As requisições são postadas via canais `mpsc` na RAM, onde uma *Dedicated Worker Thread* (Background Worker) acumula os lotes e realiza gravações sequenciais (*Batched Writes*), amortizando o atrito de I/O no NVMe.
+
+**Módulo 3: Higiene de Cemitério e Compressão Vetorial (`zstd`)**
+*   Quando a "Dinâmica de Langevin" (arquivamento de memórias marginais) empurrar vetores antigos para as bordas hiperbólicas do arquivo frio, a compressão dos dados não utilizará algoritmos padrão.
+*   A adoção da crate `zip` fica **banida** das engrenagens de compressão de memória contínua. Fica imposto o uso estrito do motor **`zstd`** (Zstandard), garantindo compressão e descompressão de dicionários com características **Zero-Copy**, velocidade extrema e economia brutal de espaço de armazenamento sem gargalos na CPU i9.
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** Desgaste do SSD (TBW) reduzido a níveis mínimos através de gravações em lote. Sobrevivência 24/7 do daemon sem congelamento do Tokio por I/O. Recuperação perfeita do histórico da IA sem corrupção silenciosa (SDC) e otimização radical de espaço no "arquivo frio" via `zstd`.
+*   **Impacto Negativo (Manutenção de Estado):** O paradigma *Append-Only* gera crescimento de banco teoricamente infinito. A arquitetura exige que o desenvolvedor crie *Snapshots* periódicos de estado e implemente as engrenagens ativas de "Slimming" (esquecimento orgânico e poda) para compactar os diários passados durante o tempo de inatividade da máquina (madrugada), o que adiciona complexidade à orquestração do *Chyros Daemon*.
 
 ### ====================================================================================================
 ARQUIVO: ADR-005-RAG-Temporal.md
@@ -166,41 +181,44 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-005-RAG-Temporal.md
 ---
 id: "ADR-005"
 title: "ADR-005-RAG-Temporal"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Memória"
-description: "Define a arquitetura RAG com estabilidade temporal, aplicando decaimento e validade (valid_from/valid_to) nos embeddings."
+description: "Erradica GraphRAGs pesados. Adota B-Trees no LanceDB, tags STABLE/EVOLVING e extração matemática O(1) na CPU contra a Cegueira Temporal."
 ---
 
-# ADR-005-RAG-Temporal
+### ADR-005: RAG Temporal, Filtros Escalares e Combate à Cegueira Temporal
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-A busca vetorial ingênua em RAG convencional sofre de "Recency Bias" (Viés de Recorrência) e contaminação de ruído semântico. Além disso, índices de busca aproximada por vizinho mais próximo (ANN) sofrem de perda severa de precisão (recall) quando filtros de metadados estreitos são aplicados pós-busca ou quando o volume total pesquisado na janela temporal é muito pequeno. Para mentes neurodivergentes, a IA necessita recuperar com precisão cirúrgica referências exatas de datas, e-mails e trechos específicos sem misturar contextos passados obsoletos.
+#### Contexto Técnico e Ameaça Operacional (A Cegueira Temporal)
+A busca vetorial ingênua em RAG (Retrieval-Augmented Generation) convencional sofre de "Cegueira Temporal" e "Recency Bias" (Viés de Recência). Em um RAG puramente baseado em similaridade de cosseno, um documento obsoleto de três anos atrás pode obter uma pontuação semântica maior do que uma regra atualizada ontem, envenenando fatalmente a resposta do agente [2]. 
 
-## Decisão
-Implementar a arquitetura de **RAG Temporal Híbrido** no SODA:
-1. **Taxonomia de Sobrevivência:** Todo chunk de informação ingerido recebe compulsoriamente a marcação `STABLE` (regras estruturais, chaves de arquitetura e conceitos lógicos imutáveis que não sofrem degradação temporal) ou `EVOLVING` (logs de sessão, conversas passadas e estados voláteis suscetíveis a obsolescência).
-2. **Pré-Filtragem Hard SQL B-Tree:** Antes de acionar qualquer motor de busca vetorial aproximada (ANN), o motor em Rust executa uma pré-filtragem rígida em SQL utilizando índices B-Tree no SQLite/LanceDB. A string temporal de entrada (ex: "semana passada") é previamente convertida em offsets absolutos pela CPU na camada de parsing lógico local.
-3. **Trava de Proteção de Índice (bypass_vector_index):** Se a janela temporal filtrada retornar **menos de 1000 linhas**, fica estabelecida a obrigatoriedade de ignorar o índice vetorial aproximado e invocar `bypass_vector_index()`. O motor executa uma busca linear exata (kNN Exato) na dGPU/CPU, prevenindo falsos negativos de indexes aproximados sub-populados.
-4. **Decaimento Orgânico via Dinâmica de Langevin:** Na inatividade noturna, o **Chyros Daemon** executa a consolidação de memória em CPU i9. Ele aplica a Dinâmica de Langevin (*Poincaré Gradient Descent*) para empurrar chunks `EVOLVING` frios e ociosos em direção às bordas topológicas de compressão, aglutinando-os em sumários ontológicos ontogenéticos densos, reduzindo a pegada física no banco. Chunks `STABLE` são blindados e imunes ao decaimento.
-5. **Compressão de Cemitério:** Dados arquivados pela Dinâmica de Langevin não podem consumir IOPS úteis do SSD. Devem ser obrigatoriamente comprimidos usando a crate nativa **zstd** (Zstandard Zero-Copy). Embeddings inativos sofrem **Quantização Extrema 2-bits (Polar)** para minimizar o footprint de armazenamento.
+A literatura acadêmica tenta mitigar isso introduzindo redes neurais monstruosas como *Temporal Graph RAG* (TG-RAG) ou *TimeRAG*, que delegam ao LLM a tarefa de organizar cronologias [1, 2]. Executar enxames de agentes para montar grafos temporais apenas para calcular fusos horários é um *overengineering* patético que asfixia os 6GB de VRAM da RTX 2060m e bloqueia o *Event Loop* do Tokio [1]. O SODA necessita de precisão cronológica cirúrgica, em milissegundos, sem estressar a dGPU.
 
-## Consequências
-- **Recuperação Cirúrgica:** Erradicação total de alucinações e perda de precisão em consultas contendo filtros de datas específicas.
-- **Redução do Context Rot:** O contexto injetado para o LLM contém apenas "ouro matemático" sumarizado de forma limpa, poupando a VRAM termodinâmica.
-- **Higiene Semântica:** Expurgo contínuo de lixo cognitivo e repetições caóticas sem perda de informações estruturais e pilares de decisão.
+#### Decisão Arquitetural (A Matriz Temporal O(1))
+Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação primária de tempo. O SODA transforma o tempo em uma propriedade física filtrável, adotando as seguintes camadas pragmáticas:
 
-## Restrições Bare-Metal
-- **Bypass Trigger:** Execução obrigatória do `bypass_vector_index()` para qualquer volume sob busca filtrada $< 1000$ nós.
-- **Latência de Parsing Temporal:** A conversão de termos linguísticos para offsets absolutos no parser local de tempo em Rust deve executar em menos de **2ms**.
-- **Custo Computacional Noturno:** A rotina do Chyros Daemon limita o consumo de energia da CPU i9 a no máximo **40% de utilização** térmica, operando estritamente em segundo plano.
-- **Manutenção LanceDB em Background:** Compactação de blocos e ordenação vetorial do LanceDB são proibidas no Event Loop do Tokio; devem ocorrer exclusivamente em Background Worker Threads com prioridade mínima.
-- **Persistência Transacional (L2):** A camada transacional é estritamente o **FrankenSQLite** operando com *MVCC* e **Serializable Snapshot Isolation (SSI)**; motores relacionais externos e locks de I/O que induzam `SQLITE_BUSY` são proibidos.
-- **Compressão de Cemitério (zstd):** Dados arquivados pela Dinâmica de Langevin devem ser armazenados comprimidos com **zstd** (Zero-Copy) para não consumir IOPS úteis do SSD.
-- **Quantização Extrema (2-bits Polar):** Embeddings inativos devem sofrer quantização extrema de **2-bits (Polar)** para minimizar o footprint persistente.
+**Módulo 1: Extração Temporal Nativa na CPU**
+*   Toda inferência de datas a partir de linguagem natural (ex: "semana passada", "ontem") será resolvida estritamente na CPU (Intel i9) utilizando código Rust de altíssima performance.
+*   Fica mandatória a adoção de bibliotecas matemáticas nativas como `temps` e `natural-date-parser` para garantir latência de extração de `1ms` em $\mathcal{O}(1)$ [4].
+*   O SLM local (ex: Phi-4-mini) será acionado via chamadas de ferramentas (`<|tool|>`) exclusivamente como *fallback* de segurança em casos de ambiguidade extrema que os parsers estáticos não consigam resolver [4].
+
+**Módulo 2: B-Trees Escalares e Bypass Vetorial (LanceDB)**
+*   A linha do tempo do usuário será ancorada fisicamente no banco de dados. Fica imposto o uso de índices **BTREE** nas colunas de data do **LanceDB** [4].
+*   A busca deverá executar pré-filtros *Hard SQL* escalares *antes* da comparação vetorial.
+*   Para fatias de tempo muito restritas, onde a filtragem prévia deixa poucos vetores (causando colapso de índice no ANN), é **obrigatória** a chamada da função `bypass_vector_index()`, forçando uma varredura exata de similaridade (k-NN exato) na fatia restante, garantindo 100% de recall [4, 5].
+
+**Módulo 3: Imunidade ao Viés de Recência (STABLE vs EVOLVING)**
+*   Para evitar que fofocas ou informações voláteis sobreponham conhecimentos fundacionais, o sistema de indexação adotará uma categorização dicotômica estrita.
+*   Conhecimentos consolidados receberão a tag **`STABLE`**, garantindo permanência no contexto [5].
+*   Conhecimentos transitórios ou dinâmicos receberão a tag **`EVOLVING`**, sujeitos ao decaimento temporal e poda orgânica [5].
+*   A ingestão de novos documentos utilizará Busca Híbrida e "Contextual Chunks" para enriquecer o payload no banco [4].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** Consumo de VRAM zerado para cálculos temporais, liberando a placa de vídeo exclusivamente para raciocínio semântico [6]. A precisão de resposta a perguntas temporais atinge o estado da arte sem alucinação, já que a filtragem é matemática e não generativa. O tempo de resposta permanece sub-milissegundo na CPU.
+*   **Impacto Negativo (Rigidez de Ingestão):** O *pipeline* de ETL cognitivo (Fase 0/1) se torna brutalmente mais engessado. Para o sistema funcionar, cada documento, arquivo ou *log* obrigatoriamente deve ter suas datas "parseadas" e estruturadas impecavelmente *antes* da inserção no LanceDB. Se o parser falhar na ingestão, o arquivo ficará fora do tempo.
 
 ### ====================================================================================================
 ARQUIVO: ADR-006-SSOT-Sheets.md
@@ -250,37 +268,44 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-007-Avaliador-Epistemico.md
 ---
 id: "ADR-007"
 title: "ADR-007-Avaliador-Epistemico"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Cognição"
-description: "Estabelece o motor de avaliação de plausibilidade (Avaliador Epistêmico) no core Rust usando CPU e logit probing."
+description: "Formaliza o Hipocampo Epistêmico via Logit Probing em Forward Pass. SLMs na CPU (AVX2) avaliam risco e ambiguidade em <150ms sem gerar texto."
 ---
 
-# ADR-007-Avaliador-Epistemico
+### ADR-007: Avaliador Epistêmico, Logit Probing e o Hipocampo na CPU
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-Avaliar se um prompt do usuário possui ambiguidades de intenção, analisar o risco relacional de uma operação destrutiva ou classificar logs de erros do compilador gerando longas respostas em texto por meio de LLMs na GPU é um gargalo duplo inaceitável. Consome VRAM crítica de 6GB da RTX 2060m, introduz latências estocásticas de segundos e drena recursos térmicos do hardware local hospedeiro de forma ineficiente.
+#### Contexto Técnico e o Gargalo do Raciocínio Reflexivo
+Em sistemas agênticos, antes de delegar uma execução (ex: mutação de código, leitura pesada) ao modelo principal, a máquina precisa avaliar o "Risco Relacional", a "Ambiguidade" e a probabilidade da ação ser destrutiva [5].
+Realizar essa triagem invocando o LLM primário na placa de vídeo gera um gargalo duplo letal:
+1. Força a geração autorregressiva de texto (ex: forçar a IA a responder "SIM" ou "NÃO" passo a passo), o que drena recursos e tempo calculando a decodificação sequencial de *tokens* [4].
+2. Concorre diretamente pela VRAM crítica (6GB) da dGPU RTX 2060m e asfixia o barramento PCIe, criando um severo "Flow-Debt" termodinâmico [1].
 
-## Decisão
-Implementar a arquitetura do **Avaliador Epistêmico (Hipocampo Epistêmico)** no SODA:
-1. **O Bisturi Epistêmico:** Fica banida a geração de texto explicativo para avaliar riscos ou lógicas transientes de sessão. A avaliação utiliza Small Language Models (SLMs) quantizados ultraleves (ex: SmolLM2-135M / Gemma-2B) rodando estritamente na CPU Intel i9 através de instruções AVX2.
-2. **Classification Head Trimming:** A fim de poupar memória e otimizar processamento, as cabeças de vocabulário generativas dos modelos são extirpadas no Unsloth (Classification Head Trimming), economizando $\approx 1$GB de RAM física.
-3. **Logit Probing em Forward Pass:** O avaliador executa unicamente passagens diretas (*forward passes*) na rede neural. O SODA lê e avalia diretamente as probabilidades matemáticas e ativações brutas (*logits*) das camadas ocultas da rede em tokens específicos de decisão (ex: "seguro/perigoso", "ambíguo/claro"), resolvendo a classificação em menos de **150ms** com consumo energético marginal zero.
-4. **Isolamento de Threads Dedicadas:** Para evitar o colapso e o travamento do motor assíncrono Tokio (Event Loop Starvation), o processamento do avaliador epistêmico roda obrigatoriamente dentro de **Dedicated Worker Threads** em Rust, comunicando-se com a thread principal assíncrona por meio de canais MPSC (*Multi-Producer Single-Consumer*).
+#### Decisão Arquitetural (O Hipocampo Híbrido O(1))
+Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "Avaliação Rápida" (CPU). O SODA institui a figura do "Hipocampo Epistêmico", operando sob as seguintes leis imutáveis:
 
-## Consequências
-- **Latência de Decisão Mínima:** Classificação de intenções e segurança de operações decidida quase instantaneamente, permitindo interações tótens e fluidas na interface.
-- **VRAM Totalmente Livre:** A dGPU permanece intocada durante a fase de triagem intelectual do prompt do usuário.
-- **Higiene Concorrente:** O core Rust pode paralelizar dezenas de varreduras epistêmicas sem degradar a estabilidade do sistema de janelas Tauri.
+**Módulo 1: O Fim da Geração Autorregressiva para Triagem**
+*   É sumariamente proibido usar ciclos de decodificação para classificar se um comando inicial é seguro, ambíguo ou necessita de intervenção [4].
+*   O motor de avaliação de risco deve interromper a sua operação de forma compulsória no exato nanossegundo em que a fase de *prefill* (leitura em bloco do *prompt*) é concluída [4].
 
-## Restrições Bare-Metal
-- **Latência de Logit Probing:** O tempo máximo para execução do forward pass e leitura de logits na CPU i9 é limitado ao teto estrito de **150ms**.
-- **Consumo de CPU Dedicada:** O isolamento em Dedicated Worker Threads não pode utilizar mais de **2 cores físicos** da CPU principal.
-- **Custo Computacional de Roteamento:** O avaliador epistêmico atua como Nível 0 do disjuntor semântico local; operações que reprovarem no teste de segurança são congeladas e enviadas à Agent Inbox.
-- **Proibição de `tokio::spawn_blocking`:** Inferência SLM na CPU (AVX2) é proibida em `tokio::spawn_blocking`; deve operar em **Dedicated Worker Threads** via `std::thread::spawn`, comunicando-se com o Tokio exclusivamente por canais **MPSC**.
+**Módulo 2: Extração Numérica via Logit Probing (Forward Pass)**
+*   O sistema implementará o paradigma *ProbeLogits* [4].
+*   No final do *Forward Pass* único, o núcleo Rust lerá diretamente a matriz de distribuição de *logits* residindo na memória RAM [4].
+*   Medindo o delta da probabilidade estrita de *tokens* âncora (ex: calculando a diferença angular/matemática de ativação entre os *logits* mapeados para risco vs. segurança), o SODA extrai a certeza da IA de forma determinística, sem nunca decodificar uma string.
+
+**Módulo 3: Isolamento Físico na CPU (AVX2)**
+*   Este motor validador será suportado por SLMs ultra-quantizados (ex: Phi-4-mini ou famílias hiper-leves). Eles estão terminantemente proibidos de tocar na placa de vídeo [6].
+*   A execução dessas matrizes matemáticas ocorrerá unicamente na CPU (Intel i9) utilizando o poder intrínseco das instruções vetoriais **AVX2** [2, 3].
+*   Para prover acesso direto aos ponteiros da memória de *logits*, o SODA fará o uso cirurgicamente algemado de bibliotecas focadas em *prefill* (ex: via injeção C-FFI de `llama-cpp-4` contida ou suporte especializado), assegurando extrações atômicas [2, 6, 7].
+*   O limite máximo de latência orçamentado para esse "reflexo epistêmico" é estritamente **< 150ms** [2, 6].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** Desoneração de 100% da dGPU (RTX 2060m) durante os processos de triagem e *guardrails* [1]. A resposta do sistema perante intenções hostis ou ambíguas adquire latência sobre-humana, abortando ciclos inúteis de processamento longo em menos de 150 milissegundos e protegendo o motor de inferência massiva [2, 5].
+*   **Impacto Negativo (Complexidade C-FFI e Dados):** A manipulação direta de tensores de saída introduz o risco do gerenciamento C-FFI (`llama-cpp-4`) no Rust, obrigando contenção paranoica contra *segfaults* para não contaminar o Tokio [7]. Adicionalmente, este módulo exigirá no futuro a aplicação do Epic 7.1, demandando o preparo artesanal de *Golden Datasets* e *Fine-Tuning* de adaptadores LoRA direcionados estritamente ao comportamento dessas respostas matemáticas de probabilidade [8, 9].
 
 ### ====================================================================================================
 ARQUIVO: ADR-008-Roteamento-FinOps.md
@@ -288,41 +313,42 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-008-Roteamento-FinOps.md
 ---
 ---
 id: "ADR-008"
-title: "ADR-008-Roteamento-FinOps"
-version: 1.0
+title: "ADR-008-Roteamento-FinOps-e-Matematica-AOT"
+version: 2.2
 status: Ativo_Inegociavel
 epic: "FinOps"
-description: "Governa o roteamento de inferência baseado no ParetoBandit, balanceando custo, latência e inteligência (nuvem vs local)."
+description: "Governa o roteamento via ParetoBandit (Tiers), Model Registry dinâmico, e impõe cálculos matemáticos AOT (lele/pulp), banindo runtimes obesos como tch-rs."
 ---
 
-# ADR-008-Roteamento-FinOps
+### ADR-008: Roteamento FinOps, Abstração de Tiers e Trator Numérico AOT
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-O ecossistema SODA opera em um regime no qual o uso impensado de modelos em nuvem premium (ex: Claude 3.5 Sonnet, GPT-4o) para processamento de contextos imensos (como refatorações de repositórios inteiros contendo dezenas de milhares de tokens) provoca custos financeiros proibitivos por chamadas de API de nuvem convencionais (Inference Bill Shock). Paralelamente, forçar tarefas complexas a rodar inteiramente na dGPU local de 6GB da RTX 2060m causa travamentos por Out-of-Memory (OOM) e degradação severa da latência e da vida útil do hardware.
+#### Contexto Técnico e Ameaça Operacional (Inference Bill Shock e Overhead Matemático)
+O uso indiscriminado de modelos de fronteira em nuvem provoca custos financeiros proibitivos (Inference Bill Shock). Para mitigar isso, o sistema requer um roteador (*ParetoBandit*) que calcule rotas com base na métrica E3 (Efficiency-Aware Effectiveness Evaluation). Contudo, se as micro-rotinas de cálculo vetorial para esse roteamento utilizarem *runtimes* de Machine Learning tradicionais (como `tch-rs` ou LibTorch), o binário inflará em gigabytes e as compilações *Just-In-Time* (JIT) gerarão latência letal que ultrapassará o orçamento de <22 microssegundos.
 
-## Decisão
-Implementar a arquitetura de **Roteamento Híbrido FinOps** governada pelo algoritmo **ParetoBandit** no AgentGateway local compilado em Rust:
-1. **Métrica E³ (Efficiency-aware Effectiveness Evaluation):** A tomada de decisão de roteamento não usa regras estáticas de intenção. O ParetoBandit calcula em tempo real o balanceamento ótimo de **Custo vs. Qualidade vs. Latência** para cada tarefa específica.
-2. **MoE Multi-Nível Hierárquica:**
-   - **Nível 0 (Triagem Local na CPU):** Executado em $< 50ms$ na CPU i9 por um classificador local estruturado. Tarefas mecânicas simples ou buscas locais triviais resolvem-se localmente a custo US$ 0,00.
-   - **Nível 1 (Edge Node na dGPU):** Contextos normais ($< 8000$ tokens) e refatorações atômicas seguras rodam localmente na RTX 2060m aproveitando modelos especialistas locais quantizados, mantendo soberania de dados e custo US$ 0,00.
-   - **Nível 2 (Subscription Hacking / Cloud Fallback):** Tarefas complexas de raciocínio de longo horizonte sofrem fallback tático para APIs de nuvem asiáticas baratas de lote (Batch APIs) ou são despachadas para sidecars efêmeros conectando as CLIs oficiais instaladas na máquina do usuário (ex: Gemini CLI / Claude Code CLI). Isso redireciona a carga de processamento massivo para as cotas mensais de assinatura fixa (Flat-Rate) do usuário, anulando faturamentos marginais variáveis.
-3. **Disjuntores FinOps (Circuit Breakers):** Um firewall financeiro monitora o consumo cumulativo diário de tokens e custos. Se o teto configurado for ameaçado, o disjuntor desarma, cessando qualquer requisição externa e travando as rotinas no motor local.
+#### Decisão Arquitetural (Tiers Abstratos e Matemática AOT)
+Fica decretado o uso da malha de roteamento dinâmico "Zero-Trust Sandwich" operando sob as seguintes abstrações inegociáveis:
 
-## Consequências
-- **Faturamento Marginal Zero:** Refatorações de centenas de milhares de tokens são executadas sem sobressaltos e sem gerar faturas variáveis de API para o usuário.
-- **Termodinâmica Preservada:** A GPU RTX 2060m local opera sob stress controlado, evitando aquecimento extremo e estrangulamento por uso contínuo de RAM.
-- **Autonomia Inteligente:** A IA decide autonomamente qual é a melhor máquina de raciocínio para a tarefa sem incomodar ou demandar intervenções manuais cognitivas de roteamento pelo usuário.
+**Módulo 1: O Model Registry Dinâmico (O Orçamentista Noturno)**
+*   O SODA implementa um **Model Registry** local em SQLite.
+*   O *Daemon Chyros* acorda durante a madrugada e realiza um *pull* assíncrono nas APIs para atualizar os preços exatos em microdólares, limites de contexto e latência (Time-To-First-Token - TTFT). O roteamento calcula as rotas em tempo $\mathcal{O}(1)$ consultando apenas o banco local.
 
-## Restrições Bare-Metal
-- **Latência de Decisão do ParetoBandit:** A avaliação da equação e o despacho do roteamento devem executar em menos de **10ms** no Gateway Rust.
-- **Disjuntor de Teto Diário:** Interrupção compulsória de chamadas externas de nuvem se o gasto diário de tokens atingir o teto parametrizado pelo usuário.
-- **Igiene de Conexão:** Quedas de rede disparam fallback automático imediato para inferência local com emissão de status estático na Bottom Bar.
-- **Teto de Paralelismo na dGPU:** É proibido carregar múltiplos agentes em paralelo na RTX 2060m; impor **Batching Sequencial** com reciclagem de contexto via **FastSwitch/KVCOMM**.
-- **Git I/O fora do Event Loop:** Operações de commit/snapshot via **gitoxide** (I/O intensivo) são proibidas no Event Loop principal; devem rodar estritamente fora do loop assíncrono (thread dedicada/worker), comunicando-se por filas/canais.
+**Módulo 2: Taxonomia Abstrata de Roteamento (Tiers de Inteligência)**
+*   O roteamento obedecerá estritamente a três camadas (Tiers) escaláveis:
+    *   **Tier 1 (Cloud Brain / Orchestrator):** Modelos de fronteira premium (Latest Pro Models) acionados **exclusivamente** para elaborar planos de execução, resolver pânicos severos do compilador Rust ou gerar o DAG de tarefas.
+    *   **Tier 3 (Cloud Fast / Batch Workers):** Modelos de altíssima velocidade e baixo custo (Latest Flash/Lite Models) usados para processamento em lote e contingência assíncrona (Failover).
+    *   **Tier 4 (Local SLM Workers):** O esforço braçal contínuo é roteado para a GPU local (RTX 2060m via `llama-cpp-2` contíguo ou `mistral.rs` efêmero) a custo rigorosamente zero.
+
+**Módulo 3: O Trator Numérico AOT (A Morte do LibTorch e JIT)**
+*   Fica terminantemente **PROIBIDA** a injeção de bibliotecas C++ de tensores obesas (ex: `tch-rs`, LibTorch, ndarray com MKL) para os cálculos de predição do roteador.
+*   A matemática matricial do ParetoBandit e outras heurísticas operacionais deverão rodar 100% estáticas via **AOT (Ahead-of-Time)** na CPU.
+*   O paralelismo vetorial (SIMD/AVX2) será forçado cirurgicamente em Rust nativo utilizando a combinação mandatória das *crates* **`lele`** e **`pulp`**, garantindo execução O(1) sem concorrência pelo barramento PCIe da GPU.
+
+#### Consequências Operacionais (Trade-offs)
+*   **Impacto Positivo:** Proteção absoluta do orçamento financeiro via *Tiers*. O binário Rust se mantém leve e a tomada de decisão do roteador é estritamente sub-milissegundo, preservando o Cache L3 e a memória RAM.
+*   **Impacto Negativo (Rigidez Matemática):** A escrita de redes de predição locais exigirá que o Arquiteto lide com matrizes de baixo nível usando `pulp` e `lele` em Rust puro, impedindo a comodidade de importar scripts prontos de Python/PyTorch para cálculos internos.
 
 ### ====================================================================================================
 ARQUIVO: ADR-009-Decodificacao-Restrita.md
@@ -331,35 +357,19 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-009-Decodificacao-Restrita.md
 ---
 id: "ADR-009"
 title: "ADR-009-Decodificacao-Restrita"
-version: 1.0
-status: Ativo_Inegociavel
-epic: "Cognição"
-description: "Obriga o uso de decodificação guiada por gramática (llguidance) no backend para garantir payloads JSON válidos."
+version: 2.0
+status: Deprecated_Superseded_By_ADR-028
+epic: "Inferência"
+description: "Documento obsoleto. A decodificação restrita e o uso do llguidance foram elevados à lei termodinâmica O(1) e consolidados no ADR-028."
 ---
 
-# ADR-009-Decodificacao-Restrita
+### ADR-009: Decodificação Restrita (DEPRECIADO)
 
-## Status
-Aceito (Ativo e Inegociável)
+**ESTA LEI FOI REVOGADA E SUBSTITUÍDA.**
 
-## Contexto
-Durante tarefas críticas de extração estruturada de dados (ETL Cognitivo) e geração de Grafos Acíclicos Dirigidos (DAGs) de fases, a inferência estocástica livre frequentemente gera erros de sintaxe (Markdown poluído, JSON inválido ou chaves ausentes). Esses pequenos desvios de formatação quebram os analisadores lógicos nativos em Rust, forçando re-tentativas de inferência desgastantes que consomem tokens desnecessários e geram atrito operacional na esteira de montagem de código.
+Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SODA. 
 
-## Decisão
-Fica rigidamente decretada a adoção de **Decodificação Restrita (Constrained Decoding)** em todo o core do SODA:
-1. **O Motor llguidance:** A inferência local e o recebimento de respostas do gateway de inferência devem operar rigidamente guiados pela biblioteca **llguidance** implementada em Rust.
-2. **Autômatos de Gramática Livre de Contexto (CFG):** O processamento da geração de tokens na dGPU/CPU é interceptado em tempo real de execução. O motor llguidance restringe dinamicamente a amostragem de logits, forçando a saída do modelo a se conformar perfeitamente a uma Gramática Livre de Contexto compilada a partir de schemas JSON estritos (esquemas Pydantic exportados ou esquemas locais JSON-Schema).
-3. **Erradicação de Cascas Textuais:** Fica terminantemente proibido o uso de prompts livres de instrução estruturada demandando JSON em texto aberto. O modelo local é matematicamente incapaz de emitir caracteres supérfluos, narrativas fora do schema ou barras de escape inválidas.
-
-## Consequências
-- **Precisão Mecânica de 100%:** O payload retornado do motor de inferência é garantido sintaticamente íntegro em nível de byte e bit em relação ao esquema solicitado, eliminando totalmente falhas de parsing.
-- **Eficiência de Geração:** A IA não gasta VRAM ou tempo gerando textos introdutórios ou tags de fechamento supérfluas (ex: "Aqui está o seu JSON: ..."), acelerando o tempo de processamento em até 30%.
-- **Segurança de Execução:** Menores riscos de ataques de injeção de prompt estruturada que tentem corromper ou sequestrar as vias de comando da aplicação.
-
-## Restrições Bare-Metal
-- **Latência de Interceptação llguidance:** O tempo de processamento e validação do autômato gramatical de tokens pelo llguidance deve executar em menos de **50 microssegundos (50µs)** por token gerado.
-- **Consistência de Schema:** Todas as DTOs e esquemas de dados da aplicação devem obrigatoriamente exportar seus arquivos JSON-Schema para a pasta de especificações (`docs/specs/`) para governar os validadores locais.
-- **Fail-Closed Gramatical:** Se o autômato falhar ao harmonizar a geração local com o schema por estouro de cota de tokens, a operação é abortada sem persistência corrompida.
+Para ler as regras atuais em vigor sobre o Cercadinho do Determinismo, amostragem Min-P, In-Context Learning (Few-Shot) e a imposição matemática de JSON via `llguidance` operando em AVX2 na CPU, consulte exclusivamente o **ADR-028**.
 
 ### ====================================================================================================
 ARQUIVO: ADR-010-Spec-Driven-Development.md
@@ -578,37 +588,19 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-015-Motor-Generativo-Local.md
 ---
 id: "ADR-015"
 title: "ADR-015-Motor-Generativo-Local"
-version: 1.0
-status: Ativo_Inegociavel
-epic: "Cognição"
-description: "Restringe a inferência generativa local ao Candle no backend Rust com micro-SLMs quantizados na RTX 2060m."
+version: 2.0
+status: Deprecated_Superseded_By_ADR-027
+epic: "Inferência"
+description: "Documento obsoleto. A arquitetura de motor único restrito ao Candle foi banida em prol da Inferência Híbrida Isolada cravada no ADR-027."
 ---
 
-# ADR-015-Motor-Generativo-Local
+### ADR-015: Motor Generativo Local (DEPRECIADO)
 
-## Status
-Aceito (Ativo e Inegociável)
+**ESTA LEI FOI REVOGADA E SUBSTITUÍDA.**
 
-## Contexto
-Depender de servidores externos pesados em contêineres Docker ou CLIs de daemons monolíticos (como Ollama, LM Studio ou LocalAI) rodando continuamente em segundo plano causa sobrecarga na CPU i9, gera contenção de rede IPC e introduz riscos severos de vazamento de controle de processos. Além disso, a placa de vídeo de consumidor do usuário (NVIDIA RTX 2060m com 6GB VRAM) é fisicamente incapaz de manter múltiplos modelos de grande porte carregados quentes na VRAM simultaneamente com o ambiente gráfico.
+Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SODA. 
 
-## Decisão
-Implementar o **Motor Generativo Local** do SODA incorporado nativamente ao core de backend em Rust:
-1. **Inferência Embarcada via Candle e Mistral.rs:** O core gerador de IA do SODA é compilado em Rust Bare-Metal utilizando os ecossistemas **Candle** (Hugging Face) e **mistral.rs**. Fica terminantemente proibido o uso de Ollama ou daemons JSON-REST externos para inferência no código final de produção.
-2. **Desagregação Computacional (Llama-swap):** Os pesos quantizados dos modelos especialistas locais (`GGUF` no formato `Q4_K_M`, tais como DeepSeek-R1-Distill-Qwen 7B ou Rnj-1 8B) permanecem armazenados quentes na RAM principal (32GB DDR4/DDR5) do host (Hot Repose).
-3. **Mecânica de Troca PCIe:** Quando uma tarefa é despachada para a dGPU pelo ParetoBandit, o SODA ativa a flag `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1`. Os tensores fluem em milissegundos via barramento PCIe para os 6GB de VRAM da dGPU, realizam a inferência e sofrem evicção atômica de volta para a RAM física após a conclusão, zerando o barramento VRAM imediatamente.
-4. **Atenção Latente e Compressão de KV Cache:** A compressão do contexto na GPU exige o suporte a arquiteturas baseadas em **Multi-head Latent Attention (MLA)** e a quantização do KV Cache para formatos compactados **INT8/FP8**, viabilizando contextos úteis superiores a 16.000 tokens sem risco de Out-of-Memory (OOM).
-
-## Consequências
-- **Privacidade Soberana Total:** Os modelos e os pesos rodam fisicamente na máquina local, garantindo confidencialidade absoluta e independência de conexões externas à internet.
-- **Gerenciamento Unificado de Processos:** Sem processos zumbis de IA comendo ciclos de CPU do host de forma oculta; o ciclo de vida do motor de IA é amarrado à própria execução da janela do Tauri.
-- **Eficiência Computacional:** A RTX 2060m é liberada imediatamente para jogos ou renderização gráfica assim que a IA cessa a inferência ativa.
-
-## Restrições Bare-Metal
-- **Teto Crítico de VRAM:** A alocação local máxima do modelo gerador na RTX 2060m é limitada ao teto estrito de **4.5GB** de VRAM ativa.
-- **Latência de Swap PCIe:** A transferência de tensores do host para a dGPU via PCIe deve executar em menos de **1.5 segundos**.
-- **Quantização Obrigatória:** Fica proibida a execução de modelos locais em formatos de precisão f32/f16; a quantização padrão obrigatória para modelos locais na GPU de 6GB é o formato `Q4_K_M`.
-- **Batching Sequencial (Anti-Spillover):** É terminantemente proibido carregar múltiplos modelos generativos em paralelo na RTX 2060m; o Motor deve operar estritamente com **Batching Sequencial** e reciclagem de contexto via **FastSwitch**, prevenindo derrame de VRAM para o barramento DDR4.
+Para ler as leis físicas e térmicas em vigor sobre a dualidade de motores (a adoção do `llama-cpp-2` como cérebro contínuo O(1) e o `mistral.rs` como sidecar efêmero de destilação) operando dentro dos 6GB de VRAM, consulte exclusivamente o **ADR-027**.
 
 ### ====================================================================================================
 ARQUIVO: ADR-016-Zero-Config-Install.md
@@ -703,36 +695,42 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-018-Paradigma-NextPlaid.md
 ---
 ---
 id: "ADR-018"
-title: "ADR-018-Paradigma-NextPlaid"
-version: 1.0
+title: "ADR-018-Paradigma-NextPlaid-e-Enjaulamento-AST"
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Memória"
-description: "Adota o fatiamento de código baseado em AST para evitar amnésia e perda de dados em contextos longos de RAG."
+description: "Impõe o fatiamento de código O(1) via AST (ast-grep) e o enjaulamento compulsório de todas as gramáticas C do tree-sitter em WebAssembly (wasmtime) para prevenir segfaults."
 ---
 
-# ADR-018-Paradigma-NextPlaid
+### ADR-018: Paradigma NextPlaid, Parsing AST e Enjaulamento em WebAssembly
 
-## Status
-Aceito (Ativo e Inegociável)
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Contexto
-O fatiamento (chunking) de código-fonte baseado em delimitadores cegos de caracteres (ex: blocos de 500 ou 1000 caracteres) ou divisores arbitrários de linhas quebra funções, desassocia documentações de suas implementações correspondentes, destrói assinaturas de tipos estruturais e corrompe o entendimento conceitual da IA. Na busca vetorial, chunks aleatórios misturam linguagens de programação e dependências causais, impossibilitando que agentes executem refatorações sistêmicas resilientes sem corromper a integridade sintática e sem sofrer de Context Rot.
+#### Contexto Técnico e Ameaça Operacional (O Risco do C-FFI)
+Historicamente, o fatiamento (*chunking*) de código-fonte baseado em delimitadores cegos (caracteres ou quebras de linha) destrói as assinaturas de funções e corrompe o entendimento do Modelo de Linguagem Grande (LLM) durante tarefas de Retrieval-Augmented Generation (RAG) [2]. A adoção da Árvore de Sintaxe Abstrata (AST) via ecossistema `tree-sitter` curou esse problema, permitindo extrações semânticas precisas.
 
-## Decisão
-Adotar rigidamente o **Paradigma NextPlaid** para o fatiamento e representação vetorial de códigos-fonte e arquivos de desenvolvimento no SODA:
-1. **Fatiamento Orientado a AST:** É expressamente proibida a indexação de trechos brutos de caracteres fixos em arquivos de código. O chunking do código é executado cirurgicamente com base na sua **Árvore de Sintaxe Abstrata (AST)** utilizando o parser AST nativo.
-2. **Ponto de Extração O(1):** A indexação decompõe o código-fonte em estruturas e símbolos semânticos explícitos (métodos, structs, enums, assinaturas de funções e blocos lógicos associados) mapeados por offsets geográficos exatos. Cada símbolo de código torna-se um vetor independente em L3 (LanceDB/LadybugDB) ancorado ao seu caminho lógico no repositório.
-3. **Amarração Tarde de Relações:** O LadybugDB costura a teia causal conectando os nós de código fatiados por dependências de importação e chamadas de métodos, garantindo que o agente recupere a cadeia lógica inteira da assinatura ao buscar uma função correlata.
+Contudo, a adoção do `tree-sitter` abriu um vetor de colapso estrutural gravíssimo: as mais de 66 gramáticas oficiais do `tree-sitter` (para linguagens como Python, Go, JS, Rust) são escritas em C e C++ [1]. Executar código C nativo no *backend* por meio de *Foreign Function Interface* (C-FFI) significa que se o agente tentar analisar um arquivo exótico, malicioso ou com a sintaxe severamente quebrada, a biblioteca C pode sofrer uma falha de segmentação (*segfault*). No ecossistema *bare-metal* em Rust, um *segfault* originado no C não gera um `Result::Err` capturável; ele age como uma guilhotina que aniquila o processo inteiro de forma silenciosa, derrubando imediatamente o *Event Loop* assíncrono do Tokio [1].
 
-## Consequências
-- **Precisão Cirúrgica de Código:** Agentes recuperam e operam sobre blocos funcionais completos e perfeitamente isolados sintaticamente, erradicando quebras do compilador por pedaços de código órfãos.
-- **Eficiência de Contexto:** Redução maciça no tamanho dos payloads de RAG enviados ao contexto do LLM. O SODA injeta apenas o "coração da lógica" das funções correlacionadas, poupando a VRAM e minimizando custos operacionais.
-- **Rigor de Navegação:** A navegação por AST fornece uma trilha de dependências inquebrável para auditorias dinâmicas e varreduras rápidas em $\mathcal{O}(1)$.
+#### Decisão Arquitetural (A Matriz de Parsing Blindada)
+Fica decretado o fim do fatiamento cego e a blindagem cirúrgica do *parsing* AST, operando sob as seguintes leis inegociáveis:
 
-## Restrições Bare-Metal
-- **Latência de Parsing AST:** A extração sintática O(1) de contornos de arquivos e assinaturas pelo parser AST nativo deve rodar em no máximo **15ms** por arquivo normal em Rust.
-- **Higiene Semântica:** Arquivos contendo lixo de desenvolvimento ou códigos temporários ignorados no Git principal estão sumariamente excluídos do fatiamento AST para prevenir contaminação da L3.
-- **Consistência:** A atualização e re-indexação de nós de AST no LanceDB ocorre de forma incremental ativada em background assincronamente a cada salvamento bem-sucedido (Exit Code 0).
+**Módulo 1: O Fim do Fatiamento Estocástico**
+*   Fica terminantemente proibido o uso de *chunking* cego ou por limites arbitrários de caracteres para ingestão de bases de código.
+*   Todo o código-fonte deve ser interpretado estruturalmente, garantindo que as assinaturas das funções, suas implementações e *docstrings* correspondentes permaneçam atômicas e inseparáveis na base vetorial. O SODA utilizará o `ast-grep` (nativo em Rust) para consultas semânticas no repositório [1].
+
+**Módulo 2: A Jaula de Silício (Enjaulamento Wasmtime)**
+*   Para fornecer suporte poliglota com segurança, é **ESTRITAMENTE PROIBIDO** carregar as gramáticas em C do `tree-sitter` como bibliotecas dinâmicas ou estáticas nativas vinculadas diretamente ao processo do Rust.
+*   O SODA exigirá que todas as gramáticas sintáticas sejam previamente compiladas para o formato **WebAssembly (WASM)** [1].
+*   A execução do `tree-sitter` no SODA operará obrigatoriamente algemada dentro do *runtime* `wasmtime`. Toda extração e leitura de AST de terceiros acontecerá dentro de *sandboxes* Wasm isoladas do ambiente hospedeiro.
+
+**Módulo 3: Interceptação de Pânicos e Sobrevivência do Tokio**
+*   Através deste enjaulamento, instaura-se o mecanismo de "Fail-Safe". Se a análise de um arquivo *slop* ou corrompido desencadear um *segfault* no código C do *parser*, o erro resultará apenas no colapso da *sandbox* WebAssembly.
+*   A máquina virtual Wasm "morre silenciosamente", permitindo que o Rust capture o evento como um erro de execução padrão (`Trap`), salte a etapa daquele arquivo defeituoso e mantenha a esteira do *Event Loop* do Tokio girando impenetrável e ininterrupta [1].
+
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Impacto Positivo:** Blindagem termodinâmica absoluta contra quedas do servidor causadas por código corrompido que o Agente ou o usuário decidam raspar. A estabilidade do SODA V4 se aproxima dos 100%, garantindo o *uptime* necessário para operações 24/7 de um Sistema Operacional Agêntico [1].
+*   **Impacto Negativo (Dívida de Toolchain):** Exigirá um esforço tático de compilação. Em vez de simplesmente baixar bibliotecas do mercado, o SODA obriga a manutenção de *pipelines* que compilem as gramáticas C do `tree-sitter` em pacotes `.wasm`. Além disso, a troca de contexto entre o Rust e a *sandbox* Wasm introduz um *overhead* mínimo (em microssegundos), perfeitamente aceitável perante o ganho colossal de resiliência.
 
 ### ====================================================================================================
 ARQUIVO: ADR-019-Maquina-de-Estados-ETL.md
@@ -1441,116 +1439,43 @@ CAMINHO: Z:\genesis_mc\docs\adrs\ADR-030-Doutrina-de-Curadoria-de-Dependências-
 ---
 ---
 id: "ADR-030"
-title: "ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates"
+title: "ADR-030-Doutrina-de-Curadoria-de-Dependencias-e-Higiene-de-Crates"
 version: 1.0
 status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Limita a adição de dependências no backend, exigindo auditoria de crates e higiene de licenças."
+description: "Doutrina implacável de higiene bare-metal: institui o Version Pinning forçado, o extermínio do syn no runtime, a morte do C-FFI criptográfico (ring) e a desidratação de I/O."
 ---
 
-# ADR-030: Doutrina de Curadoria de Dependências e Higiene de Crates
+### ADR-030: Doutrina de Curadoria de Dependências e Higiene de Crates (Rust)
 
-## Status
-
+#### Status
 Aceito (Ativo, Inegociável e Fundacional para SODA V4)
 
-## Contexto Técnico e Restrições Físicas de Infraestrutura
+#### Contexto Técnico e Restrições Físicas de Infraestrutura
+A geometria do ecossistema SODA V4 opera em uma "arquitetura de sobrevivência" atrelada aos limites físicos do hardware host (Intel i9, 32GB RAM, dGPU RTX 2060m com 6GB VRAM). 
+Se o gerenciamento de dependências (`Cargo.toml`) for delegado sem restrições a agentes de IA ou processos automatizados, o sistema sofrerá de "Câncer de Dependências": a introdução silenciosa de *frameworks* obesos, C-FFI (Foreign Function Interfaces pesadas), sub-dependências duplicadas (esquizofrenia de RAM) e metadados de macros que causam *Cache Thrashing* no Cache L3 do processador. O tempo de compilação incremental degrada e o *Event Loop* do Tokio entra em colapso termodinâmico.
 
-O desenvolvimento de software guiado por agentes automatizados em regimes de auto-reparo e geração contínua de código (_Spec-Driven Development_ / _TDD_) expõe o SODA V4 a um risco severo de entropia sintática, comumente denominado pela doutrina como "Slop de Dependências".
+#### Decisão Arquitetural (As Quatro Leis de Higiene Sistêmica)
 
-Durante as iterações rápidas do compilador no ciclo interno, a injeção estocástica de crates externas não homologadas agride diretamente a eficiência térmica e de memória do host:
+Fica decretada a adoção de quatro módulos inegociáveis de curadoria de *crates* para todo o *workspace* Rust do SODA:
 
-- **A Topologia de Cache do Hospedeiro:** O processador Intel Core i9 conta com um pool compartilhado e altamente sensível de Cache $L_3$. A expansão excessiva de tipos e metadados gerada por macros procedimentais obesas fragmenta a localidade espacial e temporal, provocando o fenômeno de _Cache Thrashing_.
-- **O Orçamento de RAM do Sistema:** A máquina hospedeira de desenvolvimento possui exatamente $32 \text{ GB}$ de RAM física dedicados. A poluição do grafo de compilação do `Cargo` por crates redundantes que exijam múltiplos runtimes, clonagens profundas de strings ou geradores dinâmicos eleva o consumo de memória de sistema durante o ciclo incremental de build, provocando latência de disco desnecessária.
-- **Garantia de Compilação Determinística:** Projetos agênticos locais operando sob o cinto de segurança bare-metal exigem que todo e qualquer binário gerado seja $100\%$ rastreável e reproduzível, impedindo desvios de comportamento sintático induzidos por atualizações opacas de sub-dependências transitórias no registro do crates.io.
+**Módulo 1: O Fim do Bloat de Rede, HTTP e I/O**
+*   **Proibição Terminal de Frameworks Obesos:** Ficam sumariamente banidas *crates* como `axum` e `octocrab`. A comunicação de APIs e o roteamento devem ser minimalistas.
+*   **Desidratação do `reqwest`:** O cliente HTTP assíncrono `reqwest` está restrito ao uso da *flag* `default-features = false`. É OBRIGATÓRIA a injeção da *feature* `rustls-no-provider` para amputar silenciosamente dependências como o `aws-lc-rs` (que puxa CMake/C) e o `icu4x` / `idna` (tabelas mastodônticas de formatação de idiomas e fusos horários). O `reqwest` operará como um executor HTTP cego e ultraleve.
 
-## Declaração do Problema
+**Módulo 2: Purificação Criptográfica e Matemática Zero-Copy**
+*   **A Morte do `ring` e Esquizofrenia de Hash:** É proibido o uso da biblioteca `ring` devido à sua bagagem C-FFI pesada. A criptografia será operada pelo `rscrypto` via instruções nativas AVX2.
+*   **O Dogma da Entropia Unificada:** O ecossistema fará a transição absoluta para a *crate* `rustc-hash v2`, banindo bibliotecas legadas de dicionário (`indexmap v1`). O uso de `rand` genérico para entropia fica obsoleto, adotando-se o gerador na CPU `tinyrand`.
 
-Como estruturar a árvore de dependências do SODA V4 de forma que o tempo de macro-parsing e a pegada de metadados do compilador operem sob complexidade assintoticamente estável $O(1)$ sobre as linhas de cache $L_3$ da CPU, impedindo que upgrades silenciosos corrompam o isolamento térmico e de memória RAM da máquina host?
+**Módulo 3: O Extermínio Sintático (`syn` no Runtime)**
+*   **Banimento do `syn`:** A *crate* `syn` é estritamente proibida no tempo de execução (*runtime*). Ela engole corpos inteiros de funções, gerando picos de *Out-Of-Memory* e tempos de compilação absurdos. O seu uso fica enjaulado exclusivamente na fase de compilação (`proc-macros`).
+*   **Adoção Superficial:** Para *parsing* estrutural local, é mandatório o uso de `venial` (leitura exclusiva da "casca" externa de `Structs` e `Enums`) e `unsynn` (manipulação Zero-Copy de tokens vitais).
+*   **Padronização de Erros:** O mapeamento de falhas fica unificado pela diretiva estável do `thiserror v2` (#![no_std]), eliminando overhead de formatação dinâmica de strings (*Garbage Collection*) no Heap central.
 
-## Decisões Arquiteturais da SODA V4
+**Módulo 4: O Dogma Hermético do Version Pinning Dinâmico**
+*   Fica terminantemente proibido o uso de operadores de atualização frouxa (`^`, `*`, `~`) no manifesto de dependências do *Workspace*.
+*   Impõe-se a ancoragem estrita e o bloqueio terminal via operador literal de igualdade (`=`) centralizado unicamente no bloco `[workspace.dependencies]` (ex: `indexmap = "=2.1.4"`). Isso esmaga a "matéria escura" transitória (múltiplas versões de `getrandom` ou `flate2`), forçando todas as dependências a convergirem fisicamente no *build*, garantindo a portabilidade e a prevenção de injeção silenciosa de símbolos `std` conflitantes.
 
-```
-                                  TOKEN STREAM DE ENTRADA (Código Rust)
-                                                    |
-                                                    v
-                                    +-------------------------------+
-                                    |     PROIBIÇÃO DO MOTOR syn    |
-                                    | - Sem parsing de AST profunda |
-                                    | - Sem varredura de blocos     |
-                                    +-------------------------------+
-                                                    |
-                                                    v
-                                    +-------------------------------+
-                                    |   MÁXIMA EFICIÊNCIA SINTÁTICA |
-                                    |                               |
-                                    |   [ venial ] Outer Shell      |
-                                    |   --> Lê apenas declarações   |
-                                    |                               |
-                                    |   [ unsynn ] Zero-Copy        |
-                                    |   --> Fatiamento síncrono     |
-                                    +-------------------------------+
-                                                    |
-                                                    v
-                                    +-------------------------------+
-                                    |      ESTABILIZAÇÃO DE I/O     |
-                                    |  thiserror v2 (#![no_std])    |
-                                    |  Version Pinning Fixo (=)     |
-                                    +-------------------------------+
-                                                    |
-                                                    v
-                                      COMPILAÇÃO BARE-METAL ULTRA-LEVE
-```
-
-### 1. O Extermínio e Banimento Terminal do `syn`
-
-Fica sumariamente proibida a injeção ou utilização direta de macros procedimentais que dependam da crate `syn` para rotinas de parsing simples ou puramente estruturais no Data Plane do SODA V4.
-
-- O `syn` reconstrói recursivamente a árvore sintática abstrata (AST) integral de blocos procedimentais densos. Esse comportamento inflaciona a memória durante a etapa de macro-parsing, estourando as linhas de Cache $L_3$ da CPU hospedeira.
-- A pegada de memória ($M$) e a complexidade temporal ($T$) de processamento de tokens por passagem recursiva profunda do `syn` é descrita por:
-
-$$T_{\text{syn}}(N) = \mathcal{O}(N \cdot d_{\text{AST}})$$$$M_{\text{syn}}(N) = \mathcal{O}(N \cdot d_{\text{AST}})$$
-
-Onde $N$ representa o número cumulativo de tokens do stream analisado e $d_{\text{AST}}$ a profundidade do grafo sintático resultante.
-
-- Sob SODA V4, o `syn` é classificado como dependência de quarentena. Sua permanência na árvore de compilação só é tolerada se encapsulada sob runtimes estáticos e isolados que não afetem o caminho crítico do ciclo de build incremental do daemon.
-
-### 2. Adoção Cirúrgica de Motores Superficiais (`venial` e `unsynn`)
-
-Para toda e qualquer necessidade de metaprogramação, macro-parsing ou extração sintática de atributos estruturais no SODA V4, o compilador deve utilizar abordagens que limitem a varredura lógica à casca externa das declarações.
-
-- **Outer-Shell Parsing via `venial`:** O SODA V4 padroniza a crate `venial` para decodificar assinaturas e estruturas externas de structs, enums e funções. A crate `venial` cessa o parsing sintático imediatamente ao cruzar as chaves `{` de corpos de implementação, tratando o interior como um bloco opaco de tokens brutos.
-- **Token Slicing via `unsynn`:** A manipulação e casamento de padrões de sequências de tokens em macros procedimentais internas deve ser realizada através da crate `unsynn`. Esta crate opera sob o paradigma _Zero-Copy_, fatiando ponteiros de memória e referências de tokens diretamente a partir do compilador, com consumo de alocação no Heap próximo a zero:
-
-$$T_{\text{venial}}(N) = \mathcal{O}(N_{\text{outer}})$$$$M_{\text{venial}}(N) = \mathcal{O}(1) \quad (\text{sem alocações redundantes})$$
-
-Onde $N_{\text{outer}}$ representa unicamente os tokens periféricos de declaração da assinatura de tipos ($N_{\text{outer}} \ll N$).
-
-### 3. Padronização de Mapeamento de Erros via `thiserror v2`
-
-Fica proibido o acoplamento de engines de erro excessivamente verbosas, dinâmicas ou baseadas em alocações pesadas no Heap para representação de falhas de I/O e lógica de negócios.
-
-- O SODA V4 adota estritamente a crate **`thiserror` (versão 2)** para todo o mapeamento e tratamento de erros tipados no backend em Rust.
-- Exige-se que os erros definidos via macro procedimental derivados do `thiserror` operem em total compatibilidade com ambientes freestanding (**`#![no_std]`**). A representação e o mapeamento dos enums de erro devem ser resolvidos de forma estática em tempo de compilação através de referências imutáveis do tipo `&'static str`.
-- Evita-se assim a formatação dinâmica de estruturas de string redundantes e fragmentações residuais de memória no Heap dos 32GB de RAM central do hospedeiro, garantindo que o canal de controle (_Control Plane_) do IPC permaneça limpo e leve.
-
-### 4. O Dogma Hermético do Version Pinning Dinâmico
-
-Fica terminantemente proibido o uso de operadores de resolução de versão flexíveis, frouxos ou flutuantes (tais como caret `^`, asterisco `*` ou til `~`) para qualquer dependência declarada nos manifestos `Cargo.toml` do ecossistema SODA V4.
-
-- **Versionamento Estrito (=):** Toda declaração de dependência deve utilizar obrigatoriamente a ancoragem literal de igualdade com precisão cirúrgica de patch (ex: `thiserror = "=2.0.0"`).
-- **Workspace Centralizado:** Todas as dependências externas compartilhadas pelos sub-crates (como `llama-cpp-2`, `chaser-oxide` ou `llguidance`) devem ter suas versões travadas de forma unificada no bloco `[workspace.dependencies]` localizado no `Cargo.toml` raiz do projeto.
-- Essa blindagem impede flutuações e quebras de pipeline sínclonas induzidas pela rede durante boots de agentes ou compilações incrementais locais, assegurando que o sistema opere sempre sob a exata combinação física de bytes validada e homologada em ambiente de teste de hardware.
-
-## Consequências e Trade-offs
-
-### Impactos Positivos:
-
-- **Compilação de Alta Frequência:** Redução drástica e comprovada no tempo de build incremental do daemon em Rust, otimizando o tempo de feedback do _Ralph Loop_ no TDD para menos de $2$ segundos.
-- **Isolamento de Cache L3:** Erradicação absoluta de surtos de latência induzidos por _Cache Thrashing_ no processador Intel i9 durante a execução concorrente de tarefas pesadas do Tokio.
-- **Estabilidade de Pipeline:** Bloqueio terminal contra a introdução acidental de dependências transitórias "tóxicas" ou quebras de comportamento sintático provocadas por upgrades de bibliotecas na nuvem.
-
-### Impactos Negativos:
-
-- **Custo de Manutenção Manual:** A atualização de qualquer biblioteca no workspace exige alteração explícita e cirúrgica do Arquiteto no manifesto principal, seguida por auditoria e recompilação completa do banco de testes local.
-- **Restrição de Flexibilidade Sintática:** Macros procedimentais internas do SODA V4 tornam-se sintaticamente mais simples e focadas, abrindo mão da capacidade de ler corpos internos complexos de funções em tempo de compilação. Esse trade-off é aceito em prol da higiene e da localidade de cache da CPU.
+#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
+*   **Positivas:** Redução brutal do tempo de compilação a frio, neutralização de conflitos de resolução de versão pelo Cargo e proteção imediata do Cache L3 do processador contra lixo sintático. Prevenção absoluta contra envenenamento de dependências por alucinação de agentes de IA.
+*   **Negativas:** Manutenção manual severa. O custo das atualizações de segurança é repassado ao Arquiteto-Chefe, que deverá atualizar o *Version Pinning* bloco a bloco para garantir que não haja regressão termodinâmica ou injeção de *bloatware*.
