@@ -6,14 +6,13 @@ pub(crate) fn biome_args(scan_targets: &[String]) -> Vec<String> {
 
 pub(crate) fn biome_args_for_profile(scan_targets: &[String], profile: JsLintProfile) -> Vec<String> {
     let mut args = vec![
-        "lint".to_string(),
-        "--reporter=json".to_string(),
+        "check".to_string(),
+        "--no-daemon".to_string(),
         "--no-errors-on-unmatched".to_string(),
         "--skip-parse-errors".to_string(),
-        "--vcs-enabled=true".to_string(),
-        "--vcs-client-kind=git".to_string(),
-        "--vcs-use-ignore-file=true".to_string(),
         "--files-ignore-unknown=true".to_string(),
+        "--diagnostic-level=error".to_string(),
+        "--reporter=json".to_string(),
     ];
     match profile {
         JsLintProfile::UnsafeHotspot => {
@@ -44,8 +43,7 @@ mod tests {
             blade_command(StaticAnalysisBlade::Biome, &scan_targets, None);
 
         assert_eq!(biome_binary, "biome");
-        assert_eq!(biome_args.first().map(String::as_str), Some("lint"));
-        assert!(!biome_args.iter().any(|arg| arg == "check"));
+        assert_eq!(biome_args.first().map(String::as_str), Some("check"));
         assert!(biome_args.iter().any(|arg| arg == "--no-errors-on-unmatched"));
         assert!(biome_args.iter().any(|arg| arg == "--only=lint/complexity"));
         assert!(!biome_args.iter().any(|arg| arg == "--only=lint/security"));

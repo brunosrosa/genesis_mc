@@ -12,6 +12,7 @@ O fluxo obrigatório para novas lógicas é usar o comando `/grill-me` antes de 
 ## 3. AMBIENTE E GOVERNANÇA (FÁBRICA VS PRODUTO)
 - No seu ambiente de Dev (Shadow Workspaces), você pode usar Python, Docker e ferramentas efêmeras para testes ou ETL Cognitivo.
 - No Produto final em produção, **NUNCA** embarque dependências contínuas de Node.js ou Python. Tudo deve ser transmutado para Rust, Wasmtime ou Sidecars isolados que sofrem SIGKILL atômico após o uso.
+- Sempre execute comandos de terminal de forma visível na sessão do usuário. Evite chamadas em background ocultas para tarefas interativas.
 
 ## 4. SKILLS E LATE-BINDING
 As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em `.agents/skills/`. Invoque-as de forma semântica apenas quando precisar. Não assuma regras além das descritas neste arquivo sem consultar suas Skills.

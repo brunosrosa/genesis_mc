@@ -397,8 +397,10 @@ fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, Strin
         haystack.push(' ');
     }
     for (key, value) in fields {
-        haystack.push_str(key);
-        haystack.push('=');
+        if key != "timeout_secs" && key != "timeout_ms" {
+            haystack.push_str(key);
+            haystack.push('=');
+        }
         haystack.push_str(value);
         haystack.push(' ');
     }

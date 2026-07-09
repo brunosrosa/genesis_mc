@@ -4,6 +4,7 @@
 # e ancorar o Fantasma na bandeja sem validações lentas de ferramentas ETL.
 # ============================================================================
 try { Clear-Host } catch {}
+$env:RUST_LOG = "debug"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 

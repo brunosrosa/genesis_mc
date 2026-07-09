@@ -24,7 +24,7 @@ use zip::ZipArchive;
 use super::projfs::ProjectedRepoSnapshot;
 
 #[derive(Debug)]
-pub struct RepoPath(pub(crate) PathBuf);
+pub struct RepoPath(pub PathBuf);
 
 impl AsRef<Path> for RepoPath {
     fn as_ref(&self) -> &Path {

@@ -650,7 +650,7 @@ impl PolyglotSastSidecar {
                 Ok(Ok(outcome)) => outcome,
                 Ok(Err(err)) => {
                     had_failed_payload = true;
-                    warn!(
+                    error!(
                         repo_path = %repo_path.display(),
                         error = %err,
                         "SAST monorepo: worker falhou; descartando sub-scan"
@@ -659,7 +659,7 @@ impl PolyglotSastSidecar {
                 }
                 Err(err) => {
                     had_failed_payload = true;
-                    warn!(
+                    error!(
                         repo_path = %repo_path.display(),
                         error = %err,
                         "SAST monorepo: join do worker falhou; descartando sub-scan"
@@ -727,8 +727,7 @@ impl PolyglotSastSidecar {
                         source_blade: blade_label.to_string(),
                         channel: SastIssueChannel::Health,
                     });
-                    had_successful_payload = true;
-                    warn!(
+                    error!(
                         blade = blade_name(outcome.requested_blade),
                         scope = %outcome.scope,
                         cwd = %outcome.execution_root.display(),
@@ -740,7 +739,7 @@ impl PolyglotSastSidecar {
         }
 
         if had_failed_payload && !had_successful_payload {
-            warn!(
+            error!(
                 repo_path = %repo_path.display(),
                 "SAST monorepo: todas as laminas falharam; retornando blobs zero-byte"
             );
@@ -1788,7 +1787,7 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
             if ((binary == "semgrep" || binary == "opengrep")
                 && !stdout_is_blank(&sanitized_stdout)
                 && stdout_contains_json_payload(&sanitized_stdout))
-                || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) && !stdout_is_blank(&sanitized_stdout))
+                || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) && (!stdout_is_blank(&sanitized_stdout) || (binary == "cppcheck" && !sanitized_stderr.is_empty())))
                 || (binary == "opengrep" && exit_code == 7)
             {
                 if binary == "cppcheck" {
@@ -2068,17 +2067,52 @@ async fn run_sast_blade<E: SandboxExecutor>(
                 bytes,
             });
     }
-    let workspace_root = if blade == StaticAnalysisBlade::RustClippy {
-        clippy::find_cargo_workspace_root(executor.repo_path(), execution_root)
-    } else {
-        execution_root.to_path_buf()
-    };
+    if blade == StaticAnalysisBlade::Govulncheck {
+        // Pre-Flight Fetch para Govulncheck: go mod download
+        // Nos testes unitários mockados, evitamos a execução real no host.
+        if !cfg!(test) {
+            info!(
+                execution_root = %execution_root.display(),
+                "SAST govulncheck: Executando Pre-Flight go mod download assincrono no sub-scan path"
+            );
+            let mut cmd = tokio::process::Command::new("go");
+            cmd.arg("mod")
+               .arg("download")
+               .current_dir(execution_root);
 
+            match cmd.output().await {
+                Ok(output) => {
+                    if output.status.success() {
+                        info!(
+                            execution_root = %execution_root.display(),
+                            "SAST govulncheck: Pre-Flight go mod download concluido com sucesso"
+                        );
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        warn!(
+                            execution_root = %execution_root.display(),
+                            stderr = %stderr.trim(),
+                            "SAST govulncheck: Pre-Flight go mod download falhou (prosseguindo offline)"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        execution_root = %execution_root.display(),
+                        error = %e,
+                        "SAST govulncheck: Falha ao iniciar Pre-Flight go mod download assincrono (prosseguindo offline)"
+                    );
+                }
+            }
+        }
+    }
     let result = if blade == StaticAnalysisBlade::RustClippy {
-        match clippy::run_rust_clippy_preflight(executor, &workspace_root, timeout_secs).await {
+        // Para o Cargo Clippy, garanta que ele execute apenas nas raízes descobertas
+        let run_dir = execution_root.to_path_buf();
+        match clippy::run_rust_clippy_preflight(executor, &run_dir, timeout_secs).await {
             Ok(()) => {
                 let (binary, args) = blade_command(blade, scan_targets, command_args);
-                let manifest_path = workspace_root.join("Cargo.toml");
+                let manifest_path = run_dir.join("Cargo.toml");
                 let manifest_path_str = manifest_path.display().to_string();
                 
                 let mut final_args = Vec::new();
@@ -2106,7 +2140,7 @@ async fn run_sast_blade<E: SandboxExecutor>(
                     &arg_refs,
                     timeout_secs,
                     SidecarExitPolicy::AllowFindingsExitOne,
-                    &workspace_root,
+                    &run_dir,
                 )
                 .await
                 .map(|bytes| SastBladeResult {
@@ -2170,7 +2204,7 @@ async fn run_sast_blade<E: SandboxExecutor>(
         })
     };
     if blade == StaticAnalysisBlade::RustClippy {
-        cleanup_rust_cargo_sandbox_state(&workspace_root).await;
+        cleanup_rust_cargo_sandbox_state(execution_root).await;
     }
     result
 }

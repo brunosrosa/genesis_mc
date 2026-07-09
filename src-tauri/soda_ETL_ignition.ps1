@@ -8,6 +8,7 @@ param(
     [switch]$Yes,
     [string]$RepoId = ""
 )
+$env:RUST_LOG = "debug"
 [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 $PSStyle.OutputRendering = 'ANSI'
 try { Clear-Host } catch {}

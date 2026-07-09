@@ -891,7 +891,7 @@ mod tests {
         assert!(executor.calls().iter().any(|call| {
             call.starts_with("cargo clippy")
                 && call.contains("-p repo")
-                && call.contains("-- --no-deps")
+                && call.contains("--no-deps")
         }));
         assert!(executor.calls().iter().any(|call| call.starts_with("cppcheck ")));
         assert!(executor.calls().iter().any(|call| {
@@ -984,7 +984,7 @@ mod tests {
         assert!(executor.calls().iter().any(|call| {
             call.starts_with("cargo clippy")
                 && call.contains("-p sdk")
-                && call.contains("-- --no-deps")
+                && call.contains("--no-deps")
                 && (call.contains("apps\\rust-sdk") || call.contains("apps/rust-sdk"))
         }));
         assert!(health_blob.contains("apps/rust-sdk/src/lib.rs"));

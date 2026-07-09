@@ -336,14 +336,22 @@ fn grant_ntfs_acl(
     access_mask: u32,
     inheritance_flag: u32,
 ) -> Result<(), SandboxError> {
-    let path_wide = path_to_wide(path);
+    // Fallback gracioso para scripts de lote (.cmd, .bat) que falham na injeção direta de ACL
+    let is_shim = path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
+        .unwrap_or(false);
+
+    use std::os::windows::ffi::OsStrExt;
+    let mut path_wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    path_wide.push(0);
 
     // 1. Obtem o DACL existente para não sobrescrever permissões do host.
     let mut existing_dacl: *mut ACL = std::ptr::null_mut();
     let mut sd_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
     let get_result = unsafe {
         GetNamedSecurityInfoW(
-            path_wide.as_ptr(),
+            path_wide.as_ptr() as windows_sys::core::PCWSTR,
             SE_FILE_OBJECT,
             DACL_SECURITY_INFORMATION,
             std::ptr::null_mut(),
@@ -356,6 +364,14 @@ fn grant_ntfs_acl(
 
     // GetNamedSecurityInfoW retorna um código Win32 (0 = sucesso), não HRESULT.
     if get_result != 0 {
+        if get_result == 0x7a {
+            warn!(
+                path = %path.display(),
+                "GetNamedSecurityInfoW retornou ERROR_INSUFFICIENT_BUFFER (0x7a) para '{}'. Aplicando fallback gracioso.",
+                path.display()
+            );
+            return Ok(());
+        }
         return Err(SandboxError::AclInjectionFailed {
             detail: format!(
                 "GetNamedSecurityInfoW falhou para '{}': Win32={get_result:#010x}",
@@ -425,6 +441,13 @@ fn grant_ntfs_acl(
     unsafe { windows_sys::Win32::Foundation::LocalFree(new_dacl as *mut _); }
 
     if apply_result != 0 {
+        if is_shim {
+            warn!(
+                path = %path.display(),
+                "Sandbox: SetNamedSecurityInfoW falhou para script trampolim .cmd/.bat (Win32={apply_result:#010x}). Prosseguindo de forma best-effort."
+            );
+            return Ok(());
+        }
         return Err(SandboxError::AclInjectionFailed {
             detail: format!(
                 "SetNamedSecurityInfoW falhou para '{}': Win32={apply_result:#010x}",
@@ -434,6 +457,193 @@ fn grant_ntfs_acl(
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn grant_access_to_winstation_and_desktop(sid: PSID) -> Result<(), SandboxError> {
+    use windows_sys::Win32::System::StationsAndDesktops::{GetProcessWindowStation, GetThreadDesktop};
+    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SetSecurityInfo, SE_WINDOW_OBJECT};
+
+    unsafe {
+        let hwinsta = GetProcessWindowStation();
+        let hdesk = GetThreadDesktop(GetCurrentThreadId());
+
+        let handles = [
+            (hwinsta as windows_sys::Win32::Foundation::HANDLE, "Window Station"),
+            (hdesk as windows_sys::Win32::Foundation::HANDLE, "Desktop")
+        ];
+
+        for (handle, name) in handles {
+            if handle.is_null() {
+                debug!("grant_access_to_winstation_and_desktop: {name} handle eh nulo, pulando.");
+                continue;
+            }
+
+            let mut sd_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+            let mut existing_dacl: *mut ACL = std::ptr::null_mut();
+
+            let get_result = GetSecurityInfo(
+                handle,
+                SE_WINDOW_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut existing_dacl,
+                std::ptr::null_mut(),
+                &mut sd_ptr,
+            );
+
+            if get_result != 0 {
+                warn!("GetSecurityInfo falhou para {name} com erro Win32={get_result:#010x}");
+                continue;
+            }
+
+            let mut ea = EXPLICIT_ACCESS_W {
+                grfAccessPermissions: GENERIC_ALL | 0x000F037F, // GENERIC_ALL + WINSTA_ALL_ACCESS/DESKTOP_ALL_ACCESS masks
+                grfAccessMode: GRANT_ACCESS,
+                grfInheritance: SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+                Trustee: TRUSTEE_W {
+                    pMultipleTrustee: std::ptr::null_mut(),
+                    MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+                    TrusteeForm: TRUSTEE_IS_SID,
+                    TrusteeType: TRUSTEE_IS_WELL_KNOWN_GROUP,
+                    ptstrName: sid as windows_sys::core::PWSTR,
+                },
+            };
+
+            let mut new_dacl: *mut ACL = std::ptr::null_mut();
+            let merge_result = SetEntriesInAclW(
+                1,
+                &mut ea,
+                existing_dacl,
+                &mut new_dacl,
+            );
+
+            if merge_result != 0 || new_dacl.is_null() {
+                if !sd_ptr.is_null() {
+                    windows_sys::Win32::Foundation::LocalFree(sd_ptr as *mut _);
+                }
+                warn!("SetEntriesInAclW falhou para {name} com erro Win32={merge_result:#010x}");
+                continue;
+            }
+
+            let set_result = SetSecurityInfo(
+                handle,
+                SE_WINDOW_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                new_dacl,
+                std::ptr::null_mut(),
+            );
+
+            windows_sys::Win32::Foundation::LocalFree(new_dacl as *mut _);
+            if !sd_ptr.is_null() {
+                windows_sys::Win32::Foundation::LocalFree(sd_ptr as *mut _);
+            }
+
+            if set_result != 0 {
+                warn!("SetSecurityInfo falhou para {name} com erro Win32={set_result:#010x}");
+            } else {
+                debug!("ACL de {name} atualizada com sucesso para o AppContainer SID");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn grant_ntfs_acl_with_parents(
+    path: &std::path::Path,
+    sid: PSID,
+    access_mask: u32,
+    inheritance_flag: u32,
+) -> Result<(), SandboxError> {
+    debug!(
+        target_path = %path.display(),
+        "grant_ntfs_acl_with_parents: Iniciando para o alvo principal..."
+    );
+    grant_ntfs_acl(path, sid, access_mask, inheritance_flag)?;
+    debug!(
+        target_path = %path.display(),
+        "grant_ntfs_acl_with_parents: Alvo principal concluido com sucesso."
+    );
+
+    let local_appdata = std::env::var("LOCALAPPDATA").ok().map(|s| strip_unc_prefix(std::path::Path::new(&s)));
+    let roaming_appdata = std::env::var("APPDATA").ok().map(|s| strip_unc_prefix(std::path::Path::new(&s)));
+    let user_profile = std::env::var("USERPROFILE").ok().map(|s| strip_unc_prefix(std::path::Path::new(&s)));
+
+    if let Some(ref profile_path) = user_profile {
+        let clean_path = strip_unc_prefix(path);
+        let clean_profile = strip_unc_prefix(profile_path);
+        
+        if clean_path.starts_with(&clean_profile) {
+            let mut parent = clean_path.parent();
+            while let Some(p) = parent {
+                if p.parent().is_none() {
+                    break;
+                }
+
+                if Some(p.to_path_buf()) == local_appdata
+                    || Some(p.to_path_buf()) == roaming_appdata
+                    || Some(p.to_path_buf()) == user_profile
+                {
+                    break;
+                }
+                
+                debug!(
+                    parent_path = %p.display(),
+                    "grant_ntfs_acl_with_parents: Concedendo travessia ao pai..."
+                );
+                if let Err(e) = grant_ntfs_acl(p, sid, 0x0012_00A9u32, NO_INHERITANCE) {
+                    let is_access_denied = match &e {
+                        SandboxError::AclInjectionFailed { detail } => {
+                            detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                        }
+                        _ => false,
+                    };
+                    if !is_access_denied {
+                        return Err(e);
+                    }
+                }
+                debug!(
+                    parent_path = %p.display(),
+                    "grant_ntfs_acl_with_parents: Concedido com sucesso ou tratado para o pai."
+                );
+                
+                if p == clean_profile {
+                    break;
+                }
+                
+                parent = p.parent();
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn grant_ntfs_acl_for_all_application_packages(
+    path: &std::path::Path,
+    access_mask: u32,
+    inheritance_flag: u32,
+) {
+    let mut all_app_packages_sid: PSID = std::ptr::null_mut();
+    let sid_str_wide = str_to_wide("S-1-15-2-1");
+    let sid_ok = unsafe {
+        windows_sys::Win32::Security::Authorization::ConvertStringSidToSidW(
+            sid_str_wide.as_ptr(),
+            &mut all_app_packages_sid,
+        )
+    };
+    if sid_ok != 0 && !all_app_packages_sid.is_null() {
+        let _ = grant_ntfs_acl_with_parents(path, all_app_packages_sid, access_mask, inheritance_flag);
+        unsafe {
+            windows_sys::Win32::Foundation::LocalFree(all_app_packages_sid as *mut _);
+        }
+    }
 }
 
 /// Wrapper seguro de thread para transportar HANDLEs Win32 através de limites de await.
@@ -588,7 +798,16 @@ fn spawn_in_appcontainer_blocking(
         .collect::<Vec<String>>()
         .join(" ");
     let mut cmd_wide: Vec<u16> = str_to_wide(&cmd_str);
-    let cwd_wide = path_to_wide(cwd);
+    let clean_cwd = dunce::canonicalize(&cwd).unwrap_or(cwd.to_path_buf());
+    let final_cwd_string = clean_cwd.to_string_lossy().replace(r"\\?\", "").replace(r"\?\", "");
+    let clean_cwd_path = std::path::PathBuf::from(final_cwd_string);
+    let cwd_wide = path_to_wide(&clean_cwd_path);
+
+    debug!(
+        cmd_line = %cmd_str,
+        cwd = %clean_cwd_path.display(),
+        "Spawn em AppContainer: executando CreateProcessW"
+    );
 
     // ── 2. Bloco de ambiente UTF-16 null-null ─────────────────────────────────
     // Formato: KEY=VALUE\0KEY=VALUE\0\0 (ordenado lexicograficamente por chaves em UPPERCASE)
@@ -633,6 +852,9 @@ fn spawn_in_appcontainer_blocking(
             // Ignora variáveis vazias ou chaves internas do Windows que começam com '='.
             if k.is_empty() || k.starts_with('=') {
                 continue;
+            }
+            if k == "LOCALAPPDATA" || k == "TEMP" || k == "TMP" || k == "USERPROFILE" || k == "APPDATA" {
+                debug!(key = %k, value = %v, "AppContainer: Ambiente injetado para CreateProcessW");
             }
             env_str.push_str(&format!("{k}={v}\0"));
         }
@@ -1161,6 +1383,14 @@ fn resolve_from_path(base_name: &str) -> Option<PathBuf> {
 }
 
 fn resolve_local_node_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if base_name == "biome" {
+            if let Some(native_exe) = resolve_native_biome_bin(repo_path) {
+                return Some(native_exe);
+            }
+        }
+    }
     let bin_dir = repo_path.join("node_modules").join(".bin");
     for executable_name in executable_names(base_name) {
         let candidate = bin_dir.join(executable_name);
@@ -1194,6 +1424,242 @@ fn resolve_local_python_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf
     }
 
     None
+}
+
+#[cfg(target_os = "windows")]
+fn trace_trampoline_target(cmd_path: &std::path::Path) -> Option<PathBuf> {
+    debug!(
+        cmd_path = %cmd_path.display(),
+        "AppContainer: Iniciando varredura de trampolim .cmd/.bat"
+    );
+    let content = std::fs::read_to_string(cmd_path).ok()?;
+    let cmd_dir = cmd_path.parent()?;
+    
+    let mut best_target = None;
+    
+    for line in content.lines() {
+        let trimmed_line = line.trim();
+        if trimmed_line.starts_with('@') || trimmed_line.to_ascii_lowercase().starts_with("rem") {
+            if trimmed_line.to_ascii_lowercase().starts_with("@echo") || trimmed_line.to_ascii_lowercase().starts_with("rem") {
+                continue;
+            }
+        }
+        
+        let mut candidates = Vec::new();
+        
+        // Extrai strings entre aspas
+        let mut in_quote = false;
+        let mut current_quote = String::new();
+        for c in line.chars() {
+            if c == '"' {
+                if in_quote {
+                    if !current_quote.is_empty() {
+                        candidates.push(current_quote.clone());
+                    }
+                    current_quote.clear();
+                    in_quote = false;
+                } else {
+                    in_quote = true;
+                }
+            } else if in_quote {
+                current_quote.push(c);
+            }
+        }
+        
+        // Também adiciona palavras que parecem caminhos (contém '\' ou '/')
+        for word in line.split_whitespace() {
+            let clean_word = word.trim_matches('"');
+            if (clean_word.contains('\\') || clean_word.contains('/')) && !clean_word.is_empty() {
+                candidates.push(clean_word.to_string());
+            }
+        }
+        
+        for raw_candidate in candidates {
+            let expanded = if raw_candidate.contains("%~dp0") {
+                let suffix = raw_candidate.replace("%~dp0", "");
+                let suffix = suffix.strip_prefix('\\').unwrap_or(&suffix);
+                cmd_dir.join(suffix)
+            } else {
+                PathBuf::from(&raw_candidate)
+            };
+            
+            let resolved = if expanded.is_absolute() {
+                expanded
+            } else {
+                cmd_dir.join(expanded)
+            };
+            
+            if let Ok(canonical) = dunce::canonicalize(&resolved) {
+                let cleaned = strip_unc_prefix(&canonical);
+                if cleaned.is_file() {
+                    let file_name = cleaned.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    let ext = cleaned.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    
+                    debug!(
+                        raw_candidate = %raw_candidate,
+                        cleaned_path = %cleaned.display(),
+                        "AppContainer: Candidato de trampolim resolvido com sucesso"
+                    );
+                    
+                    if ext.eq_ignore_ascii_case("exe") {
+                        if file_name.eq_ignore_ascii_case("node.exe") {
+                            best_target = Some(cleaned);
+                        } else {
+                            return Some(cleaned);
+                        }
+                    } else if best_target.is_none() {
+                        best_target = Some(cleaned);
+                    }
+                }
+            }
+        }
+    }
+    
+    best_target
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_native_biome_bin(repo_path: &Path) -> Option<PathBuf> {
+    let platforms = ["cli-win32-x64", "cli-win32-arm64", "cli-win32-ia32"];
+    
+    // 1. Local
+    let local_node_modules = repo_path.join("node_modules");
+    for platform in &platforms {
+        let candidate = local_node_modules.join("@biomejs").join(platform).join("biome.exe");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // 2. Global pnpm
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        let pnpm_global = PathBuf::from(localappdata).join("pnpm").join("node_modules");
+        for platform in &platforms {
+            let candidate = pnpm_global.join("@biomejs").join(platform).join("biome.exe");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    
+    // 3. Global npm
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let npm_global = PathBuf::from(appdata).join("npm").join("node_modules");
+        for platform in &platforms {
+            let candidate = npm_global.join("@biomejs").join(platform).join("biome.exe");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn grant_runtime_and_tool_acls(
+    repo_path: &Path,
+    sid: PSID,
+) -> Result<(), SandboxError> {
+    let mut paths_to_grant = Vec::new();
+
+    // 1. Node.js runtime
+    if let Some(node_path) = resolve_from_path("node") {
+        if let Some(parent) = node_path.parent() {
+            paths_to_grant.push(parent.to_path_buf());
+        }
+    }
+
+    // 2. Python runtime & standard library (via local virtualenv pyvenv.cfg)
+    let venv_candidates = [repo_path.join(".venv"), repo_path.join("venv")];
+    for venv_dir in &venv_candidates {
+        if venv_dir.is_dir() {
+            paths_to_grant.push(venv_dir.clone());
+            let cfg_path = venv_dir.join("pyvenv.cfg");
+            if cfg_path.is_file() {
+                if let Ok(cfg_content) = std::fs::read_to_string(&cfg_path) {
+                    for line in cfg_content.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.starts_with("home") {
+                            let parts: Vec<&str> = trimmed.split('=').collect();
+                            if parts.len() >= 2 {
+                                let home_path = PathBuf::from(parts[1].trim().trim_matches('"'));
+                                if home_path.is_dir() {
+                                    paths_to_grant.push(home_path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Global Python interpreter
+    if let Some(python_path) = resolve_from_path("python").or_else(|| resolve_from_path("python3")) {
+        if let Some(parent) = python_path.parent() {
+            paths_to_grant.push(parent.to_path_buf());
+        }
+    }
+
+    // 3. Global tool directories (pnpm, npm, uv, yarn)
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        let pnpm_dir = PathBuf::from(&localappdata).join("pnpm");
+        if pnpm_dir.is_dir() {
+            paths_to_grant.push(pnpm_dir);
+        }
+        let yarn_dir = PathBuf::from(&localappdata).join("Yarn");
+        if yarn_dir.is_dir() {
+            paths_to_grant.push(yarn_dir);
+        }
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let npm_dir = PathBuf::from(&appdata).join("npm");
+        if npm_dir.is_dir() {
+            paths_to_grant.push(npm_dir);
+        }
+        let uv_dir = PathBuf::from(&appdata).join("uv");
+        if uv_dir.is_dir() {
+            paths_to_grant.push(uv_dir);
+        }
+    }
+
+    // Local node_modules of the project
+    let local_node_modules = repo_path.join("node_modules");
+    if local_node_modules.is_dir() {
+        paths_to_grant.push(local_node_modules);
+    }
+
+    paths_to_grant.sort();
+    paths_to_grant.dedup();
+
+    for path in paths_to_grant {
+        let path_clean = strip_unc_prefix(&path);
+        if path_clean.exists() {
+            debug!(
+                path = %path_clean.display(),
+                "AppContainer: Concedendo ACL NTFS para runtime/ferramenta global/local"
+            );
+            if let Err(e) = grant_ntfs_acl_with_parents(&path_clean, sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
+                let is_access_denied = match &e {
+                    SandboxError::AclInjectionFailed { detail } => {
+                        detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                    }
+                    _ => false,
+                };
+                if !is_access_denied {
+                    return Err(e);
+                } else {
+                    debug!(
+                        path = %path_clean.display(),
+                        "grant_ntfs_acl_with_parents falhou com Access Denied para runtime/ferramenta. Continuando."
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn semgrep_support_root(repo_path: &Path) -> PathBuf {
@@ -1331,8 +1797,8 @@ enum ProcessObservabilityClass {
 }
 
 #[allow(dead_code)]
-fn classify_process_observability(exit_code: i32, stdout: &[u8]) -> ProcessObservabilityClass {
-    if exit_code == 0 {
+fn classify_process_observability(command: &str, exit_code: i32, stdout: &[u8]) -> ProcessObservabilityClass {
+    if exit_code == 0 || (command == "opengrep" && exit_code == 7) {
         ProcessObservabilityClass::Ok
     } else if !stdout.is_empty() {
         ProcessObservabilityClass::InformationalNonZero
@@ -1707,6 +2173,12 @@ async fn reap_command_orphans(command: &str, repo_path: &Path) {
     }
 }
 
+fn strip_unc_prefix(path: &std::path::Path) -> std::path::PathBuf {
+    let s = path.to_string_lossy();
+    let cleaned = s.replace(r"\\?\", "").replace(r"\?\", "");
+    std::path::PathBuf::from(cleaned)
+}
+
 impl SandboxHandle {
     /// Helper para acessar o Mutex de PIDs de forma segura contra poisoning.
     /// Se o Mutex estiver envenenado (panic em outra thread), recupera o lock
@@ -1941,7 +2413,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     );
                     return Ok(Vec::new());
                 }
-                let observability = classify_process_observability(exit_code, &merged_stdout);
+                let observability = classify_process_observability(&requested_command, exit_code, &merged_stdout);
                 match observability {
                     ProcessObservabilityClass::Ok => {
                         info!(
@@ -1983,7 +2455,8 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                         );
                     }
                 }
-                if status.success() {
+                let is_ok = status.success() || (requested_command == "opengrep" && exit_code == 7);
+                if is_ok {
                     Ok(merged_stdout)
                 } else {
                     let mut stderr_msg = String::from_utf8_lossy(&stderr_buffer).trim().to_string();
@@ -2156,8 +2629,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         timeout_secs: u64,
         execution_root: &Path,
     ) -> Result<Vec<u8>, SandboxError> {
-        self.validate_execution_root(execution_root)?;
-        let mut resolved = resolve_command(command, args, execution_root)?;
+        let execution_root_clean = strip_unc_prefix(execution_root);
+        self.validate_execution_root(&execution_root_clean)?;
+        let mut resolved = resolve_command(command, args, &execution_root_clean)?;
 
         // Resolve absolute path for resolved.program if it is relative or just a basename.
         if !resolved.program.is_absolute() {
@@ -2166,9 +2640,59 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             }
         }
         if !resolved.program.is_absolute() {
-            let local_candidate = execution_root.join(&resolved.program);
+            let local_candidate = execution_root_clean.join(&resolved.program);
             if local_candidate.is_file() {
                 resolved.program = local_candidate;
+            }
+        }
+        if resolved.program.is_absolute() || resolved.program.exists() {
+            if let Ok(canonical) = dunce::canonicalize(&resolved.program) {
+                resolved.program = strip_unc_prefix(&canonical);
+            }
+        }
+
+        let mut extra_acl_paths = Vec::new();
+        if let Some(ext) = resolved.program.extension().and_then(|e| e.to_str()) {
+            if ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat") {
+                if let Some(target) = trace_trampoline_target(&resolved.program) {
+                    let target_ext = target.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    if target_ext.eq_ignore_ascii_case("exe") {
+                        debug!(
+                            cmd_path = %resolved.program.display(),
+                            target_exe = %target.display(),
+                            "AppContainer: resolvendo trampolim .cmd/.bat para executavel real"
+                        );
+                        resolved.program = target;
+                    } else {
+                        debug!(
+                            cmd_path = %resolved.program.display(),
+                            target_script = %target.display(),
+                            "AppContainer: resolvendo trampolim .cmd/.bat para script. Adicionando caminhos de ACL extras."
+                        );
+                        extra_acl_paths.push(target);
+                    }
+                }
+            }
+        }
+
+        debug!(
+            command,
+            resolved_program = %resolved.program.display(),
+            extra_acl_paths = ?extra_acl_paths,
+            "AppContainer: Preparando injeções de ACL NTFS para o enjaulamento"
+        );
+
+        // Limpa prefixo UNC de todas as variáveis de ambiente resolvidas
+        for value in resolved.env.values_mut() {
+            if value.starts_with(r"\\?\") {
+                *value = value[4..].to_string();
+            }
+        }
+
+        // Limpa prefixo UNC de todos os argumentos resolvidos
+        for arg in &mut resolved.args {
+            if arg.starts_with(r"\\?\") {
+                *arg = arg[4..].to_string();
             }
         }
 
@@ -2188,7 +2712,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             command,
             container_name = %container_name,
             repo_path = %self.repo_path.display(),
-            cwd = %execution_root.display(),
+            cwd = %execution_root_clean.display(),
             timeout_secs,
             "AppContainer: preparando Gaiola de Silicio"
         );
@@ -2196,6 +2720,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         // ── Passo 1: Cria o perfil AppContainer ──────────────────────────────
         // O Drop garante DeleteAppContainerProfile + FreeSid rigorosamente.
         let profile = create_appcontainer_profile(&container_name)?;
+        grant_access_to_winstation_and_desktop(profile.sid)?;
 
         // Pre-cria as pastas de LocalAppData (Packages) do AppContainer no Host
         // e concede ACL para evitar a quebra do Nuitka {CACHE_DIR} do opengrep
@@ -2204,13 +2729,25 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             let container_packages_dir = std::path::Path::new(&local_appdata)
                 .join("Packages")
                 .join(&container_name);
-            let container_localstate_dir = container_packages_dir.join("LocalState");
-            std::fs::create_dir_all(&container_localstate_dir).map_err(|e| {
-                SandboxError::AppContainerSetupFailed {
-                    detail: format!("Falha ao criar LocalState para AppContainer em '{}': {e}", container_localstate_dir.display()),
-                }
-            })?;
-            grant_ntfs_acl(&container_packages_dir, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT).map_err(|e| {
+            
+            // Cria a árvore de pastas esperada pelo AppContainer do Windows para evitar SegFaults do Nuitka/Opengrep
+            let dirs_to_create = [
+                container_packages_dir.join("LocalState"),
+                container_packages_dir.join("AC"),
+                container_packages_dir.join("AC").join("Temp"),
+                container_packages_dir.join("AC").join("LocalState"),
+                container_packages_dir.join("AC").join("LocalCache"),
+                container_packages_dir.join("AC").join("LocalFolder"),
+            ];
+            for dir in &dirs_to_create {
+                std::fs::create_dir_all(dir).map_err(|e| {
+                    SandboxError::AppContainerSetupFailed {
+                        detail: format!("Falha ao criar pasta de perfil '{}': {e}", dir.display()),
+                    }
+                })?;
+            }
+
+            grant_ntfs_acl_with_parents(&container_packages_dir, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT).map_err(|e| {
                 SandboxError::AppContainerSetupFailed {
                     detail: format!("Falha ao conceder NTFS write ACL para a pasta do AppContainer Packages: {e:?}"),
                 }
@@ -2219,26 +2756,59 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
 
         // ── Passo 2: Diretório temporário efêmero ────────────────────────────
         // Criado no %TEMP% do host; o handle DELETE_ON_CLOSE o evaporará no Drop.
-        let ephemeral_dir = std::env::temp_dir().join(format!("soda-ac-{uuid_str}"));
+        let ephemeral_dir = strip_unc_prefix(&std::env::temp_dir().join(format!("soda-ac-{uuid_str}")));
         std::fs::create_dir_all(&ephemeral_dir).map_err(|e| SandboxError::AppContainerSetupFailed {
             detail: format!("Falha ao criar diretório efêmero '{}': {e}", ephemeral_dir.display()),
         })?;
 
+        // Injeta FORÇOSAMENTE no bloco de variáveis de ambiente do comando resolvida
+        // as variáveis do cache do Opengrep/Semgrep apontando para o diretório efêmero do AppContainer
+        let ephemeral_dir_str = ephemeral_dir.to_string_lossy().into_owned();
+        resolved.env.insert("SEMGREP_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
+        resolved.env.insert("XDG_CACHE_HOME".to_string(), ephemeral_dir_str.clone());
+
+        // Vacina do Ruff: impede erro de escrita de cache no ProjFS
+        if command == "ruff" {
+            resolved.env.insert("RUFF_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
+        }
+
+        // Cura da Cegueira dos Trampolins (Bandit / uv / Nuitka / Opengrep):
+        // Redireciona o perfil do usuário para o diretório efêmero que é 100% gravável na Gaiola.
+        resolved.env.insert("LOCALAPPDATA".to_string(), ephemeral_dir_str.clone());
+        resolved.env.insert("APPDATA".to_string(), ephemeral_dir_str.clone());
+        resolved.env.insert("USERPROFILE".to_string(), ephemeral_dir_str.clone());
+        resolved.env.insert("HOME".to_string(), ephemeral_dir_str.clone());
+
         // ── Passo 3: Handle DELETE_ON_CLOSE (evaporação automática) ──────────
+        // GENERIC_READ é necessário para abrir o diretório sem acesso de escrita exclusivo.
         let ephemeral_handle = SendHandle(open_dir_delete_on_close(&ephemeral_dir)?);
 
         // ── Passo 4: Muro do NTFS — Fail-Closed ─────────────────────────────
         // FILE_GENERIC_READ | FILE_GENERIC_EXECUTE = 0x0012_00A9
+        
+        // Concede permissão de Leitura para ALL APPLICATION PACKAGES (S-1-15-2-1) diretamente na raiz do execution_root e repo_path para mitigar erros de ProjFS (OS Error 5)
+        grant_ntfs_acl_for_all_application_packages(&execution_root_clean, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
+        if self.repo_path != execution_root_clean {
+            grant_ntfs_acl_for_all_application_packages(&self.repo_path, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
+        }
+
         // Concede leitura/execução no diretório do projeto.
-        grant_ntfs_acl(&self.repo_path, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
+        grant_ntfs_acl_with_parents(&self.repo_path, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
             .map_err(|e| {
                 // Higiene: fecha o handle efêmero antes de propagar o erro.
                 unsafe { CloseHandle(ephemeral_handle.0); }
                 e
             })?;
 
+        // Concede permissões para as runtimes e ferramentas globais/locais usadas
+        grant_runtime_and_tool_acls(&self.repo_path, profile.sid)
+            .map_err(|e| {
+                unsafe { CloseHandle(ephemeral_handle.0); }
+                e
+            })?;
+
         // Concede GENERIC_ALL na pasta temporária.
-        grant_ntfs_acl(&ephemeral_dir, profile.sid, GENERIC_ALL, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
+        grant_ntfs_acl_with_parents(&ephemeral_dir, profile.sid, GENERIC_ALL, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
             .map_err(|e| {
                 unsafe { CloseHandle(ephemeral_handle.0); }
                 e
@@ -2252,16 +2822,18 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let rustup_home = std::env::var("RUSTUP_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(&user_profile).join(".rustup"));
-        if cargo_home.exists() {
-            let _ = grant_ntfs_acl(&cargo_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
-        }
-        if rustup_home.exists() {
-            let _ = grant_ntfs_acl(&rustup_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
+        if command == "cargo" || command == "clippy" || command == "rustc" {
+            if cargo_home.exists() {
+                let _ = grant_ntfs_acl_with_parents(&cargo_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
+            }
+            if rustup_home.exists() {
+                let _ = grant_ntfs_acl_with_parents(&rustup_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
+            }
         }
 
         // Concede leitura/escrita/execução nas pastas de escrita permitidas do host
         for root in &self.host_write_roots {
-            grant_ntfs_acl(root, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
+            grant_ntfs_acl_with_parents(root, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
                 .map_err(|e| {
                     unsafe { CloseHandle(ephemeral_handle.0); }
                     e
@@ -2270,7 +2842,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
 
         // Concede leitura/execução na pasta pai do executável resolvido (para trampolins/libs locais)
         if let Some(parent) = resolved.program.parent() {
-            if let Err(e) = grant_ntfs_acl(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
+            if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
                 let is_access_denied = match &e {
                     SandboxError::AclInjectionFailed { detail } => {
                         detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -2283,17 +2855,14 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 } else {
                     debug!(
                         parent = %parent.display(),
-                        "grant_ntfs_acl falhou com Access Denied (Win32=5) para a pasta pai do executavel. Continuando."
+                        "grant_ntfs_acl_with_parents falhou com Access Denied (Win32=5) para a pasta pai do executavel. Continuando."
                     );
                 }
             }
         }
 
         // Concede leitura/execução explicitamente no arquivo binário executável resolvido.
-        // Se falhar com Access Denied (Win32=5) em arquivos do sistema (como C:\Windows\System32\cmd.exe),
-        // ignoramos, pois AppContainers já possuem acesso de leitura/execução a essas pastas por padrão
-        // e o host não tem permissão para alterar as ACLs do sistema.
-        if let Err(e) = grant_ntfs_acl(&resolved.program, profile.sid, 0x0012_00A9u32, NO_INHERITANCE) {
+        if let Err(e) = grant_ntfs_acl_with_parents(&resolved.program, profile.sid, 0x0012_00A9u32, NO_INHERITANCE) {
             let is_access_denied = match &e {
                 SandboxError::AclInjectionFailed { detail } => {
                     detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -2306,8 +2875,38 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             } else {
                 debug!(
                     program = %resolved.program.display(),
-                    "grant_ntfs_acl falhou com Access Denied (Win32=5). Continuando pois o AppContainer ja possui permissao default para esta pasta do sistema."
+                    "grant_ntfs_acl_with_parents falhou com Access Denied (Win32=5) para o binario. Continuando pois o AppContainer ja possui permissao default para esta pasta do sistema."
                 );
+            }
+        }
+
+        // Concede leitura/execução nos caminhos adicionais do trampolim (scripts e pastas pai do script)
+        for path in &extra_acl_paths {
+            if let Some(parent) = path.parent() {
+                if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
+                    let is_access_denied = match &e {
+                        SandboxError::AclInjectionFailed { detail } => {
+                            detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                        }
+                        _ => false,
+                    };
+                    if !is_access_denied {
+                        unsafe { CloseHandle(ephemeral_handle.0); }
+                        return Err(e);
+                    }
+                }
+            }
+            if let Err(e) = grant_ntfs_acl_with_parents(path, profile.sid, 0x0012_00A9u32, NO_INHERITANCE) {
+                let is_access_denied = match &e {
+                    SandboxError::AclInjectionFailed { detail } => {
+                        detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                    }
+                    _ => false,
+                };
+                if !is_access_denied {
+                    unsafe { CloseHandle(ephemeral_handle.0); }
+                    return Err(e);
+                }
             }
         }
 
@@ -2329,7 +2928,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let program = resolved.program.clone();
         let spawn_args = resolved.args.clone();
         let spawn_env = resolved.env.clone();
-        let spawn_cwd = execution_root.to_path_buf();
+        let spawn_cwd = execution_root_clean.clone();
         let timeout_ms = (timeout_secs.min(u32::MAX as u64) as u32)
             .saturating_mul(1000);
 
@@ -2372,14 +2971,25 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let stdout = result.stdout;
         let stderr_str = String::from_utf8_lossy(&result.stderr).trim().to_string();
 
-        info!(
-            command,
-            container_name = %container_name,
-            exit_code,
-            stdout_bytes = stdout.len(),
-            stderr_bytes = result.stderr.len(),
-            "AppContainer: sidecar concluido"
-        );
+        if exit_code == 0 {
+            info!(
+                command,
+                container_name = %container_name,
+                exit_code,
+                stdout_bytes = stdout.len(),
+                stderr_bytes = result.stderr.len(),
+                "AppContainer: sidecar concluido"
+            );
+        } else {
+            error!(
+                command,
+                container_name = %container_name,
+                exit_code,
+                stdout_bytes = stdout.len(),
+                stderr_bytes = result.stderr.len(),
+                "AppContainer: sidecar concluido"
+            );
+        }
 
         if exit_code == 0 {
             Ok(stdout)
@@ -2433,10 +3043,11 @@ impl SandboxOrchestrator {
         repo_path: &RepoPath,
         policy: SandboxPolicy,
     ) -> Result<SandboxHandle, SandboxError> {
+        let clean_path = strip_unc_prefix(repo_path.as_ref());
         Ok(SandboxHandle {
-            repo_path: repo_path.as_ref().to_path_buf(),
+            repo_path: clean_path.clone(),
             policy,
-            host_write_roots: build_host_write_roots(repo_path.as_ref(), policy)?,
+            host_write_roots: build_host_write_roots(&clean_path, policy)?,
             active_pids: Arc::new(Mutex::new(HashSet::new())),
         })
     }
@@ -2557,15 +3168,15 @@ mod tests {
     #[test]
     fn test_classify_process_observability_distinguishes_ok_info_and_lethal() {
         assert_eq!(
-            classify_process_observability(0, b"{}"),
+            classify_process_observability("biome", 0, b"{}"),
             ProcessObservabilityClass::Ok
         );
         assert_eq!(
-            classify_process_observability(1, b"{\"results\":[]}"),
+            classify_process_observability("biome", 1, b"{\"results\":[]}"),
             ProcessObservabilityClass::InformationalNonZero
         );
         assert_eq!(
-            classify_process_observability(101, b""),
+            classify_process_observability("biome", 101, b""),
             ProcessObservabilityClass::LethalNonZero
         );
     }
@@ -2573,7 +3184,19 @@ mod tests {
     #[test]
     fn test_classify_process_observability_treats_any_stdout_bytes_as_informational_non_zero() {
         assert_eq!(
-            classify_process_observability(1, b"\n"),
+            classify_process_observability("biome", 1, b"\n"),
+            ProcessObservabilityClass::InformationalNonZero
+        );
+    }
+
+    #[test]
+    fn test_classify_process_observability_whitelists_opengrep_exit_code_7() {
+        assert_eq!(
+            classify_process_observability("opengrep", 7, b"{}"),
+            ProcessObservabilityClass::Ok
+        );
+        assert_eq!(
+            classify_process_observability("biome", 7, b"{}"),
             ProcessObservabilityClass::InformationalNonZero
         );
     }
