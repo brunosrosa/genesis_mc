@@ -20,6 +20,14 @@ As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em
 <!-- lean-ctx-rules-v10 -->
 
 CRITICAL: **ALWAYS** use lean-ctx MCP tools instead of native equivalents. This is NOT optional.
+IMPORTANT: É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath, EndLine, etc.) no `lean_ctx_read`. A assinatura da ferramenta exige estritamente `path` (caminho do arquivo) e `mode` (ex: 'full', 'signatures', etc.). Valide o schema antes de chamar.
+
+### REGRAS OPERACIONAIS LEAN-CTX (MANDATÓRIAS):
+1. **LEITURAS FATIADAS (lines:N-M):** Para arquivos grandes, prefira `mode="lines:10-50,80-100"` em vez de `full` para economizar tokens.
+2. **PROIBIÇÃO DO MODO TASK ANTES DE EDIÇÃO:** Nunca use `mode="task"` para arquivos que planeja modificar; ele embaralha o arquivo estruturalmente.
+3. **INVALIDAÇÃO DE CACHE (fresh: true):** Se um arquivo for modificado em disco por compiladores ou testes externos, force a re-leitura usando `fresh: true` no `lean_ctx_read`.
+4. **UNICIDADE NO CTX_EDIT:** A string `old_string` no `ctx_edit`/`lean_ctx_edit` deve conter 2-3 linhas de contexto adjacentes para garantir correspondência única no arquivo.
+5. **CTX_SHELL APENAS DE LEITURA:** Use `lean_ctx_shell` apenas para comandos diagnósticos passivos; nunca para mutação de arquivos (como `sed`/`awk`).
 
 | ALWAYS USE | NEVER USE | Why |
 |------------|-----------|-----|

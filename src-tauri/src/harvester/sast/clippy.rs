@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::harvester::router::StaticAnalysisBlade;
 use super::{SandboxExecutor, SidecarError, SidecarExitPolicy, SastExecutionTarget, SodaHealthIssue, execute_sidecar_in_dir, parse_json_payload, push_issue, sort_and_dedup_issues, sanitize_host_paths_in_text, DiscoveredManifest, ManifestKind};
@@ -322,6 +322,93 @@ pub fn audit_transitive_rust_manifests(
     Ok(())
 }
 
+pub fn expand_cargo_workspace_wildcards(workspace_root: &Path) -> Result<(), String> {
+    let manifest_path = workspace_root.join("Cargo.toml");
+    if !manifest_path.is_file() {
+        return Ok(());
+    }
+
+    let manifest_text = std::fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Falha ao ler manifest raiz: {e}"))?;
+
+    let mut manifest_value = manifest_text
+        .parse::<toml::Value>()
+        .map_err(|e| format!("TOML invalido no manifest raiz: {e}"))?;
+
+    let workspace_table = match manifest_value.get_mut("workspace").and_then(|v| v.as_table_mut()) {
+        Some(t) => t,
+        None => return Ok(()),
+    };
+
+    let members_array = match workspace_table.get_mut("members").and_then(|v| v.as_array_mut()) {
+        Some(arr) => arr,
+        None => return Ok(()),
+    };
+
+    let mut new_members = Vec::new();
+    let mut modified = false;
+
+    for member_val in members_array.iter() {
+        let member_str = match member_val.as_str() {
+            Some(s) => s,
+            None => {
+                new_members.push(member_val.clone());
+                continue;
+            }
+        };
+
+        if member_str.contains('*') {
+            modified = true;
+            let pattern = member_str.replace('\\', "/");
+            let parts: Vec<&str> = pattern.split('/').collect();
+            
+            if parts.len() == 2 && parts[1] == "*" {
+                let prefix_dir = workspace_root.join(parts[0]);
+                if prefix_dir.is_dir() {
+                    if let Ok(entries) = std::fs::read_dir(&prefix_dir) {
+                        let mut sorted_entries = Vec::new();
+                        for entry in entries.flatten() {
+                            if let Ok(file_type) = entry.file_type() {
+                                if file_type.is_dir() {
+                                    let sub_dir = entry.path();
+                                    if sub_dir.join("Cargo.toml").is_file() {
+                                        if let Some(name) = sub_dir.file_name().and_then(|n| n.to_str()) {
+                                            sorted_entries.push(name.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        sorted_entries.sort();
+                        for name in sorted_entries {
+                            let expanded_member = format!("{}/{}", parts[0], name);
+                            new_members.push(toml::Value::String(expanded_member));
+                        }
+                    }
+                }
+            } else {
+                new_members.push(member_val.clone());
+            }
+        } else {
+            new_members.push(member_val.clone());
+        }
+    }
+
+    if modified {
+        *members_array = new_members;
+        let new_text = toml::to_string(&manifest_value)
+            .map_err(|e| format!("Falha ao serializar manifesto modificado: {e}"))?;
+        std::fs::write(&manifest_path, new_text)
+            .map_err(|e| format!("Falha ao gravar manifesto modificado: {e}"))?;
+        info!(
+            path = %manifest_path.display(),
+            "SAST rust-clippy: wildcard de workspace expandido com sucesso no Cargo.toml"
+        );
+    }
+
+    Ok(())
+}
+
 pub async fn run_rust_clippy_preflight<E: SandboxExecutor>(
     executor: &E,
     execution_root: &Path,
@@ -334,6 +421,17 @@ pub async fn run_rust_clippy_preflight<E: SandboxExecutor>(
             sanitize_host_paths_in_text(executor.repo_path(), &manifest_path.display().to_string())
         )));
     }
+
+    // Expand wildcard workspace members before running cargo fetch/metadata/clippy
+    let workspace_root = find_cargo_workspace_root(executor.repo_path(), execution_root);
+    if let Err(e) = expand_cargo_workspace_wildcards(&workspace_root) {
+        warn!(
+            workspace_root = %workspace_root.display(),
+            error = %e,
+            "SAST rust-clippy: Falha ao expandir wildcards de workspace (prosseguindo com manifesto original)"
+        );
+    }
+
 
     let preflight_timeout_secs = rust_clippy_preflight_timeout_secs(timeout_secs);
     let lockfile_path = cargo_lockfile_path(&manifest_path);
@@ -450,6 +548,34 @@ mod tests {
     use crate::harvester::sast::test_utils::MockExecutor;
     use crate::harvester::sast::run_sast_blade;
     use crate::harvester::sandbox::SandboxError;
+
+    #[test]
+    fn test_expand_cargo_workspace_wildcards() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        
+        let initial_toml = r#"[workspace]
+members = ["crates/*"]
+"#;
+        std::fs::write(root.join("Cargo.toml"), initial_toml).unwrap();
+        
+        std::fs::create_dir_all(root.join("crates").join("foo")).unwrap();
+        std::fs::write(root.join("crates").join("foo").join("Cargo.toml"), "[package]\nname = 'foo'").unwrap();
+        
+        std::fs::create_dir_all(root.join("crates").join("bar")).unwrap();
+        std::fs::write(root.join("crates").join("bar").join("Cargo.toml"), "[package]\nname = 'bar'").unwrap();
+
+        // ignore directory without Cargo.toml
+        std::fs::create_dir_all(root.join("crates").join("baz")).unwrap();
+
+        expand_cargo_workspace_wildcards(root).unwrap();
+
+        let modified_toml = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        assert!(modified_toml.contains("crates/foo"));
+        assert!(modified_toml.contains("crates/bar"));
+        assert!(!modified_toml.contains("crates/baz"));
+        assert!(!modified_toml.contains("crates/*"));
+    }
 
     #[test]
     fn test_normalize_clippy_messages_to_soda_health_issue() {

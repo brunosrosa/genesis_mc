@@ -681,11 +681,31 @@ impl PolyglotSastSidecar {
                                 issue.channel = forced_channel;
                             }
                         }
+                        if issues.is_empty() {
+                            let blade_label = blade_name(outcome.effective_blade);
+                            issues.push(SodaHealthIssue {
+                                level: "info".to_string(),
+                                file: String::new(),
+                                message: format!("[INFO] Nenhuma vulnerabilidade ou pendência encontrada pela lâmina '{}' no escopo '{}'.", blade_label, outcome.scope),
+                                source_blade: blade_label.to_string(),
+                                channel: SastIssueChannel::Health,
+                            });
+                        }
                         had_successful_payload = true;
                         all_issues.append(&mut issues);
                     }
                     Err(err) => {
                         had_failed_payload = true;
+                        let blade_label = blade_name(outcome.effective_blade);
+                        let error_msg = format!("Lâmina '{}' falhou na normalização dos resultados no escopo '{}': {}", blade_label, outcome.scope, err);
+                        all_issues.push(SodaHealthIssue {
+                            level: "warning".to_string(),
+                            file: String::new(),
+                            message: format!("[FALHA_NORMALIZACAO] {}", error_msg),
+                            source_blade: blade_label.to_string(),
+                            channel: SastIssueChannel::Health,
+                        });
+                        had_successful_payload = true;
                         warn!(
                             blade = blade_name(outcome.effective_blade),
                             requested_blade = blade_name(outcome.requested_blade),
@@ -698,6 +718,16 @@ impl PolyglotSastSidecar {
                 },
                 Err(err) => {
                     had_failed_payload = true;
+                    let blade_label = blade_name(outcome.requested_blade);
+                    let error_msg = format!("Lâmina '{}' falhou no escopo '{}': {}", blade_label, outcome.scope, err);
+                    all_issues.push(SodaHealthIssue {
+                        level: "warning".to_string(),
+                        file: String::new(),
+                        message: format!("[FALHA] {}", error_msg),
+                        source_blade: blade_label.to_string(),
+                        channel: SastIssueChannel::Health,
+                    });
+                    had_successful_payload = true;
                     warn!(
                         blade = blade_name(outcome.requested_blade),
                         scope = %outcome.scope,
@@ -1758,7 +1788,7 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
             if ((binary == "semgrep" || binary == "opengrep")
                 && !stdout_is_blank(&sanitized_stdout)
                 && stdout_contains_json_payload(&sanitized_stdout))
-                || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
+                || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) && !stdout_is_blank(&sanitized_stdout))
                 || (binary == "opengrep" && exit_code == 7)
             {
                 if binary == "cppcheck" {

@@ -103,7 +103,12 @@ async fn handle_mcp(
         .unwrap_or_default();
 
     if payload.get("id").is_none() && method != "notifications/initialized" {
-        return StatusCode::OK.into_response();
+        return (
+            axum::http::StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            "{}",
+        )
+            .into_response();
     }
 
     match method {

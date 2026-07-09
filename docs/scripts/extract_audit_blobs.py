@@ -8,8 +8,6 @@ from typing import Iterable
 
 
 DEFAULT_REPO_IDS = [
-    "bytecodealliance/wasmtime",
-    "tldraw/tldraw",
     "trailbaseio/trailbase",
 ]
 

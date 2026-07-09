@@ -1260,11 +1260,11 @@ windows-sys v0.42.0
     └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 
 windows-sys v0.59.0
-└── winreg v0.55.0
-    └── embed-resource v3.0.11 (*)
+└── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 
 windows-sys v0.59.0
-└── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+└── winreg v0.55.0
+    └── embed-resource v3.0.11 (*)
 
 windows-sys v0.61.2
 ├── colored v3.1.1

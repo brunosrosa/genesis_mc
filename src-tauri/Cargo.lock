@@ -1897,6 +1897,7 @@ dependencies = [
  "tree-sitter-language-pack",
  "tree-sitter-yaml",
  "url",
+ "uuid",
  "windows-projfs",
  "windows-sys 0.59.0",
  "zip",

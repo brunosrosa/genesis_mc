@@ -5,6 +5,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
+use tracing;
 
 const HARD_LIMIT_TIMEOUT_MS: u64 = 30_000;
 
@@ -248,6 +249,7 @@ where
                 write_line(out, &resp_line).await?;
             }
             Err(e) if e == "timeout" => {
+                tracing::error!("Timeout da ferramenta MCP acionado");
                 if let Some(pid) = child.id() {
                     kill_process_tree(pid).await;
                 } else {
@@ -283,6 +285,7 @@ where
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    tracing_subscriber::fmt::init();
     let cfg = parse_cli_args().map_err(io::Error::other)?;
     let mut stdout = tokio::io::stdout();
     let stdin = tokio::io::stdin();

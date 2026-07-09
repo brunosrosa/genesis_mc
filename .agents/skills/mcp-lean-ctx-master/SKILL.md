@@ -31,6 +31,12 @@ Sempre que precisar investigar arquivos locais, explorar diretórios ou vasculha
    * A edição deve respeitar as travas de concorrência (Mutex do Tokio). Falhas na gravação devem preservar o *inode* original intacto.
 
 #### Constraints
+* **PROIBIÇÃO DE PARÂMETROS NATIVOS:** É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath, EndLine, etc.) no `lean_ctx_read` (ou `ctx_read`). A assinatura da ferramenta exige estritamente `path` (caminho do arquivo) e `mode` (ex: 'full', 'signatures', etc.). Valide o schema da ferramenta antes de chamar.
+* **PROIBIÇÃO DO MODO TASK ANTES DE EDIÇÃO:** Nunca use `mode="task"` para arquivos que planeja modificar; ele embaralha o arquivo estruturalmente.
+* **INVALIDAÇÃO DE CACHE (fresh: true):** Se um arquivo for modificado em disco por compiladores ou testes externos, force a re-leitura usando `fresh: true`.
+* **UNICIDADE NO CTX_EDIT:** A string `old_string` no `ctx_edit` deve conter 2-3 linhas de contexto adjacentes para garantir correspondência única no arquivo.
+* **LEITURAS FATIADAS (lines:N-M):** Para arquivos grandes, prefira `mode="lines:N-M"` em vez de `full` para economizar tokens.
+* **CTX_SHELL APENAS DE LEITURA:** Use `ctx_shell` apenas para comandos diagnósticos passivos; nunca para mutação de arquivos (como `sed`/`awk`).
 * **O FORMATO LEAN É INEGOCIÁVEL:** Rejeite TOON ou JSON denso para leituras extensas. O formato LEAN garante 93% de precisão de Recall consumindo 48% menos tokens.
 * **SEM ALUCINAÇÕES DE PATH:** Use `ctx_tree` antes de `ctx_read`.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).

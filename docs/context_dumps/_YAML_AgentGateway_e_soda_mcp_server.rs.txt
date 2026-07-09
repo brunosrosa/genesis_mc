@@ -1,4 +1,4 @@
-_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-05 04:21:38
+_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-06 20:00:53
 
 ### ====================================================================================================
 ARQUIVO: gateway-config.yaml
@@ -186,6 +186,10 @@ async fn handle_mcp(
         .get("method")
         .and_then(Value::as_str)
         .unwrap_or_default();
+
+    if payload.get("id").is_none() && method != "notifications/initialized" {
+        return StatusCode::OK.into_response();
+    }
 
     match method {
         "initialize" => {

@@ -185,8 +185,15 @@ try {
             -Label "cargo-build-lean-ctx" `
             -WorkingDirectory $srcTauriDir
 
-        # 5. IGNIÇÃO DO DAEMON JÁ COMPILADO
-        Write-Host "`n[5/5] Iniciando o daemon compilado (genesis_mc)..." -ForegroundColor Yellow
+        # 5. PRE-AQUECIMENTO DE CACHE EM BACKGROUND
+        Write-Host "`n[5/5] Pre-aquecendo o cache do lean-ctx em background..." -ForegroundColor Yellow
+        $leanCtxPath = Join-Path $srcTauriDir "target\debug\lean-ctx.exe"
+        if (Test-Path $leanCtxPath) {
+            Start-Process -FilePath $leanCtxPath -ArgumentList "graph", "build" -WorkingDirectory $PSScriptRoot -NoNewWindow -ErrorAction SilentlyContinue
+        }
+
+        # 6. IGNIÇÃO DO DAEMON JÁ COMPILADO
+        Write-Host "`n[6/6] Iniciando o daemon compilado (genesis_mc)..." -ForegroundColor Yellow
         $daemonPath = Join-Path $srcTauriDir "target\debug\genesis_mc.exe"
         if (-not (Test-Path $daemonPath)) {
             throw "Binario esperado nao encontrado apos a build: $daemonPath"

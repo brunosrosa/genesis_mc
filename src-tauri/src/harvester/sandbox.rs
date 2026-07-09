@@ -40,6 +40,18 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_FLAG_DELETE_ON_CLOSE, FILE_FLAG_BACKUP_SEMANTICS,
     OPEN_EXISTING,
 };
+
+#[cfg(target_os = "windows")]
+const NO_INHERITANCE: u32 = 0u32;
+#[cfg(target_os = "windows")]
+const SUB_CONTAINERS_AND_OBJECTS_INHERIT: u32 = 3u32;
+
+#[cfg(target_os = "windows")]
+const GENERIC_READ: u32 = 0x80000000u32;
+#[cfg(target_os = "windows")]
+const GENERIC_EXECUTE: u32 = 0x20000000u32;
+#[cfg(target_os = "windows")]
+const GENERIC_ALL: u32 = 0x10000000u32;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
@@ -53,6 +65,7 @@ use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList,
     GetExitCodeProcess, InitializeProcThreadAttributeList,
     UpdateProcThreadAttribute, WaitForSingleObject,
+    CREATE_UNICODE_ENVIRONMENT,
     EXTENDED_STARTUPINFO_PRESENT, LPPROC_THREAD_ATTRIBUTE_LIST,
     PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, PROCESS_INFORMATION,
     STARTF_USESTDHANDLES, STARTUPINFOEXW, STARTUPINFOW,
@@ -129,6 +142,7 @@ impl Drop for WindowsKillOnCloseJob {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(dead_code)]
 fn attach_child_to_kill_on_close_job(
     child: &tokio::process::Child,
 ) -> Result<WindowsKillOnCloseJob, SandboxError> {
@@ -320,6 +334,7 @@ fn grant_ntfs_acl(
     path: &std::path::Path,
     sid: PSID,
     access_mask: u32,
+    inheritance_flag: u32,
 ) -> Result<(), SandboxError> {
     let path_wide = path_to_wide(path);
 
@@ -354,7 +369,7 @@ fn grant_ntfs_acl(
     let mut ea = EXPLICIT_ACCESS_W {
         grfAccessPermissions: access_mask,
         grfAccessMode: GRANT_ACCESS,
-        grfInheritance: 3u32, // CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE
+        grfInheritance: inheritance_flag,
         Trustee: TRUSTEE_W {
             pMultipleTrustee: std::ptr::null_mut(),
             MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
@@ -528,6 +543,7 @@ fn spawn_in_appcontainer_blocking(
     cwd: &std::path::Path,
     profile: &AppContainerProfile,
     timeout_ms: u32,
+    ephemeral_dir: &std::path::Path,
 ) -> Result<AppContainerSpawnResult, SandboxError> {
     // ── 1. Monta a linha de comando UTF-16 ────────────────────────────────────
     // Escapa argumentos conforme a regra canônica do Win32 para CreateProcessW.
@@ -575,22 +591,54 @@ fn spawn_in_appcontainer_blocking(
     let cwd_wide = path_to_wide(cwd);
 
     // ── 2. Bloco de ambiente UTF-16 null-null ─────────────────────────────────
-    // Formato: KEY=VALUE\0KEY=VALUE\0\0
+    // Formato: KEY=VALUE\0KEY=VALUE\0\0 (ordenado lexicograficamente por chaves em UPPERCASE)
     let env_block: Vec<u16> = {
-        let mut block: Vec<u16> = Vec::new();
-        // Inclui o ambiente do processo pai mais as variáveis injetadas.
         let mut merged_env: std::collections::BTreeMap<String, String> =
-            std::env::vars().collect();
-        merged_env.extend(env.clone());
+            std::collections::BTreeMap::new();
+
+        // Herda o ambiente do processo pai com chaves em UPPERCASE
+        for (k, v) in std::env::vars() {
+            merged_env.insert(k.to_uppercase(), v);
+        }
+
+        // Sobrescreve as variáveis do sidecar com chaves em UPPERCASE
+        for (k, v) in env {
+            merged_env.insert(k.to_uppercase(), v.clone());
+        }
+
+        // Sobrescreve explicitamente chaves de temporários, home e isolamento do Rust/Cargo
+        // para apontar estritamente para o diretório efêmero do sidecar.
+        let ephemeral_dir_str = ephemeral_dir.to_string_lossy().into_owned();
+        let keys_to_override = [
+            "HOME",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "TEMP",
+            "TMP",
+            "CARGO_HOME",
+            "RUSTUP_HOME",
+            "XDG_CACHE_HOME",
+        ];
+        for key in &keys_to_override {
+            merged_env.insert(key.to_string(), ephemeral_dir_str.clone());
+        }
+
+        // Força o Cargo a rodar em modo offline no sandbox
+        merged_env.insert("CARGO_NET_OFFLINE".to_string(), "true".to_string());
+
+        // Serializa o bloco de ambiente Win32
+        let mut env_str = String::new();
         for (k, v) in &merged_env {
             // Ignora variáveis vazias ou chaves internas do Windows que começam com '='.
             if k.is_empty() || k.starts_with('=') {
                 continue;
             }
-            block.extend(str_to_wide(&format!("{k}={v}")).into_iter());
+            env_str.push_str(&format!("{k}={v}\0"));
         }
-        block.push(0); // bloco termina com duplo null
-        block
+        env_str.push_str("\0"); // Duplo-nulo finalizador
+
+        env_str.encode_utf16().collect()
     };
 
     // ── 3. Pipes anônimos para stdout/stderr ──────────────────────────────────
@@ -762,8 +810,8 @@ fn spawn_in_appcontainer_blocking(
             std::ptr::null(),
             std::ptr::null(),
             TRUE, // bInheritHandles: herda stdout_write e stderr_write
-            EXTENDED_STARTUPINFO_PRESENT, // Omitimos CREATE_UNICODE_ENVIRONMENT quando passamos null no env
-            std::ptr::null(), // Herda o ambiente padrão do pai diretamente via kernel
+            EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+            env_block.as_ptr() as *const std::ffi::c_void,
             cwd_wide.as_ptr(),
             // SAFETY: STARTUPINFOEXW começa com STARTUPINFOW; cast é seguro conforme Win32 ABI.
             &si.StartupInfo as *const STARTUPINFOW,
@@ -991,11 +1039,16 @@ struct ResolvedCommand {
     env: BTreeMap<String, String>,
 }
 
+#[allow(dead_code)]
 const IDLE_TIMEOUT_SECS: u64 = 45;
+#[allow(dead_code)]
 const DEEP_FLOW_IDLE_TIMEOUT_SECS: u64 = 900;
+#[allow(dead_code)]
 const ABSOLUTE_TIMEOUT_FLOOR_SECS: u64 = 5 * 60;
+#[allow(dead_code)]
 const PROCESS_WAIT_POLL_INTERVAL_MS: u64 = 250;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TimeoutProfile {
     idle_timeout_secs: u64,
@@ -1015,6 +1068,7 @@ pub(crate) fn truncated_args_preview<S: AsRef<str>>(args: &[S]) -> Vec<String> {
     preview
 }
 
+#[allow(dead_code)]
 fn mark_process_activity(last_activity: &Arc<Mutex<Instant>>) {
     let mut guard = last_activity
         .lock()
@@ -1022,6 +1076,7 @@ fn mark_process_activity(last_activity: &Arc<Mutex<Instant>>) {
     *guard = Instant::now();
 }
 
+#[allow(dead_code)]
 fn idle_elapsed(last_activity: &Arc<Mutex<Instant>>) -> Duration {
     last_activity
         .lock()
@@ -1029,6 +1084,7 @@ fn idle_elapsed(last_activity: &Arc<Mutex<Instant>>) -> Duration {
         .elapsed()
 }
 
+#[allow(dead_code)]
 enum ProcessWaitOutcome {
     Exited(std::process::ExitStatus),
     WaitError(std::io::Error),
@@ -1036,6 +1092,7 @@ enum ProcessWaitOutcome {
     AbsoluteTimeout,
 }
 
+#[allow(dead_code)]
 fn timeout_profile<S: AsRef<str>>(command: &str, args: &[S], requested_timeout_secs: u64) -> TimeoutProfile {
     match command {
         "cargo" if is_cargo_sast_invocation(args) => TimeoutProfile {
@@ -1053,6 +1110,7 @@ fn timeout_profile<S: AsRef<str>>(command: &str, args: &[S], requested_timeout_s
     }
 }
 
+#[allow(dead_code)]
 fn truncated_env_preview(env: &BTreeMap<String, String>) -> Vec<String> {
     const MAX_ENV_PREVIEW: usize = 3;
     let mut preview = env
@@ -1240,6 +1298,7 @@ fn is_cargo_sast_invocation<S: AsRef<str>>(args: &[S]) -> bool {
     )
 }
 
+#[allow(dead_code)]
 fn merge_tool_streams(command: &str, stdout: Vec<u8>, stderr: &[u8]) -> Vec<u8> {
     if command != "cppcheck" || stderr.is_empty() {
         return stdout;
@@ -1253,6 +1312,7 @@ fn merge_tool_streams(command: &str, stdout: Vec<u8>, stderr: &[u8]) -> Vec<u8> 
     merged
 }
 
+#[allow(dead_code)]
 fn is_govulncheck_no_packages_match(command: &str, exit_code: i32, stderr: &[u8]) -> bool {
     if command != "govulncheck" || exit_code != 2 {
         return false;
@@ -1262,6 +1322,7 @@ fn is_govulncheck_no_packages_match(command: &str, exit_code: i32, stderr: &[u8]
         .contains("no packages matched the provided patterns")
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProcessObservabilityClass {
     Ok,
@@ -1269,6 +1330,7 @@ enum ProcessObservabilityClass {
     LethalNonZero,
 }
 
+#[allow(dead_code)]
 fn classify_process_observability(exit_code: i32, stdout: &[u8]) -> ProcessObservabilityClass {
     if exit_code == 0 {
         ProcessObservabilityClass::Ok
@@ -1279,6 +1341,7 @@ fn classify_process_observability(exit_code: i32, stdout: &[u8]) -> ProcessObser
     }
 }
 
+#[allow(dead_code)]
 fn persist_semgrep_diagnostics(
     repo_path: &Path,
     resolved: &ResolvedCommand,
@@ -1319,6 +1382,36 @@ fn persist_semgrep_diagnostics(
     Some(diagnostics_path)
 }
 
+fn resolve_real_cargo_path() -> Option<PathBuf> {
+    if let Ok(output) = std::process::Command::new("rustup")
+        .args(["which", "cargo"])
+        .output()
+    {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path_str.is_empty() {
+                let path = PathBuf::from(path_str);
+                if path.is_file() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    
+    if let (Ok(home), Ok(toolchain)) = (std::env::var("RUSTUP_HOME"), std::env::var("RUSTUP_TOOLCHAIN")) {
+        let path = PathBuf::from(home)
+            .join("toolchains")
+            .join(toolchain)
+            .join("bin")
+            .join(if cfg!(target_os = "windows") { "cargo.exe" } else { "cargo" });
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    
+    None
+}
+
 fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<ResolvedCommand, SandboxError> {
     match command {
         "pytest" => {
@@ -1332,8 +1425,17 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
             })
         }
         "cargo" => {
-            let program = resolve_from_path("cargo").unwrap_or_else(|| PathBuf::from(command));
+            let program = resolve_real_cargo_path()
+                .or_else(|| resolve_from_path("cargo"))
+                .unwrap_or_else(|| PathBuf::from(command));
             let mut env = BTreeMap::new();
+            if let Some(parent) = program.parent() {
+                let rustc_name = if cfg!(target_os = "windows") { "rustc.exe" } else { "rustc" };
+                let rustc_path = parent.join(rustc_name);
+                if rustc_path.is_file() {
+                    env.insert("RUSTC".to_string(), rustc_path.display().to_string());
+                }
+            }
             env.insert("CARGO_INCREMENTAL".to_string(), "0".to_string());
             env.insert(
                 "CARGO_HOME".to_string(),
@@ -1438,6 +1540,7 @@ fn resolve_command(command: &str, args: &[&str], repo_path: &Path) -> Result<Res
     }
 }
 
+#[allow(dead_code)]
 pub(crate) async fn kill_process_tree_by_pid(pid: u32) {
     #[cfg(target_os = "windows")]
     {
@@ -1466,10 +1569,12 @@ pub(crate) async fn kill_process_tree_by_pid(pid: u32) {
     }
 }
 
+#[allow(dead_code)]
 fn command_requires_orphan_reap(command: &str) -> bool {
     matches!(command, "semgrep" | "opengrep")
 }
 
+#[allow(dead_code)]
 async fn collect_output_task(task: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> {
     match timeout(Duration::from_secs(30), task).await {
         Ok(Ok(buffer)) => buffer,
@@ -1477,6 +1582,7 @@ async fn collect_output_task(task: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> 
     }
 }
 
+#[allow(dead_code)]
 async fn drain_pipe_with_telemetry<R>(
     mut stream: R,
     command: String,
@@ -1538,6 +1644,7 @@ where
     buffer
 }
 
+#[allow(dead_code)]
 async fn reap_command_orphans(command: &str, repo_path: &Path) {
     if !command_requires_orphan_reap(command) {
         return;
@@ -1604,6 +1711,7 @@ impl SandboxHandle {
     /// Helper para acessar o Mutex de PIDs de forma segura contra poisoning.
     /// Se o Mutex estiver envenenado (panic em outra thread), recupera o lock
     /// ao invés de propagar o panic — Fail-Safe obrigatório em produção.
+    #[allow(dead_code)]
     fn lock_pids(&self) -> std::sync::MutexGuard<'_, HashSet<u32>> {
         self.active_pids.lock().unwrap_or_else(|poisoned| {
             // Recupera o guard do Mutex envenenado — os dados internos ainda são válidos.
@@ -1612,6 +1720,45 @@ impl SandboxHandle {
             poisoned.into_inner()
         })
     }
+
+fn build_global_allowed_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    
+    // Resolve home do usuário de forma agnóstica a SO
+    let home_dir = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default();
+
+    if !home_dir.is_empty() {
+        let home_path = PathBuf::from(&home_dir);
+        
+        let cargo_home = std::env::var("CARGO_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| home_path.join(".cargo"));
+        roots.push(cargo_home);
+
+        let rustup_home = std::env::var("RUSTUP_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| home_path.join(".rustup"));
+        roots.push(rustup_home);
+
+        #[cfg(target_os = "windows")]
+        {
+            let appdata = std::env::var("APPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| home_path.join("AppData").join("Roaming"));
+            roots.push(appdata.join("uv").join("tools"));
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let xdg_data = std::env::var("XDG_DATA_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| home_path.join(".local").join("share"));
+            roots.push(xdg_data.join("uv").join("tools"));
+        }
+    }
+    roots
+}
 
     fn enforce_host_path_policy(&self, resolved: &ResolvedCommand) -> Result<(), SandboxError> {
         let repo_root = &self.repo_path;
@@ -1623,10 +1770,15 @@ impl SandboxHandle {
                 .filter_map(|value| env_value_to_absolute_path(value)),
         );
 
+        let global_roots = Self::build_global_allowed_roots();
+
         for candidate in inspected_paths {
             let allowed = path_is_within_root(&candidate, repo_root)
                 || self
                     .host_write_roots
+                    .iter()
+                    .any(|root| path_is_within_root(&candidate, root))
+                || global_roots
                     .iter()
                     .any(|root| path_is_within_root(&candidate, root));
             if !allowed {
@@ -1657,6 +1809,7 @@ impl SandboxHandle {
         }
     }
 
+    #[allow(dead_code)]
     async fn execute_with_root(
         &self,
         command: &str,
@@ -2004,16 +2157,32 @@ impl SandboxHandle {
         execution_root: &Path,
     ) -> Result<Vec<u8>, SandboxError> {
         self.validate_execution_root(execution_root)?;
-        let resolved = resolve_command(command, args, execution_root)?;
+        let mut resolved = resolve_command(command, args, execution_root)?;
+
+        // Resolve absolute path for resolved.program if it is relative or just a basename.
+        if !resolved.program.is_absolute() {
+            if let Some(abs_path) = resolve_from_path(&resolved.program.to_string_lossy()) {
+                resolved.program = abs_path;
+            }
+        }
+        if !resolved.program.is_absolute() {
+            let local_candidate = execution_root.join(&resolved.program);
+            if local_candidate.is_file() {
+                resolved.program = local_candidate;
+            }
+        }
+
         self.enforce_host_path_policy(&resolved)?;
 
-        // Gera nome único do perfil AppContainer baseado em timestamp para evitar
+        // Gera nome único do perfil AppContainer baseado em UUID para evitar
         // colisões entre execuções paralelas do mesmo sidecar.
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
-        let container_name = format!("soda-sidecar-{ts}");
+        let uuid_str = uuid::Uuid::new_v4().simple().to_string();
+        let container_name = format!("soda-sidecar-{uuid_str}");
+        let container_name = if container_name.len() > 64 {
+            container_name[..64].to_string()
+        } else {
+            container_name
+        };
 
         info!(
             command,
@@ -2028,9 +2197,29 @@ impl SandboxHandle {
         // O Drop garante DeleteAppContainerProfile + FreeSid rigorosamente.
         let profile = create_appcontainer_profile(&container_name)?;
 
+        // Pre-cria as pastas de LocalAppData (Packages) do AppContainer no Host
+        // e concede ACL para evitar a quebra do Nuitka {CACHE_DIR} do opengrep
+        let local_appdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        if !local_appdata.is_empty() {
+            let container_packages_dir = std::path::Path::new(&local_appdata)
+                .join("Packages")
+                .join(&container_name);
+            let container_localstate_dir = container_packages_dir.join("LocalState");
+            std::fs::create_dir_all(&container_localstate_dir).map_err(|e| {
+                SandboxError::AppContainerSetupFailed {
+                    detail: format!("Falha ao criar LocalState para AppContainer em '{}': {e}", container_localstate_dir.display()),
+                }
+            })?;
+            grant_ntfs_acl(&container_packages_dir, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT).map_err(|e| {
+                SandboxError::AppContainerSetupFailed {
+                    detail: format!("Falha ao conceder NTFS write ACL para a pasta do AppContainer Packages: {e:?}"),
+                }
+            })?;
+        }
+
         // ── Passo 2: Diretório temporário efêmero ────────────────────────────
         // Criado no %TEMP% do host; o handle DELETE_ON_CLOSE o evaporará no Drop.
-        let ephemeral_dir = std::env::temp_dir().join(format!("soda-ac-{ts}"));
+        let ephemeral_dir = std::env::temp_dir().join(format!("soda-ac-{uuid_str}"));
         std::fs::create_dir_all(&ephemeral_dir).map_err(|e| SandboxError::AppContainerSetupFailed {
             detail: format!("Falha ao criar diretório efêmero '{}': {e}", ephemeral_dir.display()),
         })?;
@@ -2041,20 +2230,86 @@ impl SandboxHandle {
         // ── Passo 4: Muro do NTFS — Fail-Closed ─────────────────────────────
         // FILE_GENERIC_READ | FILE_GENERIC_EXECUTE = 0x0012_00A9
         // Concede leitura/execução no diretório do projeto.
-        grant_ntfs_acl(&self.repo_path, profile.sid, 0x0012_00A9u32)
+        grant_ntfs_acl(&self.repo_path, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
             .map_err(|e| {
                 // Higiene: fecha o handle efêmero antes de propagar o erro.
                 unsafe { CloseHandle(ephemeral_handle.0); }
                 e
             })?;
 
-        // FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE = 0x0012_01FFu32
-        // Concede leitura/escrita/execução na pasta temporária.
-        grant_ntfs_acl(&ephemeral_dir, profile.sid, 0x0012_01FFu32)
+        // Concede GENERIC_ALL na pasta temporária.
+        grant_ntfs_acl(&ephemeral_dir, profile.sid, GENERIC_ALL, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
             .map_err(|e| {
                 unsafe { CloseHandle(ephemeral_handle.0); }
                 e
             })?;
+
+        // Concede permissões de leitura/execução no CARGO_HOME e RUSTUP_HOME do Host
+        let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
+        let cargo_home = std::env::var("CARGO_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(&user_profile).join(".cargo"));
+        let rustup_home = std::env::var("RUSTUP_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(&user_profile).join(".rustup"));
+        if cargo_home.exists() {
+            let _ = grant_ntfs_acl(&cargo_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
+        }
+        if rustup_home.exists() {
+            let _ = grant_ntfs_acl(&rustup_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
+        }
+
+        // Concede leitura/escrita/execução nas pastas de escrita permitidas do host
+        for root in &self.host_write_roots {
+            grant_ntfs_acl(root, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
+                .map_err(|e| {
+                    unsafe { CloseHandle(ephemeral_handle.0); }
+                    e
+                })?;
+        }
+
+        // Concede leitura/execução na pasta pai do executável resolvido (para trampolins/libs locais)
+        if let Some(parent) = resolved.program.parent() {
+            if let Err(e) = grant_ntfs_acl(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
+                let is_access_denied = match &e {
+                    SandboxError::AclInjectionFailed { detail } => {
+                        detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                    }
+                    _ => false,
+                };
+                if !is_access_denied {
+                    unsafe { CloseHandle(ephemeral_handle.0); }
+                    return Err(e);
+                } else {
+                    debug!(
+                        parent = %parent.display(),
+                        "grant_ntfs_acl falhou com Access Denied (Win32=5) para a pasta pai do executavel. Continuando."
+                    );
+                }
+            }
+        }
+
+        // Concede leitura/execução explicitamente no arquivo binário executável resolvido.
+        // Se falhar com Access Denied (Win32=5) em arquivos do sistema (como C:\Windows\System32\cmd.exe),
+        // ignoramos, pois AppContainers já possuem acesso de leitura/execução a essas pastas por padrão
+        // e o host não tem permissão para alterar as ACLs do sistema.
+        if let Err(e) = grant_ntfs_acl(&resolved.program, profile.sid, 0x0012_00A9u32, NO_INHERITANCE) {
+            let is_access_denied = match &e {
+                SandboxError::AclInjectionFailed { detail } => {
+                    detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                }
+                _ => false,
+            };
+            if !is_access_denied {
+                unsafe { CloseHandle(ephemeral_handle.0); }
+                return Err(e);
+            } else {
+                debug!(
+                    program = %resolved.program.display(),
+                    "grant_ntfs_acl falhou com Access Denied (Win32=5). Continuando pois o AppContainer ja possui permissao default para esta pasta do sistema."
+                );
+            }
+        }
 
         // ── Passo 5: Loopback Exemption (best-effort) ────────────────────────
         // Permite ao sidecar se conectar via loopback ao Named Pipe do Gateway.
@@ -2078,6 +2333,8 @@ impl SandboxHandle {
         let timeout_ms = (timeout_secs.min(u32::MAX as u64) as u32)
             .saturating_mul(1000);
 
+        let ephemeral_dir_clone = ephemeral_dir.clone();
+
         let result = tokio::task::spawn_blocking(move || {
             // profile está no escopo do spawn_blocking — seu Drop ocorre aqui.
             let spawn_result = spawn_in_appcontainer_blocking(
@@ -2087,6 +2344,7 @@ impl SandboxHandle {
                 &spawn_cwd,
                 &profile,
                 timeout_ms,
+                &ephemeral_dir_clone,
             );
             // Drop explícito: DeleteAppContainerProfile + FreeSid no thread bloqueante.
             drop(profile);
@@ -2101,6 +2359,14 @@ impl SandboxHandle {
         // profile já foi dropado dentro do spawn_blocking acima.
         // ephemeral_handle.CloseHandle() → NTFS apaga o diretório automaticamente.
         unsafe { CloseHandle(ephemeral_handle.0); }
+
+        // Limpa o diretório de LocalAppData do AppContainer para evitar acúmulo no disco do Host
+        if !local_appdata.is_empty() {
+            let container_packages_dir = std::path::Path::new(&local_appdata)
+                .join("Packages")
+                .join(&container_name);
+            let _ = std::fs::remove_dir_all(&container_packages_dir);
+        }
 
         let exit_code = result.exit_code;
         let stdout = result.stdout;

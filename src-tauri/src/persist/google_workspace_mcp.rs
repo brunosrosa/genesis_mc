@@ -401,28 +401,54 @@ pub fn call_google_workspace_tool_blocking(
         .ok_or_else(|| "stderr indisponível".to_string())?;
     let (_stderr_rx, _stderr_seen) = spawn_line_reader(stderr);
 
-    {
-        use std::io::Write;
-        let stdin = child.stdin.as_mut().ok_or_else(|| "stdin indisponível".to_string())?;
-        writeln!(stdin, "{}", init_req).map_err(|e| format!("Falha ao escrever init no MCP: {e}"))?;
-        stdin.flush().map_err(|e| format!("Falha ao flush init no MCP: {e}"))?;
-    }
-    let _init_response =
-        wait_for_jsonrpc_response(&stdout_rx, &stdout_seen, timeout, 0, "stdout-init")?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "stdin indisponível".to_string())?;
 
     {
         use std::io::Write;
-        let stdin = child.stdin.as_mut().ok_or_else(|| "stdin indisponível".to_string())?;
-        writeln!(stdin, "{}", initialized_notif)
-            .map_err(|e| format!("Falha ao escrever initialized no MCP: {e}"))?;
-        writeln!(stdin, "{}", mcp_request)
-            .map_err(|e| format!("Falha ao escrever tools/call no MCP: {e}"))?;
-        stdin.flush().map_err(|e| format!("Falha ao flush tools/call no MCP: {e}"))?;
+        if let Err(e) = writeln!(stdin, "{}", init_req) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("Falha ao escrever init no MCP: {e}"));
+        }
+        if let Err(e) = stdin.flush() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("Falha ao flush init no MCP: {e}"));
+        }
+    }
+    let init_res = wait_for_jsonrpc_response(&stdout_rx, &stdout_seen, timeout, 0, "stdout-init");
+    if let Err(e) = init_res {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(e);
+    }
+
+    {
+        use std::io::Write;
+        if let Err(e) = writeln!(stdin, "{}", initialized_notif) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("Falha ao escrever initialized no MCP: {e}"));
+        }
+        if let Err(e) = writeln!(stdin, "{}", mcp_request) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("Falha ao escrever tools/call no MCP: {e}"));
+        }
+        if let Err(e) = stdin.flush() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("Falha ao flush tools/call no MCP: {e}"));
+        }
     }
     let tool_response =
-        wait_for_jsonrpc_response(&stdout_rx, &stdout_seen, timeout, 1, "stdout-tools-call")?;
+        wait_for_jsonrpc_response(&stdout_rx, &stdout_seen, timeout, 1, "stdout-tools-call");
     let _ = child.kill();
     let _ = child.wait();
+    let tool_response = tool_response?;
     let result = tool_response
         .get("result")
         .cloned()

@@ -32,8 +32,8 @@ binds:
                   targets:
                     - name: lean
                       stdio:
-                        cmd: 'src-tauri/target/debug/lean-ctx.exe'
-                        args: []
+                        cmd: 'src-tauri/target/debug/mcp_stdio_guard.exe'
+                        args: ['--timeout-ms', '30000', '--', 'src-tauri/target/debug/lean-ctx.exe']
                     - name: sequential_thinking
                       stdio:
                         cmd: 'sequential-thinking-server.exe'
