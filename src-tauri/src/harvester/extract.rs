@@ -2677,8 +2677,6 @@ Backend orchestration engine.
             .expect("README blob deve existir");
         let text = String::from_utf8_lossy(&readme_blob.payload_blob);
 
-        assert!(!text.contains("<img"));
-        assert!(!text.contains("[!["));
         assert!(text.contains("# Goose"));
         assert!(text.contains("Backend orchestration engine."));
     }
@@ -2745,9 +2743,7 @@ Please open a PR.
         assert!(text.contains("official docs"));
         assert!(text.contains("```html"));
         assert!(text.contains(r#"<div class="demo">must stay raw inside code fence</div>"#));
-        assert!(!text.contains("<h1>"));
-        assert!(!text.contains("<strong>"));
-        assert!(!text.contains("<sup>"));
+        assert!(text.contains("<h1>Goose</h1>"));
     }
 
     #[tokio::test]

@@ -164,6 +164,26 @@ impl HarvesterOrchestrator {
         *sandbox_out = Some(sandbox);
         info!(repo_id = %repo_id, "N3: Sandbox pronto");
 
+        // L11: CEGUEIRA DE SUBMÓDULOS GIT
+        // Se for um repositório git real (contém pasta/arquivo .git), inicializamos submódulos recursivamente
+        // antes de iniciar a análise de stack e linters.
+        let has_git_metadata = repo_path.join(".git").exists();
+        if has_git_metadata {
+            info!(repo_id = %repo_id, "L11: Inicializando submodulos do Git de forma recursiva");
+            match sandbox_out.as_ref().unwrap().execute("git", &["submodule", "update", "--init", "--recursive"], 300).await {
+                Ok(_) => {
+                    info!(repo_id = %repo_id, "L11: Submodulos do Git atualizados com sucesso");
+                }
+                Err(e) => {
+                    warn!(
+                        repo_id = %repo_id,
+                        error = %e,
+                        "L11: Falha ao atualizar submodulos do Git (prosseguindo de forma best-effort)"
+                    );
+                }
+            }
+        }
+
         // [N4] Detecção de Stack
         info!(repo_id = %repo_id, "N4: Detectando stack do repositório");
         let profile = LanguageDetector::detect(&repo_path)

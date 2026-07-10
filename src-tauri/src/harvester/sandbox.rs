@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
-use sysinfo::{Pid, System};
+use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{debug, error, info, trace, warn};
@@ -335,7 +335,18 @@ fn grant_ntfs_acl(
     sid: PSID,
     access_mask: u32,
     inheritance_flag: u32,
+    cache: &mut FxHashSet<(PathBuf, u32, u32)>,
 ) -> Result<(), SandboxError> {
+    let path_buf = path.to_path_buf();
+    let has_sufficient = cache.iter().any(|(p, m, i)| {
+        p == &path_buf
+            && (*m & access_mask) == access_mask
+            && (*i == inheritance_flag || *i == SUB_CONTAINERS_AND_OBJECTS_INHERIT)
+    });
+    if has_sufficient {
+        return Ok(());
+    }
+
     // Fallback gracioso para scripts de lote (.cmd, .bat) que falham na injeção direta de ACL
     let is_shim = path.extension()
         .and_then(|ext| ext.to_str())
@@ -456,6 +467,7 @@ fn grant_ntfs_acl(
         });
     }
 
+    cache.insert((path_buf, access_mask, inheritance_flag));
     Ok(())
 }
 
@@ -555,17 +567,44 @@ fn grant_access_to_winstation_and_desktop(sid: PSID) -> Result<(), SandboxError>
 }
 
 #[cfg(target_os = "windows")]
+const BLOCKED_ACL_PREFIXES: &[&str] = &[
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
+    "C:\\Windows",
+    "C:\\ProgramData",
+];
+
+#[cfg(target_os = "windows")]
+fn is_blocked_os_directory(path: &std::path::Path) -> bool {
+    let path_str = path.to_string_lossy();
+    BLOCKED_ACL_PREFIXES.iter().any(|prefix| {
+        path_str.starts_with(prefix)
+    })
+}
+
+#[cfg(target_os = "windows")]
 fn grant_ntfs_acl_with_parents(
     path: &std::path::Path,
     sid: PSID,
     access_mask: u32,
     inheritance_flag: u32,
+    cache: &mut FxHashSet<(PathBuf, u32, u32)>,
 ) -> Result<(), SandboxError> {
+    // L06: Blocklist de diretórios estruturais do SO — nunca injetar ACLs do
+    // AppContainer em pastas do kernel/sistema.
+    if is_blocked_os_directory(path) {
+        debug!(
+            target_path = %path.display(),
+            "grant_ntfs_acl_with_parents: Caminho bloqueado (diretório estrutural do SO). Pulando."
+        );
+        return Ok(());
+    }
+
     debug!(
         target_path = %path.display(),
         "grant_ntfs_acl_with_parents: Iniciando para o alvo principal..."
     );
-    grant_ntfs_acl(path, sid, access_mask, inheritance_flag)?;
+    grant_ntfs_acl(path, sid, access_mask, inheritance_flag, cache)?;
     debug!(
         target_path = %path.display(),
         "grant_ntfs_acl_with_parents: Alvo principal concluido com sucesso."
@@ -597,7 +636,7 @@ fn grant_ntfs_acl_with_parents(
                     parent_path = %p.display(),
                     "grant_ntfs_acl_with_parents: Concedendo travessia ao pai..."
                 );
-                if let Err(e) = grant_ntfs_acl(p, sid, 0x0012_00A9u32, NO_INHERITANCE) {
+                if let Err(e) = grant_ntfs_acl(p, sid, 0x0012_00A9u32, NO_INHERITANCE, cache) {
                     let is_access_denied = match &e {
                         SandboxError::AclInjectionFailed { detail } => {
                             detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -629,6 +668,7 @@ fn grant_ntfs_acl_for_all_application_packages(
     path: &std::path::Path,
     access_mask: u32,
     inheritance_flag: u32,
+    cache: &mut FxHashSet<(PathBuf, u32, u32)>,
 ) {
     let mut all_app_packages_sid: PSID = std::ptr::null_mut();
     let sid_str_wide = str_to_wide("S-1-15-2-1");
@@ -639,7 +679,7 @@ fn grant_ntfs_acl_for_all_application_packages(
         )
     };
     if sid_ok != 0 && !all_app_packages_sid.is_null() {
-        let _ = grant_ntfs_acl_with_parents(path, all_app_packages_sid, access_mask, inheritance_flag);
+        let _ = grant_ntfs_acl_with_parents(path, all_app_packages_sid, access_mask, inheritance_flag, cache);
         unsafe {
             windows_sys::Win32::Foundation::LocalFree(all_app_packages_sid as *mut _);
         }
@@ -705,21 +745,29 @@ fn open_dir_delete_on_close(path: &std::path::Path) -> Result<HANDLE, SandboxErr
 /// no momento da criação do pipe, antes de abrir a conexão do sidecar.
 #[cfg(target_os = "windows")]
 fn set_loopback_exemption(profile_name: &str) -> bool {
-    // CheckNetIsolation.exe LoopbackExempt -a -n=<nome_do_perfil>
-    let result = std::process::Command::new("CheckNetIsolation.exe")
-        .args(["LoopbackExempt", "-a", &format!("-n={profile_name}")])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
-    match result {
-        Ok(status) => status.success(),
-        Err(e) => {
-            warn!(
-                profile_name,
-                error = %e,
-                "AppContainer: CheckNetIsolation não disponível; loopback IPC pode falhar"
-            );
-            false
+    #[cfg(test)]
+    {
+        let _ = profile_name;
+        true
+    }
+    #[cfg(not(test))]
+    {
+        // CheckNetIsolation.exe LoopbackExempt -a -n=<nome_do_perfil>
+        let result = std::process::Command::new("CheckNetIsolation.exe")
+            .args(["LoopbackExempt", "-a", &format!("-n={profile_name}")])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        match result {
+            Ok(status) => status.success(),
+            Err(e) => {
+                warn!(
+                    profile_name,
+                    error = %e,
+                    "AppContainer: CheckNetIsolation não disponível; loopback IPC pode falhar"
+                );
+                false
+            }
         }
     }
 }
@@ -752,7 +800,7 @@ fn spawn_in_appcontainer_blocking(
     env: &std::collections::BTreeMap<String, String>,
     cwd: &std::path::Path,
     profile: &AppContainerProfile,
-    timeout_ms: u32,
+    timeout_profile: TimeoutProfile,
     ephemeral_dir: &std::path::Path,
 ) -> Result<AppContainerSpawnResult, SandboxError> {
     // ── 1. Monta a linha de comando UTF-16 ────────────────────────────────────
@@ -825,8 +873,9 @@ fn spawn_in_appcontainer_blocking(
             merged_env.insert(k.to_uppercase(), v.clone());
         }
 
-        // Sobrescreve explicitamente chaves de temporários, home e isolamento do Rust/Cargo
-        // para apontar estritamente para o diretório efêmero do sidecar.
+        // L09: Sobrescreve chaves de temporários e home para o diretório efêmero.
+        // CARGO_HOME e RUSTUP_HOME são EXCLUÍDOS intencionalmente — devem apontar
+        // para as toolchains reais do host via ACL NTFS rasa (Lei L09).
         let ephemeral_dir_str = ephemeral_dir.to_string_lossy().into_owned();
         let keys_to_override = [
             "HOME",
@@ -835,8 +884,6 @@ fn spawn_in_appcontainer_blocking(
             "LOCALAPPDATA",
             "TEMP",
             "TMP",
-            "CARGO_HOME",
-            "RUSTUP_HOME",
             "XDG_CACHE_HOME",
         ];
         for key in &keys_to_override {
@@ -1081,31 +1128,17 @@ fn spawn_in_appcontainer_blocking(
 
     // Drena stdout e stderr em loop usando WaitForSingleObject com polling.
     // Note: reads on pipes retornam ERROR_BROKEN_PIPE quando o filho fecha o handle.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms as u64);
+    let started_at = std::time::Instant::now();
+    let mut last_activity = std::time::Instant::now();
+
     loop {
-        let remaining_ms = deadline
-            .checked_duration_since(std::time::Instant::now())
-            .map(|d| d.as_millis() as u32)
-            .unwrap_or(0);
-
-        if remaining_ms == 0 {
-            // Timeout: mata o processo e retorna erro.
-            unsafe {
-                windows_sys::Win32::System::Threading::TerminateProcess(pi.hProcess, 1);
-                WaitForSingleObject(pi.hProcess, 1000);
-                CloseHandle(pi.hProcess);
-                CloseHandle(stdout_read);
-                CloseHandle(stderr_read);
-            }
-            return Err(SandboxError::Timeout);
-        }
-
         // Polling de 250ms: balanceia responsividade vs CPU.
         let wait_result = unsafe {
-            WaitForSingleObject(pi.hProcess, 250.min(remaining_ms))
+            WaitForSingleObject(pi.hProcess, 250)
         };
 
         // Drena o que há disponível em stdout (não-bloqueante via PeekNamedPipe).
+        let mut read_any_io = false;
         loop {
             let mut bytes_avail: u32 = 0;
             let peek_ok = unsafe {
@@ -1137,6 +1170,7 @@ fn spawn_in_appcontainer_blocking(
                 break;
             }
             stdout_buf.extend_from_slice(&chunk[..bytes_read as usize]);
+            read_any_io = true;
         }
 
         // Drena o que há disponível em stderr (não-bloqueante via PeekNamedPipe).
@@ -1171,11 +1205,53 @@ fn spawn_in_appcontainer_blocking(
                 break;
             }
             stderr_buf.extend_from_slice(&chunk[..bytes_read as usize]);
+            read_any_io = true;
+        }
+
+        if read_any_io {
+            last_activity = std::time::Instant::now();
         }
 
         // WAIT_OBJECT_0 = 0x0000_0000 = processo terminou.
         if wait_result == 0x0000_0000u32 {
             break;
+        }
+
+        // Verifica os limites de timeout:
+        // 1. Idle timeout
+        if last_activity.elapsed() >= Duration::from_secs(timeout_profile.idle_timeout_secs) {
+            warn!(
+                cmd_line = %cmd_str,
+                idle_timeout_secs = timeout_profile.idle_timeout_secs,
+                "AppContainer: Idle timeout atingido (silêncio de I/O); SIGKILL"
+            );
+            unsafe {
+                windows_sys::Win32::System::Threading::TerminateProcess(pi.hProcess, 1);
+                WaitForSingleObject(pi.hProcess, 1000);
+                CloseHandle(pi.hProcess);
+                CloseHandle(stdout_read);
+                CloseHandle(stderr_read);
+            }
+            return Err(SandboxError::Timeout);
+        }
+
+        // 2. Absolute timeout
+        if let Some(absolute_secs) = timeout_profile.absolute_timeout_secs {
+            if started_at.elapsed() >= Duration::from_secs(absolute_secs) {
+                warn!(
+                    cmd_line = %cmd_str,
+                    absolute_secs,
+                    "AppContainer: Absolute timeout atingido; SIGKILL"
+                );
+                unsafe {
+                    windows_sys::Win32::System::Threading::TerminateProcess(pi.hProcess, 1);
+                    WaitForSingleObject(pi.hProcess, 1000);
+                    CloseHandle(pi.hProcess);
+                    CloseHandle(stdout_read);
+                    CloseHandle(stderr_read);
+                }
+                return Err(SandboxError::Timeout);
+            }
         }
     }
 
@@ -1563,6 +1639,7 @@ fn grant_runtime_and_tool_acls(
     repo_path: &Path,
     sid: PSID,
     command: &str,
+    cache: &mut FxHashSet<(PathBuf, u32, u32)>,
 ) -> Result<(), SandboxError> {
     let mut paths_to_grant = Vec::new();
 
@@ -1656,7 +1733,7 @@ fn grant_runtime_and_tool_acls(
                 path = %path_clean.display(),
                 "AppContainer: Concedendo ACL NTFS para runtime/ferramenta global/local"
             );
-            if let Err(e) = grant_ntfs_acl_with_parents(&path_clean, sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
+            if let Err(e) = grant_ntfs_acl_with_parents(&path_clean, sid, GENERIC_READ | GENERIC_EXECUTE, NO_INHERITANCE, cache) {
                 let is_access_denied = match &e {
                     SandboxError::AclInjectionFailed { detail } => {
                         detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -1860,7 +1937,11 @@ fn persist_semgrep_diagnostics(
         }
     }
 
-    std::fs::write(&diagnostics_path, report).ok()?;
+    // L08: Escrita atômica via write-then-rename (snapsafe) para prevenir
+    // corrupção de dados caso o sidecar sofra SIGKILL durante a gravação.
+    let temp_path = diagnostics_dir.join(format!(".semgrep-{timestamp}.tmp"));
+    std::fs::write(&temp_path, report).ok()?;
+    std::fs::rename(&temp_path, &diagnostics_path).ok()?;
     Some(diagnostics_path)
 }
 
@@ -2350,9 +2431,6 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         self.lock_pids().insert(pid);
 
         let last_activity = Arc::new(Mutex::new(Instant::now()));
-        let sys_pid = Pid::from_u32(pid);
-        let mut sys = System::new();
-        sys.refresh_process(sys_pid);
         let stdout_task = {
             let last_activity = Arc::clone(&last_activity);
             tokio::spawn(drain_pipe_with_telemetry(
@@ -2383,12 +2461,6 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let started_at = Instant::now();
 
         let wait_outcome = loop {
-            sys.refresh_process(sys_pid);
-            if let Some(process) = sys.process(sys_pid) {
-                if process.cpu_usage() > 0.1 {
-                    mark_process_activity(&last_activity);
-                }
-            }
             match child_guard.child.as_mut().unwrap().try_wait() {
                 Ok(Some(status)) => break ProcessWaitOutcome::Exited(status),
                 Ok(None) => {
@@ -2736,173 +2808,217 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             "AppContainer: preparando Gaiola de Silicio"
         );
 
-        // ── Passo 1: Cria o perfil AppContainer ──────────────────────────────
-        // O Drop garante DeleteAppContainerProfile + FreeSid rigorosamente.
-        let profile = create_appcontainer_profile(&container_name)?;
-        grant_access_to_winstation_and_desktop(profile.sid)?;
-
-        // Pre-cria as pastas de LocalAppData (Packages) do AppContainer no Host
-        // e concede ACL para evitar a quebra do Nuitka {CACHE_DIR} do opengrep
-        let local_appdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
-        if !local_appdata.is_empty() {
-            let container_packages_dir = std::path::Path::new(&local_appdata)
-                .join("Packages")
-                .join(&container_name);
+        // ── Passo 0: L14 — Dry-Run Gating (Fail-Closed) ──────────────────
+        // Testa se o binário alvo consegue executar na gaiola. Usa o
+        // próprio resolved_program com --version (não cmd.exe, pois LPAC bloqueia System32).
+        {
+            let dry_run_program = resolved.program.clone();
+            let mut cmd = tokio::process::Command::new(&dry_run_program);
             
-            // Cria a árvore de pastas esperada pelo AppContainer do Windows para evitar SegFaults do Nuitka/Opengrep
-            let dirs_to_create = [
-                container_packages_dir.join("LocalState"),
-                container_packages_dir.join("AC"),
-                container_packages_dir.join("AC").join("Temp"),
-                container_packages_dir.join("AC").join("LocalState"),
-                container_packages_dir.join("AC").join("LocalCache"),
-                container_packages_dir.join("AC").join("LocalFolder"),
-            ];
-            for dir in &dirs_to_create {
-                std::fs::create_dir_all(dir).map_err(|e| {
-                    SandboxError::AppContainerSetupFailed {
-                        detail: format!("Falha ao criar pasta de perfil '{}': {e}", dir.display()),
-                    }
-                })?;
+            // Tratativa específica de flags para cmd.exe para evitar travamento interativo
+            let is_cmd = dry_run_program
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.eq_ignore_ascii_case("cmd") || n.eq_ignore_ascii_case("cmd.exe"))
+                .unwrap_or(false);
+            if is_cmd {
+                cmd.arg("/c").arg("exit").arg("0");
+            } else {
+                cmd.arg("--version");
             }
+            
+            cmd.stdout(std::process::Stdio::null())
+               .stderr(std::process::Stdio::null())
+               .stdin(std::process::Stdio::null())
+               .kill_on_drop(true);
 
-            grant_ntfs_acl_with_parents(&container_packages_dir, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT).map_err(|e| {
-                SandboxError::AppContainerSetupFailed {
-                    detail: format!("Falha ao conceder NTFS write ACL para a pasta do AppContainer Packages: {e:?}"),
+            match cmd.spawn() {
+                Ok(mut child) => {
+                    let wait_fut = child.wait();
+                    match timeout(Duration::from_secs(3), wait_fut).await {
+                        Ok(Ok(status)) if status.success() => {
+                            debug!(
+                                command,
+                                program = %resolved.program.display(),
+                                "AppContainer: dry-run do binário alvo bem-sucedido"
+                            );
+                        }
+                        _ => {
+                            // Se falhou ou deu timeout, kill_on_drop garante a morte
+                            warn!(
+                                command,
+                                program = %resolved.program.display(),
+                                "AppContainer: dry-run do binário alvo falhou ou deu timeout (não-fatal)."
+                            );
+                        }
+                    }
                 }
-            })?;
-        }
-
-        // ── Passo 2: Diretório temporário efêmero ────────────────────────────
-        // Criado no %TEMP% do host; o handle DELETE_ON_CLOSE o evaporará no Drop.
-        let ephemeral_dir = strip_unc_prefix(&std::env::temp_dir().join(format!("soda-ac-{uuid_str}")));
-        std::fs::create_dir_all(&ephemeral_dir).map_err(|e| SandboxError::AppContainerSetupFailed {
-            detail: format!("Falha ao criar diretório efêmero '{}': {e}", ephemeral_dir.display()),
-        })?;
-
-        // Injeta FORÇOSAMENTE no bloco de variáveis de ambiente do comando resolvida
-        // as variáveis do cache do Opengrep/Semgrep apontando para o diretório efêmero do AppContainer
-        let ephemeral_dir_str = ephemeral_dir.to_string_lossy().into_owned();
-        resolved.env.insert("SEMGREP_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
-        resolved.env.insert("XDG_CACHE_HOME".to_string(), ephemeral_dir_str.clone());
-
-        // Vacina do Ruff: impede erro de escrita de cache no ProjFS
-        if command == "ruff" {
-            resolved.env.insert("RUFF_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
-        }
-
-        // Cura da Cegueira dos Trampolins (Bandit / uv / Nuitka / Opengrep):
-        // Redireciona o perfil do usuário para o diretório efêmero que é 100% gravável na Gaiola.
-        resolved.env.insert("LOCALAPPDATA".to_string(), ephemeral_dir_str.clone());
-        resolved.env.insert("APPDATA".to_string(), ephemeral_dir_str.clone());
-        resolved.env.insert("USERPROFILE".to_string(), ephemeral_dir_str.clone());
-        resolved.env.insert("HOME".to_string(), ephemeral_dir_str.clone());
-
-        // ── Passo 3: Handle DELETE_ON_CLOSE (evaporação automática) ──────────
-        // GENERIC_READ é necessário para abrir o diretório sem acesso de escrita exclusivo.
-        let ephemeral_handle = SendHandle(open_dir_delete_on_close(&ephemeral_dir)?);
-
-        // ── Passo 4: Muro do NTFS — Fail-Closed ─────────────────────────────
-        // FILE_GENERIC_READ | FILE_GENERIC_EXECUTE = 0x0012_00A9
-        
-        // Concede permissão de Leitura para ALL APPLICATION PACKAGES (S-1-15-2-1) diretamente na raiz do execution_root e repo_path para mitigar erros de ProjFS (OS Error 5)
-        grant_ntfs_acl_for_all_application_packages(&execution_root_clean, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
-        if self.repo_path != execution_root_clean {
-            grant_ntfs_acl_for_all_application_packages(&self.repo_path, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
-        }
-
-        // Concede leitura/execução no diretório do projeto.
-        grant_ntfs_acl_with_parents(&self.repo_path, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
-            .map_err(|e| {
-                // Higiene: fecha o handle efêmero antes de propagar o erro.
-                unsafe { CloseHandle(ephemeral_handle.0); }
-                e
-            })?;
-
-        // Concede permissões para as runtimes e ferramentas globais/locais usadas
-        grant_runtime_and_tool_acls(&self.repo_path, profile.sid, command)
-            .map_err(|e| {
-                unsafe { CloseHandle(ephemeral_handle.0); }
-                e
-            })?;
-
-        // Concede GENERIC_ALL na pasta temporária.
-        grant_ntfs_acl_with_parents(&ephemeral_dir, profile.sid, GENERIC_ALL, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
-            .map_err(|e| {
-                unsafe { CloseHandle(ephemeral_handle.0); }
-                e
-            })?;
-
-        // Concede permissões de leitura/execução no CARGO_HOME e RUSTUP_HOME do Host
-        let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
-        let cargo_home = std::env::var("CARGO_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(&user_profile).join(".cargo"));
-        let rustup_home = std::env::var("RUSTUP_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(&user_profile).join(".rustup"));
-        if command == "cargo" || command == "clippy" || command == "rustc" {
-            if cargo_home.exists() {
-                let _ = grant_ntfs_acl_with_parents(&cargo_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
-            }
-            if rustup_home.exists() {
-                let _ = grant_ntfs_acl_with_parents(&rustup_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
-            }
-        }
-
-        // Concede leitura/escrita/execução nas pastas de escrita permitidas do host
-        for root in &self.host_write_roots {
-            grant_ntfs_acl_with_parents(root, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
-                .map_err(|e| {
-                    unsafe { CloseHandle(ephemeral_handle.0); }
-                    e
-                })?;
-        }
-
-        // Concede leitura/execução na pasta pai do executável resolvido (para trampolins/libs locais)
-        if let Some(parent) = resolved.program.parent() {
-            if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
-                let is_access_denied = match &e {
-                    SandboxError::AclInjectionFailed { detail } => {
-                        detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
-                    }
-                    _ => false,
-                };
-                if !is_access_denied {
-                    unsafe { CloseHandle(ephemeral_handle.0); }
-                    return Err(e);
-                } else {
-                    debug!(
-                        parent = %parent.display(),
-                        "grant_ntfs_acl_with_parents falhou com Access Denied (Win32=5) para a pasta pai do executavel. Continuando."
+                Err(e) => {
+                    warn!(
+                        command,
+                        program = %resolved.program.display(),
+                        error = %e,
+                        "AppContainer: falha ao spawnar dry-run do binário alvo (não-fatal)."
                     );
                 }
             }
         }
+        // L03: Envolve pre-flight e ACLs NTFS em spawn_blocking para evitar Thread Starvation (Lei L03)
+        let container_name_clone = container_name.clone();
+        let execution_root_clean_clone = execution_root_clean.clone();
+        let repo_path_clone = self.repo_path.clone();
+        let host_write_roots_clone = self.host_write_roots.clone();
+        let command_clone = command.to_string();
+        let extra_acl_paths_clone = extra_acl_paths.clone();
+        let mut resolved_clone = resolved.clone();
+        let uuid_str_clone = uuid_str.clone();
 
-        // Concede leitura/execução explicitamente no arquivo binário executável resolvido.
-        if let Err(e) = grant_ntfs_acl_with_parents(&resolved.program, profile.sid, 0x0012_00A9u32, NO_INHERITANCE) {
-            let is_access_denied = match &e {
-                SandboxError::AclInjectionFailed { detail } => {
-                    detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+        let preflight_result = tokio::task::spawn_blocking(move || -> Result<(AppContainerProfile, PathBuf, SendHandle, ResolvedCommand), SandboxError> {
+            let mut acl_cache = FxHashSet::default();
+
+            // ── Passo 1: Cria o perfil AppContainer ──────────────────────────────
+            // O Drop garante DeleteAppContainerProfile + FreeSid rigorosamente.
+            let profile = create_appcontainer_profile(&container_name_clone)?;
+            grant_access_to_winstation_and_desktop(profile.sid)?;
+
+            // Pre-cria as pastas de LocalAppData (Packages) do AppContainer no Host
+            // e concede ACL para evitar a quebra do Nuitka {CACHE_DIR} do opengrep
+            let local_appdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+            if !local_appdata.is_empty() {
+                let container_packages_dir = std::path::Path::new(&local_appdata)
+                    .join("Packages")
+                    .join(&container_name_clone);
+                
+                // Cria a árvore de pastas esperada pelo AppContainer do Windows para evitar SegFaults do Nuitka/Opengrep
+                let dirs_to_create = [
+                    container_packages_dir.join("LocalState"),
+                    container_packages_dir.join("AC"),
+                    container_packages_dir.join("AC").join("Temp"),
+                    container_packages_dir.join("AC").join("LocalState"),
+                    container_packages_dir.join("AC").join("LocalCache"),
+                    container_packages_dir.join("AC").join("LocalFolder"),
+                ];
+                for dir in &dirs_to_create {
+                    std::fs::create_dir_all(dir).map_err(|e| {
+                        SandboxError::AppContainerSetupFailed {
+                            detail: format!("Falha ao criar pasta de perfil '{}': {e}", dir.display()),
+                        }
+                    })?;
                 }
-                _ => false,
-            };
-            if !is_access_denied {
-                unsafe { CloseHandle(ephemeral_handle.0); }
-                return Err(e);
-            } else {
-                debug!(
-                    program = %resolved.program.display(),
-                    "grant_ntfs_acl_with_parents falhou com Access Denied (Win32=5) para o binario. Continuando pois o AppContainer ja possui permissao default para esta pasta do sistema."
-                );
-            }
-        }
 
-        // Concede leitura/execução nos caminhos adicionais do trampolim (scripts e pastas pai do script)
-        for path in &extra_acl_paths {
-            if let Some(parent) = path.parent() {
-                if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
+                grant_ntfs_acl_with_parents(&container_packages_dir, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache).map_err(|e| {
+                    SandboxError::AppContainerSetupFailed {
+                        detail: format!("Falha ao conceder NTFS write ACL para a pasta do AppContainer Packages: {e:?}"),
+                    }
+                })?;
+            }
+
+            // ── Passo 2: Diretório temporário efêmero ────────────────────────────
+            // Criado no %TEMP% do host; o handle DELETE_ON_CLOSE o evaporará no Drop.
+            let ephemeral_dir = strip_unc_prefix(&std::env::temp_dir().join(format!("soda-ac-{uuid_str_clone}")));
+            std::fs::create_dir_all(&ephemeral_dir).map_err(|e| SandboxError::AppContainerSetupFailed {
+                detail: format!("Falha ao criar diretório efêmero '{}': {e}", ephemeral_dir.display()),
+            })?;
+
+            // Injeta FORÇOSAMENTE no bloco de variáveis de ambiente do comando resolvida
+            // as variáveis do cache do Opengrep/Semgrep apontando para o diretório efêmero do AppContainer
+            let ephemeral_dir_str = ephemeral_dir.to_string_lossy().into_owned();
+            resolved_clone.env.insert("SEMGREP_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
+            resolved_clone.env.insert("XDG_CACHE_HOME".to_string(), ephemeral_dir_str.clone());
+
+            // Vacina do Ruff: impede erro de escrita de cache no ProjFS
+            if command_clone == "ruff" {
+                resolved_clone.env.insert("RUFF_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
+            }
+
+            // Cura da Cegueira dos Trampolins (Bandit / uv / Nuitka / Opengrep):
+            // Redireciona o perfil do usuário para o diretório efêmero que é 100% gravável na Gaiola.
+            resolved_clone.env.insert("LOCALAPPDATA".to_string(), ephemeral_dir_str.clone());
+            resolved_clone.env.insert("APPDATA".to_string(), ephemeral_dir_str.clone());
+            resolved_clone.env.insert("USERPROFILE".to_string(), ephemeral_dir_str.clone());
+            resolved_clone.env.insert("HOME".to_string(), ephemeral_dir_str.clone());
+
+            // ── Passo 2.1: L07 — Criação dos Cofres Fantasmas ────────────────────
+            // Cria fisicamente as subpastas de APPDATA/LOCALAPPDATA que ferramentas
+            // como Opengrep, Nuitka e Bandit esperam encontrar no filesystem.
+            let vault_dirs = [
+                ephemeral_dir.join("AppData").join("Local"),
+                ephemeral_dir.join("AppData").join("Roaming"),
+                ephemeral_dir.join(".config"),
+                ephemeral_dir.join(".cache"),
+                ephemeral_dir.join(".local").join("share"),
+            ];
+            for dir in &vault_dirs {
+                std::fs::create_dir_all(dir).map_err(|e| SandboxError::AppContainerSetupFailed {
+                    detail: format!("Falha ao criar cofre fantasma '{}': {e}", dir.display()),
+                })?;
+            }
+
+            // ── Passo 3: Handle DELETE_ON_CLOSE (evaporação automática) ──────────
+            // GENERIC_READ é necessário para abrir o diretório sem acesso de escrita exclusivo.
+            let ephemeral_handle = SendHandle(open_dir_delete_on_close(&ephemeral_dir)?);
+
+            // ── Passo 4: Muro do NTFS — Fail-Closed ─────────────────────────────
+            // FILE_GENERIC_READ | FILE_GENERIC_EXECUTE = 0x0012_00A9
+            
+            // Concede permissão de Leitura para ALL APPLICATION PACKAGES (S-1-15-2-1) diretamente na raiz do execution_root e repo_path para mitigar erros de ProjFS (OS Error 5)
+            grant_ntfs_acl_for_all_application_packages(&execution_root_clean_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache);
+            if repo_path_clone != execution_root_clean_clone {
+                grant_ntfs_acl_for_all_application_packages(&repo_path_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache);
+            }
+
+            // Concede leitura/execução no diretório do projeto.
+            grant_ntfs_acl_with_parents(&repo_path_clone, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache)
+                .map_err(|e| {
+                    // Higiene: fecha o handle efêmero antes de propagar o erro.
+                    unsafe { CloseHandle(ephemeral_handle.0); }
+                    e
+                })?;
+
+            // Concede permissões para as runtimes e ferramentas globais/locais usadas
+            grant_runtime_and_tool_acls(&repo_path_clone, profile.sid, &command_clone, &mut acl_cache)
+                .map_err(|e| {
+                    unsafe { CloseHandle(ephemeral_handle.0); }
+                    e
+                })?;
+
+            // Concede GENERIC_ALL na pasta temporária.
+            grant_ntfs_acl_with_parents(&ephemeral_dir, profile.sid, GENERIC_ALL, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache)
+                .map_err(|e| {
+                    unsafe { CloseHandle(ephemeral_handle.0); }
+                    e
+                })?;
+
+            // Concede permissões de leitura/execução no CARGO_HOME e RUSTUP_HOME do Host
+            let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
+            let cargo_home = std::env::var("CARGO_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from(&user_profile).join(".cargo"));
+            let rustup_home = std::env::var("RUSTUP_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from(&user_profile).join(".rustup"));
+            if command_clone == "cargo" || command_clone == "clippy" || command_clone == "rustc" {
+                if cargo_home.exists() {
+                    // L05: Herança NTFS rasa — leitura no diretório raiz sem propagação
+                    let _ = grant_ntfs_acl_with_parents(&cargo_home, profile.sid, 0x0012_00A9u32, NO_INHERITANCE, &mut acl_cache);
+                }
+                if rustup_home.exists() {
+                    let _ = grant_ntfs_acl_with_parents(&rustup_home, profile.sid, 0x0012_00A9u32, NO_INHERITANCE, &mut acl_cache);
+                }
+            }
+
+            // Concede leitura/escrita/execução nas pastas de escrita permitidas do host
+            for root in &host_write_roots_clone {
+                grant_ntfs_acl_with_parents(root, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache)
+                    .map_err(|e| {
+                        unsafe { CloseHandle(ephemeral_handle.0); }
+                        e
+                    })?;
+            }
+
+            // Concede leitura/execução na pasta pai do executável resolvido (para trampolins/libs locais)
+            if let Some(parent) = resolved_clone.program.parent() {
+                if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache) {
                     let is_access_denied = match &e {
                         SandboxError::AclInjectionFailed { detail } => {
                             detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -2915,7 +3031,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     }
                 }
             }
-            if let Err(e) = grant_ntfs_acl_with_parents(path, profile.sid, 0x0012_00A9u32, NO_INHERITANCE) {
+
+            // Concede leitura/execução explicitamente no arquivo binário executável resolvido.
+            if let Err(e) = grant_ntfs_acl_with_parents(&resolved_clone.program, profile.sid, 0x0012_00A9u32, NO_INHERITANCE, &mut acl_cache) {
                 let is_access_denied = match &e {
                     SandboxError::AclInjectionFailed { detail } => {
                         detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -2927,17 +3045,63 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     return Err(e);
                 }
             }
-        }
 
-        // ── Passo 5: Loopback Exemption (best-effort) ────────────────────────
-        // Permite ao sidecar se conectar via loopback ao Named Pipe do Gateway.
-        let loopback_ok = set_loopback_exemption(&container_name);
-        if !loopback_ok {
-            warn!(
-                container_name = %container_name,
-                "AppContainer: loopback exemption nao configurado; IPC via loopback pode falhar"
-            );
-        }
+            // Concede leitura/execução nos caminhos adicionais do trampolim (scripts e pastas pai do script)
+            for path in &extra_acl_paths_clone {
+                if let Some(parent) = path.parent() {
+                    if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &mut acl_cache) {
+                        let is_access_denied = match &e {
+                            SandboxError::AclInjectionFailed { detail } => {
+                                detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                            }
+                            _ => false,
+                        };
+                        if !is_access_denied {
+                            unsafe { CloseHandle(ephemeral_handle.0); }
+                            return Err(e);
+                        }
+                    }
+                }
+                if let Err(e) = grant_ntfs_acl_with_parents(path, profile.sid, 0x0012_00A9u32, NO_INHERITANCE, &mut acl_cache) {
+                    let is_access_denied = match &e {
+                        SandboxError::AclInjectionFailed { detail } => {
+                            detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                        }
+                        _ => false,
+                    };
+                    if !is_access_denied {
+                        unsafe { CloseHandle(ephemeral_handle.0); }
+                        return Err(e);
+                    }
+                }
+            }
+
+            // ── Passo 5: Loopback Exemption (best-effort) ────────────────────────
+            // Permite ao sidecar se conectar via loopback ao Named Pipe do Gateway.
+            let _loopback_ok = set_loopback_exemption(&container_name_clone);
+
+            Ok((profile, ephemeral_dir, ephemeral_handle, resolved_clone))
+        });
+
+        const PREFLIGHT_TIMEOUT_SECS: u64 = 120;
+
+        let (profile, ephemeral_dir, ephemeral_handle, resolved) = match timeout(
+            Duration::from_secs(PREFLIGHT_TIMEOUT_SECS),
+            preflight_result
+        ).await {
+            Ok(Ok(Ok(res))) => res,
+            Ok(Ok(Err(sandbox_err))) => return Err(sandbox_err),
+            Ok(Err(join_err)) => {
+                return Err(SandboxError::AppContainerSetupFailed {
+                    detail: format!("Falha de thread starvation no setup da gaiola (spawn_blocking join error): {join_err}"),
+                });
+            }
+            Err(_) => {
+                return Err(SandboxError::AppContainerSetupFailed {
+                    detail: format!("Timeout pre-flight de {PREFLIGHT_TIMEOUT_SECS} segundos atingido ao preparar Gaiola de Silicio"),
+                });
+            }
+        };
 
         // ── Passo 6: Spawn em AppContainer (spawn_blocking — anti-deadlock Tokio) ──
         // Toda lógica bloqueante de Win32 ocorre dentro de spawn_blocking.
@@ -2948,8 +3112,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let spawn_args = resolved.args.clone();
         let spawn_env = resolved.env.clone();
         let spawn_cwd = execution_root_clean.clone();
-        let timeout_ms = (timeout_secs.min(u32::MAX as u64) as u32)
-            .saturating_mul(1000);
+        let timeout_profile = timeout_profile(command, args, timeout_secs);
 
         let ephemeral_dir_clone = ephemeral_dir.clone();
 
@@ -2961,7 +3124,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 &spawn_env,
                 &spawn_cwd,
                 &profile,
-                timeout_ms,
+                timeout_profile,
                 &ephemeral_dir_clone,
             );
             // Drop explícito: DeleteAppContainerProfile + FreeSid no thread bloqueante.
@@ -2979,8 +3142,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         unsafe { CloseHandle(ephemeral_handle.0); }
 
         // Limpa o diretório de LocalAppData do AppContainer para evitar acúmulo no disco do Host
-        if !local_appdata.is_empty() {
-            let container_packages_dir = std::path::Path::new(&local_appdata)
+        let local_appdata_cleanup = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        if !local_appdata_cleanup.is_empty() {
+            let container_packages_dir = std::path::Path::new(&local_appdata_cleanup)
                 .join("Packages")
                 .join(&container_name);
             let _ = std::fs::remove_dir_all(&container_packages_dir);

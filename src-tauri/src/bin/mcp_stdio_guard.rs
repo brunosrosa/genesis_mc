@@ -274,6 +274,12 @@ where
                 } else {
                     let _ = child_guard.child.as_mut().unwrap().kill().await;
                 }
+                // L01: Drenar ativamente o stdout antes de aguardar o wait() para evitar Pipe Deadlock
+                let mut stdout_to_drain = stdout_lines;
+                tokio::spawn(async move {
+                    while let Ok(Some(_)) = stdout_to_drain.next_line().await {}
+                });
+
                 let _ = child_guard.child.as_mut().unwrap().wait().await;
 
                 write_json(out, &jsonrpc_timeout_error(id)).await?;
@@ -299,6 +305,12 @@ where
     } else {
         let _ = child_guard.child.as_mut().unwrap().kill().await;
     }
+    // L01: Drenar ativamente o stdout antes de aguardar o wait() para evitar Pipe Deadlock no cleanup final
+    let mut stdout_to_drain = stdout_lines;
+    tokio::spawn(async move {
+        while let Ok(Some(_)) = stdout_to_drain.next_line().await {}
+    });
+
     let _ = child_guard.child.as_mut().unwrap().wait().await;
     let _ = child_guard.child.take(); // Desarma o ProcessGuard
     Ok(())

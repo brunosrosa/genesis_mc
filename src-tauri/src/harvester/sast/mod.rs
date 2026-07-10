@@ -576,7 +576,7 @@ impl PolyglotSastSidecar {
                         command_args,
                         forced_channel,
                     } = target;
-                    let cargo_permit = if blade == StaticAnalysisBlade::RustClippy {
+                    let _cargo_permit = if blade == StaticAnalysisBlade::RustClippy {
                         Some(
                             Arc::clone(&cargo_semaphore)
                                 .acquire_owned()
@@ -590,7 +590,7 @@ impl PolyglotSastSidecar {
                     } else {
                         None
                     };
-                    let global_permit = Arc::clone(&global_semaphore)
+                    let _global_permit = Arc::clone(&global_semaphore)
                         .acquire_owned()
                         .await
                         .map_err(|e| SidecarError::ExecutionFailed {
@@ -619,8 +619,6 @@ impl PolyglotSastSidecar {
                         has_global_opengrep_coverage,
                     )
                     .await;
-                    drop(global_permit);
-                    drop(cargo_permit);
                     info!(
                         blade = blade_name(blade),
                         scope = %scope,
@@ -2083,6 +2081,8 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
     scan_targets: &[String],
     forced_channel: Option<SastIssueChannel>,
 ) -> Result<Vec<u8>, SidecarError> {
+    // L12: Escreve o arquivo .semgrepignore no diretório de trabalho do processo
+    opengrep::write_semgrepignore_file(execution_root)?;
     let rule_set = match forced_channel {
         Some(SastIssueChannel::UnsafeHotspot) => SemgrepRuleSet::Security,
         _ => SemgrepRuleSet::Health,

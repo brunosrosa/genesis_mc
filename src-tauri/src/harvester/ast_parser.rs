@@ -18,10 +18,10 @@ pub struct NativeAstArtifacts {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ParsedFile {
-    relative_path: String,
-    language: String,
-    signatures: Vec<String>,
+struct ParsedFile<'arena> {
+    relative_path: &'arena str,
+    language: &'arena str,
+    signatures: Vec<&'arena str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -103,50 +103,54 @@ pub fn extract_repository_outline_native_from_clean_files(
         });
     }
 
+    let arena = bumpalo::Bump::new();
+    let arena_ref = &arena;
     let mut parsed_files = Vec::new();
     let mut languages = BTreeMap::<String, usize>::new();
     let mut total_signatures = 0usize;
     let mut total_import_edges = 0usize;
+
     for file_path in &outline_files {
         let relative_path = sanitize_relative_path(&repo_root, file_path);
         let Some(language) = detect_language(file_path) else {
             continue;
         };
 
-        let file_size_bytes = match std::fs::metadata(file_path) {
-            Ok(metadata) => metadata.len(),
+        // Lei 3b: Utilizar referências estritas de lifetimes baseadas em mmap (Zero-Copy)
+        let file = match std::fs::File::open(file_path) {
+            Ok(f) => f,
             Err(err) => {
                 warn!(
                     file = %relative_path,
                     error = %err,
-                    "ast-native: falha ao ler metadata; descartando arquivo"
+                    "ast-native: falha ao abrir arquivo; descartando"
                 );
                 continue;
             }
         };
-        if file_size_bytes >= AST_MINIFIED_HEURISTIC_MIN_BYTES
-            && is_probably_minified_source(file_path)
-        {
-            continue;
-        }
-
-        let source_bytes = match std::fs::read(file_path) {
-            Ok(bytes) => bytes,
+        let mmap = match unsafe { memmap2::Mmap::map(&file) } {
+            Ok(m) => m,
             Err(err) => {
                 warn!(
                     file = %relative_path,
                     error = %err,
-                    "ast-native: falha ao ler bytes do arquivo; descartando arquivo"
+                    "ast-native: falha ao mapear arquivo; descartando"
                 );
                 continue;
             }
         };
-        let source = String::from_utf8_lossy(&source_bytes).into_owned();
+        let source = match std::str::from_utf8(&mmap) {
+            Ok(s) => s,
+            Err(_) => {
+                let lossy = String::from_utf8_lossy(&mmap);
+                arena_ref.alloc_str(&lossy)
+            }
+        };
         if source.trim().is_empty() {
             continue;
         }
 
-        let (signatures, import_edges) = match extract_structural_signatures(&source, &language, &relative_path) {
+        let (signatures, import_edges) = match extract_structural_signatures(arena_ref, source, &language, &relative_path) {
             Ok(result) => result,
             Err(err) => {
                 warn!(
@@ -167,9 +171,12 @@ pub fn extract_repository_outline_native_from_clean_files(
         total_signatures += signatures.len();
         *languages.entry(language.clone()).or_insert(0) += 1;
 
+        let relative_path_arena = arena_ref.alloc_str(&relative_path);
+        let language_arena = arena_ref.alloc_str(&language);
+
         parsed_files.push(ParsedFile {
-            relative_path,
-            language,
+            relative_path: relative_path_arena,
+            language: language_arena,
             signatures,
         });
     }
@@ -824,40 +831,77 @@ fn has_named_architecture_suffix(file_name: &str) -> bool {
     .any(|suffix| file_name.ends_with(suffix))
 }
 
-fn extract_structural_signatures(
-    source: &str,
+struct NodeKindBitSet {
+    bits: Vec<u64>,
+}
+
+impl NodeKindBitSet {
+    fn new(language: &Language, kinds: &[&str]) -> Self {
+        let count = language.node_kind_count();
+        let size = (count + 63) / 64;
+        let mut bits = vec![0u64; size];
+        for kind in kinds {
+            for id in 0..count {
+                if let Some(name) = language.node_kind_for_id(id as u16) {
+                    if name == *kind {
+                        let idx = (id / 64) as usize;
+                        let bit = id % 64;
+                        bits[idx] |= 1u64 << bit;
+                    }
+                }
+            }
+        }
+        Self { bits }
+    }
+
+    #[inline]
+    fn contains(&self, kind_id: u16) -> bool {
+        let id = kind_id as usize;
+        let idx = id / 64;
+        let bit = id % 64;
+        if idx < self.bits.len() {
+            (self.bits[idx] & (1u64 << bit)) != 0
+        } else {
+            false
+        }
+    }
+}
+
+fn extract_structural_signatures<'arena, 'a>(
+    arena: &'arena bumpalo::Bump,
+    source: &'a str,
     language: &str,
     relative_path: &str,
-) -> Result<(Vec<String>, usize), AstParserError> {
+) -> Result<(Vec<&'arena str>, usize), AstParserError> {
     let mut import_edges = 0usize;
     let (signatures, edges) = if language != "svelte" {
-        if let Ok((signatures, edges)) = extract_with_language_pack(source, language, relative_path) {
+        if let Ok((signatures, edges)) = extract_with_language_pack(arena, source, language, relative_path) {
             if !signatures.is_empty() {
                 (signatures, edges)
             } else if let Ok((signatures, edges)) =
-                extract_with_official_tree_sitter(source, language, relative_path)
+                extract_with_official_tree_sitter(arena, source, language, relative_path)
             {
                 (signatures, edges)
             } else {
-                extract_with_regex_fallback(source, language, relative_path)?
+                extract_with_regex_fallback(arena, source, language, relative_path)?
             }
         } else if let Ok((signatures, edges)) =
-            extract_with_official_tree_sitter(source, language, relative_path)
+            extract_with_official_tree_sitter(arena, source, language, relative_path)
         {
             (signatures, edges)
         } else {
-            extract_with_regex_fallback(source, language, relative_path)?
+            extract_with_regex_fallback(arena, source, language, relative_path)?
         }
     } else if let Ok((signatures, edges)) =
-        extract_with_official_tree_sitter(source, language, relative_path)
+        extract_with_official_tree_sitter(arena, source, language, relative_path)
     {
         (signatures, edges)
     } else {
-        extract_with_regex_fallback(source, language, relative_path)?
+        extract_with_regex_fallback(arena, source, language, relative_path)?
     };
 
     import_edges = import_edges.max(edges);
-    let signatures = sanitize_outline_signatures(signatures, source, language);
+    let signatures = sanitize_outline_signatures_in(arena, signatures, source, language);
     if signatures.is_empty() {
         return Err(AstParserError::ParseFailure {
             file: relative_path.to_string(),
@@ -868,11 +912,12 @@ fn extract_structural_signatures(
     Ok((signatures, import_edges))
 }
 
-fn extract_with_language_pack(
-    source: &str,
+fn extract_with_language_pack<'arena, 'a>(
+    arena: &'arena bumpalo::Bump,
+    source: &'a str,
     language: &str,
     relative_path: &str,
-) -> Result<(Vec<String>, usize), AstParserError> {
+) -> Result<(Vec<&'arena str>, usize), AstParserError> {
     let mut config = ProcessConfig::new(language);
     config.structure = true;
     config.imports = true;
@@ -892,16 +937,18 @@ fn extract_with_language_pack(
         .structure
         .iter()
         .flat_map(flatten_structure_signatures)
+        .map(|sig| arena.alloc_str(&sig) as &'arena str)
         .collect::<Vec<_>>();
 
     Ok((signatures, processed.imports.len()))
 }
 
-fn extract_with_official_tree_sitter(
-    source: &str,
+fn extract_with_official_tree_sitter<'arena, 'a>(
+    arena: &'arena bumpalo::Bump,
+    source: &'a str,
     language: &str,
     relative_path: &str,
-) -> Result<(Vec<String>, usize), AstParserError> {
+) -> Result<(Vec<&'arena str>, usize), AstParserError> {
     let ts_language = official_tree_sitter_language(language, relative_path).ok_or_else(|| AstParserError::ParseFailure {
         file: relative_path.to_string(),
         language: language.to_string(),
@@ -923,8 +970,22 @@ fn extract_with_official_tree_sitter(
         reason: "parser nativo retornou arvore vazia".to_string(),
     })?;
 
+    let kinds_csharp = [
+        "namespace_declaration",
+        "class_declaration",
+        "interface_declaration",
+        "struct_declaration",
+        "enum_declaration",
+        "record_declaration",
+        "method_declaration",
+        "constructor_declaration",
+        "property_declaration",
+        "field_declaration",
+    ];
+    let bitset = NodeKindBitSet::new(&ts_language, &kinds_csharp);
+
     let mut signatures = Vec::new();
-    collect_official_tree_sitter_signatures(language, source.as_bytes(), tree.root_node(), &mut signatures);
+    collect_official_tree_sitter_signatures(arena, language, source.as_bytes(), tree.root_node(), &mut signatures, &bitset);
     signatures.sort();
     signatures.dedup();
     if signatures.is_empty() {
@@ -945,30 +1006,43 @@ fn official_tree_sitter_language(language: &str, _relative_path: &str) -> Option
     }
 }
 
-fn collect_official_tree_sitter_signatures(
+fn collect_official_tree_sitter_signatures<'arena>(
+    arena: &'arena bumpalo::Bump,
     language: &str,
     source: &[u8],
     node: Node<'_>,
-    out: &mut Vec<String>,
+    out: &mut Vec<&'arena str>,
+    bitset: &NodeKindBitSet,
 ) {
-    if let Some(signature) = official_signature_for_node(language, source, node) {
-        out.push(signature);
+    if bitset.contains(node.kind_id()) {
+        if let Some(signature) = official_signature_for_node(arena, language, source, node) {
+            out.push(signature);
+        }
     }
 
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        collect_official_tree_sitter_signatures(language, source, child, out);
+        collect_official_tree_sitter_signatures(arena, language, source, child, out, bitset);
     }
 }
 
-fn official_signature_for_node(language: &str, source: &[u8], node: Node<'_>) -> Option<String> {
+fn official_signature_for_node<'arena>(
+    arena: &'arena bumpalo::Bump,
+    language: &str,
+    source: &[u8],
+    node: Node<'_>,
+) -> Option<&'arena str> {
     match language {
-        "c_sharp" => csharp_signature_for_node(source, node),
+        "c_sharp" => csharp_signature_for_node(arena, source, node),
         _ => None,
     }
 }
 
-fn csharp_signature_for_node(source: &[u8], node: Node<'_>) -> Option<String> {
+fn csharp_signature_for_node<'arena>(
+    arena: &'arena bumpalo::Bump,
+    source: &[u8],
+    node: Node<'_>,
+) -> Option<&'arena str> {
     let label = match node.kind() {
         "namespace_declaration" => "namespace",
         "class_declaration" => "class",
@@ -983,30 +1057,59 @@ fn csharp_signature_for_node(source: &[u8], node: Node<'_>) -> Option<String> {
         _ => return None,
     };
 
-    let name = node_text_by_field(node, source, &["name", "identifier"])
-        .unwrap_or_else(|| compact_node_text(node, source, 80));
-    Some(format!("c# {label} {name}"))
+    let name = node_text_by_field(arena, node, source, &["name", "identifier"])
+        .unwrap_or_else(|| compact_node_text(arena, node, source, 80));
+    Some(bumpalo::format!(in arena, "c# {} {}", label, name).into_bump_str())
 }
 
-fn node_text_by_field(node: Node<'_>, source: &[u8], fields: &[&str]) -> Option<String> {
+fn node_text_by_field<'arena>(
+    arena: &'arena bumpalo::Bump,
+    node: Node<'_>,
+    source: &[u8],
+    fields: &[&str],
+) -> Option<&'arena str> {
     fields
         .iter()
         .find_map(|field| node.child_by_field_name(field))
-        .map(|child| compact_node_text(child, source, 80))
+        .map(|child| compact_node_text(arena, child, source, 80))
         .filter(|value| !value.is_empty())
 }
 
-fn compact_node_text(node: Node<'_>, source: &[u8], max_chars: usize) -> String {
-    let raw = node.utf8_text(source).unwrap_or("").replace('\n', " ");
-    let compact = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-    truncate_chars(compact.trim(), max_chars)
+fn compact_node_text<'arena>(
+    arena: &'arena bumpalo::Bump,
+    node: Node<'_>,
+    source: &[u8],
+    max_chars: usize,
+) -> &'arena str {
+    let raw = node.utf8_text(source).unwrap_or("");
+    let mut cleaned = bumpalo::collections::String::new_in(arena);
+    let mut last_was_space = false;
+    let mut char_count = 0;
+    for ch in raw.chars() {
+        if ch.is_whitespace() {
+            if !last_was_space && cleaned.len() > 0 {
+                cleaned.push(' ');
+                last_was_space = true;
+                char_count += 1;
+            }
+        } else {
+            cleaned.push(ch);
+            last_was_space = false;
+            char_count += 1;
+        }
+        if char_count >= max_chars {
+            break;
+        }
+    }
+    arena.alloc_str(cleaned.trim())
 }
 
-fn extract_with_regex_fallback(
-    source: &str,
+fn extract_with_regex_fallback<'arena, 'a>(
+    arena: &'arena bumpalo::Bump,
+    source: &'a str,
     language: &str,
     relative_path: &str,
-) -> Result<(Vec<String>, usize), AstParserError> {
+) -> Result<(Vec<&'arena str>, usize), AstParserError> {
     let mut signatures = Vec::new();
     for (label, pattern) in regex_fallback_patterns(language) {
         let Ok(regex) = Regex::new(pattern) else {
@@ -1016,24 +1119,25 @@ fn extract_with_regex_fallback(
             let Some(matched) = captures.get(1) else {
                 continue;
             };
-            let name = truncate_chars(matched.as_str().trim(), 96);
-            if name.is_empty() {
+            let name = matched.as_str().trim();
+            let name_truncated = truncate_chars(name, 96);
+            if name_truncated.is_empty() {
                 continue;
             }
-            signatures.push(format!("{language} {label} {name}"));
+            let sig = bumpalo::format!(in arena, "{} {} {}", language, label, name_truncated);
+            signatures.push(sig.into_bump_str());
         }
     }
     signatures.sort();
     signatures.dedup();
 
     if signatures.is_empty() && looks_like_legible_source(source) {
-        signatures.push(format!(
-            "{language} file {}",
-            Path::new(relative_path)
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or(relative_path)
-        ));
+        let filename = Path::new(relative_path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(relative_path);
+        let sig = bumpalo::format!(in arena, "{} file {}", language, filename);
+        signatures.push(sig.into_bump_str());
     }
 
     if signatures.is_empty() {
@@ -1047,21 +1151,148 @@ fn extract_with_regex_fallback(
     Ok((signatures, estimate_import_edges(language, source)))
 }
 
-fn sanitize_outline_signatures(
-    signatures: Vec<String>,
-    source: &str,
+fn sanitize_outline_signatures_in<'arena, 'a>(
+    arena: &'arena bumpalo::Bump,
+    signatures: Vec<&'arena str>,
+    source: &'a str,
     language: &str,
-) -> Vec<String> {
+) -> Vec<&'arena str> {
     let mut sanitized = signatures
         .into_iter()
-        .filter_map(|signature| sanitize_outline_signature(&signature, language))
+        .filter_map(|signature| sanitize_outline_signature_in(arena, signature, language))
         .collect::<Vec<_>>();
-    sanitized.extend(extract_import_signatures(source, language));
+    for imp in extract_import_signatures_in(arena, source, language) {
+        sanitized.push(imp);
+    }
     sanitized.sort();
     sanitized.dedup();
     sanitized
 }
 
+fn sanitize_outline_signature_in<'arena>(
+    arena: &'arena bumpalo::Bump,
+    signature: &str,
+    language: &str,
+) -> Option<&'arena str> {
+    let mut text = strip_signature_comments_in(arena, signature, language);
+    text = trim_structural_body_suffix_in(arena, text);
+    text = compact_signature_whitespace_in(arena, text);
+    let trimmed = text.trim_matches(|ch: char| ch.is_whitespace() || ch == ';' || ch == ',');
+    let trimmed = trimmed.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(arena.alloc_str(truncate_chars(trimmed, 220)))
+    }
+}
+
+fn strip_signature_comments_in<'arena>(
+    arena: &'arena bumpalo::Bump,
+    signature: &str,
+    language: &str,
+) -> &'arena str {
+    let re_block = Regex::new(r"/\*[\s\S]*?\*/").unwrap();
+    let replaced_block = re_block.replace_all(signature, " ");
+    
+    let final_str = if !matches!(language, "python" | "ruby") {
+        let re_line = Regex::new(r"//.*$").unwrap();
+        re_line.replace_all(&replaced_block, "").into_owned()
+    } else {
+        replaced_block.into_owned()
+    };
+    
+    arena.alloc_str(&final_str)
+}
+
+fn trim_structural_body_suffix_in<'arena>(
+    arena: &'arena bumpalo::Bump,
+    signature: &str,
+) -> &'arena str {
+    let compact = compact_signature_whitespace_in(arena, signature);
+    let trimmed = compact.trim();
+    if trimmed.is_empty() {
+        return "";
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let looks_like_import = lower.starts_with("import ")
+        || lower.starts_with("export import ")
+        || lower.starts_with("use ")
+        || lower.starts_with("pub use ")
+        || lower.starts_with("from ")
+        || lower.starts_with("#include ");
+    if looks_like_import {
+        return arena.alloc_str(trimmed);
+    }
+
+    if let Some(index) = trimmed.find('{') {
+        return arena.alloc_str(trimmed[..index].trim());
+    }
+    if let Some(index) = trimmed.find(" =>") {
+        return arena.alloc_str(trimmed[..index + 3].trim());
+    }
+    if let Some(index) = trimmed.find("=> ") {
+        return arena.alloc_str(trimmed[..index + 2].trim());
+    }
+    arena.alloc_str(trimmed)
+}
+
+fn compact_signature_whitespace_in<'arena>(
+    arena: &'arena bumpalo::Bump,
+    signature: &str,
+) -> &'arena str {
+    let mut compact = bumpalo::collections::String::new_in(arena);
+    let mut last_was_space = false;
+    for ch in signature.chars() {
+        if ch.is_whitespace() {
+            if !last_was_space && compact.len() > 0 {
+                compact.push(' ');
+                last_was_space = true;
+            }
+        } else {
+            compact.push(ch);
+            last_was_space = false;
+        }
+    }
+    arena.alloc_str(compact.trim())
+}
+
+fn extract_import_signatures_in<'arena, 'a>(
+    arena: &'arena bumpalo::Bump,
+    source: &'a str,
+    language: &str,
+) -> Vec<&'arena str> {
+    let patterns: &[&str] = match language {
+        "rust" => &[r"(?m)^\s*(?:pub\s+)?use\s+[^;\n]+;"],
+        "python" => &[r"(?m)^\s*(?:from\s+[^\n]+?\s+import\s+[^\n#]+|import\s+[^\n#]+)"],
+        "javascript" | "typescript" | "svelte" => &[r#"(?m)^\s*import\s+[^;\n]+(?:from\s+["'][^"']+["'])?;?"#],
+        "go" => &[r#"(?m)^\s*import\s+(?:\([\s\S]*?\)|[^\n]+)"#],
+        "java" | "kotlin" => &[r"(?m)^\s*import\s+[^\n;]+;"],
+        "c" | "cpp" => &[r#"(?m)^\s*#include\s+[<"][^>"]+[>"]"#],
+        "php" => &[r"(?m)^\s*use\s+[^\n;]+;"],
+        "ruby" => &[r#"(?m)^\s*(?:require|require_relative)\s+["'][^"']+["']"#],
+        _ => &[],
+    };
+
+    let mut imports = Vec::new();
+    for pattern in patterns {
+        let Ok(regex) = Regex::new(pattern) else {
+            continue;
+        };
+        for matched in regex.find_iter(source) {
+            if let Some(signature) = sanitize_outline_signature_in(arena, matched.as_str(), language) {
+                imports.push(signature);
+            }
+        }
+    }
+    imports
+}
+
+// ── FUNÇÕES ORIGINAIS DE COMPATIBILIDADE (SEM ARENA) ─────────────────
+fn compact_signature_whitespace(signature: &str) -> String {
+    signature.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[allow(dead_code)]
 fn sanitize_outline_signature(signature: &str, language: &str) -> Option<String> {
     let mut text = strip_signature_comments(signature, language);
     text = trim_structural_body_suffix(&text);
@@ -1073,10 +1304,12 @@ fn sanitize_outline_signature(signature: &str, language: &str) -> Option<String>
     if text.is_empty() {
         None
     } else {
-        Some(truncate_chars(&text, 220))
+        let truncated = truncate_chars(&text, 220);
+        Some(truncated.to_string())
     }
 }
 
+#[allow(dead_code)]
 fn strip_signature_comments(signature: &str, language: &str) -> String {
     let mut text = Regex::new(r"/\*[\s\S]*?\*/")
         .unwrap()
@@ -1091,6 +1324,7 @@ fn strip_signature_comments(signature: &str, language: &str) -> String {
     text
 }
 
+#[allow(dead_code)]
 fn trim_structural_body_suffix(signature: &str) -> String {
     let compact = compact_signature_whitespace(signature);
     let trimmed = compact.trim();
@@ -1118,37 +1352,6 @@ fn trim_structural_body_suffix(signature: &str) -> String {
         return trimmed[..index + 2].trim().to_string();
     }
     trimmed.to_string()
-}
-
-fn compact_signature_whitespace(signature: &str) -> String {
-    signature.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn extract_import_signatures(source: &str, language: &str) -> Vec<String> {
-    let patterns: &[&str] = match language {
-        "rust" => &[r"(?m)^\s*(?:pub\s+)?use\s+[^;\n]+;"],
-        "python" => &[r"(?m)^\s*(?:from\s+[^\n]+?\s+import\s+[^\n#]+|import\s+[^\n#]+)"],
-        "javascript" | "typescript" | "svelte" => &[r#"(?m)^\s*import\s+[^;\n]+(?:from\s+["'][^"']+["'])?;?"#],
-        "go" => &[r#"(?m)^\s*import\s+(?:\([\s\S]*?\)|[^\n]+)"#],
-        "java" | "kotlin" => &[r"(?m)^\s*import\s+[^\n;]+;"],
-        "c" | "cpp" => &[r#"(?m)^\s*#include\s+[<"][^>"]+[>"]"#],
-        "php" => &[r"(?m)^\s*use\s+[^\n;]+;"],
-        "ruby" => &[r#"(?m)^\s*(?:require|require_relative)\s+["'][^"']+["']"#],
-        _ => &[],
-    };
-
-    let mut imports = Vec::new();
-    for pattern in patterns {
-        let Ok(regex) = Regex::new(pattern) else {
-            continue;
-        };
-        for matched in regex.find_iter(source) {
-            if let Some(signature) = sanitize_outline_signature(matched.as_str(), language) {
-                imports.push(signature);
-            }
-        }
-    }
-    imports
 }
 
 fn regex_fallback_patterns(language: &str) -> &'static [(&'static str, &'static str)] {
@@ -1383,13 +1586,13 @@ fn build_productive_tree(repo_root: &Path, clean_files: &[PathBuf]) -> String {
 fn build_repo_outline(
     repo_root: &Path,
     clean_files: &[PathBuf],
-    parsed_files: &[ParsedFile],
+    parsed_files: &[ParsedFile<'_>],
 ) -> String {
     let repo_name = repo_root
         .file_name()
         .and_then(|v| v.to_str())
         .unwrap_or("repo");
-    let mut by_domain = BTreeMap::<OutlineDomainTag, Vec<&ParsedFile>>::new();
+    let mut by_domain = BTreeMap::<OutlineDomainTag, Vec<&ParsedFile<'_>>>::new();
     for file in parsed_files {
         let domain = classify_outline_domain(&file.relative_path, &file.language);
         by_domain.entry(domain).or_default().push(file);
@@ -1537,11 +1740,24 @@ fn directory_key(path: &str) -> String {
     }
 }
 
-fn truncate_chars(content: &str, max_chars: usize) -> String {
-    if content.chars().count() <= max_chars {
-        return content.to_string();
+fn truncate_chars(content: &str, max_chars: usize) -> &str {
+    if max_chars == 0 {
+        return "";
     }
-    content.chars().take(max_chars).collect()
+    let mut char_count = 0;
+    let mut byte_idx = 0;
+    for (idx, _) in content.char_indices() {
+        if char_count == max_chars {
+            return &content[..idx];
+        }
+        char_count += 1;
+        byte_idx = idx;
+    }
+    if char_count <= max_chars {
+        content
+    } else {
+        &content[..byte_idx]
+    }
 }
 
 #[cfg(test)]
@@ -1573,8 +1789,9 @@ public class Greeter {
     public void Run() {}
 }
 "#;
+        let arena = bumpalo::Bump::new();
         let (signatures, imports) =
-            extract_with_official_tree_sitter(source, "c_sharp", "Program.cs").unwrap();
+            extract_with_official_tree_sitter(&arena, source, "c_sharp", "Program.cs").unwrap();
         assert_eq!(imports, 0);
         assert!(signatures.iter().any(|item| item.contains("c# class Greeter")));
         assert!(signatures.iter().any(|item| item.contains("c# method Run")));
@@ -1775,8 +1992,9 @@ public class Greeter {
             ("elixir", "defmodule Demo.Engine do\n  def run, do: :ok\nend\n", "lib/demo/engine.ex", "elixir module Demo.Engine"),
         ];
 
+        let arena = bumpalo::Bump::new();
         for (language, source, path, expected_fragment) in scenarios {
-            let (signatures, _) = extract_with_regex_fallback(source, language, path).unwrap();
+            let (signatures, _) = extract_with_regex_fallback(&arena, source, language, path).unwrap();
             assert!(
                 signatures.iter().any(|item| item.contains(expected_fragment)),
                 "assinaturas de {language} deveriam conter `{expected_fragment}`; obtido: {:?}",

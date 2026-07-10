@@ -55,6 +55,8 @@ tree-sitter = "0.26.2"
 tree-sitter-c-sharp = "0.23.5"
 tree-sitter-language-pack = { version = "1.9.1", default-features = false, features = ["dynamic-loading"] }
 tree-sitter-yaml = "0.7.2"
+bumpalo = { version = "3.16", features = ["collections"] }
+memmap2 = "0.9"
 # html-to-markdown-rs removido — extração de texto via astral-tl zero-copy
 enable-ansi-support = "0.2.1"
 uuid = { version = "1.11.0", features = ["v4"] }
@@ -70,6 +72,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Threading",
     "Win32_System_StationsAndDesktops",
 ] }
+rustc-hash = "2.1.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-projfs = "0.1.7"

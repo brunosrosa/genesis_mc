@@ -235,11 +235,31 @@ pub async fn ensure_semgrep_rule_bundle(repo_path: &Path, rule_set: SemgrepRuleS
     Ok(support_dir)
 }
 
+pub fn write_semgrepignore_file(target_dir: &Path) -> Result<(), SidecarError> {
+    let ignore_path = target_dir.join(".semgrepignore");
+    // Se o ignore já existe (por exemplo, fornecido pelo usuário), respeitamos.
+    if ignore_path.exists() {
+        return Ok(());
+    }
+    // L13: Grava os globs de exclusão de forma limpa, uma linha por glob.
+    let content = SEMGREP_SCAN_EXCLUDES.join("\n");
+    // L08: Escrita atômica snapsafe para evitar arquivos parciais/corrompidos.
+    let temp_path = target_dir.join(".semgrepignore.tmp");
+    std::fs::write(&temp_path, content).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao escrever arquivo temporario .semgrepignore em '{}': {e}", temp_path.display()),
+    })?;
+    std::fs::rename(&temp_path, &ignore_path).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao materializar arquivo .semgrepignore em '{}': {e}", ignore_path.display()),
+    })?;
+    Ok(())
+}
+
 async fn run_semgrep_scan<E: SandboxExecutor>(
     executor: &E,
     rule_set: SemgrepRuleSet,
     timeout_secs: u64,
 ) -> Result<Vec<u8>, SidecarError> {
+    write_semgrepignore_file(executor.repo_path())?;
     let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), rule_set).await?;
     tracing::info!(
         repo_path = %executor.repo_path().display(),
@@ -381,15 +401,27 @@ fn build_semgrep_like_scan_args(
     }
     args.push("--force-exclude".to_string());
 
-    for exclude in SEMGREP_SCAN_EXCLUDES {
-        args.push("--exclude".to_string());
-        args.push((*exclude).to_string());
-    }
-
     if scan_targets.is_empty() {
         args.push(".".to_string());
     } else {
-        args.extend(scan_targets.iter().cloned());
+        // L12: Poda Transversal Global — remove pastas estáticas (tests/, docs/) antes de chamar o linter.
+        let pruned_targets: Vec<String> = scan_targets
+            .iter()
+            .filter(|target| {
+                let lower = target.to_ascii_lowercase();
+                !lower.starts_with("tests/")
+                    && !lower.starts_with("docs/")
+                    && !lower.starts_with("test/")
+                    && !lower.starts_with("doc/")
+            })
+            .cloned()
+            .collect();
+
+        if pruned_targets.is_empty() {
+            args.push(".".to_string());
+        } else {
+            args.extend(pruned_targets);
+        }
     }
     args
 }
@@ -732,23 +764,7 @@ mod tests {
         assert!(args.iter().any(|arg| arg == "--force-exclude"));
         assert!(args.iter().any(|arg| arg == "--taint-intrafile"));
         assert!(!args.iter().any(|arg| arg == "--exclude-minified-files"));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", ".git"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "node_modules"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "dist"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "build"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "vendor"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "testutil"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/examples/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/docs/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/mocks/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/*.min.js"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/*.iife.js"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/samples/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/output.json"]));
-        assert!(!args.windows(2).any(|pair| pair == ["--exclude", "C:/rules"]));
-        assert!(!args.windows(2).any(|pair| pair == ["--exclude", SEMGREP_SECURITY_RULE_FILE]));
-        assert!(!args.windows(2).any(|pair| pair == ["--exclude", SEMGREP_HEALTH_RULE_FILE]));
+        assert!(!args.iter().any(|arg| arg == "--exclude"));
         assert!(!args.iter().any(|arg| arg.contains("Cargo.lock")));
         assert!(!args.iter().any(|arg| arg.contains("package-lock.json")));
         assert!(args.ends_with(&["src/main.ts".to_string(), "src/lib.ts".to_string()]));
@@ -768,7 +784,7 @@ mod tests {
         assert!(args.iter().any(|arg| arg == "--exclude-minified-files"));
         assert!(args.iter().any(|arg| arg == "--disable-version-check"));
         assert!(args.windows(2).any(|pair| pair == ["--metrics", "off"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
+        assert!(!args.iter().any(|arg| arg == "--exclude"));
         assert!(!args.iter().any(|arg| arg == "--taint-intrafile"));
     }
 
