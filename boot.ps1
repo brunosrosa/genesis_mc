@@ -111,7 +111,7 @@ Write-Host "=======================================================" -Foreground
 try {
     # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
     Write-Host "`n[1/5] Expurgando processos supervisionados do ecossistema Souls..." -ForegroundColor Yellow
-    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "genesis_mc", "mcp_stdio_guard", "soda_mcp_server")
+    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "genesis_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-mcp", "leanctx", "biome", "opengrep", "oxlint")
     foreach ($z in $zombies) {
         Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
     }

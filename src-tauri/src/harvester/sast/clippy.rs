@@ -461,20 +461,42 @@ pub async fn run_rust_clippy_preflight<E: SandboxExecutor>(
             cmd.arg("--locked");
         }
 
-        match cmd.output().await {
-            Ok(output) => {
-                if output.status.success() {
-                    info!(
-                        manifest_path = %manifest_path.display(),
-                        "SAST rust-clippy: Pre-Flight cargo fetch concluido com sucesso"
-                    );
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    warn!(
-                        manifest_path = %manifest_path.display(),
-                        stderr = %stderr.trim(),
-                        "SAST rust-clippy: Pre-Flight cargo fetch falhou (prosseguindo offline)"
-                    );
+        cmd.stdout(std::process::Stdio::piped())
+           .stderr(std::process::Stdio::piped())
+           .kill_on_drop(true);
+
+        match cmd.spawn() {
+            Ok(child) => {
+                let wait_fut = child.wait_with_output();
+                match tokio::time::timeout(std::time::Duration::from_secs(60), wait_fut).await {
+                    Ok(Ok(output)) => {
+                        if output.status.success() {
+                            info!(
+                                manifest_path = %manifest_path.display(),
+                                "SAST rust-clippy: Pre-Flight cargo fetch concluido com sucesso"
+                            );
+                        } else {
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            warn!(
+                                manifest_path = %manifest_path.display(),
+                                stderr = %stderr.trim(),
+                                "SAST rust-clippy: Pre-Flight cargo fetch falhou (prosseguindo offline)"
+                            );
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        warn!(
+                            manifest_path = %manifest_path.display(),
+                            error = %e,
+                            "SAST rust-clippy: Erro ao executar Pre-Flight cargo fetch (prosseguindo offline)"
+                        );
+                    }
+                    Err(_) => {
+                        warn!(
+                            manifest_path = %manifest_path.display(),
+                            "SAST rust-clippy: Timeout no Pre-Flight cargo fetch (prosseguindo offline)"
+                        );
+                    }
                 }
             }
             Err(e) => {

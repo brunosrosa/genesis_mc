@@ -2332,7 +2332,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         if !resolved.env.is_empty() {
             process.envs(&resolved.env);
         }
-        let mut child = process
+        let child = process
             .spawn()
             .map_err(|e| SandboxError::ProcessSpawnFailed { reason: e.to_string() })?;
 
@@ -2345,6 +2345,8 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar PID do processo".to_string() }
         })?;
 
+        let mut child_guard = crate::process_guard::ProcessGuard::new(child);
+
         self.lock_pids().insert(pid);
 
         let last_activity = Arc::new(Mutex::new(Instant::now()));
@@ -2354,7 +2356,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let stdout_task = {
             let last_activity = Arc::clone(&last_activity);
             tokio::spawn(drain_pipe_with_telemetry(
-                child.stdout.take().ok_or_else(|| {
+                child_guard.child.as_mut().unwrap().stdout.take().ok_or_else(|| {
                     SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stdout".to_string() }
                 })?,
                 requested_command.clone(),
@@ -2367,7 +2369,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let stderr_task = {
             let last_activity = Arc::clone(&last_activity);
             tokio::spawn(drain_pipe_with_telemetry(
-                child.stderr.take().ok_or_else(|| {
+                child_guard.child.as_mut().unwrap().stderr.take().ok_or_else(|| {
                     SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar stderr".to_string() }
                 })?,
                 requested_command.clone(),
@@ -2387,7 +2389,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     mark_process_activity(&last_activity);
                 }
             }
-            match child.try_wait() {
+            match child_guard.child.as_mut().unwrap().try_wait() {
                 Ok(Some(status)) => break ProcessWaitOutcome::Exited(status),
                 Ok(None) => {
                     if idle_elapsed(&last_activity)
@@ -2409,6 +2411,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         match wait_outcome {
             ProcessWaitOutcome::Exited(status) => {
                 let _ = job_guard;
+                let _ = child_guard.child.take(); // Desarma o ProcessGuard, pois ja terminou
                 reap_command_orphans(&requested_command, execution_root).await;
                 let stdout_buffer = collect_output_task(stdout_task).await;
                 let stderr_buffer = collect_output_task(stderr_task).await;
@@ -2523,7 +2526,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     absolute_timeout_secs = timeout_profile.absolute_timeout_secs.unwrap_or(0),
                     "Sandbox: idle timeout atingido; aniquilando sidecar"
                 );
-                let _ = child.kill().await;
+                let _ = child_guard.child.as_mut().unwrap().kill().await;
                 let _ = job_guard;
                 kill_process_tree_by_pid(pid).await;
                 reap_command_orphans(&requested_command, execution_root).await;
@@ -2552,7 +2555,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     absolute_timeout_secs = timeout_profile.absolute_timeout_secs.unwrap_or(0),
                     "Sandbox: absolute timeout atingido; aniquilando sidecar"
                 );
-                let _ = child.kill().await;
+                let _ = child_guard.child.as_mut().unwrap().kill().await;
                 let _ = job_guard;
                 kill_process_tree_by_pid(pid).await;
                 reap_command_orphans(&requested_command, execution_root).await;

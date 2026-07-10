@@ -2136,22 +2136,43 @@ async fn run_sast_blade<E: SandboxExecutor>(
             let mut cmd = tokio::process::Command::new("go");
             cmd.arg("mod")
                .arg("download")
-               .current_dir(execution_root);
+               .current_dir(execution_root)
+               .stdout(std::process::Stdio::piped())
+               .stderr(std::process::Stdio::piped())
+               .kill_on_drop(true);
 
-            match cmd.output().await {
-                Ok(output) => {
-                    if output.status.success() {
-                        info!(
-                            execution_root = %execution_root.display(),
-                            "SAST govulncheck: Pre-Flight go mod download concluido com sucesso"
-                        );
-                    } else {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        warn!(
-                            execution_root = %execution_root.display(),
-                            stderr = %stderr.trim(),
-                            "SAST govulncheck: Pre-Flight go mod download falhou (prosseguindo offline)"
-                        );
+            match cmd.spawn() {
+                Ok(child) => {
+                    let wait_fut = child.wait_with_output();
+                    match tokio::time::timeout(std::time::Duration::from_secs(60), wait_fut).await {
+                        Ok(Ok(output)) => {
+                            if output.status.success() {
+                                info!(
+                                    execution_root = %execution_root.display(),
+                                    "SAST govulncheck: Pre-Flight go mod download concluido com sucesso"
+                                );
+                            } else {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                warn!(
+                                    execution_root = %execution_root.display(),
+                                    stderr = %stderr.trim(),
+                                    "SAST govulncheck: Pre-Flight go mod download falhou (prosseguindo offline)"
+                                );
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            warn!(
+                                execution_root = %execution_root.display(),
+                                error = %e,
+                                "SAST govulncheck: Erro ao executar Pre-Flight go mod download (prosseguindo offline)"
+                            );
+                        }
+                        Err(_) => {
+                            warn!(
+                                execution_root = %execution_root.display(),
+                                "SAST govulncheck: Timeout no Pre-Flight go mod download (prosseguindo offline)"
+                            );
+                        }
                     }
                 }
                 Err(e) => {

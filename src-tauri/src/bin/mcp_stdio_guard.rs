@@ -9,6 +9,24 @@ use tracing;
 
 const HARD_LIMIT_TIMEOUT_MS: u64 = 30_000;
 
+struct ProcessGuard {
+    child: Option<Child>,
+}
+
+impl ProcessGuard {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+}
+
+impl Drop for ProcessGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.start_kill();
+        }
+    }
+}
+
 #[derive(Clone)]
 struct GuardConfig {
     timeout: Duration,
@@ -208,13 +226,14 @@ where
     R: tokio::io::AsyncRead + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    let mut child = spawn_child(&cfg).await?;
+    let child = spawn_child(&cfg).await?;
+    let mut child_guard = ProcessGuard::new(child);
 
-    let mut child_stdin = child
+    let mut child_stdin = child_guard.child.as_mut().unwrap()
         .stdin
         .take()
         .ok_or_else(|| "stdin indisponível no child".to_string())?;
-    let child_stdout = child
+    let child_stdout = child_guard.child.as_mut().unwrap()
         .stdout
         .take()
         .ok_or_else(|| "stdout indisponível no child".to_string())?;
@@ -250,21 +269,22 @@ where
             }
             Err(e) if e == "timeout" => {
                 tracing::error!("Timeout da ferramenta MCP acionado");
-                if let Some(pid) = child.id() {
+                if let Some(pid) = child_guard.child.as_ref().unwrap().id() {
                     kill_process_tree(pid).await;
                 } else {
-                    let _ = child.kill().await;
+                    let _ = child_guard.child.as_mut().unwrap().kill().await;
                 }
-                let _ = child.wait().await;
+                let _ = child_guard.child.as_mut().unwrap().wait().await;
 
                 write_json(out, &jsonrpc_timeout_error(id)).await?;
 
-                child = spawn_child(&cfg).await?;
-                child_stdin = child
+                let new_child = spawn_child(&cfg).await?;
+                child_guard = ProcessGuard::new(new_child);
+                child_stdin = child_guard.child.as_mut().unwrap()
                     .stdin
                     .take()
                     .ok_or_else(|| "stdin indisponível no child".to_string())?;
-                let child_stdout = child
+                let child_stdout = child_guard.child.as_mut().unwrap()
                     .stdout
                     .take()
                     .ok_or_else(|| "stdout indisponível no child".to_string())?;
@@ -274,12 +294,13 @@ where
         }
     }
 
-    if let Some(pid) = child.id() {
+    if let Some(pid) = child_guard.child.as_ref().unwrap().id() {
         kill_process_tree(pid).await;
     } else {
-        let _ = child.kill().await;
+        let _ = child_guard.child.as_mut().unwrap().kill().await;
     }
-    let _ = child.wait().await;
+    let _ = child_guard.child.as_mut().unwrap().wait().await;
+    let _ = child_guard.child.take(); // Desarma o ProcessGuard
     Ok(())
 }
 

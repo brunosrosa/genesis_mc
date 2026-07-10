@@ -59,6 +59,24 @@ impl Drop for AbortOnDrop {
     }
 }
 
+struct ProcessGuard {
+    child: Option<tokio::process::Child>,
+}
+
+impl ProcessGuard {
+    fn new(child: tokio::process::Child) -> Self {
+        Self { child: Some(child) }
+    }
+}
+
+impl Drop for ProcessGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.start_kill();
+        }
+    }
+}
+
 fn spawn_ghost_telemetry(repo_id: String, message: String) -> AbortOnDrop {
     let started = Instant::now();
     let handle = tokio::spawn(async move {
@@ -2604,16 +2622,25 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
         if profile == "release" {
             build_cmd.arg("--release");
         }
-        build_cmd
+        let child = build_cmd
             .current_dir(root_dir.join("src-tauri"))
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
-        let build_status = build_cmd.status().await.map_err(|e| {
-            io::Error::other(format!(
-                "Falha ao compilar subfase '{binary_stem}' via cargo: {e}"
-            ))
-        })?;
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|e| {
+                io::Error::other(format!("Falha ao spawnar compilação de '{binary_stem}': {e}"))
+            })?;
+        let mut guard = ProcessGuard::new(child);
+        let wait_fut = guard.child.as_mut().unwrap().wait();
+        let build_status = match tokio::time::timeout(Duration::from_secs(300), wait_fut).await {
+            Ok(Ok(status)) => {
+                let _ = guard.child.take();
+                status
+            }
+            Ok(Err(e)) => return Err(io::Error::other(format!("Erro ao compilar '{binary_stem}': {e}"))),
+            Err(_) => return Err(io::Error::other(format!("Timeout de 300s atingido ao compilar '{binary_stem}'"))),
+        };
         if !build_status.success() {
             return Err(io::Error::other(format!(
                 "Compilação da subfase '{binary_stem}' falhou via cargo: {build_status}"
@@ -2643,9 +2670,19 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
                 .stdin(Stdio::null())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
-            let status = run_cmd.status().await.map_err(|e| {
-                io::Error::other(format!("Falha ao executar fase '{binary_stem}' via cargo run: {e}"))
+            let child = run_cmd.spawn().map_err(|e| {
+                io::Error::other(format!("Falha ao spawnar fase '{binary_stem}' via cargo run: {e}"))
             })?;
+            let mut guard = ProcessGuard::new(child);
+            let wait_fut = guard.child.as_mut().unwrap().wait();
+            let status = match tokio::time::timeout(Duration::from_secs(600), wait_fut).await {
+                Ok(Ok(status)) => {
+                    let _ = guard.child.take();
+                    status
+                }
+                Ok(Err(e)) => return Err(io::Error::other(format!("Erro ao executar fase '{binary_stem}' via cargo run: {e}"))),
+                Err(_) => return Err(io::Error::other(format!("Timeout de 600s atingido na fase '{binary_stem}' via cargo run"))),
+            };
             if !status.success() {
                 return Err(io::Error::other(format!(
                     "Fase '{binary_stem}' via cargo run retornou exit code != 0: {status}"
@@ -2655,14 +2692,23 @@ async fn run_phase_binary(binary_stem: &str, repo_id: &str) -> io::Result<u128> 
         }
     };
 
-    let status = command
+    let child = command
         .args(["--repo", repo_id])
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .status()
-        .await
-        .map_err(|e| io::Error::other(format!("Falha ao executar fase '{binary_stem}': {e}")))?;
+        .spawn()
+        .map_err(|e| io::Error::other(format!("Falha ao spawnar fase '{binary_stem}': {e}")))?;
+    let mut guard = ProcessGuard::new(child);
+    let wait_fut = guard.child.as_mut().unwrap().wait();
+    let status = match tokio::time::timeout(Duration::from_secs(600), wait_fut).await {
+        Ok(Ok(status)) => {
+            let _ = guard.child.take();
+            status
+        }
+        Ok(Err(e)) => return Err(io::Error::other(format!("Erro ao executar fase '{binary_stem}': {e}"))),
+        Err(_) => return Err(io::Error::other(format!("Timeout de 600s atingido na fase '{binary_stem}'"))),
+    };
 
     if !status.success() {
         return Err(io::Error::other(format!(
@@ -2723,9 +2769,35 @@ async fn main() -> io::Result<()> {
                 if skip_harvester {
                     cmd.arg("--skip-harvester");
                 }
-                let status = cmd.status().await.map_err(|e| {
-                    io::Error::other(format!("Falha ao executar f3_synthesizer_cli (batch resume_f3): {e}"))
+                let child = cmd.spawn().map_err(|e| {
+                    io::Error::other(format!("Falha ao spawnar f3_synthesizer_cli (batch resume_f3): {e}"))
                 })?;
+                let mut guard = ProcessGuard::new(child);
+                let wait_fut = guard.child.as_mut().unwrap().wait();
+                let status_res = tokio::time::timeout(Duration::from_secs(900), wait_fut).await;
+                let status = match status_res {
+                    Ok(Ok(status)) => {
+                        let _ = guard.child.take();
+                        status
+                    }
+                    Ok(Err(e)) => {
+                        warn!(
+                            repo_id = %item.repo_id,
+                            row_number = item.row_number_1based,
+                            error = %e,
+                            "F3/F4(batch resume_f3): falha de execucao (seguindo fail-soft)"
+                        );
+                        continue;
+                    }
+                    Err(_) => {
+                        warn!(
+                            repo_id = %item.repo_id,
+                            row_number = item.row_number_1based,
+                            "F3/F4(batch resume_f3): timeout de 900s atingido (seguindo fail-soft)"
+                        );
+                        continue;
+                    }
+                };
                 if !status.success() {
                     warn!(
                         repo_id = %item.repo_id,
@@ -2765,9 +2837,35 @@ async fn main() -> io::Result<()> {
                 if skip_harvester {
                     cmd.arg("--skip-harvester");
                 }
-                let status = cmd.status().await.map_err(|e| {
-                    io::Error::other(format!("Falha ao executar f3_synthesizer_cli (batch): {e}"))
+                let child = cmd.spawn().map_err(|e| {
+                    io::Error::other(format!("Falha ao spawnar f3_synthesizer_cli (batch): {e}"))
                 })?;
+                let mut guard = ProcessGuard::new(child);
+                let wait_fut = guard.child.as_mut().unwrap().wait();
+                let status_res = tokio::time::timeout(Duration::from_secs(900), wait_fut).await;
+                let status = match status_res {
+                    Ok(Ok(status)) => {
+                        let _ = guard.child.take();
+                        status
+                    }
+                    Ok(Err(e)) => {
+                        warn!(
+                            repo_id = %item.repo_id,
+                            row_number = item.row_number_1based,
+                            error = %e,
+                            "F3/F4(batch): falha de execucao (seguindo fail-soft)"
+                        );
+                        continue;
+                    }
+                    Err(_) => {
+                        warn!(
+                            repo_id = %item.repo_id,
+                            row_number = item.row_number_1based,
+                            "F3/F4(batch): timeout de 900s atingido (seguindo fail-soft)"
+                        );
+                        continue;
+                    }
+                };
                 if !status.success() {
                     warn!(
                         repo_id = %item.repo_id,
