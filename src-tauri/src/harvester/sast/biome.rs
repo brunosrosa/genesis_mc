@@ -7,7 +7,6 @@ pub(crate) fn biome_args(scan_targets: &[String]) -> Vec<String> {
 pub(crate) fn biome_args_for_profile(scan_targets: &[String], profile: JsLintProfile) -> Vec<String> {
     let mut args = vec![
         "check".to_string(),
-        "--no-daemon".to_string(),
         "--no-errors-on-unmatched".to_string(),
         "--skip-parse-errors".to_string(),
         "--files-ignore-unknown=true".to_string(),

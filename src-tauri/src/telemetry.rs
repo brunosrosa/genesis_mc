@@ -30,16 +30,23 @@ pub fn parse_log_level_from_env() -> Level {
     }
 }
 
-pub fn init_cli_tracing(level: Level) {
+pub fn init_cli_tracing(_level: Level) {
     enable_virtual_terminal();
     let ansi =
         (io::stderr().is_terminal() || io::stdout().is_terminal()) && std::env::var_os("NO_COLOR").is_none();
     let formatter = SodaEventFormatter::new(ansi, supports_truecolor());
+
+    use tracing_subscriber::EnvFilter;
+
+    // Configura o EnvFilter para priorizar genesis_mc e silenciar ruído do globset
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,genesis_mc=debug,genesis_mc_lib=debug,globset=info"));
+
     let _ = tracing_subscriber::fmt()
-        .with_max_level(level)
         .with_ansi(ansi)
         .event_format(formatter)
         .with_writer(io::stderr)
+        .with_env_filter(filter)
         .try_init();
 }
 
