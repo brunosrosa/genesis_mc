@@ -25,16 +25,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadWrite).await?;
     println!("[OK] Sandbox instanciado com sucesso!");
 
-    // 4. Executa o biome na Gaiola
-    println!("\n[+] Disparando execução do Biome...");
-    let command = "biome";
+    // 4. Executa o oxlint na Gaiola
+    println!("\n[+] Disparando execução do Oxlint...");
+    let command = "oxlint";
     let args = vec!["--version"];
     
     let result = sandbox.execute_in_appcontainer_in_dir(command, &args, 30, repo_root).await;
 
     match result {
         Ok(stdout) => {
-            println!("\n[SUCESSO] Biome executado com Exit Code 0!");
+            println!("\n[SUCESSO] Oxlint executado com Exit Code 0!");
             println!("Stdout retornado:\n{}", String::from_utf8_lossy(&stdout));
         }
         Err(e) => {

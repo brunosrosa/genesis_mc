@@ -911,29 +911,87 @@ pub(crate) fn derive_js_lint_execution_targets(
     targets
 }
 
+pub(crate) fn group_files_by_manifest(
+    repo_root: &Path,
+    manifests: &[DiscoveredManifest],
+    clean_files: &[PathBuf],
+) -> BTreeMap<PathBuf, (String, Vec<PathBuf>)> {
+    let mut groups: BTreeMap<PathBuf, (String, Vec<PathBuf>)> = BTreeMap::new();
+
+    for file in clean_files {
+        let abs_file = if file.is_absolute() {
+            file.clone()
+        } else {
+            repo_root.join(file)
+        };
+        let abs_file_clean = abs_file.canonicalize().unwrap_or(abs_file);
+
+        let mut closest_manifest: Option<&DiscoveredManifest> = None;
+        for manifest in manifests {
+            let manifest_root_clean = manifest.execution_root.canonicalize().unwrap_or_else(|_| manifest.execution_root.clone());
+            if abs_file_clean.starts_with(&manifest_root_clean) {
+                if let Some(current) = closest_manifest {
+                    let current_root_clean = current.execution_root.canonicalize().unwrap_or_else(|_| current.execution_root.clone());
+                    if manifest_root_clean.as_os_str().len() > current_root_clean.as_os_str().len() {
+                        closest_manifest = Some(manifest);
+                    }
+                } else {
+                    closest_manifest = Some(manifest);
+                }
+            }
+        }
+
+        if let Some(manifest) = closest_manifest {
+            let manifest_root_clean = manifest.execution_root.canonicalize().unwrap_or_else(|_| manifest.execution_root.clone());
+            let entry = groups.entry(manifest_root_clean).or_insert_with(|| (manifest.scope.clone(), Vec::new()));
+            entry.1.push(abs_file_clean);
+        } else {
+            let entry = groups.entry(repo_root.to_path_buf()).or_insert_with(|| (".".to_string(), Vec::new()));
+            entry.1.push(abs_file_clean);
+        }
+    }
+
+    groups
+}
+
 pub(crate) fn derive_opengrep_execution_targets(
     repo_path: &Path,
+    manifests: &[DiscoveredManifest],
     clean_files: &[PathBuf],
 ) -> Vec<SastExecutionTarget> {
     let repo_root = repo_path
         .canonicalize()
         .unwrap_or_else(|_| repo_path.to_path_buf());
-    let scan_targets = derive_repo_relative_clean_targets(&repo_root, clean_files, &[], |_| true);
-
+    
+    let groups = group_files_by_manifest(&repo_root, manifests, clean_files);
     let mut targets = Vec::new();
-    for (profile_scope, forced_channel) in [
-        (".::unsafe", SastIssueChannel::UnsafeHotspot),
-        (".::health", SastIssueChannel::Health),
-    ] {
-        for (idx, chunk) in scan_targets.chunks(OPENGREP_FILE_LIST_CHUNK_SIZE).enumerate() {
-            targets.push(SastExecutionTarget {
-                blade: StaticAnalysisBlade::Opengrep,
-                execution_root: repo_root.clone(),
-                scope: blade_file_batch_scope(profile_scope, idx + 1),
-                scan_targets: chunk.to_vec(),
-                command_args: None,
-                forced_channel: Some(forced_channel),
-            });
+
+    for (execution_root, (scope, files)) in groups {
+        let scan_targets = derive_repo_relative_clean_targets(&execution_root, &files, &[], |_| true);
+        if scan_targets.is_empty() {
+            continue;
+        }
+
+        let normalized_scope = if scope.trim().is_empty() {
+            ".".to_string()
+        } else {
+            scope.clone()
+        };
+
+        for (profile_scope, forced_channel) in [
+            (format!("{normalized_scope}::unsafe"), SastIssueChannel::UnsafeHotspot),
+            (format!("{normalized_scope}::health"), SastIssueChannel::Health),
+        ] {
+            for (idx, chunk) in scan_targets.chunks(OPENGREP_FILE_LIST_CHUNK_SIZE).enumerate() {
+                targets.push(SastExecutionTarget {
+                    blade: StaticAnalysisBlade::Opengrep,
+                    execution_root: execution_root.clone(),
+                    scope: blade_file_batch_scope(&profile_scope, idx + 1),
+                    scan_targets: chunk.to_vec(),
+                    command_args: None,
+                    forced_channel: Some(forced_channel),
+                });
+            }
         }
     }
     targets
@@ -946,7 +1004,7 @@ fn execution_targets_for_blade(
     blade: StaticAnalysisBlade,
 ) -> Vec<SastExecutionTarget> {
     if blade == StaticAnalysisBlade::Opengrep {
-        return derive_opengrep_execution_targets(repo_path, clean_files);
+        return derive_opengrep_execution_targets(repo_path, manifests, clean_files);
     }
     if blade == StaticAnalysisBlade::Cppcheck {
         return cppcheck::derive_cppcheck_execution_targets(repo_path, clean_files);
@@ -960,7 +1018,7 @@ fn execution_targets_for_blade(
     if blade == StaticAnalysisBlade::Sobelow {
         return sobelow::derive_elixir_execution_targets(manifests, clean_files);
     }
-    if blade == StaticAnalysisBlade::Biome {
+    if blade == StaticAnalysisBlade::Biome || blade == StaticAnalysisBlade::Oxc {
         return derive_js_lint_execution_targets(repo_path, manifests, blade, clean_files);
     }
     if let Some(kind) = manifest_kind_for_blade(blade) {

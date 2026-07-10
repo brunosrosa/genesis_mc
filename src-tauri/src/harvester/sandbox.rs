@@ -1385,10 +1385,8 @@ fn resolve_from_path(base_name: &str) -> Option<PathBuf> {
 fn resolve_local_node_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        if base_name == "biome" {
-            if let Some(native_exe) = resolve_native_biome_bin(repo_path) {
-                return Some(native_exe);
-            }
+        if let Some(native_exe) = resolve_native_npm_bin(repo_path, base_name) {
+            return Some(native_exe);
         }
     }
     let bin_dir = repo_path.join("node_modules").join(".bin");
@@ -1519,40 +1517,44 @@ fn trace_trampoline_target(cmd_path: &std::path::Path) -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_native_biome_bin(repo_path: &Path) -> Option<PathBuf> {
-    let platforms = ["cli-win32-x64", "cli-win32-arm64", "cli-win32-ia32"];
+fn resolve_native_npm_bin(repo_path: &Path, base_name: &str) -> Option<PathBuf> {
+    let platforms = ["win32-x64", "win32-arm64", "win32-ia32"];
+    let mut relative_candidates = Vec::new();
     
-    // 1. Local
-    let local_node_modules = repo_path.join("node_modules");
     for platform in &platforms {
-        let candidate = local_node_modules.join("@biomejs").join(platform).join("biome.exe");
-        if candidate.is_file() {
-            return Some(candidate);
+        if base_name == "biome" {
+            relative_candidates.push(PathBuf::from("@biomejs").join(format!("cli-{platform}")).join("biome.exe"));
+        } else if base_name == "oxlint" {
+            relative_candidates.push(PathBuf::from("@oxc-project").join(format!("oxlint-{platform}")).join("oxlint.exe"));
+            relative_candidates.push(PathBuf::from(format!("oxlint-{platform}")).join("oxlint.exe"));
+            relative_candidates.push(PathBuf::from("@oxlint").join(platform).join("oxlint.exe"));
         }
     }
 
-    // 2. Global pnpm
+    let mut node_modules_roots = Vec::new();
+    node_modules_roots.push(repo_path.join("node_modules"));
+    
     if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-        let pnpm_global = PathBuf::from(localappdata).join("pnpm").join("node_modules");
-        for platform in &platforms {
-            let candidate = pnpm_global.join("@biomejs").join(platform).join("biome.exe");
+        node_modules_roots.push(PathBuf::from(localappdata).join("pnpm").join("node_modules"));
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        node_modules_roots.push(PathBuf::from(appdata).join("npm").join("node_modules"));
+    }
+
+    for root in &node_modules_roots {
+        for rel_path in &relative_candidates {
+            let candidate = root.join(rel_path);
             if candidate.is_file() {
+                debug!(
+                    base_name = %base_name,
+                    resolved_exe = %candidate.display(),
+                    "resolve_native_npm_bin: Encontrou binario nativo O(1)"
+                );
                 return Some(candidate);
             }
         }
     }
     
-    // 3. Global npm
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        let npm_global = PathBuf::from(appdata).join("npm").join("node_modules");
-        for platform in &platforms {
-            let candidate = npm_global.join("@biomejs").join(platform).join("biome.exe");
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-
     None
 }
 
@@ -1560,6 +1562,7 @@ fn resolve_native_biome_bin(repo_path: &Path) -> Option<PathBuf> {
 fn grant_runtime_and_tool_acls(
     repo_path: &Path,
     sid: PSID,
+    command: &str,
 ) -> Result<(), SandboxError> {
     let mut paths_to_grant = Vec::new();
 
@@ -1571,21 +1574,24 @@ fn grant_runtime_and_tool_acls(
     }
 
     // 2. Python runtime & standard library (via local virtualenv pyvenv.cfg)
-    let venv_candidates = [repo_path.join(".venv"), repo_path.join("venv")];
-    for venv_dir in &venv_candidates {
-        if venv_dir.is_dir() {
-            paths_to_grant.push(venv_dir.clone());
-            let cfg_path = venv_dir.join("pyvenv.cfg");
-            if cfg_path.is_file() {
-                if let Ok(cfg_content) = std::fs::read_to_string(&cfg_path) {
-                    for line in cfg_content.lines() {
-                        let trimmed = line.trim();
-                        if trimmed.starts_with("home") {
-                            let parts: Vec<&str> = trimmed.split('=').collect();
-                            if parts.len() >= 2 {
-                                let home_path = PathBuf::from(parts[1].trim().trim_matches('"'));
-                                if home_path.is_dir() {
-                                    paths_to_grant.push(home_path);
+    let is_python_cmd = command == "python" || command == "python3" || command == "pytest" || command == "ruff" || command == "bandit" || command == "uv";
+    if is_python_cmd {
+        let venv_candidates = [repo_path.join(".venv"), repo_path.join("venv")];
+        for venv_dir in &venv_candidates {
+            if venv_dir.is_dir() {
+                paths_to_grant.push(venv_dir.clone());
+                let cfg_path = venv_dir.join("pyvenv.cfg");
+                if cfg_path.is_file() {
+                    if let Ok(cfg_content) = std::fs::read_to_string(&cfg_path) {
+                        for line in cfg_content.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.starts_with("home") {
+                                let parts: Vec<&str> = trimmed.split('=').collect();
+                                if parts.len() >= 2 {
+                                    let home_path = PathBuf::from(parts[1].trim().trim_matches('"'));
+                                    if home_path.is_dir() {
+                                        paths_to_grant.push(home_path);
+                                    }
                                 }
                             }
                         }
@@ -1593,12 +1599,12 @@ fn grant_runtime_and_tool_acls(
                 }
             }
         }
-    }
 
-    // Global Python interpreter
-    if let Some(python_path) = resolve_from_path("python").or_else(|| resolve_from_path("python3")) {
-        if let Some(parent) = python_path.parent() {
-            paths_to_grant.push(parent.to_path_buf());
+        // Global Python interpreter
+        if let Some(python_path) = resolve_from_path("python").or_else(|| resolve_from_path("python3")) {
+            if let Some(parent) = python_path.parent() {
+                paths_to_grant.push(parent.to_path_buf());
+            }
         }
     }
 
@@ -1611,6 +1617,16 @@ fn grant_runtime_and_tool_acls(
         let yarn_dir = PathBuf::from(&localappdata).join("Yarn");
         if yarn_dir.is_dir() {
             paths_to_grant.push(yarn_dir);
+        }
+        if is_python_cmd {
+            let uv_local = PathBuf::from(&localappdata).join("uv");
+            if uv_local.is_dir() {
+                paths_to_grant.push(uv_local);
+            }
+            let python_local = PathBuf::from(&localappdata).join("Programs").join("Python");
+            if python_local.is_dir() {
+                paths_to_grant.push(python_local);
+            }
         }
     }
     if let Ok(appdata) = std::env::var("APPDATA") {
@@ -2801,7 +2817,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             })?;
 
         // Concede permissões para as runtimes e ferramentas globais/locais usadas
-        grant_runtime_and_tool_acls(&self.repo_path, profile.sid)
+        grant_runtime_and_tool_acls(&self.repo_path, profile.sid, command)
             .map_err(|e| {
                 unsafe { CloseHandle(ephemeral_handle.0); }
                 e
