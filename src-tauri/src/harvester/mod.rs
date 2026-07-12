@@ -3,6 +3,7 @@ pub mod ramdisk;
 pub mod projfs;
 pub mod git;
 pub mod sandbox;
+pub mod path_sanitizer;
 pub mod detect;
 pub mod router;
 pub mod ast_parser;

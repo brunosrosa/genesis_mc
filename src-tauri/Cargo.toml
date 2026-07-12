@@ -73,6 +73,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_StationsAndDesktops",
 ] }
 rustc-hash = "2.1.0"
+which = "6.0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-projfs = "0.1.7"

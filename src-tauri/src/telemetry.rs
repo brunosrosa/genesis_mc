@@ -404,12 +404,19 @@ fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, Strin
         haystack.push(' ');
     }
     for (key, value) in fields {
-        if key != "timeout_secs" && key != "timeout_ms" {
+        if key != "timeout_secs"
+            && key != "timeout_ms"
+            && key != "args"
+            && key != "binary"
+            && key != "cmd"
+            && key != "command"
+            && key != "program"
+        {
             haystack.push_str(key);
             haystack.push('=');
+            haystack.push_str(value);
+            haystack.push(' ');
         }
-        haystack.push_str(value);
-        haystack.push(' ');
     }
     let haystack = haystack.to_ascii_lowercase();
     let contains_any = |needles: &[&str]| needles.iter().any(|n| haystack.contains(n));
@@ -423,6 +430,9 @@ fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, Strin
         || contains_any(&["token", "tokens", "custo", "cost", "usd", "latency", "tempo", "elapsed_ms"])
     {
         return EventKind::Finops;
+    }
+    if *level == Level::DEBUG || *level == Level::TRACE {
+        return EventKind::Processing;
     }
     if contains_any(&["erro", "error", "timeout", "panic", "429", "rate limit", "falha", "failed"]) {
         return EventKind::Error;

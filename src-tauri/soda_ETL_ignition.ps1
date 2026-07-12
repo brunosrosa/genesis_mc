@@ -9,8 +9,12 @@ param(
     [string]$RepoId = ""
 )
 $env:RUST_LOG = "debug"
-[console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
-$PSStyle.OutputRendering = 'ANSI'
+try {
+    [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+} catch {}
+if ($null -ne $PSStyle) {
+    $PSStyle.OutputRendering = 'ANSI'
+}
 try { Clear-Host } catch {}
 
 Write-Host "================================================================" -ForegroundColor Cyan
@@ -199,7 +203,7 @@ switch ($choice) {
 }
 
 Write-Host "`n================================================================" -ForegroundColor Cyan
-Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
+Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST: $phaseName (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
 Push-Location $PSScriptRoot
 
 try {

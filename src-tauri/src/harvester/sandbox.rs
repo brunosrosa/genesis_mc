@@ -52,6 +52,13 @@ const GENERIC_READ: u32 = 0x80000000u32;
 const GENERIC_EXECUTE: u32 = 0x20000000u32;
 #[cfg(target_os = "windows")]
 const GENERIC_ALL: u32 = 0x10000000u32;
+
+#[cfg(target_os = "windows")]
+const FILE_GENERIC_READ: u32 = 0x001200a9u32;
+#[cfg(target_os = "windows")]
+const FILE_GENERIC_WRITE: u32 = 0x00120116u32;
+#[cfg(target_os = "windows")]
+const FILE_GENERIC_EXECUTE: u32 = 0x001200a0u32;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
@@ -339,12 +346,36 @@ fn grant_ntfs_acl(
     cache: &Mutex<FxHashSet<(PathBuf, u32, u32)>>,
 ) -> Result<(), SandboxError> {
     let path_buf = path.to_path_buf();
+    let resolved_inheritance = if path.is_file() {
+        NO_INHERITANCE
+    } else {
+        inheritance_flag
+    };
+
+    let mut resolved_access_mask = access_mask;
+    if path.is_file() {
+        let is_executable_or_trampoline = path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| {
+                ext.eq_ignore_ascii_case("exe")
+                    || ext.eq_ignore_ascii_case("cmd")
+                    || ext.eq_ignore_ascii_case("bat")
+                    || ext.eq_ignore_ascii_case("ps1")
+            })
+            .unwrap_or(false)
+            || (access_mask & (0x2000_0000u32 | 0x0012_00A0u32)) != 0;
+
+        if is_executable_or_trampoline {
+            resolved_access_mask = 0x8000_0000u32 | 0x2000_0000u32;
+        }
+    }
+
     {
         let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
         let has_sufficient = guard.iter().any(|(p, m, i)| {
             p == &path_buf
-                && (*m & access_mask) == access_mask
-                && (*i == inheritance_flag || *i == SUB_CONTAINERS_AND_OBJECTS_INHERIT)
+                && (*m & resolved_access_mask) == resolved_access_mask
+                && (*i == resolved_inheritance || *i == SUB_CONTAINERS_AND_OBJECTS_INHERIT)
         });
         if has_sufficient {
             return Ok(());
@@ -398,9 +429,9 @@ fn grant_ntfs_acl(
     // 2. Monta a nova entrada de acesso para o AppContainer SID.
     // TRUSTEE_W.ptstrName é uma union com pSid — cast seguro conforme Win32 doc.
     let mut ea = EXPLICIT_ACCESS_W {
-        grfAccessPermissions: access_mask,
+        grfAccessPermissions: resolved_access_mask,
         grfAccessMode: GRANT_ACCESS,
-        grfInheritance: inheritance_flag,
+        grfInheritance: resolved_inheritance,
         Trustee: TRUSTEE_W {
             pMultipleTrustee: std::ptr::null_mut(),
             MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
@@ -473,16 +504,16 @@ fn grant_ntfs_acl(
 
     {
         let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
-        guard.insert((path_buf, access_mask, inheritance_flag));
+        guard.insert((path_buf, resolved_access_mask, resolved_inheritance));
     }
     Ok(())
 }
 
 #[cfg(target_os = "windows")]
-fn grant_access_to_winstation_and_desktop(sid: PSID) -> Result<(), SandboxError> {
+fn grant_access_to_winstation_and_desktop(_sid: PSID) -> Result<(), SandboxError> {
     use windows_sys::Win32::System::StationsAndDesktops::{GetProcessWindowStation, GetThreadDesktop};
     use windows_sys::Win32::System::Threading::GetCurrentThreadId;
-    use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SetSecurityInfo, SE_WINDOW_OBJECT};
+    use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SetSecurityInfo, SE_WINDOW_OBJECT, ConvertStringSidToSidW};
 
     unsafe {
         let hwinsta = GetProcessWindowStation();
@@ -492,6 +523,18 @@ fn grant_access_to_winstation_and_desktop(sid: PSID) -> Result<(), SandboxError>
             (hwinsta as windows_sys::Win32::Foundation::HANDLE, "Window Station"),
             (hdesk as windows_sys::Win32::Foundation::HANDLE, "Desktop")
         ];
+
+        let mut all_app_packages_sid: PSID = std::ptr::null_mut();
+        let sid_str_wide = str_to_wide("S-1-15-2-1");
+        let sid_ok = ConvertStringSidToSidW(
+            sid_str_wide.as_ptr(),
+            &mut all_app_packages_sid,
+        );
+        if sid_ok == 0 || all_app_packages_sid.is_null() {
+            return Err(SandboxError::AppContainerSetupFailed {
+                detail: format!("ConvertStringSidToSidW falhou para S-1-15-2-1: {}", last_win32_error()),
+            });
+        }
 
         for (handle, name) in handles {
             if handle.is_null() {
@@ -527,7 +570,7 @@ fn grant_access_to_winstation_and_desktop(sid: PSID) -> Result<(), SandboxError>
                     MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
                     TrusteeForm: TRUSTEE_IS_SID,
                     TrusteeType: TRUSTEE_IS_WELL_KNOWN_GROUP,
-                    ptstrName: sid as windows_sys::core::PWSTR,
+                    ptstrName: all_app_packages_sid as windows_sys::core::PWSTR,
                 },
             };
 
@@ -568,6 +611,7 @@ fn grant_access_to_winstation_and_desktop(sid: PSID) -> Result<(), SandboxError>
                 debug!("ACL de {name} atualizada com sucesso para o AppContainer SID");
             }
         }
+        windows_sys::Win32::Foundation::LocalFree(all_app_packages_sid as *mut _);
     }
 
     Ok(())
@@ -621,50 +665,46 @@ fn grant_ntfs_acl_with_parents(
     let roaming_appdata = std::env::var("APPDATA").ok().map(|s| strip_unc_prefix(std::path::Path::new(&s)));
     let user_profile = std::env::var("USERPROFILE").ok().map(|s| strip_unc_prefix(std::path::Path::new(&s)));
 
-    if let Some(ref profile_path) = user_profile {
-        let clean_path = strip_unc_prefix(path);
-        let clean_profile = strip_unc_prefix(profile_path);
-        
-        if clean_path.starts_with(&clean_profile) {
-            let mut parent = clean_path.parent();
-            while let Some(p) = parent {
-                if p.parent().is_none() {
-                    break;
-                }
-
-                if Some(p.to_path_buf()) == local_appdata
-                    || Some(p.to_path_buf()) == roaming_appdata
-                    || Some(p.to_path_buf()) == user_profile
-                {
-                    break;
-                }
-                
-                trace!(
-                    parent_path = %p.display(),
-                    "grant_ntfs_acl_with_parents: Concedendo travessia ao pai..."
-                );
-                if let Err(e) = grant_ntfs_acl(p, sid, 0x0012_00A9u32, NO_INHERITANCE, cache) {
-                    let is_access_denied = match &e {
-                        SandboxError::AclInjectionFailed { detail } => {
-                            detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
-                        }
-                        _ => false,
-                    };
-                    if !is_access_denied {
-                        return Err(e);
-                    }
-                }
-                trace!(
-                    parent_path = %p.display(),
-                    "grant_ntfs_acl_with_parents: Concedido com sucesso ou tratado para o pai."
-                );
-                
-                if p == clean_profile {
-                    break;
-                }
-                
-                parent = p.parent();
+    let clean_path = strip_unc_prefix(path);
+    if !is_blocked_os_directory(&clean_path) {
+        let mut parent = clean_path.parent();
+        while let Some(p) = parent {
+            if p.parent().is_none() {
+                break;
             }
+
+            if is_blocked_os_directory(p) {
+                break;
+            }
+
+            if Some(p.to_path_buf()) == local_appdata
+                || Some(p.to_path_buf()) == roaming_appdata
+                || Some(p.to_path_buf()) == user_profile
+            {
+                break;
+            }
+            
+            trace!(
+                parent_path = %p.display(),
+                "grant_ntfs_acl_with_parents: Concedendo travessia ao pai..."
+            );
+            if let Err(e) = grant_ntfs_acl(p, sid, 0x0012_00A9u32, NO_INHERITANCE, cache) {
+                let is_access_denied = match &e {
+                    SandboxError::AclInjectionFailed { detail } => {
+                        detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                    }
+                    _ => false,
+                };
+                if !is_access_denied {
+                    return Err(e);
+                }
+            }
+            trace!(
+                parent_path = %p.display(),
+                "grant_ntfs_acl_with_parents: Concedido com sucesso ou tratado para o pai."
+            );
+            
+            parent = p.parent();
         }
     }
     Ok(())
@@ -704,6 +744,18 @@ unsafe impl Send for SendHandle {}
 
 #[cfg(target_os = "windows")]
 unsafe impl Sync for SendHandle {}
+
+#[cfg(target_os = "windows")]
+impl Drop for SendHandle {
+    fn drop(&mut self) {
+        if !self.0.is_null() && self.0 != INVALID_HANDLE_VALUE {
+            unsafe {
+                CloseHandle(self.0);
+            }
+            self.0 = std::ptr::null_mut();
+        }
+    }
+}
 
 /// Abre o diretório com FILE_FLAG_DELETE_ON_CLOSE.
 /// O handle retornado DEVE ser armazenado na struct de Sandbox e fechado via CloseHandle no Drop.
@@ -1647,14 +1699,60 @@ fn grant_runtime_and_tool_acls(
     sid: PSID,
     command: &str,
     cache: &Mutex<FxHashSet<(PathBuf, u32, u32)>>,
+    env: &mut std::collections::BTreeMap<String, String>,
 ) -> Result<(), SandboxError> {
     let mut paths_to_grant = Vec::new();
 
     // 1. Node.js runtime
-    if let Some(node_path) = resolve_from_path("node") {
-        if let Some(parent) = node_path.parent() {
-            paths_to_grant.push(parent.to_path_buf());
+    let mut node_resolved = None;
+    if let Ok(node_path) = which::which("node") {
+        node_resolved = Some(node_path);
+    } else if let Some(node_path) = resolve_from_path("node") {
+        node_resolved = Some(node_path);
+    }
+
+    if let Some(node_path) = node_resolved {
+        // Resolve absolute physical path using std::fs::canonicalize() to resolve Symlinks
+        let canonical_node_path = match std::fs::canonicalize(&node_path) {
+            Ok(canonical) => strip_unc_prefix(&canonical),
+            Err(_) => strip_unc_prefix(&node_path),
+        };
+        if let Some(parent) = canonical_node_path.parent() {
+            let _ = grant_ntfs_acl_with_parents(
+                parent,
+                sid,
+                FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+                SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+                cache,
+            );
+
+            // Append parent to PATH env case-insensitively
+            let path_key = env.keys()
+                .find(|k| k.eq_ignore_ascii_case("PATH"))
+                .cloned()
+                .unwrap_or_else(|| "PATH".to_string());
+            let current_path = env.get(&path_key).cloned()
+                .or_else(|| {
+                    std::env::vars()
+                        .find(|(k, _)| k.eq_ignore_ascii_case("PATH"))
+                        .map(|(_, v)| v)
+                })
+                .unwrap_or_default();
+            let parent_str = parent.to_string_lossy();
+            let new_path = if current_path.is_empty() {
+                parent_str.into_owned()
+            } else {
+                format!("{};{}", current_path, parent_str)
+            };
+            env.insert(path_key, new_path);
         }
+        let _ = grant_ntfs_acl_with_parents(
+            &canonical_node_path,
+            sid,
+            FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+            SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+            cache,
+        );
     }
 
     // 2. Python runtime & standard library (via local virtualenv pyvenv.cfg)
@@ -1686,8 +1784,32 @@ fn grant_runtime_and_tool_acls(
 
         // Global Python interpreter
         if let Some(python_path) = resolve_from_path("python").or_else(|| resolve_from_path("python3")) {
-            if let Some(parent) = python_path.parent() {
+            let canonical_python_path = match std::fs::canonicalize(&python_path) {
+                Ok(canonical) => strip_unc_prefix(&canonical),
+                Err(_) => strip_unc_prefix(&python_path),
+            };
+            if let Some(parent) = canonical_python_path.parent() {
                 paths_to_grant.push(parent.to_path_buf());
+
+                // Append parent to PATH env case-insensitively
+                let path_key = env.keys()
+                    .find(|k| k.eq_ignore_ascii_case("PATH"))
+                    .cloned()
+                    .unwrap_or_else(|| "PATH".to_string());
+                let current_path = env.get(&path_key).cloned()
+                    .or_else(|| {
+                        std::env::vars()
+                            .find(|(k, _)| k.eq_ignore_ascii_case("PATH"))
+                            .map(|(_, v)| v)
+                    })
+                    .unwrap_or_default();
+                let parent_str = parent.to_string_lossy();
+                let new_path = if current_path.is_empty() {
+                    parent_str.into_owned()
+                } else {
+                    format!("{};{}", current_path, parent_str)
+                };
+                env.insert(path_key, new_path);
             }
         }
     }
@@ -1736,27 +1858,79 @@ fn grant_runtime_and_tool_acls(
     for path in paths_to_grant {
         let path_clean = strip_unc_prefix(&path);
         if path_clean.exists() {
-            trace!(
-                path = %path_clean.display(),
-                "AppContainer: Concedendo ACL NTFS para runtime/ferramenta global/local"
-            );
-            if let Err(e) = grant_ntfs_acl_with_parents(&path_clean, sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, cache) {
-                let is_access_denied = match &e {
-                    SandboxError::AclInjectionFailed { detail } => {
-                        detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+            let canonical_path = match std::fs::canonicalize(&path_clean) {
+                Ok(canonical) => strip_unc_prefix(&canonical),
+                Err(_) => path_clean.clone(),
+            };
+            if canonical_path.exists() {
+                trace!(
+                    path = %canonical_path.display(),
+                    "AppContainer: Concedendo ACL NTFS para runtime/ferramenta global/local"
+                );
+                if let Err(e) = grant_ntfs_acl_with_parents(&canonical_path, sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, cache) {
+                    let is_access_denied = match &e {
+                        SandboxError::AclInjectionFailed { detail } => {
+                            detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
+                        }
+                        _ => false,
+                    };
+                    if !is_access_denied {
+                        return Err(e);
+                    } else {
+                        trace!(
+                            path = %canonical_path.display(),
+                            "grant_ntfs_acl_with_parents falhou com Access Denied para runtime/ferramenta. Continuando."
+                        );
                     }
-                    _ => false,
-                };
-                if !is_access_denied {
-                    return Err(e);
-                } else {
-                    trace!(
-                        path = %path_clean.display(),
-                        "grant_ntfs_acl_with_parents falhou com Access Denied para runtime/ferramenta. Continuando."
-                    );
                 }
             }
         }
+    }
+
+    // PRD-031 §C: Injeta OBRIGATORIAMENTE System32 e Windows no PATH da Gaiola.
+    // Scripts .cmd (biome.cmd, oxlint.cmd) precisam de cmd.exe do System32 para executar.
+    // A injeção é feita AQUI (não no spawn) para que apareça no env final da ferramenta.
+    #[cfg(target_os = "windows")]
+    {
+        let win_paths = [
+            r"C:\Windows\System32".to_string(),
+            r"C:\Windows".to_string(),
+        ];
+        let path_key = env
+            .keys()
+            .find(|k| k.eq_ignore_ascii_case("PATH"))
+            .cloned()
+            .unwrap_or_else(|| "PATH".to_string());
+        let current_path = env
+            .get(&path_key)
+            .cloned()
+            .or_else(|| {
+                std::env::vars()
+                    .find(|(k, _)| k.eq_ignore_ascii_case("PATH"))
+                    .map(|(_, v)| v)
+            })
+            .unwrap_or_default();
+        // Materializa em Vec<String> (owned) para evitar problemas de lifetime
+        let mut path_segments: Vec<String> = current_path
+            .split(';')
+            .map(|s| s.to_string())
+            .collect();
+        for win_str in &win_paths {
+            // Deduplicação case-insensitive: não adiciona se já presente
+            let already_present = path_segments
+                .iter()
+                .any(|seg| seg.trim().eq_ignore_ascii_case(win_str.as_str()));
+            if !already_present {
+                path_segments.push(win_str.clone());
+            }
+        }
+        let new_path = path_segments
+            .iter()
+            .filter(|s| !s.is_empty())
+            .cloned()
+            .collect::<Vec<String>>()
+            .join(";");
+        env.insert(path_key, new_path);
     }
 
     Ok(())
@@ -2393,8 +2567,12 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         timeout_secs: u64,
         execution_root: &Path,
     ) -> Result<Vec<u8>, SandboxError> {
-        self.validate_execution_root(execution_root)?;
-        let resolved = resolve_command(command, args, execution_root)?;
+        let canonical_root = std::fs::canonicalize(execution_root)
+            .unwrap_or_else(|_| execution_root.to_path_buf());
+        let execution_root_clean = strip_unc_prefix(&canonical_root);
+
+        self.validate_execution_root(&execution_root_clean)?;
+        let resolved = resolve_command(command, args, &execution_root_clean)?;
         self.enforce_host_path_policy(&resolved)?;
         let requested_command = command.to_string();
         debug!(
@@ -2403,7 +2581,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             args = ?truncated_args_preview(&resolved.args),
             env = ?truncated_env_preview(&resolved.env),
             repo_path = %self.repo_path.display(),
-            cwd = %execution_root.display(),
+            cwd = %execution_root_clean.display(),
             policy = ?self.policy,
             timeout_secs,
             "Sandbox: iniciando processo efemero"
@@ -2412,7 +2590,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let mut process = tokio::process::Command::new(&resolved.program);
         process
             .args(&resolved.args)
-            .current_dir(execution_root)
+            .current_dir(&execution_root_clean)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .stdin(std::process::Stdio::null())
@@ -2727,7 +2905,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         timeout_secs: u64,
         execution_root: &Path,
     ) -> Result<Vec<u8>, SandboxError> {
-        let execution_root_clean = strip_unc_prefix(execution_root);
+        let canonical_root = std::fs::canonicalize(execution_root)
+            .unwrap_or_else(|_| execution_root.to_path_buf());
+        let execution_root_clean = strip_unc_prefix(&canonical_root);
         self.validate_execution_root(&execution_root_clean)?;
         let mut resolved = resolve_command(command, args, &execution_root_clean)?;
 
@@ -2770,6 +2950,20 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                         extra_acl_paths.push(target);
                     }
                 }
+            }
+        }
+
+        // PRD-031 §D: O support_dir (.soda_semgrep) DEVE receber leitura NTFS via extra_acl_paths
+        // para que o OpenGrep possa ler seu --config sem ser bloqueado pelo AppContainer.
+        if command == "opengrep" || command == "semgrep" {
+            let support_dir = semgrep_support_root(&self.repo_path);
+            if support_dir.exists() {
+                debug!(
+                    support_dir = %support_dir.display(),
+                    command,
+                    "AppContainer: adicionando support_dir semgrep em extra_acl_paths (PRD-031 §D)"
+                );
+                extra_acl_paths.push(support_dir);
             }
         }
 
@@ -2821,6 +3015,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         {
             let dry_run_program = resolved.program.clone();
             let mut cmd = tokio::process::Command::new(&dry_run_program);
+            cmd.current_dir(&execution_root_clean);
             
             // Tratativa específica de flags para cmd.exe para evitar travamento interativo
             let is_cmd = dry_run_program
@@ -2920,8 +3115,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             }
 
             // Concede permissão total com herança para todas as pastas de cache do sidecar
+            let clean_dir_mask = FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE;
             for dir in &host_dirs_to_materialize {
-                grant_ntfs_acl_with_parents(dir, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)
+                grant_ntfs_acl_with_parents(dir, profile.sid, clean_dir_mask, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)
                     .map_err(|e| {
                         SandboxError::AppContainerSetupFailed {
                             detail: format!("Falha ao conceder permissões NTFS de cache para '{}': {e:?}", dir.display()),
@@ -2954,7 +3150,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     })?;
                 }
 
-                grant_ntfs_acl_with_parents(&container_packages_dir, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone).map_err(|e| {
+                grant_ntfs_acl_with_parents(&container_packages_dir, profile.sid, clean_dir_mask, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone).map_err(|e| {
                     SandboxError::AppContainerSetupFailed {
                         detail: format!("Falha ao conceder NTFS write ACL para a pasta do AppContainer Packages: {e:?}"),
                     }
@@ -2966,6 +3162,17 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             let ephemeral_dir = strip_unc_prefix(&std::env::temp_dir().join(format!("soda-ac-{uuid_str_clone}")));
             std::fs::create_dir_all(&ephemeral_dir).map_err(|e| SandboxError::AppContainerSetupFailed {
                 detail: format!("Falha ao criar diretório efêmero '{}': {e}", ephemeral_dir.display()),
+            })?;
+
+            // Concede IMEDIATAMENTE acesso total 0x001201bf ao AppContainer SID para a pasta efêmera (fake USERPROFILE)
+            grant_ntfs_acl(
+                &ephemeral_dir,
+                profile.sid,
+                0x001201bf,
+                SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+                &acl_cache_clone,
+            ).map_err(|e| SandboxError::AppContainerSetupFailed {
+                detail: format!("Falha ao conceder ACL total para diretório efêmero '{}': {e:?}", ephemeral_dir.display()),
             })?;
 
             // Injeta FORÇOSAMENTE no bloco de variáveis de ambiente do comando resolvida
@@ -2999,8 +3206,10 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 ephemeral_dir.join("Temp"),
             ];
             for dir in &vault_dirs {
-                std::fs::create_dir_all(dir).map_err(|e| SandboxError::AppContainerSetupFailed {
-                    detail: format!("Falha ao criar cofre fantasma '{}': {e}", dir.display()),
+                std::fs::create_dir_all(dir).map_err(|e| {
+                    SandboxError::AppContainerSetupFailed {
+                        detail: format!("Falha ao criar cofre fantasma '{}': {e}", dir.display()),
+                    }
                 })?;
             }
 
@@ -3017,27 +3226,38 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 grant_ntfs_acl_for_all_application_packages(&repo_path_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone);
             }
 
-            // Concede leitura/execução no diretório do projeto.
-            grant_ntfs_acl_with_parents(&repo_path_clone, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)
-                .map_err(|e| {
-                    // Higiene: fecha o handle efêmero antes de propagar o erro.
-                    unsafe { CloseHandle(ephemeral_handle.0); }
-                    e
-                })?;
+            // PRD-031 §E (Monorepo Awareness): Concede FILE_GENERIC_READ na raiz ABSOLUTA do
+            // repositório clonado. Em monorepos, Cargo Clippy busca dependências em ../vendor
+            // (fora do crate path). A ACL deve cobrir o repo_root completo para evitar I/O errors.
+            //
+            // Estratégia: Se o repo_path contém Cargo.toml e o diretório pai contém um
+            // Cargo.toml ou vendor/, concedemos leitura também no pai (raiz do monorepo).
+            let repo_root_for_acl = {
+                let parent = repo_path_clone.parent();
+                match parent {
+                    Some(p) if p.join("Cargo.toml").exists() || p.join("vendor").is_dir() => {
+                        info!(
+                            monorepo_root = %p.display(),
+                            crate_path = %repo_path_clone.display(),
+                            "AppContainer: Monorepo detectado — expandindo ACL para raiz absoluta (PRD-031 §E)"
+                        );
+                        p.to_path_buf()
+                    }
+                    _ => repo_path_clone.clone(),
+                }
+            };
+            // Leitura (sem escrita) na raiz absoluta do repo — cobre ../vendor e Cargo.lock pai
+            grant_ntfs_acl_with_parents(&repo_root_for_acl, profile.sid, FILE_GENERIC_READ, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
+            // Leitura+escrita apenas no cwd efêmero do crate (execution_root)
+            if repo_root_for_acl != execution_root_clean_clone {
+                grant_ntfs_acl_with_parents(&execution_root_clean_clone, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_WRITE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
+            }
 
             // Concede permissões para as runtimes e ferramentas globais/locais usadas
-            grant_runtime_and_tool_acls(&repo_path_clone, profile.sid, &command_clone, &acl_cache_clone)
-                .map_err(|e| {
-                    unsafe { CloseHandle(ephemeral_handle.0); }
-                    e
-                })?;
+            grant_runtime_and_tool_acls(&repo_path_clone, profile.sid, &command_clone, &acl_cache_clone, &mut resolved_clone.env)?;
 
-            // Concede GENERIC_ALL na pasta temporária.
-            grant_ntfs_acl_with_parents(&ephemeral_dir, profile.sid, GENERIC_ALL, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)
-                .map_err(|e| {
-                    unsafe { CloseHandle(ephemeral_handle.0); }
-                    e
-                })?;
+            // Concede FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE na pasta temporária.
+            grant_ntfs_acl_with_parents(&ephemeral_dir, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
 
             // Concede permissões de leitura/execução no CARGO_HOME e RUSTUP_HOME do Host
             let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
@@ -3059,16 +3279,12 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
 
             // Concede leitura/escrita/execução nas pastas de escrita permitidas do host
             for root in &host_write_roots_clone {
-                grant_ntfs_acl_with_parents(root, profile.sid, 0x0012_01FFu32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)
-                    .map_err(|e| {
-                        unsafe { CloseHandle(ephemeral_handle.0); }
-                        e
-                    })?;
+                grant_ntfs_acl_with_parents(root, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
             }
 
             // Concede leitura/execução na pasta pai do executável resolvido (para trampolins/libs locais)
             if let Some(parent) = resolved_clone.program.parent() {
-                if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
+                if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
                     let is_access_denied = match &e {
                         SandboxError::AclInjectionFailed { detail } => {
                             detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -3076,10 +3292,29 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                         _ => false,
                     };
                     if !is_access_denied {
-                        unsafe { CloseHandle(ephemeral_handle.0); }
                         return Err(e);
                     }
                 }
+
+                // Append the main program's parent to PATH env as well
+                let path_key = resolved_clone.env.keys()
+                    .find(|k| k.eq_ignore_ascii_case("PATH"))
+                    .cloned()
+                    .unwrap_or_else(|| "PATH".to_string());
+                let current_path = resolved_clone.env.get(&path_key).cloned()
+                    .or_else(|| {
+                        std::env::vars()
+                            .find(|(k, _)| k.eq_ignore_ascii_case("PATH"))
+                            .map(|(_, v)| v)
+                    })
+                    .unwrap_or_default();
+                let parent_str = parent.to_string_lossy();
+                let new_path = if current_path.is_empty() {
+                    parent_str.into_owned()
+                } else {
+                    format!("{};{}", current_path, parent_str)
+                };
+                resolved_clone.env.insert(path_key, new_path);
             }
 
             // Concede leitura/execução explicitamente no arquivo binário executável resolvido.
@@ -3091,7 +3326,6 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     _ => false,
                 };
                 if !is_access_denied {
-                    unsafe { CloseHandle(ephemeral_handle.0); }
                     return Err(e);
                 }
             }
@@ -3099,7 +3333,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             // Concede leitura/execução nos caminhos adicionais do trampolim (scripts e pastas pai do script)
             for path in &extra_acl_paths_clone {
                 if let Some(parent) = path.parent() {
-                    if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
+                    if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
                         let is_access_denied = match &e {
                             SandboxError::AclInjectionFailed { detail } => {
                                 detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -3107,7 +3341,6 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                             _ => false,
                         };
                         if !is_access_denied {
-                            unsafe { CloseHandle(ephemeral_handle.0); }
                             return Err(e);
                         }
                     }
@@ -3120,7 +3353,6 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                         _ => false,
                     };
                     if !is_access_denied {
-                        unsafe { CloseHandle(ephemeral_handle.0); }
                         return Err(e);
                     }
                 }
@@ -3135,7 +3367,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
 
         const PREFLIGHT_TIMEOUT_SECS: u64 = 120;
 
-        let (profile, ephemeral_dir, ephemeral_handle, resolved) = match timeout(
+        let (profile, ephemeral_dir, _ephemeral_handle, resolved) = match timeout(
             Duration::from_secs(PREFLIGHT_TIMEOUT_SECS),
             preflight_result
         ).await {
@@ -3188,8 +3420,8 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
 
         // ── Cleanup do handle efêmero ─────────────────────────────────────────
         // profile já foi dropado dentro do spawn_blocking acima.
-        // ephemeral_handle.CloseHandle() → NTFS apaga o diretório automaticamente.
-        unsafe { CloseHandle(ephemeral_handle.0); }
+        // O handle efêmero (ephemeral_handle) será fechado automaticamente via RAII (Drop) ao sair do escopo,
+        // acionando a evaporação/remoção do diretório pelo NTFS.
 
         // Limpa o diretório de LocalAppData do AppContainer para evitar acúmulo no disco do Host
         let local_appdata_cleanup = std::env::var("LOCALAPPDATA").unwrap_or_default();
@@ -3276,7 +3508,9 @@ impl SandboxOrchestrator {
         repo_path: &RepoPath,
         policy: SandboxPolicy,
     ) -> Result<SandboxHandle, SandboxError> {
-        let clean_path = strip_unc_prefix(repo_path.as_ref());
+        let canonical_path = std::fs::canonicalize(repo_path.as_ref())
+            .unwrap_or_else(|_| repo_path.as_ref().to_path_buf());
+        let clean_path = strip_unc_prefix(&canonical_path);
         Ok(SandboxHandle {
             repo_path: clean_path.clone(),
             policy,
@@ -3452,6 +3686,122 @@ mod tests {
             2,
             b"govulncheck: no packages matched the provided patterns",
         ));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PRD-031 §C — TDD: PATH da gaiola DEVE conter C:\Windows\System32
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_sandbox_path_injection_contains_system32() {
+        // RED → GREEN: Após grant_runtime_and_tool_acls, o env["PATH"] DEVE conter System32.
+        // PRD-031 §C: Sem System32, scripts .cmd (biome.cmd, oxlint.cmd) não executam.
+        use rustc_hash::FxHashSet;
+        use std::sync::Mutex;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_dir = temp_dir.path().join("owner").join("repo");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+
+        // Monta env vazio como ponto de partida (simula ambiente da gaiola antes da injeção)
+        let mut env: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+
+        // Dummy SID nulo — grant_runtime_and_tool_acls aceita PSID mas as chamadas
+        // Win32 de ACL são ignoradas se o caminho não existe (graceful fail).
+        // O que testamos é APENAS a mutação do env["PATH"].
+        let dummy_cache: Mutex<FxHashSet<(PathBuf, u32, u32)>> =
+            Mutex::new(FxHashSet::default());
+        let _ = grant_runtime_and_tool_acls(
+            &repo_dir,
+            std::ptr::null_mut(), // PSID nulo — ACL Win32 falha gracefully
+            "opengrep",
+            &dummy_cache,
+            &mut env,
+        );
+
+        let path_val = env
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("PATH"))
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default();
+
+        assert!(
+            path_val
+                .split(';')
+                .any(|seg| seg.trim().eq_ignore_ascii_case(r"C:\Windows\System32")),
+            "PATH da gaiola DEVE conter C:\\Windows\\System32 (PRD-031 §C). PATH atual: {path_val}"
+        );
+        assert!(
+            path_val
+                .split(';')
+                .any(|seg| seg.trim().eq_ignore_ascii_case(r"C:\Windows")),
+            "PATH da gaiola DEVE conter C:\\Windows (PRD-031 §C). PATH atual: {path_val}"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_sandbox_path_injection_no_duplicate_system32() {
+        // RED → GREEN: Injetar System32 duas vezes não deve criar duplicatas.
+        use rustc_hash::FxHashSet;
+        use std::sync::Mutex;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_dir = temp_dir.path().join("owner").join("repo");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+
+        // Pré-injeta System32 no env para simular segunda chamada
+        let mut env: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+        env.insert("PATH".to_string(), r"C:\Windows\System32;C:\Windows".to_string());
+
+        let dummy_cache: Mutex<FxHashSet<(PathBuf, u32, u32)>> =
+            Mutex::new(FxHashSet::default());
+        let _ = grant_runtime_and_tool_acls(
+            &repo_dir,
+            std::ptr::null_mut(),
+            "opengrep",
+            &dummy_cache,
+            &mut env,
+        );
+
+        let path_val = env
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("PATH"))
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default();
+
+        // Conta ocorrências de System32 (case-insensitive)
+        let system32_count = path_val
+            .split(';')
+            .filter(|seg| seg.trim().eq_ignore_ascii_case(r"C:\Windows\System32"))
+            .count();
+
+        assert_eq!(
+            system32_count,
+            1,
+            "System32 nao deve ser duplicado no PATH. COUNT={system32_count}, PATH={path_val}"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PRD-031 §B — TDD: soda_clean_path / soda_strip_unc_prefix
+    // (testes canônicos já estão em path_sanitizer.rs)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_strip_unc_prefix_integration_in_sandbox() {
+        // Confirma que strip_unc_prefix (função local) remove o prefixo
+        // que o Windows adiciona via std::fs::canonicalize.
+        let unc_path = PathBuf::from(r"\\?\C:\Windows\System32");
+        let clean = strip_unc_prefix(&unc_path);
+        assert_eq!(clean, PathBuf::from(r"C:\Windows\System32"),
+            "strip_unc_prefix local deve remover prefixo UNC");
+
+        let normal = PathBuf::from(r"C:\Windows");
+        let unchanged = strip_unc_prefix(&normal);
+        assert_eq!(unchanged, PathBuf::from(r"C:\Windows"),
+            "strip_unc_prefix nao deve modificar paths normais");
     }
 
     #[test]

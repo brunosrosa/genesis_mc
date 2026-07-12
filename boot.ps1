@@ -3,6 +3,12 @@
 # Objetivo: Evitar corrupção, garantir injeção efêmera de variáveis na RAM
 # e ancorar o Fantasma na bandeja sem validações lentas de ferramentas ETL.
 # ============================================================================
+try {
+    [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+} catch {}
+if ($null -ne $PSStyle) {
+    $PSStyle.OutputRendering = 'ANSI'
+}
 try { Clear-Host } catch {}
 $env:RUST_LOG = "debug"
 $ErrorActionPreference = "Stop"
