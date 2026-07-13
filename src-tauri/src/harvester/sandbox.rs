@@ -3,12 +3,16 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tokio::time::timeout;
+use tokio::sync::Semaphore;
 use tracing::{debug, error, info, trace, warn};
 use super::git::RepoPath;
+
+static APPCONTAINER_SETUP_SEMAPHORE: OnceLock<Semaphore> = OnceLock::new();
+
 #[cfg(target_os = "windows")]
 use std::mem::size_of;
 #[cfg(target_os = "windows")]
@@ -3019,6 +3023,10 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             container_name
         };
 
+        // Adquire o semáforo de setup (limite 1) para serializar as chamadas NTFS e criação de profiles de AppContainer
+        let setup_semaphore = APPCONTAINER_SETUP_SEMAPHORE.get_or_init(|| Semaphore::new(1));
+        let setup_permit = setup_semaphore.acquire().await.ok();
+
         info!(
             command,
             container_name = %container_name,
@@ -3390,14 +3398,22 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             Duration::from_secs(PREFLIGHT_TIMEOUT_SECS),
             preflight_result
         ).await {
-            Ok(Ok(Ok(res))) => res,
-            Ok(Ok(Err(sandbox_err))) => return Err(sandbox_err),
+            Ok(Ok(Ok(res))) => {
+                drop(setup_permit);
+                res
+            }
+            Ok(Ok(Err(sandbox_err))) => {
+                drop(setup_permit);
+                return Err(sandbox_err);
+            }
             Ok(Err(join_err)) => {
+                drop(setup_permit);
                 return Err(SandboxError::AppContainerSetupFailed {
                     detail: format!("Falha de thread starvation no setup da gaiola (spawn_blocking join error): {join_err}"),
                 });
             }
             Err(_) => {
+                drop(setup_permit);
                 return Err(SandboxError::AppContainerSetupFailed {
                     detail: format!("Timeout pre-flight de {PREFLIGHT_TIMEOUT_SECS} segundos atingido ao preparar Gaiola de Silicio"),
                 });
