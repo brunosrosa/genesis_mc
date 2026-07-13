@@ -295,14 +295,7 @@ pub fn cmd_deps(args: &[String]) {
 }
 
 pub fn cmd_discover(_args: &[String]) {
-    let history = load_shell_history();
-    if history.is_empty() {
-        println!("No shell history found.");
-        return;
-    }
-
-    let result = crate::tools::ctx_discover::analyze_history(&history, 20);
-    println!("{}", crate::tools::ctx_discover::format_cli_output(&result));
+    println!("Discovery command is disabled.");
 }
 
 pub fn cmd_session() {

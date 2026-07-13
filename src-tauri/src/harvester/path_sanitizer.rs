@@ -1,4 +1,4 @@
-﻿/// Módulo de Purificação de Caminhos UNC — `path_sanitizer.rs`
+/// Módulo de Purificação de Caminhos UNC — `path_sanitizer.rs`
 ///
 /// Expõe a função `soda_clean_path` que:
 /// 1. Remove matematicamente o prefixo `\\?\` (e variantes) de caminhos Windows
@@ -38,22 +38,32 @@ pub fn soda_clean_path(path: &Path) -> PathBuf {
 /// Usada internamente por `soda_clean_path` e diretamente em contextos de testes puros.
 pub fn soda_strip_unc_prefix(path: &Path) -> PathBuf {
     let raw = path.to_string_lossy();
+    let mut cleaned = raw.as_ref();
 
-    let cleaned: &str = if raw.starts_with(r"\\?\UNC\") {
-        // \\?\UNC\server\share -> \\server\share
-        &raw[r"\\?\UNC".len()..]
-    } else if raw.starts_with(r"\\?\") {
-        // \\?\C:\foo -> C:\foo
-        &raw[r"\\?\".len()..]
-    } else if raw.starts_with("//?/UNC/") {
-        // //?/UNC/server/share -> //server/share
-        &raw["//?/UNC".len()..]
-    } else if raw.starts_with("//?/") {
-        // //?/C:/foo -> C:/foo
-        &raw["//?/".len()..]
-    } else {
-        &raw
-    };
+    // 1. Tratativa de caminhos UNC de Rede estendidos (com host/share)
+    if cleaned.starts_with(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{}", &cleaned[r"\\?\UNC\".len()..]));
+    }
+    if cleaned.starts_with(r"\?\UNC\") {
+        return PathBuf::from(format!(r"\\{}", &cleaned[r"\?\UNC\".len()..]));
+    }
+    if cleaned.starts_with("//?/UNC/") {
+        return PathBuf::from(format!("//{}", &cleaned["//?/UNC/".len()..]));
+    }
+    if cleaned.starts_with("/?/UNC/") {
+        return PathBuf::from(format!("//{}", &cleaned["/?/UNC/".len()..]));
+    }
+
+    // 2. Tratativa de caminhos locais estendidos (como drives \\?\C:\ ou \?\C:\)
+    if cleaned.starts_with(r"\\?\") {
+        cleaned = &cleaned[r"\\?\".len()..];
+    } else if cleaned.starts_with(r"\?\") {
+        cleaned = &cleaned[r"\?\".len()..];
+    } else if cleaned.starts_with("//?/") {
+        cleaned = &cleaned["//?/".len()..];
+    } else if cleaned.starts_with("/?/") {
+        cleaned = &cleaned["/?/".len()..];
+    }
 
     PathBuf::from(cleaned)
 }
@@ -73,6 +83,22 @@ mod tests {
         let result = soda_strip_unc_prefix(input);
         assert_eq!(result, PathBuf::from(r"C:\Windows"),
             r"\\?\C:\Windows deve ser limpo para C:\Windows");
+    }
+
+    #[test]
+    fn test_unc_single_backslash_aberration_is_stripped() {
+        // PRD-032 §3: A aberração \?\C:\Windows deve ser purificada de forma idêntica.
+        let input = Path::new(r"\?\C:\Windows");
+        let result = soda_strip_unc_prefix(input);
+        assert_eq!(result, PathBuf::from(r"C:\Windows"),
+            r"\?\C:\Windows deve ser limpo para C:\Windows");
+    }
+
+    #[test]
+    fn test_unc_single_backslash_network_is_stripped() {
+        let input = Path::new(r"\?\UNC\server\share");
+        let result = soda_strip_unc_prefix(input);
+        assert_eq!(result, PathBuf::from(r"\\server\share"));
     }
 
     #[test]

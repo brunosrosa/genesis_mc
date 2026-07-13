@@ -8,18 +8,14 @@ use crate::core::session::SessionState;
 
 pub mod autonomy;
 pub mod ctx_agent;
-pub mod ctx_analyze;
 pub mod ctx_architecture;
-pub mod ctx_benchmark;
 pub mod ctx_callees;
 pub mod ctx_callers;
 pub mod ctx_compress;
 pub mod ctx_compress_memory;
 pub mod ctx_context;
-pub mod ctx_cost;
 pub mod ctx_dedup;
 pub mod ctx_delta;
-pub mod ctx_discover;
 pub mod ctx_edit;
 pub mod ctx_execute;
 pub mod ctx_feedback;

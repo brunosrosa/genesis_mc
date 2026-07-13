@@ -435,6 +435,9 @@ struct SastExecutionOutcome {
     scope: String,
     forced_channel: Option<SastIssueChannel>,
     result: Result<Vec<u8>, SidecarError>,
+    /// PRD-033: payload forense capturado quando a lâmina RustClippy falha
+    /// em vez de abortar o pipeline inteiro.
+    forensic_rust_diagnostic: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -627,6 +630,37 @@ impl PolyglotSastSidecar {
                         available_cargo_permits = cargo_semaphore.available_permits(),
                         "SAST monorepo: sub-scan concluído"
                     );
+                    // PRD-033: quando a lâmina RustClippy falha, capturar
+                    // o diagnóstico e devolver como pseudossucesso forense.
+                    let forensic_rust_diagnostic = if blade == StaticAnalysisBlade::RustClippy {
+                        if let Err(ref err) = result {
+                            let stderr_limpo = match err {
+                                SidecarError::ExecutionFailed { reason } => reason.clone(),
+                                SidecarError::Timeout { timeout_secs } => {
+                                    format!("timeout após {timeout_secs}s")
+                                }
+                                other => other.to_string(),
+                            };
+                            Some(format!(
+                                "[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> {}",
+                                stderr_limpo
+                            ))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    // Se o diagnóstico forense foi capturado, substituir o Err
+                    // por Ok(SastBladeResult vazio) para que a lâmina não aborte o pipeline.
+                    let result: Result<SastBladeResult, SidecarError> = if forensic_rust_diagnostic.is_some() {
+                        Ok(SastBladeResult {
+                            effective_blade: blade,
+                            bytes: Vec::new(),
+                        })
+                    } else {
+                        result
+                    };
                     let (effective_blade, result) = match result {
                         Ok(result) => (result.effective_blade, Ok(result.bytes)),
                         Err(err) => (blade, Err(err)),
@@ -638,33 +672,46 @@ impl PolyglotSastSidecar {
                         scope,
                         forced_channel,
                         result,
+                        forensic_rust_diagnostic,
                     })
                 });
             }
         }
 
+        let mut forensic_rust_diagnostics: Vec<String> = Vec::new();
         while let Some(joined) = join_set.join_next().await {
             let outcome = match joined {
                 Ok(Ok(outcome)) => outcome,
                 Ok(Err(err)) => {
-                    had_failed_payload = true;
                     error!(
                         repo_path = %repo_path.display(),
                         error = %err,
-                        "SAST monorepo: worker falhou; descartando sub-scan"
+                        "SAST monorepo: worker falhou de forma fatal"
                     );
-                    continue;
+                    return Err(err);
                 }
                 Err(err) => {
-                    had_failed_payload = true;
                     error!(
                         repo_path = %repo_path.display(),
                         error = %err,
-                        "SAST monorepo: join do worker falhou; descartando sub-scan"
+                        "SAST monorepo: join do worker falhou de forma fatal"
                     );
-                    continue;
+                    return Err(SidecarError::ExecutionFailed {
+                        reason: format!("Join error no worker da lâmina SAST: {}", err),
+                    });
                 }
             };
+
+            // PRD-033: acumular diagnóstico forense (não aborta pipeline)
+            if let Some(diag) = outcome.forensic_rust_diagnostic {
+                warn!(
+                    scope = %outcome.scope,
+                    "SAST monorepo: falha forense da lâmina RustClippy capturada"
+                );
+                forensic_rust_diagnostics.push(diag);
+                had_failed_payload = true;
+                continue;
+            }
 
             match outcome.result {
                 Ok(bytes) => match normalize_sast_output(
@@ -715,28 +762,21 @@ impl PolyglotSastSidecar {
                     }
                 },
                 Err(err) => {
-                    had_failed_payload = true;
                     let blade_label = blade_name(outcome.requested_blade);
-                    let error_msg = format!("Lâmina '{}' falhou no escopo '{}': {}", blade_label, outcome.scope, err);
-                    all_issues.push(SodaHealthIssue {
-                        level: "warning".to_string(),
-                        file: String::new(),
-                        message: format!("[FALHA] {}", error_msg),
-                        source_blade: blade_label.to_string(),
-                        channel: SastIssueChannel::Health,
-                    });
                     error!(
-                        blade = blade_name(outcome.requested_blade),
+                        blade = blade_label,
                         scope = %outcome.scope,
                         cwd = %outcome.execution_root.display(),
                         error = %err,
-                        "SAST monorepo: execucao da lamina falhou; descartando sub-scan"
+                        "SAST monorepo: execucao da lamina falhou com erro letal (Fail-Closed)"
                     );
+                    return Err(err);
                 }
             }
         }
 
-        if had_failed_payload && !had_successful_payload {
+        // PRD-033: só retorna zero-byte se não há NENHUM sinal (nem issues, nem forense)
+        if had_failed_payload && !had_successful_payload && forensic_rust_diagnostics.is_empty() {
             error!(
                 repo_path = %repo_path.display(),
                 "SAST monorepo: todas as laminas falharam; retornando blobs zero-byte"
@@ -761,9 +801,24 @@ impl PolyglotSastSidecar {
             .cloned()
             .collect::<Vec<_>>();
 
+        let health_report_body = render_soda_health_report(&health_issues);
+
+        // PRD-033: prepend dos diagnósticos forenses ao TOPO do Blob 08
+        let health_report_blob = if forensic_rust_diagnostics.is_empty() {
+            health_report_body
+        } else {
+            let header = forensic_rust_diagnostics.join("\n");
+            let mut blob = header.into_bytes();
+            if !health_report_body.is_empty() {
+                blob.push(b'\n');
+                blob.extend_from_slice(&health_report_body);
+            }
+            blob
+        };
+
         Ok(PolyglotSastArtifacts {
             unsafe_hotspots_blob: render_unsafe_hotspots_report(&unsafe_issues, &input.clean_files),
-            health_report_blob: render_soda_health_report(&health_issues),
+            health_report_blob,
         })
     }
 }
@@ -2764,5 +2819,56 @@ mod tests {
         assert!(rendered.contains("[DOMAIN: C++ / CUDA]"));
         assert!(rendered.contains("[cppcheck]"));
         assert!(rendered.contains("[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck."));
+    }
+    /// PRD-033 TDD (RED→GREEN)
+    /// Verifica que quando a lâmina RustClippy falha (ex: crate com build.rs/FFI que
+    /// não compila no sandbox), o diagnóstico forense é injetado no TOPO do Blob 08
+    /// e o pipeline NÃO aborta — retornando Ok(PolyglotSastArtifacts).
+    #[tokio::test]
+    async fn test_prd033_clippy_failure_injects_forensic_header_at_top_of_blob08() {
+        use crate::harvester::sast::test_utils::MockExecutor;
+        use crate::harvester::sandbox::SandboxError;
+        use crate::harvester::detect::StackProfile;
+
+        // Montar um executor com um Cargo.toml simples (sem lockfile = sem --locked)
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file(
+            "Cargo.toml",
+            "[package]\nname='toxic-crate'\nversion='0.1.0'\nbuild='build.rs'\n",
+        );
+        // Forçar falha no preflight (cargo fetch) simulando erro de compilação
+        *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 101,
+                stderr: "error[E0463]: can't find crate for `proc_macro`".to_string(),
+                stdout: Vec::new(),
+            }),
+        ]);
+
+        let executor = std::sync::Arc::new(executor);
+        let clean_files = std::sync::Arc::new(Vec::new());
+
+        let result = PolyglotSastSidecar::extract(PolyglotSastInput {
+            executor,
+            timeout_secs: 30,
+            profile: &StackProfile::Rust,
+            clean_files,
+        })
+        .await;
+
+        // Pipeline NÃO deve abortar
+        let artifacts = result.expect("pipeline nao deve abortar quando clippy falha (PRD-033)");
+
+        // Blob 08 deve começar com o marcador forense
+        let blob08 = String::from_utf8_lossy(&artifacts.health_report_blob);
+        assert!(
+            blob08.starts_with("[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO]"),
+            "Blob 08 deve comecar com marcador forense PRD-033, mas foi:\n{blob08}"
+        );
+        // O erro original deve estar presente no payload
+        assert!(
+            blob08.contains("E0463") || blob08.contains("proc_macro") || blob08.contains("101"),
+            "Blob 08 deve conter o stderr do erro, mas foi:\n{blob08}"
+        );
     }
 }

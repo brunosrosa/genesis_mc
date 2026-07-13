@@ -427,10 +427,6 @@ impl ServerHandler for LeanCtxServer {
             name,
             "ctx_compress"
                 | "ctx_metrics"
-                | "ctx_benchmark"
-                | "ctx_analyze"
-                | "ctx_cache"
-                | "ctx_discover"
                 | "ctx_dedup"
                 | "ctx_session"
                 | "ctx_knowledge"
@@ -439,7 +435,6 @@ impl ServerHandler for LeanCtxServer {
                 | "ctx_wrapped"
                 | "ctx_overview"
                 | "ctx_preload"
-                | "ctx_cost"
                 | "ctx_gain"
                 | "ctx_heatmap"
                 | "ctx_task"

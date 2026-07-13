@@ -16,13 +16,7 @@ binds:
                 rules:
                   - >
                     !has(mcp.tool)
-                    || mcp.tool.name.matches("^(index_folder|index_repo|get_file_tree|get_file_outline|get_symbol_source|search_symbols|get_file_content)$")
-                    || mcp.tool.name.matches("^(read_query|list_tables|describe_table|sequentialthinking)$")
-                    || mcp.tool.name.matches("^(search_repositories|get_file_contents|search_issues|get_issue|get_pull_request|list_pull_requests|projects_list|projects_get|projects_write|issue_write)$")
-                    || mcp.tool.name.matches("^(notebook_query|notebook_list|notebook_get|notebook_create|notebook_delete|source_get_content|source_add|source_delete|add_source|delete_source)$")
-                    || mcp.tool.name.matches("^(repo_ast|web_fetch|sys_time|web_search|repo_meta|db_query)$")
-                    || mcp.tool.name.matches("^(read_values|write_values|create_spreadsheet|clear_values|get_sheet_info)$")
-                    || mcp.tool.name.matches("^(memory_.*|sqlite_.*|ctx_.*|sqz_.*|toon_compress)$")
+                    || !mcp.tool.name.matches("^(.*_edit|.*_task|.*_workflow|.*_share|.*_handoff|.*_overview|.*_prefetch|.*_preload|.*_fill|.*_routes|.*_response|.*_dedup|.*_agent|.*_knowledge|.*_benchmark|.*_cache|.*_cost|.*_analyze|.*_discover|.*delete.*|clear_values)$")
             backends:
               # ==========================================
               # NÚCLEO COGNITIVO SODA (FAIL CLOSED)
@@ -34,19 +28,19 @@ binds:
                       stdio:
                         cmd: 'src-tauri/target/debug/mcp_stdio_guard.exe'
                         args: ['--timeout-ms', '30000', '--', 'src-tauri/target/debug/lean-ctx.exe']
-                    - name: sequential_thinking
+                    - name: core
                       stdio:
                         cmd: 'sequential-thinking-server.exe'
                         args: []
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                           RUST_LOG: 'off'
-                    - name: memory-mcp-rs
+                    - name: mem
                       stdio:
                         cmd: 'memory-mcp-rs.exe'
                         args: ['--db-path', 'Z:/genesis_mc/.soda_data/soda_state.db']
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
-                    - name: core
+                    - name: soda
                       mcp:
                         host: 'http://127.0.0.1:3002/mcp'

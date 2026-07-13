@@ -2930,6 +2930,19 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         }
 
         let mut extra_acl_paths = Vec::new();
+
+        // Vacina contra asfixia de permissão NTFS (Node e NPM Global) no AppContainer
+        if let Ok(path_env) = std::env::var("PATH") {
+            for p in std::env::split_paths(&path_env) {
+                let node_path = p.join("node.exe");
+                if node_path.is_file() {
+                    debug!(node_dir = %p.display(), "AppContainer: detectado runtime Node.js no PATH. Concedendo ACL NTFS de leitura.");
+                    extra_acl_paths.push(p);
+                    break;
+                }
+            }
+        }
+
         if let Some(ext) = resolved.program.extension().and_then(|e| e.to_str()) {
             if ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat") {
                 if let Some(target) = trace_trampoline_target(&resolved.program) {
@@ -2947,8 +2960,14 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                             target_script = %target.display(),
                             "AppContainer: resolvendo trampolim .cmd/.bat para script. Adicionando caminhos de ACL extras."
                         );
-                        extra_acl_paths.push(target);
+                        extra_acl_paths.push(target.clone());
+                        if let Some(parent) = target.parent() {
+                            extra_acl_paths.push(parent.to_path_buf());
+                        }
                     }
+                }
+                if let Some(parent) = resolved.program.parent() {
+                    extra_acl_paths.push(parent.to_path_buf());
                 }
             }
         }

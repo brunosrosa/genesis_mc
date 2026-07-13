@@ -162,18 +162,6 @@ pub fn build_rust_clippy_plan(manifest: &DiscoveredManifest) -> Result<RustClipp
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "manifesto sem [package].name".to_string())?;
 
-    if manifest_effectively_has_build_script(&manifest.execution_root, package_table) {
-        return Err("package contem build.rs efetivo".to_string());
-    }
-
-    if let Some(links) = package_table.get("links").and_then(toml::Value::as_str) {
-        return Err(format!("package declara links={links}"));
-    }
-
-    if let Some(marker) = rust_manifest_native_marker(&manifest_value) {
-        return Err(format!("manifesto referencia dependencia nativa/FFI marker={marker}"));
-    }
-
     Ok(RustClippyPlan {
         command_args: clippy_args_for_package(package_name),
     })
@@ -187,29 +175,6 @@ struct CargoMetadataPackage {
 #[derive(Debug, serde::Deserialize)]
 struct CargoMetadataPayload {
     packages: Vec<CargoMetadataPackage>,
-}
-
-fn rust_manifest_declares_build_dependencies(value: &toml::Value) -> bool {
-    match value {
-        toml::Value::Table(entries) => entries.iter().any(|(key, inner)| {
-            key.eq_ignore_ascii_case("build-dependencies")
-                || rust_manifest_declares_build_dependencies(inner)
-        }),
-        toml::Value::Array(items) => items.iter().any(rust_manifest_declares_build_dependencies),
-        _ => false,
-    }
-}
-
-fn rust_manifest_declares_proc_macro(value: &toml::Value) -> bool {
-    match value {
-        toml::Value::Table(entries) => entries.iter().any(|(key, inner)| {
-            (key.eq_ignore_ascii_case("proc-macro")
-                && inner.as_bool().unwrap_or(false))
-                || rust_manifest_declares_proc_macro(inner)
-        }),
-        toml::Value::Array(items) => items.iter().any(rust_manifest_declares_proc_macro),
-        _ => false,
-    }
 }
 
 pub fn fail_closed_rust_manifest(reason: String) -> SidecarError {
@@ -242,7 +207,7 @@ pub fn audit_transitive_rust_manifests(
     let mut manifests = payload
         .packages
         .into_iter()
-        .map(|package| package.manifest_path)
+        .map(|package| crate::harvester::path_sanitizer::soda_strip_unc_prefix(&package.manifest_path))
         .collect::<Vec<_>>();
     manifests.sort();
     manifests.dedup();
@@ -265,54 +230,14 @@ pub fn audit_transitive_rust_manifests(
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
             ))
         })?;
-        let manifest_value = manifest_text.parse::<toml::Value>().map_err(|error| {
+        let _manifest_value = manifest_text.parse::<toml::Value>().map_err(|error| {
             fail_closed_rust_manifest(format!(
                 "manifesto transitivo invalido em '{}': {error}",
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
             ))
         })?;
-        let manifest_root = manifest_path
-            .parent()
-            .unwrap_or_else(|| Path::new(""));
-        let manifest_label =
-            sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string());
-
-        if let Some(package_table) = manifest_value.get("package").and_then(toml::Value::as_table) {
-            if manifest_effectively_has_build_script(manifest_root, package_table) {
-                return Err(fail_closed_rust_manifest(format!(
-                    "manifesto transitivo '{}' contem build.rs efetivo",
-                    manifest_label
-                )));
-            }
-
-            if let Some(links) = package_table.get("links").and_then(toml::Value::as_str) {
-                return Err(fail_closed_rust_manifest(format!(
-                    "manifesto transitivo '{}' declara links={links}",
-                    manifest_label
-                )));
-            }
-        }
-
-        if rust_manifest_declares_build_dependencies(&manifest_value) {
-            return Err(fail_closed_rust_manifest(format!(
-                "manifesto transitivo '{}' declara build-dependencies",
-                manifest_label
-            )));
-        }
-
-        if rust_manifest_declares_proc_macro(&manifest_value) {
-            return Err(fail_closed_rust_manifest(format!(
-                "manifesto transitivo '{}' declara proc-macro = true",
-                manifest_label
-            )));
-        }
-
-        if let Some(marker) = rust_manifest_native_marker(&manifest_value) {
-            return Err(fail_closed_rust_manifest(format!(
-                "manifesto transitivo '{}' referencia dependencia nativa/FFI marker={marker}",
-                manifest_label
-            )));
-        }
+        // PRD-033: blindagem removida — crates com build.rs/FFI/proc-macro agora
+        // tentam compilar; falhas são capturadas forensicamente em mod.rs.
     }
 
     Ok(())
@@ -544,11 +469,13 @@ pub fn derive_rust_clippy_execution_targets(manifests: &[DiscoveredManifest]) ->
                 forced_channel: None,
             }),
             Err(reason) => {
+                // PRD-033: build_rust_clippy_plan agora só falha em erros
+                // de leitura de TOML/manifest — não filtra mais por FFI.
                 info!(
                     manifest = %manifest.manifest_path.display(),
                     scope = %manifest.scope,
                     reason = %reason,
-                    "SAST rust-clippy: manifesto blindado para evitar build.rs/FFI"
+                    "SAST rust-clippy: manifesto ignorado (erro de leitura/parse)"
                 );
                 None
             }
@@ -667,7 +594,10 @@ members = ["crates/*"]
     }
 
     #[test]
-    fn test_derive_rust_clippy_targets_skip_toxic_manifests_and_scope_to_package() {
+    fn test_derive_rust_clippy_targets_includes_all_manifests_including_ffi() {
+        // PRD-033 Lei 1: a blindagem foi removida. Todos os manifestos Rust são alvos agora.
+        // Crates com cudarc/objc2/metal são incluídos; se falharem ao compilar,
+        // o diagnóstico forense é injetado no Blob 08 pelo mod.rs.
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("Cargo.toml", "[package]\nname='root'\nversion='0.1.0'\n");
         executor.write_repo_file(
@@ -682,12 +612,12 @@ members = ["crates/*"]
 
         let targets = derive_rust_clippy_execution_targets(&manifests);
 
-        assert_eq!(targets.len(), 1);
-        assert_eq!(targets[0].scope, ".");
-        assert_eq!(
-            targets[0].command_args.as_ref(),
-            Some(&clippy_args_for_package("root"))
-        );
+        // Todos os 3 manifestos são alvo agora (sem blindagem)
+        assert_eq!(targets.len(), 3);
+        let scopes: Vec<&str> = targets.iter().map(|t| t.scope.as_str()).collect();
+        assert!(scopes.contains(&"."), "root deve ser alvo");
+        assert!(scopes.iter().any(|s| s.contains("cuda")), "cuda deve ser alvo");
+        assert!(scopes.iter().any(|s| s.contains("apple")), "apple deve ser alvo");
     }
 
     #[tokio::test]
@@ -751,7 +681,10 @@ members = ["crates/*"]
     }
 
     #[tokio::test]
-    async fn test_run_sast_blade_falls_back_to_opengrep_when_transitive_manifest_declares_build_dependencies() {
+    async fn test_run_sast_blade_clippy_runs_on_crate_with_build_deps_transitive() {
+        // PRD-033 Lei 1: a blindagem foi removida. Crates com build-dependencies
+        // transitivos não disparam mais o fallback para opengrep;
+        // o clippy tenta compilar e falhas são capturadas forensicamente.
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
         executor.write_repo_file(
@@ -776,22 +709,15 @@ members = ["crates/*"]
             ]
         })
         .to_string();
-        let opengrep_payload = br#"{
-            "results": [
-                {
-                    "check_id": "soda.fragility.unwrap",
-                    "path": "src/lib.rs",
-                    "extra": {
-                        "message": "unwrap encontrado em caminho critico",
-                        "severity": "WARNING"
-                    }
-                }
-            ]
-        }"#;
+        // Clippy falha ao compilar (cc build-dep não disponivel no sandbox)
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
-            Ok(Vec::new()),
-            Ok(metadata_payload.as_bytes().to_vec()),
-            Ok(opengrep_payload.to_vec()),
+            Ok(Vec::new()),                           // cargo fetch (sem lockfile)
+            Ok(metadata_payload.as_bytes().to_vec()), // cargo metadata
+            Err(SandboxError::ProcessNonZeroExit {    // cargo clippy falha
+                exit_code: 1,
+                stderr: "error: could not compile `toxic` (build script)".to_string(),
+                stdout: Vec::new(),
+            }),
         ]);
 
         let result = run_sast_blade(
@@ -805,23 +731,26 @@ members = ["crates/*"]
             None,
             false,
         )
-        .await
-        .unwrap();
+        .await;
 
         let calls = executor.calls();
-        assert_eq!(result.effective_blade, StaticAnalysisBlade::Opengrep);
-        assert_eq!(result.bytes, opengrep_payload.to_vec());
-        assert_eq!(calls.len(), 3);
+        // Clippy agora tenta compilar (3 calls: fetch + metadata + clippy)
+        assert_eq!(calls.len(), 3, "fetch + metadata + clippy devem ser chamados");
         assert!(calls[0].starts_with("cargo fetch --manifest-path "));
-        assert!(!calls[0].contains("--locked"));
-        assert!(calls[1].starts_with("cargo metadata --format-version 1 --offline --manifest-path "));
-        assert!(!calls[1].contains("--locked"));
-        assert!(calls[2].starts_with("opengrep "));
-        assert!(!calls[2].contains("cargo clippy"));
+        assert!(calls[1].starts_with("cargo metadata"));
+        assert!(calls[2].starts_with("cargo clippy"));
+        // run_sast_blade retorna Err (o tratamento forense ocorre em mod.rs acima)
+        assert!(
+            result.is_err(),
+            "run_sast_blade deve retornar Err quando clippy falha fatalmente"
+        );
     }
 
     #[tokio::test]
-    async fn test_run_sast_blade_skips_opengrep_fallback_when_global_coverage_exists() {
+    async fn test_run_sast_blade_with_build_deps_and_global_coverage_runs_clippy_normally() {
+        // PRD-033: com global_coverage=true e crate com build-deps transitivos,
+        // o clippy ainda tenta rodar (blindagem removida). Se não há lockfile,
+        // fá fetch sem --locked e metadata sem --locked antes do clippy.
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
         executor.write_repo_file(
@@ -846,9 +775,11 @@ members = ["crates/*"]
             ]
         })
         .to_string();
+        // Com global_coverage=true, o clippy tenta rodar com bytes vazio em caso de sucesso sem achados
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
-            Ok(Vec::new()),
-            Ok(metadata_payload.as_bytes().to_vec()),
+            Ok(Vec::new()),                           // cargo fetch
+            Ok(metadata_payload.as_bytes().to_vec()), // cargo metadata
+            Ok(Vec::new()),                           // cargo clippy (sem achados)
         ]);
 
         let result = run_sast_blade(
@@ -860,18 +791,19 @@ members = ["crates/*"]
             &[".".to_string()],
             Some(&clippy_args_for_package("sdk")),
             None,
-            true,
+            true, // global_coverage=true
         )
         .await
         .unwrap();
 
         let calls = executor.calls();
         assert_eq!(result.effective_blade, StaticAnalysisBlade::RustClippy);
-        assert!(result.bytes.is_empty());
-        assert_eq!(calls.len(), 2);
+        // 3 calls: fetch + metadata + clippy
+        assert_eq!(calls.len(), 3);
         assert!(calls[0].starts_with("cargo fetch --manifest-path "));
         assert!(!calls[0].contains("--locked"));
         assert!(calls[1].starts_with("cargo metadata --format-version 1 --offline --manifest-path "));
         assert!(!calls[1].contains("--locked"));
+        assert!(calls[2].starts_with("cargo clippy"));
     }
 }

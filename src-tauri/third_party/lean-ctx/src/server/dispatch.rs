@@ -421,29 +421,6 @@ impl LeanCtxServer {
                 self.record_call("ctx_compress", 0, 0, None).await;
                 result
             }
-            "ctx_benchmark" => {
-                let path = match get_str(args, "path") {
-                    Some(p) => self
-                        .resolve_path(&p)
-                        .await
-                        .map_err(|e| ErrorData::invalid_params(e, None))?,
-                    None => return Err(ErrorData::invalid_params("path is required", None)),
-                };
-                let action = get_str(args, "action").unwrap_or_default();
-                let result = if action == "project" {
-                    let fmt = get_str(args, "format").unwrap_or_default();
-                    let bench = crate::core::benchmark::run_project_benchmark(&path);
-                    match fmt.as_str() {
-                        "json" => crate::core::benchmark::format_json(&bench),
-                        "markdown" | "md" => crate::core::benchmark::format_markdown(&bench),
-                        _ => crate::core::benchmark::format_terminal(&bench),
-                    }
-                } else {
-                    crate::tools::ctx_benchmark::handle(&path, self.crp_mode)
-                };
-                self.record_call("ctx_benchmark", 0, 0, None).await;
-                result
-            }
             "ctx_metrics" => {
                 let cache = self.cache.read().await;
                 let calls = self.tool_calls.read().await;
@@ -457,25 +434,6 @@ impl LeanCtxServer {
                 }
                 drop(stats);
                 self.record_call("ctx_metrics", 0, 0, None).await;
-                result
-            }
-            "ctx_analyze" => {
-                let path = match get_str(args, "path") {
-                    Some(p) => self
-                        .resolve_path(&p)
-                        .await
-                        .map_err(|e| ErrorData::invalid_params(e, None))?,
-                    None => return Err(ErrorData::invalid_params("path is required", None)),
-                };
-                let result = crate::tools::ctx_analyze::handle(&path, self.crp_mode);
-                self.record_call("ctx_analyze", 0, 0, None).await;
-                result
-            }
-            "ctx_discover" => {
-                let limit = get_int(args, "limit").unwrap_or(15) as usize;
-                let history = crate::cli::load_shell_history_pub();
-                let result = crate::tools::ctx_discover::discover_from_history(&history, limit);
-                self.record_call("ctx_discover", 0, 0, None).await;
                 result
             }
             "ctx_smart_read" => {
@@ -671,69 +629,6 @@ impl LeanCtxServer {
                 drop(cache);
                 self.record_call("ctx_graph", 0, 0, Some(action_for_record))
                     .await;
-                result
-            }
-            "ctx_cache" => {
-                let action = get_str(args, "action")
-                    .ok_or_else(|| ErrorData::invalid_params("action is required", None))?;
-                let mut cache = self.cache.write().await;
-                let result = match action.as_str() {
-                    "status" => {
-                        let entries = cache.get_all_entries();
-                        if entries.is_empty() {
-                            "Cache empty — no files tracked.".to_string()
-                        } else {
-                            let mut lines = vec![format!("Cache: {} file(s)", entries.len())];
-                            for (path, entry) in &entries {
-                                let fref = cache
-                                    .file_ref_map()
-                                    .get(*path)
-                                    .map(|s| s.as_str())
-                                    .unwrap_or("F?");
-                                lines.push(format!(
-                                    "  {fref}={} [{}L, {}t, read {}x]",
-                                    crate::core::protocol::shorten_path(path),
-                                    entry.line_count,
-                                    entry.original_tokens,
-                                    entry.read_count
-                                ));
-                            }
-                            lines.join("\n")
-                        }
-                    }
-                    "clear" => {
-                        let count = cache.clear();
-                        format!("Cache cleared — {count} file(s) removed. Next ctx_read will return full content.")
-                    }
-                    "invalidate" => {
-                        let path = match get_str(args, "path") {
-                            Some(p) => self
-                                .resolve_path(&p)
-                                .await
-                                .map_err(|e| ErrorData::invalid_params(e, None))?,
-                            None => {
-                                return Err(ErrorData::invalid_params(
-                                    "path is required for invalidate",
-                                    None,
-                                ))
-                            }
-                        };
-                        if cache.invalidate(&path) {
-                            format!(
-                                "Invalidated cache for {}. Next ctx_read will return full content.",
-                                crate::core::protocol::shorten_path(&path)
-                            )
-                        } else {
-                            format!(
-                                "{} was not in cache.",
-                                crate::core::protocol::shorten_path(&path)
-                            )
-                        }
-                    }
-                    _ => "Unknown action. Use: status, clear, invalidate".to_string(),
-                };
-                drop(cache);
-                self.record_call("ctx_cache", 0, 0, Some(action)).await;
                 result
             }
             "ctx_session" => {
@@ -1256,14 +1151,6 @@ impl LeanCtxServer {
                 let sent = crate::core::tokens::count_tokens(&result);
                 let saved = original.saturating_sub(sent);
                 self.record_call("ctx_outline", original, saved, kind).await;
-                result
-            }
-            "ctx_cost" => {
-                let action = get_str(args, "action").unwrap_or_else(|| "report".to_string());
-                let agent_id = get_str(args, "agent_id");
-                let limit = get_int(args, "limit").map(|n| n as usize);
-                let result = crate::tools::ctx_cost::handle(&action, agent_id.as_deref(), limit);
-                self.record_call("ctx_cost", 0, 0, Some(action)).await;
                 result
             }
             "ctx_discover_tools" => {

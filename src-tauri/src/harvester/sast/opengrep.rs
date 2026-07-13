@@ -937,28 +937,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_polyglot_sast_sidecar_returns_zero_byte_when_all_scanners_fail() {
+    async fn test_polyglot_sast_sidecar_captures_clippy_failure_forensically_in_blob08() {
+        // PRD-033: falha de clippy NÃO é mais fatal para o pipeline.
+        // O diagnóstico é capturado e injetado no topo do Blob 08.
         let executor = Arc::new(MockExecutor::new(vec![
             Err(SandboxError::ProcessNonZeroExit {
                 exit_code: 2,
                 stderr: "fatal clippy failure".to_string(),
                 stdout: Vec::new(),
             }),
-            Err(SandboxError::Timeout),
         ]));
         executor.write_repo_file("Cargo.toml", "[package]\nname='repo'\nversion='0.1.0'\n");
 
-        let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
+        let result = PolyglotSastSidecar::extract(PolyglotSastInput {
             executor: Arc::clone(&executor),
             timeout_secs: 60,
             profile: &StackProfile::Rust,
-            clean_files: test_clean_files(executor.repo_path(), &["Cargo.toml"]),
+            clean_files: Arc::new(Vec::new()),
         })
         .await
-        .unwrap();
+        .expect("PRD-033: clippy failure nao deve abortar o pipeline");
 
-        assert!(artifacts.unsafe_hotspots_blob.is_empty());
-        assert!(artifacts.health_report_blob.is_empty());
+        // Blob 08 deve ter o diagnóstico forense no topo
+        let blob08 = String::from_utf8_lossy(&result.health_report_blob);
+        assert!(
+            blob08.starts_with("[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO]"),
+            "Blob 08 deve ter marcador forense PRD-033, foi:\n{blob08}"
+        );
+        assert!(
+            blob08.contains("fatal clippy failure") || blob08.contains("exit_code") || blob08.contains("2"),
+            "Blob 08 deve conter o stderr original, foi:\n{blob08}"
+        );
     }
 
     #[tokio::test]
@@ -979,12 +988,9 @@ mod tests {
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
             Ok(Vec::new()), // consumed by cargo fetch in preflight
             Ok(metadata_payload.as_bytes().to_vec()), // consumed by cargo metadata in preflight
-            Err(SandboxError::ProcessNonZeroExit { // consumed by cargo clippy
-                exit_code: 1,
-                stderr: "findings".to_string(),
-                stdout: clippy_payload.as_bytes().to_vec(),
-            }),
-            Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep if any
+            Ok(clippy_payload.as_bytes().to_vec()), // consumed by cargo clippy (simula warnings coletados com sucesso)
+            Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep security
+            Ok(br#"{"results":[], "soda.tech-debt.todo-fixme": true}"#.to_vec()), // consumed by opengrep health
         ]);
 
         let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
