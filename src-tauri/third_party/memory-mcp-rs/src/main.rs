@@ -82,7 +82,7 @@ impl MemoryServer {
     /// Create new entities in knowledge graph
     #[tool(
         name = "create_entities",
-        description = "Create multiple new entities with their types and observations in the knowledge graph."
+        description = "Create multiple new entities in the knowledge graph."
     )]
     async fn create_entities(
         &self,
@@ -107,7 +107,7 @@ impl MemoryServer {
     /// Create relations between entities
     #[tool(
         name = "create_relations",
-        description = "Create multiple new directed relations between existing entities in the knowledge graph."
+        description = "Create multiple new relations between entities in the knowledge graph."
     )]
     async fn create_relations(
         &self,
@@ -218,7 +218,7 @@ impl MemoryServer {
     /// Read entire knowledge graph
     #[tool(
         name = "graph",
-        description = "Retrieve the complete knowledge graph structure containing all entities and relations."
+        description = "Read the entire knowledge graph."
     )]
     async fn read_graph(&self) -> Result<CallToolResult, McpError> {
         let graph = self
@@ -244,7 +244,7 @@ impl MemoryServer {
     /// Search nodes by query
     #[tool(
         name = "search",
-        description = "Search the knowledge graph using full-text search over node names, types, and observations."
+        description = "Search for nodes and relations in the knowledge graph using full-text search."
     )]
     async fn search_nodes(
         &self,
@@ -273,7 +273,7 @@ impl MemoryServer {
     /// Open specific nodes by names
     #[tool(
         name = "open_nodes",
-        description = "Retrieve specific entities by name with their observations and relations."
+        description = "Open specific nodes in the knowledge graph by their names."
     )]
     async fn open_nodes(
         &self,
