@@ -1,3 +1,12 @@
+---
+id: "ADR-026"
+title: "ADR-026-Nomenclatura-Semantica-Zero-Brand"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Padroniza a nomenclatura das ferramentas MCP adotando o padrão semântico Zero-Brand (ex: ctx_*, core_*)."
+---
+
 # ADR-026-Nomenclatura-Semantica-Zero-Brand
 
 ## Status

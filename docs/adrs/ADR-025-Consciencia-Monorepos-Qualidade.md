@@ -1,3 +1,12 @@
+---
+id: "ADR-025"
+title: "ADR-025-Consciencia-Monorepos-Qualidade"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Define a governança e estratégias de análise estática direcionadas a monorepos e estruturas complexas."
+---
+
 # ADR-025-Consciencia-Monorepos-Qualidade
 
 ## Status

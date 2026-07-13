@@ -16,8 +16,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::{error, info, warn};
 use url::Url;
-use rand::rngs::OsRng;
-use rand::RngCore;
 
 const STATUS_GATE_HARVESTER: &str = "APROVADO_PARA_HARVESTER";
 const STATUS_ATUALIZACAO_CONCLUIDO_AGUARDANDO: &str = "CONCLUIDO_AGUARDANDO";
@@ -282,8 +280,7 @@ fn backoff_ms_from_attempt(attempt: u32, jitter_seed: u32) -> u64 {
 }
 
 async fn sleep_between_repos_jitter() {
-    let mut rng = OsRng;
-    let ms = jitter_ms_3_to_7_from_u32(rng.next_u32());
+    let ms = jitter_ms_3_to_7_from_u32(fastrand::u32(..));
     tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
 }
 
@@ -918,8 +915,7 @@ async fn process_one_repo_f0(
             Err(e) => {
                 let msg = e.to_string();
                 if is_rate_limit_error_text(&msg) && attempt + 1 < max_attempts {
-                    let mut rng = OsRng;
-                    let backoff_ms = backoff_ms_from_attempt(attempt, rng.next_u32());
+                    let backoff_ms = backoff_ms_from_attempt(attempt, fastrand::u32(..));
                     warn!(
                         repo_id = %repo_id,
                         attempt = attempt + 1,
@@ -1231,8 +1227,7 @@ async fn process_one_repo_f0_direct(
             Err(e) => {
                 let msg = e.to_string();
                 if is_rate_limit_error_text(&msg) && attempt + 1 < max_attempts {
-                    let mut rng = OsRng;
-                    let backoff_ms = backoff_ms_from_attempt(attempt, rng.next_u32());
+                    let backoff_ms = backoff_ms_from_attempt(attempt, fastrand::u32(..));
                     warn!(
                         repo_id = %repo_id,
                         attempt = attempt + 1,

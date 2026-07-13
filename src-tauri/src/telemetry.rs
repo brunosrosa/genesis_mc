@@ -30,16 +30,23 @@ pub fn parse_log_level_from_env() -> Level {
     }
 }
 
-pub fn init_cli_tracing(level: Level) {
+pub fn init_cli_tracing(_level: Level) {
     enable_virtual_terminal();
     let ansi =
         (io::stderr().is_terminal() || io::stdout().is_terminal()) && std::env::var_os("NO_COLOR").is_none();
     let formatter = SodaEventFormatter::new(ansi, supports_truecolor());
+
+    use tracing_subscriber::EnvFilter;
+
+    // Configura o EnvFilter para priorizar genesis_mc e silenciar ruído do globset
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,genesis_mc=debug,genesis_mc_lib=debug,globset=info"));
+
     let _ = tracing_subscriber::fmt()
-        .with_max_level(level)
         .with_ansi(ansi)
         .event_format(formatter)
         .with_writer(io::stderr)
+        .with_env_filter(filter)
         .try_init();
 }
 
@@ -397,10 +404,19 @@ fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, Strin
         haystack.push(' ');
     }
     for (key, value) in fields {
-        haystack.push_str(key);
-        haystack.push('=');
-        haystack.push_str(value);
-        haystack.push(' ');
+        if key != "timeout_secs"
+            && key != "timeout_ms"
+            && key != "args"
+            && key != "binary"
+            && key != "cmd"
+            && key != "command"
+            && key != "program"
+        {
+            haystack.push_str(key);
+            haystack.push('=');
+            haystack.push_str(value);
+            haystack.push(' ');
+        }
     }
     let haystack = haystack.to_ascii_lowercase();
     let contains_any = |needles: &[&str]| needles.iter().any(|n| haystack.contains(n));
@@ -414,6 +430,9 @@ fn classify_event(level: &Level, message: Option<&str>, fields: &[(String, Strin
         || contains_any(&["token", "tokens", "custo", "cost", "usd", "latency", "tempo", "elapsed_ms"])
     {
         return EventKind::Finops;
+    }
+    if *level == Level::DEBUG || *level == Level::TRACE {
+        return EventKind::Processing;
     }
     if contains_any(&["erro", "error", "timeout", "panic", "429", "rate limit", "falha", "failed"]) {
         return EventKind::Error;

@@ -23,21 +23,22 @@ tauri-plugin-opener = { version = "2", optional = true }
 oxc = { version = "0.120.0", features = ["ast_visit"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-jsonwebtoken = { version = "9", default-features = false, features = ["use_pem"] }
+jsonwebtoken = { version = "10", default-features = false, features = ["use_pem"] }
 regex = "1"
 pulldown-cmark = "0.13.3"
-rand = "0.8"
+fastrand = "2"
 tokio = { version = "1", features = ["full"] }
 sysinfo = "0.30"
-thiserror = "1"
+thiserror = { version = "2", default-features = false }
 ignore = "0.4"
+dunce = "1.0"
 tracing = "0.1"
 url = "2"
 sha2 = "0.10"
 toml = "0.8"
 tiktoken-rs = "0.5"
 reqwest = { version = "0.12", features = ["json", "blocking"] }
-scraper = "0.24"
+astral-tl = "0.7.11"
 octocrab = "0.53.1"
 gix = { version = "0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
 axum = "0.7"
@@ -45,24 +46,34 @@ chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 sqlparser = "0.62"
 quick-xml = { version = "0.37", features = ["serialize"] }
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tempfile = "3"
 dotenvy = "0.15"
 quote = "1"
 syn = { version = "2", features = ["full", "visit"] }
 tree-sitter = "0.26.2"
 tree-sitter-c-sharp = "0.23.5"
-tree-sitter-language-pack = "1.9.1"
+tree-sitter-language-pack = { version = "1.9.1", default-features = false, features = ["dynamic-loading"] }
 tree-sitter-yaml = "0.7.2"
-html-to-markdown-rs = "2.19.6"
+bumpalo = { version = "3.16", features = ["collections"] }
+memmap2 = "0.9"
+# html-to-markdown-rs removido — extração de texto via astral-tl zero-copy
 enable-ansi-support = "0.2.1"
+uuid = { version = "1.11.0", features = ["v4"] }
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Isolation",
     "Win32_Storage_FileSystem",
+    "Win32_System_IO",
     "Win32_System_JobObjects",
+    "Win32_System_Pipes",
     "Win32_System_Threading",
+    "Win32_System_StationsAndDesktops",
 ] }
+rustc-hash = "2.1.0"
+which = "6.0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-projfs = "0.1.7"

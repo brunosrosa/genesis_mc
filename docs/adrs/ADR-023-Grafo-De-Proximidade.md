@@ -1,3 +1,12 @@
+---
+id: "ADR-023"
+title: "ADR-023-Grafo-De-Proximidade"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Memória"
+description: "Implementa busca de proximidade semântica em grafos no LadybugDB para relacionamentos complexos."
+---
+
 # ADR-023-Grafo-De-Proximidade
 
 ## Status

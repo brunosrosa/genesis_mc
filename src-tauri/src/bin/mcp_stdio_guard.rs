@@ -5,8 +5,27 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
+use tracing;
 
 const HARD_LIMIT_TIMEOUT_MS: u64 = 30_000;
+
+struct ProcessGuard {
+    child: Option<Child>,
+}
+
+impl ProcessGuard {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+}
+
+impl Drop for ProcessGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.start_kill();
+        }
+    }
+}
 
 #[derive(Clone)]
 struct GuardConfig {
@@ -207,13 +226,14 @@ where
     R: tokio::io::AsyncRead + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    let mut child = spawn_child(&cfg).await?;
+    let child = spawn_child(&cfg).await?;
+    let mut child_guard = ProcessGuard::new(child);
 
-    let mut child_stdin = child
+    let mut child_stdin = child_guard.child.as_mut().unwrap()
         .stdin
         .take()
         .ok_or_else(|| "stdin indisponível no child".to_string())?;
-    let child_stdout = child
+    let child_stdout = child_guard.child.as_mut().unwrap()
         .stdout
         .take()
         .ok_or_else(|| "stdout indisponível no child".to_string())?;
@@ -248,21 +268,29 @@ where
                 write_line(out, &resp_line).await?;
             }
             Err(e) if e == "timeout" => {
-                if let Some(pid) = child.id() {
+                tracing::error!("Timeout da ferramenta MCP acionado");
+                if let Some(pid) = child_guard.child.as_ref().unwrap().id() {
                     kill_process_tree(pid).await;
                 } else {
-                    let _ = child.kill().await;
+                    let _ = child_guard.child.as_mut().unwrap().kill().await;
                 }
-                let _ = child.wait().await;
+                // L01: Drenar ativamente o stdout antes de aguardar o wait() para evitar Pipe Deadlock
+                let mut stdout_to_drain = stdout_lines;
+                tokio::spawn(async move {
+                    while let Ok(Some(_)) = stdout_to_drain.next_line().await {}
+                });
+
+                let _ = child_guard.child.as_mut().unwrap().wait().await;
 
                 write_json(out, &jsonrpc_timeout_error(id)).await?;
 
-                child = spawn_child(&cfg).await?;
-                child_stdin = child
+                let new_child = spawn_child(&cfg).await?;
+                child_guard = ProcessGuard::new(new_child);
+                child_stdin = child_guard.child.as_mut().unwrap()
                     .stdin
                     .take()
                     .ok_or_else(|| "stdin indisponível no child".to_string())?;
-                let child_stdout = child
+                let child_stdout = child_guard.child.as_mut().unwrap()
                     .stdout
                     .take()
                     .ok_or_else(|| "stdout indisponível no child".to_string())?;
@@ -272,17 +300,25 @@ where
         }
     }
 
-    if let Some(pid) = child.id() {
+    if let Some(pid) = child_guard.child.as_ref().unwrap().id() {
         kill_process_tree(pid).await;
     } else {
-        let _ = child.kill().await;
+        let _ = child_guard.child.as_mut().unwrap().kill().await;
     }
-    let _ = child.wait().await;
+    // L01: Drenar ativamente o stdout antes de aguardar o wait() para evitar Pipe Deadlock no cleanup final
+    let mut stdout_to_drain = stdout_lines;
+    tokio::spawn(async move {
+        while let Ok(Some(_)) = stdout_to_drain.next_line().await {}
+    });
+
+    let _ = child_guard.child.as_mut().unwrap().wait().await;
+    let _ = child_guard.child.take(); // Desarma o ProcessGuard
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    tracing_subscriber::fmt::init();
     let cfg = parse_cli_args().map_err(io::Error::other)?;
     let mut stdout = tokio::io::stdout();
     let stdin = tokio::io::stdin();

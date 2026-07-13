@@ -209,30 +209,28 @@ impl Drop for RamdiskGuard {
             for projection in projected_roots {
                 let root = projection.root_path;
                 drop(projection.projection);
-                match remove_dir_all_via_powershell(&root) {
+                match spawn_detached_delete_process(&root) {
                     Ok(()) => {
-                        info!(path = %root.display(), "RamdiskGuard: virtualization root removida via Drop");
+                        info!(path = %root.display(), "RamdiskGuard: virtualization root delegada para delecao externa via Drop");
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                     Err(e) => {
                         warn!(
                             path = %root.display(),
-                            error = %e,
-                            "RamdiskGuard: falha ao remover virtualization root via Drop"
+                            error = ?e,
+                            "RamdiskGuard: falha ao delegar virtualization root via Drop"
                         );
                     }
                 }
             }
-            match remove_dir_all_via_powershell(&workspace_root) {
+            match spawn_detached_delete_process(&workspace_root) {
                 Ok(()) => {
-                    info!(path = %workspace_root.display(), "RamdiskGuard: workspace ProjFS descartado via Drop");
+                    info!(path = %workspace_root.display(), "RamdiskGuard: workspace ProjFS delegado para delecao externa via Drop");
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => {
                     warn!(
                         path = %workspace_root.display(),
-                        error = %e,
-                        "RamdiskGuard: falha ao remover workspace ProjFS via Drop"
+                        error = ?e,
+                        "RamdiskGuard: falha ao delegar workspace ProjFS via Drop"
                     );
                 }
             }
@@ -330,24 +328,7 @@ async fn wait_until_writable(path: &Path) -> Result<(), RamdiskError> {
     })
 }
 
-#[cfg(target_os = "windows")]
-fn remove_dir_all_via_powershell(path: &Path) -> std::io::Result<()> {
-    let escaped = path.to_string_lossy().replace('\'', "''");
-    let script = format!(
-        "$p='{escaped}'; if (Test-Path -LiteralPath $p) {{ Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop }}"
-    );
-    let status = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(std::io::Error::other(format!(
-            "PowerShell Remove-Item falhou para '{}'",
-            path.display()
-        )))
-    }
-}
+
 
 #[cfg(target_os = "windows")]
 fn spawn_detached_delete_process(path: &Path) -> Result<(), RamdiskError> {
@@ -545,7 +526,15 @@ mod tests {
             assert!(p.exists());
             p
         };
-        assert!(!path.exists(), "Workspace temporario deveria ser removido pelo Drop do TempDir");
+        let mut removed = false;
+        for _ in 0..40 {
+            if !path.exists() {
+                removed = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(removed, "Workspace temporario deveria ser removido pelo Drop do TempDir");
     }
 
     #[tokio::test]

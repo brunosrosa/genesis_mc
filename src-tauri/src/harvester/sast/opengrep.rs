@@ -235,11 +235,31 @@ pub async fn ensure_semgrep_rule_bundle(repo_path: &Path, rule_set: SemgrepRuleS
     Ok(support_dir)
 }
 
+pub fn write_semgrepignore_file(target_dir: &Path) -> Result<(), SidecarError> {
+    let ignore_path = target_dir.join(".semgrepignore");
+    // Se o ignore já existe (por exemplo, fornecido pelo usuário), respeitamos.
+    if ignore_path.exists() {
+        return Ok(());
+    }
+    // L13: Grava os globs de exclusão de forma limpa, uma linha por glob.
+    let content = SEMGREP_SCAN_EXCLUDES.join("\n");
+    // L08: Escrita atômica snapsafe para evitar arquivos parciais/corrompidos.
+    let temp_path = target_dir.join(".semgrepignore.tmp");
+    std::fs::write(&temp_path, content).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao escrever arquivo temporario .semgrepignore em '{}': {e}", temp_path.display()),
+    })?;
+    std::fs::rename(&temp_path, &ignore_path).map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Falha ao materializar arquivo .semgrepignore em '{}': {e}", ignore_path.display()),
+    })?;
+    Ok(())
+}
+
 async fn run_semgrep_scan<E: SandboxExecutor>(
     executor: &E,
     rule_set: SemgrepRuleSet,
     timeout_secs: u64,
 ) -> Result<Vec<u8>, SidecarError> {
+    write_semgrepignore_file(executor.repo_path())?;
     let rule_path = ensure_semgrep_rule_bundle(executor.repo_path(), rule_set).await?;
     tracing::info!(
         repo_path = %executor.repo_path().display(),
@@ -381,15 +401,27 @@ fn build_semgrep_like_scan_args(
     }
     args.push("--force-exclude".to_string());
 
-    for exclude in SEMGREP_SCAN_EXCLUDES {
-        args.push("--exclude".to_string());
-        args.push((*exclude).to_string());
-    }
-
     if scan_targets.is_empty() {
         args.push(".".to_string());
     } else {
-        args.extend(scan_targets.iter().cloned());
+        // L12: Poda Transversal Global — remove pastas estáticas (tests/, docs/) antes de chamar o linter.
+        let pruned_targets: Vec<String> = scan_targets
+            .iter()
+            .filter(|target| {
+                let lower = target.to_ascii_lowercase();
+                !lower.starts_with("tests/")
+                    && !lower.starts_with("docs/")
+                    && !lower.starts_with("test/")
+                    && !lower.starts_with("doc/")
+            })
+            .cloned()
+            .collect();
+
+        if pruned_targets.is_empty() {
+            args.push(".".to_string());
+        } else {
+            args.extend(pruned_targets);
+        }
     }
     args
 }
@@ -732,23 +764,7 @@ mod tests {
         assert!(args.iter().any(|arg| arg == "--force-exclude"));
         assert!(args.iter().any(|arg| arg == "--taint-intrafile"));
         assert!(!args.iter().any(|arg| arg == "--exclude-minified-files"));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", ".git"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "node_modules"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "dist"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "build"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "vendor"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "testutil"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/examples/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/docs/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/mocks/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/*.min.js"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/*.iife.js"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/samples/**"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "**/output.json"]));
-        assert!(!args.windows(2).any(|pair| pair == ["--exclude", "C:/rules"]));
-        assert!(!args.windows(2).any(|pair| pair == ["--exclude", SEMGREP_SECURITY_RULE_FILE]));
-        assert!(!args.windows(2).any(|pair| pair == ["--exclude", SEMGREP_HEALTH_RULE_FILE]));
+        assert!(!args.iter().any(|arg| arg == "--exclude"));
         assert!(!args.iter().any(|arg| arg.contains("Cargo.lock")));
         assert!(!args.iter().any(|arg| arg.contains("package-lock.json")));
         assert!(args.ends_with(&["src/main.ts".to_string(), "src/lib.ts".to_string()]));
@@ -768,7 +784,7 @@ mod tests {
         assert!(args.iter().any(|arg| arg == "--exclude-minified-files"));
         assert!(args.iter().any(|arg| arg == "--disable-version-check"));
         assert!(args.windows(2).any(|pair| pair == ["--metrics", "off"]));
-        assert!(args.windows(2).any(|pair| pair == ["--exclude", "tests"]));
+        assert!(!args.iter().any(|arg| arg == "--exclude"));
         assert!(!args.iter().any(|arg| arg == "--taint-intrafile"));
     }
 
@@ -891,7 +907,7 @@ mod tests {
         assert!(executor.calls().iter().any(|call| {
             call.starts_with("cargo clippy")
                 && call.contains("-p repo")
-                && call.contains("-- --no-deps")
+                && call.contains("--no-deps")
         }));
         assert!(executor.calls().iter().any(|call| call.starts_with("cppcheck ")));
         assert!(executor.calls().iter().any(|call| {
@@ -921,28 +937,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_polyglot_sast_sidecar_returns_zero_byte_when_all_scanners_fail() {
+    async fn test_polyglot_sast_sidecar_captures_clippy_failure_forensically_in_blob08() {
+        // PRD-033: falha de clippy NÃO é mais fatal para o pipeline.
+        // O diagnóstico é capturado e injetado no topo do Blob 08.
         let executor = Arc::new(MockExecutor::new(vec![
             Err(SandboxError::ProcessNonZeroExit {
                 exit_code: 2,
                 stderr: "fatal clippy failure".to_string(),
                 stdout: Vec::new(),
             }),
-            Err(SandboxError::Timeout),
         ]));
         executor.write_repo_file("Cargo.toml", "[package]\nname='repo'\nversion='0.1.0'\n");
 
-        let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
+        let result = PolyglotSastSidecar::extract(PolyglotSastInput {
             executor: Arc::clone(&executor),
             timeout_secs: 60,
             profile: &StackProfile::Rust,
-            clean_files: test_clean_files(executor.repo_path(), &["Cargo.toml"]),
+            clean_files: Arc::new(Vec::new()),
         })
         .await
-        .unwrap();
+        .expect("PRD-033: clippy failure nao deve abortar o pipeline");
 
-        assert!(artifacts.unsafe_hotspots_blob.is_empty());
-        assert!(artifacts.health_report_blob.is_empty());
+        // Blob 08 deve ter o diagnóstico forense no topo
+        let blob08 = String::from_utf8_lossy(&result.health_report_blob);
+        assert!(
+            blob08.starts_with("[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO]"),
+            "Blob 08 deve ter marcador forense PRD-033, foi:\n{blob08}"
+        );
+        assert!(
+            blob08.contains("fatal clippy failure") || blob08.contains("exit_code") || blob08.contains("2"),
+            "Blob 08 deve conter o stderr original, foi:\n{blob08}"
+        );
     }
 
     #[tokio::test]
@@ -963,12 +988,9 @@ mod tests {
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
             Ok(Vec::new()), // consumed by cargo fetch in preflight
             Ok(metadata_payload.as_bytes().to_vec()), // consumed by cargo metadata in preflight
-            Err(SandboxError::ProcessNonZeroExit { // consumed by cargo clippy
-                exit_code: 1,
-                stderr: "findings".to_string(),
-                stdout: clippy_payload.as_bytes().to_vec(),
-            }),
-            Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep if any
+            Ok(clippy_payload.as_bytes().to_vec()), // consumed by cargo clippy (simula warnings coletados com sucesso)
+            Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep security
+            Ok(br#"{"results":[], "soda.tech-debt.todo-fixme": true}"#.to_vec()), // consumed by opengrep health
         ]);
 
         let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {
@@ -984,7 +1006,7 @@ mod tests {
         assert!(executor.calls().iter().any(|call| {
             call.starts_with("cargo clippy")
                 && call.contains("-p sdk")
-                && call.contains("-- --no-deps")
+                && call.contains("--no-deps")
                 && (call.contains("apps\\rust-sdk") || call.contains("apps/rust-sdk"))
         }));
         assert!(health_blob.contains("apps/rust-sdk/src/lib.rs"));

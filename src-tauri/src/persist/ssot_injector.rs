@@ -678,29 +678,21 @@ impl SsotInjector {
         (raw.trim() == canonical).then_some(idx)
     }
 
-    async fn read_sheet_cell(
-        client: &dyn SheetsClient,
-        spreadsheet_id: &str,
-        sheet: &str,
-        row_number_1based: u32,
+    fn get_cell_value_from_row(
         header_row: &[String],
+        row_cells: &[String],
         canonical_col: &str,
-    ) -> Result<String, SsotError> {
-        let Some(idx) = Self::header_idx(header_row, canonical_col) else {
-            return Ok(String::new());
-        };
-        let col = Self::col_idx_to_a1(idx);
-        let range = format!("{col}{row_number_1based}:{col}{row_number_1based}");
-        let values = client
-            .get_sheet_data(spreadsheet_id, sheet, range)
-            .await
-            .map_err(SsotError::CloudFailure)?;
-        Ok(values
-            .first()
-            .and_then(|r| r.first())
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default())
+    ) -> String {
+        if let Some(idx) = Self::header_idx(header_row, canonical_col) {
+            row_cells
+                .get(idx)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default()
+        } else {
+            String::new()
+        }
     }
+
     fn should_short_circuit(status_atualizacao: &str) -> bool {
         status_atualizacao.trim().starts_with("REJEITADO_")
     }
@@ -740,7 +732,7 @@ impl SsotInjector {
                     }
 
                     let jitter = if policy.jitter_ms > 0 {
-                        rand::random::<u64>() % (policy.jitter_ms + 1)
+                        fastrand::u64(0..=policy.jitter_ms)
                     } else {
                         0
                     };
@@ -792,24 +784,16 @@ impl SsotInjector {
         let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
-        let sheet_proposta = Self::read_sheet_cell(
-            &client,
-            &spreadsheet_id,
-            sheet,
-            row_number_1based,
-            &header_row,
-            "proposta_original_resumo",
-        )
-        .await?;
-        let sheet_categoria = Self::read_sheet_cell(
-            &client,
-            &spreadsheet_id,
-            sheet,
-            row_number_1based,
-            &header_row,
-            "categoria_arquitetural",
-        )
-        .await?;
+
+        let row_range = sheet_range_for_row(row_number_1based);
+        let row_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, row_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let row_cells = row_values.first().cloned().unwrap_or_default();
+
+        let sheet_proposta = Self::get_cell_value_from_row(&header_row, &row_cells, "proposta_original_resumo");
+        let sheet_categoria = Self::get_cell_value_from_row(&header_row, &row_cells, "categoria_arquitetural");
 
         if !sheet_proposta.is_empty() {
             row.proposta_original_resumo = sheet_proposta.clone();
@@ -831,22 +815,9 @@ impl SsotInjector {
                 }
             }
         }
-        let lote_idx = header_row
-            .iter()
-            .enumerate()
-            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
-            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
-        let lote_col = Self::col_idx_to_a1(lote_idx);
-        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
-        let lote_values = client
-            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
-            .await
-            .map_err(SsotError::CloudFailure)?;
-        let lote_cell = lote_values
-            .first()
-            .and_then(|r| r.first())
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
+
+        let lote_cell = Self::get_cell_value_from_row(&header_row, &row_cells, "lote_id");
+
         let mut dynamic_skip: Vec<&'static str> = Vec::new();
         if !lote_cell.is_empty() {
             row.lote_id = lote_cell.clone();
@@ -924,24 +895,16 @@ impl SsotInjector {
         let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
-        let sheet_proposta = Self::read_sheet_cell(
-            &client,
-            &spreadsheet_id,
-            sheet,
-            row_number_1based,
-            &header_row,
-            "proposta_original_resumo",
-        )
-        .await?;
-        let sheet_categoria = Self::read_sheet_cell(
-            &client,
-            &spreadsheet_id,
-            sheet,
-            row_number_1based,
-            &header_row,
-            "categoria_arquitetural",
-        )
-        .await?;
+
+        let row_range = sheet_range_for_row(row_number_1based);
+        let row_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, row_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let row_cells = row_values.first().cloned().unwrap_or_default();
+
+        let sheet_proposta = Self::get_cell_value_from_row(&header_row, &row_cells, "proposta_original_resumo");
+        let sheet_categoria = Self::get_cell_value_from_row(&header_row, &row_cells, "categoria_arquitetural");
 
         if !sheet_proposta.is_empty() {
             row.proposta_original_resumo = sheet_proposta.clone();
@@ -963,22 +926,9 @@ impl SsotInjector {
                 }
             }
         }
-        let lote_idx = header_row
-            .iter()
-            .enumerate()
-            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
-            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
-        let lote_col = Self::col_idx_to_a1(lote_idx);
-        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
-        let lote_values = client
-            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
-            .await
-            .map_err(SsotError::CloudFailure)?;
-        let lote_cell = lote_values
-            .first()
-            .and_then(|r| r.first())
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
+
+        let lote_cell = Self::get_cell_value_from_row(&header_row, &row_cells, "lote_id");
+
         let mut merged_skip: Vec<&'static str> = skip_columns.to_vec();
         if !lote_cell.is_empty() && !merged_skip.contains(&"lote_id") {
             row.lote_id = lote_cell.clone();
@@ -1061,24 +1011,16 @@ impl SsotInjector {
         let client = ReqwestGoogleWorkspaceSheetsClient;
         let header_row = Self::load_master_solutions_header(&client, &spreadsheet_id).await?;
         let (l2_proposta, l2_categoria) = Self::load_l2_curated_overrides(repo_id)?;
-        let sheet_proposta = Self::read_sheet_cell(
-            &client,
-            &spreadsheet_id,
-            sheet,
-            row_number_1based,
-            &header_row,
-            "proposta_original_resumo",
-        )
-        .await?;
-        let sheet_categoria = Self::read_sheet_cell(
-            &client,
-            &spreadsheet_id,
-            sheet,
-            row_number_1based,
-            &header_row,
-            "categoria_arquitetural",
-        )
-        .await?;
+
+        let row_range = sheet_range_for_row(row_number_1based);
+        let row_values = client
+            .get_sheet_data(&spreadsheet_id, sheet, row_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let row_cells = row_values.first().cloned().unwrap_or_default();
+
+        let sheet_proposta = Self::get_cell_value_from_row(&header_row, &row_cells, "proposta_original_resumo");
+        let sheet_categoria = Self::get_cell_value_from_row(&header_row, &row_cells, "categoria_arquitetural");
 
         if !sheet_proposta.is_empty() {
             row.proposta_original_resumo = sheet_proposta.clone();
@@ -1101,22 +1043,8 @@ impl SsotInjector {
             }
         }
 
-        let lote_idx = header_row
-            .iter()
-            .enumerate()
-            .find_map(|(idx, raw)| (raw.trim() == "lote_id").then_some(idx))
-            .ok_or_else(|| SsotError::CloudFailure("Header missing lote_id".to_string()))?;
-        let lote_col = Self::col_idx_to_a1(lote_idx);
-        let lote_range = format!("{lote_col}{row_number_1based}:{lote_col}{row_number_1based}");
-        let lote_values = client
-            .get_sheet_data(&spreadsheet_id, sheet, lote_range)
-            .await
-            .map_err(SsotError::CloudFailure)?;
-        let lote_cell = lote_values
-            .first()
-            .and_then(|r| r.first())
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
+        let lote_cell = Self::get_cell_value_from_row(&header_row, &row_cells, "lote_id");
+
         let mut dynamic_skip: Vec<&'static str> = Vec::new();
         if !lote_cell.is_empty() {
             row.lote_id = lote_cell.clone();
@@ -2387,19 +2315,18 @@ impl SsotInjector {
         header_row: &[String],
         payload: &MasterSolutionsRow,
     ) -> Result<(), SsotError> {
+        let row_range = sheet_range_for_row(row_number_1based);
+        let row_values = client
+            .get_sheet_data(spreadsheet_id, MASTER_SOLUTIONS_SHEET, row_range)
+            .await
+            .map_err(SsotError::CloudFailure)?;
+        let row_cells = row_values.first().cloned().unwrap_or_default();
+
         for canonical in ["project_name", "repo_url", "score_final", "analise_origem"] {
             let Some(expected) = Self::cell_text_for_confirmation(payload, canonical) else {
                 continue;
             };
-            let actual = Self::read_sheet_cell(
-                client,
-                spreadsheet_id,
-                MASTER_SOLUTIONS_SHEET,
-                row_number_1based,
-                header_row,
-                canonical,
-            )
-            .await?;
+            let actual = Self::get_cell_value_from_row(header_row, &row_cells, canonical);
             if !Self::confirmation_matches(canonical, &expected, &actual) {
                 return Err(SsotError::CloudFailure(format!(
                     "Confirmação de escrita falhou para '{}': esperado '{}', recebido '{}'",

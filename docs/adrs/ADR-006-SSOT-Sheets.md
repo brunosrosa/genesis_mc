@@ -1,3 +1,12 @@
+---
+id: "ADR-006"
+title: "ADR-006-SSOT-Sheets"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "FinOps"
+description: "Adota o Google Sheets como única fonte de verdade bidirecional para logs, canibalização e governança do projeto."
+---
+
 # ADR-006-SSOT-Sheets
 
 ## Status

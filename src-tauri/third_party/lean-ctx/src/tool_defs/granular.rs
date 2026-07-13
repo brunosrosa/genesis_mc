@@ -7,8 +7,7 @@ pub fn granular_tool_defs() -> Vec<Tool> {
     vec![
         tool_def(
             "ctx_read",
-            "Read file (cached, compressed). Re-reads ~13 tok. Auto-selects optimal mode. \
-Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fresh=true re-reads.",
+            "Read file (cached, compressed). Auto-selects optimal mode. Modes: full, map, signatures, diff, lines:N-M. fresh=true forces re-read.",
             json!({
                 "type": "object",
                 "properties": {
@@ -31,7 +30,7 @@ Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fre
         ),
         tool_def(
             "ctx_multi_read",
-            "Batch read files in one call. Same modes as ctx_read.",
+            "Batch read files. Same modes as ctx_read.",
             json!({
                 "type": "object",
                 "properties": {
@@ -42,7 +41,7 @@ Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fre
                     },
                     "mode": {
                         "type": "string",
-                        "description": "Compression mode (default: full). Same modes as ctx_read (auto, full, map, signatures, diff, aggressive, entropy, task, reference, lines:N-M)."
+                        "description": "Compression mode (default: full). Same modes as ctx_read."
                     }
                 },
                 "required": ["paths"]
@@ -50,7 +49,7 @@ Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fre
         ),
         tool_def(
             "ctx_tree",
-            "Directory listing with file counts.",
+            "Directory listing with file counts. Recursively lists directory contents up to max depth.",
             json!({
                 "type": "object",
                 "properties": {
@@ -62,20 +61,20 @@ Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fre
         ),
         tool_def(
             "ctx_shell",
-            "Run shell command (compressed output, 90+ patterns). Use raw=true to skip compression. cwd sets working directory (persists across calls via cd tracking).",
+            "Run shell command with pattern-based output compression. Use strictly for fast context compression (git/cargo). DO NOT use for long-running builds. Will be SIGKILLED after 30s.",
             json!({
                 "type": "object",
                 "properties": {
                     "command": { "type": "string", "description": "Shell command to execute" },
-                    "raw": { "type": "boolean", "description": "Skip compression, return full uncompressed output. Use for small outputs or when full detail is critical." },
-                    "cwd": { "type": "string", "description": "Working directory for the command. If omitted, uses last cd target or project root." }
+                    "raw": { "type": "boolean", "description": "Skip compression, return full uncompressed output." },
+                    "cwd": { "type": "string", "description": "Working directory for the command." }
                 },
                 "required": ["command"]
             }),
         ),
         tool_def(
             "ctx_search",
-            "Regex code search (.gitignore aware, compact results).",
+            "Search files using regular expressions. Respects .gitignore patterns.",
             json!({
                 "type": "object",
                 "properties": {
@@ -90,7 +89,7 @@ Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fre
         ),
         tool_def(
             "ctx_compress",
-            "Context checkpoint for long conversations.",
+            "Checkpoint context to compress conversation history.",
             json!({
                 "type": "object",
                 "properties": {
@@ -99,67 +98,11 @@ Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fre
             }),
         ),
         tool_def(
-            "ctx_benchmark",
-            "Benchmark compression modes for a file or project.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "File path (action=file) or project directory (action=project)" },
-                    "action": { "type": "string", "description": "file (default) or project", "default": "file" },
-                    "format": { "type": "string", "description": "Output format for project benchmark: terminal, markdown, json", "default": "terminal" }
-                },
-                "required": ["path"]
-            }),
-        ),
-        tool_def(
             "ctx_metrics",
-            "Session token stats, cache rates, per-tool savings.",
+            "Show token usage metrics and cache efficiency stats.",
             json!({
                 "type": "object",
                 "properties": {}
-            }),
-        ),
-        tool_def(
-            "ctx_analyze",
-            "Entropy analysis — recommends optimal compression mode for a file.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "File path to analyze" }
-                },
-                "required": ["path"]
-            }),
-        ),
-        tool_def(
-            "ctx_cache",
-            "Cache ops: status|clear|invalidate.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["status", "clear", "invalidate"],
-                        "description": "Cache operation to perform"
-                    },
-                    "path": {
-                        "type": "string",
-                        "description": "File path (required for 'invalidate' action)"
-                    }
-                },
-                "required": ["action"]
-            }),
-        ),
-        tool_def(
-            "ctx_discover",
-            "Find missed compression opportunities in shell history.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max number of command types to show (default: 15)"
-                    }
-                }
             }),
         ),
         tool_def(
@@ -849,7 +792,7 @@ pub fn unified_tool_defs() -> Vec<Tool> {
     vec![
         tool_def(
             "ctx_read",
-            "Read file (cached, compressed). Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fresh=true re-reads.",
+            "Read file (cached, compressed). Modes: full, map, signatures, diff, lines:N-M. fresh=true forces re-read.",
             json!({
                 "type": "object",
                 "properties": {
@@ -863,7 +806,7 @@ pub fn unified_tool_defs() -> Vec<Tool> {
         ),
         tool_def(
             "ctx_shell",
-            "Run shell command (compressed output). raw=true skips compression. cwd sets working directory.",
+            "Run shell command with pattern-based output compression. Use strictly for fast context compression (git/cargo). DO NOT use for long-running builds. Will be SIGKILLED after 30s.",
             json!({
                 "type": "object",
                 "properties": {
@@ -876,7 +819,7 @@ pub fn unified_tool_defs() -> Vec<Tool> {
         ),
         tool_def(
             "ctx_search",
-            "Regex code search (.gitignore aware).",
+            "Search files using regular expressions. Respects .gitignore patterns.",
             json!({
                 "type": "object",
                 "properties": {
@@ -891,7 +834,7 @@ pub fn unified_tool_defs() -> Vec<Tool> {
         ),
         tool_def(
             "ctx_tree",
-            "Directory listing with file counts.",
+            "Directory listing with file counts. Recursively lists directory contents up to max depth.",
             json!({
                 "type": "object",
                 "properties": {
@@ -904,21 +847,21 @@ pub fn unified_tool_defs() -> Vec<Tool> {
         tool_def(
             "ctx",
             "Meta-tool: set tool= to sub-tool name. Sub-tools: compress (checkpoint), metrics (stats), \
-analyze (entropy), cache (status|clear|invalidate), discover (missed patterns), smart_read (auto-mode), \
+smart_read (auto-mode), \
 delta (incremental diff), dedup (cross-file), fill (budget-aware batch read), intent (auto-read by task), \
 response (compress LLM text), context (session state), graph (build|related|symbol|impact|status), \
 session (load|save|task|finding|decision|status|reset|list|cleanup), \
 knowledge (remember|recall|pattern|consolidate|timeline|rooms|search|wakeup|status|remove|export|embeddings_status|embeddings_reset|embeddings_reindex), \
 agent (register|post|read|status|list|info|diary|recall_diary|diaries), overview (project map), \
-wrapped (savings report), benchmark (file|project), multi_read (batch), semantic_search (BM25), \
-cost (attribution), heatmap (file access), impact (graph impact), architecture (graph structure), \
+wrapped (savings report), multi_read (batch), semantic_search (BM25), \
+heatmap (file access), impact (graph impact), architecture (graph structure), \
 task (A2A tasks), workflow (state machine).",
             json!({
                 "type": "object",
                 "properties": {
                     "tool": {
                         "type": "string",
-                        "description": "compress|metrics|analyze|cache|discover|smart_read|delta|dedup|fill|intent|response|context|graph|session|knowledge|agent|overview|wrapped|benchmark|multi_read|semantic_search|cost|heatmap|impact|architecture|task|workflow"
+                        "description": "compress|metrics|smart_read|delta|dedup|fill|intent|response|context|graph|session|knowledge|agent|overview|wrapped|multi_read|semantic_search|heatmap|impact|architecture|task|workflow"
                     },
                     "action": { "type": "string" },
                     "path": { "type": "string" },
@@ -963,61 +906,46 @@ task (A2A tasks), workflow (state machine).",
 
 pub fn list_all_tool_defs() -> Vec<(&'static str, &'static str, Value)> {
     vec![
-        ("ctx_read", "Read file (cached, compressed). Re-reads ~13 tok. Auto-selects optimal mode. \
-Modes: full|map|signatures|diff|aggressive|entropy|task|reference|lines:N-M. fresh=true re-reads.", json!({"type": "object", "properties": {"path": {"type": "string"}, "mode": {"type": "string"}, "start_line": {"type": "integer"}, "fresh": {"type": "boolean"}}, "required": ["path"]})),
-        ("ctx_multi_read", "Batch read files in one call. Same modes as ctx_read.", json!({"type": "object", "properties": {"paths": {"type": "array", "items": {"type": "string"}}, "mode": {"type": "string"}}, "required": ["paths"]})),
-        ("ctx_tree", "Directory listing with file counts.", json!({"type": "object", "properties": {"path": {"type": "string"}, "depth": {"type": "integer"}, "show_hidden": {"type": "boolean"}}})),
-        ("ctx_shell", "Run shell command (compressed output, 90+ patterns). cwd sets working directory.", json!({"type": "object", "properties": {"command": {"type": "string"}, "cwd": {"type": "string", "description": "Working directory"}}, "required": ["command"]})),
-        ("ctx_search", "Regex code search (.gitignore aware, compact results).", json!({"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string"}, "ext": {"type": "string"}, "max_results": {"type": "integer"}}, "required": ["pattern"]})),
-        ("ctx_compress", "Context checkpoint for long conversations.", json!({"type": "object", "properties": {"include_signatures": {"type": "boolean"}}})),
-        ("ctx_benchmark", "Benchmark compression modes for a file or project.", json!({"type": "object", "properties": {"path": {"type": "string"}, "action": {"type": "string"}, "format": {"type": "string"}}, "required": ["path"]})),
-        ("ctx_metrics", "Session token stats, cache rates, per-tool savings.", json!({"type": "object", "properties": {}})),
-        ("ctx_analyze", "Entropy analysis — recommends optimal compression mode for a file.", json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})),
-        ("ctx_cache", "Cache ops: status|clear|invalidate.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}}, "required": ["action"]})),
-        ("ctx_discover", "Find missed compression opportunities in shell history.", json!({"type": "object", "properties": {"limit": {"type": "integer"}}})),
+        ("ctx_read", "Read file (cached, compressed). Modes: full, map, signatures, diff, lines:N-M. fresh=true forces re-read.", json!({"type": "object", "properties": {"path": {"type": "string"}, "mode": {"type": "string"}, "start_line": {"type": "integer"}, "fresh": {"type": "boolean"}}, "required": ["path"]})),
+        ("ctx_multi_read", "Batch read files. Same modes as ctx_read.", json!({"type": "object", "properties": {"paths": {"type": "array", "items": {"type": "string"}}, "mode": {"type": "string"}}, "required": ["paths"]})),
+        ("ctx_tree", "Directory listing with file counts. Recursively lists directory contents up to max depth.", json!({"type": "object", "properties": {"path": {"type": "string"}, "depth": {"type": "integer"}, "show_hidden": {"type": "boolean"}}})),
+        ("ctx_shell", "Run shell command with pattern-based output compression. Use strictly for fast context compression (git/cargo). DO NOT use for long-running builds. Will be SIGKILLED after 30s.", json!({"type": "object", "properties": {"command": {"type": "string"}, "cwd": {"type": "string", "description": "Working directory"}}, "required": ["command"]})),
+        ("ctx_search", "Search files using regular expressions. Respects .gitignore patterns.", json!({"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string"}, "ext": {"type": "string"}, "max_results": {"type": "integer"}}, "required": ["pattern"]})),
+        ("ctx_compress", "Checkpoint context to compress conversation history.", json!({"type": "object", "properties": {"include_signatures": {"type": "boolean"}}})),
+        ("ctx_metrics", "Show token usage metrics and cache efficiency stats.", json!({"type": "object", "properties": {}})),
         ("ctx_smart_read", "Auto-select optimal read mode for a file.", json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})),
-        ("ctx_delta", "Incremental diff — sends only changed lines since last read.", json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})),
-        ("ctx_edit", "Edit a file via search-and-replace. Works without native Read/Edit tools. Use when Edit requires Read but Read is unavailable.", json!({"type": "object", "properties": {"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}, "create": {"type": "boolean"}}, "required": ["path", "new_string"]})),
-        ("ctx_dedup", "Cross-file dedup: analyze or apply shared block references.", json!({"type": "object", "properties": {"action": {"type": "string"}}})),
-        ("ctx_fill", "Budget-aware context fill — auto-selects compression per file within token limit.", json!({"type": "object", "properties": {"paths": {"type": "array", "items": {"type": "string"}}, "budget": {"type": "integer"}, "task": {"type": "string"}}, "required": ["paths", "budget"]})),
-        ("ctx_intent", "Structured intent input (optional) — submit compact JSON or short text; server also infers intents automatically from tool calls.", json!({"type": "object", "properties": {"query": {"type": "string"}, "project_root": {"type": "string"}}, "required": ["query"]})),
-        ("ctx_response", "Compress LLM response text (remove filler, apply TDD).", json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})),
-        ("ctx_context", "Session context overview — cached files, seen files, session state.", json!({"type": "object", "properties": {}})),
-        ("ctx_graph", "Code dependency graph. Actions: build (index project), related (find files connected to path), \
-symbol (lookup definition/usages as file::name), impact (blast radius of changes to path), status (index stats).", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "project_root": {"type": "string"}}, "required": ["action"]})),
-        ("ctx_session", "Cross-session memory (CCP). Actions: load (restore previous session ~400 tok), \
-save, status, task (set current task), finding (record discovery), decision (record choice), \
-reset, list (show sessions), cleanup, snapshot (build compaction snapshot ~2KB), \
-restore (rebuild state from snapshot after context compaction).", json!({"type": "object", "properties": {"action": {"type": "string"}, "value": {"type": "string"}, "session_id": {"type": "string"}}, "required": ["action"]})),
-        ("ctx_knowledge", "Persistent project knowledge with temporal facts + contradiction detection. Actions: remember (auto-tracks validity + detects contradictions), recall, pattern, consolidate, \
-gotcha (record a bug to never repeat — trigger+resolution), timeline (fact version history), rooms (list knowledge categories), \
-search (cross-session/cross-project), wakeup (compact AAAK briefing), status, remove, export, embeddings_status|embeddings_reset|embeddings_reindex.", json!({"type": "object", "properties": {"action": {"type": "string"}, "category": {"type": "string"}, "key": {"type": "string"}, "value": {"type": "string"}, "query": {"type": "string"}, "trigger": {"type": "string"}, "resolution": {"type": "string"}, "severity": {"type": "string"}}, "required": ["action"]})),
-        ("ctx_agent", "Multi-agent coordination with persistent diaries. Actions: register, \
-post, read, status, handoff, sync, diary (log discovery/decision/blocker/progress/insight — persisted), \
-recall_diary (read diary), diaries (list all), list, info.", json!({"type": "object", "properties": {"action": {"type": "string"}, "agent_type": {"type": "string"}, "role": {"type": "string"}, "message": {"type": "string"}, "to_agent": {"type": "string"}, "status": {"type": "string"}}, "required": ["action"]})),
-        ("ctx_share", "Share cached file contexts between agents. Actions: push (share files from cache), \
-pull (receive shared files), list (show all shared contexts), clear (remove your shared contexts).", json!({"type": "object", "properties": {"action": {"type": "string"}, "paths": {"type": "string"}, "to_agent": {"type": "string"}, "message": {"type": "string"}}, "required": ["action"]})),
-        ("ctx_overview", "Task-relevant project map — use at session start.", json!({"type": "object", "properties": {"task": {"type": "string"}, "path": {"type": "string"}}})),
-        ("ctx_preload", "Proactive context loader — reads and caches task-relevant files, returns compact L-curve-optimized summary with critical lines, imports, and signatures. Costs ~50-100 tokens instead of ~5000 for individual reads.", json!({"type": "object", "properties": {"task": {"type": "string", "description": "Task description (e.g. 'fix auth bug in validate_token')"}, "path": {"type": "string", "description": "Project root (default: .)"}}, "required": ["task"]})),
-        ("ctx_prefetch", "Predictive prefetch — prewarm cache for blast radius files (graph + task signals) within budgets.", json!({"type": "object", "properties": {"root": {"type": "string"}, "task": {"type": "string"}, "changed_files": {"type": "array", "items": {"type": "string"}}, "budget_tokens": {"type": "integer"}, "max_files": {"type": "integer"}}})),
-        ("ctx_wrapped", "Savings report card. Periods: week|month|all.", json!({"type": "object", "properties": {"period": {"type": "string"}}})),
-        ("ctx_cost", "Cost attribution (local-first). Actions: report|agent|tools|json|reset.", json!({"type": "object", "properties": {"action": {"type": "string"}, "agent_id": {"type": "string"}, "limit": {"type": "integer"}}})),
-        ("ctx_gain", "Gain report.", json!({"type": "object", "properties": {"action": {"type": "string"}, "period": {"type": "string"}, "model": {"type": "string"}, "limit": {"type": "integer"}}})),
-        ("ctx_feedback", "Harness feedback for LLM output tokens/latency (local-first). Actions: record|report|json|reset|status.", json!({"type": "object", "properties": {"action": {"type": "string"}, "agent_id": {"type": "string"}, "intent": {"type": "string"}, "model": {"type": "string"}, "llm_input_tokens": {"type": "integer"}, "llm_output_tokens": {"type": "integer"}, "latency_ms": {"type": "integer"}, "note": {"type": "string"}, "limit": {"type": "integer"}}})),
-        ("ctx_handoff", "Context Ledger Protocol (hashed, deterministic, local-first). Actions: create|show|list|pull|clear.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}}, "apply_workflow": {"type": "boolean"}, "apply_session": {"type": "boolean"}, "apply_knowledge": {"type": "boolean"}}})),
-        ("ctx_heatmap", "File access heatmap (local-first). Actions: status|directory|cold|json.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}}})),
-        ("ctx_task", "Multi-agent task orchestration. Actions: create|update|list|get|cancel|message|info.", json!({"type": "object", "properties": {"action": {"type": "string"}, "task_id": {"type": "string"}, "to_agent": {"type": "string"}, "description": {"type": "string"}, "state": {"type": "string"}, "message": {"type": "string"}}, "required": ["action"]})),
-        ("ctx_impact", "Graph-based impact analysis. Actions: analyze|chain|build|status.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "root": {"type": "string"}, "depth": {"type": "integer"}}})),
-        ("ctx_architecture", "Graph-based architecture analysis. Actions: overview|clusters|layers|cycles|entrypoints|module.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "root": {"type": "string"}}})),
-        ("ctx_workflow", "Workflow rails (state machine + evidence). Actions: start|status|transition|complete|evidence_add|evidence_list|stop.", json!({"type": "object", "properties": {"action": {"type": "string"}, "name": {"type": "string"}, "spec": {"type": "string"}, "to": {"type": "string"}, "key": {"type": "string"}, "value": {"type": "string"}}})),
-        ("ctx_semantic_search", "Semantic code search (BM25 + optional embeddings/hybrid). action=reindex to rebuild.", json!({"type": "object", "properties": {"query": {"type": "string"}, "path": {"type": "string"}, "top_k": {"type": ["integer", "string"]}, "action": {"type": "string"}, "mode": {"type": "string", "enum": ["bm25","dense","hybrid"]}, "languages": {"type": "array", "items": {"type": "string"}}, "path_glob": {"type": "string"}}, "required": ["query"]})),
-        ("ctx_execute", "Run code in sandbox (11 languages). Only stdout enters context. Languages: javascript, typescript, python, shell, ruby, go, rust, php, perl, r, elixir. Actions: batch (multiple scripts), file (process file in sandbox).", json!({"type": "object", "properties": {"language": {"type": "string"}, "code": {"type": "string"}, "intent": {"type": "string"}, "timeout": {"type": ["integer", "string"]}, "action": {"type": "string"}, "items": {"type": "string"}, "path": {"type": "string"}}, "required": ["language", "code"]})),
-        ("ctx_symbol", "Read a specific symbol (function, struct, class) by name. Returns only the symbol code block instead of the entire file. 90-97% fewer tokens than full file read.", json!({"type": "object", "properties": {"name": {"type": "string"}, "file": {"type": "string"}, "kind": {"type": "string"}}, "required": ["name"]})),
-        ("ctx_outline", "List all symbols in a file with signatures. Much fewer tokens than reading the full file.", json!({"type": "object", "properties": {"path": {"type": "string"}, "kind": {"type": "string"}}, "required": ["path"]})),
-        ("ctx_compress_memory", "Compress a memory/config file (CLAUDE.md, .cursorrules) preserving code, URLs, paths. Creates .original.md backup.", json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})),
-        ("ctx_callers", "Find all symbols that call a given function/method.", json!({"type": "object", "properties": {"symbol": {"type": "string"}, "file": {"type": "string"}}, "required": ["symbol"]})),
-        ("ctx_callees", "Find all functions/methods called by a given symbol.", json!({"type": "object", "properties": {"symbol": {"type": "string"}, "file": {"type": "string"}}, "required": ["symbol"]})),
-        ("ctx_routes", "List HTTP routes/endpoints extracted from the project. Supports Express, Flask, FastAPI, Actix, Spring, Rails, Next.js.", json!({"type": "object", "properties": {"method": {"type": "string"}, "path": {"type": "string"}}})),
-        ("ctx_graph_diagram", "Generate a Mermaid diagram of the dependency or call graph.", json!({"type": "object", "properties": {"file": {"type": "string"}, "depth": {"type": "integer"}, "kind": {"type": "string"}}})),
+        ("ctx_delta", "Retrieve only the modified lines of a file since it was last read.", json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})),
+        ("ctx_edit", "Edit a file via search-and-replace. Works without native Read/Edit tools.", json!({"type": "object", "properties": {"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}, "create": {"type": "boolean"}}, "required": ["path", "new_string"]})),
+        ("ctx_dedup", "Analyze or apply cross-file deduplication for shared code blocks.", json!({"type": "object", "properties": {"action": {"type": "string"}}})),
+        ("ctx_fill", "Read multiple files within a specific token budget, prioritizing key content.", json!({"type": "object", "properties": {"paths": {"type": "array", "items": {"type": "string"}}, "budget": {"type": "integer"}, "task": {"type": "string"}}, "required": ["paths", "budget"]})),
+        ("ctx_intent", "Declare intent to automatically read relevant files for a task.", json!({"type": "object", "properties": {"query": {"type": "string"}, "project_root": {"type": "string"}}, "required": ["query"]})),
+        ("ctx_response", "Compress LLM response text by removing boilerplate.", json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})),
+        ("ctx_context", "Retrieve an overview of cached files, seen files, and current session state.", json!({"type": "object", "properties": {}})),
+        ("ctx_graph", "Analyze code dependency graph. Actions: build, related, symbol, impact, status.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "project_root": {"type": "string"}}, "required": ["action"]})),
+        ("ctx_session", "Manage cross-session memory and restore task state.", json!({"type": "object", "properties": {"action": {"type": "string"}, "value": {"type": "string"}, "session_id": {"type": "string"}}, "required": ["action"]})),
+        ("ctx_knowledge", "Access persistent project facts with gotcha warnings.", json!({"type": "object", "properties": {"action": {"type": "string"}, "category": {"type": "string"}, "key": {"type": "string"}, "value": {"type": "string"}, "query": {"type": "string"}, "trigger": {"type": "string"}, "resolution": {"type": "string"}, "severity": {"type": "string"}}, "required": ["action"]})),
+        ("ctx_agent", "Coordinate with other agents via shared diaries.", json!({"type": "object", "properties": {"action": {"type": "string"}, "agent_type": {"type": "string"}, "role": {"type": "string"}, "message": {"type": "string"}, "to_agent": {"type": "string"}, "status": {"type": "string"}}, "required": ["action"]})),
+        ("ctx_share", "Share cached file contexts directly between agents.", json!({"type": "object", "properties": {"action": {"type": "string"}, "paths": {"type": "string"}, "to_agent": {"type": "string"}, "message": {"type": "string"}}, "required": ["action"]})),
+        ("ctx_overview", "Retrieve a task-relevant map of the project at session start.", json!({"type": "object", "properties": {"task": {"type": "string"}, "path": {"type": "string"}}})),
+        ("ctx_preload", "Preload task-relevant files using L-curve optimization to save tokens.", json!({"type": "object", "properties": {"task": {"type": "string", "description": "Task description"}, "path": {"type": "string", "description": "Project root"}}, "required": ["task"]})),
+        ("ctx_prefetch", "Prefetch files in the predicted blast radius of a task.", json!({"type": "object", "properties": {"root": {"type": "string"}, "task": {"type": "string"}, "changed_files": {"type": "array", "items": {"type": "string"}}, "budget_tokens": {"type": "integer"}, "max_files": {"type": "integer"}}})),
+        ("ctx_wrapped", "Generate a periodic report of token savings.", json!({"type": "object", "properties": {"period": {"type": "string"}}})),
+        ("ctx_gain", "Retrieve detailed reports on compression gains and costs.", json!({"type": "object", "properties": {"action": {"type": "string"}, "period": {"type": "string"}, "model": {"type": "string"}, "limit": {"type": "integer"}}})),
+        ("ctx_feedback", "Record input/output tokens and latency to evaluate performance.", json!({"type": "object", "properties": {"action": {"type": "string"}, "agent_id": {"type": "string"}, "intent": {"type": "string"}, "model": {"type": "string"}, "llm_input_tokens": {"type": "integer"}, "llm_output_tokens": {"type": "integer"}, "latency_ms": {"type": "integer"}, "note": {"type": "string"}, "limit": {"type": "integer"}}})),
+        ("ctx_handoff", "Generate or pull a hashed context ledger to transfer session state.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}}, "apply_workflow": {"type": "boolean"}, "apply_session": {"type": "boolean"}, "apply_knowledge": {"type": "boolean"}}})),
+        ("ctx_heatmap", "Analyze file access frequency to find hot and cold spots.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}}})),
+        ("ctx_task", "Orchestrate tasks and states across multiple agents.", json!({"type": "object", "properties": {"action": {"type": "string"}, "task_id": {"type": "string"}, "to_agent": {"type": "string"}, "description": {"type": "string"}, "state": {"type": "string"}, "message": {"type": "string"}}, "required": ["action"]})),
+        ("ctx_impact", "Perform graph-based change impact analysis on specific files.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "root": {"type": "string"}, "depth": {"type": "integer"}}})),
+        ("ctx_architecture", "Analyze project architecture, layers, cycles, and entry points.", json!({"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "root": {"type": "string"}}})),
+        ("ctx_workflow", "Track workflow states, transitions, and evidence for code tasks.", json!({"type": "object", "properties": {"action": {"type": "string"}, "name": {"type": "string"}, "spec": {"type": "string"}, "to": {"type": "string"}, "key": {"type": "string"}, "value": {"type": "string"}}})),
+        ("ctx_semantic_search", "Perform semantic code search using BM25 and hybrid dense embeddings.", json!({"type": "object", "properties": {"query": {"type": "string"}, "path": {"type": "string"}, "top_k": {"type": ["integer", "string"]}, "action": {"type": "string"}, "mode": {"type": "string", "enum": ["bm25","dense","hybrid"]}, "languages": {"type": "array", "items": {"type": "string"}}, "path_glob": {"type": "string"}}, "required": ["query"]})),
+        ("ctx_execute", "Run code in sandbox (11 languages). Only stdout enters context. DO NOT use for long-running scripts. Will be SIGKILLED after 30s.", json!({"type": "object", "properties": {"language": {"type": "string"}, "code": {"type": "string"}, "intent": {"type": "string"}, "timeout": {"type": ["integer", "string"]}, "action": {"type": "string"}, "items": {"type": "string"}, "path": {"type": "string"}}, "required": ["language", "code"]})),
+        ("ctx_symbol", "Read only the definition block of a specific code symbol.", json!({"type": "object", "properties": {"name": {"type": "string"}, "file": {"type": "string"}, "kind": {"type": "string"}}, "required": ["name"]})),
+        ("ctx_outline", "List all symbols in a file with signatures.", json!({"type": "object", "properties": {"path": {"type": "string"}, "kind": {"type": "string"}}, "required": ["path"]})),
+        ("ctx_compress_memory", "Compress large configuration files like CLAUDE.md or .cursorrules.", json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})),
+        ("ctx_callers", "Find all symbols that call a given function or method.", json!({"type": "object", "properties": {"symbol": {"type": "string"}, "file": {"type": "string"}}, "required": ["symbol"]})),
+        ("ctx_callees", "Find all functions and methods called by a given symbol.", json!({"type": "object", "properties": {"symbol": {"type": "string"}, "file": {"type": "string"}}, "required": ["symbol"]})),
+        ("ctx_routes", "Extract and list HTTP routes and endpoints from the codebase.", json!({"type": "object", "properties": {"method": {"type": "string"}, "path": {"type": "string"}}})),
+        ("ctx_graph_diagram", "Generate a Mermaid dependency or call graph diagram.", json!({"type": "object", "properties": {"file": {"type": "string"}, "depth": {"type": "integer"}, "kind": {"type": "string"}}})),
     ]
 }

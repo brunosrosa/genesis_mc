@@ -106,6 +106,40 @@ mod mock_executor {
                     .lock()
                     .unwrap()
                     .push(format!("{} {}", command, args.join(" ")).trim().to_string());
+                
+                if command == "cargo" {
+                    let mut guard = self.responses.lock().unwrap();
+                    let is_metadata = args.contains(&"metadata");
+                    let is_clippy = args.contains(&"clippy");
+                    let is_fetch = args.contains(&"fetch");
+
+                    if is_fetch {
+                        if let Some(pos) = guard.iter().position(|r| r.as_ref().map(|b| b.is_empty()).unwrap_or(false)) {
+                            return guard.remove(pos).unwrap();
+                        }
+                    } else if is_metadata {
+                        if let Some(pos) = guard.iter().position(|r| r.as_ref().map(|b| String::from_utf8_lossy(b).contains("packages")).unwrap_or(false)) {
+                            return guard.remove(pos).unwrap();
+                        }
+                    } else if is_clippy {
+                        if let Some(pos) = guard.iter().position(|r| {
+                            match r {
+                                Ok(b) => {
+                                    let s = String::from_utf8_lossy(b);
+                                    s.contains("compiler-message") || s.contains("reason")
+                                }
+                                Err(SandboxError::ProcessNonZeroExit { stdout, .. }) => {
+                                    let s = String::from_utf8_lossy(stdout);
+                                    s.contains("compiler-message") || s.contains("reason")
+                                }
+                                _ => false,
+                            }
+                        }) {
+                            return guard.remove(pos).unwrap();
+                        }
+                    }
+                }
+
                 let mut guard = self.responses.lock().unwrap();
                 guard.pop_front().unwrap_or_else(|| {
                     Err(SandboxError::ProcessSpawnFailed {
@@ -129,6 +163,42 @@ mod mock_executor {
                     args.join(" "),
                     execution_root.display()
                 ).trim().to_string());
+                
+                if command == "cargo" {
+                    let mut guard = self.responses.lock().unwrap();
+                    let is_metadata = args.contains(&"metadata");
+                    let is_clippy = args.contains(&"clippy");
+                    let is_fetch = args.contains(&"fetch");
+
+                    if is_fetch {
+                        if let Some(pos) = guard.iter().position(|r| r.as_ref().map(|b| b.is_empty()).unwrap_or(false)) {
+                            return guard.remove(pos).unwrap();
+                        }
+                    } else if is_metadata {
+                        if let Some(pos) = guard.iter().position(|r| r.as_ref().map(|b| {
+                            let s = String::from_utf8_lossy(b);
+                            s.contains("\"packages\"") || s.contains("packages")
+                        }).unwrap_or(false)) {
+                            return guard.remove(pos).unwrap();
+                        }
+                    } else if is_clippy {
+                        if let Some(pos) = guard.iter().position(|r| {
+                            match r {
+                                Ok(b) => {
+                                    let s = String::from_utf8_lossy(b);
+                                    s.contains("compiler-message") || s.contains("reason")
+                                }
+                                Err(SandboxError::ProcessNonZeroExit { stdout, .. }) => {
+                                    let s = String::from_utf8_lossy(stdout);
+                                    s.contains("compiler-message") || s.contains("reason")
+                                }
+                                _ => false,
+                            }
+                        }) {
+                            return guard.remove(pos).unwrap();
+                        }
+                    }
+                }
                 
                 if command == "opengrep" {
                     let is_security = args.iter().any(|arg| arg.contains("security.yml") || arg.contains("security.yaml") || arg.contains("security.json"));

@@ -1,3 +1,12 @@
+---
+id: "ADR-012"
+title: "ADR-012-Guardiao-Idempotente"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Estabelece o guardião de transição para o Google Sheets, garantindo idempotência e re-runs seguros de lotes."
+---
+
 # ADR-012-Guardiao-Idempotente
 
 ## Status

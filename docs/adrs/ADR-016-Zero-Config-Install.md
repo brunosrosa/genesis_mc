@@ -1,3 +1,12 @@
+---
+id: "ADR-016"
+title: "ADR-016-Zero-Config-Install"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Garante a distribuição auto-suficiente do SODA empacotado pelo Tauri com zero dependências externas no host."
+---
+
 # ADR-016-Zero-Config-Install
 
 ## Status

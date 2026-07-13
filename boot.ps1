@@ -3,7 +3,14 @@
 # Objetivo: Evitar corrupção, garantir injeção efêmera de variáveis na RAM
 # e ancorar o Fantasma na bandeja sem validações lentas de ferramentas ETL.
 # ============================================================================
+try {
+    [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+} catch {}
+if ($null -ne $PSStyle) {
+    $PSStyle.OutputRendering = 'ANSI'
+}
 try { Clear-Host } catch {}
+$env:RUST_LOG = "debug"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -110,7 +117,7 @@ Write-Host "=======================================================" -Foreground
 try {
     # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
     Write-Host "`n[1/5] Expurgando processos supervisionados do ecossistema Souls..." -ForegroundColor Yellow
-    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "genesis_mc", "mcp_stdio_guard", "soda_mcp_server")
+    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "genesis_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-mcp", "leanctx", "biome", "opengrep", "oxlint")
     foreach ($z in $zombies) {
         Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
     }
@@ -185,8 +192,15 @@ try {
             -Label "cargo-build-lean-ctx" `
             -WorkingDirectory $srcTauriDir
 
-        # 5. IGNIÇÃO DO DAEMON JÁ COMPILADO
-        Write-Host "`n[5/5] Iniciando o daemon compilado (genesis_mc)..." -ForegroundColor Yellow
+        # 5. PRE-AQUECIMENTO DE CACHE EM BACKGROUND
+        Write-Host "`n[5/5] Pre-aquecendo o cache do lean-ctx em background..." -ForegroundColor Yellow
+        $leanCtxPath = Join-Path $srcTauriDir "target\debug\lean-ctx.exe"
+        if (Test-Path $leanCtxPath) {
+            Start-Process -FilePath $leanCtxPath -ArgumentList "graph", "build" -WorkingDirectory $PSScriptRoot -NoNewWindow -ErrorAction SilentlyContinue
+        }
+
+        # 6. IGNIÇÃO DO DAEMON JÁ COMPILADO
+        Write-Host "`n[6/6] Iniciando o daemon compilado (genesis_mc)..." -ForegroundColor Yellow
         $daemonPath = Join-Path $srcTauriDir "target\debug\genesis_mc.exe"
         if (-not (Test-Path $daemonPath)) {
             throw "Binario esperado nao encontrado apos a build: $daemonPath"

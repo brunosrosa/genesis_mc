@@ -1,3 +1,12 @@
+---
+id: "ADR-020"
+title: "ADR-020-Enxame-Cognitivo-ELO"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição"
+description: "Estabelece a colaboração multi-agente governada por pontuações de reputação dinâmica (ELO/EMA)."
+---
+
 # ADR-020-Enxame-Cognitivo-ELO
 
 ## Status

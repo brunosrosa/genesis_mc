@@ -1,0 +1,71 @@
+---
+version: 5.1
+description: SODA Workspace Map & Territorial Governance (Canon v5.1 - Revisado)
+---
+
+# SODA WORKSPACE MAP & TERRITORIAL GOVERNANCE
+
+> [!IMPORTANT]
+> **REGRA MATRIZ (FAIL-CLOSED):**
+> É terminantemente proibido criar novas pastas ou ejetar arquivos fora das zonas delimitadas abaixo. A árvore é estática e monitorada contra entropia.
+
+---
+
+## 1. ZONAS DO TERRITÓRIO
+
+### [ZONA 1: A FÁBRICA & AMBIENTE DO AGENTE] *(Ignorados no Git Principal)*
+- `.agents/` -> Armazenamento global das engrenagens da IA.
+- `.agents/rules/` -> Diretrizes e manifestos de contexto (DESIGN, tech-stack).
+- `.agents/sidecars/` -> Dockerfiles e isolamentos efêmeros de desenvolvimento.
+- `.agents/skills/` -> Servidores MCP locais e customizados (native-ast-parser, sheets).
+- `.trae/` -> Habilidades e configurações exclusivas da IDE Trae PRO+.
+- `.antigravitycli/` -> Logs de execução e sessões do Antigravity CLI.
+- `.vscode/` -> Perfis de workspace, tarefas e debugger local.
+
+### [ZONA 2: ESTADO DA MÁQUINA E CACHE] *(Ignorados no Git Principal)*
+- `.soda_data/` -> [L2/L3 Memory] SQLite transacional (`soda_state.db` / `soda_heuristic_vault.db`) e LanceDB vetorial.
+- `.soda_cache/` -> Chunks temporários, hashes de arquivos e tokens.
+- `.soda_sandbox/` -> Sandboxing para execução segura de módulos externos.
+- `.soda_scratchpad/reports/` -> **OBRIGATÓRIO:** Destino exclusivo de outputs textuais da IA (Ex: os relatórios de execução `_PHASE_REPORT_...txt`).
+
+### [ZONA 3: O CÂNONE E MEMÓRIA DE PRODUTO] *(Repositório Rígido de Documentação)*
+- `.archive/` -> Arquivo Frio / Histórico Forense do workspace. Destino legítimo para relatórios congelados, scripts órfãos desativados, dumps de contexto e artefatos históricos fora do caminho crítico do Produto.
+- `docs/` -> Diretório principal de documentação técnica do SODA.
+- `docs/adrs/` -> Architecture Decision Records (O Por Quê - decisões estruturais).
+- `docs/architecture/` -> Manuais macro e visões de engenharia (Inference, Memory, Gateway).
+- `docs/audits/` -> Relatórios de segurança, vulnerabilidades, crates e auditoria semgrep.
+- `docs/context_dumps/` -> Snapshots e compilações unificadas do estado atual gerados por scripts.
+- `docs/dags/` -> Grafos Acíclicos Dirigidos das Fases de Design e Ingestão.
+- `docs/prds/` -> Product Requirement Documents (especificações de produto e refatorações).
+- `docs/scripts/` -> Scripts utilitários e compiladores do ecossistema de documentação (ex: `soda_adr_compiler.py`, `soda_context_dumps_compiler.py`).
+- `docs/specs/` -> Dicionários e especificações tabulares fixas (ex: `DATABASE_SCHEMA_DIC.csv`).
+- `docs/state/` -> Monitoramento do estado de crates, dependências e relatórios de reflexão arquitetural.
+
+### [ZONA 4: O PRODUTO - BACKEND BARE-METAL RUST]
+- `src-tauri/Cargo.toml` -> Manifesto principal do backend Tauri/SODA.
+- `src-tauri/src/` -> Código-fonte do core Rust.
+- `src-tauri/src/bin/` -> CLIs utilitários executáveis das fases (harvester_cli, etc.).
+- `src-tauri/src/cognition/` -> Orquestração de SLMs locais e gerenciamento de contexto.
+- `src-tauri/src/finops/` -> Roteadores em cascata e controle orçamentário (Iron Cost).
+- `src-tauri/src/harvester/` -> Motor determinístico O(1) de clonagem e extração AST.
+- `src-tauri/src/ipc/` -> Contratos DTO e pipelines de comunicação.
+- `src-tauri/src/persist/` -> Camada transacional de leitura/escrita.
+- `src-tauri/tests/` -> Testes de Integração e E2E (A Alfândega de Release).
+- `src-tauri/third_party/` -> Dependências locais isoladas do repositório (ex: `lean-ctx`).
+
+### [ZONA 5: A JANELA DE VIDRO - FRONTEND SVELTE 5]
+- `src/components/` -> Componentes visuais passivos (Svelte Runes). Sem lógica de negócios.
+- `src/lib/` -> Tipagem TypeScript e invocadores assíncronos do Tauri IPC.
+- `src/routes/` -> Telas e roteamento estático da interface.
+
+### [ZONA 6: ZONA EXTERNA EFÊMERA (HOST %TEMP%)] *(Ignorada no Git Principal)*
+- `%TEMP%/.souls_workspaces/` -> Raízes efêmeras do ProjFS e workspaces de extração (exigem NTFS/mini-filtro).
+  - *Criação:* Zero-Config via `std::env::temp_dir()` + `std::fs::create_dir_all`.
+  - *Teardown:* Deleção não-bloqueante via `spawn_detached_delete_process` (fora do repositório host).
+
+---
+
+## 2. REGRAS DE FORMA E HIGIENE DIGITAL
+
+- PRDs em andamento na pasta `docs/prds/` devem adotar o prefixo da Fase Temporal correspondente (Ex: `PRD_00X_Fase_X_...`).
+- O arquivo `_WORKSPACE_MAP.md` deve ser lido pelo agente no início de cada sessão para garantir compliance topológico absoluto.

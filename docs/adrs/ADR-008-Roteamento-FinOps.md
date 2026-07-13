@@ -1,28 +1,38 @@
-# ADR-008-Roteamento-FinOps
+---
+id: "ADR-008"
+title: "ADR-008-Roteamento-FinOps-e-Matematica-AOT"
+version: 2.2
+status: Ativo_Inegociavel
+epic: "FinOps"
+description: "Governa o roteamento via ParetoBandit (Tiers), Model Registry dinâmico, e impõe cálculos matemáticos AOT (lele/pulp), banindo runtimes obesos como tch-rs."
+---
 
-## Status
-Aceito (Ativo e Inegociável)
+### ADR-008: Roteamento FinOps, Abstração de Tiers e Trator Numérico AOT
 
-## Contexto
-O ecossistema SODA opera em um regime no qual o uso impensado de modelos em nuvem premium (ex: Claude 3.5 Sonnet, GPT-4o) para processamento de contextos imensos (como refatorações de repositórios inteiros contendo dezenas de milhares de tokens) provoca custos financeiros proibitivos por chamadas de API de nuvem convencionais (Inference Bill Shock). Paralelamente, forçar tarefas complexas a rodar inteiramente na dGPU local de 6GB da RTX 2060m causa travamentos por Out-of-Memory (OOM) e degradação severa da latência e da vida útil do hardware.
+#### Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
 
-## Decisão
-Implementar a arquitetura de **Roteamento Híbrido FinOps** governada pelo algoritmo **ParetoBandit** no AgentGateway local compilado em Rust:
-1. **Métrica E³ (Efficiency-aware Effectiveness Evaluation):** A tomada de decisão de roteamento não usa regras estáticas de intenção. O ParetoBandit calcula em tempo real o balanceamento ótimo de **Custo vs. Qualidade vs. Latência** para cada tarefa específica.
-2. **MoE Multi-Nível Hierárquica:**
-   - **Nível 0 (Triagem Local na CPU):** Executado em $< 50ms$ na CPU i9 por um classificador local estruturado. Tarefas mecânicas simples ou buscas locais triviais resolvem-se localmente a custo US$ 0,00.
-   - **Nível 1 (Edge Node na dGPU):** Contextos normais ($< 8000$ tokens) e refatorações atômicas seguras rodam localmente na RTX 2060m aproveitando modelos especialistas locais quantizados, mantendo soberania de dados e custo US$ 0,00.
-   - **Nível 2 (Subscription Hacking / Cloud Fallback):** Tarefas complexas de raciocínio de longo horizonte sofrem fallback tático para APIs de nuvem asiáticas baratas de lote (Batch APIs) ou são despachadas para sidecars efêmeros conectando as CLIs oficiais instaladas na máquina do usuário (ex: Gemini CLI / Claude Code CLI). Isso redireciona a carga de processamento massivo para as cotas mensais de assinatura fixa (Flat-Rate) do usuário, anulando faturamentos marginais variáveis.
-3. **Disjuntores FinOps (Circuit Breakers):** Um firewall financeiro monitora o consumo cumulativo diário de tokens e custos. Se o teto configurado for ameaçado, o disjuntor desarma, cessando qualquer requisição externa e travando as rotinas no motor local.
+#### Contexto Técnico e Ameaça Operacional (Inference Bill Shock e Overhead Matemático)
+O uso indiscriminado de modelos de fronteira em nuvem provoca custos financeiros proibitivos (Inference Bill Shock). Para mitigar isso, o sistema requer um roteador (*ParetoBandit*) que calcule rotas com base na métrica E3 (Efficiency-Aware Effectiveness Evaluation). Contudo, se as micro-rotinas de cálculo vetorial para esse roteamento utilizarem *runtimes* de Machine Learning tradicionais (como `tch-rs` ou LibTorch), o binário inflará em gigabytes e as compilações *Just-In-Time* (JIT) gerarão latência letal que ultrapassará o orçamento de <22 microssegundos.
 
-## Consequências
-- **Faturamento Marginal Zero:** Refatorações de centenas de milhares de tokens são executadas sem sobressaltos e sem gerar faturas variáveis de API para o usuário.
-- **Termodinâmica Preservada:** A GPU RTX 2060m local opera sob stress controlado, evitando aquecimento extremo e estrangulamento por uso contínuo de RAM.
-- **Autonomia Inteligente:** A IA decide autonomamente qual é a melhor máquina de raciocínio para a tarefa sem incomodar ou demandar intervenções manuais cognitivas de roteamento pelo usuário.
+#### Decisão Arquitetural (Tiers Abstratos e Matemática AOT)
+Fica decretado o uso da malha de roteamento dinâmico "Zero-Trust Sandwich" operando sob as seguintes abstrações inegociáveis:
 
-## Restrições Bare-Metal
-- **Latência de Decisão do ParetoBandit:** A avaliação da equação e o despacho do roteamento devem executar em menos de **10ms** no Gateway Rust.
-- **Disjuntor de Teto Diário:** Interrupção compulsória de chamadas externas de nuvem se o gasto diário de tokens atingir o teto parametrizado pelo usuário.
-- **Igiene de Conexão:** Quedas de rede disparam fallback automático imediato para inferência local com emissão de status estático na Bottom Bar.
-- **Teto de Paralelismo na dGPU:** É proibido carregar múltiplos agentes em paralelo na RTX 2060m; impor **Batching Sequencial** com reciclagem de contexto via **FastSwitch/KVCOMM**.
-- **Git I/O fora do Event Loop:** Operações de commit/snapshot via **gitoxide** (I/O intensivo) são proibidas no Event Loop principal; devem rodar estritamente fora do loop assíncrono (thread dedicada/worker), comunicando-se por filas/canais.
+**Módulo 1: O Model Registry Dinâmico (O Orçamentista Noturno)**
+*   O SODA implementa um **Model Registry** local em SQLite.
+*   O *Daemon Chyros* acorda durante a madrugada e realiza um *pull* assíncrono nas APIs para atualizar os preços exatos em microdólares, limites de contexto e latência (Time-To-First-Token - TTFT). O roteamento calcula as rotas em tempo $\mathcal{O}(1)$ consultando apenas o banco local.
+
+**Módulo 2: Taxonomia Abstrata de Roteamento (Tiers de Inteligência)**
+*   O roteamento obedecerá estritamente a três camadas (Tiers) escaláveis:
+    *   **Tier 1 (Cloud Brain / Orchestrator):** Modelos de fronteira premium (Latest Pro Models) acionados **exclusivamente** para elaborar planos de execução, resolver pânicos severos do compilador Rust ou gerar o DAG de tarefas.
+    *   **Tier 3 (Cloud Fast / Batch Workers):** Modelos de altíssima velocidade e baixo custo (Latest Flash/Lite Models) usados para processamento em lote e contingência assíncrona (Failover).
+    *   **Tier 4 (Local SLM Workers):** O esforço braçal contínuo é roteado para a GPU local (RTX 2060m via `llama-cpp-2` contíguo ou `mistral.rs` efêmero) a custo rigorosamente zero.
+
+**Módulo 3: O Trator Numérico AOT (A Morte do LibTorch e JIT)**
+*   Fica terminantemente **PROIBIDA** a injeção de bibliotecas C++ de tensores obesas (ex: `tch-rs`, LibTorch, ndarray com MKL) para os cálculos de predição do roteador.
+*   A matemática matricial do ParetoBandit e outras heurísticas operacionais deverão rodar 100% estáticas via **AOT (Ahead-of-Time)** na CPU.
+*   O paralelismo vetorial (SIMD/AVX2) será forçado cirurgicamente em Rust nativo utilizando a combinação mandatória das *crates* **`lele`** e **`pulp`**, garantindo execução O(1) sem concorrência pelo barramento PCIe da GPU.
+
+#### Consequências Operacionais (Trade-offs)
+*   **Impacto Positivo:** Proteção absoluta do orçamento financeiro via *Tiers*. O binário Rust se mantém leve e a tomada de decisão do roteador é estritamente sub-milissegundo, preservando o Cache L3 e a memória RAM.
+*   **Impacto Negativo (Rigidez Matemática):** A escrita de redes de predição locais exigirá que o Arquiteto lide com matrizes de baixo nível usando `pulp` e `lele` em Rust puro, impedindo a comodidade de importar scripts prontos de Python/PyTorch para cálculos internos.

@@ -435,6 +435,9 @@ struct SastExecutionOutcome {
     scope: String,
     forced_channel: Option<SastIssueChannel>,
     result: Result<Vec<u8>, SidecarError>,
+    /// PRD-033: payload forense capturado quando a lâmina RustClippy falha
+    /// em vez de abortar o pipeline inteiro.
+    forensic_rust_diagnostic: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -576,7 +579,7 @@ impl PolyglotSastSidecar {
                         command_args,
                         forced_channel,
                     } = target;
-                    let cargo_permit = if blade == StaticAnalysisBlade::RustClippy {
+                    let _cargo_permit = if blade == StaticAnalysisBlade::RustClippy {
                         Some(
                             Arc::clone(&cargo_semaphore)
                                 .acquire_owned()
@@ -590,7 +593,7 @@ impl PolyglotSastSidecar {
                     } else {
                         None
                     };
-                    let global_permit = Arc::clone(&global_semaphore)
+                    let _global_permit = Arc::clone(&global_semaphore)
                         .acquire_owned()
                         .await
                         .map_err(|e| SidecarError::ExecutionFailed {
@@ -619,8 +622,6 @@ impl PolyglotSastSidecar {
                         has_global_opengrep_coverage,
                     )
                     .await;
-                    drop(global_permit);
-                    drop(cargo_permit);
                     info!(
                         blade = blade_name(blade),
                         scope = %scope,
@@ -629,6 +630,37 @@ impl PolyglotSastSidecar {
                         available_cargo_permits = cargo_semaphore.available_permits(),
                         "SAST monorepo: sub-scan concluído"
                     );
+                    // PRD-033: quando a lâmina RustClippy falha, capturar
+                    // o diagnóstico e devolver como pseudossucesso forense.
+                    let forensic_rust_diagnostic = if blade == StaticAnalysisBlade::RustClippy {
+                        if let Err(ref err) = result {
+                            let stderr_limpo = match err {
+                                SidecarError::ExecutionFailed { reason } => reason.clone(),
+                                SidecarError::Timeout { timeout_secs } => {
+                                    format!("timeout após {timeout_secs}s")
+                                }
+                                other => other.to_string(),
+                            };
+                            Some(format!(
+                                "[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> {}",
+                                stderr_limpo
+                            ))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    // Se o diagnóstico forense foi capturado, substituir o Err
+                    // por Ok(SastBladeResult vazio) para que a lâmina não aborte o pipeline.
+                    let result: Result<SastBladeResult, SidecarError> = if forensic_rust_diagnostic.is_some() {
+                        Ok(SastBladeResult {
+                            effective_blade: blade,
+                            bytes: Vec::new(),
+                        })
+                    } else {
+                        result
+                    };
                     let (effective_blade, result) = match result {
                         Ok(result) => (result.effective_blade, Ok(result.bytes)),
                         Err(err) => (blade, Err(err)),
@@ -640,33 +672,46 @@ impl PolyglotSastSidecar {
                         scope,
                         forced_channel,
                         result,
+                        forensic_rust_diagnostic,
                     })
                 });
             }
         }
 
+        let mut forensic_rust_diagnostics: Vec<String> = Vec::new();
         while let Some(joined) = join_set.join_next().await {
             let outcome = match joined {
                 Ok(Ok(outcome)) => outcome,
                 Ok(Err(err)) => {
-                    had_failed_payload = true;
-                    warn!(
+                    error!(
                         repo_path = %repo_path.display(),
                         error = %err,
-                        "SAST monorepo: worker falhou; descartando sub-scan"
+                        "SAST monorepo: worker falhou de forma fatal"
                     );
-                    continue;
+                    return Err(err);
                 }
                 Err(err) => {
-                    had_failed_payload = true;
-                    warn!(
+                    error!(
                         repo_path = %repo_path.display(),
                         error = %err,
-                        "SAST monorepo: join do worker falhou; descartando sub-scan"
+                        "SAST monorepo: join do worker falhou de forma fatal"
                     );
-                    continue;
+                    return Err(SidecarError::ExecutionFailed {
+                        reason: format!("Join error no worker da lâmina SAST: {}", err),
+                    });
                 }
             };
+
+            // PRD-033: acumular diagnóstico forense (não aborta pipeline)
+            if let Some(diag) = outcome.forensic_rust_diagnostic {
+                warn!(
+                    scope = %outcome.scope,
+                    "SAST monorepo: falha forense da lâmina RustClippy capturada"
+                );
+                forensic_rust_diagnostics.push(diag);
+                had_failed_payload = true;
+                continue;
+            }
 
             match outcome.result {
                 Ok(bytes) => match normalize_sast_output(
@@ -681,11 +726,31 @@ impl PolyglotSastSidecar {
                                 issue.channel = forced_channel;
                             }
                         }
+                        if issues.is_empty() {
+                            let blade_label = blade_name(outcome.effective_blade);
+                            issues.push(SodaHealthIssue {
+                                level: "info".to_string(),
+                                file: String::new(),
+                                message: format!("[INFO] Nenhuma vulnerabilidade ou pendência encontrada pela lâmina '{}' no escopo '{}'.", blade_label, outcome.scope),
+                                source_blade: blade_label.to_string(),
+                                channel: SastIssueChannel::Health,
+                            });
+                        }
                         had_successful_payload = true;
                         all_issues.append(&mut issues);
                     }
                     Err(err) => {
                         had_failed_payload = true;
+                        let blade_label = blade_name(outcome.effective_blade);
+                        let error_msg = format!("Lâmina '{}' falhou na normalização dos resultados no escopo '{}': {}", blade_label, outcome.scope, err);
+                        all_issues.push(SodaHealthIssue {
+                            level: "warning".to_string(),
+                            file: String::new(),
+                            message: format!("[FALHA_NORMALIZACAO] {}", error_msg),
+                            source_blade: blade_label.to_string(),
+                            channel: SastIssueChannel::Health,
+                        });
+                        had_successful_payload = true;
                         warn!(
                             blade = blade_name(outcome.effective_blade),
                             requested_blade = blade_name(outcome.requested_blade),
@@ -697,20 +762,22 @@ impl PolyglotSastSidecar {
                     }
                 },
                 Err(err) => {
-                    had_failed_payload = true;
-                    warn!(
-                        blade = blade_name(outcome.requested_blade),
+                    let blade_label = blade_name(outcome.requested_blade);
+                    error!(
+                        blade = blade_label,
                         scope = %outcome.scope,
                         cwd = %outcome.execution_root.display(),
                         error = %err,
-                        "SAST monorepo: execucao da lamina falhou; descartando sub-scan"
+                        "SAST monorepo: execucao da lamina falhou com erro letal (Fail-Closed)"
                     );
+                    return Err(err);
                 }
             }
         }
 
-        if had_failed_payload && !had_successful_payload {
-            warn!(
+        // PRD-033: só retorna zero-byte se não há NENHUM sinal (nem issues, nem forense)
+        if had_failed_payload && !had_successful_payload && forensic_rust_diagnostics.is_empty() {
+            error!(
                 repo_path = %repo_path.display(),
                 "SAST monorepo: todas as laminas falharam; retornando blobs zero-byte"
             );
@@ -734,9 +801,24 @@ impl PolyglotSastSidecar {
             .cloned()
             .collect::<Vec<_>>();
 
+        let health_report_body = render_soda_health_report(&health_issues);
+
+        // PRD-033: prepend dos diagnósticos forenses ao TOPO do Blob 08
+        let health_report_blob = if forensic_rust_diagnostics.is_empty() {
+            health_report_body
+        } else {
+            let header = forensic_rust_diagnostics.join("\n");
+            let mut blob = header.into_bytes();
+            if !health_report_body.is_empty() {
+                blob.push(b'\n');
+                blob.extend_from_slice(&health_report_body);
+            }
+            blob
+        };
+
         Ok(PolyglotSastArtifacts {
             unsafe_hotspots_blob: render_unsafe_hotspots_report(&unsafe_issues, &input.clean_files),
-            health_report_blob: render_soda_health_report(&health_issues),
+            health_report_blob,
         })
     }
 }
@@ -882,29 +964,87 @@ pub(crate) fn derive_js_lint_execution_targets(
     targets
 }
 
+pub(crate) fn group_files_by_manifest(
+    repo_root: &Path,
+    manifests: &[DiscoveredManifest],
+    clean_files: &[PathBuf],
+) -> BTreeMap<PathBuf, (String, Vec<PathBuf>)> {
+    let mut groups: BTreeMap<PathBuf, (String, Vec<PathBuf>)> = BTreeMap::new();
+
+    for file in clean_files {
+        let abs_file = if file.is_absolute() {
+            file.clone()
+        } else {
+            repo_root.join(file)
+        };
+        let abs_file_clean = abs_file.canonicalize().unwrap_or(abs_file);
+
+        let mut closest_manifest: Option<&DiscoveredManifest> = None;
+        for manifest in manifests {
+            let manifest_root_clean = manifest.execution_root.canonicalize().unwrap_or_else(|_| manifest.execution_root.clone());
+            if abs_file_clean.starts_with(&manifest_root_clean) {
+                if let Some(current) = closest_manifest {
+                    let current_root_clean = current.execution_root.canonicalize().unwrap_or_else(|_| current.execution_root.clone());
+                    if manifest_root_clean.as_os_str().len() > current_root_clean.as_os_str().len() {
+                        closest_manifest = Some(manifest);
+                    }
+                } else {
+                    closest_manifest = Some(manifest);
+                }
+            }
+        }
+
+        if let Some(manifest) = closest_manifest {
+            let manifest_root_clean = manifest.execution_root.canonicalize().unwrap_or_else(|_| manifest.execution_root.clone());
+            let entry = groups.entry(manifest_root_clean).or_insert_with(|| (manifest.scope.clone(), Vec::new()));
+            entry.1.push(abs_file_clean);
+        } else {
+            let entry = groups.entry(repo_root.to_path_buf()).or_insert_with(|| (".".to_string(), Vec::new()));
+            entry.1.push(abs_file_clean);
+        }
+    }
+
+    groups
+}
+
 pub(crate) fn derive_opengrep_execution_targets(
     repo_path: &Path,
+    manifests: &[DiscoveredManifest],
     clean_files: &[PathBuf],
 ) -> Vec<SastExecutionTarget> {
     let repo_root = repo_path
         .canonicalize()
         .unwrap_or_else(|_| repo_path.to_path_buf());
-    let scan_targets = derive_repo_relative_clean_targets(&repo_root, clean_files, &[], |_| true);
-
+    
+    let groups = group_files_by_manifest(&repo_root, manifests, clean_files);
     let mut targets = Vec::new();
-    for (profile_scope, forced_channel) in [
-        (".::unsafe", SastIssueChannel::UnsafeHotspot),
-        (".::health", SastIssueChannel::Health),
-    ] {
-        for (idx, chunk) in scan_targets.chunks(OPENGREP_FILE_LIST_CHUNK_SIZE).enumerate() {
-            targets.push(SastExecutionTarget {
-                blade: StaticAnalysisBlade::Opengrep,
-                execution_root: repo_root.clone(),
-                scope: blade_file_batch_scope(profile_scope, idx + 1),
-                scan_targets: chunk.to_vec(),
-                command_args: None,
-                forced_channel: Some(forced_channel),
-            });
+
+    for (execution_root, (scope, files)) in groups {
+        let scan_targets = derive_repo_relative_clean_targets(&execution_root, &files, &[], |_| true);
+        if scan_targets.is_empty() {
+            continue;
+        }
+
+        let normalized_scope = if scope.trim().is_empty() {
+            ".".to_string()
+        } else {
+            scope.clone()
+        };
+
+        for (profile_scope, forced_channel) in [
+            (format!("{normalized_scope}::unsafe"), SastIssueChannel::UnsafeHotspot),
+            (format!("{normalized_scope}::health"), SastIssueChannel::Health),
+        ] {
+            for (idx, chunk) in scan_targets.chunks(OPENGREP_FILE_LIST_CHUNK_SIZE).enumerate() {
+                targets.push(SastExecutionTarget {
+                    blade: StaticAnalysisBlade::Opengrep,
+                    execution_root: execution_root.clone(),
+                    scope: blade_file_batch_scope(&profile_scope, idx + 1),
+                    scan_targets: chunk.to_vec(),
+                    command_args: None,
+                    forced_channel: Some(forced_channel),
+                });
+            }
         }
     }
     targets
@@ -917,7 +1057,7 @@ fn execution_targets_for_blade(
     blade: StaticAnalysisBlade,
 ) -> Vec<SastExecutionTarget> {
     if blade == StaticAnalysisBlade::Opengrep {
-        return derive_opengrep_execution_targets(repo_path, clean_files);
+        return derive_opengrep_execution_targets(repo_path, manifests, clean_files);
     }
     if blade == StaticAnalysisBlade::Cppcheck {
         return cppcheck::derive_cppcheck_execution_targets(repo_path, clean_files);
@@ -931,7 +1071,7 @@ fn execution_targets_for_blade(
     if blade == StaticAnalysisBlade::Sobelow {
         return sobelow::derive_elixir_execution_targets(manifests, clean_files);
     }
-    if blade == StaticAnalysisBlade::Biome {
+    if blade == StaticAnalysisBlade::Biome || blade == StaticAnalysisBlade::Oxc {
         return derive_js_lint_execution_targets(repo_path, manifests, blade, clean_files);
     }
     if let Some(kind) = manifest_kind_for_blade(blade) {
@@ -1758,7 +1898,7 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
             if ((binary == "semgrep" || binary == "opengrep")
                 && !stdout_is_blank(&sanitized_stdout)
                 && stdout_contains_json_payload(&sanitized_stdout))
-                || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne))
+                || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) && (!stdout_is_blank(&sanitized_stdout) || (binary == "cppcheck" && !sanitized_stderr.is_empty())))
                 || (binary == "opengrep" && exit_code == 7)
             {
                 if binary == "cppcheck" {
@@ -1783,6 +1923,17 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
                 } else {
                     Ok(sanitized_stdout)
                 }
+            } else if binary == "ruff" && exit_code == 2 {
+                let stdout_hint = stdout_preview(&sanitized_stdout, 400);
+                warn!(
+                    binary = %binary,
+                    exit_code,
+                    stderr = %sanitized_stderr,
+                    stdout = %stdout_hint,
+                    semantic_outcome = "informational_non_zero",
+                    "Ruff falhou devido a erro de configuracao (Fail-Soft)"
+                );
+                Ok(b"[]".to_vec())
             } else {
                 let stdout_hint = stdout_preview(&sanitized_stdout, 400);
                 if classify_sidecar_observability(exit_code, &sanitized_stdout)
@@ -1985,6 +2136,8 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
     scan_targets: &[String],
     forced_channel: Option<SastIssueChannel>,
 ) -> Result<Vec<u8>, SidecarError> {
+    // L12: Escreve o arquivo .semgrepignore no diretório de trabalho do processo
+    opengrep::write_semgrepignore_file(execution_root)?;
     let rule_set = match forced_channel {
         Some(SastIssueChannel::UnsafeHotspot) => SemgrepRuleSet::Security,
         _ => SemgrepRuleSet::Health,
@@ -2027,18 +2180,101 @@ async fn run_sast_blade<E: SandboxExecutor>(
                 bytes,
             });
     }
+    if blade == StaticAnalysisBlade::Govulncheck {
+        // Pre-Flight Fetch para Govulncheck: go mod download
+        // Nos testes unitários mockados, evitamos a execução real no host.
+        if !cfg!(test) {
+            info!(
+                execution_root = %execution_root.display(),
+                "SAST govulncheck: Executando Pre-Flight go mod download assincrono no sub-scan path"
+            );
+            let mut cmd = tokio::process::Command::new("go");
+            cmd.arg("mod")
+               .arg("download")
+               .current_dir(execution_root)
+               .stdout(std::process::Stdio::piped())
+               .stderr(std::process::Stdio::piped())
+               .kill_on_drop(true);
+
+            match cmd.spawn() {
+                Ok(child) => {
+                    let wait_fut = child.wait_with_output();
+                    match tokio::time::timeout(std::time::Duration::from_secs(60), wait_fut).await {
+                        Ok(Ok(output)) => {
+                            if output.status.success() {
+                                info!(
+                                    execution_root = %execution_root.display(),
+                                    "SAST govulncheck: Pre-Flight go mod download concluido com sucesso"
+                                );
+                            } else {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                warn!(
+                                    execution_root = %execution_root.display(),
+                                    stderr = %stderr.trim(),
+                                    "SAST govulncheck: Pre-Flight go mod download falhou (prosseguindo offline)"
+                                );
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            warn!(
+                                execution_root = %execution_root.display(),
+                                error = %e,
+                                "SAST govulncheck: Erro ao executar Pre-Flight go mod download (prosseguindo offline)"
+                            );
+                        }
+                        Err(_) => {
+                            warn!(
+                                execution_root = %execution_root.display(),
+                                "SAST govulncheck: Timeout no Pre-Flight go mod download (prosseguindo offline)"
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        execution_root = %execution_root.display(),
+                        error = %e,
+                        "SAST govulncheck: Falha ao iniciar Pre-Flight go mod download assincrono (prosseguindo offline)"
+                    );
+                }
+            }
+        }
+    }
     let result = if blade == StaticAnalysisBlade::RustClippy {
-        match clippy::run_rust_clippy_preflight(executor, execution_root, timeout_secs).await {
+        // Para o Cargo Clippy, garanta que ele execute apenas nas raízes descobertas
+        let run_dir = execution_root.to_path_buf();
+        match clippy::run_rust_clippy_preflight(executor, &run_dir, timeout_secs).await {
             Ok(()) => {
                 let (binary, args) = blade_command(blade, scan_targets, command_args);
-                let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+                let manifest_path = run_dir.join("Cargo.toml");
+                let manifest_path_str = manifest_path.display().to_string();
+                
+                let mut final_args = Vec::new();
+                for arg in args {
+                    final_args.push(arg);
+                    if final_args.last().map(|s| s.as_str()) == Some("clippy") {
+                        final_args.push("--manifest-path".to_string());
+                        final_args.push(manifest_path_str.clone());
+                    }
+                }
+                
+                if !final_args.iter().any(|arg| arg == "--no-deps") {
+                    if let Some(pos) = final_args.iter().position(|arg| arg == "--") {
+                        final_args.insert(pos + 1, "--no-deps".to_string());
+                    } else {
+                        final_args.push("--".to_string());
+                        final_args.push("--no-deps".to_string());
+                    }
+                }
+                
+                let arg_refs = final_args.iter().map(String::as_str).collect::<Vec<_>>();
                 execute_sidecar_in_dir(
                     executor,
                     binary,
                     &arg_refs,
                     timeout_secs,
                     SidecarExitPolicy::AllowFindingsExitOne,
-                    execution_root,
+                    &run_dir,
                 )
                 .await
                 .map(|bytes| SastBladeResult {
@@ -2583,5 +2819,56 @@ mod tests {
         assert!(rendered.contains("[DOMAIN: C++ / CUDA]"));
         assert!(rendered.contains("[cppcheck]"));
         assert!(rendered.contains("[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck."));
+    }
+    /// PRD-033 TDD (RED→GREEN)
+    /// Verifica que quando a lâmina RustClippy falha (ex: crate com build.rs/FFI que
+    /// não compila no sandbox), o diagnóstico forense é injetado no TOPO do Blob 08
+    /// e o pipeline NÃO aborta — retornando Ok(PolyglotSastArtifacts).
+    #[tokio::test]
+    async fn test_prd033_clippy_failure_injects_forensic_header_at_top_of_blob08() {
+        use crate::harvester::sast::test_utils::MockExecutor;
+        use crate::harvester::sandbox::SandboxError;
+        use crate::harvester::detect::StackProfile;
+
+        // Montar um executor com um Cargo.toml simples (sem lockfile = sem --locked)
+        let executor = MockExecutor::new(Vec::new());
+        executor.write_repo_file(
+            "Cargo.toml",
+            "[package]\nname='toxic-crate'\nversion='0.1.0'\nbuild='build.rs'\n",
+        );
+        // Forçar falha no preflight (cargo fetch) simulando erro de compilação
+        *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
+            Err(SandboxError::ProcessNonZeroExit {
+                exit_code: 101,
+                stderr: "error[E0463]: can't find crate for `proc_macro`".to_string(),
+                stdout: Vec::new(),
+            }),
+        ]);
+
+        let executor = std::sync::Arc::new(executor);
+        let clean_files = std::sync::Arc::new(Vec::new());
+
+        let result = PolyglotSastSidecar::extract(PolyglotSastInput {
+            executor,
+            timeout_secs: 30,
+            profile: &StackProfile::Rust,
+            clean_files,
+        })
+        .await;
+
+        // Pipeline NÃO deve abortar
+        let artifacts = result.expect("pipeline nao deve abortar quando clippy falha (PRD-033)");
+
+        // Blob 08 deve começar com o marcador forense
+        let blob08 = String::from_utf8_lossy(&artifacts.health_report_blob);
+        assert!(
+            blob08.starts_with("[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO]"),
+            "Blob 08 deve comecar com marcador forense PRD-033, mas foi:\n{blob08}"
+        );
+        // O erro original deve estar presente no payload
+        assert!(
+            blob08.contains("E0463") || blob08.contains("proc_macro") || blob08.contains("101"),
+            "Blob 08 deve conter o stderr do erro, mas foi:\n{blob08}"
+        );
     }
 }

@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::harvester::router::StaticAnalysisBlade;
 use super::{SandboxExecutor, SidecarError, SidecarExitPolicy, SastExecutionTarget, SodaHealthIssue, execute_sidecar_in_dir, parse_json_payload, push_issue, sort_and_dedup_issues, sanitize_host_paths_in_text, DiscoveredManifest, ManifestKind};
@@ -33,26 +33,22 @@ const RUST_NATIVE_BUILD_MARKERS: &[&str] = &[
 pub fn clippy_args_for_package(package_name: &str) -> Vec<String> {
     vec![
         "clippy".to_string(),
-        "--message-format=json".to_string(),
         "--workspace".to_string(),
         "--offline".to_string(),
-        "--frozen".to_string(),
+        "--no-deps".to_string(),
+        "--message-format=json".to_string(),
         "-p".to_string(),
         package_name.to_string(),
-        "--".to_string(),
-        "--no-deps".to_string(),
     ]
 }
 
 pub fn default_clippy_args() -> Vec<String> {
     vec![
         "clippy".to_string(),
-        "--message-format=json".to_string(),
         "--workspace".to_string(),
         "--offline".to_string(),
-        "--frozen".to_string(),
-        "--".to_string(),
         "--no-deps".to_string(),
+        "--message-format=json".to_string(),
     ]
 }
 
@@ -90,6 +86,24 @@ pub fn cargo_metadata_args(manifest_path: &Path, use_locked: bool) -> Vec<String
 
 pub fn rust_clippy_manifest_path(execution_root: &Path) -> PathBuf {
     execution_root.join("Cargo.toml")
+}
+
+pub fn find_cargo_workspace_root(repo_path: &Path, execution_root: &Path) -> PathBuf {
+    let mut current = execution_root.to_path_buf();
+    let mut workspace_root = execution_root.to_path_buf();
+
+    while current.starts_with(repo_path) {
+        if current.join("Cargo.toml").is_file() {
+            workspace_root = current.clone();
+        }
+        if current == repo_path {
+            break;
+        }
+        if !current.pop() {
+            break;
+        }
+    }
+    workspace_root
 }
 
 pub fn rust_clippy_preflight_timeout_secs(timeout_secs: u64) -> u64 {
@@ -148,18 +162,6 @@ pub fn build_rust_clippy_plan(manifest: &DiscoveredManifest) -> Result<RustClipp
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "manifesto sem [package].name".to_string())?;
 
-    if manifest_effectively_has_build_script(&manifest.execution_root, package_table) {
-        return Err("package contem build.rs efetivo".to_string());
-    }
-
-    if let Some(links) = package_table.get("links").and_then(toml::Value::as_str) {
-        return Err(format!("package declara links={links}"));
-    }
-
-    if let Some(marker) = rust_manifest_native_marker(&manifest_value) {
-        return Err(format!("manifesto referencia dependencia nativa/FFI marker={marker}"));
-    }
-
     Ok(RustClippyPlan {
         command_args: clippy_args_for_package(package_name),
     })
@@ -173,29 +175,6 @@ struct CargoMetadataPackage {
 #[derive(Debug, serde::Deserialize)]
 struct CargoMetadataPayload {
     packages: Vec<CargoMetadataPackage>,
-}
-
-fn rust_manifest_declares_build_dependencies(value: &toml::Value) -> bool {
-    match value {
-        toml::Value::Table(entries) => entries.iter().any(|(key, inner)| {
-            key.eq_ignore_ascii_case("build-dependencies")
-                || rust_manifest_declares_build_dependencies(inner)
-        }),
-        toml::Value::Array(items) => items.iter().any(rust_manifest_declares_build_dependencies),
-        _ => false,
-    }
-}
-
-fn rust_manifest_declares_proc_macro(value: &toml::Value) -> bool {
-    match value {
-        toml::Value::Table(entries) => entries.iter().any(|(key, inner)| {
-            (key.eq_ignore_ascii_case("proc-macro")
-                && inner.as_bool().unwrap_or(false))
-                || rust_manifest_declares_proc_macro(inner)
-        }),
-        toml::Value::Array(items) => items.iter().any(rust_manifest_declares_proc_macro),
-        _ => false,
-    }
 }
 
 pub fn fail_closed_rust_manifest(reason: String) -> SidecarError {
@@ -228,7 +207,7 @@ pub fn audit_transitive_rust_manifests(
     let mut manifests = payload
         .packages
         .into_iter()
-        .map(|package| package.manifest_path)
+        .map(|package| crate::harvester::path_sanitizer::soda_strip_unc_prefix(&package.manifest_path))
         .collect::<Vec<_>>();
     manifests.sort();
     manifests.dedup();
@@ -251,54 +230,101 @@ pub fn audit_transitive_rust_manifests(
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
             ))
         })?;
-        let manifest_value = manifest_text.parse::<toml::Value>().map_err(|error| {
+        let _manifest_value = manifest_text.parse::<toml::Value>().map_err(|error| {
             fail_closed_rust_manifest(format!(
                 "manifesto transitivo invalido em '{}': {error}",
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
             ))
         })?;
-        let manifest_root = manifest_path
-            .parent()
-            .unwrap_or_else(|| Path::new(""));
-        let manifest_label =
-            sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string());
+        // PRD-033: blindagem removida — crates com build.rs/FFI/proc-macro agora
+        // tentam compilar; falhas são capturadas forensicamente em mod.rs.
+    }
 
-        if let Some(package_table) = manifest_value.get("package").and_then(toml::Value::as_table) {
-            if manifest_effectively_has_build_script(manifest_root, package_table) {
-                return Err(fail_closed_rust_manifest(format!(
-                    "manifesto transitivo '{}' contem build.rs efetivo",
-                    manifest_label
-                )));
+    Ok(())
+}
+
+pub fn expand_cargo_workspace_wildcards(workspace_root: &Path) -> Result<(), String> {
+    let manifest_path = workspace_root.join("Cargo.toml");
+    if !manifest_path.is_file() {
+        return Ok(());
+    }
+
+    let manifest_text = std::fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Falha ao ler manifest raiz: {e}"))?;
+
+    let mut manifest_value = manifest_text
+        .parse::<toml::Value>()
+        .map_err(|e| format!("TOML invalido no manifest raiz: {e}"))?;
+
+    let workspace_table = match manifest_value.get_mut("workspace").and_then(|v| v.as_table_mut()) {
+        Some(t) => t,
+        None => return Ok(()),
+    };
+
+    let members_array = match workspace_table.get_mut("members").and_then(|v| v.as_array_mut()) {
+        Some(arr) => arr,
+        None => return Ok(()),
+    };
+
+    let mut new_members = Vec::new();
+    let mut modified = false;
+
+    for member_val in members_array.iter() {
+        let member_str = match member_val.as_str() {
+            Some(s) => s,
+            None => {
+                new_members.push(member_val.clone());
+                continue;
             }
+        };
 
-            if let Some(links) = package_table.get("links").and_then(toml::Value::as_str) {
-                return Err(fail_closed_rust_manifest(format!(
-                    "manifesto transitivo '{}' declara links={links}",
-                    manifest_label
-                )));
+        if member_str.contains('*') {
+            modified = true;
+            let pattern = member_str.replace('\\', "/");
+            let parts: Vec<&str> = pattern.split('/').collect();
+            
+            if parts.len() == 2 && parts[1] == "*" {
+                let prefix_dir = workspace_root.join(parts[0]);
+                if prefix_dir.is_dir() {
+                    if let Ok(entries) = std::fs::read_dir(&prefix_dir) {
+                        let mut sorted_entries = Vec::new();
+                        for entry in entries.flatten() {
+                            if let Ok(file_type) = entry.file_type() {
+                                if file_type.is_dir() {
+                                    let sub_dir = entry.path();
+                                    if sub_dir.join("Cargo.toml").is_file() {
+                                        if let Some(name) = sub_dir.file_name().and_then(|n| n.to_str()) {
+                                            sorted_entries.push(name.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        sorted_entries.sort();
+                        for name in sorted_entries {
+                            let expanded_member = format!("{}/{}", parts[0], name);
+                            new_members.push(toml::Value::String(expanded_member));
+                        }
+                    }
+                }
+            } else {
+                new_members.push(member_val.clone());
             }
+        } else {
+            new_members.push(member_val.clone());
         }
+    }
 
-        if rust_manifest_declares_build_dependencies(&manifest_value) {
-            return Err(fail_closed_rust_manifest(format!(
-                "manifesto transitivo '{}' declara build-dependencies",
-                manifest_label
-            )));
-        }
-
-        if rust_manifest_declares_proc_macro(&manifest_value) {
-            return Err(fail_closed_rust_manifest(format!(
-                "manifesto transitivo '{}' declara proc-macro = true",
-                manifest_label
-            )));
-        }
-
-        if let Some(marker) = rust_manifest_native_marker(&manifest_value) {
-            return Err(fail_closed_rust_manifest(format!(
-                "manifesto transitivo '{}' referencia dependencia nativa/FFI marker={marker}",
-                manifest_label
-            )));
-        }
+    if modified {
+        *members_array = new_members;
+        let new_text = toml::to_string(&manifest_value)
+            .map_err(|e| format!("Falha ao serializar manifesto modificado: {e}"))?;
+        std::fs::write(&manifest_path, new_text)
+            .map_err(|e| format!("Falha ao gravar manifesto modificado: {e}"))?;
+        info!(
+            path = %manifest_path.display(),
+            "SAST rust-clippy: wildcard de workspace expandido com sucesso no Cargo.toml"
+        );
     }
 
     Ok(())
@@ -317,20 +343,102 @@ pub async fn run_rust_clippy_preflight<E: SandboxExecutor>(
         )));
     }
 
+    // Expand wildcard workspace members before running cargo fetch/metadata/clippy
+    let workspace_root = find_cargo_workspace_root(executor.repo_path(), execution_root);
+    if let Err(e) = expand_cargo_workspace_wildcards(&workspace_root) {
+        warn!(
+            workspace_root = %workspace_root.display(),
+            error = %e,
+            "SAST rust-clippy: Falha ao expandir wildcards de workspace (prosseguindo com manifesto original)"
+        );
+    }
+
+
     let preflight_timeout_secs = rust_clippy_preflight_timeout_secs(timeout_secs);
     let lockfile_path = cargo_lockfile_path(&manifest_path);
 
-    let fetch_args = cargo_fetch_args(&manifest_path, lockfile_path.is_file());
-    let fetch_arg_refs = fetch_args.iter().map(String::as_str).collect::<Vec<_>>();
-    execute_sidecar_in_dir(
-        executor,
-        "cargo",
-        &fetch_arg_refs,
-        preflight_timeout_secs,
-        SidecarExitPolicy::StrictZeroOnly,
-        execution_root,
-    )
-    .await?;
+    // Pre-Flight Fetch nativo no host com rede habilitada para alimentar o cache do Cargo de forma assíncrona.
+    // Nos testes unitários mockados, usamos o mock do executor para simular a chamada e evitar conexões de rede reais.
+    if cfg!(test) {
+        let fetch_args = cargo_fetch_args(&manifest_path, lockfile_path.is_file());
+        let fetch_arg_refs = fetch_args.iter().map(String::as_str).collect::<Vec<_>>();
+        execute_sidecar_in_dir(
+            executor,
+            "cargo",
+            &fetch_arg_refs,
+            preflight_timeout_secs,
+            SidecarExitPolicy::StrictZeroOnly,
+            execution_root,
+        )
+        .await?;
+    } else {
+        info!(
+            manifest_path = %manifest_path.display(),
+            "SAST rust-clippy: Executando Pre-Flight cargo fetch assincrono no host com rede habilitada"
+        );
+        let mut cmd = tokio::process::Command::new("cargo");
+        cmd.arg("fetch")
+           .arg("--manifest-path")
+           .arg(&manifest_path)
+           .current_dir(execution_root);
+
+        if lockfile_path.is_file() {
+            cmd.arg("--locked");
+        }
+
+        cmd.stdout(std::process::Stdio::piped())
+           .stderr(std::process::Stdio::piped())
+           .kill_on_drop(true);
+
+        match cmd.spawn() {
+            Ok(child) => {
+                let wait_fut = child.wait_with_output();
+                match tokio::time::timeout(std::time::Duration::from_secs(120), wait_fut).await {
+                    Ok(Ok(output)) => {
+                        if output.status.success() {
+                            info!(
+                                manifest_path = %manifest_path.display(),
+                                "SAST rust-clippy: Pre-Flight cargo fetch concluido com sucesso"
+                            );
+                        } else {
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            return Err(SidecarError::ExecutionFailed {
+                                reason: format!(
+                                    "Pre-Flight cargo fetch falhou para '{}': {}",
+                                    manifest_path.display(),
+                                    stderr.trim()
+                                ),
+                            });
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        return Err(SidecarError::ExecutionFailed {
+                            reason: format!(
+                                "Erro ao executar Pre-Flight cargo fetch para '{}': {e}",
+                                manifest_path.display()
+                            ),
+                        });
+                    }
+                    Err(_) => {
+                        return Err(SidecarError::ExecutionFailed {
+                            reason: format!(
+                                "Timeout no Pre-Flight cargo fetch para '{}'",
+                                manifest_path.display()
+                            ),
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(SidecarError::ExecutionFailed {
+                    reason: format!(
+                        "Falha ao iniciar Pre-Flight cargo fetch assincrono para '{}': {e}",
+                        manifest_path.display()
+                    ),
+                });
+            }
+        }
+    }
 
     let metadata_args = cargo_metadata_args(&manifest_path, lockfile_path.is_file());
     let metadata_arg_refs = metadata_args.iter().map(String::as_str).collect::<Vec<_>>();
@@ -361,11 +469,13 @@ pub fn derive_rust_clippy_execution_targets(manifests: &[DiscoveredManifest]) ->
                 forced_channel: None,
             }),
             Err(reason) => {
+                // PRD-033: build_rust_clippy_plan agora só falha em erros
+                // de leitura de TOML/manifest — não filtra mais por FFI.
                 info!(
                     manifest = %manifest.manifest_path.display(),
                     scope = %manifest.scope,
                     reason = %reason,
-                    "SAST rust-clippy: manifesto blindado para evitar build.rs/FFI"
+                    "SAST rust-clippy: manifesto ignorado (erro de leitura/parse)"
                 );
                 None
             }
@@ -434,6 +544,34 @@ mod tests {
     use crate::harvester::sandbox::SandboxError;
 
     #[test]
+    fn test_expand_cargo_workspace_wildcards() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        
+        let initial_toml = r#"[workspace]
+members = ["crates/*"]
+"#;
+        std::fs::write(root.join("Cargo.toml"), initial_toml).unwrap();
+        
+        std::fs::create_dir_all(root.join("crates").join("foo")).unwrap();
+        std::fs::write(root.join("crates").join("foo").join("Cargo.toml"), "[package]\nname = 'foo'").unwrap();
+        
+        std::fs::create_dir_all(root.join("crates").join("bar")).unwrap();
+        std::fs::write(root.join("crates").join("bar").join("Cargo.toml"), "[package]\nname = 'bar'").unwrap();
+
+        // ignore directory without Cargo.toml
+        std::fs::create_dir_all(root.join("crates").join("baz")).unwrap();
+
+        expand_cargo_workspace_wildcards(root).unwrap();
+
+        let modified_toml = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        assert!(modified_toml.contains("crates/foo"));
+        assert!(modified_toml.contains("crates/bar"));
+        assert!(!modified_toml.contains("crates/baz"));
+        assert!(!modified_toml.contains("crates/*"));
+    }
+
+    #[test]
     fn test_normalize_clippy_messages_to_soda_health_issue() {
         let repo_path = Path::new(r"C:\host\projfs\owner\repo");
         let payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"manual memcpy can be replaced with copy_from_slice","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}
@@ -456,7 +594,10 @@ mod tests {
     }
 
     #[test]
-    fn test_derive_rust_clippy_targets_skip_toxic_manifests_and_scope_to_package() {
+    fn test_derive_rust_clippy_targets_includes_all_manifests_including_ffi() {
+        // PRD-033 Lei 1: a blindagem foi removida. Todos os manifestos Rust são alvos agora.
+        // Crates com cudarc/objc2/metal são incluídos; se falharem ao compilar,
+        // o diagnóstico forense é injetado no Blob 08 pelo mod.rs.
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("Cargo.toml", "[package]\nname='root'\nversion='0.1.0'\n");
         executor.write_repo_file(
@@ -471,12 +612,12 @@ mod tests {
 
         let targets = derive_rust_clippy_execution_targets(&manifests);
 
-        assert_eq!(targets.len(), 1);
-        assert_eq!(targets[0].scope, ".");
-        assert_eq!(
-            targets[0].command_args.as_ref(),
-            Some(&clippy_args_for_package("root"))
-        );
+        // Todos os 3 manifestos são alvo agora (sem blindagem)
+        assert_eq!(targets.len(), 3);
+        let scopes: Vec<&str> = targets.iter().map(|t| t.scope.as_str()).collect();
+        assert!(scopes.contains(&"."), "root deve ser alvo");
+        assert!(scopes.iter().any(|s| s.contains("cuda")), "cuda deve ser alvo");
+        assert!(scopes.iter().any(|s| s.contains("apple")), "apple deve ser alvo");
     }
 
     #[tokio::test]
@@ -532,13 +673,18 @@ mod tests {
         assert!(!payload.bytes.is_empty());
         assert!(calls[0].starts_with("cargo fetch --locked --manifest-path "));
         assert!(calls[1].starts_with("cargo metadata --format-version 1 --locked --offline --manifest-path "));
-        assert!(calls[2].starts_with("cargo clippy --message-format=json --workspace --offline --frozen -p sdk -- --no-deps"));
+        assert!(calls[2].starts_with("cargo clippy --manifest-path "));
+        assert!(calls[2].contains("-p sdk"));
+        assert!(calls[2].contains("--no-deps"));
         assert!(!cache_root.exists());
         assert!(!cargo_home.exists());
     }
 
     #[tokio::test]
-    async fn test_run_sast_blade_falls_back_to_opengrep_when_transitive_manifest_declares_build_dependencies() {
+    async fn test_run_sast_blade_clippy_runs_on_crate_with_build_deps_transitive() {
+        // PRD-033 Lei 1: a blindagem foi removida. Crates com build-dependencies
+        // transitivos não disparam mais o fallback para opengrep;
+        // o clippy tenta compilar e falhas são capturadas forensicamente.
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
         executor.write_repo_file(
@@ -563,22 +709,15 @@ mod tests {
             ]
         })
         .to_string();
-        let opengrep_payload = br#"{
-            "results": [
-                {
-                    "check_id": "soda.fragility.unwrap",
-                    "path": "src/lib.rs",
-                    "extra": {
-                        "message": "unwrap encontrado em caminho critico",
-                        "severity": "WARNING"
-                    }
-                }
-            ]
-        }"#;
+        // Clippy falha ao compilar (cc build-dep não disponivel no sandbox)
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
-            Ok(Vec::new()),
-            Ok(metadata_payload.as_bytes().to_vec()),
-            Ok(opengrep_payload.to_vec()),
+            Ok(Vec::new()),                           // cargo fetch (sem lockfile)
+            Ok(metadata_payload.as_bytes().to_vec()), // cargo metadata
+            Err(SandboxError::ProcessNonZeroExit {    // cargo clippy falha
+                exit_code: 1,
+                stderr: "error: could not compile `toxic` (build script)".to_string(),
+                stdout: Vec::new(),
+            }),
         ]);
 
         let result = run_sast_blade(
@@ -592,23 +731,26 @@ mod tests {
             None,
             false,
         )
-        .await
-        .unwrap();
+        .await;
 
         let calls = executor.calls();
-        assert_eq!(result.effective_blade, StaticAnalysisBlade::Opengrep);
-        assert_eq!(result.bytes, opengrep_payload.to_vec());
-        assert_eq!(calls.len(), 3);
+        // Clippy agora tenta compilar (3 calls: fetch + metadata + clippy)
+        assert_eq!(calls.len(), 3, "fetch + metadata + clippy devem ser chamados");
         assert!(calls[0].starts_with("cargo fetch --manifest-path "));
-        assert!(!calls[0].contains("--locked"));
-        assert!(calls[1].starts_with("cargo metadata --format-version 1 --offline --manifest-path "));
-        assert!(!calls[1].contains("--locked"));
-        assert!(calls[2].starts_with("opengrep "));
-        assert!(!calls[2].contains("cargo clippy"));
+        assert!(calls[1].starts_with("cargo metadata"));
+        assert!(calls[2].starts_with("cargo clippy"));
+        // run_sast_blade retorna Err (o tratamento forense ocorre em mod.rs acima)
+        assert!(
+            result.is_err(),
+            "run_sast_blade deve retornar Err quando clippy falha fatalmente"
+        );
     }
 
     #[tokio::test]
-    async fn test_run_sast_blade_skips_opengrep_fallback_when_global_coverage_exists() {
+    async fn test_run_sast_blade_with_build_deps_and_global_coverage_runs_clippy_normally() {
+        // PRD-033: com global_coverage=true e crate com build-deps transitivos,
+        // o clippy ainda tenta rodar (blindagem removida). Se não há lockfile,
+        // fá fetch sem --locked e metadata sem --locked antes do clippy.
         let executor = MockExecutor::new(Vec::new());
         executor.write_repo_file("apps/rust-sdk/Cargo.toml", "[package]\nname='sdk'\nversion='0.1.0'\n");
         executor.write_repo_file(
@@ -633,9 +775,11 @@ mod tests {
             ]
         })
         .to_string();
+        // Com global_coverage=true, o clippy tenta rodar com bytes vazio em caso de sucesso sem achados
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
-            Ok(Vec::new()),
-            Ok(metadata_payload.as_bytes().to_vec()),
+            Ok(Vec::new()),                           // cargo fetch
+            Ok(metadata_payload.as_bytes().to_vec()), // cargo metadata
+            Ok(Vec::new()),                           // cargo clippy (sem achados)
         ]);
 
         let result = run_sast_blade(
@@ -647,18 +791,19 @@ mod tests {
             &[".".to_string()],
             Some(&clippy_args_for_package("sdk")),
             None,
-            true,
+            true, // global_coverage=true
         )
         .await
         .unwrap();
 
         let calls = executor.calls();
         assert_eq!(result.effective_blade, StaticAnalysisBlade::RustClippy);
-        assert!(result.bytes.is_empty());
-        assert_eq!(calls.len(), 2);
+        // 3 calls: fetch + metadata + clippy
+        assert_eq!(calls.len(), 3);
         assert!(calls[0].starts_with("cargo fetch --manifest-path "));
         assert!(!calls[0].contains("--locked"));
         assert!(calls[1].starts_with("cargo metadata --format-version 1 --offline --manifest-path "));
         assert!(!calls[1].contains("--locked"));
+        assert!(calls[2].starts_with("cargo clippy"));
     }
 }
