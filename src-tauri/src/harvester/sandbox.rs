@@ -921,6 +921,20 @@ fn spawn_in_appcontainer_blocking(
         .chain(args.iter().map(|a| escape_cmd_arg(a)))
         .collect::<Vec<String>>()
         .join(" ");
+    // L14: Garantia anti-aspa. Se escape_cmd_arg falhou em detectar que o program
+    // precisa de quoting (path com espaço/backslash mal interpretado), o cmd_str
+    // não começará com '"'. Recuperamos o comando encontrando o primeiro espaço
+    // (delimitações program vs args) e re-quotando apenas o program.
+    let cmd_str = if !cmd_str.starts_with('"') {
+        if let Some(pos) = cmd_str.find(' ') {
+            let (prog, args_part) = cmd_str.split_at(pos);
+            format!("\"{}\"{}", prog, args_part)
+        } else {
+            format!("\"{}\"", cmd_str)
+        }
+    } else {
+        cmd_str
+    };
     let mut cmd_wide: Vec<u16> = str_to_wide(&cmd_str);
     let clean_cwd = dunce::canonicalize(&cwd).unwrap_or(cwd.to_path_buf());
     let final_cwd_string = clean_cwd.to_string_lossy().replace(r"\\?\", "").replace(r"\?\", "");
@@ -2118,6 +2132,12 @@ fn build_semgrep_env(repo_path: &Path) -> BTreeMap<String, String> {
             "SEMGREP_SETTINGS_FILE".to_string(),
             semgrep_dir.join("settings.yml").display().to_string(),
         ),
+        // L14: Desabilita version check de rede (phone-home) que causa timeout de 120s
+        // quando o sandbox não tem acesso à internet.
+        (
+            "SEMGREP_ENABLE_VERSION_CHECK".to_string(),
+            "0".to_string(),
+        ),
     ])
 }
 
@@ -3069,14 +3089,20 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
 
         let mut extra_acl_paths = Vec::new();
 
-        // Vacina contra asfixia de permissão NTFS (Node e NPM Global) no AppContainer
-        if let Ok(path_env) = std::env::var("PATH") {
-            for p in std::env::split_paths(&path_env) {
-                let node_path = p.join("node.exe");
-                if node_path.is_file() {
-                    debug!(node_dir = %p.display(), "AppContainer: detectado runtime Node.js no PATH. Concedendo ACL NTFS de leitura.");
-                    extra_acl_paths.push(p);
-                    break;
+        // L14: Vacina contra asfixia de permissão NTFS (Node e NPM Global) no AppContainer.
+        // ESTE BLOCO DEVE EXECUTAR APENAS para ferramentas que genuinamente precisam do runtime JS
+        // (jest, vitest). Ferramentas nativas (opengrep, bandit, ruff, biome) NÃO usam Node.js
+        // e não devem receber ACL para C:\Program Files\nodejs\.
+        let needs_js_runtime = matches!(command, "jest" | "vitest");
+        if needs_js_runtime {
+            if let Ok(path_env) = std::env::var("PATH") {
+                for p in std::env::split_paths(&path_env) {
+                    let node_path = p.join("node.exe");
+                    if node_path.is_file() {
+                        debug!(node_dir = %p.display(), "AppContainer: detectado runtime Node.js no PATH. Concedendo ACL NTFS de leitura.");
+                        extra_acl_paths.push(p);
+                        break;
+                    }
                 }
             }
         }
@@ -3496,7 +3522,15 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         // Testa se o binário alvo consegue executar na gaiola. Usa o
         // próprio resolved_program com --version (não cmd.exe, pois LPAC bloqueia System32).
         // Executado FORA e APÓS a liberação do setup_permit do semáforo.
-        {
+        //
+        // L14: Bypass para ferramentas do arsenal local e ferramentas que não suportam
+        // --version de forma confiável no AppContainer. Estas ferramentas são localmente
+        // instaladas e confiáveis — o dry-run é redundante.
+        const DRY_RUN_BYPASS_TOOLS: &[&str] = &[
+            "biome", "oxlint", "ruff", "opengrep", "clippy", "govulncheck",
+        ];
+        let skip_dry_run = DRY_RUN_BYPASS_TOOLS.contains(&command);
+        if !skip_dry_run {
             let dry_run_program = resolved.program.clone();
             let mut cmd = tokio::process::Command::new(&dry_run_program);
             cmd.current_dir(&execution_root_clean);
@@ -3554,8 +3588,13 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     });
                 }
             }
+        } else {
+            debug!(
+                command,
+                program = %resolved.program.display(),
+                "AppContainer: dry-run pulado para ferramenta do arsenal local (bypass confiavel)"
+            );
         }
-
 
         // ── Passo 6: Spawn em AppContainer (spawn_blocking — anti-deadlock Tokio) ──
         // Toda lógica bloqueante de Win32 ocorre dentro de spawn_blocking.

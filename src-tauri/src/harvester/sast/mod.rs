@@ -1898,11 +1898,21 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
         Err(SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout }) => {
             let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
             let sanitized_stderr = sanitize_host_paths_in_text(executor.repo_path(), &stderr);
+            // L14: Fail-Soft para lâminas SAST. Se stdout contém dados (payload de achados),
+            // o processo é considerado sucesso mesmo com exit code 1 ou 7.
+            // Isso trata biome, ruff, opengrep e outras ferramentas que retornam exit_code=1
+            // quando encontram vulnerabilidades.
+            let has_findings_payload = !stdout_is_blank(&sanitized_stdout);
+            let is_sast_tool_with_findings = matches!(binary, "biome" | "ruff" | "bandit" | "opengrep" | "semgrep" | "cppcheck" | "oxlint" | "sobelow" | "govulncheck");
+            let is_informational_exit = exit_code == 1 || exit_code == 7;
+            let should_capture_payload = has_findings_payload && is_sast_tool_with_findings && is_informational_exit;
+            
             if ((binary == "semgrep" || binary == "opengrep")
                 && !stdout_is_blank(&sanitized_stdout)
                 && stdout_contains_json_payload(&sanitized_stdout))
                 || (exit_code == 1 && matches!(exit_policy, SidecarExitPolicy::AllowFindingsExitOne) && (!stdout_is_blank(&sanitized_stdout) || (binary == "cppcheck" && !sanitized_stderr.is_empty())))
                 || (binary == "opengrep" && exit_code == 7)
+                || should_capture_payload
             {
                 if binary == "cppcheck" {
                     let mut merged = sanitized_stderr.into_bytes();

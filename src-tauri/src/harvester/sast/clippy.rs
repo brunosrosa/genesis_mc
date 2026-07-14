@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::harvester::router::StaticAnalysisBlade;
 use super::{SandboxExecutor, SidecarError, SidecarExitPolicy, SastExecutionTarget, SodaHealthIssue, execute_sidecar_in_dir, parse_json_payload, push_issue, sort_and_dedup_issues, sanitize_host_paths_in_text, DiscoveredManifest, ManifestKind};
@@ -440,15 +440,44 @@ pub async fn run_rust_clippy_preflight<E: SandboxExecutor>(
         }
     }
 
-    let metadata_args = cargo_metadata_args(&manifest_path, lockfile_path.is_file());
-    let metadata_arg_refs = metadata_args.iter().map(String::as_str).collect::<Vec<_>>();
+    // L14: Inteligência Topológica de Workspace (ADR-025).
+    // O cargo metadata com --manifest-path pointing to a sub-crate of a workspace
+    // RETURNS exit_code=1 because it can't resolve workspace members from a sub-crate manifest.
+    // We MUST run cargo metadata from the WORKSPACE ROOT (no --manifest-path) to get
+    // proper workspace member information. This is the CORRECT behavior, not a band-aid.
+    let metadata_run_dir: &std::path::Path;
+    let metadata_args_for_run: Vec<String>;
+
+    let ws_root = find_cargo_workspace_root(executor.repo_path(), execution_root);
+    if ws_root != execution_root {
+        // Workspace detectado — executar cargo metadata a partir da RAIZ do workspace
+        // SEM --manifest-path para que o cargo auto-descubra todos os membros do workspace.
+        // Passing --manifest-path pointing to a sub-crate from the workspace root still
+        // causes cargo to only show that sub-crate's view (exit_code=1 on full workspaces).
+        debug!(
+            execution_root = %execution_root.display(),
+            workspace_root = %ws_root.display(),
+            "SAST rust-clippy: Detectado workspace. Executando cargo metadata a partir da raiz do workspace."
+        );
+        metadata_run_dir = ws_root.as_path();
+        // Build args WITHOUT --manifest-path and WITHOUT --locked for workspace root.
+        // The --locked flag is unsafe for workspace root (may not have a lockfile for root).
+        metadata_args_for_run = vec!["metadata".to_string(), "--format-version".to_string(), "1".to_string(), "--offline".to_string()];
+    } else {
+        // Não é workspace — usar o manifest do sub-crate como antes.
+        metadata_run_dir = execution_root;
+        metadata_args_for_run = cargo_metadata_args(&manifest_path, lockfile_path.is_file());
+    }
+
+    let metadata_arg_refs = metadata_args_for_run.iter().map(String::as_str).collect::<Vec<_>>();
+
     let metadata_bytes = execute_sidecar_in_dir(
         executor,
         "cargo",
         &metadata_arg_refs,
         preflight_timeout_secs,
         SidecarExitPolicy::StrictZeroOnly,
-        execution_root,
+        metadata_run_dir,
     )
     .await?;
 

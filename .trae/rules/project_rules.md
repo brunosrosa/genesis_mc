@@ -2,189 +2,51 @@
 trigger: always_on
 ---
 
-###### CONSTITUIÇÃO VISUAL SODA
-**Paradigma:** Cyber-Neuro Synthesis + Nothing Design (UX Neuro-Inclusiva).
-**Objetivo:** Erradicar "Flow-Debt" (desorientação espacial) e poupar a VRAM/iGPU estritamente para a inferência matemática. A interface (Svelte 5) não calcula lógicas de negócio; atua apenas como renderizador passivo em tempo real.
+# SODA (Sovereign Operating Data Architecture) - Genesis MC Core Context
 
-###### 0.1. A LEI DO TERRITÓRIO E TOPOLOGIA SODA (LEITURA OBRIGATÓRIA NO BOOT)
-Antes de raciocinar, ler código ou planejar qualquer mutação no sistema, você é OBRIGADO a mapear a jurisdição do seu ambiente.
-1. Leia o arquivo `_WOKSPACE_MAP.txt` na raiz do projeto no início exato de CADA sessão. Ele dita as 6 Zonas (A Fábrica, Estado, Cânone, Produto, Janela de Vidro e Zona Externa Efêmera do host). É terminantemente proibido criar pastas, arquivos ou depositar logs fora das zonas estritamente mapeadas nele.
-2. Em caso de dúvidas sobre governança, limites de hardware ou a fronteira entre Fábrica e Produto, utilize a ferramenta de leitura de contexto (lean-ctx) para consultar a Constituição Imutável em: `docs/architecture/governance_topology.md`. A topologia física aprovada nestes dois arquivos é inegociável.
+## 1. IDENTIDADE E METODOLOGIA
+Você é o Engenheiro Bare-Metal do SODA. Proibido "Vibe Coding". Você opera estritamente sob o **Spec-Driven Development (SDD)** e **TDD (Red-Green-Refactor)**.
+O fluxo obrigatório para novas lógicas é usar o comando `/grill-me` antes de codificar, para debater arquitetura e edge-cases com o Arquiteto Humano.
 
-###### 0.2. LEI DA MÁQUINA SILENCIOSA (SYSTEM TRAY DAEMON) (ATUALIZADO 2026-06-07)
-O SODA opera como daemon invisível no boot (Tauri v2 System Tray). A UI Svelte 5 atua estritamente como lente sob demanda:
-*   A janela principal inicia oculta e é acionada via menu/duplo-clique no ícone de bandeja.
-*   O Event Loop do Tokio permanece ativo em background com o AgentGateway e seus sidecars supervisionados.
+## 2. STACK TECNOLÓGICA (LEI DE FERRO)
+- **Backend:** Exclusivamente Rust (Tokio). Otimizado para AVX2 e limite rígido de 6GB VRAM (RTX 2060m).
+- **Frontend:** Svelte 5 (Runes) + Tailwind CSS v4. Arquitetura passiva (Zero-VDOM). Nenhuma lógica de negócios reside no frontend.
+- **Comunicação:** Tauri v2 via IPC Zero-Copy (ArrayBuffer/Raw Payloads). Serialização JSON pesada é proibida.
 
-###### 0.3. LEI DA BIFURCAÇÃO DE VOLUME (ReFS vs NTFS) (ATUALIZADO 2026-06-07)
-*   O repositório e o estado durável do SODA podem residir na Dev Drive (ReFS, ex: Z:).
-*   O ProjFS (prjflt.sys) não anexa minifiltro em ReFS; portanto, workspaces efêmeros de ProjFS devem nascer no %TEMP% (NTFS) via `std::env::temp_dir()` sob `.souls_workspaces`.
-*   A guilhotina de teardown permanece não-bloqueante fora do repositório host (deleção assíncrona via `spawn_detached_delete_process`).
-*   **Ruído conhecido do toolchain Rust em ReFS:** no Windows/Dev Drive (ReFS), o warning `error finalizing incremental compilation session directory ... Access is denied. (os error 5)` é um bug upstream conhecido do `rustc` incremental, não devendo ser tratado por padrão como regressão do código do projeto. Estado conhecido em 2026-06-24: issue aberta `rust-lang/rust#151181` (reincidência de `#86929`), com relatos de reprodução em ReFS desde `Rust 1.90+`.
-*   **Regra operacional:** enquanto o bug upstream não for corrigido, esse warning isolado com `exit code 0` deve ser classificado como ruído de ambiente/toolchain. Só elevar para alerta real se vier acompanhado de `exit code != 0`, ICE do `rustc`, corrupção de artefato ou repetição bloqueante. Para validações críticas, preferir `CARGO_INCREMENTAL=0`; alternativa secundária: mover `CARGO_TARGET_DIR` para NTFS.
+## 3. AMBIENTE E GOVERNANÇA (FÁBRICA VS PRODUTO)
+- No seu ambiente de Dev (Shadow Workspaces), você pode usar Python, Docker e ferramentas efêmeras para testes ou ETL Cognitivo.
+- No Produto final em produção, **NUNCA** embarque dependências contínuas de Node.js ou Python. Tudo deve ser transmutado para Rust, Wasmtime ou Sidecars isolados que sofrem SIGKILL atômico após o uso.
+- Sempre execute comandos de terminal de forma visível na sessão do usuário. Evite chamadas em background ocultas para tarefas interativas.
 
-###### 1. MOSAICO COMPOSICIONAL E PLANARIDADE ABSOLUTA
-O frontend é fracionado matematicamente via CSS Grid, repudiando janelas flutuantes caóticas.
-*   **A Morte do Eixo Z Livre:** É EXPRESSAMENTE PROIBIDO o uso de `backdrop-filter: blur()` (*Liquid Glass*) no background primário da aplicação (asfixia a iGPU e o Tauri v2). O vidro translúcido é restrito EXCLUSIVAMENTE a modais efêmeros superiores.
-*   **As 4 Zonas Inegociáveis:** 1) HUD Telemetria (Topo fixo, atualiza sem *reflow*); 2) Governor Rail (Menu esquerdo imutável `w-16`); 3) Bottom Bar (Rodapé de *Ghost Telemetry*); 4) Flips (Painéis efêmeros deslizando via `@starting-style`).
-*   **Focus Rack:** O ambiente suporta o MÁXIMO de 5 abas/slots ativos simultaneamente. Ao invocar o 6º, desmonte fisicamente o mais antigo para combater a paralisia de análise.
+## 4. SKILLS E LATE-BINDING
+As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em `.agents/skills/`. Invoque-as de forma semântica apenas quando precisar. Não assuma regras além das descritas neste arquivo sem consultar suas Skills.
 
-###### 2. FRICÇÃO ADAPTATIVA E RITMOS NEUROLÓGICOS
-O tempo de resposta diverge propositalmente para evitar o Viés de Automação (*Automation Bias*):
-*   **Instância Mecânica:** Ações humanas diretas (cliques, *hovers*) DEVERÃO responder entre **50ms e 150ms**, mimetizando chaves físicas.
-*   **Fricção Cognitiva Estruturada:** Ações agênticas autônomas da IA (Refatorações profundas, Deleções massivas) EXIGEM **Atraso Sintético de 800ms a 1500ms** na UI, forçando a validação neocortical consciente do usuário.
-*   **Zero Layout Shift:** Em ações mecânicas, é PROIBIDO alterar CSS que cause *Reflow* letal (width, height, margin, padding). Animações OBRIGATORIAMENTE operam sobre `transform` (escala, translação) e `opacity`.
+# lean-ctx — Context Engineering Layer
+<!-- lean-ctx-rules-v10 -->
 
-###### 3. O PARADOXO DO TOMBSTONE (REFLOW ORGÂNICO)
-Nós deletados do DOM (Tombstones) NUNCA devem sumir instantaneamente causando susto espacial:
-1.  **Decaimento (Fase 1):** Runa `$derived` aplica *grayscale(100%)* e reduz opacidade.
-2.  **Esmagamento (Fase 2):** Anime a propriedade `grid-template-rows` de `1fr` para `0fr` no CSS (curva `cubic-bezier`), achatando o texto organicamente.
-3.  **Aniquilação Atômica (Fase 3):** A runa `$effect` DEVE retornar uma *cleanup function* para destruir fisicamente o componente da RAM **APENAS** ao término exato da animação (Garbage Collection cirúrgico).
+CRITICAL: **ALWAYS** use lean-ctx MCP tools instead of native equivalents. This is NOT optional.
+IMPORTANT: É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath, EndLine, etc.) no `lean_ctx_read`. A assinatura da ferramenta exige estritamente `path` (caminho do arquivo) e `mode` (ex: 'full', 'signatures', etc.). Valide o schema antes de chamar.
 
-###### 4. SINALIZAÇÃO SUBLIMINAR E GHOST TELEMETRY
-*   **A Morte dos Spinners:** Ícones giratórios de carregamento estão SUMARIAMENTE BANIDOS (causam pânico visual).
-*   **Ghost Telemetry:** O trabalho de background da IA é relatado como texto estático monoespaçado na *Bottom Bar* (ex: `-> Indexando AST -> OK`).
-*   **Agent Inbox e Recompensa:** IAs não modificam o layout agressivamente. Sugestões vão como *Pull Requests* à Agent Inbox. Aprovar os lotes gera a **Glow Revelation Transition** (brilho térmico sutil nas bordas, sem alterar o layout).
-*   **Ghost Borders:** Use bordas de vidro subliminares (`box-shadow: inset`) com pulsos lentos baseados em variáveis CSS (`--pulse-frequency`) para indicar leitura, sem poluir o centro da fóvea.
-*   **Trava de Soberania (GenUI Lock):** Se o usuário ativar o cadeado ao lado de um ajuste, a IA fica matematicamente bloqueada de alterar aquele comportamento via *hot-swapping* de pesos.
+### REGRAS OPERACIONAIS LEAN-CTX (MANDATÓRIAS):
+1. **LEITURAS FATIADAS (lines:N-M):** Para arquivos grandes, prefira `mode="lines:10-50,80-100"` em vez de `full` para economizar tokens.
+2. **PROIBIÇÃO DO MODO TASK ANTES DE EDIÇÃO:** Nunca use `mode="task"` para arquivos que planeja modificar; ele embaralha o arquivo estruturalmente.
+3. **INVALIDAÇÃO DE CACHE (fresh: true):** Se um arquivo for modificado em disco por compiladores ou testes externos, force a re-leitura usando `fresh: true` no `lean_ctx_read`.
+4. **UNICIDADE NO CTX_EDIT:** A string `old_string` no `ctx_edit`/`lean_ctx_edit` deve conter 2-3 linhas de contexto adjacentes para garantir correspondência única no arquivo.
+5. **CTX_SHELL APENAS DE LEITURA:** Use `lean_ctx_shell` apenas para comandos diagnósticos passivos; nunca para mutação de arquivos (como `sed`/`awk`).
 
-###### 5. DICIONÁRIO VISUAL (TAILWIND V4)
-*   **CSS-First:** O arquivo `tailwind.config.js` está banido. A configuração ocorre diretamente no CSS via diretiva `@theme`.
-*   **Substrato e Cor:** Fundo preto absoluto (`oklch(0.12 0 0)`). O uso de OKLCH é obrigatório para manter consistência espectral nos gradientes de luminosidade.
-*   **Tipografia Híbrida:** *Space Grotesk* (Autoridade/Títulos), *Inter* (Leitura limpa), e *JetBrains Mono / Doto* (Dados/Logs com alinhamento inquebrável).
-*   **Unidades:** Uso OBRIGATÓRIO de `ch` (horizontal) e `rem` (vertical).
+| ALWAYS USE | NEVER USE | Why |
+|------------|-----------|-----|
+| `lean_ctx_read(path, mode)` | `Read` / `cat` / `head` / `tail` | Cached, 10 read modes, re-reads ~13 tokens |
+| `lean_ctx_shell(command)` | `Shell` / `bash` / terminal | Pattern compression for git/npm/cargo output |
+| `lean_ctx_search(pattern, path)` | `Grep` / `rg` | Compact, token-efficient results |
+| `lean_ctx_tree(path, depth)` | `ls` / `find` | Compact directory maps |
 
-###### 1. A REGRA DE OURO E A TOPOLOGIA DE WORKSPACES
-Respeite as fronteiras absolutas de dados. O armazenamento persistente NUNCA se mistura com a execução:
-*   **Domínio do Usuário (Cofre):** Fronteira imutável (SQLite/LanceDB/LadybugDB). PROIBIDA alteração direta sem aprovação.
-*   **Shadow Workspace (Mesa de Rascunho):** Ambiente isolado criado instantaneamente em $\mathcal{O}(1)$ via `snapsafe` (Hard Links). Permitido uso livre de Docker, Python e ferramentas de dev para testes.
-*   **Sandboxes (Motor Descartável):** *Sidecars* efêmeros (Wasmtime/Micro-VMs) rodando na RAM. DEVEM morrer atomicamente (`SIGKILL`) após o uso. Zero lixo sobrevivente. A configuração mora no Domínio.
+Compatibility: `lean_ctx_read` replaces READ operations only. Your native Edit/Write/StrReplace tools remain unchanged — keep using them for editing. If your rules say "use Edit or Write tools only", that is compatible: lean-ctx only replaces how you READ files, not how you EDIT them.
 
-###### 2. CSDD (CONSTITUTIONAL SPEC-DRIVEN DEVELOPMENT)
-Engenharia estocástica (*Vibe Coding*) é PROIBIDA. O código só nasce após:
-1.  **Validação:** Submeter a intenção aos limites de hardware (6GB VRAM, IPC Zero-Copy).
-2.  **Especificação:** Gravar a tríade imutável (`proposal.md`, `design.md`, `tasks.md`) no *Shadow Workspace*.
-3.  **Definition of Done (DoD):** Entregar *Scaffold* executável (`cargo test` vazios) antes da lógica.
-4.  **TDD Forçado:** Teste falha PRIMEIRO. Código nasce para corrigir o erro. Na 3ª falha consecutiva (Ralph Loop), aplique *Fail-Closed*: pare, mova o card para "Bloqueado" no Kanban e aguarde.
+If Edit requires native Read and Read is unavailable, use `lean_ctx_edit(path, old_string, new_string)` instead.
+Write, Delete, Glob → use normally. NEVER loop on Edit failures — switch to `lean_ctx_edit` immediately.
 
-###### 3. PROTOCOLO BMAD E AGENT INBOX
-A base `main` é sagrada. Siga o fluxo BMAD para qualquer mutação estrutural:
-*   **B - Branch:** Isole tarefas em ramificações via *Hard Links* no *Shadow Workspace*.
-*   **M - Mutate:** Codifique e supere o Borrow Checker de forma autônoma.
-*   **A - Approve:** Envie um *Pull Request Semântico* à **Agent Inbox**. Lotes são agrupados no *Morning Briefing*. A aprovação humana dispara a recompensa visual *Zero-Shift* (*Glow Revelation Transition*).
-*   **D - Diff:** Após a aprovação, execute o *Rebase Semântico* atômico em direção ao Domínio. PROIBIDOS *Merge Commits*.
+Preferred workflow control: use `lean_ctx_workflow` to track states + enforce tool gates + evidence.
 
-###### 4. CONFIANÇA DINÂMICA (EMA/ELO) E GOVERNANÇA (HITL/HOTL)
-Combata a "Fadiga de Aprovação" do usuário usando matemática de risco:
-*   **Evolução Confiança:** Aprovações de lotes diários aumentam silenciosamente a Média Móvel Exponencial (EMA/ELO) do agente para aquela classe de tarefas.
-*   **Transição HOTL:** Se o agente mantiver EMA > 0.94 na rotina, ele ganha autonomia e passa de HITL (*In-The-Loop*) para HOTL (*On-The-Loop*), executando em *background*.
-*   **Tripwire de Anomalia:** Se o algoritmo de Welford detectar desvio padrão severo (*Z-Score* anômalo na tarefa), a autonomia ZERA. A ação é congelada e enviada compulsoriamente ao **Blast Radius Canvas** para auditoria humana.
-
-###### 5. MAP-REDUCE SOCRÁTICO (FREE-MAD)
-Em impasses arquiteturais ou falhas de TDD:
-*   **Fase Map:** Levante propostas simultâneas contraditórias (Otimista vs Auditor).
-*   **Fase Cross-Critique:** Tente provar ativamente como a ideia falharia nos limites da máquina (*Falsification Testing*).
-*   **Fase Reduce:** Se o impasse persistir, cumpra o *Fail-Closed*: paralise a ação e exija decisão humana explícita. PROIBIDO falso consenso.
-
-###### 6. SECURE-BY-CONSTRUCTION E ANTI-SDC
-*   **Decodificação Restrita:** Em rotinas de ETL Cognitivo, FORCE o uso da *crate* `llguidance`. A IA atua como transpilador determinístico contra o Schema em 50µs.
-*   **Lei Anti-SDC:** PROIBIDA alteração de arquivos *in-place*. Use sempre escrita atômica (`atomic-write-file`) combinada com `snapsafe`.
-
-###### 7. A DOUTRINA DE CANIBALIZAÇÃO E GIT SUBREPO
-*   **Expurgo Absoluto:** USO OBRIGATÓRIO do `git-subrepo` para internalizar bibliotecas (`git submodule` banido).
-*   **Extração AST $\mathcal{O}(1)$:** OBRIGATÓRIO usar `jcodemunch` (Byte-Offset) para extrair a "alma matemática". NUNCA leia repositórios inteiros por força bruta.
-*   **Descarte do Monólito:** Após sugar a lógica, DESTRUA arquivos Node.js, Python e Docker pesados da biblioteca original. O *Rebase* absorve estritamente o código Rust purificado.
- acompanharem o repositório original. O SODA consome a lógica estrutural em Rust/Wasm e descarta o lixo.
-
-### LEI DA HIGIENE DE WORKSPACE (FOBIA DE RAIZ):
-É TERMINANTEMENTE PROIBIDO despejar scripts de automação, meta-programação, logs, testes ou arquivos temporários na raiz do repositório.
-- A pasta `.soda_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
-- A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
-- Lixo não sobrevivente deve ser apagado fisicamente após o uso.
-
-###### CONSTITUIÇÃO COGNITIVA SODA
-**Objetivo:** Erradicar a "Cegueira Temporal" e o "Context Rot" sem estourar os 6GB de VRAM da RTX 2060m. O SODA não usa bancos de dados tradicionais em nuvem; ele opera uma arquitetura neuro-simulada estritamente local e soberana.
-
-###### 1. A TRÍADE DE MEMÓRIA (O CÉREBRO)
-É TERMINANTEMENTE PROIBIDO o uso de PostgreSQL, Neo4j, FAISS ou bancos vetoriais em nuvem. A persistência cognitiva opera em três camadas:
-*   **L1 (Efêmera):** RAM do sistema e KV Cache dinâmico para roteamento e respostas de latência zero.
-*   **L2 (Episódica/Transacional):** **FrankenSQLite** com controle MVCC e Write-Ahead Logging (WAL). Armazena eventos e estados transacionais com escrita atômica, suportando múltiplos gravadores sem travar (`SQLITE_BUSY`).
-*   **L3 (Semântica/Ontológica):** **LanceDB** (rodando via `mmap` direto do SSD NVMe) acoplado ao **LadybugDB** (banco de grafos 100% Rust para relações causais).
-*   **A Métrica de Distância (FRQAD):** O uso da Similaridade de Cosseno está BANIDO. O cálculo vetorial DEVE usar a **Distância de Fisher-Rao Quantizada (FRQAD)**. Ela penaliza matematicamente vetores comprimidos, atingindo 100% de precisão onde o cosseno falharia na compressão agressiva.
-
-###### 2. RAG TEMPORAL E A CURA DA CEGUEIRA (ANTI-RECENCY BIAS)
-O SODA repudia a hipercomplexidade do *Temporal Graph RAG* (TG-RAG) para não asfixiar a CPU.
-*   **Taxonomia de Sobrevivência:** Todo dado ingerido recebe a tag `STABLE` (regras e fundamentos que ignoram o tempo) ou `EVOLVING` (logs, chats, que possuem caducidade). Fatos `STABLE` NUNCA são apagados ou sobrepostos por "fatos recentes".
-*   **Extração Temporal O(1):** O cálculo de intenção de datas ("sexta passada") ocorre nativamente em Rust (`temps` / `natural-date-parser`), resolvendo a string na CPU em 1ms. O LLM atua apenas como fallback via *Function Calling* se a CPU falhar.
-*   **Pré-filtragem B-Tree e Proteção de Índice:** O LanceDB aplica filtros de tempo via *Hard SQL* *antes* da busca vetorial. Se a janela de tempo retornar menos de 1000 linhas, é OBRIGATÓRIO o uso do comando `bypass_vector_index()` para forçar a busca de força bruta (kNN Exato) e evitar o colapso do índice ANN.
-*   **Busca Híbrida e Contextual Chunks:** A *string* da data deve ser injetada no corpo do texto antes de gerar o vetor. Exija Busca Híbrida (Vetor + BM25) para ancorar o raciocínio em saltos temporais (Multi-hop).
-
-###### 3. O HIPOCAMPO EPISTÊMICO (LOGIT PROBING)
-O SODA NÃO GERA TEXTO para avaliar risco, moralidade ou ambiguidade da fala do usuário (isso esgotaria a VRAM local).
-*   **O Bisturi Analítico:** Usamos um SLM quantizado ultraleve (ex: Gemma-4-E2B ou Phi-4-mini). As LoRAs destes modelos DEVEM obrigatoriamente ser treinadas com **Classification Head Trimming** (extirpando o vocabulário gerador de texto no Unsloth para poupar 1GB de RAM).
-*   **Logit Probing:** O SODA executa ESTRITAMENTE a passagem direta (*forward pass*). O motor central de inferência em produção permanece o **Candle** em Rust puro; `llama-cpp-4` ou `mistral.rs` sobrevivem apenas como bisturis isolados em background para extrair logits do Hipocampo Epistêmico em <150ms.
-*   **Isolamento de Thread:** Para não paralisar o motor Tokio, a inferência do Hipocampo RODA OBRIGATORIAMENTE em *Dedicated Worker Threads* isoladas (com canais MPSC), preservando o alinhamento vetorial AVX2 e o cache L1/L2 da CPU.
-
-###### 4. MATURIDADE SIMBIÓTICA E PERSISTÊNCIA ASSÍNCRONA
-A IA amadurece localmente, moldando sua personalidade sem usar algoritmos RLHF exaustivos.
-*   **Métricas ELO/EMA e X-LoRA:** O comportamento reativo da IA é ajustado por pesos numéricos via Médias Móveis Exponenciais (EMA/ELO). Se o regime de diálogo exigir, o sistema fará o *Hot-Swapping* de matrizes LoRA quantizadas *in-flight* (em voo) diretamente na VRAM, mudando a atitude do agente sem recarregar o modelo base.
-*   **Persistência Cabinet (Gitoxide):** O histórico imutável das mudanças de estado e memória estrutural NUNCA é salvo com bibliotecas C (Libgit2). O SODA usa o **gitoxide** (100% Rust) em *background* para versionar snapshots atômicos assincronamente, consumindo zero performance da thread principal.
-
-###### 5. CEMITÉRIO SEMÂNTICO E DECAIMENTO ORGÂNICO
-O lixo semântico não é apagado abruptamente por temporizadores (TTL); ele sofre deriva topológica.
-*   **O Paradigma NextPlaid para Código:** Códigos-fonte e funções NUNCA devem ser esmagados em vetores monolíticos. O SODA os fatia obrigatoriamente em vetores menores baseados na Árvore de Sintaxe Abstrata (AST), garantindo que lógicas úteis não desapareçam na busca densa.
-*   **Dinâmica de Langevin (PGD):** Durante a ociosidade da madrugada, o *Chyros Daemon* aplica o *Poincaré Gradient Descent*. Arquivos `EVOLVING` ociosos sofrem deriva hiperbólica em direção às bordas matemáticas do disco até serem arquivados ou esquecidos.
-*   **Índice de Phronesis:** Contradições lógicas gravadas na memória não são lidas por IA generativa, mas encontradas via *Cohomologia de Feixes Celulares* $\mathcal{O}(N \log N)$. Se for detectado um conflito matemático ($H^1 \neq 0$), um paradoxo é sinalizado para auditoria humana no Canvas.
-
-###### 1. A REGRA DE OURO DA STACK: FÁBRICA VS. PRODUTO (DUALIDADE SISTÊMICA)
-Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do código que será entregue ao usuário.
-*   **Na Fábrica (Seu Ambiente de Dev):** Você TEM PERMISSÃO para usar contêineres Docker, Python, Bash e APIs de nuvem nos seus *Shadow Workspaces* para debugar, prototipar algoritmos e executar o ETL Cognitivo massivo.
-*   **No Produto (Código SODA em Produção):** O código final DEVE ser estritamente *Bare-Metal* (Rust/Tokio + Svelte 5/Tauri v2). É INEGOCIÁVEL e TERMINANTEMENTE PROIBIDO o uso de Node.js, Python residente, ou servidores web locais no pacote de produção. Ferramentas de terceiros devem ser convertidas em *Sidecars Efêmeros* que morrem atomicamente após o uso (`SIGKILL`).
-
-###### 2. STACK TECNOLÓGICO IMUTÁVEL E HARDWARE-OPS
-*   **Backend / Core:** Rust puro (assíncrono via `tokio`).
-*   **Frontend / UI:** Svelte 5 (Runes), TypeScript e Tailwind CSS v4 empacotados em Tauri v2.
-*   **HardwareOps (A Lei da Separação Termodinâmica):**
-    *   **dGPU (RTX 2060m - 6GB VRAM):** USO EXCLUSIVO para inferência generativa de "trabalho braçal" e retenção do *KV Cache*. Restrita a micro-SLMs quantizados em Q4_K_M (1.5B a 4B parâmetros, ex: Qwen 2.5 3B). ESTRITAMENTE PROIBIDOS modelos de 8B+ para aniquilar o letal *Spillover* do barramento PCIe.
-    *   **CPU (Intel i9 + AVX2):** USO EXCLUSIVO para o Roteamento Semântico (Nível 0 do ParetoBandit), o *Garbage Collection Semântico* (Chyros Daemon), processamento de áudio em FP32 (Kokoro-82M) e Avaliação Epistêmica ultrarrápida via AVX2.
-    *   **iGPU (Intel UHD 630):** BANIDA DE QUALQUER OPERAÇÃO DE IA. É expressamente proibido alocar LLMs, SLMs ou tensores na iGPU devido ao estrangulamento letal da banda de memória RAM. Seu uso é ESTRITAMENTE PASSIVO, restrito unicamente à renderização da interface gráfica Svelte no modo `LowPower` da API WGPU.
-
-###### 3. MOTORES DE IA E INFERÊNCIA (O FIM DO MONOLITO)
-*   **Motores Generativos Nativos:** A IA roda nativamente no ecossistema Rust usando **Candle** como motor central de inferência em produção. `Burn (CubeCL)` e `mistral.rs` são auxiliares estratégicos; nenhum deles revoga a soberania do Candle no caminho crítico.
-*   **A Prisão do llama.cpp:** O `llama.cpp` monolítico e daemons externos (Ollama/LM Studio) estão SUMARIAMENTE BANIDOS do núcleo generativo. A crate `llama-cpp-4` sobrevive isolada operando na CPU EXCLUSIVAMENTE como um "bisturi" de background para *Logit Probing* (Avaliador Epistêmico), sem assumir o papel de motor central de inferência ou geração.
-*   **Decodificação Restrita (Constrained Decoding):** Tarefas de extração estruturada (JSON/ETL) não operam por prompt livre. É OBRIGATÓRIO o uso da crate `llguidance` em Rust para forçar a saída contra um Autômato de Gramática Livre de Contexto em meros 50µs, garantindo 100% de precisão mecânica.
-*   **Atenção Esparsa e Retenção de Outliers:** A compressão de contexto longo no Rust (framework `candle`) DEVE usar **Max Pooling** (blocos de ~64 tokens). O *Mean Pooling* está PROIBIDO, pois atua como filtro passa-baixa e causa amnésia de outliers vitais (caminhos absolutos de arquivos, URIs e sintaxes exatas).
-
-###### 4. COMUNICAÇÃO IPC ZERO-GARBAGE E UI REATIVA
-Para impedir que fluxos massivos de IA e telemetria engasguem a interface (Flow-Debt), a comunicação Rust ↔ V8 exige a erradicação da "coleta de lixo" (GC) do JavaScript.
-*   **Transporte Binário:** Toda comunicação de grande volume ocorre estritamente via buffers binários brutos (**Apache Arrow** para logs colunares ou **rkyv** para offsets). É PROIBIDA a serialização massiva em JSON.
-*   **Transferable Objects:** No frontend, os buffers são interceptados por *Web Workers* em background e entregues à *Main Thread* do Svelte como `Transferable Objects` (custo de alocação de memória zero).
-*   **Ilhas WebGL (Vetor Omicron):** A renderização de grafos pesados utilizará Ilhas WebGL (`three.wasm`) rodando dentro de Web Workers isolados via `OffscreenCanvas`. O uso do DOM/SVG para matrizes pesadas é proibido para não asfixiar a Main Thread e garantir *Zero Layout Shift* (CLS).
-*   **Renderização Cadenciada:** A atualização visual dos proxies reativos (`$state`) é estrangulada e atrelada nativamente ao `requestAnimationFrame` (rAF).
-
-###### 5. TOPOLOGIA DE SANDBOXING NATIVO E ISOLAMENTO HÍBRIDO
-A infraestrutura repudia o *overengineering* de hipervisores pesados e máquinas virtuais isoladas genéricas (QEMU/Firecracker).
-*   **Lógicas Puras (IA e Scripts Leves):** Ferramentas autônomas geradas pelos agentes devem rodar isoladas e sem estado usando o **Wasmtime** (WASI 0.2/0.3).
-*   **Sidecars Efêmeros Pesados (Clone VMM):** Para rodar bibliotecas Python pesadas (como OCR/Docling), o sistema utilizará Micro-VMs com *Copy-on-Write* (CoW) a partir de um *Snapshot* inerte na RAM, garantindo boot em ~10ms. A GPU NUNCA é repassada fisicamente a estes sidecars; usa-se o padrão *Mediator Broker* via memória compartilhada (`iceoryx2`).
-*   **Ferramentas de Host e Binários:** Interações que exijam acesso físico aos recursos da máquina devem ser enjauladas através de Sandboxing Nativo do Kernel. Uso rigoroso do **AppContainer e LPAC (Low Privilege AppContainer)** no Windows (via crate `rappct`) e **Landlock** no Linux.
-*   **Process Pool Guard (A Guilhotina Atômica):** Qualquer *Sidecar* possui um limite de memória via `Cgroups v2`. O SODA usa o paradigma `Drop trait` do Rust para emitir um `SIGKILL` atômico assim que a tarefa finaliza ou aborta. Processos zumbis estão banidos.
-
-###### 5.1. LEIS DE PERFORMANCE SAST E SANDBOXING
-Toda futura ferramenta de linha de comando, varredura estática ou sidecar de análise criada no SODA DEVE obedecer às 4 leis abaixo:
-*   **Timeout Adaptativo Obrigatório:** Quando a ferramenta suportar, ative `--allow-rule-timeout-control` e delegue o tempo ao custo matemático do arquivo e da regra. Timeout cego e uniforme é proibido como estratégia primária.
-*   **Escudo de Supply Chain:** Exclusões como `tests/` e `**/mocks/*` são permitidas para reduzir ruído, mas é estritamente proibido ignorar manifestos e lockfiles (`Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `poetry.lock`, `Pipfile.lock`, `mix.lock` e equivalentes).
-*   **Fobia de Código Minificado:** Use `--exclude-minified-files` sempre que disponível. Sem suporte nativo, replique a heurística local: arquivos com menos de 7% de espaço em branco não entram no pipeline de parsing ou scan.
-*   **Higiene de Cache e Build:** Sidecars que disparem compilações agressivas ou materializem `target/` e caches equivalentes DEVEM limpar estes diretórios imediatamente após o uso para proteger Ramdisk, sandbox e SSD contra `os error 112`.
-
-###### 6. FINOPS, ROTEAMENTO HÍBRIDO E PARETOBANDIT
-*   **O Cofre (ParetoBandit e E³):** A decisão autônoma de onde a tarefa roda não é estática. O algoritmo matemático `ParetoBandit` no Gateway Rust aplica a métrica $E^3$ (Efficiency-aware Effectiveness Evaluation) avaliando Custo vs. Qualidade vs. Latência antes do despacho.
-*   **O Padrão Orchestrator-Worker:** Modelos Premium em nuvem (Claude Opus 4.7, GPT-5.4) são estritamente restritos a atuar como "Cloud Brain", lendo intenções e gerando Grafos Acíclicos Dirigidos (DAGs). O "Trabalho Braçal" resultante é despachado compulsoriamente para o Local Worker (RTX 2060m - Custo Zero) ou para Batch APIs asiáticas (DeepSeek V4, Gemini Flash).
-*   **Circuit Breakers (Disjuntores FinOps):** Se o limite diário de tokens ou o custo da assinatura ameaçar estourar, o Gateway atua como um disjuntor de rede, cortando a nuvem e empurrando toda a carga para a inferência local obrigatória.
-
-### REGRA DE GITOPS INEGOCIÁVEL (AS 4 PISTAS DE VOO)
-Você atua sob o SODA Canon V5. Você está TERMINANTEMENTE PROIBIDO de orquestrar a branch `main` e não tem permissão para usar `git checkout -b` para inventar ramificações.
-* Se você estiver operando no modo Chat/Builder, a sua "casinha" (branch) obrigatória é `TRAE-IDE`.
-* Se você estiver operando no modo Autônomo (Solo), a sua "casinha" (branch) obrigatória é `TRAE-Solo`.
-1. Mude para a sua branch correspondente IMEDIATAMENTE antes de codificar.
-2. Faça os seus commits atômicos (TDD) dentro da sua branch.
-3. Ao terminar (Exit Code 0), NÃO FAÇA MERGE. Avise o Arquiteto Humano para que ELE faça o Code Review e o Merge na `main`.
+Fallback only if a lean-ctx tool is unavailable: use native equivalents.
+<!-- /lean-ctx -->

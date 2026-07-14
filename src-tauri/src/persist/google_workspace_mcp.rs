@@ -1,7 +1,7 @@
 use std::env;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -11,6 +11,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 const GOOGLE_SHEETS_SCOPE: &str = "https://www.googleapis.com/auth/spreadsheets";
+
+// L14: Connection pooling para OAuth. Reutiliza conexões TCP/TLS em vez de criar
+// um novo handshake a cada requisição de token.
+fn oauth_http_client() -> &'static reqwest::blocking::Client {
+    static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .pool_max_idle_per_host(3)
+            .pool_idle_timeout(std::time::Duration::from_secs(120))
+            .build()
+            .expect("reqwest Client deve inicializar")
+    })
+}
 
 #[derive(Debug, Deserialize)]
 struct ServiceAccountKey {
@@ -85,7 +98,7 @@ pub fn google_workspace_access_token_blocking() -> Result<String, String> {
     }
 
     if let Some((client_id, client_secret, refresh_token)) = oauth_refresh_credentials() {
-        let response = reqwest::blocking::Client::new()
+        let response = oauth_http_client()
             .post("https://oauth2.googleapis.com/token")
             .json(&json!({
                 "client_id": client_id,
@@ -114,7 +127,7 @@ pub fn google_workspace_access_token_blocking() -> Result<String, String> {
 
     let key = read_service_account_key()?;
     let assertion = build_service_account_assertion(&key)?;
-    let response = reqwest::blocking::Client::new()
+    let response = oauth_http_client()
         .post(&key.token_uri)
         .form(&[
             ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
