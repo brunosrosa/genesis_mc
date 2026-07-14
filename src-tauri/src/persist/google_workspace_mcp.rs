@@ -148,11 +148,16 @@ pub async fn google_workspace_access_token_async() -> Result<String, String> {
 }
 
 fn mcp_google_workspace_command() -> String {
-    fn default_bin_name() -> &'static str {
+    fn default_bin_names() -> Vec<String> {
         if cfg!(windows) {
-            "mcp-google.exe"
+            vec![
+                "mcp-google-x86_64-pc-windows-msvc.exe".to_string(),
+                "mcp-google.exe".to_string(),
+            ]
         } else {
-            "mcp-google"
+            vec![
+                "mcp-google".to_string(),
+            ]
         }
     }
 
@@ -164,20 +169,33 @@ fn mcp_google_workspace_command() -> String {
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    let primary = configured.unwrap_or_else(|| default_bin_name().to_string());
 
-    if primary.contains(['\\', '/', ':']) && exists(&primary) {
-        return primary;
-    }
-
-    let packaged = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("bin")
-        .join(default_bin_name());
-    if let Some(packaged_str) = packaged.to_str() {
-        if exists(packaged_str) {
-            return packaged_str.to_string();
+    if let Some(ref primary) = configured {
+        if primary.contains(['\\', '/', ':']) && exists(primary) {
+            return primary.clone();
         }
     }
+
+    // Tenta primeiro no diretório de empacotados bin/ do manifesto
+    for name in default_bin_names() {
+        let packaged = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("bin")
+            .join(&name);
+        if let Some(packaged_str) = packaged.to_str() {
+            if exists(packaged_str) {
+                return packaged_str.to_string();
+            }
+        }
+    }
+
+    // Tenta nos caminhos alternativos/cargo
+    let primary = configured.unwrap_or_else(|| {
+        if cfg!(windows) {
+            "mcp-google.exe".to_string()
+        } else {
+            "mcp-google".to_string()
+        }
+    });
 
     if let Ok(cargo_path) = env::var("SODA_CARGO_PATH") {
         let cargo_path = cargo_path.trim();
