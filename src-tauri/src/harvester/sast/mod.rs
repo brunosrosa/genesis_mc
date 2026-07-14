@@ -630,30 +630,33 @@ impl PolyglotSastSidecar {
                         available_cargo_permits = cargo_semaphore.available_permits(),
                         "SAST monorepo: sub-scan concluído"
                     );
-                    // PRD-033: quando a lâmina RustClippy falha, capturar
-                    // o diagnóstico e devolver como pseudossucesso forense.
-                    let forensic_rust_diagnostic = if blade == StaticAnalysisBlade::RustClippy {
-                        if let Err(ref err) = result {
-                            let stderr_limpo = match err {
-                                SidecarError::ExecutionFailed { reason } => reason.clone(),
-                                SidecarError::Timeout { timeout_secs } => {
-                                    format!("timeout após {timeout_secs}s")
-                                }
-                                other => other.to_string(),
-                            };
+                    // Intercepta qualquer erro na lâmina e o transforma em diagnóstico forense
+                    // sem interromper as outras lâminas.
+                    let forensic_blade_diagnostic = if let Err(ref err) = result {
+                        let stderr_limpo = match err {
+                            SidecarError::ExecutionFailed { reason } => reason.clone(),
+                            SidecarError::Timeout { timeout_secs } => {
+                                format!("timeout após {timeout_secs}s")
+                            }
+                            other => other.to_string(),
+                        };
+                        if blade == StaticAnalysisBlade::RustClippy {
                             Some(format!(
                                 "[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> {}",
                                 stderr_limpo
                             ))
                         } else {
-                            None
+                            Some(format!(
+                                "[DIAGNÓSTICO ESTRUTURAL: Lâmina '{}' ignorada por violação/ausência] -> {}",
+                                blade_name(blade), stderr_limpo
+                            ))
                         }
                     } else {
                         None
                     };
                     // Se o diagnóstico forense foi capturado, substituir o Err
                     // por Ok(SastBladeResult vazio) para que a lâmina não aborte o pipeline.
-                    let result: Result<SastBladeResult, SidecarError> = if forensic_rust_diagnostic.is_some() {
+                    let result: Result<SastBladeResult, SidecarError> = if forensic_blade_diagnostic.is_some() {
                         Ok(SastBladeResult {
                             effective_blade: blade,
                             bytes: Vec::new(),
@@ -672,13 +675,13 @@ impl PolyglotSastSidecar {
                         scope,
                         forced_channel,
                         result,
-                        forensic_rust_diagnostic,
+                        forensic_rust_diagnostic: forensic_blade_diagnostic,
                     })
                 });
             }
         }
 
-        let mut forensic_rust_diagnostics: Vec<String> = Vec::new();
+        let mut forensic_blade_diagnostics: Vec<String> = Vec::new();
         while let Some(joined) = join_set.join_next().await {
             let outcome = match joined {
                 Ok(Ok(outcome)) => outcome,
@@ -706,9 +709,9 @@ impl PolyglotSastSidecar {
             if let Some(diag) = outcome.forensic_rust_diagnostic {
                 warn!(
                     scope = %outcome.scope,
-                    "SAST monorepo: falha forense da lâmina RustClippy capturada"
+                    "SAST monorepo: falha forense da lâmina capturada"
                 );
-                forensic_rust_diagnostics.push(diag);
+                forensic_blade_diagnostics.push(diag);
                 had_failed_payload = true;
                 continue;
             }
@@ -776,7 +779,7 @@ impl PolyglotSastSidecar {
         }
 
         // PRD-033: só retorna zero-byte se não há NENHUM sinal (nem issues, nem forense)
-        if had_failed_payload && !had_successful_payload && forensic_rust_diagnostics.is_empty() {
+        if had_failed_payload && !had_successful_payload && forensic_blade_diagnostics.is_empty() {
             error!(
                 repo_path = %repo_path.display(),
                 "SAST monorepo: todas as laminas falharam; retornando blobs zero-byte"
@@ -804,10 +807,10 @@ impl PolyglotSastSidecar {
         let health_report_body = render_soda_health_report(&health_issues);
 
         // PRD-033: prepend dos diagnósticos forenses ao TOPO do Blob 08
-        let health_report_blob = if forensic_rust_diagnostics.is_empty() {
+        let health_report_blob = if forensic_blade_diagnostics.is_empty() {
             health_report_body
         } else {
-            let header = forensic_rust_diagnostics.join("\n");
+            let header = forensic_blade_diagnostics.join("\n");
             let mut blob = header.into_bytes();
             if !health_report_body.is_empty() {
                 blob.push(b'\n');
@@ -2869,6 +2872,50 @@ mod tests {
         assert!(
             blob08.contains("E0463") || blob08.contains("proc_macro") || blob08.contains("101"),
             "Blob 08 deve conter o stderr do erro, mas foi:\n{blob08}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fail_soft_continues_after_generic_blade_violation() {
+        let executor = test_utils::MockExecutor::new(vec![
+            Err(crate::harvester::sandbox::SandboxError::PolicyViolation {
+                detail: "Policy Violation simulated".to_string(),
+            }),
+            Err(crate::harvester::sandbox::SandboxError::PolicyViolation {
+                detail: "Policy Violation simulated".to_string(),
+            }),
+            Err(crate::harvester::sandbox::SandboxError::PolicyViolation {
+                detail: "Policy Violation simulated".to_string(),
+            }),
+            Err(crate::harvester::sandbox::SandboxError::PolicyViolation {
+                detail: "Policy Violation simulated".to_string(),
+            }),
+            Err(crate::harvester::sandbox::SandboxError::PolicyViolation {
+                detail: "Policy Violation simulated".to_string(),
+            }),
+            Err(crate::harvester::sandbox::SandboxError::PolicyViolation {
+                detail: "Policy Violation simulated".to_string(),
+            }),
+        ]);
+
+        let executor = std::sync::Arc::new(executor);
+        let repo_path = executor.repo_path().canonicalize().unwrap();
+        let clean_files = std::sync::Arc::new(vec![repo_path.join("src/app.ts")]);
+
+        let result = PolyglotSastSidecar::extract(PolyglotSastInput {
+            executor,
+            timeout_secs: 30,
+            profile: &StackProfile::NodeJS,
+            clean_files,
+        })
+        .await;
+
+        let artifacts = result.expect("Lâmina com erro não deve abortar o pipeline");
+        let blob08 = String::from_utf8_lossy(&artifacts.health_report_blob);
+
+        assert!(
+            blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência]"),
+            "Blob 08 deve registrar a falha de biome de forma fail-soft, mas foi:\n{blob08}"
         );
     }
 }

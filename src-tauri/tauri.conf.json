@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "genesis-mc-temp",
-  "version": "0.1.0",
-  "identifier": "com.rosas.genesis-mc-temp",
+  "productName": "souls-mc",
+  "version": "0.1.1",
+  "identifier": "com.rosas.souls-mc",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "genesis-mc-temp",
+        "title": "souls-mc",
         "width": 800,
         "height": 600,
         "visible": false
@@ -31,6 +31,13 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "externalBin": [
+      "bin/biome",
+      "bin/oxlint",
+      "bin/ruff",
+      "bin/opengrep",
+      "bin/mcp-google"
     ]
   }
 }
