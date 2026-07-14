@@ -37,3 +37,4 @@ dist-ssr
 .soda_semgrep/
 .pytest_cache/
 .lean-ctx/
+src-tauri/third_party/ultrafast-mcp-sequential-thinking
