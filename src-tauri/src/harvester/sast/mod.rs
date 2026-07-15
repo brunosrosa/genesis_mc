@@ -2254,8 +2254,23 @@ async fn run_sast_blade<E: SandboxExecutor>(
         }
     }
     let result = if blade == StaticAnalysisBlade::RustClippy {
-        // Para o Cargo Clippy, garanta que ele execute apenas nas raízes descobertas
-        let run_dir = execution_root.to_path_buf();
+        // L14: Inteligência Topológica de Workspace (ADR-025).
+        // Se execution_root é uma sub-pasta de um workspace, o cargo clippy
+        // DEVE ser executado a partir da raiz do workspace (ws_root), não da sub-pasta.
+        // Isso evita o erro "manifest not found" quando o cargo tenta resolver
+        // dependências do workspace a partir de um sub-crate.
+        let repo_path = executor.repo_path();
+        let ws_root = clippy::find_cargo_workspace_root(repo_path, execution_root);
+        let run_dir = if ws_root != execution_root {
+            info!(
+                execution_root = %execution_root.display(),
+                workspace_root = %ws_root.display(),
+                "SAST rust-clippy: Monorepo detectado. Executando clippy a partir da raiz do workspace."
+            );
+            ws_root
+        } else {
+            execution_root.to_path_buf()
+        };
         match clippy::run_rust_clippy_preflight(executor, &run_dir, timeout_secs).await {
             Ok(()) => {
                 let (binary, args) = blade_command(blade, scan_targets, command_args);

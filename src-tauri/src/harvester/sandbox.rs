@@ -917,24 +917,18 @@ fn spawn_in_appcontainer_blocking(
         res
     };
 
-    let cmd_str = std::iter::once(escape_cmd_arg(&program.to_string_lossy()))
-        .chain(args.iter().map(|a| escape_cmd_arg(a)))
+    // L14: Garantia anti-aspa para o Windows CreateProcessW.
+    // O programa SEMPRE deve estar englobado em aspas duplas explícitas, pois o
+    // CreateProcessW interpreta o primeiro token como o caminho do executável.
+    // O escape_cmd_arg não quotava o program quando não continha espaços, mas o
+    // Windows precisa de quoting explícito para paths com backslashes.
+    // Solução: quoting brutal do program, depois concatenar args escapados.
+    let program_quoted = format!("\"{}\"", program.display());
+    let args_string = args.iter()
+        .map(|a| escape_cmd_arg(a))
         .collect::<Vec<String>>()
         .join(" ");
-    // L14: Garantia anti-aspa. Se escape_cmd_arg falhou em detectar que o program
-    // precisa de quoting (path com espaço/backslash mal interpretado), o cmd_str
-    // não começará com '"'. Recuperamos o comando encontrando o primeiro espaço
-    // (delimitações program vs args) e re-quotando apenas o program.
-    let cmd_str = if !cmd_str.starts_with('"') {
-        if let Some(pos) = cmd_str.find(' ') {
-            let (prog, args_part) = cmd_str.split_at(pos);
-            format!("\"{}\"{}", prog, args_part)
-        } else {
-            format!("\"{}\"", cmd_str)
-        }
-    } else {
-        cmd_str
-    };
+    let cmd_str = format!("{} {}", program_quoted, args_string);
     let mut cmd_wide: Vec<u16> = str_to_wide(&cmd_str);
     let clean_cwd = dunce::canonicalize(&cwd).unwrap_or(cwd.to_path_buf());
     let final_cwd_string = clean_cwd.to_string_lossy().replace(r"\\?\", "").replace(r"\?\", "");
@@ -975,6 +969,11 @@ fn spawn_in_appcontainer_blocking(
             "TEMP",
             "TMP",
             "XDG_CACHE_HOME",
+            // L14: Cache dirs do Opengrep/Semgrep — também precisam ser redirecionados
+            // para o diretório efêmero para que os binários auto-extraíveis consigam
+            // inflar seus runtimes dentro da gaiola AppContainer.
+            "SEMGREP_CACHE_DIR",
+            "OPENGREP_CACHE_DIR",
         ];
         for key in &keys_to_override {
             merged_env.insert(key.to_string(), ephemeral_dir_str.clone());
@@ -990,7 +989,12 @@ fn spawn_in_appcontainer_blocking(
             if k.is_empty() || k.starts_with('=') {
                 continue;
             }
-            if k == "LOCALAPPDATA" || k == "TEMP" || k == "TMP" || k == "USERPROFILE" || k == "APPDATA" {
+            // L14: Log expandido para mostrar TODAS as variáveis críticas injetadas,
+            // incluindo os cache dirs do Opengrep/Semgrep que são essenciais para
+            // o binário auto-extraível funcionar dentro do AppContainer.
+            if k == "LOCALAPPDATA" || k == "TEMP" || k == "TMP" || k == "USERPROFILE" || k == "APPDATA"
+                || k == "SEMGREP_CACHE_DIR" || k == "OPENGREP_CACHE_DIR" || k == "XDG_CACHE_HOME"
+            {
                 debug!(key = %k, value = %v, "AppContainer: Ambiente injetado para CreateProcessW");
             }
             env_str.push_str(&format!("{k}={v}\0"));
@@ -3067,6 +3071,16 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             .unwrap_or_else(|_| execution_root.to_path_buf());
         let execution_root_clean = strip_unc_prefix(&canonical_root);
         self.validate_execution_root(&execution_root_clean)?;
+        // L14: Validação de CWD fantasma — o diretório DEVE existir no disco
+        // para que o CreateProcessW não falhe com Win32 Error 2 (ERROR_FILE_NOT_FOUND).
+        if !execution_root_clean.exists() {
+            return Err(SandboxError::PolicyViolation {
+                detail: format!(
+                    "CWD fantasma: '{}' nao existe no disco",
+                    execution_root_clean.display()
+                ),
+            });
+        }
         let mut resolved = resolve_command(command, args, &execution_root_clean)?;
 
         // Resolve absolute path for resolved.program if it is relative or just a basename.
@@ -3304,6 +3318,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             // as variáveis do cache do Opengrep/Semgrep apontando para o diretório efêmero do AppContainer
             let ephemeral_dir_str = ephemeral_dir.to_string_lossy().into_owned();
             resolved_clone.env.insert("SEMGREP_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
+            resolved_clone.env.insert("OPENGREP_CACHE_DIR".to_string(), ephemeral_dir_str.clone());
             resolved_clone.env.insert("XDG_CACHE_HOME".to_string(), ephemeral_dir_str.clone());
 
             // Vacina do Ruff: impede erro de escrita de cache no ProjFS
@@ -3603,6 +3618,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         // garantindo DeleteAppContainerProfile+FreeSid antes do retorno.
         let program = resolved.program.clone();
         let spawn_args = resolved.args.clone();
+        // L14: O resolved Extraído da destructureação (linha 3490) É o mesmo resolved_clone
+        // que foi modificado dentro do spawn_blocking (cache dirs injetados em ~linha 3300).
+        // verified: resolved.env.clone() contém OPENGREP_CACHE_DIR após o await.
         let spawn_env = resolved.env.clone();
         let spawn_cwd = execution_root_clean.clone();
         let timeout_profile = timeout_profile(command, args, timeout_secs);
@@ -3647,6 +3665,11 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let stdout = result.stdout;
         let stderr_str = String::from_utf8_lossy(&result.stderr).trim().to_string();
 
+        // L14: Alert Fatigue — SASTs como Biome/Opengrep retornam exit_code=1 quando encontram
+        // findings. Isso é um resultado válido, não um erro. Só logamos [ERR] para crashes
+        // (exit_code < 0) ou erros reais (exit_code >= 2). Para exit 1/7 com stdout, WARN.
+        let is_sast_expected_nonzero = (exit_code == 1 || exit_code == 7) && !stdout.is_empty();
+
         if exit_code == 0 {
             info!(
                 command,
@@ -3655,6 +3678,16 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 stdout_bytes = stdout.len(),
                 stderr_bytes = result.stderr.len(),
                 "AppContainer: sidecar concluido"
+            );
+        } else if is_sast_expected_nonzero {
+            warn!(
+                command,
+                container_name = %container_name,
+                exit_code,
+                stdout_bytes = stdout.len(),
+                stderr_bytes = result.stderr.len(),
+                "AppContainer: SAST concluido com achados (Exit {})",
+                exit_code
             );
         } else {
             error!(
