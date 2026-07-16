@@ -3502,6 +3502,94 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             // Permite ao sidecar se conectar via loopback ao Named Pipe do Gateway.
             let _loopback_ok = set_loopback_exemption(&container_name_clone);
 
+            // ── Passo 5.5: Desidratação do Opengrep (Nuitka Pre-Extraction) ─────
+            // O OpenGrep é compilado via Nuitka e tenta extrair seu motor OCaml em runtime
+            // para OPENGREP_CACHE_DIR. Para evitar STATUS_FAIL_FAST_EXCEPTION
+            // (exit_code=-1073740791) causado pelo AppContainer bloqueando geração de código
+            // dinâmico (ACG), pré-executamos o opengrep no HOST (fora da gaiola) para que
+            // o Nuitka extraia o cache ANTES do AppContainer ser trancado.
+            // O AppContainer reutilizará o cache já extraído, driblando a política ACG.
+            if command_clone == "opengrep" {
+                info!(
+                    command = %command_clone,
+                    cache_dir = %ephemeral_dir_str,
+                    "Desidratação Opengrep: pré-executando --version no host para extrair motor Nuitka"
+                );
+
+                // Construir o ambiente completo para a desidratação (mesmas vars do AppContainer)
+                let mut dehydrate_env: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+                for (k, v) in std::env::vars() {
+                    dehydrate_env.insert(k, v);
+                }
+                for (k, v) in &resolved_clone.env {
+                    dehydrate_env.insert(k.clone(), v.clone());
+                }
+                // Garante que TEMP/tmp apontam para o ephemeral_dir
+                let ephemeral_str = ephemeral_dir.to_string_lossy().into_owned();
+                dehydrate_env.insert("TEMP".to_string(), ephemeral_str.clone());
+                dehydrate_env.insert("TMP".to_string(), ephemeral_str.clone());
+                dehydrate_env.insert("OPENGREP_CACHE_DIR".to_string(), ephemeral_str.clone());
+                dehydrate_env.insert("SEMGREP_CACHE_DIR".to_string(), ephemeral_str.clone());
+                dehydrate_env.insert("XDG_CACHE_HOME".to_string(), ephemeral_str.clone());
+
+                // Desidratação: executa --version no host para forçar extração Nuitka
+                let dehydrate_result = std::process::Command::new(&resolved_clone.program)
+                    .arg("--version")
+                    .env_clear()
+                    .envs(dehydrate_env.iter())
+                    .current_dir(&execution_root_clean_clone)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn();
+
+                match dehydrate_result {
+                    Ok(mut child) => {
+                        use std::io::Read;
+                        let mut stdout_buf = Vec::new();
+                        let mut stderr_buf = Vec::new();
+                        if let Some(ref mut stdout) = child.stdout {
+                            let _ = stdout.read_to_end(&mut stdout_buf);
+                        }
+                        if let Some(ref mut stderr) = child.stderr {
+                            let _ = stderr.read_to_end(&mut stderr_buf);
+                        }
+                        match child.wait() {
+                            Ok(status) => {
+                                if status.success() {
+                                    info!(
+                                        command = %command_clone,
+                                        exit_code = ?status.code(),
+                                        "Desidratação Opengrep: sucesso - motor Nuitka extraído para cache"
+                                    );
+                                } else {
+                                    warn!(
+                                        command = %command_clone,
+                                        exit_code = ?status.code(),
+                                        stderr = %String::from_utf8_lossy(&stderr_buf),
+                                        "Desidratação Opengrep: concluído com código não-sucesso (pode ser OK se --version打印ou info)"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                warn!(
+                                    command = %command_clone,
+                                    error = %e,
+                                    "Desidratação Opengrep: wait falhou - continuando mesmo assim"
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            command = %command_clone,
+                            error = %e,
+                            "Desidratação Opengrep: spawn falhou - continuando sem desidratação"
+                        );
+                    }
+                }
+            }
+
             Ok((profile, ephemeral_dir, ephemeral_handle, resolved_clone))
         });
 
