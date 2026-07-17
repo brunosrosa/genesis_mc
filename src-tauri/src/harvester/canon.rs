@@ -14,7 +14,7 @@ const CANON_CACHE_MAX_AGE_SECS: i64 = 7 * 24 * 60 * 60;
 const CANON_SCHEMA_TAG: &str = "SODA_CANON_V5_ADRS_ALL";
 const CANON_MANIFEST_RELATIVE_PATH: &str = "docs/SODA_CANON_MANIFEST.md";
 const CANON_LOCAL_CONTEXT: &str = "SODA_CANON_V5_ADRS_ALL
-Raio-X Macro do SODA / Genesis MC:
+Raio-X Macro do SODA / Souls MC:
 
 O nucleo do sistema e soberania bare-metal. A regra estrutural e backend em Rust com Tokio, ownership explicito, fail-closed e zero panic em producao. O frontend existe como casca passiva em Svelte 5, renderizando estado sem tomar para si logica de negocio, orquestracao, memoria ou inferencia. Python, Node.js e sidecars externos nao definem o produto; quando aparecem, existem apenas como ferramentas efemeras de fabrica, confinadas e descartadas ao fim da tarefa.
 

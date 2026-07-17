@@ -36,9 +36,9 @@ E consolidando os catálogos:
 
 ### Saídas (Contratos Persistidos)
 - Sheets:
-  - `status_atualizacao` aceita exclusivamente os valores definidos em [DAG_funil_ingestao_v5](file:///c:/Users/rosas/Dev_Projects/genesis_mc/docs/dags/DAG_funil_ingestao_v5.md#L24-L55)
-  - `status_fase` aceita exclusivamente os valores definidos em [DAG_funil_ingestao_v5](file:///c:/Users/rosas/Dev_Projects/genesis_mc/docs/dags/DAG_funil_ingestao_v5.md#L57-L69)
-  - `categoria_arquitetural` aceita exclusivamente os 10 ENUMs definidos em [DAG_funil_ingestao_v5](file:///c:/Users/rosas/Dev_Projects/genesis_mc/docs/dags/DAG_funil_ingestao_v5.md#L71-L84)
+  - `status_atualizacao` aceita exclusivamente os valores definidos em [DAG_funil_ingestao_v5](file:///c:/Users/rosas/Dev_Projects/souls_mc/docs/dags/DAG_funil_ingestao_v5.md#L24-L55)
+  - `status_fase` aceita exclusivamente os valores definidos em [DAG_funil_ingestao_v5](file:///c:/Users/rosas/Dev_Projects/souls_mc/docs/dags/DAG_funil_ingestao_v5.md#L57-L69)
+  - `categoria_arquitetural` aceita exclusivamente os 10 ENUMs definidos em [DAG_funil_ingestao_v5](file:///c:/Users/rosas/Dev_Projects/souls_mc/docs/dags/DAG_funil_ingestao_v5.md#L71-L84)
 - SQLite:
   - Persistência das duas colunas de status por repositório (mesmos valores do Sheets)
   - Capacidade de registrar `SHORT-CIRCUIT` e impedir reprocessamento

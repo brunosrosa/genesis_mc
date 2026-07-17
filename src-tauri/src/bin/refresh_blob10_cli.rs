@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         params![
             repo_id,
             "LOCAL",
-            "file://local/genesis_mc",
+            "file://local/souls_mc",
             "UUID-LOCAL-CANON-REFRESH",
             "LOCAL",
             0_i64,

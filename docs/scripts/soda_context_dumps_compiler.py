@@ -21,7 +21,7 @@ def write_header(outfile, file_name, abs_path):
     outfile.write(f"---\n")
 
 def compile_env_clean(output_dir):
-    env_file = r"Z:\genesis_mc\.env"
+    env_file = r"Z:\souls_mc\.env"
     output_path = os.path.join(output_dir, "_ENV_CLEAN.txt")
     
     delete_if_exists(output_path)
@@ -74,8 +74,8 @@ def compile_env_clean(output_dir):
 
 def compile_ignition_scripts(output_dir):
     files_to_compile = [
-        r"Z:\genesis_mc\boot.ps1",
-        r"Z:\genesis_mc\src-tauri\soda_ETL_ignition.ps1"
+        r"Z:\souls_mc\boot.ps1",
+        r"Z:\souls_mc\src-tauri\soda_ETL_ignition.ps1"
     ]
     output_path = os.path.join(output_dir, "_IGNITION_SCRIPTS.txt")
     delete_if_exists(output_path)
@@ -101,7 +101,7 @@ def compile_mcp_inventory(output_dir):
     inventory_lines = []
     inventory_lines.append("=== MCP SERVER INVENTORY + SMOKE TEST ===")
     inventory_lines.append("SERVER_NAME: souls")
-    inventory_lines.append(f"LEGACY_REPORT_PATH: Z:\\genesis_mc\\.soda_scratchpad\\reports\\_MCP_INVENTORY_soda-agent-gateway.txt")
+    inventory_lines.append(f"LEGACY_REPORT_PATH: Z:\\souls_mc\\.soda_scratchpad\\reports\\_MCP_INVENTORY_soda-agent-gateway.txt")
     inventory_lines.append(f"SOURCE_DIR: {mcp_dir}")
     
     tools = []
@@ -148,11 +148,11 @@ def compile_mcp_inventory(output_dir):
 
 def compile_rules_in_ides(output_dir):
     primary_rules = [
-        r"Z:\genesis_mc\GEMINI.md",
-        r"Z:\genesis_mc\.trae\rules\project_rules.md",
-        r"Z:\genesis_mc\.trae\rules\user_rules.md"
+        r"Z:\souls_mc\GEMINI.md",
+        r"Z:\souls_mc\.trae\rules\project_rules.md",
+        r"Z:\souls_mc\.trae\rules\user_rules.md"
     ]
-    rules_dir = r"Z:\genesis_mc\docs\.archive\rules"
+    rules_dir = r"Z:\souls_mc\docs\.archive\rules"
     output_path = os.path.join(output_dir, "_RULES_IN_IDEs.txt")
     delete_if_exists(output_path)
     timestamp = get_timestamp()
@@ -187,7 +187,7 @@ def compile_rules_in_ides(output_dir):
                     outfile.write("\n")
 
 def compile_skills_in_ides(output_dir):
-    skills_dir = r"Z:\genesis_mc\.agents\skills"
+    skills_dir = r"Z:\souls_mc\.agents\skills"
     output_path = os.path.join(output_dir, "_SKILLS_IN_IDEs.txt")
     delete_if_exists(output_path)
     timestamp = get_timestamp()
@@ -209,7 +209,7 @@ def compile_skills_in_ides(output_dir):
                         outfile.write("\n")
 
 def compile_workspace_map(output_dir):
-    map_file = r"Z:\genesis_mc\_WORKSPACE_MAP.md"
+    map_file = r"Z:\souls_mc\_WORKSPACE_MAP.md"
     output_path = os.path.join(output_dir, "_WOKSPACE_MAP.txt")
     delete_if_exists(output_path)
     timestamp = get_timestamp()
@@ -226,9 +226,9 @@ def compile_workspace_map(output_dir):
 
 def compile_yaml_json_outputs(output_dir):
     files_to_compile = [
-        r"Z:\genesis_mc\gateway-config.yaml",
+        r"Z:\souls_mc\gateway-config.yaml",
         r"C:\Users\rosas\.gemini\config\mcp_config.json",
-        r"Z:\genesis_mc\src-tauri\src\bin\soda_mcp_server.rs"
+        r"Z:\souls_mc\src-tauri\src\bin\soda_mcp_server.rs"
     ]
     output_path = os.path.join(output_dir, "_YAML_AgentGateway_e_soda_mcp_server.rs.txt")
     delete_if_exists(output_path)
@@ -251,7 +251,7 @@ def compile_yaml_json_outputs(output_dir):
                     outfile.write("\n")
 
 def main():
-    output_dir = r"Z:\genesis_mc\docs\context_dumps"
+    output_dir = r"Z:\souls_mc\docs\context_dumps"
     os.makedirs(output_dir, exist_ok=True)
     
     compile_env_clean(output_dir)

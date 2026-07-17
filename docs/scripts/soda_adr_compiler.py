@@ -3,8 +3,8 @@ import glob
 from datetime import datetime
 
 def compile_adrs():
-    adrs_dir = r"Z:\genesis_mc\docs\adrs"
-    output_file = r"Z:\genesis_mc\docs\context_dumps\_ADRs_ALL.txt"
+    adrs_dir = r"Z:\souls_mc\docs\adrs"
+    output_file = r"Z:\souls_mc\docs\context_dumps\_ADRs_ALL.txt"
     
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_file), exist_ok=True)

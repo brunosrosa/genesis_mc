@@ -377,7 +377,7 @@ fn write_f1_report(root_dir: &Path, conn: &Connection, repo_id: &str) -> io::Res
 
 fn distillation_prompt(artifact_type: &str) -> String {
     format!(
-        "Voce e o Destilador do SODA (Genesis MC). Converta o blob '{artifact_type}' em uma Essencia objetiva (<= 3000 tokens). Preserve fatos tecnicos, interfaces, invariantes e riscos. Remova redundancia e qualquer recomendacao de stacks proibidas (Node.js/Electron/VDOM). Retorne apenas o texto da essencia.",
+        "Voce e o Destilador do SODA (Souls MC). Converta o blob '{artifact_type}' em uma Essencia objetiva (<= 3000 tokens). Preserve fatos tecnicos, interfaces, invariantes e riscos. Remova redundancia e qualquer recomendacao de stacks proibidas (Node.js/Electron/VDOM). Retorne apenas o texto da essencia.",
     )
 }
 

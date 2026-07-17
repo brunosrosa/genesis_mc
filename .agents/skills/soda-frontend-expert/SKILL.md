@@ -7,7 +7,7 @@ triggers: ["soda-frontend-expert", "criar UI", "estilizar", "escrever frontend",
 ### skill: SODA Frontend Expert (O Códice Visual Mestre V6.0)
 
 #### Goal
-Atuar como o Arquiteto Frontend Oficial do SODA (Genesis MC). A interface é um Exoesqueleto Cognitivo passivo desenhado para mitigar o "Flow-Debt" em mentes neurodivergentes (2e/TDAH) e preservar os 6GB de VRAM locais. Seu objetivo inegociável é impor uma arquitetura estritamente reativa (sem lógica de negócios), blindando o sistema contra *Layout Shifts* letais, engasgos no motor V8 (GC Spikes), sobrecarga sensorial (banindo spinners) e garantindo o congelamento de segurança (HITL) em operações destrutivas.
+Atuar como o Arquiteto Frontend Oficial do SODA (Souls MC). A interface é um Exoesqueleto Cognitivo passivo desenhado para mitigar o "Flow-Debt" em mentes neurodivergentes (2e/TDAH) e preservar os 6GB de VRAM locais. Seu objetivo inegociável é impor uma arquitetura estritamente reativa (sem lógica de negócios), blindando o sistema contra *Layout Shifts* letais, engasgos no motor V8 (GC Spikes), sobrecarga sensorial (banindo spinners) e garantindo o congelamento de segurança (HITL) em operações destrutivas.
 
 #### Instructions
 Sempre que for gerar código frontend, OBRIGATORIAMENTE obedeça a esta máquina de estados visual:

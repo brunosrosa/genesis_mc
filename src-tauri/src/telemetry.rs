@@ -38,9 +38,9 @@ pub fn init_cli_tracing(_level: Level) {
 
     use tracing_subscriber::EnvFilter;
 
-    // Configura o EnvFilter para priorizar genesis_mc e silenciar ruído do globset
+    // Configura o EnvFilter para priorizar souls_mc e silenciar ruído do globset
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,genesis_mc=debug,genesis_mc_lib=debug,globset=info"));
+        .unwrap_or_else(|_| EnvFilter::new("info,souls_mc=debug,souls_mc_lib=debug,globset=info"));
 
     let _ = tracing_subscriber::fmt()
         .with_ansi(ansi)
