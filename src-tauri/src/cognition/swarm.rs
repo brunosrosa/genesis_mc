@@ -165,6 +165,21 @@ where
             self.execute_lens(LensKind::Operations, repo_id, &payloads.package_c),
         );
 
+        let lens_a_failed = lens_a.is_err();
+        let lens_b_failed = lens_b.is_err();
+        let lens_c_failed = lens_c.is_err();
+
+        // Se TODAS falharem, aí marcamos erro global e abortamos
+        if lens_a_failed && lens_b_failed && lens_c_failed {
+            let root_error = lens_a.err().unwrap_or_else(|| {
+                Phase2Error::EmptyPackage("Todas as lentes do enxame falharam".to_string())
+            });
+            self.store
+                .mark_phase2_error(repo_id)
+                .map_err(Phase2Error::Phase2Aborted)?;
+            return Err(root_error);
+        }
+
         let lente_a = match lens_a {
             Ok(val) => val,
             Err(e) => {
@@ -203,17 +218,6 @@ where
                 }).to_string()
             }
         };
-
-        // Se TODAS falharem, aí marcamos erro global e abortamos
-        if lens_a.is_err() && lens_b.is_err() && lens_c.is_err() {
-            let root_error = lens_a.err().unwrap_or_else(|| {
-                Phase2Error::EmptyPackage("Todas as lentes do enxame falharam".to_string())
-            });
-            self.store
-                .mark_phase2_error(repo_id)
-                .map_err(Phase2Error::Phase2Aborted)?;
-            return Err(root_error);
-        }
 
         let debate = SwarmDebate {
             repo_id: repo_id.to_string(),
@@ -1568,6 +1572,7 @@ mod tests {
     async fn test_timeout_does_not_hang_join_and_marks_phase2_error() {
         let store = MemoryStore::new(sample_payloads());
         let store_errors = Arc::clone(&store.errors);
+        let store_persisted = Arc::clone(&store.persisted);
         let invoker = RecordingLensInvoker::new(
             HashMap::from([(LensKind::Architecture, 800)]),
             HashMap::new(),
@@ -1578,9 +1583,10 @@ mod tests {
         let result = dispatcher.dispatch_swarm("repo/test").await;
         let elapsed = started.elapsed();
 
-        assert!(result.is_err());
+        assert!(result.is_ok(), "Falha parcial nao deve abortar o debate global: {:?}", result);
         assert!(elapsed < Duration::from_secs(2), "timeout nao abortou em tempo util: {:?}", elapsed);
-        assert_eq!(store_errors.load(Ordering::SeqCst), 1);
+        assert_eq!(store_persisted.load(Ordering::SeqCst), 1);
+        assert_eq!(store_errors.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
@@ -1629,17 +1635,17 @@ mod tests {
         let deepseek_mock = deepseek_server
             .mock("POST", "/deepseek")
             .match_body(Matcher::Regex("PACKAGE_B_ONLY".to_string()))
-            .with_status(200)
-            .with_body(success_body(LensKind::Architecture))
-            .expect(1)
+            .with_status(429)
+            .with_body(r#"{"error":"rate limit"}"#)
+            .expect(5)
             .create();
 
         let glm_mock = glm_server
             .mock("POST", "/glm")
             .match_body(Matcher::Regex("PACKAGE_C_ONLY".to_string()))
-            .with_status(200)
-            .with_body(success_body(LensKind::Operations))
-            .expect(1)
+            .with_status(429)
+            .with_body(r#"{"error":"rate limit"}"#)
+            .expect(6)
             .create();
 
         let store_conn = create_test_db();
@@ -1695,14 +1701,4 @@ mod tests {
         assert_eq!(status, STATUS_ERR);
     }
 
-    fn success_body(lens: LensKind) -> String {
-        serde_json::json!({
-            "choices": [{
-                "message": {
-                    "content": default_json(lens, "mock-model")
-                }
-            }]
-        })
-        .to_string()
-    }
 }
