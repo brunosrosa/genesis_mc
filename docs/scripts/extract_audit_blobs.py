@@ -30,7 +30,7 @@ CANDIDATE_PAYLOAD_COLUMNS = [
 
 
 def parse_args() -> argparse.Namespace:
-    # parents[0]=scripts, parents[1]=docs, parents[2]=genesis_mc (raiz)
+    # parents[0]=scripts, parents[1]=docs, parents[2]=souls_mc (raiz)
     root = Path(__file__).resolve().parents[2]
     default_db = root / ".soda_data" / "soda_heuristic_vault.db"
     default_reports = root / "docs" / "audits" / "blobs"

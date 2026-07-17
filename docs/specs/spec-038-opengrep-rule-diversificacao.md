@@ -17,7 +17,7 @@ target_release: "Souls MC V6.1"
 
 Esta spec continua `Draft_Aguardando_Audit`, mas a tese de "monocultura severa" foi **amenizada** pelo header canônico introduzido no PRD-042, que separa o sinal agregado em `[SEVERITY_BREAKDOWN]: ERROR=2, WARNING=5` (informação estruturada que LLMs 3-7B interpretam sem ambiguidade):
 
-- **PRD-042 (`render_semgrep_header`)** — em [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/opengrep.rs). O `severity_breakdown` é uma BTreeMap `String → usize` que **fornece diversidade estatística** sobre o payload (quantos ERROR vs WARNING vs INFO), mesmo quando as findings vêm de uma única regra. **4 testes TDD verdes**.
+- **PRD-042 (`render_semgrep_header`)** — em [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/opengrep.rs). O `severity_breakdown` é uma BTreeMap `String → usize` que **fornece diversidade estatística** sobre o payload (quantos ERROR vs WARNING vs INFO), mesmo quando as findings vêm de uma única regra. **4 testes TDD verdes**.
 
 **O que esta spec ainda pede (e não foi tocado):**
 1. Rotação efetiva de **múltiplas regras** do catálogo `src-tauri/semgrep/rules` (~700 regras disponíveis, apenas 4-8 usadas).
@@ -40,7 +40,7 @@ A auditoria de validação do Spec-036 (rebrand) sobre o `blob_08_health_report`
 
 Consequência: a Lente C das Fases 2-3 recebe um relatório massivamente homogêneo. Não consegue distinguir "este repo tem 1.183 unwraps perigosos em código de produção" de "este repo tem 1.183 unwraps em testes inofensivos". O sinal agregado é pobre.
 
-Cross-ref com o [ADR-031 §4 Blob 6 e Blob 8](file:///Z:/genesis_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md): a lâmina é `opengrep` com `--skip-formatter` no Blob 8. A mudança proposta é **diversificar as regras** que essa lâmina aplica, mantendo o mesmo motor.
+Cross-ref com o [ADR-031 §4 Blob 6 e Blob 8](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md): a lâmina é `opengrep` com `--skip-formatter` no Blob 8. A mudança proposta é **diversificar as regras** que essa lâmina aplica, mantendo o mesmo motor.
 
 ## Leis Aplicáveis
 - **ADR-031 Lei I (Radar Global + Poda Universal):** novas regras devem respeitar a exclusão de `tests/`, `mocks/`, minificados, lockfiles (cross-ref ADR-024 §B).

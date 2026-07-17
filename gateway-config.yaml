@@ -38,7 +38,7 @@ binds:
                     - name: mem
                       stdio:
                         cmd: 'memory-mcp-rs.exe'
-                        args: ['--db-path', 'Z:/genesis_mc/.soda_data/soda_state.db']
+                        args: ['--db-path', 'Z:/souls_mc/.soda_data/soda_state.db']
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: soda

@@ -17,7 +17,7 @@ target_release: "Souls MC V6.1"
 - **v0.2 (2026-07-16):** Adiciona seção **PRDs Parcialmente Implementados** mapeando quais hipóteses já foram **endereçadas por construção** pelos PRDs 033/042/043/044 entregues nos ciclos subsequentes. Diagnóstico precisa ser recalibrado: algumas hipóteses podem ter sido **resolvidas** sem que a Fase 0 (queries SQL) tenha rodado.
 
 ## Contexto
-A [Auditoria Qualitativa (spec-040)](file:///Z:/genesis_mc/docs/specs/spec-040-auditoria-qualitativa-blos.md) executada sobre os 7.221 pares `(repo_id, artifact_type)` no SQLite revelou que **3 dos 11 blobs têm mediana de ~100 bytes**, o que caracteriza **placeholders sistemáticos**:
+A [Auditoria Qualitativa (spec-040)](file:///Z:/souls_mc/docs/specs/spec-040-auditoria-qualitativa-blos.md) executada sobre os 7.221 pares `(repo_id, artifact_type)` no SQLite revelou que **3 dos 11 blobs têm mediana de ~100 bytes**, o que caracteriza **placeholders sistemáticos**:
 
 | Blob | Mediana | Min | Max | Diagnóstico |
 |---|---:|---:|---:|---|
@@ -25,7 +25,7 @@ A [Auditoria Qualitativa (spec-040)](file:///Z:/genesis_mc/docs/specs/spec-040-a
 | `blob_08_health_report` | 102 | 76 | 429.919 | 720/721 repos = placeholder (trailbase é o único rico) |
 | `blob_11_ux_contracts` | 63 | 30 | 164.379 | Maioria = placeholder (alguns repos com UI real) |
 
-A meta da "Fotografia Completa (Zero Truncamento)" do [ADR-031 §2](file:///Z:/genesis_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) está sendo violada em escala: 720 dos 721 repos têm blobs 06/08/11 como **esqueletos de placeholder**, não como extração real. Isso **não é** violação formal da Lei IV (o conteúdo gravado é "100% verdade" do ponto de vista do payload — placeholder é o conteúdo), mas **é** violação do espírito do ADR-031: a IA das Fases 2-3 recebe um esqueleto vazio, não uma fotografia.
+A meta da "Fotografia Completa (Zero Truncamento)" do [ADR-031 §2](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) está sendo violada em escala: 720 dos 721 repos têm blobs 06/08/11 como **esqueletos de placeholder**, não como extração real. Isso **não é** violação formal da Lei IV (o conteúdo gravado é "100% verdade" do ponto de vista do payload — placeholder é o conteúdo), mas **é** violação do espírito do ADR-031: a IA das Fases 2-3 recebe um esqueleto vazio, não uma fotografia.
 
 **Esta spec NÃO é sobre o conteúdo dos payloads (que está em conformidade com a Lei IV)**, mas sobre o **pipeline de extração** que produz esses payloads. Por que 720 dos 721 repos não estão sendo extraídos completamente?
 
@@ -75,10 +75,10 @@ A v0.1 foi escrita quando os placeholders eram **estado atual inexplicado**. Ent
 
 | Hipótese | PRD que endereça | Localização | Status |
 |---|---|---|---|
-| **H2 (sidecars falham em silêncio)** | **PRD-042 (`render_semgrep_header`)** | [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/opengrep.rs) | **Parcialmente mitigada.** O header canônico torna **diagnosticável** se o sidecar rodou (tool, version, duration) — placeholders pós-PRD-042 carregam "audit_header" mesmo se findings=0. Runs **pré-PRD-042** não têm essa info. |
-| **H3 (persistência parcial)** | **PRD-033 (`deduplicate_forensic_diagnostics`)** | [src-tauri/src/harvester/sast/mod.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/mod.rs) | **Não relacionada.** PRD-033 atua sobre findings já extraídos, não sobre o pipeline de gravação. H3 segue em aberto. |
-| **H4 (batch ETL seletivo)** | **PRD-043 (`cargo_workspace_deps_capture`)** + **PRD-044 (`package_json_peer_optional_deps`)** | [src-tauri/src/harvester/extract.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/extract.rs) | **Parcialmente endereçada indiretamente.** Os PRDs não mudam o batch ETL, mas aumentam o conteúdo dos payloads quando rodam. **Placeholders pós-PRD-043/044 são menos prováveis** porque o `blob_02` agora tem mais sinal. |
-| **H5 (payload curto = clean real)** | **PRD-042 (`render_semgrep_header`)** | [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/opengrep.rs) | **Fortalecida como tese.** O header canônico transforma "100 bytes de placeholder" em "100 bytes de header canônico + findings_count: 0" — explicitando que **clean é informação válida**, não placeholder. **H5 vira a interpretação default** para runs pós-PRD-042. |
+| **H2 (sidecars falham em silêncio)** | **PRD-042 (`render_semgrep_header`)** | [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/opengrep.rs) | **Parcialmente mitigada.** O header canônico torna **diagnosticável** se o sidecar rodou (tool, version, duration) — placeholders pós-PRD-042 carregam "audit_header" mesmo se findings=0. Runs **pré-PRD-042** não têm essa info. |
+| **H3 (persistência parcial)** | **PRD-033 (`deduplicate_forensic_diagnostics`)** | [src-tauri/src/harvester/sast/mod.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/mod.rs) | **Não relacionada.** PRD-033 atua sobre findings já extraídos, não sobre o pipeline de gravação. H3 segue em aberto. |
+| **H4 (batch ETL seletivo)** | **PRD-043 (`cargo_workspace_deps_capture`)** + **PRD-044 (`package_json_peer_optional_deps`)** | [src-tauri/src/harvester/extract.rs](file:///Z:/souls_mc/src-tauri/src/harvester/extract.rs) | **Parcialmente endereçada indiretamente.** Os PRDs não mudam o batch ETL, mas aumentam o conteúdo dos payloads quando rodam. **Placeholders pós-PRD-043/044 são menos prováveis** porque o `blob_02` agora tem mais sinal. |
+| **H5 (payload curto = clean real)** | **PRD-042 (`render_semgrep_header`)** | [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/opengrep.rs) | **Fortalecida como tese.** O header canônico transforma "100 bytes de placeholder" em "100 bytes de header canônico + findings_count: 0" — explicitando que **clean é informação válida**, não placeholder. **H5 vira a interpretação default** para runs pós-PRD-042. |
 | **H1 (falha de clone)** | — | — | Sem PRD relacionado. **H1 já foi refutada na v0.1** (outros blobs funcionam para os 720 repos). |
 
 **Implicação para a Fase 0:** as queries SQL precisam ser **estratificadas por timestamp** vs. merge dos PRDs:

@@ -1334,7 +1334,7 @@ impl SsotInjector {
     fn build_google_sheets_http_client() -> Result<reqwest::Client, String> {
         reqwest::Client::builder()
             .timeout(GOOGLE_SHEETS_HTTP_TIMEOUT)
-            .user_agent("genesis-mc-sheets/1.0")
+            .user_agent("souls-mc-sheets/1.0")
             .build()
             .map_err(|e| format!("Falha ao construir cliente HTTP do Google Sheets: {e}"))
     }

@@ -141,27 +141,27 @@ Se o canário revelar que o F0 não pode satisfazer os critérios para nenhum do
 
 ```powershell
 # Rodar canário completo (3 repos sequenciais)
-powershell "Z:\genesis_mc\docs\scripts\run_canary.ps1"
+powershell "Z:\souls_mc\docs\scripts\run_canary.ps1"
 
 # Rodar canário para 1 repo apenas
-powershell "Z:\genesis_mc\docs\scripts\run_canary.ps1" -Repo trailbaseio/trailbase
+powershell "Z:\souls_mc\docs\scripts\run_canary.ps1" -Repo trailbaseio/trailbase
 
 # Auditar 33 blobs do canário
-python "Z:\genesis_mc\docs\scripts\audit_blob_quality.py"
+python "Z:\souls_mc\docs\scripts\audit_blob_quality.py"
 
 # Ver baselines históricos
-cat "Z:\genesis_mc\docs\state\CANARY_BASELINES.json"
+cat "Z:\souls_mc\docs\state\CANARY_BASELINES.json"
 ```
 
 ## PRDs Parcialmente Implementados (v0.3)
 
 A v0.2 foi escrita assumindo que o F0 entregaria blobs em formato "raw" e que o audit (`spec-040`) avaliaria puramente a qualidade do sinal. Entre v0.2 e v0.3, **5 PRDs foram entregues** que mudam o formato dos blobs e, portanto, **invalidam os baselines propostos na v0.2**. O canário precisa ser recalibrado:
 
-- **PRD-042 (`render_semgrep_header`)** — em [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/opengrep.rs). Adiciona `audit_header` canônico ao topo do `blob_06` e `blob_08` (tool, version, timestamp, duration, target_repo, file_count). **Implicação para o canário:** o `score ≥ 60` do `blob_04` e `blob_06` agora se decompõe em "header (10 pts) + findings (50 pts)" — recalcular o peso.
-- **PRD-043 (`cargo_workspace_deps_capture`)** — em [src-tauri/src/harvester/extract.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/extract.rs). `parse_cargo_toml` agora cobre `[workspace.dependencies]` e `[build-dependencies]`. **Implicação:** o critério `score ≥ 80` do `blob_02` para trailbase sobe automaticamente (trailbase tem ~15 deps de workspace que antes eram ignoradas). Baseline vira ≥ 90.
-- **PRD-044 (`package_json_peer_optional_deps`)** — em [src-tauri/src/harvester/extract.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/extract.rs). `parse_package_json` agora cobre `peerDependencies` e `optionalDependencies`. **Implicação:** o critério de `tokio-rs/mio` (happy path) precisa de repo JS no canário para validar — **mio não exercita este PRD**. Adicionar `vercel/next.js` ou similar como canário secundário (futuro).
-- **PRD-045 (`manifest_version_spec_annotation`)** — em [src-tauri/src/harvester/extract.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/extract.rs). `extract_manifest_block` agora ordena alfabeticamente e anexa `version_spec` (ex: `serde 1.0`) em vez de apenas `- serde`. **Implicação:** o `Dumb-LLM Test` agora passa para LLM 3B no `blob_02` — o canário precisa incluir um teste de "LLM 3B consegue listar as 5 maiores deps" como gate de aceite.
-- **PRD-033 (`deduplicate_forensic_diagnostics`)** — em [src-tauri/src/harvester/sast/mod.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/mod.rs). Colapsa 32+ erros idênticos de `libsqlite3-sys` em 1 entrada canônica. **Implicação direta:** o `blob_08` do trailbase deixa de ter 245KB de ruído e cai para < 60KB. O critério `score ≥ 50` (linha 92) está **subdimensionado** — a qualidade real agora permite ≥ 80.
+- **PRD-042 (`render_semgrep_header`)** — em [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/opengrep.rs). Adiciona `audit_header` canônico ao topo do `blob_06` e `blob_08` (tool, version, timestamp, duration, target_repo, file_count). **Implicação para o canário:** o `score ≥ 60` do `blob_04` e `blob_06` agora se decompõe em "header (10 pts) + findings (50 pts)" — recalcular o peso.
+- **PRD-043 (`cargo_workspace_deps_capture`)** — em [src-tauri/src/harvester/extract.rs](file:///Z:/souls_mc/src-tauri/src/harvester/extract.rs). `parse_cargo_toml` agora cobre `[workspace.dependencies]` e `[build-dependencies]`. **Implicação:** o critério `score ≥ 80` do `blob_02` para trailbase sobe automaticamente (trailbase tem ~15 deps de workspace que antes eram ignoradas). Baseline vira ≥ 90.
+- **PRD-044 (`package_json_peer_optional_deps`)** — em [src-tauri/src/harvester/extract.rs](file:///Z:/souls_mc/src-tauri/src/harvester/extract.rs). `parse_package_json` agora cobre `peerDependencies` e `optionalDependencies`. **Implicação:** o critério de `tokio-rs/mio` (happy path) precisa de repo JS no canário para validar — **mio não exercita este PRD**. Adicionar `vercel/next.js` ou similar como canário secundário (futuro).
+- **PRD-045 (`manifest_version_spec_annotation`)** — em [src-tauri/src/harvester/extract.rs](file:///Z:/souls_mc/src-tauri/src/harvester/extract.rs). `extract_manifest_block` agora ordena alfabeticamente e anexa `version_spec` (ex: `serde 1.0`) em vez de apenas `- serde`. **Implicação:** o `Dumb-LLM Test` agora passa para LLM 3B no `blob_02` — o canário precisa incluir um teste de "LLM 3B consegue listar as 5 maiores deps" como gate de aceite.
+- **PRD-033 (`deduplicate_forensic_diagnostics`)** — em [src-tauri/src/harvester/sast/mod.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/mod.rs). Colapsa 32+ erros idênticos de `libsqlite3-sys` em 1 entrada canônica. **Implicação direta:** o `blob_08` do trailbase deixa de ter 245KB de ruído e cai para < 60KB. O critério `score ≥ 50` (linha 92) está **subdimensionado** — a qualidade real agora permite ≥ 80.
 
 **Ação obrigatória antes de promover v0.3 → v0.4:** rodar F0 sobre trailbase com os PRDs 042/043/045/033 ativos e gerar **novos baselines** em `docs/state/CANARY_BASELINES.json`. Os limites da v0.2 ficam como **piso mínimo**; os novos valores serão empíricos.
 

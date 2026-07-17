@@ -17,8 +17,8 @@ target_release: "Souls MC V6.1"
 
 Esta spec continua `Draft_Aguardando_Audit`, mas **2 PRDs de sua tese foram JÁ implementados e testados em TDD** no ciclo atual (Dumb-LLM Test aprovado):
 
-- **PRD-033 (`deduplicate_forensic_diagnostics`)** — em [src-tauri/src/harvester/sast/mod.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/mod.rs). Colapsa 32+ diagnósticos idênticos do libsqlite3-sys (mesmo erro em N sub-crates de um monorepo) em 1 entrada canônica. Reduz o `blob_08` de trailbase de ~245KB para < 60KB sem perda de sinal. **4 testes TDD verdes** (collapses_identical_failures, handles_empty_input, handles_malformed_entries, keeps_distinct_failures).
-- **PRD-042 (`render_semgrep_header`)** — em [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/genesis_mc/src-tauri/src/harvester/sast/opengrep.rs). Adiciona header de auditoria canônico ao topo do `blob_06` E `blob_08`:
+- **PRD-033 (`deduplicate_forensic_diagnostics`)** — em [src-tauri/src/harvester/sast/mod.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/mod.rs). Colapsa 32+ diagnósticos idênticos do libsqlite3-sys (mesmo erro em N sub-crates de um monorepo) em 1 entrada canônica. Reduz o `blob_08` de trailbase de ~245KB para < 60KB sem perda de sinal. **4 testes TDD verdes** (collapses_identical_failures, handles_empty_input, handles_malformed_entries, keeps_distinct_failures).
+- **PRD-042 (`render_semgrep_header`)** — em [src-tauri/src/harvester/sast/opengrep.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/opengrep.rs). Adiciona header de auditoria canônico ao topo do `blob_06` E `blob_08`:
   ```
   [AUDITED_AT]: 2026-07-16T...
   [OPENGREP_VERSION]: 1.45.0 | unknown
@@ -37,7 +37,7 @@ Esta spec **NÃO deve ser implementada antes de `spec-040` (Auditoria Qualitativ
 **Status atual:** `Draft_Aguardando_Audit`. Será promovido a `Draft` (executável) após a decisão do gating, ou a `Pausado` se o audit revelar que o problema não é sistêmico.
 
 ## Contexto
-O `blob_08_health_report` é definido pelo [ADR-031 §4](file:///Z:/genesis_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) como "A Podridão Estrutural": o mesmo motor SAST do `blob_06`, mas com a flag `--skip-formatter`, focado em complexidade ciclomática, código morto e code smells.
+O `blob_08_health_report` é definido pelo [ADR-031 §4](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) como "A Podridão Estrutural": o mesmo motor SAST do `blob_06`, mas com a flag `--skip-formatter`, focado em complexidade ciclomática, código morto e code smells.
 
 A auditoria de validação do Spec-036 (rebrand) revelou que o `blob_08` do trailbase (429.781 bytes) é um **texto-relatório com markers `[DOMAIN:...]`** e não JSON estruturado:
 

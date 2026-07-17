@@ -17,7 +17,7 @@ target_release: "Souls MC V6.1"
 - **v0.2 (2026-07-16):** Adiciona **7 novas dimensões de scoring** derivadas dos PRDs entregues nos ciclos 042-047. As dimensões originais continuam válidas; as novas permitem **discriminar** sinais que a v0.1 colapsava (ex: `tamanho_sadio` não distinguia "manifest com version_spec" de "manifest cru").
 
 ## Contexto
-O F0 Harvester extrai 11 artefatos por repositório (ver [ADR-031 §4](file:///Z:/genesis_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md)) e os persiste em `artefatos_brutos.payload_blob`. O SQLite contém **150+ runs históricas** (uma por repo) para os blobs 06 e 08, e algumas dezenas para outros. A maioria dos runs vem de execuções **pré-rebrand** (placeholder mínimo, ~100-500 bytes) e apenas `trailbaseio/trailbase` tem run pós-rebrand com payload rico.
+O F0 Harvester extrai 11 artefatos por repositório (ver [ADR-031 §4](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md)) e os persiste em `artefatos_brutos.payload_blob`. O SQLite contém **150+ runs históricas** (uma por repo) para os blobs 06 e 08, e algumas dezenas para outros. A maioria dos runs vem de execuções **pré-rebrand** (placeholder mínimo, ~100-500 bytes) e apenas `trailbaseio/trailbase` tem run pós-rebrand com payload rico.
 
 **Não temos visibilidade sistêmica** sobre quais blobs são consistentemente fracos. Cada análise feita até hoje foi **ad-hoc, repo a repo**. Esta spec define o instrumento de medida que fecha essa lacuna e serve de **gating decision** para spec-037, spec-038 e spec-039.
 
@@ -156,11 +156,11 @@ Se o audit revelar problemas graves (ex: violações de Lei IV > 50%), **não h�
 
 ```powershell
 # Smoke test (1 repo, valida output)
-python "Z:\genesis_mc\docs\scripts\audit_blob_quality.py" --repo-allowlist trailbaseio/trailbase
+python "Z:\souls_mc\docs\scripts\audit_blob_quality.py" --repo-allowlist trailbaseio/trailbase
 
 # Full audit (todos os repos)
-python "Z:\genesis_mc\docs\scripts\audit_blob_quality.py"
+python "Z:\souls_mc\docs\scripts\audit_blob_quality.py"
 
 # Customizado (top-20, score mínimo 40)
-python "Z:\genesis_mc\docs\scripts\audit_blob_quality.py" --top 20 --min-score 40
+python "Z:\souls_mc\docs\scripts\audit_blob_quality.py" --top 20 --min-score 40
 ```

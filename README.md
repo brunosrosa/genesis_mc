@@ -15,7 +15,7 @@ Esta arquitetura foi forjada com restrições e objetivos matematicamente estrit
 
 ## 🏗️ Dogmas Arquiteturais (A Stack Imutável)
 
-O Genesis MC repudia a execução de interpretadores pesados em *background* (como daemons contínuos em Node.js ou Python) para preservar a VRAM e a CPU estritamente para a inferência local de IA.
+O Souls MC repudia a execução de interpretadores pesados em *background* (como daemons contínuos em Node.js ou Python) para preservar a VRAM e a CPU estritamente para a inferência local de IA.
 
 1. **Backend (O Cérebro):** Rust + Tokio (Assíncrono). Gerencia todo o I/O, persistência local e orquestração de Agentes.
 2. **Desktop Bridge:** Tauri v2. Garante um binário leve, seguro e com comunicação IPC (Inter-Process Communication) orientada a buffers binários de Zero-Copy.
@@ -59,7 +59,7 @@ A estruturação do projeto é regida pela metodologia **Spec-Driven Development
 ---
 
 ## 🛡️ Segurança (Zero-Trust & HITL)
-Nenhum agente autônomo rodando no Genesis MC possui permissão de escrita livre no disco principal. Alterações destrutivas ou invocações de terminais operam sob o conceito de **Shadow Workspaces** e dependem de aprovação **Human-In-The-Loop (HITL)** via interface gráfica antes da mutação real.
+Nenhum agente autônomo rodando no Souls MC possui permissão de escrita livre no disco principal. Alterações destrutivas ou invocações de terminais operam sob o conceito de **Shadow Workspaces** e dependem de aprovação **Human-In-The-Loop (HITL)** via interface gráfica antes da mutação real.
 
 ---
 *“Pessimismo da razão, otimismo da vontade.”*
