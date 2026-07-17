@@ -1,0 +1,7 @@
+# AUDIT REPORT: blob_11_ux_contracts
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T15:46:05
+
+=== REPO: trailbaseio/trailbase ===
+[NO_UX_DETECTED_BACKEND_ONLY_TOPOLOGY]

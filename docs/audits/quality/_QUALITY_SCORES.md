@@ -1,6 +1,6 @@
 # Auditoria Qualitativa dos Blobs (Fase 0 Harvester)
 
-**Gerado em:** 2026-07-16T14:01:36
+**Gerado em:** 2026-07-17T15:33:01
 
 **Pares (repo, blob) auditados:** 7221
 
@@ -676,7 +676,7 @@
 | `tokio-rs/tokio` | 88 | 73 | 78 | 56 | 68 | 71 | 89 | 46 | 78 | — | 56 | **70.4** |
 | `tracel-ai/burn` | 81 | 73 | 73 | 56 | 68 | 71 | 86 | 46 | 78 | — | 56 | **68.9** |
 | `tracel-ai/cubecl` | 75 | 73 | 73 | 56 | 88 | 71 | 86 | 46 | 78 | — | 56 | **70.2** |
-| `trailbaseio/trailbase` | 88 | 78 | 78 | 66 | 69 | 81 | 91 | 50 | 63 | 83 | 88 | **75.9** |
+| `trailbaseio/trailbase` | 88 | 83 | 78 | 66 | 89 | 81 | 91 | 98 | 63 | 83 | 58 | **79.8** |
 | `trycua/cua` | 88 | 73 | 68 | 56 | 68 | 71 | 80 | 46 | 78 | — | 88 | **71.7** |
 | `trynullsec/nullsec-s1` | 79 | 66 | 63 | 56 | 68 | 75 | 86 | 75 | 50 | — | 56 | **67.4** |
 | `tschk/crepuscularity` | 86 | 71 | 78 | 56 | 88 | 71 | 93 | 46 | 78 | — | 56 | **72.4** |
@@ -745,7 +745,7 @@
 | blob_05_architecture_map | **62.1** | 12.6 | 48 | 89 | 721 |
 | blob_06_unsafe_hotspots | **70.6** | 3.0 | 61 | 81 | 721 |
 | blob_07_ops_blueprint | **74.1** | 16.1 | 50 | 93 | 721 |
-| blob_08_health_report | **51.6** | 9.8 | 46 | 86 | 721 |
+| blob_08_health_report | **51.7** | 9.9 | 46 | 98 | 721 |
 | blob_09_community_meta | **73.5** | 10.2 | 50 | 78 | 721 |
 | blob_10_soda_canon_context | **83.0** | 0.0 | 83 | 83 | 11 |
 | blob_11_ux_contracts | **61.7** | 11.6 | 56 | 88 | 721 |
@@ -769,6 +769,7 @@
 
 | repo_id | blob | size | score |
 |---|---|---:|---:|
+| `trailbaseio/trailbase` | blob_08_health_report | 168873 | **97.5** |
 | `CES-Ltd/Lumi` | blob_07_ops_blueprint | 1713 | **93.0** |
 | `HKUDS/OpenHarness` | blob_07_ops_blueprint | 5808 | **93.0** |
 | `Hmbown/DeepSeek-TUI` | blob_07_ops_blueprint | 81389 | **93.0** |
@@ -778,12 +779,11 @@
 | `ankitvgupta/Exo` | blob_07_ops_blueprint | 23654 | **93.0** |
 | `ankitvgupta/mail-app` | blob_07_ops_blueprint | 23654 | **93.0** |
 | `brightbeanxyz/brightbean-studio` | blob_07_ops_blueprint | 6482 | **93.0** |
-| `crynta/terax-ai` | blob_07_ops_blueprint | 9810 | **93.0** |
 
 ## 5. Resumo executivo
 
-- **Blob mais fraco (sistêmico):** `blob_08_health_report` com média 51.6
+- **Blob mais fraco (sistêmico):** `blob_08_health_report` com média 51.7
 - **Blob mais forte (sistêmico):** `blob_10_soda_canon_context` com média 83.0
-- **Violações de Lei IV (ADR-031):** 1 / 7221
+- **Violações de Lei IV (ADR-031):** 0 / 7221
 - **Violações de rebrand (`genesis_mc` residual):** 11 / 7221
 - **Casos com slop (TODO/FIXME/PLACEHOLDER):** 0 / 7221

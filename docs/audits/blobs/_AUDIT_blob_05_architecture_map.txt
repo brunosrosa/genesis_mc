@@ -1,0 +1,261 @@
+# AUDIT REPORT: blob_05_architecture_map
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T15:46:05
+
+=== REPO: trailbaseio/trailbase ===
+# Architecture Map
+
+[cli] (6 arquivos)
+  [crates/cli]
+  - crates/cli/Cargo.toml
+  - crates/cli/build.rs
+  [crates/cli/src]
+  - crates/cli/src/args.rs
+  - crates/cli/src/import.rs
+  - crates/cli/src/lib.rs
+  - crates/cli/src/wasm.rs
+
+[config] (25 arquivos)
+  [.]
+  - Cargo.toml
+  [client/go/trailbase]
+  - client/go/trailbase/go.mod
+  [client/python]
+  - client/python/pyproject.toml
+  [crates/assets]
+  - crates/assets/Cargo.toml
+  [crates/auth-config]
+  - crates/auth-config/Cargo.toml
+  [crates/auth-ui]
+  - crates/auth-ui/Cargo.toml
+  [crates/auth-ui/ui]
+  - crates/auth-ui/ui/package.json
+  - crates/auth-ui/ui/tsconfig.json
+  [crates/client]
+  - crates/client/Cargo.toml
+  [crates/core]
+  - crates/core/Cargo.toml
+  [crates/extension]
+  - crates/extension/Cargo.toml
+  [crates/extension-so]
+  - crates/extension-so/Cargo.toml
+  [crates/pg-schema]
+  - crates/pg-schema/Cargo.toml
+  [crates/qs]
+  - crates/qs/Cargo.toml
+  [crates/reactive]
+  - crates/reactive/Cargo.toml
+  [crates/refinery]
+  - crates/refinery/Cargo.toml
+  [crates/sqlite]
+  - crates/sqlite/Cargo.toml
+  [crates/sqlvalue]
+  - crates/sqlvalue/Cargo.toml
+  [crates/wasi-keyvalue]
+  - crates/wasi-keyvalue/Cargo.toml
+  [crates/wasm-runtime-axum]
+  - crates/wasm-runtime-axum/Cargo.toml
+  [crates/wasm-runtime-common]
+  - crates/wasm-runtime-common/Cargo.toml
+  [crates/wasm-runtime-guest]
+  - crates/wasm-runtime-guest/Cargo.toml
+  [crates/wasm-runtime-host]
+  - crates/wasm-runtime-host/Cargo.toml
+  [guests/typescript]
+  - guests/typescript/package.json
+  - guests/typescript/tsconfig.json
+
+[core] (116 arquivos)
+  [client/dart/lib]
+  - client/dart/lib/trailbase.dart
+  [client/dotnet/trailbase]
+  - client/dotnet/trailbase/Client.cs
+  - client/dotnet/trailbase/RecordApi.cs
+  - client/dotnet/trailbase/TrailBase.csproj
+  [client/go/trailbase]
+  - client/go/trailbase/client.go
+  - client/go/trailbase/event.go
+  - client/go/trailbase/record_api.go
+  - client/go/trailbase/transport.go
+  [client/kotlin]
+  - client/kotlin/build.gradle.kts
+  - client/kotlin/settings.gradle.kts
+  [client/kotlin/lib]
+  - client/kotlin/lib/build.gradle.kts
+  [client/python/trailbase]
+  - client/python/trailbase/__init__.py
+  [client/swift/trailbase]
+  - client/swift/trailbase/Package.swift
+  [crates/assets]
+  - crates/assets/build.rs
+  [crates/assets/src]
+  - crates/assets/src/assets.rs
+  - crates/assets/src/email.rs
+  - crates/assets/src/lib.rs
+  [crates/auth-config/src]
+  - crates/auth-config/src/lib.rs
+  [crates/auth-ui]
+  - crates/auth-ui/build.rs
+  [crates/auth-ui/src]
+  - crates/auth-ui/src/auth.rs
+  - crates/auth-ui/src/lib.rs
+  [crates/auth-ui/ui]
+  - crates/auth-ui/ui/.prettierrc.mjs
+  - crates/auth-ui/ui/astro.config.mjs
+  - crates/auth-ui/ui/eslint.config.mjs
+  [crates/client/src]
+  - crates/client/src/client.rs
+  - crates/client/src/error.rs
+  - crates/client/src/lib.rs
+  - crates/client/src/record_api.rs
+  - crates/client/src/transport.rs
+  [crates/core]
+  - crates/core/build.rs
+  [crates/core/src]
+  - crates/core/src/app_state.rs
+  - crates/core/src/backup.rs
+  - crates/core/src/config.rs
+  - crates/core/src/connection.rs
+  - crates/core/src/constants.rs
+  - crates/core/src/data_dir.rs
+  - crates/core/src/email.rs
+  - crates/core/src/encryption.rs
+  - crates/core/src/init_error.rs
+  - crates/core/src/lib.rs
+  - crates/core/src/listing.rs
+  - crates/core/src/logging.rs
+  - crates/core/src/metadata.rs
+  - crates/core/src/migrations.rs
+  - crates/core/src/scheduler.rs
+  - crates/core/src/schema_metadata.rs
+  - crates/core/src/test.rs
+  - crates/core/src/test_utils.rs
+  - crates/core/src/transaction_recorder.rs
+  - crates/core/src/util.rs
+  [crates/extension-so/src]
+  - crates/extension-so/src/lib.rs
+  [crates/extension/src]
+  - crates/extension/src/base64.rs
+  - crates/extension/src/geoip.rs
+  - crates/extension/src/jsonschema.rs
+  - crates/extension/src/lib.rs
+  - crates/extension/src/password.rs
+  - crates/extension/src/regex.rs
+  - crates/extension/src/uuid.rs
+  - crates/extension/src/validators.rs
+  [crates/pg-schema/src]
+  - crates/pg-schema/src/error.rs
+  - crates/pg-schema/src/index.rs
+  - crates/pg-schema/src/lib.rs
+  - crates/pg-schema/src/table.rs
+  - crates/pg-schema/src/trigger.rs
+  - crates/pg-schema/src/util.rs
+  - crates/pg-schema/src/view.rs
+  [crates/qs/src]
+  - crates/qs/src/column_rel_value.rs
+  - crates/qs/src/filter.rs
+  - crates/qs/src/lib.rs
+  - crates/qs/src/query.rs
+  - crates/qs/src/util.rs
+  - crates/qs/src/value.rs
+  [crates/reactive/src]
+  - crates/reactive/src/async_reactive.rs
+  - crates/reactive/src/lib.rs
+  - crates/reactive/src/macros.rs
+  - crates/reactive/src/merge.rs
+  - crates/reactive/src/reactive.rs
+  [crates/refinery/src]
+  - crates/refinery/src/error.rs
+  - crates/refinery/src/lib.rs
+  - crates/refinery/src/runner.rs
+  - crates/refinery/src/util.rs
+  [crates/sqlite/src]
+  - crates/sqlite/src/database.rs
+  - crates/sqlite/src/error.rs
+  - crates/sqlite/src/from_sql.rs
+  - crates/sqlite/src/generic.rs
+  - crates/sqlite/src/lib.rs
+  - crates/sqlite/src/params.rs
+  - crates/sqlite/src/rows.rs
+  - crates/sqlite/src/statement.rs
+  - crates/sqlite/src/tests.rs
+  - crates/sqlite/src/to_sql.rs
+  - crates/sqlite/src/traits.rs
+  - crates/sqlite/src/type.rs
+  - crates/sqlite/src/value.rs
+  [crates/sqlvalue/src]
+  - crates/sqlvalue/src/lib.rs
+  [crates/wasi-keyvalue/src]
+  - crates/wasi-keyvalue/src/lib.rs
+  [crates/wasm-runtime-axum/src]
+  - crates/wasm-runtime-axum/src/lib.rs
+  [crates/wasm-runtime-common/src]
+  - crates/wasm-runtime-common/src/lib.rs
+  [crates/wasm-runtime-guest/src]
+  - crates/wasm-runtime-guest/src/db.rs
+  - crates/wasm-runtime-guest/src/fetch.rs
+  - crates/wasm-runtime-guest/src/fs.rs
+  - crates/wasm-runtime-guest/src/http.rs
+  - crates/wasm-runtime-guest/src/job.rs
+  - crates/wasm-runtime-guest/src/kv.rs
+  - crates/wasm-runtime-guest/src/lib.rs
+  - crates/wasm-runtime-guest/src/time.rs
+  [crates/wasm-runtime-host/src]
+  - crates/wasm-runtime-host/src/functions.rs
+  - crates/wasm-runtime-host/src/host.rs
+  - crates/wasm-runtime-host/src/lib.rs
+  - crates/wasm-runtime-host/src/sqlite.rs
+  [guests/typescript]
+  - guests/typescript/eslint.config.mjs
+  - guests/typescript/vite.config.ts
+  [guests/typescript/src]
+  - guests/typescript/src/index.ts
+  - guests/typescript/src/json.js
+  - guests/typescript/src/timer.ts
+  - guests/typescript/src/util.ts
+
+[database] (10 arquivos)
+  [crates/schema]
+  - crates/schema/Cargo.toml
+  [crates/schema/src]
+  - crates/schema/src/error.rs
+  - crates/schema/src/file.rs
+  - crates/schema/src/json.rs
+  - crates/schema/src/json_schema.rs
+  - crates/schema/src/lib.rs
+  - crates/schema/src/metadata.rs
+  - crates/schema/src/parse.rs
+  - crates/schema/src/registry.rs
+  - crates/schema/src/sqlite.rs
+
+[docs] (11 arquivos)
+  [docs]
+  - docs/.prettierrc.mjs
+  - docs/astro.config.ts
+  - docs/eslint.config.mjs
+  - docs/package.json
+  - docs/tsconfig.json
+  [docs/src]
+  - docs/src/config.ts
+  - docs/src/content.config.ts
+  [docs/src/layouts]
+  - docs/src/layouts/Base.astro
+  [docs/src/lib]
+  - docs/src/lib/darkmode.ts
+  - docs/src/lib/github.ts
+  - docs/src/lib/utils.ts
+
+[frontend] (5 arquivos)
+  [docs/src/components]
+  - docs/src/components/BarChart.tsx
+  - docs/src/components/LineChart.tsx
+  - docs/src/components/ScatterChart.tsx
+  - docs/src/components/SplitCard.astro
+  [docs/src/pages]
+  - docs/src/pages/blog.astro
+
+[tests] (2 arquivos)
+  [client/go/trailbase]
+  - client/go/trailbase/client_test.go
+  - client/go/trailbase/record_api_test.go

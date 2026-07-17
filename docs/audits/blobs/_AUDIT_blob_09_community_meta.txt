@@ -1,0 +1,91 @@
+# AUDIT REPORT: blob_09_community_meta
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T15:46:05
+
+=== REPO: trailbaseio/trailbase ===
+# Community Meta
+
+extracted_at: 2026-07-17T07:06:32.137674600+00:00
+
+repo:
+- full_name: trailbaseio/trailbase
+- name: trailbase
+- description: An open, sub-millisecond, single-executable Firebase alternative with type-safe APIs, built-in WebAssembly runtime, realtime subscriptions, auth, and admin UI built on Rust, SQLite & Wasmtime.
+- license: OSL-3.0
+
+vanity:
+- stars: 5397
+- forks: 182
+- open_issues: 40
+- open_prs: 6
+
+last_commit:
+- sha: 5658b314592a40c910ff40f93456619e4c79e194
+- date: 2026-07-16T14:28:08+00:00
+
+top_open_issues:
+- number: 161
+  title: Too much compiling needed now. Might we need a "Detached/optional Scripting Runtime" for developers?
+  labels: []
+  comments: 28
+  reactions: 1
+  updated_at: 2026-01-27T09:04:05+00:00
+- number: 215
+  title: OpenID Connect scopes unsupported
+  labels: []
+  comments: 24
+  reactions: 0
+  updated_at: 2026-06-04T08:30:20+00:00
+- number: 156
+  title: Feature Request: Serve image thumbnails
+  labels: []
+  comments: 17
+  reactions: 0
+  updated_at: 2025-12-22T07:14:45+00:00
+- number: 210
+  title: Clarify conditions for a integer/UUID primary key column
+  labels: []
+  comments: 15
+  reactions: 0
+  updated_at: 2026-02-18T15:18:01+00:00
+- number: 252
+  title: Allow WASM modules to extend the TrailBase admin panel
+  labels: []
+  comments: 15
+  reactions: 0
+  updated_at: 2026-07-08T14:37:59+00:00
+- number: 221
+  title: WASM support for Multi-DB
+  labels: []
+  comments: 13
+  reactions: 0
+  updated_at: 2026-04-29T07:51:33+00:00
+- number: 86
+  title: Auth docs improvements suggestions
+  labels: []
+  comments: 10
+  reactions: 1
+  updated_at: 2025-07-29T10:01:13+00:00
+
+recent_prs:
+- number: 262
+  status: open
+  title: Adds an MCP sidecar for TrailBase with Docker/Portainer support and a documented release flow.
+  updated_at: 2026-07-15T10:51:27+00:00
+- number: 134
+  status: draft
+  title: feat(clients): add transaction support
+  updated_at: 2026-07-13T14:56:42+00:00
+- number: 253
+  status: open
+  title: Add WASM module registry and admin panel extensibility via manifest convention
+  updated_at: 2026-07-13T14:56:41+00:00
+- number: 237
+  status: open
+  title: Fix access-rule SQL errors being returned as Forbidden
+  updated_at: 2026-07-13T14:56:41+00:00
+- number: 194
+  status: open
+  title: Added a register user api call to the rust client
+  updated_at: 2026-07-13T14:56:41+00:00

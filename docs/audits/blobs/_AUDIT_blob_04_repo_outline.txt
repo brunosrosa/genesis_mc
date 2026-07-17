@@ -1,0 +1,3618 @@
+# AUDIT REPORT: blob_04_repo_outline
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T15:46:05
+
+=== REPO: trailbaseio/trailbase ===
+# Repository Outline
+
+repo: trailbase
+symbol_files: 142
+source: native-rust multi-strategy (language-pack + targeted-tree-sitter + regex-fallback)
+
+## Productive Tree
+
+trailbase/
+|-- .cargo/
+|   `-- config.toml
+|-- .github/
+|   |-- actions/
+|   |   |-- free_disk/
+|   |   |   `-- action.yml
+|   |   |-- setup_build/
+|   |   |   `-- action.yml
+|   |   `-- setup_clients/
+|   |       `-- action.yml
+|   `-- workflows/
+|       |-- release.yml
+|       `-- test.yml
+|-- assets/
+|   |-- colors.svg
+|   |-- favicon.svg
+|   |-- logo.svg
+|   `-- screenshots.svg
+|-- client/
+|   |-- dart/
+|   |   |-- lib/
+|   |   |   `-- trailbase.dart
+|   |   |-- .gitignore
+|   |   |-- .pubignore
+|   |   |-- CHANGELOG.md
+|   |   |-- LICENSE
+|   |   |-- README.md
+|   |   |-- analysis_options.yaml
+|   |   `-- pubspec.yaml
+|   |-- dotnet/
+|   |   |-- docs/
+|   |   |   |-- docfx.json
+|   |   |   |-- index.md
+|   |   |   `-- toc.yml
+|   |   |-- trailbase/
+|   |   |   |-- Client.cs
+|   |   |   |-- Makefile
+|   |   |   |-- README.md
+|   |   |   |-- RecordApi.cs
+|   |   |   `-- TrailBase.csproj
+|   |   |-- .editorconfig
+|   |   `-- .gitignore
+|   |-- go/
+|   |   `-- trailbase/
+|   |       |-- LICENSE
+|   |       |-- client.go
+|   |       |-- client_test.go
+|   |       |-- event.go
+|   |       |-- go.mod
+|   |       |-- go.sum
+|   |       |-- record_api.go
+|   |       |-- record_api_test.go
+|   |       `-- transport.go
+|   |-- kotlin/
+|   |   |-- gradle/
+|   |   |   `-- libs.versions.toml
+|   |   |-- lib/
+|   |   |   `-- build.gradle.kts
+|   |   |-- .gitattributes
+|   |   |-- .gitignore
+|   |   |-- Makefile
+|   |   |-- build.gradle.kts
+|   |   |-- gradle.properties
+|   |   |-- gradlew
+|   |   |-- gradlew.bat
+|   |   `-- settings.gradle.kts
+|   |-- python/
+|   |   |-- trailbase/
+|   |   |   `-- __init__.py
+|   |   |-- .flake8
+|   |   |-- .gitignore
+|   |   |-- Makefile
+|   |   |-- README.md
+|   |   |-- poetry.toml
+|   |   `-- pyproject.toml
+|   |-- swift/
+|   |   `-- trailbase/
+|   |       |-- .gitignore
+|   |       |-- LICENSE
+|   |       |-- Package.resolved
+|   |       `-- Package.swift
+|   |-- testfixture/
+|   |   |-- .gitignore
+|   |   |-- Makefile
+|   |   `-- config.textproto
+|   |-- LICENSE-APACHE
+|   |-- rust
+|   `-- typescript
+|-- crates/
+|   |-- assets/
+|   |   |-- src/
+|   |   |   |-- assets.rs
+|   |   |   |-- email.rs
+|   |   |   `-- lib.rs
+|   |   |-- templates/
+|   |   |   |-- default_email_change_address_body.html
+|   |   |   |-- default_email_change_address_subject.txt
+|   |   |   |-- default_email_otp_body.html
+|   |   |   |-- default_email_otp_subject.txt
+|   |   |   |-- default_email_reset_password_body.html
+|   |   |   |-- default_email_reset_password_subject.txt
+|   |   |   |-- default_email_verification_body.html
+|   |   |   `-- default_email_verification_subject.txt
+|   |   |-- Cargo.toml
+|   |   |-- askama.toml
+|   |   `-- build.rs
+|   |-- auth-config/
+|   |   |-- src/
+|   |   |   `-- lib.rs
+|   |   `-- Cargo.toml
+|   |-- auth-ui/
+|   |   |-- src/
+|   |   |   |-- auth.rs
+|   |   |   `-- lib.rs
+|   |   |-- ui/
+|   |   |   |-- .gitignore
+|   |   |   |-- .prettierignore
+|   |   |   |-- .prettierrc.mjs
+|   |   |   |-- astro.config.mjs
+|   |   |   |-- eslint.config.mjs
+|   |   |   |-- package.json
+|   |   |   |-- tsconfig.json
+|   |   |   `-- ui.config.json
+|   |   |-- .gitignore
+|   |   |-- Cargo.toml
+|   |   |-- Makefile
+|   |   |-- README.md
+|   |   |-- askama.toml
+|   |   `-- build.rs
+|   |-- cli/
+|   |   |-- src/
+|   |   |   |-- args.rs
+|   |   |   |-- import.rs
+|   |   |   |-- lib.rs
+|   |   |   `-- wasm.rs
+|   |   |-- Cargo.toml
+|   |   `-- build.rs
+|   |-- client/
+|   |   |-- src/
+|   |   |   |-- client.rs
+|   |   |   |-- error.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- record_api.rs
+|   |   |   `-- transport.rs
+|   |   `-- Cargo.toml
+|   |-- core/
+|   |   |-- proto/
+|   |   |   |-- config.proto
+|   |   |   |-- config_api.proto
+|   |   |   |-- metadata.proto
+|   |   |   `-- vault.proto
+|   |   |-- src/
+|   |   |   |-- app_state.rs
+|   |   |   |-- backup.rs
+|   |   |   |-- config.rs
+|   |   |   |-- connection.rs
+|   |   |   |-- constants.rs
+|   |   |   |-- data_dir.rs
+|   |   |   |-- email.rs
+|   |   |   |-- encryption.rs
+|   |   |   |-- init_error.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- listing.rs
+|   |   |   |-- logging.rs
+|   |   |   |-- metadata.rs
+|   |   |   |-- migrations.rs
+|   |   |   |-- scheduler.rs
+|   |   |   |-- schema_metadata.rs
+|   |   |   |-- test.rs
+|   |   |   |-- test_utils.rs
+|   |   |   |-- transaction_recorder.rs
+|   |   |   `-- util.rs
+|   |   |-- templates/
+|   |   |   |-- create_or_replace_record_query.sql
+|   |   |   |-- create_record_access_query.sql
+|   |   |   |-- create_record_access_query_pg.sql
+|   |   |   |-- list_record_query.sql
+|   |   |   |-- list_record_query_pg.sql
+|   |   |   |-- read_record_query.sql
+|   |   |   |-- read_record_query_expanded.sql
+|   |   |   |-- subscription_record_read.sql
+|   |   |   |-- update_record_access_query.sql
+|   |   |   |-- update_record_access_query_pg.sql
+|   |   |   `-- update_record_query.sql
+|   |   |-- .gitignore
+|   |   |-- Cargo.toml
+|   |   `-- build.rs
+|   |-- extension/
+|   |   |-- src/
+|   |   |   |-- base64.rs
+|   |   |   |-- geoip.rs
+|   |   |   |-- jsonschema.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- password.rs
+|   |   |   |-- regex.rs
+|   |   |   |-- uuid.rs
+|   |   |   `-- validators.rs
+|   |   |-- testdata/
+|   |   |   `-- GeoIP2-City-Test.mmdb
+|   |   `-- Cargo.toml
+|   |-- extension-so/
+|   |   |-- src/
+|   |   |   `-- lib.rs
+|   |   |-- Cargo.toml
+|   |   `-- README.md
+|   |-- pg-schema/
+|   |   |-- src/
+|   |   |   |-- error.rs
+|   |   |   |-- index.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- table.rs
+|   |   |   |-- trigger.rs
+|   |   |   |-- util.rs
+|   |   |   `-- view.rs
+|   |   `-- Cargo.toml
+|   |-- qs/
+|   |   |-- src/
+|   |   |   |-- column_rel_value.rs
+|   |   |   |-- filter.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- query.rs
+|   |   |   |-- util.rs
+|   |   |   `-- value.rs
+|   |   `-- Cargo.toml
+|   |-- reactive/
+|   |   |-- src/
+|   |   |   |-- async_reactive.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- macros.rs
+|   |   |   |-- merge.rs
+|   |   |   `-- reactive.rs
+|   |   |-- .gitignore
+|   |   `-- Cargo.toml
+|   |-- refinery/
+|   |   |-- src/
+|   |   |   |-- error.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- runner.rs
+|   |   |   `-- util.rs
+|   |   `-- Cargo.toml
+|   |-- schema/
+|   |   |-- schemas/
+|   |   |   `-- Geometry.json
+|   |   |-- src/
+|   |   |   |-- error.rs
+|   |   |   |-- file.rs
+|   |   |   |-- json.rs
+|   |   |   |-- json_schema.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- metadata.rs
+|   |   |   |-- parse.rs
+|   |   |   |-- registry.rs
+|   |   |   `-- sqlite.rs
+|   |   |-- .gitignore
+|   |   `-- Cargo.toml
+|   |-- sqlite/
+|   |   |-- src/
+|   |   |   |-- database.rs
+|   |   |   |-- error.rs
+|   |   |   |-- from_sql.rs
+|   |   |   |-- generic.rs
+|   |   |   |-- lib.rs
+|   |   |   |-- params.rs
+|   |   |   |-- rows.rs
+|   |   |   |-- statement.rs
+|   |   |   |-- tests.rs
+|   |   |   |-- to_sql.rs
+|   |   |   |-- traits.rs
+|   |   |   |-- type.rs
+|   |   |   `-- value.rs
+|   |   `-- Cargo.toml
+|   |-- sqlvalue/
+|   |   |-- src/
+|   |   |   `-- lib.rs
+|   |   `-- Cargo.toml
+|   |-- wasi-keyvalue/
+|   |   |-- src/
+|   |   |   `-- lib.rs
+|   |   |-- wit/
+|   |   |   `-- world.wit
+|   |   `-- Cargo.toml
+|   |-- wasm-runtime-axum/
+|   |   |-- src/
+|   |   |   `-- lib.rs
+|   |   `-- Cargo.toml
+|   |-- wasm-runtime-common/
+|   |   |-- src/
+|   |   |   `-- lib.rs
+|   |   `-- Cargo.toml
+|   |-- wasm-runtime-guest/
+|   |   |-- src/
+|   |   |   |-- db.rs
+|   |   |   |-- fetch.rs
+|   |   |   |-- fs.rs
+|   |   |   |-- http.rs
+|   |   |   |-- job.rs
+|   |   |   |-- kv.rs
+|   |   |   |-- lib.rs
+|   |   |   `-- time.rs
+|   |   `-- Cargo.toml
+|   `-- wasm-runtime-host/
+|       |-- src/
+|       |   |-- functions.rs
+|       |   |-- host.rs
+|       |   |-- lib.rs
+|       |   `-- sqlite.rs
+|       |-- Cargo.toml
+|       `-- wit
+|-- deploy/
+|   |-- k8s/
+|   |   |-- README.md
+|   |   |-- trailbase-deployment.yml
+|   |   `-- trailbase-service.yml
+|   |-- install.ps1
+|   `-- install.sh
+|-- docs/
+|   |-- openapi/
+|   |   `-- schema.json
+|   |-- public/
+|   |   |-- favicon.svg
+|   |   |-- install.ps1
+|   |   `-- install.sh
+|   |-- src/
+|   |   |-- assets/
+|   |   |   |-- dotnet_logo.svg
+|   |   |   |-- flutter_logo.svg
+|   |   |   |-- go_logo.svg
+|   |   |   |-- kotlin_logo.svg
+|   |   |   |-- nut.svg
+|   |   |   |-- python_logo.svg
+|   |   |   |-- rust_unofficial_logo.svg
+|   |   |   |-- swift_logo.svg
+|   |   |   |-- tanstack_logo.svg
+|   |   |   `-- ts_logo.svg
+|   |   |-- components/
+|   |   |   |-- BarChart.tsx
+|   |   |   |-- LineChart.tsx
+|   |   |   |-- ScatterChart.tsx
+|   |   |   `-- SplitCard.astro
+|   |   |-- layouts/
+|   |   |   `-- Base.astro
+|   |   |-- lib/
+|   |   |   |-- darkmode.ts
+|   |   |   |-- github.ts
+|   |   |   `-- utils.ts
+|   |   |-- pages/
+|   |   |   `-- blog.astro
+|   |   |-- styles/
+|   |   |   `-- global.css
+|   |   |-- config.ts
+|   |   `-- content.config.ts
+|   |-- .dockerignore
+|   |-- .gitignore
+|   |-- .prettierignore
+|   |-- .prettierrc.mjs
+|   |-- Dockerfile
+|   |-- README.md
+|   |-- astro.config.ts
+|   |-- docker-compose.yml
+|   |-- eslint.config.mjs
+|   |-- nginx.conf
+|   |-- package.json
+|   `-- tsconfig.json
+|-- guests/
+|   |-- typescript/
+|   |   |-- src/
+|   |   |   |-- index.ts
+|   |   |   |-- json.js
+|   |   |   |-- timer.ts
+|   |   |   `-- util.ts
+|   |   |-- wit/
+|   |   |   |-- init.wit
+|   |   |   |-- sqlite.wit
+|   |   |   `-- world.wit
+|   |   |-- .gitignore
+|   |   |-- eslint.config.mjs
+|   |   |-- package.json
+|   |   |-- tsconfig.json
+|   |   `-- vite.config.ts
+|   `-- rust
+|-- .dockerignore
+|-- .gitignore
+|-- .gitmodules
+|-- .npmrc
+|-- .pre-commit-config.yaml
+|-- .rustfmt.toml
+|-- .soda_repo_version
+|-- .soda_ultima_versao_online
+|-- CHANGELOG.md
+|-- Cargo.lock
+|-- Cargo.toml
+|-- Dockerfile
+|-- Dockerfile.ci
+|-- LICENSE
+|-- Makefile
+|-- README.md
+|-- SECURITY.md
+|-- docker-compose.yml
+|-- pnpm-workspace.yaml
+|-- pubspec.lock
+`-- pubspec.yaml
+
+## Indexed Symbol Files
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- crates/schema/src/sqlite.rs [rust; 111 symbols]
+- crates/sqlite/src/generic.rs [rust; 86 symbols]
+- crates/core/src/lib.rs [rust; 79 symbols]
+- crates/core/src/app_state.rs [rust; 74 symbols]
+- crates/client/src/record_api.rs [rust; 73 symbols]
+- crates/core/src/config.rs [rust; 71 symbols]
+- crates/schema/src/metadata.rs [rust; 66 symbols]
+- crates/core/src/logging.rs [rust; 61 symbols]
+- crates/client/src/client.rs [rust; 58 symbols]
+- crates/refinery/src/runner.rs [rust; 58 symbols]
+- crates/wasm-runtime-guest/src/http.rs [rust; 58 symbols]
+- crates/wasm-runtime-host/src/lib.rs [rust; 58 symbols]
+- crates/core/src/scheduler.rs [rust; 50 symbols]
+- crates/wasm-runtime-guest/src/lib.rs [rust; 48 symbols]
+- crates/core/src/email.rs [rust; 44 symbols]
+- crates/core/src/schema_metadata.rs [rust; 43 symbols]
+- crates/wasm-runtime-host/src/host.rs [rust; 43 symbols]
+- crates/core/src/connection.rs [rust; 41 symbols]
+- crates/core/src/migrations.rs [rust; 38 symbols]
+- crates/qs/src/query.rs [rust; 37 symbols]
+- crates/wasi-keyvalue/src/lib.rs [rust; 37 symbols]
+- crates/sqlite/src/value.rs [rust; 35 symbols]
+- crates/wasm-runtime-host/src/sqlite.rs [rust; 35 symbols]
+- crates/auth-ui/src/lib.rs [rust; 33 symbols]
+- crates/sqlite/src/tests.rs [rust; 33 symbols]
+- crates/schema/src/file.rs [rust; 31 symbols]
+- crates/sqlite/src/lib.rs [rust; 30 symbols]
+- crates/sqlite/src/rows.rs [rust; 30 symbols]
+- crates/auth-ui/src/auth.rs [rust; 29 symbols]
+- crates/qs/src/filter.rs [rust; 29 symbols]
+- crates/reactive/src/reactive.rs [rust; 29 symbols]
+- crates/refinery/src/util.rs [rust; 28 symbols]
+- crates/wasm-runtime-axum/src/lib.rs [rust; 28 symbols]
+- crates/extension/src/jsonschema.rs [rust; 27 symbols]
+- crates/extension/src/geoip.rs [rust; 26 symbols]
+- crates/schema/src/json_schema.rs [rust; 25 symbols]
+- crates/assets/src/assets.rs [rust; 24 symbols]
+- crates/wasm-runtime-guest/src/db.rs [rust; 24 symbols]
+- crates/extension/src/lib.rs [rust; 23 symbols]
+- crates/schema/src/lib.rs [rust; 23 symbols]
+- crates/sqlvalue/src/lib.rs [rust; 23 symbols]
+- crates/core/src/transaction_recorder.rs [rust; 21 symbols]
+- crates/pg-schema/src/table.rs [rust; 21 symbols]
+- crates/core/src/data_dir.rs [rust; 20 symbols]
+- crates/core/src/util.rs [rust; 20 symbols]
+- crates/reactive/src/async_reactive.rs [rust; 20 symbols]
+- crates/cli/src/args.rs [rust; 19 symbols]
+- crates/extension/src/password.rs [rust; 18 symbols]
+- crates/refinery/src/error.rs [rust; 17 symbols]
+- crates/core/src/backup.rs [rust; 16 symbols]
+- crates/extension/src/uuid.rs [rust; 16 symbols]
+- crates/pg-schema/src/view.rs [rust; 16 symbols]
+- crates/schema/src/json.rs [rust; 16 symbols]
+- crates/cli/src/wasm.rs [rust; 15 symbols]
+- crates/client/src/transport.rs [rust; 15 symbols]
+- crates/qs/src/column_rel_value.rs [rust; 15 symbols]
+- crates/wasm-runtime-host/src/functions.rs [rust; 15 symbols]
+- crates/core/src/metadata.rs [rust; 14 symbols]
+- crates/extension/src/base64.rs [rust; 14 symbols]
+- crates/qs/src/value.rs [rust; 14 symbols]
+- crates/sqlite/src/traits.rs [rust; 14 symbols]
+- crates/extension/src/regex.rs [rust; 13 symbols]
+- crates/schema/src/registry.rs [rust; 12 symbols]
+- crates/cli/src/import.rs [rust; 11 symbols]
+- crates/pg-schema/src/index.rs [rust; 11 symbols]
+- crates/pg-schema/src/lib.rs [rust; 11 symbols]
+- crates/wasm-runtime-guest/src/job.rs [rust; 11 symbols]
+- crates/extension/src/validators.rs [rust; 10 symbols]
+- crates/refinery/src/lib.rs [rust; 10 symbols]
+- crates/client/src/lib.rs [rust; 9 symbols]
+- crates/pg-schema/src/trigger.rs [rust; 9 symbols]
+- crates/qs/src/lib.rs [rust; 9 symbols]
+- crates/sqlite/src/to_sql.rs [rust; 9 symbols]
+- crates/wasm-runtime-guest/src/kv.rs [rust; 9 symbols]
+- crates/core/src/listing.rs [rust; 8 symbols]
+- crates/sqlite/src/from_sql.rs [rust; 8 symbols]
+- crates/sqlite/src/params.rs [rust; 8 symbols]
+- crates/wasm-runtime-common/src/lib.rs [rust; 8 symbols]
+- crates/core/src/encryption.rs [rust; 7 symbols]
+- crates/core/src/test_utils.rs [rust; 7 symbols]
+- crates/reactive/src/lib.rs [rust; 7 symbols]
+- crates/schema/src/parse.rs [rust; 7 symbols]
+- crates/qs/src/util.rs [rust; 6 symbols]
+- crates/sqlite/src/statement.rs [rust; 6 symbols]
+- crates/assets/src/lib.rs [rust; 5 symbols]
+- crates/auth-config/src/lib.rs [rust; 5 symbols]
+- crates/wasm-runtime-guest/src/fetch.rs [rust; 5 symbols]
+- crates/wasm-runtime-guest/src/fs.rs [rust; 5 symbols]
+- crates/cli/src/lib.rs [rust; 4 symbols]
+- crates/client/src/error.rs [rust; 4 symbols]
+- crates/core/src/constants.rs [rust; 4 symbols]
+- crates/reactive/src/macros.rs [rust; 4 symbols]
+- crates/wasm-runtime-guest/src/time.rs [rust; 4 symbols]
+- crates/core/src/init_error.rs [rust; 3 symbols]
+- crates/reactive/src/merge.rs [rust; 3 symbols]
+- crates/assets/build.rs [rust; 2 symbols]
+- crates/core/src/test.rs [rust; 2 symbols]
+- crates/extension-so/src/lib.rs [rust; 2 symbols]
+- crates/schema/src/error.rs [rust; 2 symbols]
+- crates/sqlite/src/error.rs [rust; 2 symbols]
+- crates/assets/src/email.rs [rust; 1 symbols]
+- crates/auth-ui/build.rs [rust; 1 symbols]
+- crates/cli/build.rs [rust; 1 symbols]
+- crates/core/build.rs [rust; 1 symbols]
+- crates/pg-schema/src/error.rs [rust; 1 symbols]
+- crates/pg-schema/src/util.rs [rust; 1 symbols]
+- crates/sqlite/src/database.rs [rust; 1 symbols]
+- crates/sqlite/src/type.rs [rust; 1 symbols]
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- docs/src/components/BarChart.tsx [typescript; 12 symbols]
+- docs/astro.config.ts [typescript; 11 symbols]
+- guests/typescript/src/index.ts [typescript; 8 symbols]
+- guests/typescript/src/timer.ts [typescript; 8 symbols]
+- crates/auth-ui/ui/eslint.config.mjs [javascript; 7 symbols]
+- docs/eslint.config.mjs [javascript; 7 symbols]
+- docs/src/components/LineChart.tsx [typescript; 7 symbols]
+- docs/src/components/ScatterChart.tsx [typescript; 7 symbols]
+- docs/src/lib/github.ts [typescript; 6 symbols]
+- crates/auth-ui/ui/astro.config.mjs [javascript; 5 symbols]
+- docs/src/content.config.ts [typescript; 5 symbols]
+- docs/src/lib/darkmode.ts [typescript; 4 symbols]
+- guests/typescript/src/json.js [javascript; 4 symbols]
+- guests/typescript/src/util.ts [typescript; 4 symbols]
+- guests/typescript/vite.config.ts [typescript; 4 symbols]
+- docs/src/lib/utils.ts [typescript; 3 symbols]
+- guests/typescript/eslint.config.mjs [javascript; 3 symbols]
+- crates/auth-ui/ui/.prettierrc.mjs [javascript; 1 symbols]
+- docs/.prettierrc.mjs [javascript; 1 symbols]
+- docs/src/config.ts [typescript; 1 symbols]
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- client/python/trailbase/__init__.py [python; 69 symbols]
+
+=================================================================
+[DOMAIN: GO]
+=================================================================
+- client/go/trailbase/client.go [go; 2 symbols]
+- client/go/trailbase/client_test.go [go; 2 symbols]
+- client/go/trailbase/event.go [go; 2 symbols]
+- client/go/trailbase/record_api.go [go; 2 symbols]
+- client/go/trailbase/record_api_test.go [go; 2 symbols]
+- client/go/trailbase/transport.go [go; 2 symbols]
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- client/dotnet/trailbase/RecordApi.cs [c_sharp; 72 symbols]
+- client/dotnet/trailbase/Client.cs [c_sharp; 66 symbols]
+- client/dart/lib/trailbase.dart [dart; 1 symbols]
+- client/kotlin/build.gradle.kts [kotlin; 1 symbols]
+- client/kotlin/lib/build.gradle.kts [kotlin; 1 symbols]
+- client/kotlin/settings.gradle.kts [kotlin; 1 symbols]
+- client/swift/trailbase/Package.swift [swift; 1 symbols]
+
+## AST Blueprint
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+[crates/schema/src/sqlite.rs]
+- rust enum ColumnAffinityType
+- rust enum ColumnDataType
+- rust enum ColumnOption
+- rust enum ConflictResolution
+- rust enum GeneratedExpressionMode
+- rust enum ReferentialAction
+- rust enum SchemaError
+- rust fn build_foreign_key
+- rust fn builtin_function_preserving_type
+- rust fn column_with_alias
+- rust fn create_index_statement
+- rust fn create_table_statement
+- rust fn eq
+- rust fn escaped_string
+- rust fn extract_column_mapping
+- rust fn extract_group_by_key_candidate
+- rust fn extract_join_type
+- rust fn extract_joins_and_referenced_tables_by_alias
+- rust fn extract_result_columns
+- rust fn extract_single_arg
+- rust fn fmt
+- rust fn from
+- rust fn from_data_type
+- rust fn from_type_name
+- rust fn get_parent_name
+- rust fn has_default
+- rust fn hash
+- rust fn is_float_kind
+- rust fn is_integer_kind
+- rust fn is_not_null
+- rust fn is_primary
+- rust fn literal_to_column
+- rust fn lookup_and_parse_table_schema
+- rust fn migration_filename
+- rust fn parse
+- rust fn parse_create_table
+- rust fn parse_create_view_select
+- rust fn parse_into_select
+- rust fn precondition
+- rust fn quote
+- rust fn sanitize
+- rust fn test_create_table_statement_quoting
+- rust fn test_create_view_column_mapping
+- rust fn test_join_column_extraction
+- rust fn test_parse_create_index
+- rust fn test_parse_create_trigger
+- rust fn test_quote
+- rust fn test_statement_to_table_index_and_back
+- rust fn test_statement_to_table_schema_and_back
+- rust fn test_unquote
+- rust fn test_view_column_extraction
+- rust fn to_alias
+- rust fn to_fragment
+- rust fn try_from
+- rust fn unparse_fk_trigger
+- rust fn unquote_db_name
+- rust fn unquote_expr
+- rust fn unquote_id
+- rust fn unquote_name
+- rust fn unquote_qualified
+- rust fn unquote_string
+- rust impl Check
+- rust impl Column
+- rust impl ColumnAffinityType
+- rust impl ColumnDataType
+- rust impl ColumnOption
+- rust impl ConflictResolution
+- rust impl Eq
+- rust impl ForeignKey
+- rust impl From<
+- rust impl From<AstQualifiedName<
+- rust impl From<sqlite3_parser::ast::RefAct>
+- rust impl From<sqlite3_parser::ast::ResolveType>
+- rust impl Hash
+- rust impl PartialEq
+- rust impl QualifiedName
+- rust impl ReferentialAction
+- rust impl Table
+- rust impl TableIndex
+- rust impl TryFrom<
+- rust impl UniqueConstraint
+- rust impl View
+- rust impl std::fmt::Display
+- rust mod tests
+- rust struct C
+- rust struct Check
+- rust struct Column
+- rust struct ColumnMapping
+- rust struct ColumnOrder
+- rust struct ForeignKey
+- rust struct GroupBy
+- rust struct QualifiedName
+- rust struct ReferredTable
+- rust struct SelectFormatter
+- rust struct StmtFormatter
+- rust struct Table
+- rust struct TableIndex
+- rust struct UniqueConstraint
+- rust struct View
+- rust struct ViewColumn
+- use crate::{metadata::find_record_pk_column_index_for_view, parse::parse_into_statement}
+- use itertools::Itertools
+- use log::*
+- use serde::{Deserialize, Serialize}
+- use sqlite3_parser::ast::RefAct
+- use sqlite3_parser::ast::RefArg
+- use sqlite3_parser::ast::ResolveType
+- use std::hash::{Hash, Hasher}
+- use super::*
+- use thiserror::Error
+- use ts_rs::TS
+
+[crates/sqlite/src/generic.rs]
+- pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard}
+- pub use crate::sqlite::transaction::OwnedTx
+- rust enum Executor
+- rust enum PgConnection
+- rust enum SyncConnection
+- rust enum Transaction
+- rust fn attach
+- rust fn backup
+- rust fn backup_to_dir
+- rust fn call_writer
+- rust fn close
+- rust fn commit
+- rust fn connection_type
+- rust fn detach
+- rust fn eq
+- rust fn execute
+- rust fn execute_batch
+- rust fn expand_sql
+- rust fn fmt
+- rust fn generic_connection_w_pg_create_more_complex_table_test
+- rust fn generic_connection_w_pg_create_simple_table_test
+- rust fn generic_connection_w_pg_test
+- rust fn generic_pg_poc_test
+- rust fn hash
+- rust fn id
+- rust fn list_databases
+- rust fn new
+- rust fn open_in_memory
+- rust fn pg_float_test
+- rust fn pg_int_test
+- rust fn pg_json_test
+- rust fn pg_lite_test
+- rust fn pg_tid_test
+- rust fn pg_trigger_test
+- rust fn pg_uuids_test
+- rust fn pg_with_opts
+- rust fn query_row
+- rust fn query_rows
+- rust fn read_query_row
+- rust fn read_query_row_get
+- rust fn read_query_rows
+- rust fn read_query_value
+- rust fn read_query_values
+- rust fn restore
+- rust fn rollback
+- rust fn threads
+- rust fn transaction
+- rust fn try_write_arc_lock_for
+- rust fn with_opts
+- rust fn write_lock
+- rust fn write_query_row
+- rust fn write_query_row_get
+- rust fn write_query_rows
+- rust fn write_query_value
+- rust fn write_query_values
+- rust impl Connection
+- rust impl Debug
+- rust impl Eq
+- rust impl Hash
+- rust impl PartialEq
+- rust impl SyncConnectionTrait
+- rust impl SyncTransactionTrait
+- rust mod tests
+- rust struct Connection
+- rust struct Data
+- rust struct PgOptions
+- use crate::Value
+- use crate::database::Database
+- use crate::error::Error
+- use crate::from_sql::FromSql
+- use crate::params::Params
+- use crate::pg::executor::Executor as PgExecutor
+- use crate::pg::executor::build_pg_test_executor
+- use crate::r#type::ConnectionType
+- use crate::rows::{Row, Rows}
+- use crate::sqlite::executor::Executor as SqliteExecutor
+- use crate::{named_params, params}
+- use pglite_oxide::PgliteServer
+- use postgres::fallible_iterator::FallibleIterator
+- use postgres::{Client, NoTls}
+- use serde::Deserialize
+- use std::fmt::Debug
+- use std::hash::{Hash, Hasher}
+- use std::sync::Arc
+- use std::sync::atomic::{AtomicUsize, Ordering}
+- use super::*
+
+[crates/core/src/lib.rs]
+- pub use app_state::{AppState, InitArgs}
+- pub use auth::User
+- pub use crate::admin::user::{CreateUserRequest, create_user_handler}
+- pub use crate::app_state::InitArgs
+- pub use crate::auth::util::{UserIdentifier, login_with_password_for_test}
+- pub use crate::auth::{AuthTokenClaims, JwtHelper, cli}
+- pub use crate::backup::{Backup, backup_all, delete_backups, find_backups, restore_all}
+- pub use crate::connection::Connection
+- pub use crate::email::{Email, EmailError}
+- pub use crate::migrations::new_unique_migration_filename
+- pub use crate::records::json_schema::build_api_json_schema
+- pub use crate::schema_metadata::ConnectionMetadata
+- pub use data_dir::DataDir
+- pub use init_error::InitError
+- pub use server::{Server, ServerOptions}
+- pub use trailbase_schema::json_schema::JsonSchemaMode
+- rust fn append_string
+- rust fn build_sync_wasm_runtimes_for_components
+- rust fn component_path
+- rust fn install_routes_and_jobs
+- rust fn new
+- rust fn random_alphanumeric
+- rust fn random_numeric_and_lowercase
+- rust fn random_numeric_and_uppercase
+- rust fn sample
+- rust fn set
+- rust fn test_random_alphanumeric
+- rust fn test_random_numberic_and_uppercase
+- rust fn wasm_runtime_builders
+- rust impl Distribution<u8>
+- rust impl KvStore
+- rust impl Runtime
+- rust impl SampleString
+- rust mod admin
+- rust mod api
+- rust mod app_state
+- rust mod auth
+- rust mod backup
+- rust mod config
+- rust mod connection
+- rust mod constants
+- rust mod data_dir
+- rust mod email
+- rust mod encryption
+- rust mod extract
+- rust mod init_error
+- rust mod listing
+- rust mod logging
+- rust mod metadata
+- rust mod migrations
+- rust mod openapi
+- rust mod records
+- rust mod scheduler
+- rust mod schema_metadata
+- rust mod server
+- rust mod test
+- rust mod test_utils
+- rust mod tests
+- rust mod transaction_recorder
+- rust mod util
+- rust mod wasm
+- rust struct Doc
+- rust struct KvStore
+- rust struct NumericAndLowerCase
+- rust struct NumericAndUpperCase
+- rust struct Runtime
+- rust struct SqliteFunctions
+- rust struct SqliteStore
+- use axum::Router
+- use crate::AppState
+- use prost_reflect::DescriptorPool
+- use rand::distr::{Alphanumeric, Distribution, SampleString}
+- use rand::{CryptoRng, Rng}
+- use std::path::PathBuf
+- use std::sync::Arc
+- use std::sync::LazyLock
+- use super::*
+- use tokio::sync::RwLock
+- use utoipa::OpenApi
+
+[crates/core/src/app_state.rs]
+- pub use test_utils::*
+- rust fn access_config
+- rust fn auth_options
+- rust fn build_auth_config
+- rust fn build_objectstore
+- rust fn build_record_apis
+- rust fn build_record_apis_impl
+- rust fn build_site_url
+- rust fn conn
+- rust fn connection_manager
+- rust fn data_dir
+- rust fn demo_mode
+- rust fn dev_mode
+- rust fn get_config
+- rust fn init
+- rust fn init_app_state
+- rust fn jobs
+- rust fn json_schema_registry
+- rust fn jwt
+- rust fn logs_conn
+- rust fn lookup_record_api
+- rust fn mailer
+- rust fn new
+- rust fn oauth_provider_name_to_img
+- rust fn objectstore
+- rust fn public_dir
+- rust fn rebuild_connection_metadata
+- rust fn reload_wasm_runtimes
+- rust fn runtime_root_fs
+- rust fn session_conn
+- rust fn site_url
+- rust fn start_time
+- rust fn subscription_manager
+- rust fn test_config
+- rust fn test_state
+- rust fn update_json_schema_registry
+- rust fn user_conn
+- rust fn validate_and_update_config
+- rust fn validate_path
+- rust fn version
+- rust fn wasm_runtimes
+- rust impl AppState
+- rust mod test_utils
+- rust struct AppState
+- rust struct AppStateArgs
+- rust struct InitArgs
+- rust struct InternalState
+- rust struct TestStateOptions
+- use crate::auth::jwt::JwtHelper
+- use crate::auth::oauth::providers::test::TestOAuthProvider
+- use crate::auth::options::AuthOptions
+- use crate::config::proto::{OAuthProviderConfig, OAuthProviderId}
+- use crate::connection::{BuildOptions, ConnectionEntry, ConnectionError, ConnectionManager}
+- use crate::constants::USER_TABLE
+- use crate::data_dir::DataDir
+- use crate::email::Mailer
+- use crate::init_error::InitError
+- use crate::metadata::load_or_init_metadata_textproto
+- use crate::rand::random_alphanumeric
+- use crate::records::RecordApi
+- use crate::records::subscribe::manager::SubscriptionManager
+- use crate::scheduler::{JobRegistry, build_job_registry_from_config}
+- use crate::wasm::Runtime
+- use log::*
+- use object_store::ObjectStore
+- use std::collections::HashMap
+- use std::path::{Path, PathBuf}
+- use std::sync::Arc
+- use super::*
+- use tokio::sync::RwLock
+- use tokio::time::*
+- use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider, RegistrationIdentifier}
+- use trailbase_extension::jsonschema::JsonSchemaRegistry
+- use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive}
+
+[crates/client/src/record_api.rs]
+- rust enum CompareOp
+- rust enum EventErrorStatus
+- rust enum EventPayload
+- rust enum Operation
+- rust enum ValueOrFilterGroup
+- rust fn create
+- rust fn create_bulk
+- rust fn create_impl
+- rust fn create_op
+- rust fn delete
+- rust fn delete_op
+- rust fn expand
+- rust fn format
+- rust fn from
+- rust fn from_str
+- rust fn is_not_null
+- rust fn is_null
+- rust fn is_null_filter_builder
+- rust fn is_null_formats_to_is
+- rust fn is_null_wire_values
+- rust fn list
+- rust fn new
+- rust fn parse_change_event_test
+- rust fn read
+- rust fn serialized_id
+- rust fn subscribe
+- rust fn subscribe_ws
+- rust fn to_list
+- rust fn traverse_filters
+- rust fn update
+- rust fn update_op
+- rust fn with_count
+- rust fn with_cursor
+- rust fn with_expand
+- rust fn with_filters
+- rust fn with_limit
+- rust fn with_offset
+- rust fn with_order
+- rust fn with_pagination
+- rust impl ChangeEvent
+- rust impl CompareOp
+- rust impl Filter
+- rust impl From<F>
+- rust impl From<Filter>
+- rust impl ListArguments<
+- rust impl Pagination
+- rust impl RecordApi
+- rust impl RecordId<
+- rust mod tests
+- rust struct ChangeEvent
+- rust struct Filter
+- rust struct ListArguments
+- rust struct ListResponse
+- rust struct Pagination
+- rust struct ReadArguments
+- rust struct RecordApi
+- rust struct RecordIdResponse
+- rust trait ReadArgumentsTrait
+- rust trait RecordId
+- use crate::client::ClientState
+- use crate::error::Error
+- use crate::transport::json
+- use eventsource_stream::Eventsource
+- use futures_lite::{Stream, StreamExt}
+- use reqwest::Method
+- use reqwest_websocket::Message
+- use serde::de::DeserializeOwned
+- use serde::{Deserialize, Serialize}
+- use serde_repr::{Deserialize_repr, Serialize_repr}
+- use std::borrow::Cow
+- use std::sync::Arc
+- use super::*
+- use tracing::*
+
+[crates/core/src/config.rs]
+- rust enum ConfigError
+- rust fn apply_parsed_env_var
+- rust fn clear
+- rust fn from_text
+- rust fn hash_config
+- rust fn ierr
+- rust fn is_secret
+- rust fn is_valid_hostname_or_ip
+- rust fn load_or_init_config_textproto
+- rust fn load_vault_textproto_or_default
+- rust fn maybe_load_config_textproto_unverified
+- rust fn merge_vault_and_env
+- rust fn new_with_custom_defaults
+- rust fn parse_env_var
+- rust fn recursively_merge_vault_and_env
+- rust fn recursively_redact_secrets
+- rust fn redact_secrets
+- rust fn set
+- rust fn split_config
+- rust fn test_config_merging
+- rust fn test_config_merging_from_env_and_vault
+- rust fn test_config_stripping
+- rust fn test_config_tests_sequentially
+- rust fn test_default_config_is_valid
+- rust fn test_is_valid_hostname_or_ip
+- rust fn test_strip_and_merge
+- rust fn test_validate_email_template_empty_or_none_body_passes
+- rust fn test_validate_email_template_password_reset_with_code_passes
+- rust fn test_validate_email_template_password_reset_with_token_passes
+- rust fn test_validate_email_template_without_acceptable_var_fails
+- rust fn to_text
+- rust fn token_ttls
+- rust fn validate_application_name
+- rust fn validate_config
+- rust fn validate_email_config
+- rust fn validate_email_template
+- rust fn write_config_and_vault_textproto
+- rust impl AuthConfig
+- rust impl Config
+- rust impl Vault
+- rust mod proto
+- rust mod test
+- rust mod test_env
+- use base64::prelude::*
+- use chrono::Duration
+- use crate::DESCRIPTOR_POOL
+- use crate::app_state::test_state
+- use crate::auth::oauth::providers::oauth_providers_static_registry
+- use crate::config::ConfigError
+- use crate::config::proto::{AuthConfig, Config, EmailConfig, OAuthProviderConfig}
+- use crate::connection::ConnectionManager
+- use crate::data_dir::DataDir
+- use crate::records::validate_record_api_config
+- use lazy_static::lazy_static
+- use log::*
+- use parking_lot::Mutex
+- use prost::Message
+- use prost_reflect::text_format::FormatOptions
+- use prost_reflect::{DynamicMessage, MessageDescriptor, ReflectMessage}
+- use proto::{EmailTemplate, OAuthProviderId, SmtpEncryption}
+- use std::collections::HashMap
+- use std::collections::{HashMap, HashSet}
+- use std::convert::TryFrom
+- use std::fs
+- use std::hash::{DefaultHasher, Hash, Hasher}
+- use std::str::FromStr
+- use super::*
+- use test_env::parse_env_var
+- use thiserror::Error
+- use trailbase_sqlite::ConnectionType
+- use validator::{ValidateEmail, ValidateUrl}
+
+[crates/schema/src/metadata.rs]
+- rust enum JsonColumnMetadata
+- rust enum JsonSchemaError
+- rust enum TableOrView
+- rust enum TableOrViewMetadata
+- rust fn build_json_metadata
+- rust fn builtin_pk_preserving_type
+- rust fn column_by_name
+- rust fn column_index_by_name
+- rust fn columns
+- rust fn extract_json_metadata
+- rust fn find_file_column_indexes
+- rust fn find_geometry_column_indexes
+- rust fn find_record_pk_column_index_for_table
+- rust fn find_record_pk_column_index_for_view
+- rust fn find_user_id_foreign_key_columns
+- rust fn from
+- rust fn from_schemas
+- rust fn get_table
+- rust fn get_table_or_view
+- rust fn get_view
+- rust fn is_file_column
+- rust fn is_geometry_column
+- rust fn is_pk_column
+- rust fn is_suitable_record_pk_column
+- rust fn name
+- rust fn new
+- rust fn parse_create_table
+- rust fn parse_create_view
+- rust fn qualified_name
+- rust fn record_pk_column
+- rust fn tables
+- rust fn test_extract_json_metadata
+- rust fn test_find_geometry_columns
+- rust fn test_find_record_pk_column_index_for_table
+- rust fn test_parse_create_view
+- rust fn test_parse_create_view_from_issue_99
+- rust fn test_parse_create_view_with_group_by
+- rust fn test_parse_create_view_with_joins
+- rust fn test_parse_create_view_with_subquery
+- rust fn validate
+- rust fn views
+- rust impl ConnectionMetadata
+- rust impl JsonColumnMetadata
+- rust impl TableMetadata
+- rust impl TableOrView<
+- rust impl TableOrViewMetadata<
+- rust impl ViewMetadata
+- rust mod tests
+- rust struct ColumnMetadata
+- rust struct ConnectionMetadata
+- rust struct TableMetadata
+- rust struct ViewMetadata
+- use crate::parse::parse_into_statement
+- use crate::sqlite::{SchemaError, Table}
+- use jsonschema::Validator
+- use lazy_static::lazy_static
+- use log::*
+- use regex::Regex
+- use sqlite3_parser::Bump
+- use sqlite3_parser::ast::JoinType
+- use std::borrow::Borrow
+- use std::collections::HashMap
+- use std::sync::Arc
+- use super::*
+- use thiserror::Error
+- use trailbase_extension::jsonschema::JsonSchemaRegistry
+
+[crates/core/src/logging.rs]
+- rust enum HttpMethod
+- rust enum HttpVersion
+- rust fn as_millis_f64
+- rust fn as_seconds_f64
+- rust fn as_str
+- rust fn default
+- rust fn fmt
+- rust fn from
+- rust fn insert_logs
+- rust fn new
+- rust fn new_buffer
+- rust fn on_event
+- rust fn on_new_span
+- rust fn on_record
+- rust fn record_bool
+- rust fn record_debug
+- rust fn record_error
+- rust fn record_f64
+- rust fn record_i64
+- rust fn record_str
+- rust fn record_u128
+- rust fn record_u64
+- rust fn sqlite_logger_make_span
+- rust fn sqlite_logger_on_request
+- rust fn sqlite_logger_on_response
+- rust fn test_as_millis_f64
+- rust fn test_as_seconds_f64
+- rust fn write_log
+- rust impl Default
+- rust impl From<
+- rust impl HttpMethod
+- rust impl HttpVersion
+- rust impl Layer<S>
+- rust impl SqliteLogLayer
+- rust impl std::fmt::Display
+- rust impl tracing::field::Visit
+- rust mod tests
+- rust struct JsonLog
+- rust struct LogFieldStorage
+- rust struct LogVisitor
+- rust struct SqliteLogLayer
+- use axum::body::Body
+- use axum::http::{Request, header}
+- use axum::response::Response
+- use const_format::formatcp
+- use crate::AppState
+- use crate::extract::ip::extract_ip
+- use crate::util::get_header
+- use flume::TrySendError
+- use serde::Serialize
+- use serde_json::json
+- use std::time::Duration
+- use super::*
+- use tokio::io::AsyncWriteExt
+- use tracing::Level
+- use tracing::field::Field
+- use tracing::span::{Attributes, Id, Record, Span}
+- use tracing_subscriber::layer::{Context, Layer}
+- use trailbase_sqlite::SyncConnectionTrait
+- use trailbase_sqlite::Value
+- use uuid::Uuid
+
+[crates/client/src/client.rs]
+- rust fn base_url
+- rust fn build
+- rust fn build_headers
+- rust fn decode_auth_token
+- rust fn error_for_status_unpack
+- rust fn execute
+- rust fn extract_headers_and_refresh_token_if_exp
+- rust fn extract_headers_refresh_token
+- rust fn fetch
+- rust fn is_send_test
+- rust fn login
+- rust fn login_anonymously
+- rust fn login_otp
+- rust fn login_second
+- rust fn logout
+- rust fn new
+- rust fn now
+- rust fn promote_anonymous
+- rust fn records
+- rust fn refresh
+- rust fn refresh_tokens_impl
+- rust fn request_otp
+- rust fn should_refresh
+- rust fn tokens
+- rust fn update_tokens
+- rust fn upgrade_ws
+- rust fn user
+- rust impl Client
+- rust impl ClientState
+- rust impl TokenState
+- rust mod tests
+- rust struct Client
+- rust struct ClientOptions
+- rust struct ClientState
+- rust struct Credentials
+- rust struct JwtTokenClaims
+- rust struct LogoutRequest
+- rust struct MultiFactorAuthToken
+- rust struct PromoteOptions
+- rust struct RefreshRequest
+- rust struct RefreshResponse
+- rust struct Request
+- rust struct Response
+- rust struct TokenState
+- rust struct Tokens
+- rust struct User
+- use crate::error::Error
+- use crate::record_api::{Operation, RecordApi}
+- use crate::transport::{DefaultTransport, Transport, json}
+- use parking_lot::RwLock
+- use reqwest::header::{self, HeaderMap, HeaderValue}
+- use reqwest::{Method, StatusCode}
+- use serde::de::DeserializeOwned
+- use serde::{Deserialize, Serialize}
+- use std::borrow::Cow
+- use std::sync::Arc
+- use super::*
+- use tracing::*
+
+[crates/refinery/src/runner.rs]
+- rust enum State
+- rust enum Target
+- rust enum Type
+- rust fn applied
+- rust fn applied_migrations
+- rust fn applied_on
+- rust fn checksum
+- rust fn cmp
+- rust fn eq
+- rust fn fmt
+- rust fn get_applied_migrations
+- rust fn get_applied_migrations_async
+- rust fn get_last_applied_migration
+- rust fn get_last_applied_migration_async
+- rust fn get_migrations
+- rust fn name
+- rust fn new
+- rust fn next
+- rust fn partial_cmp
+- rust fn prefix
+- rust fn run
+- rust fn run_async
+- rust fn run_iter
+- rust fn set_abort_divergent
+- rust fn set_abort_missing
+- rust fn set_applied
+- rust fn set_grouped
+- rust fn set_migration_table_name
+- rust fn set_target
+- rust fn sql
+- rust fn unapplied
+- rust fn version
+- rust impl Eq
+- rust impl Iterator
+- rust impl Migration
+- rust impl Ord
+- rust impl PartialEq
+- rust impl PartialOrd
+- rust impl Report
+- rust impl RunIterator<
+- rust impl Runner
+- rust impl fmt::Debug
+- rust impl fmt::Display
+- rust struct Migration
+- rust struct Report
+- rust struct RunIterator
+- rust struct Runner
+- use crate::traits::{DEFAULT_MIGRATION_TABLE_NAME, sync::migrate as sync_migrate}
+- use crate::util::parse_migration_name
+- use crate::{AsyncMigrate, Error, Migrate}
+- use log::error
+- use siphasher::sip::SipHasher13
+- use std::cmp::Ordering
+- use std::collections::VecDeque
+- use std::fmt
+- use std::fmt::Formatter
+- use std::hash::{Hash, Hasher}
+- use time::OffsetDateTime
+
+[crates/wasm-runtime-guest/src/http.rs]
+- pub use http::{HeaderMap, HeaderValue, Method, StatusCode, Version, header}
+- pub use trailbase_wasm_common::HttpContextUser as User
+- rust fn body
+- rust fn build_json_response
+- rust fn build_response
+- rust fn delete
+- rust fn empty_error_response
+- rust fn from
+- rust fn get
+- rust fn header
+- rust fn internal_error_response
+- rust fn into_body
+- rust fn into_response
+- rust fn len
+- rust fn message
+- rust fn method
+- rust fn new
+- rust fn patch
+- rust fn path_param
+- rust fn permanent
+- rust fn post
+- rust fn query_param
+- rust fn query_parse
+- rust fn read
+- rust fn status
+- rust fn temporary
+- rust fn to
+- rust fn to_url
+- rust fn url
+- rust fn user
+- rust fn version
+- rust fn with_status_code
+- rust impl From<HttpError>
+- rust impl HttpError
+- rust impl HttpRoute
+- rust impl IntoBody
+- rust impl IntoResponse<B::IntoBody>
+- rust impl IntoResponse<B>
+- rust impl IntoResponse<BoundedBody<Vec<u8>>>
+- rust impl Redirect
+- rust impl Request
+- rust mod routing
+- rust struct BoundedBody
+- rust struct Html
+- rust struct HttpError
+- rust struct HttpRoute
+- rust struct Json
+- rust struct Parts
+- rust struct Redirect
+- rust struct Request
+- rust trait IntoBody
+- rust trait IntoResponse
+- use futures_util::future::LocalBoxFuture
+- use serde::de::DeserializeOwned
+- use super::{HttpRoute, IntoResponse, Method, Request}
+- use trailbase_wasm_common::HttpContext
+- use wstd::http::server::{Finished, Responder}
+- use wstd::io::{Cursor, Empty, empty}
+
+[crates/wasm-runtime-host/src/lib.rs]
+- pub use crate::host::exports::trailbase::component::init_endpoint::HttpMethodType
+- pub use crate::host::{SharedState, State}
+- pub use trailbase_wasi_keyvalue::Store as KvStore
+- rust enum Error
+- rust fn build_config
+- rust fn call
+- rust fn call_incoming_http_handler
+- rust fn component_path
+- rust fn find_wasm_components
+- rust fn init
+- rust fn init_runtime
+- rust fn init_sqlite_function_runtime
+- rust fn initialize
+- rust fn new
+- rust fn new_bindings
+- rust fn new_store
+- rust fn response_to_i64
+- rust fn send_http_request
+- rust fn test_custom_sqlite_function
+- rust fn test_init
+- rust fn test_transaction
+- rust fn to_header_value
+- rust impl HttpStore
+- rust impl StoreBuilder<State>
+- rust mod functions
+- rust mod host
+- rust mod sqlite
+- rust mod tests
+- rust struct HttpStore
+- rust struct HttpStoreInternal
+- rust struct InitArgs
+- rust struct InitResult
+- rust struct RuntimeInternal
+- rust struct RuntimeOptions
+- rust struct RuntimeT
+- rust trait StoreBuilder
+- use bytes::Bytes
+- use core::future::Future
+- use crate::host::SharedState
+- use crate::host::TransactionImpl
+- use crate::host::exports::trailbase::component::init_endpoint::Arguments
+- use http::{Response, StatusCode}
+- use http_body_util::combinators::UnsyncBoxBody
+- use http_body_util::{BodyExt, combinators::UnsyncBoxBody}
+- use std::path::PathBuf
+- use std::sync::Arc
+- use std::sync::atomic::{AtomicUsize, Ordering}
+- use std::time::SystemTime
+- use super::*
+- use tokio::task::JoinError
+- use trailbase_wasi_keyvalue::WasiKeyValueCtx
+- use trailbase_wasm_common::{HttpContext, HttpContextKind}
+- use wasmtime::component::{Component, Linker, ResourceTable}
+- use wasmtime::{AsContextMut, Config, Engine, Result, Store}
+- use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder}
+- use wasmtime_wasi_http::WasiHttpCtx
+- use wasmtime_wasi_http::p2::WasiHttpView
+- use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode
+
+[crates/core/src/scheduler.rs]
+- rust fn build_callback
+- rust fn build_job
+- rust fn build_job_registry_from_config
+- rust fn cleanup_anonymous_users
+- rust fn delete_pending_files_job
+- rust fn drop
+- rust fn into_result
+- rust fn latest
+- rust fn name
+- rust fn new
+- rust fn new_job
+- rust fn next_run
+- rust fn run_job
+- rust fn run_now
+- rust fn running
+- rust fn schedule
+- rust fn start
+- rust fn stop
+- rust fn test_cron
+- rust fn test_delete_pending_files_job
+- rust fn test_scheduler
+- rust impl CallbackResultTrait
+- rust impl Drop
+- rust impl Job
+- rust impl JobRegistry
+- rust mod tests
+- rust struct DefaultSystemJob
+- rust struct ExecutionResult
+- rust struct Job
+- rust struct JobRegistry
+- rust struct JobState
+- rust trait CallbackResultTrait
+- use chrono::{DateTime, Duration, Utc}
+- use const_format::formatcp
+- use crate::DataDir
+- use crate::config::proto::{Config, SystemJob, SystemJobId}
+- use crate::connection::{BuildOptions, ConnectionManager}
+- use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl}
+- use cron::Schedule
+- use cron::TimeUnitSpec
+- use futures_util::future::BoxFuture
+- use log::*
+- use object_store::ObjectStore
+- use parking_lot::Mutex
+- use std::collections::{HashMap, hash_map::Entry}
+- use std::future::Future
+- use std::str::FromStr
+- use super::*
+- use trailbase_schema::{QualifiedName, QualifiedNameEscaped}
+- use trailbase_sqlite::{Connection, named_params, params}
+
+[crates/wasm-runtime-guest/src/lib.rs]
+- pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments
+- pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags
+- pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value}
+- pub use static_assertions::assert_impl_all
+- pub use wstd::rand::{get_insecure_random_bytes, get_random_bytes}
+- pub use wstd::wasip2 as __wasi
+- rust fn call_init_once
+- rust fn dispatch_scalar_function
+- rust fn get_sqlite_scalar_functions
+- rust fn handle
+- rust fn http_handlers
+- rust fn init
+- rust fn init_http_handlers
+- rust fn init_job_handlers
+- rust fn init_sqlite_functions
+- rust fn job_handlers
+- rust fn new
+- rust fn sqlite_scalar_functions
+- rust fn to_method_type
+- rust impl HttpIncomingHandler<T>
+- rust impl SqliteFunction
+- rust impl TrailbaseHandler<T>
+- rust impl crate::wit::exports::trailbase::component::init_endpoint::Guest
+- rust impl crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest
+- rust mod db
+- rust mod fetch
+- rust mod fs
+- rust mod http
+- rust mod job
+- rust mod kv
+- rust mod rand
+- rust mod sqlite
+- rust mod time
+- rust mod wit
+- rust struct Args
+- rust struct HttpIncomingHandler
+- rust struct SqliteFunction
+- rust struct TrailbaseHandler
+- rust trait Guest
+- use crate::http::{HttpRoute, Method, StatusCode, empty_error_response}
+- use crate::job::Job
+- use crate::wit::exports::trailbase::component::init_endpoint::HttpMethodType
+- use crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error
+- use std::sync::OnceLock
+- use trailbase_wasm_common::{HttpContext, HttpContextKind}
+- use wstd::http::Request
+- use wstd::http::body::IncomingBody
+- use wstd::http::server::{Finished, Responder}
+
+[crates/core/src/email.rs]
+- rust enum EmailError
+- rust enum Mailer
+- rust fn change_email_address_email
+- rust fn fallback_sender
+- rust fn get_logs
+- rust fn get_sender
+- rust fn get_site_url
+- rust fn new
+- rust fn new_from_config
+- rust fn new_internal
+- rust fn new_local
+- rust fn new_smtp
+- rust fn otp_email
+- rust fn password_reset_email
+- rust fn send
+- rust fn send_raw
+- rust fn smtp_from_config
+- rust fn test_fallback_sender
+- rust fn test_template_rendering
+- rust fn verification_email
+- rust impl AsyncTransport
+- rust impl Email
+- rust impl Mailer
+- rust impl TestAsyncSmtpTransport
+- rust mod testing
+- rust struct Email
+- rust struct TestAsyncSmtpTransport
+- use crate::AppState
+- use crate::app_state::test_state
+- use crate::config::proto::{Config, EmailConfig, SmtpEncryption}
+- use crate::constants::AUTH_API_PATH
+- use lettre::AsyncTransport
+- use lettre::address::AddressError
+- use lettre::address::Envelope
+- use lettre::message::{Body, Mailbox, Message, header::ContentType}
+- use lettre::transport::smtp
+- use lettre::transport::smtp::response::{Category, Code, Detail, Response, Severity}
+- use lettre::{AsyncSendmailTransport, AsyncSmtpTransport, AsyncTransport, Tokio1Executor}
+- use log::*
+- use minijinja::{Environment, context}
+- use parking_lot::Mutex
+- use std::sync::Arc
+- use super::*
+- use thiserror::Error
+
+[crates/core/src/schema_metadata.rs]
+- rust enum SchemaLookupError
+- rust fn build_connection_metadata_and_install_file_deletion_triggers
+- rust fn build_metadata
+- rust fn build_metadata_impl
+- rust fn list_databases
+- rust fn lookup_and_parse_all_table_schemas
+- rust fn lookup_and_parse_all_table_schemas_pg
+- rust fn lookup_and_parse_all_table_schemas_sqlite
+- rust fn lookup_and_parse_all_view_schemas
+- rust fn lookup_and_parse_all_view_schemas_sqlite
+- rust fn lookup_and_parse_table_schema
+- rust fn lookup_and_parse_table_schema_pg
+- rust fn lookup_and_parse_table_schema_sqlite
+- rust fn setup_file_deletion_triggers
+- rust fn sqlite3_parse_view
+- rust fn test_column_nullability
+- rust fn test_expanded_foreign_key
+- rust fn test_expanded_with_multiple_foreign_keys
+- rust mod tests
+- use axum::extract::{Json, Path, Query, RawQuery, State}
+- use crate::app_state::*
+- use crate::config::proto::{PermissionFlag, RecordApiConfig}
+- use crate::connection::ConnectionEntry
+- use crate::constants::SQLITE_SCHEMA_TABLE
+- use crate::records::list_records::{ListOrGeoJSONResponse, list_records_handler}
+- use crate::records::read_record::{ReadRecordQuery, read_record_handler}
+- use crate::records::test_utils::add_record_api_config
+- use crate::test_utils::*
+- use fallible_iterator::FallibleIterator
+- use log::*
+- use parking_lot::RwLock
+- use serde_json::json
+- use sqlite3_parser::ast::Cmd
+- use std::sync::Arc
+- use thiserror::Error
+- use trailbase_extension::jsonschema::JsonSchemaRegistry
+- use trailbase_schema::QualifiedName
+- use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded}
+- use trailbase_schema::parse::parse_into_statement
+- use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption}
+- use trailbase_schema::sqlite::{Table, View}
+- use trailbase_sqlite::ConnectionType
+- use trailbase_sqlite::{ConnectionType, params, unpack_other_error}
+
+[crates/wasm-runtime-host/src/host.rs]
+- pub use self::trailbase::database::sqlite::{Transaction, TxError, Value}
+- rust fn commit
+- rust fn ctx
+- rust fn drop
+- rust fn execute
+- rust fn from_sqlite_value
+- rust fn http
+- rust fn new
+- rust fn query
+- rust fn rollback
+- rust fn send_request
+- rust fn table
+- rust fn to_sqlite_value
+- rust fn tx_begin
+- rust fn tx_commit
+- rust fn tx_execute
+- rust fn tx_query
+- rust fn tx_rollback
+- rust impl HasData
+- rust impl IoView
+- rust impl TransactionImpl
+- rust impl WasiHttpHooks
+- rust impl WasiHttpView
+- rust impl WasiView
+- rust impl self::trailbase::database::sqlite::Host
+- rust impl self::trailbase::database::sqlite::HostTransaction
+- rust struct Hooks
+- rust struct SharedState
+- rust struct State
+- rust struct TransactionImpl
+- use std::path::PathBuf
+- use std::sync::Arc
+- use tokio::sync::Mutex
+- use tokio::time::Duration
+- use trailbase_sqlite::SyncConnectionTrait
+- use trailbase_sqlite::traits::SyncTransaction
+- use trailbase_wasi_keyvalue::WasiKeyValueCtx
+- use wasmtime::Result
+- use wasmtime::component::{HasData, Resource, ResourceTable}
+- use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView}
+- use wasmtime_wasi_http::WasiHttpCtx
+- use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView}
+- use wasmtime_wasi_io::IoView
+
+[crates/core/src/connection.rs]
+- pub use trailbase_sqlite::{Connection, unpack_other_error}
+- rust enum ConnectionError
+- rust fn _implicitly_assert_db_sqlite_connection_type
+- rust fn build
+- rust fn build_connection
+- rust fn connect_rusqlite_without_default_extensions_and_schemas
+- rust fn from
+- rust fn from_data_dir
+- rust fn get_entry
+- rust fn get_entry_for_qn
+- rust fn init_db_pg
+- rust fn init_db_sqlite
+- rust fn init_logs_db
+- rust fn init_session_db
+- rust fn main_entry
+- rust fn new
+- rust fn new_for_test
+- rust fn rebuild_metadata
+- rust impl AttachedDatabase
+- rust impl ConnectionManager
+- rust impl From<ConnectionError>
+- rust struct AttachedDatabase
+- rust struct BuildOptions
+- rust struct ConnectionEntry
+- rust struct ConnectionKey
+- rust struct ConnectionManager
+- rust struct ConnectionManagerState
+- rust struct InitDbOptions
+- rust struct Options
+- use crate::data_dir::DataDir
+- use crate::schema_metadata::build_metadata
+- use crate::wasm::{SqliteFunctions, SqliteStore}
+- use parking_lot::RwLock
+- use quick_cache::sync::GuardResult
+- use rusqlite::OpenFlags
+- use std::collections::BTreeSet
+- use std::path::PathBuf
+- use std::sync::Arc
+- use thiserror::Error
+- use trailbase_extension::jsonschema::JsonSchemaRegistry
+- use trailbase_schema::metadata::ConnectionMetadata
+
+[crates/core/src/migrations.rs]
+- rust fn apply_base_migrations
+- rust fn apply_logs_migrations
+- rust fn apply_main_migrations
+- rust fn apply_migrations
+- rust fn apply_migrations_async
+- rust fn apply_pg_main_migrations
+- rust fn apply_session_migrations
+- rust fn exists
+- rust fn find_migration_files
+- rust fn index_exists
+- rust fn load_embedded_migrations
+- rust fn load_sql_migrations
+- rust fn log_migrations
+- rust fn maybe_load_sql_migrations
+- rust fn name
+- rust fn new_migration_runner
+- rust fn new_unique_migration_filename
+- rust fn test_load_sql_migrations
+- rust fn test_schema_invariants_still_hold_after_migrations
+- rust fn trigger_exists
+- rust mod tests
+- rust struct BaseMigrations
+- rust struct LogsMigrations
+- rust struct MainMigrations
+- rust struct PgMainMigrations
+- rust struct SessionMigrations
+- use itertools::Itertools
+- use log::*
+- use parking_lot::Mutex
+- use std::ffi::OsStr
+- use std::path::{Path, PathBuf}
+- use std::sync::LazyLock
+- use super::*
+- use trailbase_refinery::error::Kind
+- use trailbase_refinery::{Error as RefineryError, Migration}
+- use trailbase_refinery::{Error, error::Kind}
+- use trailbase_sqlite::Connection
+- use walkdir::{DirEntry, WalkDir}
+
+[crates/qs/src/query.rs]
+- rust enum Cursor
+- rust enum CursorType
+- rust enum OrderPrecedent
+- rust fn deserialize
+- rust fn map
+- rust fn parse
+- rust fn test_basic_to_query
+- rust fn test_date_range_filter
+- rust fn test_geometry_filter
+- rust fn test_query_basic_parsing
+- rust fn test_query_cursor_parsing
+- rust fn test_query_expand_parsing
+- rust fn test_query_filter_parsing
+- rust fn test_query_order_parsing
+- rust fn to_query
+- rust impl Cursor
+- rust impl FilterQuery
+- rust impl Query
+- rust impl serde::de::Deserialize<
+- rust mod tests
+- rust struct Expand
+- rust struct FilterQuery
+- rust struct Order
+- rust struct Query
+- use base64::prelude::*
+- use crate::column_rel_value::{ColumnOpValue, CompareOp}
+- use crate::filter::Combiner
+- use crate::filter::ValueOrComposite
+- use crate::util::deserialize_bool
+- use crate::value::Value
+- use itertools::Itertools
+- use rusqlite::types::Value as SqlValue
+- use serde::Deserialize
+- use serde::de::Error
+- use serde_qs::Config
+- use serde_value::Value
+- use super::*
+
+[crates/wasi-keyvalue/src/lib.rs]
+- rust enum Error
+- rust fn add_to_linker
+- rust fn convert_error
+- rust fn delete
+- rust fn delete_many
+- rust fn drop
+- rust fn exists
+- rust fn from
+- rust fn get
+- rust fn get_many
+- rust fn increment
+- rust fn list_keys
+- rust fn new
+- rust fn open
+- rust fn set
+- rust fn set_many
+- rust impl From<ResourceTableError>
+- rust impl HasData
+- rust impl Store
+- rust impl WasiKeyValue<
+- rust impl WasiKeyValueCtx
+- rust impl keyvalue::atomics::Host
+- rust impl keyvalue::batch::Host
+- rust impl keyvalue::store::Host
+- rust impl keyvalue::store::HostBucket
+- rust mod generated
+- rust struct Bucket
+- rust struct HasWasiKeyValue
+- rust struct Store
+- rust struct WasiKeyValue
+- rust struct WasiKeyValueCtx
+- use parking_lot::RwLock
+- use self::generated::wasi::keyvalue
+- use std::collections::HashMap
+- use std::sync::Arc
+- use wasmtime::Result
+- use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError}
+
+[crates/sqlite/src/value.rs]
+- rust enum Value
+- rust enum ValueRef
+- rust fn as_blob
+- rust fn as_blob_or_null
+- rust fn as_bytes
+- rust fn as_bytes_or_null
+- rust fn as_f64
+- rust fn as_f64_or_null
+- rust fn as_i64
+- rust fn as_i64_or_null
+- rust fn as_str
+- rust fn as_str_or_null
+- rust fn column_result
+- rust fn from
+- rust fn to_sql
+- rust fn try_from
+- rust impl From<
+- rust impl From<Option<T>>
+- rust impl From<String>
+- rust impl From<Value>
+- rust impl From<ValueRef<
+- rust impl From<Vec<u8>>
+- rust impl From<bool>
+- rust impl From<f32>
+- rust impl From<f64>
+- rust impl From<i64>
+- rust impl From<rusqlite::types::ValueRef<
+- rust impl TryFrom<ValueRef<
+- rust impl TryFrom<rusqlite::types::ValueRef<
+- rust impl ValueRef<
+- rust impl rusqlite::types::FromSql
+- rust impl rusqlite::types::ToSql
+- use crate::from_sql::{FromSqlError, FromSqlResult}
+- use rusqlite::types::Value as SqliteValue
+- use rusqlite::types::ValueRef as SqliteValueRef
+
+[crates/wasm-runtime-host/src/sqlite.rs]
+- pub use trailbase_sqlite::OwnedTx
+- rust enum StatementKind
+- rust fn acquire_transaction_lock_with_timeout
+- rust fn build_query_response
+- rust fn bytes_to_body
+- rust fn convert_values
+- rust fn handle_sqlite_execute
+- rust fn handle_sqlite_execute_test
+- rust fn handle_sqlite_query
+- rust fn handle_sqlite_query_test
+- rust fn handle_sqlite_request
+- rust fn is_readonly_one_select
+- rust fn is_readonly_select
+- rust fn parse_select
+- rust fn read
+- rust fn readonly_select_filter_test
+- rust fn sql_values_to_sqlite_params
+- rust fn sqlite_err
+- rust fn to_request
+- rust fn to_response
+- rust fn write
+- rust mod tests
+- use bytes::Bytes
+- use http::Uri
+- use http_body_util::{BodyExt, combinators::UnsyncBoxBody}
+- use sqlite3_parser::ast::{OneSelect, Select, Stmt}
+- use super::*
+- use tokio::time::Duration
+- use trailbase_schema::parse::{Bump, parse_into_statement}
+- use trailbase_schema::sqlite::unquote_expr
+- use trailbase_sqlite::Connection
+- use trailbase_sqlite::{LockError, Rows}
+- use trailbase_sqlvalue::{DecodeError, SqlValue}
+- use trailbase_wasm_common::{SqliteRequest, SqliteResponse}
+- use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode
+
+[crates/auth-ui/src/lib.rs]
+- rust fn http_handlers
+- rust fn internal
+- rust fn static_assets_handler
+- rust fn ui_change_email_handler
+- rust fn ui_change_password_handler
+- rust fn ui_change_username_handler
+- rust fn ui_login_handler
+- rust fn ui_login_mfa_handler
+- rust fn ui_logout_handler
+- rust fn ui_otp_login_handler
+- rust fn ui_otp_request_handler
+- rust fn ui_register_handler
+- rust fn ui_reset_password_request_handler
+- rust fn ui_reset_password_update_handler
+- rust impl Guest
+- rust mod auth
+- rust struct ChangeEmailQuery
+- rust struct ChangePasswordQuery
+- rust struct Endpoints
+- rust struct LoginMfaQuery
+- rust struct LoginQuery
+- rust struct LogoutQuery
+- rust struct OtpLoginQuery
+- rust struct OtpRequestQuery
+- rust struct RegisterQuery
+- rust struct ResetPasswordRequestQuery
+- rust struct ResetPasswordUpdateQuery
+- use askama::Template
+- use serde::Deserialize
+- use std::sync::LazyLock
+- use trailbase_auth_config::AuthConfig
+- use trailbase_wasm::kv::Store
+- use trailbase_wasm::{Guest, export}
+
+[crates/sqlite/src/tests.rs]
+- rust enum MyError
+- rust fn call_failure_test
+- rust fn call_success_test
+- rust fn close_call_test
+- rust fn close_failure_test
+- rust fn close_success_test
+- rust fn debug_format_test
+- rust fn double_close_test
+- rust fn failable_func
+- rust fn open_in_memory_test
+- rust fn test_attach
+- rust fn test_backup
+- rust fn test_busy
+- rust fn test_ergonomic_errors
+- rust fn test_error_source
+- rust fn test_execute_and_query
+- rust fn test_execute_batch
+- rust fn test_execute_batch_error
+- rust fn test_execute_returning_rows
+- rust fn test_hooks
+- rust fn test_identity
+- rust fn test_locking
+- rust fn test_params
+- rust struct Person
+- rust struct State
+- use crate::sqlite::connection::{Connection, Options}
+- use crate::sqlite::extract_row_id
+- use crate::{Database, Error, SyncConnectionTrait, Value, ValueType}
+- use futures_util::future::join_all
+- use rusqlite::hooks::PreUpdateCase
+- use rusqlite::{ErrorCode, ffi}
+- use serde::Deserialize
+- use std::borrow::Cow
+
+[crates/schema/src/file.rs]
+- rust fn build_unique_filename
+- rust fn consume
+- rust fn content_type
+- rust fn deserialize
+- rust fn filename
+- rust fn filter_char
+- rust fn generate_random_lower_case_alphanumeric
+- rust fn new
+- rust fn objectstore_id
+- rust fn original_filename
+- rust fn serialize
+- rust fn test_build_unique_filename
+- rust fn test_file_upload_input_serialization
+- rust impl FileUpload
+- rust impl FileUploadInput
+- rust mod bytes_or_base64
+- rust mod tests
+- rust struct FileUpload
+- rust struct FileUploadData
+- rust struct FileUploadInput
+- rust struct FileUploads
+- use base64::prelude::*
+- use base64::{Engine, prelude::BASE64_URL_SAFE}
+- use crate::error::Error
+- use rand::Rng
+- use schemars::JsonSchema
+- use serde::{Deserialize, Serialize}
+- use serde::{Deserializer, Serializer}
+- use std::path::PathBuf
+- use super::*
+- use uuid::Uuid
+
+[crates/sqlite/src/lib.rs]
+- pub use connection_imports::*
+- pub use database::Database
+- pub use error::{Error, unpack_other_error}
+- pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params}
+- pub use rows::{Row, Rows, ValueType}
+- pub use statement::Statement
+- pub use super::generic::{Connection, OwnedTx, SyncConnection, Transaction, execute_batch}
+- pub use super::r#type::ConnectionType
+- pub use super::sqlite::batch::execute_batch
+- pub use super::sqlite::connection::{ArcLockGuard, Connection, LockError, LockGuard, Options}
+- pub use super::sqlite::connection::{ArcLockGuard, LockError, LockGuard, Options}
+- pub use super::sqlite::sync::SyncConnection
+- pub use super::sqlite::transaction::{OwnedTx, Transaction}
+- pub use traits::SyncConnection as SyncConnectionTrait
+- pub use value::{Value, ValueRef}
+- rust mod connection_imports
+- rust mod database
+- rust mod error
+- rust mod from_sql
+- rust mod generic
+- rust mod params
+- rust mod pg
+- rust mod r
+- rust mod rows
+- rust mod sqlite
+- rust mod statement
+- rust mod tests
+- rust mod to_sql
+- rust mod traits
+- rust mod value
+
+[crates/sqlite/src/rows.rs]
+- rust enum ValueType
+- rust fn column_count
+- rust fn column_name
+- rust fn column_type
+- rust fn empty
+- rust fn from_str
+- rust fn get
+- rust fn get_value
+- rust fn index
+- rust fn into_iter
+- rust fn is_empty
+- rust fn iter
+- rust fn last
+- rust fn len
+- rust fn split_off
+- rust impl FromStr
+- rust impl Index<usize>
+- rust impl IntoIterator
+- rust impl Row
+- rust impl Rows
+- rust struct Column
+- rust struct Row
+- rust struct Rows
+- use crate::error::Error
+- use crate::from_sql::{FromSql, FromSqlError}
+- use crate::value::Value
+- use std::fmt::Debug
+- use std::ops::Index
+- use std::str::FromStr
+- use std::sync::Arc
+
+[crates/auth-ui/src/auth.rs]
+- pub use trailbase_auth_config::{LoginIdentifier, RegistrationIdentifier}
+- rust fn hidden_input
+- rust fn redirect_uri
+- rust fn render_safe_query_params
+- rust fn test_change_email_template_escaping
+- rust fn test_change_password_template_escaping
+- rust fn test_login_mfa_template_escaping
+- rust fn test_login_template_escaping
+- rust fn test_register_template_escaping
+- rust fn test_reset_password_request_template_escaping
+- rust fn test_reset_password_update_template_escaping
+- rust mod tests
+- rust struct AuthAssets
+- rust struct ChangeEmailTemplate
+- rust struct ChangePasswordTemplate
+- rust struct ChangeUsernameTemplate
+- rust struct LoginMfaTemplate
+- rust struct LoginTemplate
+- rust struct OtpLoginTemplate
+- rust struct OtpRequestTemplate
+- rust struct RegisterTemplate
+- rust struct ResetPasswordRequestTemplate
+- rust struct ResetPasswordUpdateTemplate
+- use askama::Template
+- use askama::filters::Safe
+- use itertools::Itertools
+- use rust_embed::RustEmbed
+- use super::*
+- use trailbase_auth_config::OAuthProvider
+
+[crates/qs/src/filter.rs]
+- rust enum Combiner
+- rust enum ValueOrComposite
+- rust fn combine
+- rust fn deserialize
+- rust fn into_sql
+- rust fn map
+- rust fn param_name
+- rust fn recurse
+- rust fn render_param
+- rust fn render_sql_fragment
+- rust fn serde_value_to_value_or_composite
+- rust fn test_filter_parsing
+- rust fn test_filter_to_sql
+- rust fn to_query
+- rust fn visit_values
+- rust impl ValueOrComposite
+- rust impl serde::de::Deserialize<
+- rust mod tests
+- use crate::column_rel_value::{ColumnOpValue, CompareOp, serde_value_to_single_column_rel_value}
+- use crate::column_rel_value::{ColumnOpValue, CompareOp}
+- use crate::query::FilterQuery as Query
+- use crate::value::Value
+- use itertools::Itertools
+- use rusqlite::types::Value as SqlValue
+- use serde::de::Error
+- use serde_qs::Config
+- use serde_value::Value
+- use std::collections::BTreeMap
+- use super::*
+
+[crates/reactive/src/reactive.rs]
+- rust fn add_observer
+- rust fn clear_observers
+- rust fn clone
+- rust fn derive
+- rust fn derive_async_reactive_test
+- rust fn derive_unchecked
+- rust fn derive_unchecked_async
+- rust fn fmt
+- rust fn new
+- rust fn notify
+- rust fn ptr
+- rust fn set
+- rust fn update
+- rust fn update_unchecked
+- rust fn value
+- rust fn with_value
+- rust impl Clone
+- rust impl Debug
+- rust impl Reactive<T>
+- rust mod tests
+- rust struct DeriveInput
+- rust struct Reactive
+- rust struct State
+- use crate::async_reactive::AsyncReactive
+- use parking_lot::{Mutex, RwLock}
+- use std::fmt::Debug
+- use std::ops::DerefMut
+- use std::sync::Arc
+- use super::*
+
+[crates/refinery/src/util.rs]
+- rust enum MigrationType
+- rust fn file_match_re
+- rust fn file_re_all
+- rust fn file_re_sql
+- rust fn file_stem_re
+- rust fn find_migration_files
+- rust fn finds_mod_migrations
+- rust fn finds_sql_migrations
+- rust fn finds_unversioned_migrations
+- rust fn ignores_mod_files_without_migration_regex_match
+- rust fn ignores_sql_files_without_migration_regex_match
+- rust fn load_sql_migrations
+- rust fn loads_migrations_from_path
+- rust fn parse_migration_name
+- rust impl MigrationType
+- rust mod tests
+- use crate::Migration
+- use crate::error::{Error, Kind}
+- use crate::runner::Type
+- use regex::Regex
+- use std::ffi::OsStr
+- use std::fs
+- use std::path::PathBuf
+- use std::path::{Path, PathBuf}
+- use std::sync::OnceLock
+- use super::{MigrationType, find_migration_files, load_sql_migrations}
+- use tempfile::TempDir
+- use walkdir::{DirEntry, WalkDir}
+
+[crates/wasm-runtime-axum/src/lib.rs]
+- pub use trailbase_wasm_runtime_host::functions::{SqliteFunctions, SqliteStore}
+- pub use trailbase_wasm_runtime_host::{HttpStore, KvStore, Runtime, SharedState}
+- rust fn axum_method
+- rust fn build_sync_wasm_runtimes_for_components
+- rust fn empty
+- rust fn install_routes_and_jobs
+- rust fn internal
+- rust fn to_header_value
+- rust fn urlencode
+- rust fn wasm_runtime_builder
+- rust fn wasm_runtime_builders
+- rust struct InstallResult
+- rust struct Job
+- use axum::Router
+- use axum::extract::{RawPathParams, Request, State}
+- use axum::http::request::Parts
+- use axum::response::Response
+- use bytes::Bytes
+- use futures_util::future::BoxFuture
+- use http_body_util::{BodyExt, combinators::UnsyncBoxBody}
+- use hyper::StatusCode
+- use log::*
+- use std::path::{Path, PathBuf}
+- use std::str::FromStr
+- use std::sync::Arc
+- use tokio::sync::RwLock
+- use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser}
+- use trailbase_wasm_runtime_host::HttpMethodType
+
+[crates/extension/src/jsonschema.rs]
+- rust fn entries
+- rust fn from
+- rust fn from_schemas
+- rust fn get_schema
+- rust fn jsonschema_by_name_impl
+- rust fn jsonschema_by_name_with_extra_args_impl
+- rust fn jsonschema_matches
+- rust fn names
+- rust fn register_extension_functions
+- rust fn starts_with
+- rust fn swap
+- rust fn test_explicit_jsonschema
+- rust fn test_registerd_jsonschema
+- rust impl JsonSchemaRegistry
+- rust impl Schema
+- rust mod tests
+- rust struct JsonSchemaRegistry
+- rust struct Schema
+- use jsonschema::Validator
+- use parking_lot::RwLock
+- use quick_cache::sync::Cache
+- use rusqlite::Error
+- use rusqlite::functions::{Context, FunctionFlags}
+- use rusqlite::params
+- use std::collections::HashMap
+- use std::sync::{Arc, LazyLock}
+- use super::*
+
+[crates/extension/src/geoip.rs]
+- rust enum DatabaseType
+- rust fn database_type
+- rust fn extract_city_name
+- rust fn extract_subdivision_names
+- rust fn from
+- rust fn geoip_city
+- rust fn geoip_city_json
+- rust fn geoip_city_name
+- rust fn geoip_country
+- rust fn geoip_extract
+- rust fn has_geoip_db
+- rust fn load_geoip_db
+- rust fn register_extension_functions
+- rust fn test_explicit_jsonschema
+- rust impl City
+- rust mod tests
+- rust struct City
+- use arc_swap::ArcSwap
+- use maxminddb::{MaxMindDbError, Reader, geoip2}
+- use rusqlite::Error
+- use rusqlite::functions::{Context, FunctionFlags}
+- use serde::{Deserialize, Serialize}
+- use std::net::IpAddr
+- use std::path::Path
+- use std::sync::LazyLock
+- use super::*
+
+[crates/schema/src/json_schema.rs]
+- rust enum JsonSchemaMode
+- rust fn build_json_schema
+- rust fn build_json_schema_expanded
+- rust fn build_json_schema_expanded_impl
+- rust fn column_data_type_to_json_type
+- rust fn get_and_build_table_schema
+- rust fn test_file_uploads_schema
+- rust fn test_geojson_schema
+- rust fn test_parse_table_schema
+- rust mod tests
+- rust struct Expand
+- use crate::FileUpload
+- use crate::sqlite::{ColumnDataType, ColumnOption}
+- use crate::sqlite::{ColumnOption, Table, lookup_and_parse_table_schema}
+- use jsonschema::Validator
+- use log::*
+- use parking_lot::RwLock
+- use serde::{Deserialize, Serialize}
+- use serde_json::Value
+- use serde_json::json
+- use serde_json::map::Entry
+- use std::sync::Arc
+- use std::sync::LazyLock
+- use super::*
+- use trailbase_extension::jsonschema::JsonSchemaRegistry
+
+[crates/assets/src/assets.rs]
+- rust fn call
+- rust fn cow_to_bytes
+- rust fn not_allowed
+- rust fn not_found
+- rust fn poll
+- rust fn poll_ready
+- rust fn with_parameters
+- rust impl AssetService<E>
+- rust impl Future
+- rust impl ServeFuture<E>
+- rust impl Service<Request<Body>>
+- rust struct AssetService
+- rust struct ServeFuture
+- use axum::body::{Body, Bytes}
+- use axum::http::{self, Request, StatusCode}
+- use axum::response::Response
+- use rust_embed::RustEmbed
+- use std::borrow::Cow
+- use std::convert::Infallible
+- use std::future::Future
+- use std::pin::Pin
+- use std::sync::Arc
+- use std::task::Poll
+- use tower_service::Service
+
+[crates/wasm-runtime-guest/src/db.rs]
+- pub use crate::wit::trailbase::database::sqlite::{TxError, Value}
+- pub use trailbase_wasm_common::{SqliteRequest, SqliteResponse}
+- rust enum Error
+- rust fn begin
+- rust fn commit
+- rust fn drop
+- rust fn escape
+- rust fn escape_test
+- rust fn execute
+- rust fn from
+- rust fn from_sql_value
+- rust fn query
+- rust fn to_sql_value
+- rust impl Drop
+- rust impl From<DecodeError>
+- rust impl From<serde_json::Error>
+- rust impl Transaction
+- rust mod tests
+- rust struct Transaction
+- use crate::wit::trailbase::database::sqlite::Transaction as WasiTransaction
+- use super::*
+- use trailbase_sqlvalue::{Blob, DecodeError, SqlValue}
+- use wstd::http::body::IntoBody
+- use wstd::http::{Client, Request}
+
+[crates/extension/src/lib.rs]
+- rust enum Error
+- rust fn apply_default_pragmas
+- rust fn connect_sqlite
+- rust fn register_all_extension_functions
+- rust fn test_connect_and_extensions
+- rust fn test_uuids
+- rust mod base64
+- rust mod geoip
+- rust mod jsonschema
+- rust mod password
+- rust mod regex
+- rust mod test
+- rust mod uuid
+- rust mod validators
+- use ::uuid::Uuid
+- use crate::jsonschema::JsonSchemaRegistry
+- use parking_lot::RwLock
+- use rusqlite::Connection
+- use rusqlite::Error
+- use rusqlite::OpenFlags
+- use std::path::PathBuf
+- use std::sync::Arc
+- use super::*
+
+[crates/schema/src/lib.rs]
+- pub use error::Error
+- pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads}
+- pub use sqlite::QualifiedName
+- rust fn fmt
+- rust fn from
+- rust fn new
+- rust fn parse
+- rust fn test_qualified_name
+- rust impl From<
+- rust impl From<QualifiedName>
+- rust impl QualifiedNameEscaped
+- rust impl std::fmt::Display
+- rust mod error
+- rust mod file
+- rust mod json
+- rust mod json_schema
+- rust mod metadata
+- rust mod parse
+- rust mod registry
+- rust mod sqlite
+- rust mod tests
+- rust struct QualifiedNameEscaped
+- use super::*
+
+[crates/sqlvalue/src/lib.rs]
+- rust enum Blob
+- rust enum DecodeError
+- rust enum SqlValue
+- rust fn decode_hex
+- rust fn decode_hex_test
+- rust fn default
+- rust fn from
+- rust fn into_b64_url_safe
+- rust fn into_bytes
+- rust fn to_b64_url_safe
+- rust fn to_bytes
+- rust fn try_from
+- rust impl Blob
+- rust impl Default
+- rust impl From<
+- rust impl From<trailbase_sqlite::Value>
+- rust impl TryFrom<SqlValue>
+- rust mod tests
+- use base64::prelude::*
+- use serde::{Deserialize, Serialize}
+- use super::*
+- use trailbase_sqlite::Value
+- use ts_rs::TS
+
+[crates/core/src/transaction_recorder.rs]
+- rust enum QueryType
+- rust enum TransactionError
+- rust fn apply_as_migration
+- rust fn build_sql
+- rust fn commit
+- rust fn execute
+- rust fn new
+- rust fn query
+- rust fn rollback
+- rust fn test_transaction_log
+- rust fn write_migration_file
+- rust impl TransactionLog
+- rust impl TransactionRecorder<
+- rust mod tests
+- rust struct TransactionLog
+- rust struct TransactionRecorder
+- use crate::migrations
+- use log::*
+- use super::*
+- use thiserror::Error
+- use trailbase_sqlite::traits::{SyncConnection, SyncTransaction}
+
+[crates/pg-schema/src/table.rs]
+- rust fn build_all_table_schemas
+- rust fn build_column_schema
+- rust fn build_table_schema
+- rust fn get_columns
+- rust fn get_columns_async
+- rust fn get_tables
+- rust fn get_tables_async
+- rust fn infer_affinity_type
+- rust fn infer_data_type
+- rust fn postgres_check_jsonschema_test
+- rust fn postgres_column_schema_test
+- rust fn postgres_table_schema_test
+- rust mod tests
+- rust struct ColumnInformationSchema
+- rust struct TableInformationSchema
+- use crate::error::Error
+- use crate::util::test_connection
+- use serde::Deserialize
+- use super::*
+- use trailbase_sqlite::Connection
+- use trailbase_sqlite::params
+
+[crates/core/src/data_dir.rs]
+- rust fn backup_path
+- rust fn config_path
+- rust fn data_path
+- rust fn default
+- rust fn ensure_directory_structure
+- rust fn key_path
+- rust fn logs_db_path
+- rust fn main_db_path
+- rust fn migrations_path
+- rust fn queue_db_path
+- rust fn root
+- rust fn secrets_path
+- rust fn session_db_path
+- rust fn uploads_path
+- rust impl DataDir
+- rust impl Default
+- rust struct DataDir
+- use log::*
+- use std::path::PathBuf
+- use tokio::{fs, io::AsyncWriteExt}
+
+[crates/core/src/util.rs]
+- rust enum IdError
+- rust fn b64_to_id
+- rust fn b64_to_uuid
+- rust fn cow_to_string
+- rust fn get_header
+- rust fn id_to_b64
+- rust fn row_id_column
+- rust fn row_id_column2
+- rust fn test_urlencode
+- rust fn urlencode
+- rust fn uuid_to_b64
+- rust mod tests
+- use axum::http::HeaderMap
+- use base64::prelude::*
+- use reqwest::header::AsHeaderName
+- use std::borrow::Cow
+- use super::*
+- use thiserror::Error
+- use trailbase_sqlite::{Connection, ConnectionType}
+- use uuid::Uuid
+
+[crates/reactive/src/async_reactive.rs]
+- rust fn add_observer
+- rust fn async_reactive_test
+- rust fn clone
+- rust fn fmt
+- rust fn new
+- rust fn ptr
+- rust fn snapshot
+- rust fn update_unchecked
+- rust impl AsyncReactive<T>
+- rust impl Clone
+- rust impl Debug
+- rust mod tests
+- rust struct AsyncReactive
+- rust struct State
+- use futures_util::FutureExt
+- use futures_util::future::{BoxFuture, Shared}
+- use parking_lot::{Mutex, RwLock}
+- use std::fmt::Debug
+- use std::sync::Arc
+- use super::*
+
+[crates/cli/src/args.rs]
+- rust enum AdminSubCommands
+- rust enum BackupSubCommands
+- rust enum ComponentReference
+- rust enum ComponentSubCommands
+- rust enum JsonSchemaModeArg
+- rust enum OpenApiSubCommands
+- rust enum SubCommands
+- rust enum UserSubCommands
+- rust fn from
+- rust fn try_from
+- rust impl From<JsonSchemaModeArg>
+- rust impl TryFrom<
+- rust struct CommandLineArgs
+- rust struct EmailArgs
+- rust struct JsonSchemaArgs
+- rust struct ServerArgs
+- use clap::{Args, Parser, Subcommand, ValueEnum}
+- use trailbase::DataDir
+- use trailbase::api::JsonSchemaMode
+
+[crates/extension/src/password.rs]
+- rust enum PasswordError
+- rust fn from
+- rust fn hash_password
+- rust fn hash_password_sqlite
+- rust fn register_extension_functions
+- rust fn test_verification
+- rust fn valid_hash
+- rust fn verify_password
+- rust impl From<argon2::password_hash::Error>
+- rust impl From<bcrypt::BcryptError>
+- rust mod tests
+- use argon2::password_hash::{SaltString, rand_core::OsRng}
+- use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier}
+- use rusqlite::Error
+- use rusqlite::functions::{Context, FunctionFlags}
+- use std::str::FromStr
+- use std::sync::LazyLock
+- use super::*
+
+[crates/refinery/src/error.rs]
+- rust enum Kind
+- rust fn fmt
+- rust fn kind
+- rust fn migration_err
+- rust fn new
+- rust fn report
+- rust fn source
+- rust impl Error
+- rust impl WrapMigrationError<T
+- rust impl fmt::Display
+- rust impl std::error::Error
+- rust struct Error
+- rust trait WrapMigrationError
+- use crate::{Migration, Report}
+- use std::fmt
+- use std::path::PathBuf
+- use thiserror::Error as TError
+
+[crates/core/src/backup.rs]
+- rust enum BackupError
+- rust fn backup_all
+- rust fn connect_db
+- rust fn delete_backups
+- rust fn find_backups
+- rust fn restore_all
+- rust fn test_backup
+- rust mod tests
+- rust struct Backup
+- use crate::DataDir
+- use crate::app_state::test_state
+- use crate::config::proto::Config
+- use crate::connection::{ConnectionError, ConnectionManager}
+- use std::path::PathBuf
+- use super::*
+- use thiserror::Error
+
+[crates/extension/src/uuid.rs]
+- rust fn is_uuid
+- rust fn is_uuid_v4
+- rust fn is_uuid_v7
+- rust fn register_extension_functions
+- rust fn test_uuid
+- rust fn unpack_uuid_or_null
+- rust fn uuid_parse
+- rust fn uuid_text
+- rust fn uuid_v4
+- rust fn uuid_v7
+- rust mod tests
+- use rusqlite::Error
+- use rusqlite::functions::{Context, FunctionFlags}
+- use rusqlite::types::{FromSqlError, ValueRef}
+- use rusqlite::{Error, params}
+- use uuid::Uuid
+
+[crates/pg-schema/src/view.rs]
+- rust fn build_all_view_schemas
+- rust fn build_view_column_schema
+- rust fn build_view_schema
+- rust fn get_views
+- rust fn postgres_view_schema_derived_column_test
+- rust fn postgres_view_schema_simple_test
+- rust mod tests
+- rust struct ViewInformationSchema
+- use crate::error::Error
+- use crate::table::{ColumnInformationSchema, build_column_schema, get_columns}
+- use crate::util::test_connection
+- use itertools::Itertools
+- use serde::Deserialize
+- use super::*
+- use trailbase_schema::sqlite::{Column, ColumnOption}
+- use trailbase_schema::sqlite::{ColumnMapping, QualifiedName, View, ViewColumn}
+
+[crates/schema/src/json.rs]
+- rust enum JsonError
+- rust fn flat_json_to_value
+- rust fn json_array_to_bytes
+- rust fn parse_string_to_sqlite_value
+- rust fn rich_json_to_value
+- rust fn strict_parse_string_to_sqlite_value
+- rust fn test_parse_string_json_value
+- rust fn value_to_flat_json
+- rust fn value_to_rich_json
+- rust mod tests
+- use base64::prelude::*
+- use crate::sqlite::ColumnDataType
+- use super::*
+- use thiserror::Error
+- use trailbase_sqlite::Value as SqliteValue
+- use trailbase_sqlite::{Connection, params}
+
+[crates/cli/src/wasm.rs]
+- rust fn download_component
+- rust fn find_component
+- rust fn find_component_by_filename
+- rust fn install_wasm_component
+- rust fn list_installed_wasm_components
+- rust fn repo
+- rust struct Component
+- rust struct ComponentDefinition
+- rust struct Package
+- use minijinja::{Environment, context}
+- use std::collections::HashMap
+- use std::fs
+- use std::io::{Read, Seek}
+- use trailbase::DataDir
+- use trailbase_wasm_runtime_host::find_wasm_components
+
+[crates/client/src/transport.rs]
+- rust fn fetch
+- rust fn into_bytes
+- rust fn json
+- rust fn new
+- rust fn upgrade_ws
+- rust impl DefaultTransport
+- rust impl Transport
+- rust struct DefaultTransport
+- rust trait Transport
+- use crate::Error
+- use reqwest::Method
+- use reqwest::header::HeaderMap
+- use reqwest_websocket::Upgrade
+- use serde::de::DeserializeOwned
+- use std::borrow::Cow
+
+[crates/qs/src/column_rel_value.rs]
+- rust enum CompareOp
+- rust fn as_query
+- rust fn as_sql
+- rust fn from
+- rust fn parse_value
+- rust fn serde_value_to_single_column_rel_value
+- rust fn validate_wkt
+- rust impl CompareOp
+- rust struct ColumnOpValue
+- use base64::prelude::*
+- use crate::util::unexpected
+- use crate::value::Value
+- use serde::de::{Deserializer, Error}
+- use serde_value::Value
+- use std::str::FromStr
+
+[crates/wasm-runtime-host/src/functions.rs]
+- rust fn dispatch_scalar_function
+- rust fn initialize_sqlite_functions
+- rust fn new
+- rust fn setup_connection
+- rust impl SqliteStore
+- rust struct SqliteFunctions
+- rust struct SqliteScalarFunction
+- rust struct SqliteStore
+- rust struct SqliteStoreInternal
+- use crate::Error
+- use crate::host::exports::trailbase::component::sqlite_function_endpoint::Arguments
+- use crate::host::exports::trailbase::component::sqlite_function_endpoint::Value
+- use std::sync::Arc
+- use tokio::sync::Mutex
+- use wasmtime::{Result, Store}
+
+[crates/core/src/metadata.rs]
+- rust fn from_text
+- rust fn load_or_init_metadata_textproto
+- rust fn new_with_custom_defaults
+- rust fn to_text
+- rust impl Metadata
+- rust mod proto
+- use crate::DESCRIPTOR_POOL
+- use crate::config::ConfigError
+- use crate::data_dir::DataDir
+- use lazy_static::lazy_static
+- use log::*
+- use prost_reflect::text_format::FormatOptions
+- use prost_reflect::{DynamicMessage, MessageDescriptor, ReflectMessage}
+- use tokio::fs
+
+[crates/extension/src/base64.rs]
+- rust fn base64
+- rust fn base64_url_safe
+- rust fn register_extension_functions
+- rust fn test_base64_url_safe_empty_string
+- rust fn test_base64_url_safe_null_handling
+- rust fn test_base64_url_safe_roundtrip
+- rust fn test_base64_url_safe_trimmed_input
+- rust fn test_base64_wrong_number_of_arguments
+- rust mod tests
+- use base64::prelude::*
+- use rusqlite::Error
+- use rusqlite::Result
+- use rusqlite::functions::{Context, FunctionFlags}
+- use rusqlite::types::{Value, ValueRef}
+
+[crates/qs/src/value.rs]
+- rust enum Value
+- rust fn fmt
+- rust fn test_value
+- rust fn unparse
+- rust impl Value
+- rust impl std::fmt::Display
+- rust mod tests
+- rust struct Query
+- use crate::column_rel_value::{ColumnOpValue, CompareOp}
+- use crate::filter::ValueOrComposite
+- use serde::Deserialize
+- use serde_qs::Config
+- use std::str::FromStr
+- use super::*
+
+[crates/sqlite/src/traits.rs]
+- rust fn commit
+- rust fn connection_type
+- rust fn execute
+- rust fn execute_batch
+- rust fn expand_sql
+- rust fn query_row
+- rust fn query_rows
+- rust fn rollback
+- rust trait SyncConnection
+- rust trait SyncTransaction
+- use crate::error::Error
+- use crate::params::Params
+- use crate::r#type::ConnectionType
+- use crate::rows::{Row, Rows}
+
+[crates/extension/src/regex.rs]
+- rust fn regexp
+- rust fn regexp_impl
+- rust fn register_extension_functions
+- rust fn test_regexp
+- rust fn test_regexp_impl
+- rust mod tests
+- use quick_cache::sync::Cache
+- use regex::Regex
+- use rusqlite::Error
+- use rusqlite::functions::{Context, FunctionFlags}
+- use rusqlite::params
+- use std::sync::LazyLock
+- use super::*
+
+[crates/schema/src/registry.rs]
+- pub use trailbase_extension::jsonschema::{JsonSchemaRegistry, Schema}
+- rust fn build_json_schema_registry
+- rust fn builtin_schemas
+- rust fn test_builtin_schemas
+- rust fn validate_mime_type
+- rust mod tests
+- use crate::error::Error
+- use crate::file::{FileUpload, FileUploads}
+- use schemars::schema_for
+- use serde_json::json
+- use std::sync::Arc
+- use super::*
+
+[crates/cli/src/import.rs]
+- rust fn parse
+- rust fn read_auth0_nd_json
+- rust fn test_auth0_import
+- rust mod tests
+- rust struct Auth0Date
+- rust struct Auth0Id
+- rust struct Auth0User
+- use chrono::{DateTime, Utc}
+- use serde::{Deserialize, Serialize}
+- use super::*
+- use trailbase::api::cli::ImportUser
+
+[crates/pg-schema/src/index.rs]
+- rust fn build_all_index_schemas
+- rust fn build_index_schema
+- rust fn get_indexes
+- rust fn postgres_index_schema_test
+- rust mod tests
+- rust struct PgIndex
+- use crate::error::Error
+- use crate::util::test_connection
+- use serde::Deserialize
+- use super::*
+- use trailbase_schema::sqlite::{QualifiedName, TableIndex}
+
+[crates/pg-schema/src/lib.rs]
+- pub use crate::error::Error
+- pub use crate::index::build_all_index_schemas
+- pub use crate::table::build_all_table_schemas
+- pub use crate::trigger::{TriggerInformationSchema, build_all_trigger_schemas}
+- pub use crate::view::build_all_view_schemas
+- rust mod error
+- rust mod index
+- rust mod table
+- rust mod trigger
+- rust mod util
+- rust mod view
+
+[crates/wasm-runtime-guest/src/job.rs]
+- rust enum Error
+- rust fn daily
+- rust fn hourly
+- rust fn minutely
+- rust fn new
+- rust fn validate_spec
+- rust impl Job
+- rust struct Job
+- use crate::http::IntoResponse
+- use futures_util::future::LocalBoxFuture
+- use wstd::http::server::{Finished, Responder}
+
+[crates/extension/src/validators.rs]
+- rust fn is_email
+- rust fn is_json
+- rust fn register_extension_functions
+- rust fn test_is_email
+- rust fn test_is_json
+- rust mod tests
+- use rusqlite::Error
+- use rusqlite::functions::{Context, FunctionFlags}
+- use rusqlite::params
+- use validator::ValidateEmail
+
+[crates/refinery/src/lib.rs]
+- pub use crate::error::Error
+- pub use crate::runner::{Migration, Report, Runner, Target}
+- pub use crate::traits::r#async::AsyncMigrate
+- pub use crate::traits::sync::Migrate
+- pub use rusqlite
+- rust mod drivers
+- rust mod error
+- rust mod runner
+- rust mod traits
+- rust mod util
+
+[crates/client/src/lib.rs]
+- pub use crate::client::*
+- pub use crate::error::Error
+- pub use crate::record_api::*
+- pub use crate::transport::{DefaultTransport, Transport}
+- pub use futures_lite::Stream
+- rust mod client
+- rust mod error
+- rust mod record_api
+- rust mod transport
+
+[crates/pg-schema/src/trigger.rs]
+- rust fn build_all_trigger_schemas
+- rust fn get_triggers
+- rust fn postgres_trigger_schema_test
+- rust mod tests
+- rust struct TriggerInformationSchema
+- use crate::error::Error
+- use crate::util::test_connection
+- use serde::Deserialize
+- use super::*
+
+[crates/qs/src/lib.rs]
+- pub use column_rel_value::{ColumnOpValue, CompareOp}
+- pub use filter::{Combiner, ValueOrComposite}
+- pub use query::{Cursor, CursorType, Expand, FilterQuery, Order, OrderPrecedent, Query}
+- pub use value::Value
+- rust mod column_rel_value
+- rust mod filter
+- rust mod query
+- rust mod util
+- rust mod value
+
+[crates/sqlite/src/to_sql.rs]
+- rust enum ToSqlProxy
+- rust fn from
+- rust fn to_sql
+- rust fn try_from
+- rust impl From<
+- rust impl From<Option<
+- rust impl TryFrom<ToSqlProxy<
+- rust impl rusqlite::ToSql
+- use crate::value::{Value, ValueRef}
+
+[crates/wasm-runtime-guest/src/kv.rs]
+- pub use crate::wit::wasi::keyvalue::store::Error
+- rust fn delete
+- rust fn exists
+- rust fn get
+- rust fn open
+- rust fn set
+- rust impl Store
+- rust struct Store
+- use crate::wit::wasi::keyvalue::store::{Bucket, open as wit_open}
+
+[crates/core/src/listing.rs]
+- rust enum WhereClauseError
+- rust fn build_filter_where_clause
+- rust fn limit_or_default
+- rust struct WhereClause
+- use std::borrow::Cow
+- use thiserror::Error
+- use trailbase_qs::ValueOrComposite
+- use trailbase_schema::metadata::ColumnMetadata
+
+[crates/sqlite/src/from_sql.rs]
+- rust enum FromSqlError
+- rust fn column_result
+- rust impl FromSql
+- rust trait FromSql
+- use crate::value::{Value, ValueRef}
+- use std::borrow::Cow
+- use std::error::Error
+- use std::str::Utf8Error
+
+[crates/sqlite/src/params.rs]
+- rust fn bind
+- rust impl Params
+- rust trait Params
+- use crate::error::Error
+- use crate::statement::Statement
+- use crate::to_sql::ToSqlProxy
+- use crate::value::Value
+- use std::borrow::Cow
+
+[crates/wasm-runtime-common/src/lib.rs]
+- rust enum HttpContextKind
+- rust enum SqliteResponse
+- rust struct HttpContext
+- rust struct HttpContextUser
+- rust struct SqliteRequest
+- use serde::{Deserialize, Serialize}
+- use trailbase_sqlvalue::SqlValue
+- use ts_rs::TS
+
+[crates/core/src/encryption.rs]
+- rust fn decrypt
+- rust fn encrypt
+- rust fn generate_random_key
+- rust fn test_encryption
+- rust mod tests
+- use rand::Rng
+- use super::*
+
+[crates/core/src/test_utils.rs]
+- pub use crate::util::row_id_column
+- rust fn blob_column
+- rust fn json_column
+- rust fn serial_column
+- rust fn strict
+- rust fn uuid_column
+- use trailbase_sqlite::{Connection, ConnectionType}
+
+[crates/reactive/src/lib.rs]
+- pub use async_reactive::AsyncReactive
+- pub use merge::Merge
+- pub use reactive::{DeriveInput, Reactive}
+- rust mod async_reactive
+- rust mod macros
+- rust mod merge
+- rust mod reactive
+
+[crates/schema/src/parse.rs]
+- pub use sqlite3_parser::Bump
+- rust fn parse_into_statement
+- rust fn parse_into_statements
+- use fallible_iterator::FallibleIterator
+- use log::*
+- use sqlite3_parser::ast::{Cmd, Stmt}
+- use sqlite3_parser::lexer::sql::{Error as Sqlite3Error, Parser}
+
+[crates/qs/src/util.rs]
+- rust fn deserialize_bool
+- rust fn sanitize_column_name
+- rust fn unexpected
+- use serde::de::Error
+- use serde::de::{Deserialize, Unexpected}
+- use serde_value::Value
+
+[crates/sqlite/src/statement.rs]
+- rust fn bind_parameter
+- rust fn parameter_index
+- rust impl Statement
+- rust trait Statement
+- use crate::error::Error
+- use crate::to_sql::ToSqlProxy
+
+[crates/assets/src/lib.rs]
+- pub use assets::AssetService
+- rust mod assets
+- rust mod email
+- rust struct AdminAssets
+- use rust_embed::RustEmbed
+
+[crates/auth-config/src/lib.rs]
+- rust enum LoginIdentifier
+- rust enum RegistrationIdentifier
+- rust struct AuthConfig
+- rust struct OAuthProvider
+- use serde::{Deserialize, Serialize}
+
+[crates/wasm-runtime-guest/src/fetch.rs]
+- pub use http::{Request, Uri}
+- rust fn fetch
+- rust fn get
+- use wstd::http::Client
+- use wstd::io::empty
+
+[crates/wasm-runtime-guest/src/fs.rs]
+- pub use crate::wit::wasi::filesystem::preopens::{Descriptor, get_directories}
+- pub use crate::wit::wasi::filesystem::types::{DescriptorFlags, ErrorCode, OpenFlags, PathFlags}
+- rust enum Error
+- rust fn read_file
+- use std::path::Path
+
+[crates/cli/src/lib.rs]
+- pub use args::OpenApiSubCommands
+- rust mod args
+- rust mod import
+- rust mod wasm
+
+[crates/client/src/error.rs]
+- rust enum Error
+- rust fn from
+- rust impl From<reqwest::Error>
+- use thiserror::Error
+
+[crates/core/src/constants.rs]
+- rust file constants.rs
+- use chrono::Duration
+- use std::sync::LazyLock
+- use trailbase_schema::QualifiedName
+
+[crates/reactive/src/macros.rs]
+- rust fn merge
+- rust impl Merge
+- use crate::{Merge, Reactive}
+- use paste::paste
+
+[crates/wasm-runtime-guest/src/time.rs]
+- pub use wstd::future::FutureExt
+- pub use wstd::task::{sleep, sleep_until}
+- pub use wstd::time::{Duration, SystemTime, Timer}
+- rust file time.rs
+
+[crates/core/src/init_error.rs]
+- rust enum InitError
+- use crate::auth::jwt::JwtHelperError
+- use thiserror::Error
+
+[crates/reactive/src/merge.rs]
+- rust fn merge
+- rust trait Merge
+- use crate::Reactive
+
+[crates/assets/build.rs]
+- rust fn main
+- use std::{io::Result, path::PathBuf}
+
+[crates/core/src/test.rs]
+- rust fn unpack_json_response
+- use axum::response::Response
+
+[crates/extension-so/src/lib.rs]
+- rust file lib.rs
+- use rusqlite::{Connection, ffi}
+
+[crates/schema/src/error.rs]
+- rust enum Error
+- use std::sync::Arc
+
+[crates/sqlite/src/error.rs]
+- rust enum Error
+- rust fn unpack_other_error
+
+[crates/assets/src/email.rs]
+- rust file email.rs
+
+[crates/auth-ui/build.rs]
+- rust fn main
+
+[crates/cli/build.rs]
+- rust fn main
+
+[crates/core/build.rs]
+- rust fn main
+
+[crates/pg-schema/src/error.rs]
+- rust enum Error
+
+[crates/pg-schema/src/util.rs]
+- rust fn test_connection
+
+[crates/sqlite/src/database.rs]
+- rust struct Database
+
+[crates/sqlite/src/type.rs]
+- rust enum ConnectionType
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+[docs/src/components/BarChart.tsx]
+- import ChartDeferred from "chartjs-plugin-deferred"
+- import {
+- import { createDarkMode } from "@/lib/darkmode"
+- import { onCleanup, createEffect } from "solid-js"
+- typescript function BarChart
+- typescript function BarChartWithErrors
+- typescript function adjustScaleColor
+- typescript interface BarChartProps
+- typescript interface BarChartWithErrorsProps
+- typescript type ChartData
+- typescript type ScaleOptions
+- typescript type Tick
+
+[docs/astro.config.ts]
+- import config from "./src/config"
+- import icon from "astro-icon"
+- import robotsTxt from "astro-robots-txt"
+- import sitemap from "@astrojs/sitemap"
+- import solid from "@astrojs/solid-js"
+- import starlight from "@astrojs/starlight"
+- import starlightLinksValidator from "starlight-links-validator"
+- import starlightOpenAPI, { openAPISidebarGroups } from "starlight-openapi"
+- import tailwindcss from "@tailwindcss/vite"
+- import { defineConfig } from "astro/config"
+- typescript file astro.config.ts
+
+[guests/typescript/src/index.ts]
+- import type {
+- import type { HttpHandlerInterface } from "./http"
+- import type { JobHandlerInterface } from "./job"
+- import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.3"
+- import { buildIncomingHttpHandler } from "./http/incoming"
+- typescript function defineConfig
+- typescript interface Config
+- typescript interface InitArgs
+
+[guests/typescript/src/timer.ts]
+- typescript function addPeriodicCallback
+- typescript function awaitPendingTimers
+- typescript function clearInterval
+- typescript function clearTimeout
+- typescript function setInterval
+- typescript function setTimeout
+- typescript type Timeout
+- typescript type TimerHandler
+
+[crates/auth-ui/ui/eslint.config.mjs]
+- import astro from "eslint-plugin-astro"
+- import globals from "globals"
+- import pluginJs from "@eslint/js"
+- import solid from "eslint-plugin-solid/configs/recommended"
+- import tailwind from "eslint-plugin-better-tailwindcss"
+- import tseslint from "typescript-eslint"
+- javascript file eslint.config.mjs
+
+[docs/eslint.config.mjs]
+- import astroPlugin from "eslint-plugin-astro"
+- import globals from "globals"
+- import jsPlugin from "@eslint/js"
+- import solidPlugin from "eslint-plugin-solid/configs/recommended"
+- import tailwindPlugin from "eslint-plugin-better-tailwindcss"
+- import tsPlugin from "typescript-eslint"
+- javascript file eslint.config.mjs
+
+[docs/src/components/LineChart.tsx]
+- import ChartDeferred from "chartjs-plugin-deferred"
+- import { Chart, type ChartData, type ScaleOptions } from "chart.js/auto"
+- import { createDarkMode } from "@/lib/darkmode"
+- import { onCleanup, createEffect } from "solid-js"
+- typescript function LineChart
+- typescript function adjustScaleColor
+- typescript interface LineChartProps
+
+[docs/src/components/ScatterChart.tsx]
+- import ChartDeferred from "chartjs-plugin-deferred"
+- import { Chart, type ChartData, type ScaleOptions } from "chart.js/auto"
+- import { createDarkMode } from "@/lib/darkmode"
+- import { onCleanup, createEffect } from "solid-js"
+- typescript function ScatterChart
+- typescript function adjustScaleColor
+- typescript interface ScatterChartProps
+
+[docs/src/lib/github.ts]
+- import { cwd } from "node:process"
+- import { join } from "node:path"
+- import { readFileSync, existsSync } from "node:fs"
+- import { repo } from "@/config"
+- typescript function githubCodeReference
+- typescript function githubPath
+
+[crates/auth-ui/ui/astro.config.mjs]
+- import icon from "astro-icon"
+- import solidJs from "@astrojs/solid-js"
+- import tailwindcss from "@tailwindcss/vite"
+- import { defineConfig } from "astro/config"
+- javascript file astro.config.mjs
+
+[docs/src/content.config.ts]
+- import { defineCollection, reference } from "astro:content"
+- import { docsSchema } from "@astrojs/starlight/schema"
+- import { glob } from "astro/loaders"
+- import { z } from "astro/zod"
+- typescript file content.config.ts
+
+[docs/src/lib/darkmode.ts]
+- import type { Accessor } from "solid-js"
+- import { createSignal, onCleanup, onMount } from "solid-js"
+- typescript const isDark
+- typescript function createDarkMode
+
+[guests/typescript/src/json.js]
+- javascript class RawJSON
+- javascript const fix
+- javascript const noop
+- javascript const reviver
+
+[guests/typescript/src/util.ts]
+- typescript function base64Decode
+- typescript function base64Encode
+- typescript function urlSafeBase64Decode
+- typescript function urlSafeBase64Encode
+
+[guests/typescript/vite.config.ts]
+- import dts from "vite-plugin-dts"
+- import { defineConfig } from "vite"
+- import { resolve } from "path"
+- typescript file vite.config.ts
+
+[docs/src/lib/utils.ts]
+- import { clsx, type ClassValue } from "clsx"
+- import { twMerge } from "tailwind-merge"
+- typescript function cn
+
+[guests/typescript/eslint.config.mjs]
+- import pluginJs from "@eslint/js"
+- import tseslint from "typescript-eslint"
+- javascript file eslint.config.mjs
+
+[crates/auth-ui/ui/.prettierrc.mjs]
+- javascript file .prettierrc.mjs
+
+[docs/.prettierrc.mjs]
+- javascript file .prettierrc.mjs
+
+[docs/src/config.ts]
+- typescript type Config
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+[client/python/trailbase/__init__.py]
+- from abc import ABC, abstractmethod
+- from contextlib import contextmanager
+- from enum import Enum
+- from time import time
+- from typing import ContextManager, TypeAlias, cast, final
+- import httpx
+- import json
+- import jwt
+- import logging
+- import typing
+- python class And
+- python class Client
+- python class CompareOp
+- python class DefaultTransport
+- python class DeleteEvent
+- python class ErrorEvent
+- python class Event
+- python class FetchException
+- python class Filter
+- python class InsertEvent
+- python class JwtToken
+- python class ListResponse
+- python class MultiFactorAuthToken
+- python class Or
+- python class RecordApi
+- python class RecordId
+- python class TokenState
+- python class Tokens
+- python class Transport
+- python class UpdateEvent
+- python class User
+- python def __init__
+- python def __repr__
+- python def _refresh_tokens_impl
+- python def _set_token_state
+- python def _shouldRefresh
+- python def build
+- python def build_headers
+- python def convert
+- python def create
+- python def create_bulk
+- python def delete
+- python def fetch
+- python def from_json
+- python def impl
+- python def is_not_null
+- python def is_null
+- python def list
+- python def login
+- python def login_anonymously
+- python def login_otp
+- python def login_second
+- python def logout
+- python def parseEvent
+- python def promote_anonymous
+- python def read
+- python def record_ids_from_json
+- python def records
+- python def refresh_auth_tokens
+- python def request_otp
+- python def site
+- python def stream
+- python def subscribe
+- python def subscribe_all
+- python def tokens
+- python def traverseFilters
+- python def update
+- python def user
+- python def valid
+
+=================================================================
+[DOMAIN: GO]
+=================================================================
+[client/go/trailbase/client.go]
+- go file client.go
+- import ( "bufio" "bytes" "errors" "fmt" "io" "strings" "sync" "time" "encoding/base64" "encoding/json" "net/http" "net/url" )
+
+[client/go/trailbase/client_test.go]
+- go file client_test.go
+- import ( "errors" "fmt" "io" "log" "net/http" "os" "os/exec" "path" "runtime" "strings" "time" "testing" ttp "github.com/pquerna/otp/totp" )
+
+[client/go/trailbase/event.go]
+- go file event.go
+- import ( "bytes" "encoding/json" )
+
+[client/go/trailbase/record_api.go]
+- go file record_api.go
+- import ( "errors" "fmt" "io" "strings" "encoding/json" )
+
+[client/go/trailbase/record_api_test.go]
+- go file record_api_test.go
+- import ( "fmt" "testing" )
+
+[client/go/trailbase/transport.go]
+- go file transport.go
+- import ( "bytes" "net/http" "net/url" )
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+[client/dotnet/trailbase/RecordApi.cs]
+- c# class And
+- c# class CreateRecordResponse
+- c# class DeleteEvent
+- c# class ErrorEvent
+- c# class Event
+- c# class Filter
+- c# class FilterBase
+- c# class InsertEvent
+- c# class IntegerRecordId
+- c# class ListResponse
+- c# class Or
+- c# class Pagination
+- c# class RecordApi
+- c# class RecordId
+- c# class SerializeResponseRecordIdContext
+- c# class UpdateEvent
+- c# class UuidRecordId
+- c# constructor And
+- c# constructor CreateRecordResponse
+- c# constructor DeleteEvent
+- c# constructor ErrorEvent
+- c# constructor Event
+- c# constructor Filter
+- c# constructor InsertEvent
+- c# constructor IntegerRecordId
+- c# constructor ListResponse
+- c# constructor Or
+- c# constructor Pagination
+- c# constructor RecordApi
+- c# constructor UpdateEvent
+- c# constructor UuidRecordId
+- c# enum CompareOp
+- c# enum ErrorStatus
+- c# field const string DynamicCodeMessage = "Use overload with JsonTypeInfo instead"
+- c# field const string UnreferencedCodeMessage = "Use overload with JsonTypeInfo instead"
+- c# field internal CompareOp? op
+- c# field internal List<FilterBase> filters
+- c# field internal String column
+- c# field internal String value
+- c# field static readonly string _recordApi = "api/records/v1"
+- c# method Create
+- c# method CreateBulk
+- c# method CreateImpl
+- c# method Delete
+- c# method IsNotNull
+- c# method IsNull
+- c# method List
+- c# method ListImpl
+- c# method Parse
+- c# method Read
+- c# method ReadImpl
+- c# method StreamToEnumerableImpl
+- c# method Subscribe
+- c# method SubscribeAll
+- c# method SubscribeImpl
+- c# method ToString
+- c# method Update
+- c# method UpdateImpl
+- c# method addFiltersToParams
+- c# property Message
+- c# property Seq
+- c# property Status
+- c# property Value
+- c# property client
+- c# property cursor
+- c# property id
+- c# property ids
+- c# property limit
+- c# property name
+- c# property offset
+- c# property records
+- c# property total_count
+
+[client/dotnet/trailbase/Client.cs]
+- c# class Client
+- c# class Credentials
+- c# class DefaultTransport
+- c# class FetchException
+- c# class JwtToken
+- c# class MultiFactorAuthCredentials
+- c# class MultiFactorAuthToken
+- c# class RefreshTokenRequest
+- c# class RefreshTokenResponse
+- c# class SourceGenerationContext
+- c# class TokenState
+- c# class Tokens
+- c# class Transport
+- c# class User
+- c# constructor Client
+- c# constructor Credentials
+- c# constructor DefaultTransport
+- c# constructor FetchException
+- c# constructor JwtToken
+- c# constructor MultiFactorAuthCredentials
+- c# constructor MultiFactorAuthToken
+- c# constructor RefreshTokenRequest
+- c# constructor RefreshTokenResponse
+- c# constructor TokenState
+- c# constructor Tokens
+- c# constructor User
+- c# field Uri baseUrl
+- c# field internal (Tokens, JwtToken)? state
+- c# field internal TokenState tokenState
+- c# field internal Transport client
+- c# field public HttpRequestHeaders headers
+- c# field static readonly HttpClient client = new HttpClient()
+- c# field static readonly ILogger logger = LoggerFactory.Create( builder =>
+- c# field static readonly string _authApi = "api/auth/v1"
+- c# method Fetch
+- c# method Login
+- c# method LoginAnonymously
+- c# method LoginOTP
+- c# method LoginSecond
+- c# method Logout
+- c# method PromoteAnonymous
+- c# method Records
+- c# method RefreshAuthToken
+- c# method RequestOTP
+- c# method ToString
+- c# method Tokens
+- c# method User
+- c# method build
+- c# method buildHeaders
+- c# method refreshTokensImpl
+- c# method shouldRefresh
+- c# method updateTokens
+- c# property Status
+- c# property auth_token
+- c# property csrf_token
+- c# property email
+- c# property email_or_username
+- c# property exp
+- c# property iat
+- c# property mfa_token
+- c# property password
+- c# property refresh_token
+- c# property site
+- c# property sub
+- c# property totp
+- c# property username
+
+[client/dart/lib/trailbase.dart]
+- dart file trailbase.dart
+
+[client/kotlin/build.gradle.kts]
+- kotlin file build.gradle.kts
+
+[client/kotlin/lib/build.gradle.kts]
+- kotlin file build.gradle.kts
+
+[client/kotlin/settings.gradle.kts]
+- kotlin file settings.gradle.kts
+
+[client/swift/trailbase/Package.swift]
+- swift file Package.swift

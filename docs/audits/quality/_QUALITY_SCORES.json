@@ -266042,15 +266042,15 @@
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_02_dependency_manifest",
-    "size": 8760,
+    "size": 9618,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(8760)"
+        "detail": "healthy(9618)"
       },
       "estrutura_canonica": {
-        "score": 25.0,
-        "detail": "1/4 markers"
+        "score": 50.0,
+        "detail": "2/4 markers"
       },
       "lei_iv_compliance": {
         "score": 100.0,
@@ -266077,16 +266077,16 @@
         "detail": "text"
       }
     },
-    "total_score": 78.0
+    "total_score": 83.0
   },
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_03_test_intent",
-    "size": 16042,
+    "size": 11067,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(16042)"
+        "detail": "healthy(11067)"
       },
       "estrutura_canonica": {
         "score": 50.0,
@@ -266122,11 +266122,11 @@
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_04_repo_outline",
-    "size": 359634,
+    "size": 103042,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(359634)"
+        "detail": "healthy(103042)"
       },
       "estrutura_canonica": {
         "score": 0.0,
@@ -266162,15 +266162,15 @@
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_05_architecture_map",
-    "size": 28370,
+    "size": 7476,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(28370)"
+        "detail": "healthy(7476)"
       },
       "estrutura_canonica": {
-        "score": 0.0,
-        "detail": "0/1 markers"
+        "score": 100.0,
+        "detail": "1/1 markers"
       },
       "lei_iv_compliance": {
         "score": 100.0,
@@ -266197,7 +266197,7 @@
         "detail": "text"
       }
     },
-    "total_score": 69.0
+    "total_score": 89.0
   },
   {
     "repo_id": "trailbaseio/trailbase",
@@ -266242,11 +266242,11 @@
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_07_ops_blueprint",
-    "size": 27375,
+    "size": 27125,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(27375)"
+        "detail": "healthy(27125)"
       },
       "estrutura_canonica": {
         "score": 100.0,
@@ -266282,19 +266282,19 @@
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_08_health_report",
-    "size": 429919,
+    "size": 168873,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(429919)"
+        "detail": "healthy(168873)"
       },
       "estrutura_canonica": {
         "score": 100.0,
         "detail": "3/3 markers"
       },
       "lei_iv_compliance": {
-        "score": 0.0,
-        "detail": "violation: (?i)Failed:\\s*timeout"
+        "score": 100.0,
+        "detail": "clean"
       },
       "diversidade_fonte": {
         "score": 100.0,
@@ -266302,7 +266302,7 @@
       },
       "refs_file_line": {
         "score": 75.0,
-        "detail": "some_refs(11)"
+        "detail": "some_refs(12)"
       },
       "sem_slop": {
         "score": 100.0,
@@ -266317,16 +266317,16 @@
         "detail": "report_format"
       }
     },
-    "total_score": 50.0
+    "total_score": 97.5
   },
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_09_community_meta",
-    "size": 2345,
+    "size": 2348,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(2345)"
+        "detail": "healthy(2348)"
       },
       "estrutura_canonica": {
         "score": 0.0,
@@ -266402,15 +266402,15 @@
   {
     "repo_id": "trailbaseio/trailbase",
     "blob": "blob_11_ux_contracts",
-    "size": 37890,
+    "size": 38,
     "dimensions": {
       "tamanho_sadio": {
-        "score": 100.0,
-        "detail": "healthy(37890)"
+        "score": 50.0,
+        "detail": "below_min(38<1000)"
       },
       "estrutura_canonica": {
-        "score": 100.0,
-        "detail": "1/1 markers"
+        "score": 0.0,
+        "detail": "0/1 markers"
       },
       "lei_iv_compliance": {
         "score": 100.0,
@@ -266437,7 +266437,7 @@
         "detail": "text"
       }
     },
-    "total_score": 88.0
+    "total_score": 58.0
   },
   {
     "repo_id": "trycua/cua",

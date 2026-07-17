@@ -1,0 +1,887 @@
+# AUDIT REPORT: blob_07_ops_blueprint
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T15:46:05
+
+=== REPO: trailbaseio/trailbase ===
+# Ops Blueprint
+
+[INFRA_FILES_COUNT]: 15
+[CONTAINS_TEST_WORKFLOW]: yes
+[CONTAINS_DOCKERFILE]: yes
+[CONTAINS_DEPLOY_WORKFLOW]: yes
+
+### .github/workflows/release.yml
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  TOOLCHAIN_VERSION: 1.95.0
+  CARGO_PROFILE_RELEASE_LTO: "fat"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+  PNPM_OFFLINE: "TRUE"
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get release notes from changelog
+        id: release_notes
+        run: |
+          export VERSION=$(echo ${{  github.ref_name }} | sed 's/^v//')
+          echo "VERSION = ${VERSION}"
+          awk "/## v${VERSION}.*/{include=1; next} /## v.*/{include=0} include && NF" CHANGELOG.md > ./CHANGELOG-release.md
+          cat ./CHANGELOG-release.md
+
+      - name: Release Changelog
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body_path: ./CHANGELOG-release.md
+
+  # NOTE: We use Docker. Otherwise getting compatible versions for
+  # musl-gcc, g++ (GEOS is C++) and rustc is borderline impossible.
+  release-x86_64-linux-musl:
+    needs: changelog
+    runs-on: ubuntu-latest
+    env:
+      RUST_TARGET: x86_64-unknown-linux-musl
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_linux.zip
+      DOCKER_WORKSPACE: /workspace
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: PNPM install
+        run: pnpm install
+      - name: Build a Builder Image
+        run: |
+          docker build -f Dockerfile.ci \
+            --build-arg BASE_IMAGE_TAG=x86_64-musl \
+            --build-arg RUST_TARGET=${{ env.RUST_TARGET }} \
+            --build-arg RUST_TOOLCHAIN_VERSION=${{ env.TOOLCHAIN_VERSION }} \
+            --build-arg WORKSPACE=${{ env.DOCKER_WORKSPACE }} \
+            -t builder:latest .
+
+      - name: Rust Build using the Builder
+        run: |
+          env && \
+          docker run --rm \
+            -v ${{ github.workspace }}:${{ env.DOCKER_WORKSPACE }} \
+            -e CARGO_PROFILE_RELEASE_LTO=${{ env.CARGO_PROFILE_RELEASE_LTO }} \
+            -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
+            -e PNPM_OFFLINE=FALSE \
+            builder:latest \
+              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail"
+
+      - name: Package Artifacts
+        run: |
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: ${{ env.ARCHIVE_NAME }}
+
+  release-aarch64-linux-musl:
+    needs: changelog
+    runs-on: ubuntu-24.04-arm
+    env:
+      RUST_TARGET: aarch64-unknown-linux-musl
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_arm64_linux.zip
+      DOCKER_WORKSPACE: /workspace
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: PNPM install
+        run: pnpm install
+      - name: Build a Builder Image
+        run: |
+          docker build -f Dockerfile.ci \
+            --build-arg BASE_IMAGE_TAG=aarch64-musl \
+            --build-arg RUST_TARGET=${{ env.RUST_TARGET }} \
+            --build-arg RUST_TOOLCHAIN_VERSION=${{ env.TOOLCHAIN_VERSION }} \
+            --build-arg WORKSPACE=${{ env.DOCKER_WORKSPACE }} \
+            -t builder:latest .
+
+      - name: Rust Build using the Builder
+        run: |
+          env && \
+          docker run --rm \
+            -v ${{ github.workspace }}:${{ env.DOCKER_WORKSPACE }} \
+            -e CARGO_PROFILE_RELEASE_LTO=${{ env.CARGO_PROFILE_RELEASE_LTO }} \
+            -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
+            -e PNPM_OFFLINE=FALSE \
+            builder:latest \
+              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail"
+
+      - name: Package Artifacts
+        run: |
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: ${{ env.ARCHIVE_NAME }}
+
+  release-aarch64-apple-darwin:
+    needs: changelog
+    runs-on: macos-15
+    env:
+      RUST_TARGET: aarch64-apple-darwin
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - name: Install Dependencies
+        run: brew update && brew install protobuf pnpm
+      - name: PNPM install
+        run: pnpm install
+      # CMake v4 is too new: https://github.com/georust/geos/issues/194
+      - name: Downgrade CMake
+        run: pipx install --force cmake==3.31.10
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
+          default: true
+      - name: Rust Build
+        run: |
+          env && \
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+
+      - name: Package Artifacts
+        run: |
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: ${{ env.ARCHIVE_NAME }}
+
+  release-x86_64-apple-darwin:
+    needs: changelog
+    runs-on: macos-15
+    env:
+      RUST_TARGET: x86_64-apple-darwin
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - name: Install Dependencies
+        run: brew update && brew install protobuf pnpm
+      - name: PNPM install
+        run: pnpm install
+      # CMake v4 is too new: https://github.com/georust/geos/issues/194
+      - name: Downgrade CMake
+        run: pipx install --force cmake==3.31.10
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
+          default: true
+      - name: Rust Build
+        run: |
+          env && \
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+
+      - name: Package Artifacts
+        run: |
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: ${{ env.ARCHIVE_NAME }}
+
+  release-x86_64-windows:
+    needs: changelog
+    runs-on: windows-latest
+    env:
+      RUST_TARGET: x86_64-pc-windows-msvc
+      BINARY_PATH: target/x86_64-pc-windows-msvc/release/trail.exe
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_windows.zip
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - uses: MinoruSekine/setup-scoop@v4.0.1
+        with:
+          buckets: extras
+          apps: nodejs pnpm protobuf zip
+      - name: PNPM install
+        shell: bash
+        run: pnpm install
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
+          default: true
+      - name: Rust Build
+        shell: bash
+        run: |
+          env && \
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+
+      - name: Package Artifacts
+        run: |
+          ${{ env.BINARY_PATH }} --version &&
+            zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: ${{ env.ARCHIVE_NAME }}
+
+  release-wasm-auth-ui:
+    needs: changelog
+    runs-on: ubuntu-latest
+    env:
+      RUST_TARGET: wasm32-wasip2
+      BINARY_PATH: target/$RUST_TARGET/release/trailbase_auth_ui_component.wasm
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && \
+            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: PNPM install
+        run: pnpm install
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
+          default: true
+      - name: Rust Build
+        run: |
+          env && cd crates/auth-ui && \
+            cargo build --target ${{ env.RUST_TARGET }} --release
+
+      - name: Package Artifacts
+        run: |
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: ${{ env.ARCHIVE_NAME }}
+
+### .github/workflows/test.yml
+name: test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+
+  build-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+
+      - name: "Build With All Features"
+        env:
+          RUST_BACKTRACE: 1
+        run: cargo build --all-features
+
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
+
+  build-minimal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+
+      - name: "Build With Minimal Features"
+        env:
+          RUST_BACKTRACE: 1
+        run: cargo build --all-targets --no-default-features
+
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+      - id: setup_clients
+        uses: ./.github/actions/setup_clients
+
+      - name: "Build & Run Tests"
+        uses: pre-commit/action@v3.0.1
+        env:
+          RUST_BACKTRACE: 1
+        with:
+          extra_args: "--all-files --verbose"
+
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
+
+  test-websocket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+
+      - name: "Test Rust Client"
+        env:
+          RUST_BACKTRACE: 1
+        run: cd crates/client && cargo test --features=ws
+      - name: "Test TypeScript Client"
+        env:
+          USE_WS: 1
+        run: cd crates/assets/js/client && pnpm test
+
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
+
+  test-pg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+
+      - name: "Build & Run Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: cargo test --features=geos,otel,pg-test
+
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
+
+### Dockerfile
+ARG TARGETARCH
+
+# NOTE: We cannot use alpine here because rusqlite's `libsqlite3-sys` with
+# `preupdate-hook` has a **build-time** dependency on the `bindgen` crate with
+# the `runtime` feature enabled. This in turn requires a dynamically linked
+# libclang.so, alpine's `clang-dev` package won't work :/.
+FROM messense/rust-musl-cross:x86_64-musl AS builder-amd64
+
+ARG RUST_TOOLCHAIN_VERSION=1.95
+RUN rustup default ${RUST_TOOLCHAIN_VERSION}
+RUN rustup target add x86_64-unknown-linux-musl
+
+
+FROM messense/rust-musl-cross:aarch64-musl AS builder-arm64
+
+ARG RUST_TOOLCHAIN_VERSION=1.95
+RUN rustup default ${RUST_TOOLCHAIN_VERSION}
+RUN rustup target add aarch64-unknown-linux-musl
+
+
+FROM builder-${TARGETARCH} AS base-builder
+
+# Install additional build dependencies. git is needed to bake version metadata.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libsqlite3-dev
+
+# Install node
+ENV PATH=/usr/local/node/bin:$PATH
+ENV NODE_VERSION=22.13.1
+
+RUN curl -sL https://github.com/nodenv/node-build/archive/master.tar.gz | tar xz -C /tmp/ && \
+    /tmp/node-build-master/bin/node-build "${NODE_VERSION}" /usr/local/node && \
+    rm -rf /tmp/node-build-master
+
+RUN npm install -g pnpm
+RUN pnpm --version
+
+WORKDIR /app
+COPY . .
+
+# Start by installing all JS dependencies upfront. This is to avoid
+# `node_modules` collisions due to parallel installs later-on while building
+# packages for various crates.
+RUN pnpm -r install --frozen-lockfile
+
+
+FROM base-builder AS auth-ui-builder
+
+RUN rustup target add wasm32-wasip2
+RUN RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target wasm32-wasip2 --release -p trailbase-auth-ui-component
+
+
+FROM base-builder AS binary-builder
+
+ARG TARGETPLATFORM
+
+RUN case ${TARGETPLATFORM} in \
+         "linux/arm64")  RUST_TARGET="aarch64-unknown-linux-musl"  ;; \
+         *)              RUST_TARGET="x86_64-unknown-linux-musl"   ;; \
+    esac && \
+    RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target ${RUST_TARGET} --features=geos-static --release --bin trail && \
+    mv target/${RUST_TARGET}/release/trail /app/trail.exe
+
+
+FROM alpine:3.23 AS image
+RUN apk add --no-cache tini curl
+
+RUN mkdir -p /app/traildepot/wasm
+
+COPY --from=binary-builder /app/trail.exe /app/trail
+COPY --from=auth-ui-builder /app/target/wasm32-wasip2/release/trailbase_auth_ui_component.wasm /app/traildepot/wasm/
+
+# When `docker run` is executed, launch the binary as unprivileged user.
+RUN adduser -D trailbase
+RUN chown trailbase /app/traildepot
+USER trailbase
+
+WORKDIR /app
+
+EXPOSE 4000
+ENTRYPOINT ["tini", "--"]
+
+CMD ["/app/trail", "--data-dir", "/app/traildepot", "run", "--address", "0.0.0.0:4000"]
+
+HEALTHCHECK CMD curl --fail http://localhost:4000/api/healthcheck || exit 1
+
+### Dockerfile.ci
+# Valid values are: x86_64-musl, aarch64-musl.
+ARG BASE_IMAGE_TAG
+
+# NOTE: We cannot use alpine here because rusqlite's `libsqlite3-sys` with
+# `preupdate-hook` has a **build-time** dependency on the `bindgen` crate with
+# the `runtime` feature enabled. This in turn requires a dynamically linked
+# libclang.so, alpine's `clang-dev` package won't work :/.
+FROM messense/rust-musl-cross:${BASE_IMAGE_TAG} AS builder-x86_64-unknown-linux-musl
+
+# ARGs need to be after FROM.
+ARG RUST_TARGET
+ARG RUST_TOOLCHAIN_VERSION
+ARG WORKSPACE=/workspace
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libsqlite3-dev
+
+# Install node
+ENV PATH=/usr/local/node/bin:$PATH
+ENV NODE_VERSION=22.13.1
+
+RUN curl -sL https://github.com/nodenv/node-build/archive/master.tar.gz | tar xz -C /tmp/ && \
+    /tmp/node-build-master/bin/node-build "${NODE_VERSION}" /usr/local/node && \
+    rm -rf /tmp/node-build-master
+
+RUN npm install -g pnpm
+RUN pnpm --version
+
+# Needed by `pnpm install`
+ENV CI=TRUE
+
+RUN rustup default ${RUST_TOOLCHAIN_VERSION}
+RUN rustup target add ${RUST_TARGET}
+
+# Otherwise git's sanity checks will prevent us from backing the version.
+RUN git config --global --add safe.directory ${WORKSPACE}
+
+WORKDIR ${WORKSPACE}
+
+# vim: ft=dockerfile
+
+### Makefile
+default: format check
+
+static:
+	RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release --bin trail
+
+format:
+	pnpm -r format; \
+		cargo +nightly fmt; \
+		dart format client/dart docs/examples/record_api_dart examples/blog/flutter; \
+		# Don't mess with TrailBase writing config.textproto
+		txtpbfmt `find . -regex ".*.textproto" | grep -v config.textproto`; \
+		dotnet format client/dotnet/trailbase; \
+	       	dotnet format client/dotnet/test; \
+		poetry -C client/python run black --config pyproject.toml .; \
+		swift format -r -i client/swift/trailbase/**/*.swift; \
+		gofmt -w client/go/trailbase;
+
+check:
+	pnpm -r check; \
+		cargo clippy --workspace --no-deps; \
+		dart analyze; \
+		dotnet format client/dotnet/trailbase --verify-no-changes; \
+		dotnet format client/dotnet/test --verify-no-changes; \
+		poetry -C client/python run pyright
+
+docker:
+	docker buildx build --platform linux/arm64,linux/amd64 --output=type=registry -t trailbase/trailbase:latest .
+
+openapi:
+	cargo run -- openapi print > docs/openapi/schema.json
+
+cloc:
+	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.build|.venv|/traildepot|/flutter|lock|_benchmark|/bin|/obj).*" .
+
+publish_crates:
+	cargo +nightly -Z package-workspace publish --no-verify \
+		-p trailbase-build \
+		-p trailbase-assets \
+		-p trailbase-qs \
+		-p trailbase-sqlean \
+		-p trailbase-refinery \
+		-p trailbase-extension \
+		-p trailbase-schema \
+		-p trailbase-sqlite \
+		-p trailbase-js \
+		-p trailbase
+
+.PHONY: default format check static docker openapi cloc publish_crates
+
+### client/dotnet/trailbase/Makefile
+test:
+	dotnet test ../test
+
+# Publish to http://nuget.org
+release: clean
+	dotnet build -c Release \
+		&& dotnet pack \
+	        && dotnet nuget push bin/Release/TrailBase.${VERSION}.nupkg --api-key ${NUGET_KEY} --source https://api.nuget.org/v3/index.json
+
+format:
+	dotnet format . ; dotnet format ../test
+
+docs:
+	cd ../docs && docfx docfx.json --serve
+
+outdated:
+	dotnet list package --outdated
+
+upgrade:
+	dotnet outdated --upgrade
+
+clean:
+	rm -rf bin obj
+
+.PHONY: release clean docs format test outdated upgrade
+
+### client/kotlin/Makefile
+test:
+	./gradlew allTests
+
+# Note `gradle build` also runs the tests.
+build:
+	./gradlew assemble
+
+# Version number is in `lib/build.gradle.kts`.
+# Tokens are in `~/.gradle/gradle.properties`
+#
+# Maven Central: https://central.sonatype.com/publishing/deployments
+#
+# Setting up publishing requires extracting your private key into a binary
+# key-ring file with:
+#
+#   $ gpg --no-armor --export-secret-keys contact@trailbase.io > key.gpg
+#
+# To get key id:
+#
+#   $ gpg --list-secret-keys --keyid-format LONG
+#
+#  For something like `sec   rsa4096/0123456789ABCDEF 2024-01-01 [SC]` the key
+#  id is the last 8 hex characters, i.e. `89ABCDEF`.
+#
+# Then generate a token on maven central and set the credentials:
+#
+#   $ cat ~/.gradle/gradle.properties
+#   mavenCentralUsername=<username_from_generated_maven_central_token>
+#   mavenCentralPassword=<password_from_generated_maven_central_token>
+#   signing.keyId=<key_id>
+#   signing.password=<key_password>
+#   signing.secretKeyRingFile=</absolute/path/to/key.gpg>
+#
+# Version specifier lives in `lib/build.gradle.kts`.
+#
+# Artifacts are browsable on: https://repo.maven.apache.org/maven2/io/trailbase/
+#
+# NOTE: Only publishes, requires subsequent manual release on maven central.
+release:
+	./gradlew publishAllPublicationsToMavenCentralRepository
+
+# Only releases non-multi-platform JVM artifacts.
+# release:
+# 	./gradlew publishToMavenCentral
+
+format:
+	./gradlew spotlessApply
+
+list:
+	./gradlew tasks
+
+# Run the example application.
+run:
+	./gradlew run
+
+clean:
+	rm -rf lib/build/
+
+
+.PHONY: test build publish release format list clean run
+
+### client/python/Makefile
+format:
+	poetry run black trailbase tests
+
+check:
+	poetry run pyright && poetry run flake8
+
+test:
+	poetry run pytest -s
+
+publish:
+	poetry publish --build
+
+.PHONY: format check test publish
+
+### client/testfixture/Makefile
+clean:
+	rm -rf data/ uploads/
+
+.PHONY: clean
+
+### crates/auth-ui/Makefile
+TRAILBIN ?= RUST_BACKTRACE=1 cargo run -p trailbase-cli --
+TRAILDEPOT := traildepot
+NAME := trailbase_auth_ui_component
+
+APPDIR := .
+DISTDIR := ${APPDIR}/dist
+ADDRESS := 127.0.0.1:4000
+
+deploy: ${TRAILDEPOT}/wasm/component.wasm
+	cp $< ../../client/testfixture/wasm/trailbase_auth_ui_component.wasm
+
+run: ${TRAILDEPOT}/wasm/component.wasm
+	${TRAILBIN} --data-dir=${TRAILDEPOT} run --address=${ADDRESS}
+
+${TRAILDEPOT}/wasm/component.wasm: ../../target/wasm32-wasip2/release/${NAME}.wasm
+	mkdir -p ${TRAILDEPOT}/wasm && cp $< $@
+
+../../target/wasm32-wasip2/release/${NAME}.wasm: src/*.rs FORCE
+	cargo build --target wasm32-wasip2  --release
+
+FORCE:
+
+.PHONY: deploy run FORCE
+
+### deploy/k8s/trailbase-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trailbase-deployment
+  labels:
+    app: trailbase
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trailbase
+  strategy:
+    type: Recreate
+
+  template:
+    metadata:
+      labels:
+        app: trailbase
+    spec:
+      containers:
+        - name: trailbase
+          image: docker.io/trailbase/trailbase:latest
+          ports:
+          - containerPort: 4000
+          # - hostPort: 4000
+          env:
+          - name: RUST_BACKTRACE
+            value: "1"
+          volumeMounts:
+            - name: trailbase-storage
+              mountPath: /app/traildepot
+
+      restartPolicy: Always
+
+      volumes:
+        - name: trailbase-storage
+          persistentVolumeClaim:
+            claimName: trailbase-storage
+        # Alternatively one can bind mount a local path. Podman may need `--userns=keep-id`
+        # for user ids to line up and FS permissions to work.
+        # - name: trailbase-storage
+        #   hostPath:
+        #     path: ./traildepot/
+
+### deploy/k8s/trailbase-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: trailbase-service
+spec:
+  selector:
+    app: trailbase
+  ports:
+    - protocol: TCP
+      port: 4000
+      targetPort: 4000
+
+### docker-compose.yml
+services:
+
+  trail:
+    image: docker.io/trailbase/trailbase:latest
+    ports:
+      - "${PORT:-4000}:4000"
+    restart: unless-stopped
+    volumes:
+      # NOTE: Docker compose will automatically create missing directories with
+      # "root" ownership. However, the TrailBase image drops root privileges.
+      # You therefore need to ensure that a `traildepot` folder with the
+      # appropriate permissions exist. Otherwise, you'll see "PermissionDenied"
+      # errors in the logs.
+      - ${DATA_DIR:-.}/traildepot:/app/traildepot
+    environment:
+      RUST_BACKTRACE: "1"
+    # command: "/app/trail --data-dir /app/traildepot run --address 0.0.0.0:4000"
+
+### docs/Dockerfile
+FROM nginx:mainline-alpine AS runner
+
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+COPY ./dist /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK CMD curl --fail http://localhost:80 || exit 1
+
+### docs/docker-compose.yml
+services:
+  trailbase-docs:
+    container_name: trailbase-docs
+    build: .
+    ports:
+      - "127.0.0.1:3036:80/tcp"
+    restart: unless-stopped
+
+    # By default containers get 1024 cpu shares. Setting it to 512 means half
+    # the resources compared to a default container. And 2048 double,
+    # respectively.
+    cpu_shares: 1024
+    mem_limit: 128m
+    oom_score_adj: -200

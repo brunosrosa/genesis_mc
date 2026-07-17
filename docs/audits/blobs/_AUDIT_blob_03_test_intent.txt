@@ -1,0 +1,306 @@
+# AUDIT REPORT: blob_03_test_intent
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T15:46:05
+
+=== REPO: trailbaseio/trailbase ===
+[crates/cli/src/import.rs]
+- fn test_auth0_import  // expects: .unwrap()
+
+[client/go/trailbase/client_test.go]
+- func TestAnonymousAuth(t *testing.T)
+- func TestAuth(t *testing.T)
+- func TestMain(m *testing.M)
+- func TestMultiFactorAuth(t *testing.T)
+- func TestOtpLogin(t *testing.T)
+- func TestRecordApi(t *testing.T)
+- func TestRecordApiSubscriptions(t *testing.T)
+
+[client/go/trailbase/record_api_test.go]
+- func TestEventParsing(t *testing.T)
+- func TestFilter(t *testing.T)
+- func TestFilterIsNotNullToParams(t *testing.T)
+- func TestFilterIsNullToParams(t *testing.T)
+
+[client/python/tests/test_client.py]
+- def test_anonymous_auth
+- def test_authentication
+- def test_expand_foreign_records
+- def test_filter_is_not_null_factory
+- def test_filter_is_null_factory
+- def test_filter_is_null_repr
+- def test_otp_auth
+- def test_parse_event
+- def test_records
+- def test_second_factor_authentication
+- def test_subscriptions
+
+[crates/auth-ui/src/auth.rs]
+- fn test_change_email_template_escaping
+- fn test_change_password_template_escaping
+- fn test_login_mfa_template_escaping
+- fn test_login_template_escaping
+- fn test_register_template_escaping
+- fn test_reset_password_request_template_escaping
+- fn test_reset_password_update_template_escaping
+
+[crates/client/src/client.rs]
+- async fn is_send_test  // expects: .unwrap()
+
+[crates/client/src/record_api.rs]
+- fn is_null_filter_builder  // asserts: assert_eq
+- fn is_null_formats_to_is  // asserts: assert_eq
+- fn is_null_wire_values  // asserts: assert_eq
+- fn parse_change_event_test
+
+[crates/client/tests/integration_test.rs]
+- fn integration_test  // expects: .unwrap()
+
+[crates/core/src/app_state.rs]
+- pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState>  // expects: .unwrap()
+- pub fn test_config() -> Config
+
+[crates/core/src/backup.rs]
+- async fn test_backup  // expects: .unwrap()
+
+[crates/core/src/config.rs]
+- async fn test_config_tests_sequentially
+- async fn test_default_config_is_valid  // expects: .unwrap()
+- fn test_config_merging
+- fn test_config_merging_from_env_and_vault
+- fn test_config_stripping
+- fn test_is_valid_hostname_or_ip  // asserts: assert_eq
+- fn test_strip_and_merge
+- fn test_validate_email_template_empty_or_none_body_passes  // expects: .unwrap()
+- fn test_validate_email_template_password_reset_with_code_passes
+- fn test_validate_email_template_password_reset_with_token_passes
+- fn test_validate_email_template_without_acceptable_var_fails
+
+[crates/core/src/email.rs]
+- async fn test_template_rendering  // expects: .unwrap()
+- fn test_fallback_sender  // expects: .unwrap()
+
+[crates/core/src/encryption.rs]
+- fn test_encryption  // expects: .unwrap()
+
+[crates/core/src/lib.rs]
+- fn test_random_alphanumeric  // asserts: assert_eq
+- fn test_random_numberic_and_uppercase  // asserts: assert_eq
+
+[crates/core/src/logging.rs]
+- fn test_as_millis_f64  // asserts: assert_eq
+- fn test_as_seconds_f64  // expects: .unwrap()
+
+[crates/core/src/migrations.rs]
+- async fn test_schema_invariants_still_hold_after_migrations  // expects: .unwrap()
+- fn test_load_sql_migrations  // expects: .unwrap()
+
+[crates/core/src/scheduler.rs]
+- async fn test_delete_pending_files_job  // expects: .unwrap()
+- async fn test_scheduler  // expects: .unwrap()
+- fn test_cron  // expects: .unwrap()
+
+[crates/core/src/schema_metadata.rs]
+- async fn test_column_nullability  // expects: .unwrap()
+- async fn test_expanded_foreign_key  // expects: .unwrap()
+- async fn test_expanded_with_multiple_foreign_keys  // expects: .unwrap()
+
+[crates/core/src/transaction_recorder.rs]
+- async fn test_transaction_log  // expects: .unwrap()
+
+[crates/core/src/util.rs]
+- fn test_urlencode  // asserts: assert_eq
+
+[crates/core/tests/admin_permissions_test.rs]
+- fn test_admin_permissions  // expects: .unwrap()
+
+[crates/core/tests/integration_test.rs]
+- async fn test_record_apis  // expects: .unwrap()
+- fn integration_tests  // expects: .unwrap()
+
+[crates/core/tests/public_dir_spa_test.rs]
+- async fn test_spa_fallback  // expects: .unwrap()
+
+[crates/core/tests/public_dir_test.rs]
+- async fn test_without_spa_fallback  // expects: .unwrap()
+
+[crates/core/tests/tls_test.rs]
+- fn test_https_serving  // expects: .unwrap()
+
+[crates/extension/src/base64.rs]
+- fn test_base64_url_safe_empty_string  // expects: .unwrap()
+- fn test_base64_url_safe_null_handling  // expects: .unwrap()
+- fn test_base64_url_safe_roundtrip  // expects: .unwrap()
+- fn test_base64_url_safe_trimmed_input  // expects: .unwrap()
+- fn test_base64_wrong_number_of_arguments  // expects: .unwrap()
+
+[crates/extension/src/geoip.rs]
+- fn test_explicit_jsonschema  // expects: .unwrap()
+
+[crates/extension/src/jsonschema.rs]
+- fn test_explicit_jsonschema  // expects: .unwrap()
+- fn test_registerd_jsonschema
+
+[crates/extension/src/lib.rs]
+- fn test_connect_and_extensions  // expects: .unwrap()
+- fn test_uuids  // expects: .unwrap()
+
+[crates/extension/src/password.rs]
+- fn test_verification  // asserts: assert_eq
+
+[crates/extension/src/regex.rs]
+- fn test_regexp  // expects: .unwrap()
+- fn test_regexp_impl  // expects: .unwrap()
+
+[crates/extension/src/uuid.rs]
+- fn test_uuid  // expects: .unwrap()
+
+[crates/extension/src/validators.rs]
+- fn test_is_email  // expects: .unwrap()
+- fn test_is_json  // expects: .unwrap()
+
+[crates/pg-schema/src/index.rs]
+- async fn postgres_index_schema_test  // expects: .unwrap()
+
+[crates/pg-schema/src/table.rs]
+- async fn postgres_check_jsonschema_test  // expects: .unwrap()
+- async fn postgres_column_schema_test  // expects: .unwrap()
+- async fn postgres_table_schema_test  // expects: .unwrap()
+
+[crates/pg-schema/src/trigger.rs]
+- async fn postgres_trigger_schema_test  // expects: .unwrap()
+
+[crates/pg-schema/src/util.rs]
+- pub async fn test_connection() -> (pglite_oxide::PgliteServer, trailbase_sqlite::Connection)  // expects: .unwrap()
+
+[crates/pg-schema/src/view.rs]
+- async fn postgres_view_schema_derived_column_test  // expects: .unwrap()
+- async fn postgres_view_schema_simple_test  // expects: .unwrap()
+
+[crates/qs/src/filter.rs]
+- fn test_filter_parsing  // expects: .unwrap()
+- fn test_filter_to_sql
+
+[crates/qs/src/query.rs]
+- fn test_basic_to_query
+- fn test_date_range_filter  // expects: .expect(...)
+- fn test_geometry_filter
+- fn test_query_basic_parsing  // asserts: assert_eq
+- fn test_query_cursor_parsing  // asserts: assert_eq
+- fn test_query_expand_parsing
+- fn test_query_filter_parsing  // expects: .unwrap()
+- fn test_query_order_parsing  // asserts: assert_eq
+
+[crates/qs/src/value.rs]
+- fn test_value  // asserts: assert_eq
+
+[crates/reactive/src/async_reactive.rs]
+- async fn async_reactive_test  // asserts: assert_eq
+
+[crates/reactive/src/reactive.rs]
+- async fn derive_async_reactive_test
+
+[crates/reactive/tests/lib_tests.rs]
+- fn can_add_observers
+- fn can_clear_observers  // asserts: assert_eq
+- fn can_merge  // asserts: assert_eq
+- fn can_notify
+- fn can_set  // asserts: assert_eq
+- fn can_update  // asserts: assert_eq
+- fn initial_derived_values_must_not_be_default  // asserts: assert_eq
+- fn update_only_notifies_observers_when_value_changes
+- fn update_unchecked_notifies_observers_without_checking_if_value_changed
+
+[crates/refinery/src/util.rs]
+- fn finds_mod_migrations  // expects: .unwrap()
+- fn finds_sql_migrations  // expects: .unwrap()
+- fn finds_unversioned_migrations  // expects: .unwrap()
+- fn ignores_mod_files_without_migration_regex_match  // expects: .unwrap()
+- fn ignores_sql_files_without_migration_regex_match  // expects: .unwrap()
+- fn loads_migrations_from_path  // expects: .unwrap()
+
+[crates/schema/src/file.rs]
+- fn test_build_unique_filename  // asserts: assert_eq
+- fn test_file_upload_input_serialization
+
+[crates/schema/src/json.rs]
+- async fn test_parse_string_json_value  // expects: .unwrap()
+
+[crates/schema/src/json_schema.rs]
+- fn test_file_uploads_schema  // expects: .unwrap()
+- fn test_geojson_schema  // expects: .unwrap()
+- fn test_parse_table_schema  // expects: .unwrap()
+
+[crates/schema/src/lib.rs]
+- fn test_qualified_name  // expects: .unwrap()
+
+[crates/schema/src/metadata.rs]
+- fn test_extract_json_metadata  // expects: .unwrap()
+- fn test_find_geometry_columns  // asserts: assert_eq
+- fn test_find_record_pk_column_index_for_table  // asserts: assert_eq
+- fn test_parse_create_view  // expects: .unwrap()
+- fn test_parse_create_view_from_issue_99  // expects: .unwrap()
+- fn test_parse_create_view_with_group_by  // expects: .unwrap()
+- fn test_parse_create_view_with_joins  // expects: .unwrap()
+- fn test_parse_create_view_with_subquery  // expects: .unwrap()
+
+[crates/schema/src/registry.rs]
+- fn test_builtin_schemas  // expects: .unwrap()
+
+[crates/sqlite/src/generic.rs]
+- async fn generic_connection_w_pg_create_more_complex_table_test  // expects: .unwrap()
+- async fn generic_connection_w_pg_create_simple_table_test  // expects: .unwrap()
+- async fn generic_connection_w_pg_test  // expects: .unwrap()
+- async fn generic_pg_poc_test  // expects: .unwrap()
+- async fn pg_float_test  // expects: .unwrap()
+- async fn pg_int_test  // expects: .unwrap()
+- async fn pg_json_test  // expects: .unwrap()
+- async fn pg_lite_test  // expects: .unwrap()
+- async fn pg_tid_test  // expects: .unwrap()
+- async fn pg_trigger_test  // expects: .unwrap()
+- async fn pg_uuids_test  // expects: .unwrap()
+
+[crates/sqlite/src/tests.rs]
+- async fn call_failure_test  // expects: .unwrap()
+- async fn call_success_test  // expects: .unwrap()
+- async fn close_call_test  // expects: .unwrap()
+- async fn close_failure_test  // expects: .unwrap()
+- async fn close_success_test  // expects: .unwrap()
+- async fn debug_format_test  // expects: .unwrap()
+- async fn double_close_test  // expects: .unwrap()
+- async fn open_in_memory_test  // expects: .unwrap()
+- async fn test_attach  // expects: .unwrap()
+- async fn test_backup  // expects: .unwrap()
+- async fn test_ergonomic_errors  // expects: .unwrap()
+- async fn test_error_source  // asserts: assert_eq
+- async fn test_execute_and_query  // expects: .unwrap()
+- async fn test_execute_batch  // expects: .unwrap()
+- async fn test_execute_batch_error  // expects: .unwrap()
+- async fn test_execute_returning_rows  // expects: .unwrap()
+- async fn test_hooks  // expects: .unwrap()
+- async fn test_identity  // expects: .unwrap()
+- async fn test_params
+- fn test_busy  // expects: .unwrap()
+- fn test_locking  // expects: .unwrap()
+
+[crates/sqlvalue/src/lib.rs]
+- fn decode_hex_test  // asserts: assert_eq
+
+[crates/wasm-runtime-guest/src/db.rs]
+- fn escape_test  // asserts: assert_eq
+
+[crates/wasm-runtime-host/src/lib.rs]
+- async fn test_custom_sqlite_function  // expects: .unwrap()
+- async fn test_init  // expects: .unwrap()
+- async fn test_transaction  // expects: .unwrap()
+
+[crates/wasm-runtime-host/src/sqlite.rs]
+- async fn handle_sqlite_execute_test  // expects: .unwrap()
+- async fn handle_sqlite_query_test  // expects: .unwrap()
+- fn readonly_select_filter_test
+
+[guests/typescript/tests/runtime.test.ts]
+- test "JSON value conversion"
+- test "SQL escape"
+- test "Wit value conversion"
+- test "base64"
