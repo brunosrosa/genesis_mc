@@ -1,0 +1,33 @@
+# AUDIT REPORT: blob_06_unsafe_hotspots
+# DB: Z:\genesis_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-16T04:06:39
+
+=== REPO: trailbaseio/trailbase ===
+# history_runs=1  latest_bytes=861  latest_ts=1784183493
+# Unsafe Hotspots
+
+summary: findings=0
+
+=================================================================
+[DOMAIN: RUST]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: PYTHON]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+
+=================================================================
+[DOMAIN: GO]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.

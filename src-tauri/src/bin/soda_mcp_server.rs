@@ -9,11 +9,11 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{Local, Utc};
-use genesis_mc_lib::harvester::ast_parser;
-use genesis_mc_lib::harvester::community::RateLimiter;
-use genesis_mc_lib::harvester::github_tracker;
-use genesis_mc_lib::harvester::repo_radar;
-use genesis_mc_lib::harvester::web_scraper;
+use souls_mc_lib::harvester::ast_parser;
+use souls_mc_lib::harvester::community::RateLimiter;
+use souls_mc_lib::harvester::github_tracker;
+use souls_mc_lib::harvester::repo_radar;
+use souls_mc_lib::harvester::web_scraper;
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
@@ -834,7 +834,7 @@ async fn run_repo_meta(params: &serde_json::Map<String, Value>) -> Result<Value,
 
 fn format_github_meta_markdown(
     owner_repo: &str,
-    meta: &genesis_mc_lib::harvester::community::CommunityMetaPayload,
+    meta: &souls_mc_lib::harvester::community::CommunityMetaPayload,
 ) -> String {
     let mut out = String::new();
     out.push_str("# GitHub Meta\n\n");

@@ -43,7 +43,7 @@ fn normalize_header_cell(raw: &str) -> String {
 }
 
 fn read_sheet_values(spreadsheet_id: &str, sheet: &str, range: &str) -> io::Result<Value> {
-    genesis_mc_lib::persist::google_workspace_mcp::read_values_blocking(
+    souls_mc_lib::persist::google_workspace_mcp::read_values_blocking(
         spreadsheet_id,
         sheet,
         range,
@@ -247,7 +247,7 @@ fn main() -> io::Result<()> {
         .or_else(|| std::env::var("GOOGLE_SHEETS_ID").ok())
         .ok_or_else(|| io::Error::other("Missing GOOGLE_SHEETS_ID (or --sheets-id)"))?;
 
-    let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header_range = souls_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let header = read_sheet_values(&spreadsheet_id, "MASTER_SOLUTIONS", &header_range)?;
     let header_row = extract_values_2d(&header)
         .unwrap_or_default()
@@ -256,8 +256,8 @@ fn main() -> io::Result<()> {
         .unwrap_or_default();
     let cols = resolve_column_map(&header_row)?;
 
-    let end_col = genesis_mc_lib::persist::sheets_utils::col_idx_to_a1(
-        genesis_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
+    let end_col = souls_mc_lib::persist::sheets_utils::col_idx_to_a1(
+        souls_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
             .len()
             .saturating_sub(1),
     );
@@ -307,7 +307,7 @@ fn main() -> io::Result<()> {
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
 
-        let canonical_cols = genesis_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS;
+        let canonical_cols = souls_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS;
         let mut missing_sheet_cols: Vec<String> = Vec::new();
         let mut missing_header_cols: Vec<String> = Vec::new();
         for col_name in canonical_cols {

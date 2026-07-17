@@ -8,7 +8,10 @@ param(
     [switch]$Yes,
     [string]$RepoId = ""
 )
-$env:RUST_LOG = "debug"
+# ETL eh one-shot, queremos ver TUDO: debug do core, silencia apenas o ruido
+# cosmico do `ignore`/`globset`/`walkdir` (~600 linhas de "built glob set").
+# Pos-B: crate agora chama souls_mc_lib (renomeada em B).
+$env:RUST_LOG = "souls_mc_lib=debug,soda_sast=debug,soda_harvester=debug,ignore=warn,globset=warn,walkdir=warn"
 try {
     [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 } catch {}
@@ -18,7 +21,7 @@ if ($null -ne $PSStyle) {
 try { Clear-Host } catch {}
 
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " 🦅 SODA GENESIS MC - PAINEL DE IGNIÇÃO ETL V5 (JANELA DE VIDRO)" -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host " 🦅 SOULS MC (SODA Stack) - PAINEL DE IGNIÇÃO ETL V5 (JANELA DE VIDRO)" -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host "================================================================" -ForegroundColor Cyan
 
 # 1. BLINDAGEM DE AMBIENTE: CARREGA O .ENV PARA A RAM
@@ -58,6 +61,42 @@ if (Test-Path $envPath) {
 } else {
     Write-Host "[ERRO] Arquivo .env não encontrado na raiz!" -ForegroundColor Red
     exit
+}
+
+# 1.5. HIGIENE LEVE DE ZUMBIS + EXPORTAÇÃO DE CAMINHOS DE SIDECARS
+# Nota: este script roda VIA boot.ps1, portanto NAO podemos matar souls_mc,
+# agentgateway, mcp_stdio_guard, soda_mcp_server, sequential-thinking-mcp ou leanctx
+# (esses sao o coracao supervisionado e devem continuar vivos).
+Write-Host "`n[+] Higiene de sidecars ETL orfaos + resolucao de binarios..." -ForegroundColor DarkGray
+$etlZombies = @("opengrep", "biome", "ruff", "oxlint", "mcp-google")
+foreach ($z in $etlZombies) {
+    $exists = Get-Process -Name $z -ErrorAction SilentlyContinue
+    if ($exists) {
+        Write-Host ("[HIGIENE] Encerrando sidecar hung: {0} ({1} PIDs)" -f $z, $exists.Count) -ForegroundColor DarkYellow
+        Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
+    }
+}
+# Resolve os caminhos absolutos dos sidecars para o fallback host-side (PRD-035).
+$binDir = Join-Path $PSScriptRoot "bin"
+$sidecarExports = @{
+    "SODA_OPENGREP_BIN" = "opengrep*.exe"
+    "SODA_BIOME_BIN"    = "biome*.exe"
+    "SODA_RUFF_BIN"     = "ruff*.exe"
+    "SODA_OXLINT_BIN"   = "oxlint*.exe"
+}
+foreach ($kv in $sidecarExports.GetEnumerator()) {
+    $varName = $kv.Key
+    $pattern = $kv.Value
+    $resolved = Get-ChildItem -Path $binDir -Filter $pattern -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike "*.pdb" } |
+        Select-Object -First 1
+    if ($resolved) {
+        $abs = $resolved.FullName
+        Set-Item -Path ("Env:{0}" -f $varName) -Value $abs
+        Write-Host ("[OK] {0} = {1}" -f $varName, $abs) -ForegroundColor Green
+    } else {
+        Write-Host ("[WARN] {0} nao encontrado em {1} (padrao: {2})" -f $varName, $binDir, $pattern) -ForegroundColor Yellow
+    }
 }
 
 $cargoManifest = Join-Path $PSScriptRoot "Cargo.toml"
@@ -208,18 +247,90 @@ Push-Location $PSScriptRoot
 
 try {
     $env:CARGO_INCREMENTAL = "0"
+
+    # ==== WRAPPER DE TRACKING (espelho do Invoke-TrackedProcess do boot.ps1) ====
+    # Captura stdout/stderr em arquivos do TEMP e faz heartbeat a cada 30s
+    # para garantir visibilidade durante runs longos (F0 pode levar 15-20min).
+    $etlLog = Join-Path $env:TEMP "soda_etl_cargo.out.log"
+    $etlErr = Join-Path $env:TEMP "soda_etl_cargo.err.log"
+    Remove-Item -LiteralPath $etlLog, $etlErr -Force -ErrorAction SilentlyContinue
+
+    $cargoArgs = @("run", "--manifest-path", $cargoManifest, "--bin", $bin)
     if ($binArgs.Count -gt 0) {
-        & cargo run --manifest-path $cargoManifest --bin $bin -- @binArgs
-    } else {
-        & cargo run --manifest-path $cargoManifest --bin $bin
+        $cargoArgs += "--"
+        $cargoArgs += $binArgs
     }
-    
-    # Trava de Segurança do Exit Code
+
+    Write-Host ("[PROC] LANCAMENTO: cargo {0}" -f ($cargoArgs -join ' ')) -ForegroundColor DarkCyan
+    $proc = Start-Process `
+        -FilePath "cargo" `
+        -ArgumentList $cargoArgs `
+        -WorkingDirectory $PSScriptRoot `
+        -RedirectStandardOutput $etlLog `
+        -RedirectStandardError $etlErr `
+        -PassThru `
+        -NoNewWindow
+    $null = $proc.Handle  # materializa o handle para ExitCode confiavel
+
+    $startedAt = Get-Date
+    $lastBeat = $startedAt
+    $HeartbeatSeconds = 30
+
+    while (-not $proc.HasExited) {
+        Start-Sleep -Seconds 5
+        $now = Get-Date
+        if (($now - $lastBeat).TotalSeconds -ge $HeartbeatSeconds) {
+            $elapsed = [int](($now - $startedAt).TotalSeconds)
+            Write-Host ("[ETL] {0} ainda rodando apos {1}s (heartbeat)..." -f $phaseName, $elapsed) -ForegroundColor DarkCyan
+            foreach ($p in @($etlLog, $etlErr)) {
+                if (-not (Test-Path $p)) { continue }
+                $prefix = if ($p -eq $etlLog) { "[OUT]" } else { "[ERR]" }
+                $color  = if ($p -eq $etlLog) { "DarkGray" } else { "Yellow" }
+                Get-Content -LiteralPath $p -Tail 5 -ErrorAction SilentlyContinue | ForEach-Object {
+                    if ($_ -and $_.Trim()) {
+                        Write-Host ("{0} {1}" -f $prefix, $_) -ForegroundColor $color
+                    }
+                }
+            }
+            $lastBeat = $now
+        }
+    }
+
+    $proc.WaitForExit()
+    $proc.Refresh()
+    $LASTEXITCODE = $proc.ExitCode
+    if ($null -eq $LASTEXITCODE) {
+        Write-Host "`n[FALHA LETAL] Nao foi possivel ler o Exit Code do Motor Rust." -ForegroundColor Red
+        exit 1
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "`n[FALHA LETAL] O Motor Rust abortou com Exit Code $LASTEXITCODE." -ForegroundColor Red
+        # Drena o conteudo final dos logs para diagnostico
+        foreach ($p in @($etlLog, $etlErr)) {
+            if (-not (Test-Path $p)) { continue }
+            $prefix = if ($p -eq $etlLog) { "[OUT-FINAL]" } else { "[ERR-FINAL]" }
+            $color  = if ($p -eq $etlLog) { "DarkGray" } else { "Red" }
+            Write-Host ("----- {0} -----" -f $p) -ForegroundColor $color
+            Get-Content -LiteralPath $p -Tail 50 -ErrorAction SilentlyContinue | ForEach-Object {
+                if ($_ -and $_.Trim()) {
+                    Write-Host ("{0} {1}" -f $prefix, $_) -ForegroundColor $color
+                }
+            }
+        }
         exit $LASTEXITCODE
+    } else {
+        Write-Host "`n[OK] Motor Rust concluido com sucesso (Exit Code 0)." -ForegroundColor Green
+        # Drena os ultimos 10 linhas do stdout como evidencia
+        if (Test-Path $etlLog) {
+            Write-Host "----- ULTIMAS LINHAS DO STDOUT -----" -ForegroundColor DarkGray
+            Get-Content -LiteralPath $etlLog -Tail 10 -ErrorAction SilentlyContinue | ForEach-Object {
+                if ($_ -and $_.Trim()) {
+                    Write-Host ("[OUT] {0}" -f $_) -ForegroundColor DarkGray
+                }
+            }
+        }
     }
-    
+
 } finally {
     Pop-Location
 }

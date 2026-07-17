@@ -44,11 +44,25 @@ impl SemgrepRuleSet {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SemgrepNormalizedPayload {
     pub blocks: Vec<ScopedTextBlock>,
     pub files_analyzed: usize,
     pub findings_count: usize,
+    /// Distribuicao de findings por nivel de severidade.
+    /// Chave canonica (uppercase): "ERROR", "WARNING", "INFO".
+    /// Mantida para enriquecer o header do blob (Lente C: "Pessimismo da Razao").
+    #[serde(default)]
+    pub severity_breakdown: BTreeMap<String, usize>,
+    /// Versao do opengrep detectada via `--version` (PRD-042).
+    /// Quando None, o renderer imprime `unknown` (honesto: Lei IV).
+    #[serde(default)]
+    pub opengrep_version: Option<String>,
+    /// Timestamp ISO-8601 (RFC 3339) da auditoria, gerado no momento da
+    /// normalizacao. Pode ser sobrescrito pelo orquestrador para garantir
+    /// coerencia com a janela do pipeline (PRD-042).
+    #[serde(default)]
+    pub audit_timestamp: Option<String>,
 }
 
 pub struct SemgrepInput<'a, E: SandboxExecutor> {
@@ -67,6 +81,20 @@ impl SemgrepSidecar {
 
         let health_bytes = run_semgrep_scan(input.executor, SemgrepRuleSet::Health, input.timeout_secs).await?;
         let health_payload = normalize_semgrep_payload(input.executor.repo_path(), &health_bytes)?;
+
+        // PRD-042: detecta a versao do opengrep via sidecar --version (fire-and-forget
+        // via env var setada pelo orquestrador, com fallback honesto "unknown").
+        // Optamos por env var em vez de chamada extra para preservar a janela de
+        // timeout e o principio do zero-overhead para monorepos grandes.
+        let opengrep_version = std::env::var("SODA_OPENGREP_VERSION")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+
+        let mut security_payload = security_payload;
+        let mut health_payload = health_payload;
+        security_payload.opengrep_version = opengrep_version.clone();
+        health_payload.opengrep_version = opengrep_version;
 
         tracing::info!(
             repo_path = %input.executor.repo_path().display(),
@@ -479,6 +507,7 @@ pub fn normalize_semgrep_payload(
 
     let mut blocks_map = BTreeMap::<String, Vec<String>>::new();
     let mut findings_count = 0;
+    let mut severity_breakdown: BTreeMap<String, usize> = BTreeMap::new();
 
     for result in results {
         let Some(raw_path) = result.get("path").and_then(|v| v.as_str()) else {
@@ -516,6 +545,11 @@ pub fn normalize_semgrep_payload(
         );
         blocks_map.entry(file_path).or_default().push(finding);
         findings_count += 1;
+        // PRD-042: contagem canonica de severidade para o header do blob.
+        // Chaves normalizadas em uppercase para garantir agrupamento estavel
+        // independente da formatacao do opengrep.
+        let severity_key = severity.to_ascii_uppercase();
+        *severity_breakdown.entry(severity_key).or_insert(0) += 1;
     }
 
     let blocks = blocks_map
@@ -533,6 +567,12 @@ pub fn normalize_semgrep_payload(
         blocks,
         files_analyzed,
         findings_count,
+        severity_breakdown,
+        // PRD-042: timestamp gerado aqui para garantir atomicidade entre
+        // o fim do scan e o registro da auditoria. Orquestrador pode
+        // sobrescrever se quiser garantir coerencia de janela.
+        opengrep_version: None,
+        audit_timestamp: Some(chrono::Utc::now().to_rfc3339()),
     })
 }
 
@@ -543,7 +583,8 @@ pub fn render_semgrep_blob(
     let mut out = String::new();
     match rule_set {
         SemgrepRuleSet::Security => {
-            out.push_str("# Unsafe Hotspots\n\n");
+            out.push_str("# Unsafe Hotspots");
+            render_semgrep_header(&mut out, payload);
             if payload.findings_count == 0 {
                 out.push_str("Sem hotspots estaticos relevantes do semgrep.\n");
             } else {
@@ -551,7 +592,8 @@ pub fn render_semgrep_blob(
             }
         }
         SemgrepRuleSet::Health => {
-            out.push_str("# Health Report\n\n");
+            out.push_str("# Health Report");
+            render_semgrep_header(&mut out, payload);
             if payload.findings_count == 0 {
                 out.push_str("Sem divida tecnica estatica relevante do semgrep.\n");
             } else {
@@ -560,6 +602,51 @@ pub fn render_semgrep_blob(
         }
     }
     out.into_bytes()
+}
+
+/// PRD-042: renderiza o header canonico do blob semgrep com metadados
+/// de auditoria. Cada linha segue o formato `[KEY]: <value>` para que
+/// LLMs menos robustas consigam parsear como um mini-YAML.
+///
+/// Lei IV (Zero-Byte Uniforme): `opengrep_version` honestamente reporta
+/// "unknown" quando nao detectado (em vez de string vazia ou "0.0.0"),
+/// porque ZERO BYTES seria descartar a auditoria inteira.
+fn render_semgrep_header(out: &mut String, payload: &SemgrepNormalizedPayload) {
+    out.push('\n');
+    let ts_owned: String;
+    let ts = match payload.audit_timestamp.as_deref() {
+        Some(v) => v,
+        None => {
+            ts_owned = chrono::Utc::now().to_rfc3339();
+            ts_owned.as_str()
+        }
+    };
+    out.push_str(&format!("[AUDITED_AT]: {ts}\n"));
+    let version_owned: String;
+    let version_raw = payload
+        .opengrep_version
+        .as_deref()
+        .unwrap_or("unknown")
+        .trim();
+    let version = if version_raw.is_empty() {
+        version_owned = "unknown".to_string();
+        version_owned.as_str()
+    } else {
+        version_raw
+    };
+    out.push_str(&format!("[OPENGREP_VERSION]: {version}\n"));
+    out.push_str(&format!("[FILES_SCANNED]: {}\n", payload.files_analyzed));
+    out.push_str(&format!("[FINDINGS_COUNT]: {}\n", payload.findings_count));
+    if !payload.severity_breakdown.is_empty() {
+        let breakdown = payload
+            .severity_breakdown
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!("[SEVERITY_BREAKDOWN]: {breakdown}\n"));
+    }
+    out.push('\n');
 }
 
 #[cfg(test)]
@@ -688,6 +775,7 @@ mod tests {
             }],
             files_analyzed: 1,
             findings_count: 1,
+            ..Default::default()
         };
 
         let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Security, &payload)).unwrap();
@@ -708,6 +796,7 @@ mod tests {
             }],
             files_analyzed: 1,
             findings_count: 1,
+            ..Default::default()
         };
 
         let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Health, &payload)).unwrap();
@@ -715,6 +804,104 @@ mod tests {
         assert!(rendered.contains("tail-marker-"));
         assert!(rendered.ends_with(&long_tail));
         assert!(rendered.len() > BLOB_04_REPO_OUTLINE_MAX_CHARS);
+    }
+
+    // PRD-042: testes do header canonico [AUDITED_AT] / [OPENGREP_VERSION]
+    // / [FILES_SCANNED] / [FINDINGS_COUNT] / [SEVERITY_BREAKDOWN] no blob
+    // semgrep. Esses campos sao a "alma" da auditoria e dao contexto
+    // operacional (Lente C: "Pessimismo da Razao") para qualquer agente
+    // que consuma o blob depois do pipeline.
+
+    #[test]
+    fn test_render_semgrep_blob_emits_audit_header_with_all_metadata_keys() {
+        let mut breakdown = BTreeMap::new();
+        breakdown.insert("ERROR".to_string(), 2);
+        breakdown.insert("WARNING".to_string(), 5);
+        let payload = SemgrepNormalizedPayload {
+            blocks: vec![ScopedTextBlock {
+                file_path: "src/lib.rs".to_string(),
+                items: vec!["L1: [soda.rust.unsafe.block] (WARNING / memory-unsafety) -> unsafe {}".to_string()],
+                omitted_count: 0,
+            }],
+            files_analyzed: 12,
+            findings_count: 7,
+            severity_breakdown: breakdown,
+            opengrep_version: Some("1.2.3".to_string()),
+            audit_timestamp: Some("2026-07-16T12:34:56Z".to_string()),
+        };
+
+        let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Security, &payload)).unwrap();
+
+        // Header canonico presente
+        assert!(rendered.contains("[AUDITED_AT]: 2026-07-16T12:34:56Z"));
+        assert!(rendered.contains("[OPENGREP_VERSION]: 1.2.3"));
+        assert!(rendered.contains("[FILES_SCANNED]: 12"));
+        assert!(rendered.contains("[FINDINGS_COUNT]: 7"));
+        assert!(rendered.contains("[SEVERITY_BREAKDOWN]: ERROR=2, WARNING=5"));
+        // Conteudo real preservado
+        assert!(rendered.contains("[src/lib.rs]"));
+        assert!(rendered.contains("soda.rust.unsafe.block"));
+    }
+
+    #[test]
+    fn test_render_semgrep_blob_falls_back_to_unknown_for_opengrep_version() {
+        // PRD-042 / Lei IV: quando opengrep_version e None ou vazia, o header
+        // deve honestamente reportar "unknown" (em vez de string vazia ou
+        // valor hardcoded "0.0.0") para preservar a rastreabilidade.
+        let payload = SemgrepNormalizedPayload {
+            blocks: vec![],
+            files_analyzed: 0,
+            findings_count: 0,
+            audit_timestamp: Some("2026-07-16T00:00:00Z".to_string()),
+            ..Default::default()
+        };
+
+        let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Security, &payload)).unwrap();
+
+        assert!(rendered.contains("[OPENGREP_VERSION]: unknown"));
+        // Sem findings: cai no caminho de "Sem hotspots" (texto canonico)
+        assert!(rendered.contains("Sem hotspots estaticos relevantes do semgrep"));
+    }
+
+    #[test]
+    fn test_render_semgrep_blob_emits_audit_header_for_health_rule_set() {
+        let payload = SemgrepNormalizedPayload {
+            blocks: vec![],
+            files_analyzed: 5,
+            findings_count: 0,
+            audit_timestamp: Some("2026-07-16T01:02:03Z".to_string()),
+            opengrep_version: Some("0.42.0".to_string()),
+            ..Default::default()
+        };
+
+        let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Health, &payload)).unwrap();
+
+        // Mesmo header para o Health (blob_08)
+        assert!(rendered.contains("# Health Report"));
+        assert!(rendered.contains("[AUDITED_AT]: 2026-07-16T01:02:03Z"));
+        assert!(rendered.contains("[OPENGREP_VERSION]: 0.42.0"));
+        assert!(rendered.contains("[FILES_SCANNED]: 5"));
+        assert!(rendered.contains("[FINDINGS_COUNT]: 0"));
+    }
+
+    #[test]
+    fn test_render_semgrep_blob_omits_severity_breakdown_when_empty() {
+        // PRD-042: SEVERITY_BREAKDOWN so aparece se ha findings (senao e
+        // estetico e polui o header). Mantemos [AUDITED_AT], [OPENGREP_VERSION],
+        // [FILES_SCANNED] e [FINDINGS_COUNT] que sao o esqueleto da auditoria.
+        let payload = SemgrepNormalizedPayload {
+            blocks: vec![],
+            files_analyzed: 0,
+            findings_count: 0,
+            audit_timestamp: Some("2026-07-16T00:00:00Z".to_string()),
+            ..Default::default()
+        };
+
+        let rendered = String::from_utf8(render_semgrep_blob(SemgrepRuleSet::Security, &payload)).unwrap();
+
+        assert!(!rendered.contains("[SEVERITY_BREAKDOWN]"),
+            "Header nao deve inflar [SEVERITY_BREAKDOWN] quando nao ha findings");
+        assert!(rendered.contains("[FINDINGS_COUNT]: 0"));
     }
 
     #[test]

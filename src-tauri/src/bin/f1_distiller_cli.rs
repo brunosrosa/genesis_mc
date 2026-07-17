@@ -4,11 +4,11 @@ use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Utc};
-use genesis_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination, RoutingZone as FinopsZone};
-use genesis_mc_lib::finops::phase1_5::cloud_cascade::CloudCascade;
-use genesis_mc_lib::finops::phase1_5::local_distiller::{LocalDistiller, TruncatingInferenceEngine};
-use genesis_mc_lib::finops::phase1_5::package_assembler::{DbReader as PackageDbReader, PackageAssembler};
-use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination, RoutingZone as FinopsZone};
+use souls_mc_lib::finops::phase1_5::cloud_cascade::CloudCascade;
+use souls_mc_lib::finops::phase1_5::local_distiller::{LocalDistiller, TruncatingInferenceEngine};
+use souls_mc_lib::finops::phase1_5::package_assembler::{DbReader as PackageDbReader, PackageAssembler};
+use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use rusqlite::{params, Connection};
 use tempfile::NamedTempFile;
 use tracing::{error, info};

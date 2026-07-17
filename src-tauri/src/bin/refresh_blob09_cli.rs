@@ -2,8 +2,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use genesis_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
-use genesis_mc_lib::harvester::extract::render_community_meta_dossier;
+use souls_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
+use souls_mc_lib::harvester::extract::render_community_meta_dossier;
 use rusqlite::{params, Connection, OptionalExtension};
 use url::Url;
 

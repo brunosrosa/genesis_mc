@@ -1,0 +1,534 @@
+# AUDIT REPORT: blob_08_health_report
+# DB: Z:\genesis_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-16T04:06:39
+
+=== REPO: trailbaseio/trailbase ===
+# history_runs=1  latest_bytes=72784  latest_ts=1784183493
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência] -> AppContainer setup failed: Timeout pre-flight de 120 segundos atingido ao preparar Gaiola de Silicio
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência] -> CreateProcessW (AppContainer) falhou: Win32 error code: 0x00000002
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência] -> CreateProcessW (AppContainer) falhou: Win32 error code: 0x00000002
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'ruff' ignorada por violação/ausência] -> AppContainer setup failed: Timeout pre-flight de 120 segundos atingido ao preparar Gaiola de Silicio
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'bandit' ignorada por violação/ausência] -> AppContainer setup failed: Timeout pre-flight de 120 segundos atingido ao preparar Gaiola de Silicio
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> CreateProcessW (AppContainer) falhou: Win32 error code: 0x00000002
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência] -> OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> Pre-Flight cargo fetch falhou para 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\Cargo.toml': Updating crates.io index
+error: failed to select a version for `libsqlite3-sys`.
+    ... required by package `rusqlite v0.40.0`
+    ... which satisfies dependency `rusqlite = "^0.40.0"` of package `trailbase-sqlite v0.3.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\sqlite)`
+    ... which satisfies path dependency `trailbase-sqlite` (locked to 0.3.0) of package `trailbase-cli v0.2.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\cli)`
+versions that meet the requirements `^0.38.0` are: 0.38.1, 0.38.0
+
+package `libsqlite3-sys` links to the native library `sqlite3`, but it conflicts with a previous package which links to `sqlite3` as well:
+package `libsqlite3-sys v0.36.0`
+    ... which satisfies dependency `libsqlite3-sys = "^0.36.0"` of package `rusqlite v0.38.0`
+    ... which satisfies dependency `rusqlite = "^0.38.0"` of package `trailbase-extension-so v0.1.0 (C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_31600_1784182447654136800\repos\trailbaseio\trailbase\crates\extension-so)`
+Only one package in the dependency graph may specify the same links value. This helps ensure that only one copy of a native library is linked in the final binary. Try to adjust your dependencies so that only one package uses the `links = "sqlite3"` value. For more information, see https://doc.rust-lang.org/cargo/reference/resolver.html#links.
+
+failed to select a version for `libsqlite3-sys` which could resolve this conflict
+# Health Report
+
+summary: findings=1
+
+=================================================================
+[DOMAIN: OTHER]
+=================================================================
+- [info] [govulncheck] [INFO] Nenhuma vulnerabilidade ou pendência encontrada pela lâmina 'govulncheck' no escopo 'client/go/trailbase'.

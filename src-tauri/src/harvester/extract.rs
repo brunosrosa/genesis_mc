@@ -53,6 +53,75 @@ pub struct InfraFile {
     pub content: String,
 }
 
+/// PRD-044: categoria canonica de um arquivo de infra para o header
+/// de completude do blob_07. Usado para responder "o repo tem CI?",
+/// "tem Dockerfile?", "tem deploy?" com LLMs 3-7B sem ambiguidade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InfraCategory {
+    /// Workflow de CI/test (ex: `.github/workflows/test.yml`, `.gitlab-ci.yml`)
+    TestWorkflow,
+    /// Receita de container (ex: `Dockerfile`, `Containerfile`, `docker-compose.yml`)
+    Dockerfile,
+    /// Workflow de deploy/release (ex: `.github/workflows/deploy.yml`, `release.yml`)
+    DeployWorkflow,
+    /// Qualquer outro infra (charts, k8s, ansible, etc.)
+    Other,
+}
+
+/// Classifica um arquivo de infra a partir do seu path relativo.
+/// Heuristica deterministica: combina diretorio + filename + keywords do nome.
+pub(crate) fn classify_infra_file(rel_path: &str) -> InfraCategory {
+    let lower = rel_path.replace('\\', "/").to_ascii_lowercase();
+    let file_name = Path::new(&lower)
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("");
+
+    // DOCKERFILE: dockerfile*, containerfile, compose*
+    if file_name.starts_with("dockerfile")
+        || file_name == "containerfile"
+        || file_name.starts_with("docker-compose")
+        || file_name.starts_with("compose.")
+    {
+        return InfraCategory::Dockerfile;
+    }
+
+    // DEPLOY_WORKFLOW: nome contem "deploy", "release", "publish" em workflow
+    let is_workflow_path = lower.starts_with(".github/workflows/")
+        || lower.starts_with(".circleci/")
+        || lower.starts_with(".buildkite/")
+        || lower.starts_with(".azure-pipelines/");
+    let is_legacy_ci = matches!(
+        file_name,
+        ".gitlab-ci.yml" | ".travis.yml" | ".drone.yml" | ".woodpecker.yml" | "bitbucket-pipelines.yml" | "appveyor.yml" | "azure-pipelines.yml" | "azure-pipelines.yaml"
+    );
+
+    if (is_workflow_path || is_legacy_ci) && is_yaml_like(file_name) {
+        if file_name.contains("deploy")
+            || file_name.contains("release")
+            || file_name.contains("publish")
+        {
+            return InfraCategory::DeployWorkflow;
+        }
+        // senao, e CI/test workflow
+        return InfraCategory::TestWorkflow;
+    }
+
+    InfraCategory::Other
+}
+
+fn is_yaml_like(name: &str) -> bool {
+    name.ends_with(".yml") || name.ends_with(".yaml")
+}
+
+fn yes_no(b: bool) -> &'static str {
+    if b {
+        "yes"
+    } else {
+        "no"
+    }
+}
+
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ExtractionError {
     #[error("No manifest files found in repository root")]
@@ -180,17 +249,86 @@ impl<'a> UxAstCollector<'a> {
     }
 }
 
+/// PRD-043: extrai o JSDoc /** ... */ imediatamente acima de um offset,
+/// retornando o **significado** (primeira frase util) para anexar como
+/// "comportamento" ao contrato UX.
+///
+/// Estrategia:
+/// 1. Procura para tras o ultimo `/**` antes de `span_start`.
+/// 2. Varre ate o proximo `*/` (que fecha o bloco).
+/// 3. Pega apenas a primeira frase (ate o primeiro `.` ou quebra de linha)
+///    e remove prefixos de bullet `*` e JSDoc tags (`@param`, `@returns`, etc.).
+/// 4. Se nao encontrar JSDoc, retorna None.
+///
+/// Lei IV: se o comentario for vazio ou puramente tags, retorna None
+/// (em vez de string vazia) para nao poluir o blob.
+///
+/// Validacao anti-falso-positivo: garante que o `/**` encontrado NAO esta
+/// dentro de uma string literal (ex: `const s = "/**"`). Fazemos isso
+/// limitando a busca a ate 2000 chars antes do span_start.
+pub(crate) fn extract_jsdoc_above(source: &str, span_start: u32) -> Option<String> {
+    let prefix = source.get(..span_start as usize)?;
+    let search_start = prefix.len().saturating_sub(2000);
+    let relevant = &prefix[search_start..];
+    let open_rel = relevant.rfind("/**")?;
+    let open_abs = search_start + open_rel;
+    // Acha o */ que fecha o bloco (procurando apos o /**)
+    let after_open = &prefix[open_abs + 3..];
+    let close_rel = after_open.find("*/")?;
+    let raw = &after_open[..close_rel];
+    // Sanitiza: remove linhas de comentario, pega apenas a primeira frase util.
+    let mut cleaned = String::new();
+    for line in raw.lines() {
+        let line = line.trim().trim_start_matches('*').trim();
+        if line.is_empty() || line.starts_with('@') {
+            continue;
+        }
+        let sentence = line.split('.').next().unwrap_or(line).trim().to_string();
+        if sentence.is_empty() {
+            continue;
+        }
+        if !cleaned.is_empty() {
+            cleaned.push(' ');
+        }
+        cleaned.push_str(&sentence);
+        break;
+    }
+    if cleaned.is_empty() {
+        None
+    } else if cleaned.len() > 200 {
+        Some(cleaned.chars().take(200).collect())
+    } else {
+        Some(cleaned)
+    }
+}
+
 impl<'a> Visit<'a> for UxAstCollector<'a> {
     fn visit_ts_interface_declaration(&mut self, declaration: &TSInterfaceDeclaration<'a>) {
         if is_ux_contract_type_name(declaration.id.name.as_str()) {
-            self.push_entry(format!("interface {}", declaration.id.name.as_str()));
+            // PRD-043: anexa o JSDoc (significado) como "behavior" do contrato.
+            // Formato canonico: `interface Foo  // behavior: <frase>`.
+            let behavior = extract_jsdoc_above(self.source_text, declaration.span.start)
+                .map(|doc| format!("  // behavior: {doc}"))
+                .unwrap_or_default();
+            self.push_entry(format!(
+                "interface {}{}",
+                declaration.id.name.as_str(),
+                behavior
+            ));
         }
         walk::walk_ts_interface_declaration(self, declaration);
     }
 
     fn visit_ts_type_alias_declaration(&mut self, declaration: &TSTypeAliasDeclaration<'a>) {
         if is_ux_contract_type_name(declaration.id.name.as_str()) {
-            self.push_entry(format!("type {}", declaration.id.name.as_str()));
+            let behavior = extract_jsdoc_above(self.source_text, declaration.span.start)
+                .map(|doc| format!("  // behavior: {doc}"))
+                .unwrap_or_default();
+            self.push_entry(format!(
+                "type {}{}",
+                declaration.id.name.as_str(),
+                behavior
+            ));
         }
         walk::walk_ts_type_alias_declaration(self, declaration);
     }
@@ -914,10 +1052,17 @@ fn extract_regex_frontend_signals(source: &str) -> Vec<String> {
                 .or_else(|| captures.get(4))
                 .map(|value| collapse_inline_contract(value.as_str()))
                 .unwrap_or_default();
+            // PRD-043: anexa o JSDoc (significado) como "behavior" da funcao.
+            // Usamos o start do match inteiro (captures[0]) como offset para
+            // buscar o JSDoc imediatamente acima da assinatura.
+            let match_start = captures.get(0).map(|m| m.start() as u32).unwrap_or(0);
+            let behavior = extract_jsdoc_above(source, match_start)
+                .map(|doc| format!("  // behavior: {doc}"))
+                .unwrap_or_default();
             Some(if params.is_empty() {
-                format!("fn {name}()")
+                format!("fn {name}(){behavior}")
             } else {
-                format!("fn {name}({params})")
+                format!("fn {name}({params}){behavior}")
             })
         });
     }
@@ -1245,7 +1390,39 @@ impl OpsBlueprintExtractor {
             return Ok(empty_artifact_blob("blob_07_ops_blueprint"));
         }
 
+        // PRD-044: completude do blueprint operacional.
+        // Categoriza cada arquivo em TEST_WORKFLOW (CI/test), DOCKERFILE
+        // (build), DEPLOY_WORKFLOW (release/deploy) ou OTHER, e expoe
+        // um header canonico para que agentes (mesmo LLMs 3-7B) saibam
+        // se o repo tem CI, containerizacao e deploy.
+        let mut has_test_workflow = false;
+        let mut has_dockerfile = false;
+        let mut has_deploy_workflow = false;
+        for file in &payload.infra_files {
+            match classify_infra_file(&file.path) {
+                InfraCategory::TestWorkflow => has_test_workflow = true,
+                InfraCategory::Dockerfile => has_dockerfile = true,
+                InfraCategory::DeployWorkflow => has_deploy_workflow = true,
+                InfraCategory::Other => {}
+            }
+        }
+
         let mut body = String::new();
+        body.push_str("# Ops Blueprint\n\n");
+        body.push_str(&format!(
+            "[INFRA_FILES_COUNT]: {}\n",
+            payload.infra_files.len()
+        ));
+        body.push_str(&format!(
+            "[CONTAINS_TEST_WORKFLOW]: {}\n",
+            yes_no(has_test_workflow)
+        ));
+        body.push_str(&format!("[CONTAINS_DOCKERFILE]: {}\n", yes_no(has_dockerfile)));
+        body.push_str(&format!(
+            "[CONTAINS_DEPLOY_WORKFLOW]: {}\n",
+            yes_no(has_deploy_workflow)
+        ));
+        body.push('\n');
         for file in &payload.infra_files {
             let _ = writeln!(body, "### {}", file.path);
             let _ = writeln!(body, "{}", file.content.trim());
@@ -1454,8 +1631,8 @@ impl ManifestExtractor {
                     continue;
                 }
                 manifest_kinds_seen.insert(kind);
-                let _size = match std::fs::metadata(&path) {
-                    Ok(metadata) => metadata,
+                let size = match std::fs::metadata(&path) {
+                    Ok(metadata) => metadata.len(),
                     Err(e) => {
                         warn!(
                             artifact_type = "blob_02_dependency_manifest",
@@ -1498,7 +1675,7 @@ impl ManifestExtractor {
                     continue;
                 }
 
-                if let Some(block) = Self::extract_manifest_block(&rel_path, &content, kind)? {
+                if let Some(block) = Self::extract_manifest_block(&rel_path, &content, kind, size)? {
                     blocks.push(block);
                 }
             }
@@ -1599,32 +1776,65 @@ impl ManifestExtractor {
         file_path: &str,
         content: &str,
         kind: ManifestKind,
+        size: u64,
     ) -> Result<Option<ScopedTextBlock>, ExtractionError> {
-        let names = match kind {
-            ManifestKind::CargoToml => Self::extract_cargo_dependency_names(content, file_path)?,
-            ManifestKind::PackageJson => Self::extract_package_json_dependency_names(content, file_path)?,
-            ManifestKind::GoMod => Self::extract_go_mod_dependency_names(content),
-            ManifestKind::RequirementsTxt => Self::extract_requirements_dependency_names(content),
-            ManifestKind::PyprojectToml => Self::extract_pyproject_dependency_names(content, file_path)?,
-            ManifestKind::Pipfile => Self::extract_pipfile_dependency_names(content, file_path)?,
-            ManifestKind::MixExs => Self::extract_mix_exs_dependency_names(content),
-            ManifestKind::Gemfile => Self::extract_gemfile_dependency_names(content),
-            ManifestKind::ComposerJson => Self::extract_composer_dependency_names(content, file_path)?,
-            ManifestKind::PomXml => Self::extract_pom_dependency_names(content),
-            ManifestKind::BuildGradle | ManifestKind::BuildGradleKts => {
-                Self::extract_gradle_dependency_names(content)
+        // PRD-047: usar parse_manifest_info (que tem version_spec) quando
+        // possivel para incluir a versao canonica ao lado de cada dependencia.
+        // Para manifests sem parser estruturado (CMake, Conanfile, BuildZig),
+        // mantemos o fallback para extract_*_dependency_names.
+        let entries: Vec<DependencyEntry> = match Self::parse_manifest_info(kind, content, file_path, size) {
+            Ok(info) => {
+                let mut all = info.dependencies;
+                all.extend(info.dev_dependencies);
+                all
             }
-            ManifestKind::Csproj => Self::extract_csproj_dependency_names(content),
-            ManifestKind::CMakeListsTxt => Self::extract_cmake_dependency_names(content),
-            ManifestKind::ConanfileTxt => Self::extract_conan_dependency_names(content),
-            ManifestKind::BuildZigZon => Self::extract_build_zig_dependency_names(content),
+            Err(_) => {
+                // Fallback: apenas nomes (sem versao)
+                let names = match kind {
+                    ManifestKind::CargoToml => Self::extract_cargo_dependency_names(content, file_path)?,
+                    ManifestKind::PackageJson => Self::extract_package_json_dependency_names(content, file_path)?,
+                    ManifestKind::GoMod => Self::extract_go_mod_dependency_names(content),
+                    ManifestKind::RequirementsTxt => Self::extract_requirements_dependency_names(content),
+                    ManifestKind::PyprojectToml => Self::extract_pyproject_dependency_names(content, file_path)?,
+                    ManifestKind::Pipfile => Self::extract_pipfile_dependency_names(content, file_path)?,
+                    ManifestKind::MixExs => Self::extract_mix_exs_dependency_names(content),
+                    ManifestKind::Gemfile => Self::extract_gemfile_dependency_names(content),
+                    ManifestKind::ComposerJson => Self::extract_composer_dependency_names(content, file_path)?,
+                    ManifestKind::PomXml => Self::extract_pom_dependency_names(content),
+                    ManifestKind::BuildGradle | ManifestKind::BuildGradleKts => {
+                        Self::extract_gradle_dependency_names(content)
+                    }
+                    ManifestKind::Csproj => Self::extract_csproj_dependency_names(content),
+                    ManifestKind::CMakeListsTxt => Self::extract_cmake_dependency_names(content),
+                    ManifestKind::ConanfileTxt => Self::extract_conan_dependency_names(content),
+                    ManifestKind::BuildZigZon => Self::extract_build_zig_dependency_names(content),
+                };
+                names.into_iter()
+                    .map(|name| DependencyEntry {
+                        name,
+                        version_spec: "*".to_string(),
+                    })
+                    .collect()
+            }
         };
 
-        if names.is_empty() {
+        if entries.is_empty() {
             return Ok(None);
         }
 
-        let items = names
+        // PRD-047: formata como "name version_spec" para que o agente saiba
+        // a versao exata (ou "*" se vier do fallback). Ordena alfabeticamente
+        // por nome para casar com o snapshot dos testes TDD e com o
+        // comportamento do fallback antigo (BTreeSet).
+        let mut entries = entries;
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let items = entries
+            .iter()
+            .map(|e| format!("{} {}", e.name, e.version_spec))
+            .collect::<Vec<_>>();
+
+        let items = items
             .chunks(MANIFEST_DEPENDENCY_CHUNK_SIZE)
             .map(|chunk| chunk.join(", "))
             .collect::<Vec<_>>();
@@ -2166,11 +2376,24 @@ impl ManifestExtractor {
     }
 
     fn parse_cargo_toml(content: &str, file: &str, size: u64) -> Result<ManifestInfo, ExtractionError> {
+        // PRD-047: cobrir TODAS as secoes de dependencias (dependencies,
+        // dev-dependencies, build-dependencies, workspace.dependencies) para
+        // que o version_spec seja confiavel em monorepos e projetos com
+        // tabelas auxiliares. Sem isso, o fallback herdava mais cobertura,
+        // mas perdia a versao canonica.
         #[derive(Deserialize)]
         struct CargoManifest {
             dependencies: Option<BTreeMap<String, toml::Value>>,
             #[serde(rename = "dev-dependencies")]
             dev_dependencies: Option<BTreeMap<String, toml::Value>>,
+            #[serde(rename = "build-dependencies")]
+            build_dependencies: Option<BTreeMap<String, toml::Value>>,
+            workspace: Option<CargoWorkspace>,
+        }
+
+        #[derive(Deserialize)]
+        struct CargoWorkspace {
+            dependencies: Option<BTreeMap<String, toml::Value>>,
         }
 
         let manifest: CargoManifest = toml::from_str(content).map_err(|e| ExtractionError::ParseError {
@@ -2178,10 +2401,20 @@ impl ManifestExtractor {
             reason: e.to_string(),
         })?;
 
+        // Concatena: workspace.dependencies + dependencies + build-dependencies + dev-dependencies.
+        // A ordem segue a do fallback antigo (`extract_cargo_dependency_names`).
+        let mut dependencies: Vec<DependencyEntry> = Vec::new();
+        if let Some(ws) = manifest.workspace.as_ref() {
+            dependencies.extend(Self::map_toml_deps(ws.dependencies.clone()));
+        }
+        dependencies.extend(Self::map_toml_deps(manifest.dependencies));
+        dependencies.extend(Self::map_toml_deps(manifest.build_dependencies));
+        let dev_dependencies = Self::map_toml_deps(manifest.dev_dependencies);
+
         Ok(ManifestInfo {
             file_name: file.to_string(),
-            dependencies: Self::map_toml_deps(manifest.dependencies),
-            dev_dependencies: Self::map_toml_deps(manifest.dev_dependencies),
+            dependencies,
+            dev_dependencies,
             file_size_bytes: size,
         })
     }
@@ -2204,11 +2437,19 @@ impl ManifestExtractor {
     }
 
     fn parse_package_json(content: &str, file: &str, size: u64) -> Result<ManifestInfo, ExtractionError> {
+        // PRD-047: cobre dependencies, devDependencies, peerDependencies e
+        // optionalDependencies (mesma cobertura do fallback antigo
+        // `extract_package_json_dependency_names`) para que o version_spec
+        // seja confiavel em monorepos/libs com peer deps.
         #[derive(Deserialize)]
         struct PackageJson {
             dependencies: Option<BTreeMap<String, String>>,
             #[serde(rename = "devDependencies")]
             dev_dependencies: Option<BTreeMap<String, String>>,
+            #[serde(rename = "peerDependencies")]
+            peer_dependencies: Option<BTreeMap<String, String>>,
+            #[serde(rename = "optionalDependencies")]
+            optional_dependencies: Option<BTreeMap<String, String>>,
         }
 
         let manifest: PackageJson = serde_json::from_str(content).map_err(|e| ExtractionError::ParseError {
@@ -2216,18 +2457,26 @@ impl ManifestExtractor {
             reason: e.to_string(),
         })?;
 
+        // Mesma ordem do fallback antigo (BTreeSet garante unicidade).
+        let mut dependencies: Vec<DependencyEntry> = Vec::new();
+        dependencies.extend(Self::map_string_deps(manifest.dependencies));
+        dependencies.extend(Self::map_string_deps(manifest.peer_dependencies));
+        dependencies.extend(Self::map_string_deps(manifest.optional_dependencies));
+        let dev_dependencies = Self::map_string_deps(manifest.dev_dependencies);
+
         Ok(ManifestInfo {
             file_name: file.to_string(),
-            dependencies: manifest.dependencies.unwrap_or_default()
-                .into_iter()
-                .map(|(name, version_spec)| DependencyEntry { name, version_spec })
-                .collect(),
-            dev_dependencies: manifest.dev_dependencies.unwrap_or_default()
-                .into_iter()
-                .map(|(name, version_spec)| DependencyEntry { name, version_spec })
-                .collect(),
+            dependencies,
+            dev_dependencies,
             file_size_bytes: size,
         })
+    }
+
+    fn map_string_deps(deps: Option<BTreeMap<String, String>>) -> Vec<DependencyEntry> {
+        deps.unwrap_or_default()
+            .into_iter()
+            .map(|(name, version_spec)| DependencyEntry { name, version_spec })
+            .collect()
     }
 
     fn parse_go_mod(content: &str, file: &str, size: u64) -> ManifestInfo {
@@ -2799,15 +3048,131 @@ require (
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
         assert!(text.contains("[Cargo.toml]"));
-        assert!(text.contains("- cc, serde, tempfile, tokio"));
+        // PRD-047: formato agora inclui version_spec canonico (name version)
+        assert!(text.contains("- cc 1.1, serde 1.0, tempfile 3, tokio 1"), "Atual: {}", text);
         assert!(text.contains("[frontend/package.json]"));
-        assert!(text.contains("- react, typescript, zod"));
+        assert!(text.contains("- react ^18.2.0, typescript ^5.4.0, zod ^3.23.0"), "Atual: {}", text);
         assert!(text.contains("[backend/go.mod]"));
-        assert!(text.contains("- github.com/gin-gonic/gin, golang.org/x/sync"));
+        // PRD-047: go.mod nao tem parser estruturado -> cai no fallback "*"
+        assert!(text.contains("- github.com/gin-gonic/gin *, golang.org/x/sync *"), "Atual: {}", text);
         assert!(!text.contains("[package]"));
         assert!(!text.contains("\"name\": \"demo\""));
         assert!(!text.contains("\"version\": \"0.1.0\""));
         assert!(!text.contains("v1.10.0"));
+    }
+
+    // =========================================================================
+    // PRD-047: testes TDD para version_spec no dependency manifest
+    // Garante que cada dependencia apareca com a versao canonica ao lado
+    // (Dumb-LLM Test: uma LLM 3-7B sabe a versao exata de cada lib).
+    // =========================================================================
+
+    /// PRD-047 / TDD Red: Cargo.toml com `name = "version"` deve produzir
+    /// `name version` no blob (em vez de apenas `name`).
+    #[tokio::test]
+    async fn tdd_manifest_block_cargo_toml_includes_version_spec_for_string_deps() {
+        let dir = TempDir::new().unwrap();
+        let cargo_toml = r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+serde = "1.0"
+tokio = "1.40"
+"#;
+        fs::write(dir.path().join("Cargo.toml"), cargo_toml).await.unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("serde 1.0"), "Esperava 'serde 1.0' no blob, atual: {}", text);
+        assert!(text.contains("tokio 1.40"), "Esperava 'tokio 1.40' no blob, atual: {}", text);
+    }
+
+    /// PRD-047: Cargo.toml com `name = { version = "X", features = [...] }` deve
+    /// extrair apenas a versao, descartando features.
+    #[tokio::test]
+    async fn tdd_manifest_block_cargo_toml_extracts_version_from_inline_table() {
+        let dir = TempDir::new().unwrap();
+        let cargo_toml = r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+tokio = { version = "1.40", features = ["full"] }
+serde = { version = "1.0.210", features = ["derive"] }
+"#;
+        fs::write(dir.path().join("Cargo.toml"), cargo_toml).await.unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("tokio 1.40"), "Esperava 'tokio 1.40' no blob, atual: {}", text);
+        assert!(text.contains("serde 1.0.210"), "Esperava 'serde 1.0.210' no blob, atual: {}", text);
+        // Garante que features NAO vazaram para o blob
+        assert!(!text.contains("features"), "Features nao deveriam aparecer, atual: {}", text);
+        assert!(!text.contains("\"full\""), "Features nao deveriam aparecer, atual: {}", text);
+    }
+
+    /// PRD-047: package.json com `react: ^18.2.0` deve produzir `react ^18.2.0`.
+    #[tokio::test]
+    async fn tdd_manifest_block_package_json_includes_version_spec() {
+        let dir = TempDir::new().unwrap();
+        let package_json = r#"{
+  "name": "demo",
+  "version": "1.0.0",
+  "dependencies": {
+    "react": "^18.2.0",
+    "lodash": "4.17.21"
+  },
+  "devDependencies": {
+    "typescript": "~5.4.0"
+  }
+}"#;
+        fs::write(dir.path().join("package.json"), package_json).await.unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        assert!(text.contains("react ^18.2.0"), "Esperava 'react ^18.2.0' no blob, atual: {}", text);
+        assert!(text.contains("lodash 4.17.21"), "Esperava 'lodash 4.17.21' no blob, atual: {}", text);
+        assert!(text.contains("typescript ~5.4.0"), "Esperava 'typescript ~5.4.0' no blob, atual: {}", text);
+    }
+
+    /// PRD-047: Manifests sem parser estruturado (CMake, Conanfile, BuildZig)
+    /// devem cair no fallback usando "*" como version_spec.
+    #[tokio::test]
+    async fn tdd_manifest_block_fallback_uses_wildcard_for_unsupported_kinds() {
+        let dir = TempDir::new().unwrap();
+        let cmake = "find_package(Boost 1.83 REQUIRED)\nfind_package(OpenSSL 3.0 REQUIRED)\n";
+        fs::write(dir.path().join("CMakeLists.txt"), cmake).await.unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        // Fallback: Boost e OpenSSL vem com "*" (nao temos parser para CMake)
+        assert!(text.contains("Boost *"), "Esperava 'Boost *' (fallback) no blob, atual: {}", text);
+        assert!(text.contains("OpenSSL *"), "Esperava 'OpenSSL *' (fallback) no blob, atual: {}", text);
+    }
+
+    /// PRD-047: go.mod (que parseia apenas nomes) deve produzir fallback com "*".
+    /// Isso e o caso de dominios onde a extracao estruturada de versao e custosa.
+    #[tokio::test]
+    async fn tdd_manifest_block_go_mod_falls_back_to_wildcard() {
+        let dir = TempDir::new().unwrap();
+        let go_mod = "module example.com/demo\n\ngo 1.23.0\n\nrequire (\n    github.com/gin-gonic/gin v1.10.0\n)\n";
+        fs::write(dir.path().join("go.mod"), go_mod).await.unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let blob = ManifestExtractor::extract_blob(ManifestInput { repo_path: &repo_path }).await.unwrap();
+        let text = String::from_utf8_lossy(&blob.payload_blob);
+
+        // go.mod nao tem parser estruturado -> cai no fallback "*"
+        assert!(text.contains("github.com/gin-gonic/gin *"), "Esperava fallback '*' para go.mod, atual: {}", text);
     }
 
     #[tokio::test]
@@ -3594,7 +3959,7 @@ FetchContent_Declare(fmt)
             "X".repeat(PHASE1_HEAVY_BLOB_MAX_CHARS + 512)
         );
         fs::write(dir.path().join("Dockerfile"), &long_content).await.unwrap();
-        
+
         let repo_path = RepoPath(dir.path().to_path_buf());
         let result = OpsBlueprintExtractor::extract_blob(OpsInput { repo_path: &repo_path }).await.unwrap();
         let text = String::from_utf8(result.payload_blob).unwrap();
@@ -3602,5 +3967,226 @@ FetchContent_Declare(fmt)
         assert!(text.contains("### Dockerfile"));
         assert!(text.contains(&long_content.trim().replace('\r', "")));
         assert!(text.len() > PHASE1_HEAVY_BLOB_MAX_CHARS);
+    }
+
+    // PRD-043: testes do helper `extract_jsdoc_above` (UX Contracts behavior).
+    // O helper captura a PRIMEIRA FRASE util de um JSDoc /** ... */ acima
+    // de um offset, removendo bullets e JSDoc tags.
+
+    #[test]
+    fn test_extract_jsdoc_above_returns_first_sentence() {
+        let src = "\
+/**
+ * Renderiza o card de usuario com avatar e nome.
+ * Segue o design system v2.
+ */
+interface UserCardProps {
+    user: User;
+}
+";
+        let offset = src.find("interface UserCardProps").unwrap() as u32;
+        let result = extract_jsdoc_above(src, offset).unwrap();
+        assert_eq!(result, "Renderiza o card de usuario com avatar e nome");
+    }
+
+    #[test]
+    fn test_extract_jsdoc_above_skips_empty_and_tag_only_blocks() {
+        let src = "\
+/**
+ * @param user usuario a renderizar
+ * @returns JSX do card
+ */
+type UserCard = (user: User) => JSX.Element;
+";
+        let offset = src.find("type UserCard").unwrap() as u32;
+        // JSDoc so tem tags => comportamento vazio => None
+        assert!(extract_jsdoc_above(src, offset).is_none());
+    }
+
+    #[test]
+    fn test_extract_jsdoc_above_returns_none_when_no_jsdoc() {
+        let src = "interface Foo { x: number; }";
+        let offset = src.find("interface Foo").unwrap() as u32;
+        assert!(extract_jsdoc_above(src, offset).is_none());
+    }
+
+    #[test]
+    fn test_extract_jsdoc_above_ignores_unrelated_previous_jsdoc() {
+        // Ha um JSDoc anterior (para outra coisa) e um */ entre ele e o target.
+        // O helper deve encontrar o JSDoc real (imediato acima do target).
+        let src = "\
+/**
+ * Comentario antigo.
+ */
+const other = 1;
+/** JSDoc real */
+interface Target {}
+";
+        let offset = src.find("interface Target").unwrap() as u32;
+        let result = extract_jsdoc_above(src, offset).unwrap();
+        assert_eq!(result, "JSDoc real");
+    }
+
+    #[test]
+    fn test_extract_jsdoc_above_truncates_long_sentences() {
+        let long_phrase = "A".repeat(250);
+        let src = format!(
+            "/**\n * {long_phrase}.\n * Continua...\n */\ninterface X {{}}\n"
+        );
+        let offset = src.find("interface X").unwrap() as u32;
+        let result = extract_jsdoc_above(&src, offset).unwrap();
+        assert!(result.len() <= 200, "deve truncar para 200 chars: {}", result.len());
+        assert!(result.starts_with("A"));
+    }
+
+    // PRD-044: testes de classificacao de infra files para o header de
+    // completude do blob_07. A heuristica deve distinguir
+    // TEST_WORKFLOW / DOCKERFILE / DEPLOY_WORKFLOW / Other de forma
+    // deterministica para que LLMs 3-7B nao tenham que inferir.
+
+    #[test]
+    fn test_classify_infra_file_dockerfile_paths() {
+        assert_eq!(
+            classify_infra_file("Dockerfile"),
+            InfraCategory::Dockerfile
+        );
+        assert_eq!(
+            classify_infra_file("Dockerfile.dev"),
+            InfraCategory::Dockerfile
+        );
+        assert_eq!(
+            classify_infra_file("Containerfile"),
+            InfraCategory::Dockerfile
+        );
+        assert_eq!(
+            classify_infra_file("docker-compose.yml"),
+            InfraCategory::Dockerfile
+        );
+        assert_eq!(
+            classify_infra_file("compose.yaml"),
+            InfraCategory::Dockerfile
+        );
+    }
+
+    #[test]
+    fn test_classify_infra_file_test_workflow_paths() {
+        assert_eq!(
+            classify_infra_file(".github/workflows/test.yml"),
+            InfraCategory::TestWorkflow
+        );
+        assert_eq!(
+            classify_infra_file(".github/workflows/ci.yaml"),
+            InfraCategory::TestWorkflow
+        );
+        assert_eq!(
+            classify_infra_file(".github/workflows/lint.yml"),
+            InfraCategory::TestWorkflow
+        );
+        assert_eq!(
+            classify_infra_file(".gitlab-ci.yml"),
+            InfraCategory::TestWorkflow
+        );
+        assert_eq!(
+            classify_infra_file(".circleci/config.yml"),
+            InfraCategory::TestWorkflow
+        );
+    }
+
+    #[test]
+    fn test_classify_infra_file_deploy_workflow_paths() {
+        assert_eq!(
+            classify_infra_file(".github/workflows/deploy.yml"),
+            InfraCategory::DeployWorkflow
+        );
+        assert_eq!(
+            classify_infra_file(".github/workflows/release.yaml"),
+            InfraCategory::DeployWorkflow
+        );
+        assert_eq!(
+            classify_infra_file(".github/workflows/publish-crate.yml"),
+            InfraCategory::DeployWorkflow
+        );
+    }
+
+    #[test]
+    fn test_classify_infra_file_other_paths() {
+        // Charts, k8s, terraform, ansible -> Other
+        assert_eq!(
+            classify_infra_file("charts/api/Chart.yaml"),
+            InfraCategory::Other
+        );
+        assert_eq!(
+            classify_infra_file("k8s/deployment.yaml"),
+            InfraCategory::Other
+        );
+        assert_eq!(
+            classify_infra_file("terraform/main.tf"),
+            InfraCategory::Other
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ops_blob_emits_completeness_header() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("Dockerfile"),
+            "FROM rust:1.80\nRUN cargo build\n",
+        )
+        .await
+        .unwrap();
+        fs::create_dir_all(dir.path().join(".github/workflows")).await.unwrap();
+        fs::write(
+            dir.path().join(".github/workflows/test.yml"),
+            "name: test\non: [push]\n",
+        )
+        .await
+        .unwrap();
+        fs::write(
+            dir.path().join(".github/workflows/deploy.yml"),
+            "name: deploy\non: [push]\n",
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let result = OpsBlueprintExtractor::extract_blob(OpsInput { repo_path: &repo_path })
+            .await
+            .unwrap();
+        let text = String::from_utf8(result.payload_blob).unwrap();
+
+        // Header canonico presente
+        assert!(text.contains("# Ops Blueprint"));
+        assert!(text.contains("[INFRA_FILES_COUNT]: 3"));
+        assert!(text.contains("[CONTAINS_TEST_WORKFLOW]: yes"));
+        assert!(text.contains("[CONTAINS_DOCKERFILE]: yes"));
+        assert!(text.contains("[CONTAINS_DEPLOY_WORKFLOW]: yes"));
+        // Conteudo preservado
+        assert!(text.contains("### Dockerfile"));
+        assert!(text.contains("FROM rust:1.80"));
+        assert!(text.contains("### .github/workflows/test.yml"));
+    }
+
+    #[tokio::test]
+    async fn test_ops_blob_header_reflects_missing_components() {
+        // Repo sem CI, sem Dockerfile, sem deploy => tudo "no"
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("terraform")).await.unwrap();
+        fs::write(
+            dir.path().join("terraform/main.tf"),
+            "terraform { required_version = \">= 1.0\" }\n",
+        )
+        .await
+        .unwrap();
+
+        let repo_path = RepoPath(dir.path().to_path_buf());
+        let result = OpsBlueprintExtractor::extract_blob(OpsInput { repo_path: &repo_path })
+            .await
+            .unwrap();
+        let text = String::from_utf8(result.payload_blob).unwrap();
+
+        assert!(text.contains("[INFRA_FILES_COUNT]: 1"));
+        assert!(text.contains("[CONTAINS_TEST_WORKFLOW]: no"));
+        assert!(text.contains("[CONTAINS_DOCKERFILE]: no"));
+        assert!(text.contains("[CONTAINS_DEPLOY_WORKFLOW]: no"));
     }
 }

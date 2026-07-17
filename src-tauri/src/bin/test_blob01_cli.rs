@@ -1,6 +1,6 @@
-use genesis_mc_lib::harvester::extract::LocalStaticExtractor;
-use genesis_mc_lib::harvester::git::BloblessCloner;
-use genesis_mc_lib::harvester::ramdisk::RamdiskAllocator;
+use souls_mc_lib::harvester::extract::LocalStaticExtractor;
+use souls_mc_lib::harvester::git::BloblessCloner;
+use souls_mc_lib::harvester::ramdisk::RamdiskAllocator;
 use rusqlite::Connection;
 use std::fs;
 use std::io;

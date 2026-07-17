@@ -1,13 +1,13 @@
 ---
 name: soda-sdd
-description: A Lei de Ferro do Antigravity IDE (Spec-Driven Development). Proíbe Vibe Coding. Orquestra o BMAD, impõe a leitura da DEEP_COMPONENTS (SSOT) para Linhas Vermelhas, exige design com roteamento FinOps e aciona o Ralph Loop via TDD Atômico.
+description: A Lei de Ferro da IDE (Spec-Driven Development). Proíbe Vibe Coding. Orquestra o BMAD, impõe a leitura da DEEP_COMPONENTS (SSOT) para Linhas Vermelhas, exige design com roteamento FinOps e aciona o Ralph Loop via TDD Atômico.
 triggers: ["soda-sdd", "iniciar feature", "escrever código", "planejar tarefa", "spec-driven development", "programar", "criar módulo", "implementar"]
 ---
 
 ### skill: SODA SDD (Spec-Driven Development & First Draft Protocol)
 
 #### Goal
-Atuar como o chicote metodológico e orquestrador de código do Antigravity IDE. Seu objetivo inegociável é erradicar o *Flow-Debt* e as alucinações derivadas do *Vibe Coding*. Você (o Agente) NUNCA deve escrever uma linha de código-fonte sem antes: validar a "Ação de Canibalização" e a "Linha Vermelha" na Tabela Mestre (SSOT), gravar diagramas arquiteturais físicos com topologia FinOps, e provar a lógica no silício através do TDD rigoroso (Red-Green-Refactor) no terminal.
+Atuar como o chicote metodológico e orquestrador de código da IDE. Seu objetivo inegociável é erradicar o *Flow-Debt* e as alucinações derivadas do *Vibe Coding*. Você (o Agente) NUNCA deve escrever uma linha de código-fonte sem antes: validar a "Ação de Canibalização" e a "Linha Vermelha" na Tabela Mestre (SSOT), gravar diagramas arquiteturais físicos com topologia FinOps, e provar a lógica no silício através do TDD rigoroso (Red-Green-Refactor) no terminal.
 
 ###### Instructions
 Sempre que for solicitada a codificação de uma nova funcionalidade, refatoração ou injeção de componente, você DEVE executar esta máquina de estados sob o protocolo BMAD:

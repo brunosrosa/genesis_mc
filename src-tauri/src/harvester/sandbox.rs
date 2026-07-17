@@ -922,13 +922,13 @@ fn spawn_in_appcontainer_blocking(
     // CreateProcessW interpreta o primeiro token como o caminho do executável.
     // O escape_cmd_arg não quotava o program quando não continha espaços, mas o
     // Windows precisa de quoting explícito para paths com backslashes.
-    // Solução: quoting brutal do program, depois concatenar args escapados.
-    let program_quoted = format!("\"{}\"", program.display());
+    // Solução: quoting brutal direto com argumentos nomeados para evitar ambiguidade.
     let args_string = args.iter()
         .map(|a| escape_cmd_arg(a))
         .collect::<Vec<String>>()
         .join(" ");
-    let cmd_str = format!("{} {}", program_quoted, args_string);
+    // Garante que o caminho do executável esteja SEMPRE entre aspas duplas para CreateProcessW
+    let cmd_str = format!("\"{}\" {}", program.display(), args_string);
     let mut cmd_wide: Vec<u16> = str_to_wide(&cmd_str);
     let clean_cwd = dunce::canonicalize(&cwd).unwrap_or(cwd.to_path_buf());
     let final_cwd_string = clean_cwd.to_string_lossy().replace(r"\\?\", "").replace(r"\?\", "");
@@ -3216,7 +3216,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let repo_path_clone = self.repo_path.clone();
         let host_write_roots_clone = self.host_write_roots.clone();
         let command_clone = command.to_string();
-        let extra_acl_paths_clone = extra_acl_paths.clone();
+        let mut extra_acl_paths_clone = extra_acl_paths.clone();
         let mut resolved_clone = resolved.clone();
         let uuid_str_clone = uuid_str.clone();
         let acl_cache_clone = self.acl_cache.clone();
@@ -3313,6 +3313,17 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             ).map_err(|e| SandboxError::AppContainerSetupFailed {
                 detail: format!("Falha ao conceder ACL total para diretório efêmero '{}': {e:?}", ephemeral_dir.display()),
             })?;
+
+            // PRD-031 §E: O ephemeral_dir DEVE ser adicionado ao extra_acl_paths_clone
+            // para que o AppContainer possa ler os arquivos pré-extracted pelo Host (Nuitka).
+            // O grant_ntfs_acl acima concede ACL ao diretório, mas arquivos novos criados pelo Host
+            // (Nuitka desidratação) não herdam automaticamente —必须 injeção explícita.
+            extra_acl_paths_clone.push(ephemeral_dir.clone());
+            debug!(
+                ephemeral_dir = %ephemeral_dir.display(),
+                extra_acl_paths_count = extra_acl_paths_clone.len(),
+                "AppContainer: ephemeral_dir adicionado a extra_acl_paths para ACL recursiva"
+            );
 
             // Injeta FORÇOSAMENTE no bloco de variáveis de ambiente do comando resolvida
             // as variáveis do cache do Opengrep/Semgrep apontando para o diretório efêmero do AppContainer
@@ -3535,8 +3546,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 // Desidratação: executa --version no host para forçar extração Nuitka
                 let dehydrate_result = std::process::Command::new(&resolved_clone.program)
                     .arg("--version")
-                    .env_clear()
-                    .envs(dehydrate_env.iter())
+                    .envs(dehydrate_env.iter())  // REMOVI .env_clear() - mantém sistema PATH!
                     .current_dir(&execution_root_clean_clone)
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::piped())
@@ -3588,6 +3598,21 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                         );
                     }
                 }
+
+                // Passo crucial: após Nuitka extrair arquivos no ephemeral_dir, re-aplicamos
+                // ACL para garantir que todos os arquivos extraídos tenham permissões para o AppContainer SID
+                info!(
+                    ephemeral_dir = %ephemeral_dir.display(),
+                    "Reaplicando ACL NTFS recursiva no ephemeral_dir após desidratação Nuitka"
+                );
+                let clean_dir_mask = FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE;
+                let _ = grant_ntfs_acl_with_parents(
+                    &ephemeral_dir,
+                    profile.sid,
+                    clean_dir_mask,
+                    SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+                    &acl_cache_clone
+                );
             }
 
             Ok((profile, ephemeral_dir, ephemeral_handle, resolved_clone))

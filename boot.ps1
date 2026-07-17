@@ -10,7 +10,10 @@ if ($null -ne $PSStyle) {
     $PSStyle.OutputRendering = 'ANSI'
 }
 try { Clear-Host } catch {}
-$env:RUST_LOG = "debug"
+# Filtro cirurgico: preserva debug do core, silencia o ruido do `ignore`/`globset`/`walkdir`
+# que polui logs com ~600 linhas de "built glob set" durante o build.
+# Pos-B: crate agora chama souls_mc_lib (renomeada em B).
+$env:RUST_LOG = "souls_mc_lib=info,soda_sast=debug,soda_harvester=debug,ignore=warn,globset=warn,walkdir=warn"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -117,11 +120,23 @@ Write-Host "=======================================================" -Foreground
 try {
     # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
     Write-Host "`n[1/5] Expurgando processos supervisionados do ecossistema Souls..." -ForegroundColor Yellow
-    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "genesis_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-mcp", "leanctx", "biome", "opengrep", "oxlint")
+    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-mcp", "leanctx", "biome", "opengrep", "oxlint")
+    $killed = @()
     foreach ($z in $zombies) {
-        Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
+        $existing = Get-Process -Name $z -ErrorAction SilentlyContinue
+        if ($existing) {
+            $killed += [PSCustomObject]@{ Name = $z; Pids = ($existing.Id -join ",") }
+            Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
+        }
     }
     Start-Sleep -Seconds 1
+    if ($killed.Count -gt 0) {
+        foreach ($k in $killed) {
+            Write-Host ("[HIGIENE] Encerrado: {0} (PIDs: {1})" -f $k.Name, $k.Pids) -ForegroundColor DarkYellow
+        }
+    } else {
+        Write-Host "[HIGIENE] Nenhum zumbi encontrado, sessoes anteriores limpas." -ForegroundColor DarkGray
+    }
     Write-BootOk "Supervisores antigos encerrados e portas locais liberadas."
 
     # 2. HIGIENE LEVE SEM DESTRUIR CACHE DO MCP REMOTO
@@ -135,6 +150,8 @@ try {
     Write-Host "`n[3/5] Injetando chaves do .env na RAM da sessao..." -ForegroundColor Yellow
     $envPath = Join-Path $PSScriptRoot ".env"
     if (Test-Path $envPath) {
+        $injectedKeys = @()
+        $skippedKeys = @()
         Get-Content $envPath | ForEach-Object {
             if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)\s*$') {
                 $name = $matches[1].Trim()
@@ -151,8 +168,15 @@ try {
                     $value = $value.Trim()
                 }
                 $value = $value.Trim('"', "'", ' ')
-                if ($name) { Set-Item -Path ("Env:{0}" -f $name) -Value $value }
+                if ($name) {
+                    Set-Item -Path ("Env:{0}" -f $name) -Value $value
+                    if ($value.Length -gt 0) { $injectedKeys += $name } else { $skippedKeys += $name }
+                }
             }
+        }
+        Write-Host ("[ENV] Injetadas: {0}" -f ($injectedKeys -join ", ")) -ForegroundColor DarkCyan
+        if ($skippedKeys.Count -gt 0) {
+            Write-Host ("[ENV] Vazias (skip): {0}" -f ($skippedKeys -join ", ")) -ForegroundColor DarkYellow
         }
         Write-BootOk "Segredos injetados com seguranca (Set-Item)."
     } else {
@@ -175,7 +199,7 @@ try {
                 "--bin", "soda_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
-                "--bin", "genesis_mc"
+                "--bin", "souls_mc"
             ) `
             -Label "cargo-build-supervisores" `
             -WorkingDirectory $srcTauriDir
@@ -196,20 +220,33 @@ try {
         Write-Host "`n[5/5] Pre-aquecendo o cache do lean-ctx em background..." -ForegroundColor Yellow
         $leanCtxPath = Join-Path $srcTauriDir "target\debug\lean-ctx.exe"
         if (Test-Path $leanCtxPath) {
-            Start-Process -FilePath $leanCtxPath -ArgumentList "graph", "build" -WorkingDirectory $PSScriptRoot -NoNewWindow -ErrorAction SilentlyContinue
+            $leanProc = Start-Process -FilePath $leanCtxPath -ArgumentList "graph", "build" -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru -ErrorAction SilentlyContinue
+            if ($leanProc -and $leanProc.Id) {
+                Write-Host ("[BG] lean-ctx iniciado em background (PID: {0})" -f $leanProc.Id) -ForegroundColor DarkCyan
+            } else {
+                Write-BootWarn "lean-ctx nao conseguiu iniciar em background (verifique permissoes ou binario)."
+            }
+        } else {
+            Write-BootWarn "Binario lean-ctx.exe nao encontrado em $leanCtxPath - pre-aquecimento pulado."
         }
 
         # 6. IGNIÇÃO DO DAEMON JÁ COMPILADO
-        Write-Host "`n[6/6] Iniciando o daemon compilado (genesis_mc)..." -ForegroundColor Yellow
-        $daemonPath = Join-Path $srcTauriDir "target\debug\genesis_mc.exe"
+        Write-Host "`n[6/6] Iniciando o daemon compilado (souls_mc)..." -ForegroundColor Yellow
+        $daemonPath = Join-Path $srcTauriDir "target\debug\souls_mc.exe"
         if (-not (Test-Path $daemonPath)) {
             throw "Binario esperado nao encontrado apos a build: $daemonPath"
         }
 
         Write-BootOk "Build finalizada. Daemon sera iniciado sem passar de novo pelo cargo run."
-        & $daemonPath
-        if ($LASTEXITCODE -ne 0) {
-            throw "genesis_mc encerrou com exit code $LASTEXITCODE"
+        $daemonProc = Start-Process -FilePath $daemonPath -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru
+        Write-Host ("[DAEMON] souls_mc iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
+        # Daemon deve continuar vivo; se cair em <2s, algo esta muito errado.
+        Start-Sleep -Seconds 2
+        $stillAlive = Get-Process -Id $daemonProc.Id -ErrorAction SilentlyContinue
+        if ($null -eq $stillAlive) {
+            throw "souls_mc (PID $daemonProc.Id) morreu em menos de 2s apos o start. Verifique logs do daemon."
+        } else {
+            Write-Host ("[DAEMON] souls_mc estavel apos 2s (PID: {0}, WorkingSet: {1:N1} MB)" -f $daemonProc.Id, ($stillAlive.WorkingSet64 / 1MB)) -ForegroundColor Green
         }
     }
     finally {

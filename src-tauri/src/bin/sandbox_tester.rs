@@ -1,7 +1,7 @@
 use std::path::PathBuf;
-use genesis_mc_lib::harvester::sandbox::{SandboxOrchestrator, SandboxPolicy};
-use genesis_mc_lib::harvester::git::RepoPath;
-use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::harvester::sandbox::{SandboxOrchestrator, SandboxPolicy};
+use souls_mc_lib::harvester::git::RepoPath;
+use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             println!("\n[FALHA] Execução falhou: {:?}", e);
-            if let genesis_mc_lib::harvester::sandbox::SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout } = e {
+            if let souls_mc_lib::harvester::sandbox::SandboxError::ProcessNonZeroExit { exit_code, stderr, stdout } = e {
                 println!("Exit Code: {}", exit_code);
                 println!("Stdout:\n{}", String::from_utf8_lossy(&stdout));
                 println!("Stderr:\n{}", stderr);

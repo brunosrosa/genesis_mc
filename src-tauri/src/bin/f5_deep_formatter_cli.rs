@@ -9,7 +9,7 @@ use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use tracing::{info, warn};
 
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
@@ -104,7 +104,7 @@ impl SheetsMcpClient {
         sheet: &str,
         range: &str,
     ) -> Result<Vec<Vec<String>>, String> {
-        let result = genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+        let result = souls_mc_lib::persist::google_workspace_mcp::read_values_async(
             spreadsheet_id,
             sheet,
             range,
@@ -124,7 +124,7 @@ impl SheetsMcpClient {
         for (range, values) in ranges {
             payload_ranges.insert(range, json!(values));
         }
-        genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+        souls_mc_lib::persist::google_workspace_mcp::write_ranges_async(
             spreadsheet_id,
             sheet,
             &payload_ranges,
@@ -845,7 +845,7 @@ async fn main() -> io::Result<()> {
     ensure_deep_components_schema(&conn).map_err(io::Error::other)?;
 
     let sheets = SheetsMcpClient;
-    let header_range = genesis_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header_range = souls_mc_lib::cognition::synthesizer::master_solutions_header_range();
     let header = sheets
         .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, header_range)
         .await
@@ -854,7 +854,7 @@ async fn main() -> io::Result<()> {
     let cols = resolve_master_columns(&header_row).map_err(io::Error::other)?;
 
     let end_col = col_idx_to_a1(
-        genesis_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
+        souls_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
             .len()
             .saturating_sub(1),
     );

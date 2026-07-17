@@ -1664,29 +1664,132 @@ fn compact_outline_blob_text(text: &str) -> String {
 }
 
 fn build_architecture_map(files: &[String]) -> String {
-    let directories = architecture_directories(files);
-    let mut out = String::from("# Architecture Map\n\n");
-    for (directory, files) in directories {
-        out.push_str(&format!("[{}]\n", directory));
-        for file in files {
-            out.push_str("- ");
-            out.push_str(&file);
-            out.push('\n');
+    // PRD-046: agrupa arquivos por LAYER (frontend, backend, cli, database,
+    // tests, infra, docs, config, core) e DENTRO de cada layer por diretorio.
+    // Isso da contexto arquitetonico real (data flow + camadas) em vez de
+    // apenas um flat list de diretorios que LLMs 3-7B nao conseguem
+    // interpretar com precisao.
+    let mut by_layer: BTreeMap<&'static str, BTreeMap<String, Vec<String>>> = BTreeMap::new();
+    for file in files {
+        let layer = classify_layer(file);
+        let dir = directory_key(file);
+        by_layer.entry(layer).or_default().entry(dir).or_default().push(file.clone());
+    }
+
+    let mut out = String::from("# Architecture Map\n");
+    for (layer, dirs) in &by_layer {
+        out.push_str(&format!("\n[{}] ({} arquivos)\n", layer, total_files(dirs)));
+        for (dir, files) in dirs {
+            out.push_str(&format!("  [{}]\n", dir));
+            for file in files {
+                out.push_str("  - ");
+                out.push_str(file);
+                out.push('\n');
+            }
         }
-        out.push('\n');
     }
     out
 }
 
-fn architecture_directories(files: &[String]) -> BTreeMap<String, Vec<String>> {
-    let mut directories = BTreeMap::<String, Vec<String>>::new();
-    for relative_path in files {
-        directories
-            .entry(directory_key(relative_path))
-            .or_default()
-            .push(relative_path.clone());
+fn total_files(dirs: &BTreeMap<String, Vec<String>>) -> usize {
+    dirs.values().map(|v| v.len()).sum()
+}
+
+/// PRD-046: classifica um path em uma CAMADA arquitetural deterministica.
+/// Heuristica: combina extensao do arquivo com segmentos do path.
+///
+/// Layers canônicas (em ordem de prioridade):
+/// 1. frontend: Svelte/React/Vue, components/, pages/, src/routes/
+/// 2. backend: src/api/, src/server/, src/services/, src/handlers/, src/controllers/
+/// 3. cli: bin/, cmd/, src/cli/, src/commands/
+/// 4. database: migrations/, schema/, prisma/, drizzle/
+/// 5. tests: tests/, __tests__/, spec/, *.test.*, *_test.*, *_spec.*
+/// 6. infra: Dockerfile*, .github/, deploy/, k8s/, terraform/
+/// 7. docs: docs/, README*, CHANGELOG*, *.md (top-level)
+/// 8. config: package.json, Cargo.toml, go.mod, pyproject.toml, tsconfig.json
+/// 9. core: catch-all (lib/, src/, internal/)
+fn classify_layer(path: &str) -> &'static str {
+    let lower = path.to_ascii_lowercase();
+    let lower_slash = lower.replace('\\', "/");
+    let segments: Vec<&str> = lower_slash.split('/').collect();
+    let file_name = segments.last().copied().unwrap_or("");
+    let ext = Path::new(file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    // 5. tests: tem "test" no path ou extensao .test.* / _spec.
+    if segments.iter().any(|s| *s == "tests" || *s == "__tests__" || *s == "spec")
+        || file_name.contains(".test.")
+        || file_name.contains("_test.")
+        || file_name.contains("_spec.")
+        || file_name.ends_with("_test.go")
+        || file_name.ends_with("_spec.rb")
+    {
+        return "tests";
     }
-    directories
+
+    // 1. frontend
+    if matches!(ext, "svelte" | "vue" | "jsx" | "tsx")
+        || segments.iter().any(|s| matches!(*s, "components" | "pages" | "routes" | "views" | "screens"))
+    {
+        return "frontend";
+    }
+
+    // 2. backend
+    if segments.iter().any(|s| matches!(*s, "api" | "server" | "services" | "handlers" | "controllers" | "endpoints" | "rest" | "graphql"))
+    {
+        return "backend";
+    }
+
+    // 3. cli
+    if segments.iter().any(|s| matches!(*s, "bin" | "cmd" | "cli" | "commands"))
+        || file_name == "main.go"
+        || file_name == "main.rs"
+    {
+        return "cli";
+    }
+
+    // 4. database
+    if segments.iter().any(|s| matches!(*s, "migrations" | "schema" | "prisma" | "drizzle" | "models"))
+        || ext == "sql"
+    {
+        return "database";
+    }
+
+    // 6. infra
+    if file_name.starts_with("dockerfile")
+        || file_name == "containerfile"
+        || file_name == "docker-compose.yml"
+        || file_name == "compose.yaml"
+        || segments.first() == Some(&".github")
+        || segments.iter().any(|s| matches!(*s, "deploy" | "k8s" | "kubernetes" | "terraform" | "ansible"))
+    {
+        return "infra";
+    }
+
+    // 7. docs
+    if segments.iter().any(|s| matches!(*s, "docs" | "documentation"))
+        || file_name.starts_with("readme")
+        || file_name.starts_with("changelog")
+        || file_name == "license"
+        || file_name == "contributing.md"
+    {
+        return "docs";
+    }
+
+    // 8. config (manifests, build files)
+    if matches!(file_name,
+        "package.json" | "cargo.toml" | "go.mod" | "pyproject.toml" | "tsconfig.json"
+        | "composer.json" | "gemfile" | "mix.exs" | "build.zig" | "pnpm-lock.yaml"
+        | "yarn.lock" | "package-lock.json" | "requirements.txt" | "setup.py"
+        | "workspace.toml" | ".gitignore" | ".gitattributes"
+    ) {
+        return "config";
+    }
+
+    // 9. core (catch-all)
+    "core"
 }
 
 fn build_health_report(
@@ -2126,4 +2229,97 @@ public class Greeter {
         assert!(!repo_outline.contains("target/generated.rs"));
     }
 
+    // PRD-046: testes de classificacao de camada arquitetural.
+    // A heuristica deve ser deterministica para que LLMs 3-7B consigam
+    // inferir o data flow do repo (frontend -> backend -> cli -> db).
+
+    #[test]
+    fn test_classify_layer_frontend_extensions() {
+        assert_eq!(classify_layer("web/App.svelte"), "frontend");
+        assert_eq!(classify_layer("src/components/Button.tsx"), "frontend");
+        assert_eq!(classify_layer("pages/Home.vue"), "frontend");
+        assert_eq!(classify_layer("src/routes/about.tsx"), "frontend");
+    }
+
+    #[test]
+    fn test_classify_layer_backend_segments() {
+        assert_eq!(classify_layer("src/api/users.rs"), "backend");
+        assert_eq!(classify_layer("src/server/main.ts"), "backend");
+        assert_eq!(classify_layer("src/handlers/auth.go"), "backend");
+        assert_eq!(classify_layer("src/services/billing.py"), "backend");
+    }
+
+    #[test]
+    fn test_classify_layer_cli_segments() {
+        assert_eq!(classify_layer("bin/soda.rs"), "cli");
+        assert_eq!(classify_layer("cmd/root.go"), "cli");
+        assert_eq!(classify_layer("src/cli/main.ts"), "cli");
+    }
+
+    #[test]
+    fn test_classify_layer_database_segments() {
+        assert_eq!(classify_layer("migrations/001_init.sql"), "database");
+        assert_eq!(classify_layer("prisma/schema.prisma"), "database");
+        assert_eq!(classify_layer("drizzle/0001_init.ts"), "database");
+    }
+
+    #[test]
+    fn test_classify_layer_tests_segments() {
+        assert_eq!(classify_layer("tests/auth.rs"), "tests");
+        assert_eq!(classify_layer("src/__tests__/foo.tsx"), "tests");
+        assert_eq!(classify_layer("spec/user_spec.rb"), "tests");
+        assert_eq!(classify_layer("src/Button.test.tsx"), "tests");
+        assert_eq!(classify_layer("pkg/foo_test.go"), "tests");
+    }
+
+    #[test]
+    fn test_classify_layer_infra_files() {
+        assert_eq!(classify_layer("Dockerfile"), "infra");
+        assert_eq!(classify_layer("Dockerfile.dev"), "infra");
+        assert_eq!(classify_layer("docker-compose.yml"), "infra");
+        assert_eq!(classify_layer(".github/workflows/ci.yml"), "infra");
+        assert_eq!(classify_layer("k8s/deployment.yaml"), "infra");
+    }
+
+    #[test]
+    fn test_classify_layer_docs_and_config() {
+        assert_eq!(classify_layer("README.md"), "docs");
+        assert_eq!(classify_layer("CHANGELOG.md"), "docs");
+        assert_eq!(classify_layer("docs/guide.md"), "docs");
+        assert_eq!(classify_layer("package.json"), "config");
+        assert_eq!(classify_layer("Cargo.toml"), "config");
+        assert_eq!(classify_layer("go.mod"), "config");
+    }
+
+    #[test]
+    fn test_classify_layer_core_catchall() {
+        assert_eq!(classify_layer("src/lib.rs"), "core");
+        assert_eq!(classify_layer("lib/utils.py"), "core");
+        assert_eq!(classify_layer("internal/auth.go"), "core");
+    }
+
+    #[test]
+    fn test_build_architecture_map_groups_by_layer() {
+        let files = vec![
+            "src/lib.rs".to_string(),
+            "web/App.svelte".to_string(),
+            "tests/auth.rs".to_string(),
+            "Dockerfile".to_string(),
+            "README.md".to_string(),
+            "Cargo.toml".to_string(),
+        ];
+        let map = build_architecture_map(&files);
+
+        // Cada layer aparece com seu count
+        assert!(map.contains("[core]"), "deveria ter layer core: {map}");
+        assert!(map.contains("[frontend]"), "deveria ter layer frontend: {map}");
+        assert!(map.contains("[tests]"), "deveria ter layer tests: {map}");
+        assert!(map.contains("[infra]"), "deveria ter layer infra: {map}");
+        assert!(map.contains("[docs]"), "deveria ter layer docs: {map}");
+        assert!(map.contains("[config]"), "deveria ter layer config: {map}");
+        // Cada arquivo aparece dentro do seu layer
+        assert!(map.contains("src/lib.rs"));
+        assert!(map.contains("web/App.svelte"));
+        assert!(map.contains("tests/auth.rs"));
+    }
 }

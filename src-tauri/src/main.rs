@@ -12,15 +12,15 @@ use std::time::{Duration, Instant};
 use tauri::Manager;
 
 #[tauri::command]
-fn genesis_ping(payload: &str) -> String {
-    format!("Genesis Core Online. Recebido: {}", payload)
+fn souls_ping(payload: &str) -> String {
+    format!("Souls MC Core Online. Recebido: {}", payload)
 }
 
 #[allow(clippy::zombie_processes)]
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![genesis_ping])
+        .invoke_handler(tauri::generate_handler![souls_ping])
         .setup(|app| {
             let fallback_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("target")

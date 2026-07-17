@@ -460,6 +460,143 @@ pub fn blade_name(blade: StaticAnalysisBlade) -> &'static str {
     }
 }
 
+/// PRD-033: colapsa diagnósticos forenses duplicados antes de prepend no Blob 08.
+///
+/// Monorepos com N sub-crates podem repetir o MESMO blade com o MESMO erro
+/// N vezes (ex: trailbase tem 32 crates, clippy falha em todos com
+/// `libsqlite3-sys` conflict). Sem dedup, o Blob 08 fica com ~245KB de
+/// bloat: o stack trace do cargo eh repetido inteiro a cada sub-crate.
+///
+/// Estrategia de dedup: (blade) + (alma do erro normalizada).
+/// - Alma = resto do payload apos normalizar:
+///   * remove paths absolutos (Windows + Unix) do tipo C:\.../foo.rs, /tmp/...,
+///     .../target/..., ./relative/path
+///   * remove numeros de linha (`:123:45`)
+///   * colapsa whitespace
+/// - Mesmo blade + mesma alma => colapsa em 1 entrada (preserva a primeira).
+/// - Mesmo blade + alma diferente => preserva (sao erros realmente distintos).
+/// - Blade diferente (outra lamina) => sempre preserva.
+pub(crate) fn deduplicate_forensic_diagnostics(diagnostics: Vec<String>) -> Vec<String> {
+    use std::collections::BTreeSet;
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut out: Vec<String> = Vec::with_capacity(diagnostics.len());
+    for d in diagnostics {
+        let key = forensic_dedup_key(&d);
+        if seen.insert(key) {
+            out.push(d);
+        }
+    }
+    out
+}
+
+/// Extrai a chave canonica de dedup de um diagnostico forense.
+///
+/// Formato esperado do payload: `"<BLADE_MARKER> -> <ERRO>"` (o " -> " e o
+/// separador canonico produzido por todos os blades em `forensic_blade_diagnostics`).
+///
+/// Quando o separador nao existe, retorna o payload inteiro normalizado.
+fn forensic_dedup_key(diagnostic: &str) -> String {
+    let (blade, rest) = match diagnostic.split_once(" -> ") {
+        Some((b, r)) => (b, r),
+        None => return normalize_error_payload(diagnostic),
+    };
+    format!("{}|{}", blade, normalize_error_payload(rest))
+}
+
+/// Normaliza o "resto" de um erro removendo ruido que varia entre sub-crates
+/// de um monorepo (paths absolutos, numeros de linha, whitespace) e devolve
+/// os primeiros 200 chars canonicos. Essa eh a "alma" do erro usada como
+/// chave de dedup.
+fn normalize_error_payload(payload: &str) -> String {
+    let mut normalized = String::with_capacity(payload.len());
+    let mut chars = payload.chars().peekable();
+    while let Some(c) = chars.next() {
+        // Detecta path Windows (C:\..., Z:\..., \\?\...) ou Unix (/foo/bar).
+        // Quando achar, consome ate o fim do path (delimitadores: espaco, \n, ", ').
+        if is_path_start(c, &mut chars) {
+            consume_path(&mut chars);
+            normalized.push_str("<PATH>");
+            continue;
+        }
+        // Detecta numero de linha tipo `:123:45` ou `:123` (depois de path/keyword).
+        if c == ':' && starts_line_col_number(&mut chars) {
+            consume_digits(&mut chars);
+            if chars.peek() == Some(&':') {
+                chars.next();
+                consume_digits(&mut chars);
+            }
+            normalized.push_str(":<N>");
+            continue;
+        }
+        // Colapsa multiplos whitespace em um unico espaco.
+        if c.is_whitespace() {
+            normalized.push(' ');
+            while let Some(&nc) = chars.peek() {
+                if nc.is_whitespace() {
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            continue;
+        }
+        normalized.push(c);
+    }
+    let trimmed = normalized.trim().to_string();
+    if trimmed.len() > 200 {
+        trimmed.chars().take(200).collect()
+    } else {
+        trimmed
+    }
+}
+
+/// Heuristica: c + proximo char indicam inicio de path absoluto?
+/// Windows: letra + ':' + '\' ou '/'.
+/// Unix: '/' como primeiro char significativo.
+/// UNC: '\\' como primeiros chars.
+fn is_path_start(c: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    if c == '/' {
+        return true;
+    }
+    if c.is_ascii_alphabetic() {
+        if let Some(&next) = chars.peek() {
+            return next == ':';
+        }
+    }
+    false
+}
+
+/// Consome caracteres de um path ate encontrar um delimitador (espaco, newline,
+/// aspas, ou fim de string). O path NAO inclui espacos, entao qualquer espaco
+/// em branco fecha o path.
+fn consume_path(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() || c == '"' || c == '\'' {
+            break;
+        }
+        chars.next();
+    }
+}
+
+/// Verifica se os proximos chars (apos o ':' ja consumido) sao digitos
+/// (numero de linha opcional, seguido de ':' + digitos para coluna).
+fn starts_line_col_number(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    match chars.peek() {
+        Some(c) if c.is_ascii_digit() => true,
+        _ => false,
+    }
+}
+
+fn consume_digits(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    while let Some(&c) = chars.peek() {
+        if c.is_ascii_digit() {
+            chars.next();
+        } else {
+            break;
+        }
+    }
+}
+
 pub fn blade_command(
     blade: StaticAnalysisBlade,
     scan_targets: &[String],
@@ -806,11 +943,15 @@ impl PolyglotSastSidecar {
 
         let health_report_body = render_soda_health_report(&health_issues);
 
-        // PRD-033: prepend dos diagnósticos forenses ao TOPO do Blob 08
-        let health_report_blob = if forensic_blade_diagnostics.is_empty() {
+        // PRD-033: prepend dos diagnósticos forenses ao TOPO do Blob 08.
+        // Aplicamos deduplicacao antes do join para colapsar erros identicos
+        // que aparecem repetidos em monorepos (mesmo blade, N sub-crates, mesmo erro).
+        let deduped_forensic_diagnostics =
+            deduplicate_forensic_diagnostics(forensic_blade_diagnostics);
+        let health_report_blob = if deduped_forensic_diagnostics.is_empty() {
             health_report_body
         } else {
-            let header = forensic_blade_diagnostics.join("\n");
+            let header = deduped_forensic_diagnostics.join("\n");
             let mut blob = header.into_bytes();
             if !health_report_body.is_empty() {
                 blob.push(b'\n');
@@ -2162,7 +2303,17 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
     let args = opengrep::opengrep_args(&rules_arg, scan_targets, rule_set);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
 
-    execute_sidecar_in_dir(
+    // PRD-035: Sandbox-Soft-Fail com Fallback Bare-Metal para OpenGrep.
+    // O OpenGrep é um binário Nuitka que sofre STATUS_FAIL_FAST_EXCEPTION (-1073740791)
+    // dentro do AppContainer do Windows quando o ACG (Arbitrary Code Guard) bloqueia a
+    // expansão do spec `{CACHE_DIR}\opengrep\v1.25.0` em runtime. Mesmo com a desidratação
+    // prévia, o spec é avaliado novamente no início de CADA scan e falha.
+    //
+    // Solução: Se a execução dentro da Gaiola de Silício falhar com FAIL_FAST, fazemos
+    // fallback gracioso para execução direta no host (sem AppContainer) para garantir
+    // que NENHUMA lâmina de blob_06/blob_08 seja perdida. A segurança do host é
+    // garantida porque o OpenGrep é uma ferramenta SAST de LEITURA PURA — sem RCE.
+    let sandbox_result = execute_sidecar_in_dir(
         executor,
         "opengrep",
         &arg_refs,
@@ -2170,7 +2321,160 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
         SidecarExitPolicy::AllowFindingsExitOne,
         execution_root,
     )
+    .await;
+
+    match sandbox_result {
+        Ok(bytes) => Ok(bytes),
+        Err(sandbox_err) => {
+            // Detecta se é o FAIL_FAST_EXCEPTION conhecido do Nuitka/AppContainer
+            let is_fail_fast = match &sandbox_err {
+                SidecarError::ExecutionFailed { reason } => {
+                    reason.contains("1073740791")
+                        || reason.contains("FAIL_FAST")
+                        || reason.contains("couldn't runtime expand spec")
+                }
+                _ => false,
+            };
+            if !is_fail_fast {
+                return Err(sandbox_err);
+            }
+            warn!(
+                execution_root = %execution_root.display(),
+                reason = %sandbox_err,
+                "OpenGrep: FAIL_FAST_EXCEPTION detectado dentro da Gaiola. Acionando Fallback Bare-Metal no host."
+            );
+            // Fallback: executa OpenGrep diretamente no host, sem AppContainer.
+            // O host tem PATH completo e permissões NTFS totais — Nuitka pode expandir
+            // o spec sem bloqueios de ACG.
+            run_opengrep_host_fallback(
+                executor,
+                &arg_refs,
+                timeout_secs,
+                execution_root,
+            )
+            .await
+        }
+    }
+}
+
+/// Resolve o caminho de um sidecar a partir de:
+///   1) env var `SODA_<NAME>_BIN` (ex.: `SODA_OPENGREP_BIN`)
+///   2) `<cwd>/bin/<name><EXE_SUFFIX>` (ex.: `src-tauri/bin/opengrep.exe`)
+///   3) `<cwd>/bin/<name>-<target_triple><EXE_SUFFIX>` (ex.: `opengrep-x86_64-pc-windows-msvc.exe`)
+/// O passo 3 eh necessario porque o build do SODA compila os sidecars com o target triple
+/// no nome do artefato (padrao Cargo `--bin`).
+fn resolve_sidecar_bin(name: &str) -> Option<PathBuf> {
+    use std::env::consts::EXE_SUFFIX;
+    let env_var = format!("SODA_{}_BIN", name.to_ascii_uppercase().replace('-', "_"));
+    if let Some(p) = std::env::var_os(&env_var).map(PathBuf::from) {
+        if p.is_file() { return Some(p); }
+    }
+    let cwd = std::env::current_dir().ok()?;
+    let bin_dir = cwd.join("bin");
+    if !bin_dir.is_dir() {
+        return None;
+    }
+    // 1) nome simples
+    let simple = bin_dir.join(format!("{name}{EXE_SUFFIX}"));
+    if simple.is_file() {
+        return Some(simple);
+    }
+    // 2) prefix match com target triple: "<name>-*.exe"
+    let prefix = format!("{name}-");
+    let ext_suffix = EXE_SUFFIX;
+    let entries = std::fs::read_dir(&bin_dir).ok()?;
+    let mut candidates: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_file()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with(&prefix) && n.ends_with(ext_suffix))
+                    .unwrap_or(false)
+        })
+        .collect();
+    candidates.sort();
+    candidates.into_iter().next()
+}
+
+/// Fallback bare-metal: executa o OpenGrep diretamente no host, sem AppContainer.
+/// Usado quando a Gaiola de Silício falha com FAIL_FAST_EXCEPTION (Nuitka + ACG).
+/// A execução é feita via `tokio::process::Command` que spawna sem isolamento.
+async fn run_opengrep_host_fallback<E: SandboxExecutor>(
+    _executor: &E,
+    arg_refs: &[&str],
+    timeout_secs: u64,
+    execution_root: &Path,
+) -> Result<Vec<u8>, SidecarError> {
+    use std::process::Stdio;
+    use tokio::time::timeout as tokio_timeout;
+
+    // Resolve o caminho do binário OpenGrep (mesmo path usado pela Gaiola).
+    // Os sidecars SODA sao compilados com target triple no nome, ex.:
+    //   "opengrep-x86_64-pc-windows-msvc.exe"
+    // Aceitamos tanto o nome simples ("opengrep.exe") quanto o sufixado.
+    let opengrep_bin = resolve_sidecar_bin("opengrep").ok_or_else(|| SidecarError::ExecutionFailed {
+        reason: "OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)".to_string(),
+    })?;
+
+    info!(
+        binary = %opengrep_bin.display(),
+        cwd = %execution_root.display(),
+        "OpenGrep: Fallback host-side iniciado (sem AppContainer)"
+    );
+
+    let mut cmd = tokio::process::Command::new(&opengrep_bin);
+    cmd.args(arg_refs)
+        .current_dir(execution_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    // Herda apenas variáveis essenciais — o host já tem tudo que precisa.
+    // OPENGREP_CACHE_DIR aponta para o TEMP do host (resolve o spec expansion).
+    if let Ok(temp) = std::env::var("TEMP") {
+        cmd.env("OPENGREP_CACHE_DIR", &temp);
+        cmd.env("SEMGREP_CACHE_DIR", &temp);
+        cmd.env("XDG_CACHE_HOME", &temp);
+    }
+
+    let child = cmd.spawn().map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("OpenGrep fallback: spawn falhou: {e}"),
+    })?;
+
+    let output = tokio_timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        child.wait_with_output()
+    )
     .await
+    .map_err(|_| SidecarError::Timeout { timeout_secs })?
+    .map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("OpenGrep fallback: wait falhou: {e}"),
+    })?;
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = output.stdout;
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if exit_code == 0 {
+        info!(exit_code, stdout_bytes = stdout.len(), "OpenGrep: Fallback host-side concluído com sucesso");
+        return Ok(stdout);
+    }
+
+    // Fail-Soft: exit 1/7 com payload = achados válidos
+    if (exit_code == 1 || exit_code == 7) && !stdout.is_empty() {
+        info!(exit_code, stdout_bytes = stdout.len(), "OpenGrep: Fallback host-side encontrou achados (exit {})", exit_code);
+        return Ok(stdout);
+    }
+
+    Err(SidecarError::ExecutionFailed {
+        reason: format!(
+            "OpenGrep fallback falhou (exit={}): {}",
+            exit_code,
+            stderr.chars().take(200).collect::<String>()
+        ),
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2942,5 +3246,62 @@ mod tests {
             blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência]"),
             "Blob 08 deve registrar a falha de biome de forma fail-soft, mas foi:\n{blob08}"
         );
+    }
+
+    // PRD-033: testes do dedup de diagnostics forenses.
+    // Cobre o caso do monorepo do trailbase: 32 sub-crates clippy
+    // falham com o mesmo erro libsqlite3-sys e o stack trace do cargo
+    // era repetido 32x (245KB de bloat). Apos dedup, fica 1 entrada.
+
+    #[test]
+    fn test_deduplicate_forensic_diagnostics_collapses_identical_failures() {
+        // Simula 32 sub-crates com paths diferentes mas mesmo erro.
+        let template = "[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> \
+            Pre-Flight cargo fetch falhou para 'C:\\\\crates\\\\trailbase-{idx}\\\\Cargo.toml': Updating crates.io index\n\
+            error: failed to select a version for `libsqlite3-sys`.\n\
+            ... required by package `rusqlite v0.40.0`\n\
+            ... which satisfies dependency `rusqlite = \"^0.40.0\"` of package `trailbase-sqlite`";
+        let mut diagnostics = Vec::new();
+        for i in 0..32 {
+            diagnostics.push(template.replace("{idx}", &i.to_string()));
+        }
+        // Apos dedup, deve restar 1 entrada.
+        let deduped = deduplicate_forensic_diagnostics(diagnostics);
+        assert_eq!(deduped.len(), 1, "Devia colapsar 32 erros identicos em 1");
+        // Conteudo do erro original deve ser preservado.
+        assert!(deduped[0].contains("libsqlite3-sys"));
+        assert!(deduped[0].contains("trailbase-sqlite"));
+    }
+
+    #[test]
+    fn test_deduplicate_forensic_diagnostics_keeps_distinct_failures() {
+        let d_rust_fatal = "[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> \
+            error: failed to select a version for `libsqlite3-sys`.\n... required by `rusqlite v0.40.0`";
+        let d_biome_ignored = "[DIAGNÓSTICO ESTRUTRAL: Lâmina 'biome' ignorada por violação/ausência] -> \
+            error: Policy Violation simulated";
+        let d_dup_rust = d_rust_fatal.to_string(); // duplicata exata
+        let diagnostics = vec![
+            d_rust_fatal.to_string(),
+            d_biome_ignored.to_string(),
+            d_dup_rust,
+        ];
+        // Deve manter 2 (rust fatal + biome ignored).
+        let deduped = deduplicate_forensic_diagnostics(diagnostics);
+        assert_eq!(deduped.len(), 2, "Devia manter 2 entradas distintas");
+    }
+
+    #[test]
+    fn test_deduplicate_forensic_diagnostics_handles_empty_input() {
+        let deduped = deduplicate_forensic_diagnostics(Vec::new());
+        assert!(deduped.is_empty());
+    }
+
+    #[test]
+    fn test_deduplicate_forensic_diagnostics_handles_malformed_entries() {
+        // Entradas sem " -> " (malformadas) sao preservadas verbatim.
+        let d_malformed = "[raw diagnostic without arrow]";
+        let deduped = deduplicate_forensic_diagnostics(vec![d_malformed.to_string()]);
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0], d_malformed);
     }
 }

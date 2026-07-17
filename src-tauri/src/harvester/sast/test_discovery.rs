@@ -255,31 +255,130 @@ fn extract_python_test_entries_shallow(content: &str) -> Vec<String> {
 
 fn extract_rust_test_entries_shallow(content: &str) -> Vec<String> {
     let mut out = BTreeSet::new();
-    let mut saw_test_attr = false;
-    for line in content.lines().take(2_000) {
-        let trimmed = line.trim();
-        if is_rust_test_attribute(trimmed) {
-            saw_test_attr = true;
-            continue;
-        }
-
-        let is_fn_line = trimmed.starts_with("fn ") || trimmed.starts_with("async fn ");
-        if is_fn_line {
-            let is_test_name = trimmed.contains(" fn test_") || trimmed.starts_with("fn test_") || trimmed.starts_with("async fn test_");
-            if saw_test_attr || is_test_name {
-                saw_test_attr = false;
-                let normalized = trimmed.trim().trim_end_matches(';').trim();
-                if let Some(signature) = normalize_rust_test_signature(normalized) {
-                    out.insert(signature);
-                }
-                continue;
+    let lines: Vec<&str> = content.lines().take(2_000).collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let trimmed = lines[i].trim();
+        let is_test_attr = is_rust_test_attribute(trimmed);
+        let is_test_fn = trimmed.starts_with("fn test_")
+            || trimmed.starts_with("async fn test_")
+            || trimmed.contains(" fn test_");
+        if is_test_attr || is_test_fn {
+            // A linha da assinatura pode estar 1 linha apos o #[test]
+            let sig_line_idx = if is_test_attr && i + 1 < lines.len() {
+                i + 1
+            } else {
+                i
+            };
+            let sig_trimmed = lines[sig_line_idx].trim();
+            let normalized = sig_trimmed.trim().trim_end_matches(';').trim();
+            if let Some(signature) = normalize_rust_test_signature(normalized) {
+                // PRD-045: anexa o primeiro assert/expect como "significado"
+                // do teste, para que LLMs 3-7B entendam o que ele VALIDA
+                // sem precisar parsear o codigo.
+                let behavior = extract_rust_test_body_assertion(&lines, sig_line_idx + 1);
+                let entry = match behavior {
+                    Some(b) => format!("{signature}  // {b}"),
+                    None => signature,
+                };
+                out.insert(entry);
             }
-            saw_test_attr = false;
-        } else if !trimmed.starts_with("#[") && !trimmed.is_empty() {
-            saw_test_attr = false;
+            // Pula ate o final do bloco (heuristica: brace_depth).
+            // Importante: comecar pela linha da assinatura para que o `{` seja contado.
+            i = sig_line_idx;
+            let mut brace_depth: i32 = 0;
+            while i < lines.len() {
+                let l = lines[i];
+                brace_depth += l.matches('{').count() as i32;
+                brace_depth -= l.matches('}').count() as i32;
+                // Termo do bloco: brace_depth voltou a zero E a linha tem `}`
+                // (ex: `fn test_x() {}` em uma unica linha).
+                if brace_depth <= 0 && l.contains('}') {
+                    i += 1;
+                    // Se a proxima linha for o inicio de um novo teste (`#[test]`
+                    // ou `fn test_`), NAO pular: o while externo precisa
+                    // re-detecta-la. Sem isso, perde-se 1 a cada 2 testes
+                    // com corpo vazio inline.
+                    if i < lines.len() {
+                        let next = lines[i].trim();
+                        if next.starts_with("#[test")
+                            || next.starts_with("#[tokio::test")
+                            || next.starts_with("fn test_")
+                            || next.starts_with("async fn test_")
+                        {
+                            // Continua o while externo a partir de i (ja incrementado)
+                        }
+                    }
+                    break;
+                }
+                if trimmed_is_new_top_level_fn(l) {
+                    break;
+                }
+                i += 1;
+            }
+        } else {
+            i += 1;
         }
     }
     out.into_iter().collect()
+}
+
+/// Heuristica: linha que parece abrir uma nova funcao top-level.
+fn trimmed_is_new_top_level_fn(line: &str) -> bool {
+    let t = line.trim();
+    t.starts_with("fn ") || t.starts_with("async fn ") || t.starts_with("pub fn ")
+}
+
+/// PRD-045: extrai o primeiro assert/expect do corpo de um teste Rust.
+/// Retorna "asserts: <macro>" ou "expects: <expr>" para anexar como
+/// significado/contrato do teste.
+///
+/// Lei IV: retorna None se nao encontrar nenhum assert/expect no body
+/// (teste vazio, ou apenas side-effects), para nao inventar semantica.
+fn extract_rust_test_body_assertion(lines: &[&str], start: usize) -> Option<String> {
+    let mut brace_depth: i32 = 0;
+    for line in &lines[start..] {
+        brace_depth += line.matches('{').count() as i32;
+        brace_depth -= line.matches('}').count() as i32;
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") {
+            continue;
+        }
+        // Macro: assert!, assert_eq!, assert_ne!, assert_matches!, ...
+        if let Some(rest) = trimmed.strip_prefix("assert") {
+            if let Some(after_bang) = rest.find('!') {
+                let mac = rest[..after_bang].trim().trim_start_matches('_').trim_end_matches('_');
+                if !mac.is_empty()
+                    && mac.chars().all(|c| c.is_ascii_alphabetic() || c == '_')
+                {
+                    let kind = if mac.is_empty() {
+                        "assert".to_string()
+                    } else {
+                        // mac ja vem como "eq", "ne", etc (sem o prefixo "assert_")
+                        format!("assert_{mac}")
+                    };
+                    return Some(format!("asserts: {kind}"));
+                }
+            }
+        }
+        // expect("...") - panics with a message
+        if trimmed.contains(".expect(") {
+            return Some("expects: .expect(...)".to_string());
+        }
+        // unwrap() - panics if None/Err
+        if trimmed.contains(".unwrap()") {
+            return Some("expects: .unwrap()".to_string());
+        }
+        // should_panic (attribute no #[should_panic])
+        if trimmed.starts_with("#[should_panic") {
+            return Some("asserts: should_panic".to_string());
+        }
+        // Fim do bloco antes de achar assert
+        if brace_depth <= 0 && line.contains('}') {
+            return None;
+        }
+    }
+    None
 }
 
 fn extract_go_test_entries_shallow(content: &str) -> Vec<String> {
@@ -626,5 +725,96 @@ func TestSmokePath(t *testing.T) {
             .any(|block| block.file_path == "pkg/smoke.go"
                 && block.items.contains(&"func TestSmokePath(t *testing.T)".to_string())
                 && !block.items.iter().any(|item| item.contains("panic"))));
+    }
+
+    // PRD-045: testes de extracao de "significado" do teste (assert/expect).
+    // O objetivo eh que LLMs 3-7B consigam inferir o QUE o teste valida
+    // sem precisar parsear o codigo.
+
+    #[test]
+    fn test_extract_rust_test_body_assertion_finds_assert_eq() {
+        let lines = vec![
+            "fn test_addition() {",
+            "    let result = 2 + 2;",
+            "    assert_eq!(result, 4);",
+            "}",
+        ];
+        let result = extract_rust_test_body_assertion(&lines, 1);
+        assert_eq!(result, Some("asserts: assert_eq".to_string()));
+    }
+
+    #[test]
+    fn test_extract_rust_test_body_assertion_finds_expect() {
+        let lines = vec![
+            "fn test_parse() {",
+            "    let val: i32 = \"42\".parse().expect(\"not a number\");",
+            "    assert_eq!(val, 42);",
+            "}",
+        ];
+        let result = extract_rust_test_body_assertion(&lines, 1);
+        // expect() vem antes de assert, deve pegar expect primeiro
+        assert_eq!(result, Some("expects: .expect(...)".to_string()));
+    }
+
+    #[test]
+    fn test_extract_rust_test_body_assertion_finds_unwrap() {
+        let lines = vec![
+            "fn test_open() {",
+            "    let f = File::open(\"x.txt\").unwrap();",
+            "}",
+        ];
+        let result = extract_rust_test_body_assertion(&lines, 1);
+        assert_eq!(result, Some("expects: .unwrap()".to_string()));
+    }
+
+    #[test]
+    fn test_extract_rust_test_body_assertion_finds_should_panic() {
+        let lines = vec![
+            "#[should_panic]",
+            "fn test_panic() {",
+            "    panic!(\"oh no\");",
+            "}",
+        ];
+        let result = extract_rust_test_body_assertion(&lines, 0);
+        assert_eq!(result, Some("asserts: should_panic".to_string()));
+    }
+
+    #[test]
+    fn test_extract_rust_test_body_assertion_returns_none_for_empty_test() {
+        let lines = vec![
+            "fn test_empty() {",
+            "    let _ = setup();",
+            "}",
+        ];
+        let result = extract_rust_test_body_assertion(&lines, 1);
+        // Nenhum assert/expect => None (Lei IV)
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_rust_test_entries_attach_assertion_context() {
+        // Teste de integracao: extract_rust_test_entries_shallow deve
+        // anexar o contexto do assert como // expects: <kind>
+        let content = "\
+#[test]
+fn test_addition() {
+    let result = 2 + 2;
+    assert_eq!(result, 4);
+}
+
+#[test]
+fn test_unwrap_path() {
+    let x = parse(\"5\").unwrap();
+    assert_eq!(x, 5);
+}
+";
+        let entries = extract_rust_test_entries_shallow(content);
+        assert_eq!(entries.len(), 2);
+        // O primeiro teste tem // expects: assert_eq
+        let addition = entries.iter().find(|e| e.contains("test_addition")).unwrap();
+        assert!(addition.contains("// asserts: assert_eq"), "Esperava contexto do assert, got: {addition}");
+        // O segundo teste tem // expects: .unwrap() (vem antes do assert)
+        let unwrap = entries.iter().find(|e| e.contains("test_unwrap_path")).unwrap();
+        assert!(unwrap.contains("// expects: .unwrap()"), "Esperava contexto do unwrap, got: {unwrap}");
     }
 }

@@ -18,8 +18,8 @@ use tokio::task::JoinSet;
 use tokio::time::Instant;
 #[cfg(test)]
 use tokio::io::AsyncBufReadExt;
-use genesis_mc_lib::cognition::synthesizer::master_solutions_header_range;
-use genesis_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::cognition::synthesizer::master_solutions_header_range;
+use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -230,7 +230,7 @@ impl SheetsMcpClient {
         sheet: &str,
         range: &str,
     ) -> Result<Vec<Vec<String>>, String> {
-        let result = genesis_mc_lib::persist::google_workspace_mcp::read_values_async(
+        let result = souls_mc_lib::persist::google_workspace_mcp::read_values_async(
             spreadsheet_id,
             sheet,
             range,
@@ -250,7 +250,7 @@ impl SheetsMcpClient {
         for (range, values) in ranges {
             payload_ranges.insert(range, json!(values));
         }
-        genesis_mc_lib::persist::google_workspace_mcp::write_ranges_async(
+        souls_mc_lib::persist::google_workspace_mcp::write_ranges_async(
             spreadsheet_id,
             sheet,
             &payload_ranges,

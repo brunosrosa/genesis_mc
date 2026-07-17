@@ -4,10 +4,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Utc};
-use genesis_mc_lib::cognition::swarm::{
+use souls_mc_lib::cognition::swarm::{
     ensure_phase2_schema, CognitiveSwarmDispatcher, HttpLensInvoker, SqliteDebateStore,
 };
-use genesis_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use rusqlite::{params, Connection};
 use tracing::info;
 

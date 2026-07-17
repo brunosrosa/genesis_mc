@@ -1,4 +1,4 @@
-# Auditoria Cega do Estado Atual (Reality Check) — SODA / Genesis MC / Souls MC
+# Auditoria Cega do Estado Atual (Reality Check) — SODA / Souls MC
 **Data da Auditoria:** 2026-07-05
 **Auditor:** Antigravity (SODA Bare-Metal Engine)
 
