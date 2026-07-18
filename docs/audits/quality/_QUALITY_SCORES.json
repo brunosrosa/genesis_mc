@@ -322,11 +322,11 @@
   {
     "repo_id": "bytecodealliance/wasmtime",
     "blob": "blob_09_community_meta",
-    "size": 2230,
+    "size": 2279,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(2230)"
+        "detail": "healthy(2279)"
       },
       "estrutura_canonica": {
         "score": 0.0,
@@ -722,11 +722,11 @@
   {
     "repo_id": "mendableai/firecrawl",
     "blob": "blob_08_health_report",
-    "size": 33332,
+    "size": 40144,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(33332)"
+        "detail": "healthy(40144)"
       },
       "estrutura_canonica": {
         "score": 100.0,
@@ -742,7 +742,7 @@
       },
       "refs_file_line": {
         "score": 75.0,
-        "detail": "some_refs(13)"
+        "detail": "some_refs(9)"
       },
       "sem_slop": {
         "score": 100.0,
