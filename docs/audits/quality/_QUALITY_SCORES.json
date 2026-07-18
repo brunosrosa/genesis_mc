@@ -282,11 +282,11 @@
   {
     "repo_id": "bytecodealliance/wasmtime",
     "blob": "blob_08_health_report",
-    "size": 529207,
+    "size": 534118,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(529207)"
+        "detail": "healthy(534118)"
       },
       "estrutura_canonica": {
         "score": 100.0,
@@ -297,12 +297,12 @@
         "detail": "violation: (?i)Failed:\\s*timeout"
       },
       "diversidade_fonte": {
-        "score": 100.0,
-        "detail": "diverse(3)"
+        "score": 60.0,
+        "detail": "duo(opengrep,ruff)"
       },
       "refs_file_line": {
         "score": 75.0,
-        "detail": "some_refs(8)"
+        "detail": "some_refs(11)"
       },
       "sem_slop": {
         "score": 100.0,
@@ -322,11 +322,11 @@
   {
     "repo_id": "bytecodealliance/wasmtime",
     "blob": "blob_09_community_meta",
-    "size": 2259,
+    "size": 2230,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(2259)"
+        "detail": "healthy(2230)"
       },
       "estrutura_canonica": {
         "score": 0.0,
@@ -722,11 +722,11 @@
   {
     "repo_id": "mendableai/firecrawl",
     "blob": "blob_08_health_report",
-    "size": 33616,
+    "size": 33332,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(33616)"
+        "detail": "healthy(33332)"
       },
       "estrutura_canonica": {
         "score": 100.0,
@@ -762,11 +762,11 @@
   {
     "repo_id": "mendableai/firecrawl",
     "blob": "blob_09_community_meta",
-    "size": 2389,
+    "size": 2374,
     "dimensions": {
       "tamanho_sadio": {
         "score": 100.0,
-        "detail": "healthy(2389)"
+        "detail": "healthy(2374)"
       },
       "estrutura_canonica": {
         "score": 0.0,
@@ -1162,23 +1162,23 @@
   {
     "repo_id": "tldraw/tldraw",
     "blob": "blob_08_health_report",
-    "size": 1097,
+    "size": 223,
     "dimensions": {
       "tamanho_sadio": {
-        "score": 100.0,
-        "detail": "healthy(1097)"
+        "score": 50.0,
+        "detail": "below_min(223<1000)"
       },
       "estrutura_canonica": {
         "score": 33.33333333333333,
         "detail": "1/3 markers"
       },
       "lei_iv_compliance": {
-        "score": 0.0,
-        "detail": "violation: (?i)Failed:\\s*timeout"
+        "score": 100.0,
+        "detail": "clean"
       },
       "diversidade_fonte": {
-        "score": 60.0,
-        "detail": "duo(biome,opengrep)"
+        "score": 30.0,
+        "detail": "monocultura(biome)"
       },
       "refs_file_line": {
         "score": 30.0,
@@ -1197,7 +1197,7 @@
         "detail": "unknown_format"
       }
     },
-    "total_score": 50.0
+    "total_score": 59.17
   },
   {
     "repo_id": "tldraw/tldraw",
@@ -1282,11 +1282,11 @@
   {
     "repo_id": "tldraw/tldraw",
     "blob": "blob_11_ux_contracts",
-    "size": 38,
+    "size": 327,
     "dimensions": {
       "tamanho_sadio": {
         "score": 50.0,
-        "detail": "below_min(38<1000)"
+        "detail": "below_min(327<1000)"
       },
       "estrutura_canonica": {
         "score": 0.0,

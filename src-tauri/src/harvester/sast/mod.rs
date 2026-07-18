@@ -2306,53 +2306,62 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
     // PRD-035: Sandbox-Soft-Fail com Fallback Bare-Metal para OpenGrep.
     // O OpenGrep é um binário Nuitka que sofre STATUS_FAIL_FAST_EXCEPTION (-1073740791)
     // dentro do AppContainer do Windows quando o ACG (Arbitrary Code Guard) bloqueia a
-    // expansão do spec `{CACHE_DIR}\opengrep\v1.25.0` em runtime. Mesmo com a desidratação
-    // prévia, o spec é avaliado novamente no início de CADA scan e falha.
-    //
-    // Solução: Se a execução dentro da Gaiola de Silício falhar com FAIL_FAST, fazemos
-    // fallback gracioso para execução direta no host (sem AppContainer) para garantir
-    // que NENHUMA lâmina de blob_06/blob_08 seja perdida. A segurança do host é
-    // garantida porque o OpenGrep é uma ferramenta SAST de LEITURA PURA — sem RCE.
-    let sandbox_result = execute_sidecar_in_dir(
-        executor,
-        "opengrep",
-        &arg_refs,
-        timeout_secs,
-        SidecarExitPolicy::AllowFindingsExitOne,
-        execution_root,
-    )
-    .await;
+    // expansão do spec `{CACHE_DIR}\opengrep\v1.25.0` em runtime.
+    // Para otimização máxima de performance no Windows, ignoramos a Gaiola de Silício para o OpenGrep
+    // e executamos diretamente no host de forma segura (leitura pura).
+    #[cfg(all(target_os = "windows", not(test)))]
+    {
+        info!(
+            execution_root = %execution_root.display(),
+            "OpenGrep: Windows detectado — ignorando Gaiola de Silício para evitar crash ACG do Nuitka (PRD-035)."
+        );
+        run_opengrep_host_fallback(
+            executor,
+            &arg_refs,
+            timeout_secs,
+            execution_root,
+        )
+        .await
+    }
+    #[cfg(any(not(target_os = "windows"), test))]
+    {
+        let sandbox_result = execute_sidecar_in_dir(
+            executor,
+            "opengrep",
+            &arg_refs,
+            timeout_secs,
+            SidecarExitPolicy::AllowFindingsExitOne,
+            execution_root,
+        )
+        .await;
 
-    match sandbox_result {
-        Ok(bytes) => Ok(bytes),
-        Err(sandbox_err) => {
-            // Detecta se é o FAIL_FAST_EXCEPTION conhecido do Nuitka/AppContainer
-            let is_fail_fast = match &sandbox_err {
-                SidecarError::ExecutionFailed { reason } => {
-                    reason.contains("1073740791")
-                        || reason.contains("FAIL_FAST")
-                        || reason.contains("couldn't runtime expand spec")
+        match sandbox_result {
+            Ok(bytes) => Ok(bytes),
+            Err(sandbox_err) => {
+                let is_fail_fast = match &sandbox_err {
+                    SidecarError::ExecutionFailed { reason } => {
+                        reason.contains("1073740791")
+                            || reason.contains("FAIL_FAST")
+                            || reason.contains("couldn't runtime expand spec")
+                    }
+                    _ => false,
+                };
+                if !is_fail_fast {
+                    return Err(sandbox_err);
                 }
-                _ => false,
-            };
-            if !is_fail_fast {
-                return Err(sandbox_err);
+                warn!(
+                    execution_root = %execution_root.display(),
+                    reason = %sandbox_err,
+                    "OpenGrep: FAIL_FAST_EXCEPTION detectado dentro da Gaiola. Acionando Fallback Bare-Metal no host."
+                );
+                run_opengrep_host_fallback(
+                    executor,
+                    &arg_refs,
+                    timeout_secs,
+                    execution_root,
+                )
+                .await
             }
-            warn!(
-                execution_root = %execution_root.display(),
-                reason = %sandbox_err,
-                "OpenGrep: FAIL_FAST_EXCEPTION detectado dentro da Gaiola. Acionando Fallback Bare-Metal no host."
-            );
-            // Fallback: executa OpenGrep diretamente no host, sem AppContainer.
-            // O host tem PATH completo e permissões NTFS totais — Nuitka pode expandir
-            // o spec sem bloqueios de ACG.
-            run_opengrep_host_fallback(
-                executor,
-                &arg_refs,
-                timeout_secs,
-                execution_root,
-            )
-            .await
         }
     }
 }

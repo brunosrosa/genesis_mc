@@ -1,6 +1,6 @@
 # Auditoria Qualitativa dos Blobs (Fase 0 Harvester)
 
-**Gerado em:** 2026-07-17T22:45:07
+**Gerado em:** 2026-07-18T05:29:54
 
 **Pares (repo, blob) auditados:** 33
 
@@ -13,7 +13,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `bytecodealliance/wasmtime` | 82 | 76 | 78 | 69 | 68 | 81 | 86 | 50 | 61 | 88 | 58 | **72.5** |
 | `mendableai/firecrawl` | 86 | 83 | 78 | 66 | 89 | 81 | 78 | 50 | 63 | 88 | 58 | **74.6** |
-| `tldraw/tldraw` | 79 | 73 | 68 | 66 | 68 | 81 | 86 | 50 | 63 | 88 | 58 | **71.0** |
+| `tldraw/tldraw` | 79 | 73 | 68 | 66 | 68 | 81 | 86 | 59 | 63 | 88 | 58 | **71.8** |
 
 ## 2. Agregado por artifact_type (sistêmico)
 
@@ -26,7 +26,7 @@
 | blob_05_architecture_map | **75.0** | 9.9 | 68 | 89 | 3 |
 | blob_06_unsafe_hotspots | **81.3** | 0.0 | 81 | 81 | 3 |
 | blob_07_ops_blueprint | **83.3** | 3.8 | 78 | 86 | 3 |
-| blob_08_health_report | **50.0** | 0.0 | 50 | 50 | 3 |
+| blob_08_health_report | **53.1** | 4.3 | 50 | 59 | 3 |
 | blob_09_community_meta | **62.3** | 0.9 | 61 | 63 | 3 |
 | blob_10_soda_canon_context | **88.0** | 0.0 | 88 | 88 | 3 |
 | blob_11_ux_contracts | **58.0** | 0.0 | 58 | 58 | 3 |
@@ -54,8 +54,8 @@
 
 ## 5. Resumo executivo
 
-- **Blob mais fraco (sistêmico):** `blob_08_health_report` com média 50.0
+- **Blob mais fraco (sistêmico):** `blob_08_health_report` com média 53.1
 - **Blob mais forte (sistêmico):** `blob_10_soda_canon_context` com média 88.0
-- **Violações de Lei IV (ADR-031):** 3 / 33
+- **Violações de Lei IV (ADR-031):** 2 / 33
 - **Violações de rebrand (`genesis_mc` residual):** 0 / 33
 - **Casos com slop (TODO/FIXME/PLACEHOLDER):** 0 / 33
