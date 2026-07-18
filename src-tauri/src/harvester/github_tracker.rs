@@ -3,6 +3,8 @@ use std::sync::Once;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
@@ -150,10 +152,10 @@ pub async fn fetch_community_meta(
     limiter.check().await;
     let token = required_github_token()?;
     let (owner, repo) = github_owner_repo(repo_url)?;
-    let crab = build_octocrab(&token, api_base)?;
+    let client = GitHubRestClient::new(&token, api_base)?;
 
     let repo_route = format!("/repos/{owner}/{repo}");
-    let repo_payload: GithubRepoPayload = github_get(&crab, &repo_route).await?;
+    let repo_payload: GithubRepoPayload = client.get(&repo_route).await?;
     let canonical_owner_repo = repo_payload
         .full_name
         .as_deref()
@@ -181,10 +183,10 @@ pub async fn fetch_community_meta(
         "/repos/{canonical_owner}/{canonical_repo}/commits?sha={default_branch}&per_page=1"
     );
 
-    let open_prs: SearchIssueResponse = github_get(&crab, &open_prs_route).await?;
-    let top_issues: GithubSearchIssueResponse = github_get(&crab, &top_issues_route).await?;
-    let recent_prs: Vec<GithubPullPayload> = github_get(&crab, &pulls_route).await?;
-    let commits: Vec<GithubCommitPayload> = github_get(&crab, &commits_route).await?;
+    let open_prs: SearchIssueResponse = client.get(&open_prs_route).await?;
+    let top_issues: GithubSearchIssueResponse = client.get(&top_issues_route).await?;
+    let recent_prs: Vec<GithubPullPayload> = client.get(&pulls_route).await?;
+    let commits: Vec<GithubCommitPayload> = client.get(&commits_route).await?;
     let last_commit = commits.into_iter().next();
 
     let licenca = repo_payload
@@ -477,42 +479,85 @@ fn copy_tree_without_git(src: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn build_octocrab(
-    token: &str,
-    api_base: Option<&str>,
-) -> Result<octocrab::Octocrab, GithubTrackerError> {
-    let mut builder = octocrab::Octocrab::builder()
-        .personal_token(token.to_string())
-        .set_connect_timeout(Some(Duration::from_secs(10)));
-    if let Some(base) = api_base {
-        builder = builder
-            .base_uri(base)
+/// Cliente HTTP bare-metal para a API REST do GitHub.
+///
+/// Instanciado **uma única vez** por chamada a `fetch_community_meta` para
+/// reutilizar o pool de conexões TLS do reqwest (ADR-GH-001: Zero-Garbage).
+/// Passe `api_base = None` para usar `https://api.github.com` (produção) ou
+/// `Some(url)` para apontar a um mock server nos testes de integração.
+struct GitHubRestClient {
+    inner: reqwest::Client,
+    base_url: String,
+}
+
+impl GitHubRestClient {
+    fn new(token: &str, api_base: Option<&str>) -> Result<Self, GithubTrackerError> {
+        let base_url = api_base
+            .unwrap_or("https://api.github.com")
+            .trim_end_matches('/')
+            .to_string();
+
+        let mut headers = HeaderMap::new();
+        let auth_value = HeaderValue::from_str(&format!("Bearer {token}"))
             .map_err(|e| GithubTrackerError::ClientConfig(e.to_string()))?;
+        headers.insert(AUTHORIZATION, auth_value);
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/vnd.github+json"),
+        );
+        headers.insert(
+            reqwest::header::HeaderName::from_static("x-github-api-version"),
+            HeaderValue::from_static("2022-11-28"),
+        );
+
+        let inner = reqwest::Client::builder()
+            .default_headers(headers)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .user_agent("SODA-Harvester/1.0 (reqwest bare-metal)")
+            .build()
+            .map_err(|e| GithubTrackerError::ClientConfig(e.to_string()))?;
+
+        Ok(Self { inner, base_url })
     }
-    builder
-        .build()
-        .map_err(|e| GithubTrackerError::ClientConfig(e.to_string()))
-}
 
-async fn github_get<T>(crab: &octocrab::Octocrab, route: &str) -> Result<T, GithubTrackerError>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    crab.get(route, None::<&()>)
-        .await
-        .map_err(map_octocrab_error)
-}
+    /// Executa GET `route` (ex: `/repos/owner/repo`) e desserializa a resposta JSON em `T`.
+    /// Mapeia status HTTP diretamente para `GithubTrackerError` sem depender de strings.
+    async fn get<T: DeserializeOwned>(&self, route: &str) -> Result<T, GithubTrackerError> {
+        let url = format!("{}{}", self.base_url, route);
+        let response = self
+            .inner
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| GithubTrackerError::Network(e.to_string()))?;
 
-fn map_octocrab_error(err: octocrab::Error) -> GithubTrackerError {
-    let message = err.to_string();
-    if message.contains("404") {
-        GithubTrackerError::NotFound
-    } else if message.contains("422") {
-        GithubTrackerError::InvalidResponse(message)
-    } else if message.contains("403") || message.to_ascii_lowercase().contains("rate") {
-        GithubTrackerError::RateLimit
-    } else {
-        GithubTrackerError::Network(message)
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Err(GithubTrackerError::NotFound);
+        }
+        if status.as_u16() == 422 {
+            let text = response.text().await.unwrap_or_default();
+            return Err(GithubTrackerError::InvalidResponse(text));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN
+            || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        {
+            return Err(GithubTrackerError::RateLimit);
+        }
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(GithubTrackerError::Network(format!(
+                "HTTP {}: {}",
+                status.as_u16(),
+                text.chars().take(200).collect::<String>()
+            )));
+        }
+
+        response
+            .json::<T>()
+            .await
+            .map_err(|e| GithubTrackerError::InvalidResponse(e.to_string()))
     }
 }
 

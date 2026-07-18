@@ -1,17 +1,7 @@
 # AUDIT REPORT: blob_06_unsafe_hotspots
 # DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
 # PAYLOAD_COLUMN: payload_blob
-# GENERATED_AT: 2026-07-17T22:45:28
-
-=== REPO: tldraw/tldraw ===
-# Unsafe Hotspots
-
-summary: findings=0
-
-=================================================================
-[DOMAIN: JAVASCRIPT / TYPESCRIPT]
-=================================================================
-- clean: Sem linhas vermelhas estaticas relevantes.
+# GENERATED_AT: 2026-07-18T17:16:46
 
 === REPO: bytecodealliance/wasmtime ===
 # Unsafe Hotspots
@@ -72,5 +62,15 @@ summary: findings=0
 
 =================================================================
 [DOMAIN: ELIXIR]
+=================================================================
+- clean: Sem linhas vermelhas estaticas relevantes.
+
+=== REPO: tldraw/tldraw ===
+# Unsafe Hotspots
+
+summary: findings=0
+
+=================================================================
+[DOMAIN: JAVASCRIPT / TYPESCRIPT]
 =================================================================
 - clean: Sem linhas vermelhas estaticas relevantes.

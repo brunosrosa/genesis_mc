@@ -1,7 +1,7 @@
 # AUDIT REPORT: blob_08_health_report
 # DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
 # PAYLOAD_COLUMN: payload_blob
-# GENERATED_AT: 2026-07-18T06:23:57
+# GENERATED_AT: 2026-07-18T17:16:46
 
 === REPO: bytecodealliance/wasmtime ===
 [DIAGNÓSTICO ESTRUTURAL: Lâmina 'ruff' ignorada por violação/ausência] -> AppContainer setup failed: Timeout pre-flight de 120 segundos atingido ao preparar Gaiola de Silicio
@@ -1948,3 +1948,11 @@ summary: findings=170
 - [error] [ruff] examples/blog-articles/mastering-map-endpoint/mastering-map-endpoint.ipynb :: Module level import not at top of cell (line 3)
 - [error] [ruff] examples/blog-articles/mastering-map-endpoint/mastering-map-endpoint.ipynb :: Module level import not at top of cell (line 4)
 - [error] [ruff] examples/blog-articles/mastering-map-endpoint/mastering-map-endpoint.ipynb :: Multiple statements on one line (semicolon) (line 2)
+
+=== REPO: tldraw/tldraw ===
+[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência] -> CreateProcessW (AppContainer) falhou: Win32 error code: 0x00000002
+# Health Report
+
+summary: findings=0
+
+Sem divida tecnica estatica relevante.

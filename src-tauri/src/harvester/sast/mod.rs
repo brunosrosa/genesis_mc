@@ -648,6 +648,38 @@ pub fn has_global_opengrep_coverage(targets: &[SastExecutionTarget]) -> bool {
     })
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ARQUITETURA DUPLA CAMADA SAST (ADR-SAST-002)
+//
+// CAMADA 1 — ESTRUTURAL O(1) [Fase 1, lâminas concorrentes]:
+//   • Opengrep: varrimento de AST com regras globais de segurança e saúde.
+//     Ativação: sempre que o router inclui StaticAnalysisBlade::Opengrep.
+//     Canal: UnsafeHotspot (regras security/taint) | Health (regras debt/flow).
+//   • Demais lâminas leves (Biome, Oxc, Ruff, Bandit, Govulncheck, Cppcheck,
+//     Sobelow) também executam concorrentemente nesta fase.
+//
+// CAMADA 2 — SEMÂNTICA HIR [Fase 2, RustClippy isolado e serial]:
+//   • cargo clippy --offline --no-deps: análise do HIR Rust real.
+//     Ativação: sempre que há manifesto Cargo.toml no repositório.
+//     Canal: Health (lints de qualidade) | UnsafeHotspot (unsafe/panic).
+//     Isolamento: semáforo RUST_CLIPPY_MAX_PARALLEL=1 previne corrida de I/O.
+//
+// COMBINAÇÃO: ambas as camadas acumulam resultados em `all_issues`.
+// Particionamento final:
+//   • Blob 06 (Unsafe Hotspots)  ← issues com channel == UnsafeHotspot
+//   • Blob 08 (Health Report)    ← issues com channel == Health
+//
+// FILTROS ALLOWLIST (Anti-Slop):
+//   Os filtros `should_keep_blob06_issue` e `should_keep_blob08_issue`
+//   aplicam allowlists APENAS em lâminas inerentemente ruidosas (biome, oxc,
+//   opengrep-health) para reduzir slop semântico. NUNCA anulam lâminas de
+//   compilação (clippy, cppcheck) que já são filtradas pelo compilador.
+//
+// FALLBACK (Trava C):
+//   Se o clippy falhar por impedimento de build (build.rs nativo, RCE risk),
+//   o sistema faz fallback para Opengrep naquele escopo, garantindo cobertura
+//   mínima mesmo sem a Camada 2 (rust_clippy_should_fallback_to_opengrep).
+// ═══════════════════════════════════════════════════════════════════
 impl PolyglotSastSidecar {
     pub async fn extract<E: SandboxExecutor + Send + Sync + 'static>(
         input: PolyglotSastInput<'_, E>,
@@ -715,7 +747,7 @@ impl PolyglotSastSidecar {
 
         let mut forensic_blade_diagnostics: Vec<String> = Vec::new();
 
-        // FASE 1: Executar todas as lâminas leves de forma concorrente
+        // FASE 1 [CAMADA ESTRUTURAL O(1)]: Opengrep AST + demais lâminas concorrentes leves
         if !other_targets.is_empty() {
             info!(
                 count = other_targets.len(),
@@ -883,7 +915,7 @@ impl PolyglotSastSidecar {
             }
         }
 
-        // FASE 2: Executar lâminas de compilação pesada (Cargo Clippy) de forma totalmente isolada para evitar asfixia de I/O
+        // FASE 2 [CAMADA SEMÂNTICA HIR]: RustClippy isolado e serial — análise do HIR Rust real com --offline --no-deps
         if !clippy_targets.is_empty() {
             info!(
                 count = clippy_targets.len(),
@@ -976,7 +1008,7 @@ impl PolyglotSastSidecar {
                     } else {
                         None
                     };
-                    let result: Result<SastBladeResult, SidecarError> = if forensic_blade_diagnostic.is_some() {
+                    let result: Result<SastBladeResult, SidecarError> = if result.is_err() {
                         Ok(SastBladeResult {
                             effective_blade: blade,
                             bytes: Vec::new(),
