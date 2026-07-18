@@ -1,241 +1,1251 @@
 # AUDIT REPORT: blob_01_promessa_readme
 # DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
 # PAYLOAD_COLUMN: payload_blob
-# GENERATED_AT: 2026-07-17T15:46:05
+# GENERATED_AT: 2026-07-17T22:45:28
 
-=== REPO: trailbaseio/trailbase ===
+=== REPO: tldraw/tldraw ===
+<div alt style="text-align: center; transform: scale(.25);">
+	<picture>
+		<source media="(prefers-color-scheme: dark)" srcset="https://github.com/tldraw/tldraw/raw/main/assets/github-hero-dark.png" />
+		<img alt="tldraw" src="https://github.com/tldraw/tldraw/raw/main/assets/github-hero-light.png" />
+	</picture>
+</div>
+
 <p align="center">
-  <a href="https://trailbase.io" target="_blank">
-    <picture>
-      <img alt="TrailBase logo" width="150" src="assets/logo.svg" />
-    </picture>
-  </a>
+  <a href="https://www.npmjs.com/package/tldraw"><img src="https://img.shields.io/npm/v/tldraw" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/tldraw"><img src="https://img.shields.io/npm/dm/tldraw" alt="npm downloads" /></a>
+  <a href="https://discord.tldraw.com/?utm_source=github&utm_medium=readme&utm_campaign=sociallink"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://deepwiki.com/tldraw/tldraw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
 </p>
 
-<p align="center">
-  An open, <a href="https://trailbase.io/reference/benchmarks/">sub-millisecond</a>,
-  single-executable Firebase alternative with type-safe REST & realtime APIs,
-  multi-DB, WebAssembly runtime, geospatial support, SSR, auth and admin
-  UI built on Rust, Wasmtime & SQLite (or experimentally Postgres v0.28+).
-<p>
+<h3 align="center">
+  Build infinite canvas apps in React with the tldraw SDK.
+</h3>
 
 <p align="center">
-  Simplify with fewer moving parts: an easy to self-host, single-executable,
-  extensible backend for your mobile, web or desktop application.
-  Sub-millisecond latencies eliminate the need for dedicated caches, no more
-  stale or inconsistent data.
-<p>
-
-<p align="center">
-  <a href="https://github.com/trailbaseio/trailbase/stargazers/">
-    <img src="https://img.shields.io/github/stars/trailbaseio/trailbase?style=social&label=Star" />
-  </a>
-  <a href="https://github.com/trailbaseio/trailbase/actions?query=branch%3Amain">
-    <img src="https://github.com/trailbaseio/trailbase/actions/workflows/test.yml/badge.svg?branch=main" alt="Build Status">
-  </a>
-  <a href="https://github.com/trailbaseio/trailbase/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-OSL_3.0-blue" alt="License - OSL 3.0">
-  </a>
-  <a href="https://trailbase.io/reference/roadmap/">
-    <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status - Alpha">
-  </a>
+  <a href="https://tldraw.dev/quick-start">Docs</a> · <a href="https://tldraw.dev/examples">Examples</a> · <a href="https://tldraw.dev/starter-kits/overview">Starter kits</a>
 </p>
 
-# TrailBase
+## Feature highlights
 
-<p align="center">
-  <a
-    href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret"
-    target="_blank"
-  >
-    <picture>
-      <img alt="Admin UI" width="600" src="docs/src/assets/screenshots.webp" />
-    </picture>
-  </a>
-</p>
+tldraw provides a feature-complete infinite canvas engine designed to be the foundation for any canvas app. Create custom shapes, tools, bindings and UI components for a custom experience. Use the default whiteboarding tool set or use the library's primitives to build entirely new shapes and interactions.
 
-<p align="center">
-  <strong>
-    Try the
-    <a href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret" target="_blank">demo</a> online
-  </strong>
-  <br/>Email: <em>admin@localhost</em>
-  <br/>password: <em>secret</em>
-</p>
+- **Multiplayer** — self-hostable real-time collaboration with [`@tldraw/sync`](https://tldraw.dev/docs/sync)
+- **Drawing and diagramming** — pressure-sensitive drawing, geometric shapes, rich text, arrows, snapping to shapes, edge scrolling, image and video support, image export
+- **Runtime API** - drive the canvas at runtime with the Editor API
+- **Fully extensible** — custom [shapes](https://tldraw.dev/docs/shapes), [tools](https://tldraw.dev/docs/tools), [bindings](https://tldraw.dev/sdk-features/bindings), [UI components](https://tldraw.dev/sdk-features/ui-components), side effects, and event hooks
+- **AI integrations** — canvas primitives for [building with LLMs](https://tldraw.dev/docs/ai)
+- **DOM canvas** — web rendering supports anything the browser supports, including embedded websites from YouTube, Figma, GitHub, [and more](https://tldraw.dev/sdk-features/embed-shape)
+- **Broad support** — works in any browser across desktop, touch screens, tablets, and mobile devices
 
-For more context, documentation, and a live demo, check out the website:
-[trailbase.io](https://trailbase.io).
-Questions? Thoughts? - Take a look at the
-[FAQ](https://trailbase.io/reference/faq/) or reach out.
-If you like TrailBase or want to follow along, consider leaving a ⭐🙏.
+## Who's using tldraw
 
-## Project Structure & Releases
+The tldraw SDK powers canvas experiences in products from [Google](https://about.google), [Shopify](https://www.shopify.com), [BlackRock](https://www.blackrock.com), [Autodesk](https://blogs.autodesk.com/forma/2024/06/20/forma-board-collaborative-tool-for-architects/), [ClickUp](https://tldraw.dev/blog/clickup), [Replit](https://docs.replit.com/replitai/canvas), [Google Stitch](https://stitch.withgoogle.com), [Luma](https://lumalabs.ai/app), [Runway](https://runwayml.com), [Padlet](https://tldraw.dev/blog/padlet), [Mobbin](https://tldraw.dev/blog/mobbin), [Jam](https://tldraw.dev/blog/jam), [Craft](https://support.craft.do/en/write-and-edit/whiteboards), [Honeycomb](https://www.honeycomb.io/platform/canvas), [SchoolAI](https://schoolai.com/products/powerups), [Brisk](https://www.briskteaching.com/post/boost-whiteboard), [CADChat](https://cadchat.com), [bigpi](https://www.bigpi.ai), [Genio](https://genio.co), [Pollination](https://www.pollination.solutions), [Legendkeeper](https://www.legendkeeper.com), [Matilda](https://www.matilda.io), [Aries](https://aries.com/infinite), [Alai](https://getalai.com), [Dirac](https://www.diracinc.com), and many more.
 
-This repository contains all components that make up TrailBase including the
-server, client libraries, tests, documentation and examples.
-Only the [benchmarks](https://github.com/trailbaseio/trailbase-benchmark) are
-kept separately due to their external dependencies.
+See our [showcase](https://tldraw.dev/showcase) for case studies on how teams build with tldraw.
 
-Pre-built binaries are available as
-[GitHub releases](https://github.com/trailbaseio/trailbase/releases/) for
-Linux, MacOS and Windows or [Docker images](https://hub.docker.com/r/trailbase/trailbase).
+## Quick start
 
-Client packages for various languages are available via:
+Install the tldraw package:
 
-- [JavaScript/TypeScript](https://www.npmjs.com/package/trailbase)
-- [Dart/Flutter](https://pub.dev/packages/trailbase)
-- [Rust](https://crates.io/crates/trailbase-client)
-- [C#/.Net](https://www.nuget.org/packages/TrailBase/)
-- [Swift](https://github.com/trailbaseio/trailbase/tree/main/client/swift/trailbase)
-- [Kotlin](https://mvnrepository.com/artifact/io.trailbase/trailbase-client)
-- [Go](https://github.com/trailbaseio/trailbase/tree/main/client/go/trailbase)
-- [Python](https://pypi.org/project/trailbase/)
-
-## Getting Started
-
-TrailBase is a **single executable** and therefore very easy to
-[deploy](https://trailbase.io/getting-started/install/).
-You can simply download the appropriate pre-built
-[GitHub release](https://github.com/trailbaseio/trailbase/releases/) bundle for
-your system (MacOS, Linux or Windows), unpack and run the executable w/o having
-to worry about dependencies or shared-library skew.
-
-If you want to get started even quicker, install TrailBase with the following
-command:
-
-```sh
-# Linux & MacOS
-curl -sSL https://trailbase.io/install.sh | bash
-
-# Windows
-iwr https://trailbase.io/install.ps1 | iex
+```bash
+npm i tldraw
 ```
 
-Alternatively, run TrailBase using the Docker image:
+Then, use the `<Tldraw />` component in your React app:
 
-```sh
-alias trail='
-  mkdir -p traildepot && \
-  docker run \
-      -p 4000:4000 \
-      -e ADDRESS=0.0.0.0:4000 \
-      --mount type=bind,source="$PWD"/traildepot,target=/app/traildepot \
-      trailbase/trailbase /app/trail'
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+	return (
+		<div style={{ position: 'fixed', inset: 0 }}>
+			<Tldraw />
+		</div>
+	)
+}
 ```
 
-Then execute `trail help` to check that it is properly installed and list all
-available command line options.
+## Starter kits
 
-To bring up the server on `localhost:4000`, run:
+Starter kits provide the custom shapes, tools, and user interface needed for common applications. Each kit is MIT-licensed. Hack together a prototype, build out an app on top, or reference the code in a larger project.
 
-```sh
-trail run
+Start building with:
+
+```bash
+npx create-tldraw@latest
 ```
 
-On first start, a `./traildepot` folder will be bootstrapped, an admin user
-created and their credentials printed to the terminal.
-Afterwards open [http://localhost:4000/\_/admin/](http://localhost:4000/_/admin/)
-in your browser and use the credentials to log into the admin dashboard.
+- **Multiplayer** — self-hosted real-time collaboration powered by `@tldraw/sync` and Cloudflare Durable Objects, the same stack behind [tldraw.com](https://tldraw.com)
+- **Agent** — AI agents that read, interpret, and modify canvas content
+- **Workflow** — drag-and-drop node builder for automation pipelines, visual programming, and no-code platforms
+- **Chat** — canvas-powered AI chat where users sketch, annotate, and mark up images alongside conversations
+- **Image pipeline** — node-based builder for image generation pipelines
+- **Branching chat** — AI chat with visual branching, letting users explore and compare different conversation paths
+- **Shader** — WebGL shaders that respond to canvas interactions
 
-If you want to install the auth UI, you can simply run:
+## Local development
 
-```sh
-trail components add trailbase/auth_ui
+The development server runs the examples app at `localhost:5420`. You'll need [Node.js](https://nodejs.org) `^20.0.0`. Clone the repo, then enable [corepack](https://nodejs.org/api/corepack.html) for the correct yarn version:
+
+```bash
+npm i -g corepack
 ```
 
-, which will add a WASM component in `./traildepot/wasm` exposing additional UI
-endpoints, e.g.
-[http://localhost:4000/\_/auth/login](http://localhost:4000/_/auth/login).
+Install dependencies and start the dev server:
 
-## Building
-
-If you have all the necessary build dependencies (Rust, node.js, geos,
-protobuf, pnpm) installed, you can build TrailBase by running:
-
-```sh
-# Windows only: make sure to enable symlinks (w/o `mklink` permissions for your
-# user, git will fall back to copies).
-git config core.symlinks true && git reset --hard
-
-# Download necessary git sub-modules.
-git submodule update --init --recursive
-
-# Install Javascript dependencies first. Required for the next step.
-pnpm install
-
-# Build the executable. Adding `--release` will yield a more optimized binary
-# but slow builds significantly.
-cargo build --bin trail
+```bash
+yarn
+yarn dev
 ```
 
-Alternatively, if you want to build a Docker image or don't want to deal with
-build dependencies, you can simply run:
+## Documentation
 
-```sh
-# Download necessary git sub-modules.
-git submodule update --init --recursive
+Documentation for the most recent release can be found on [tldraw.dev/docs](https://tldraw.dev/docs), including [reference docs](https://tldraw.dev/reference/editor/Editor). Our release notes can be found [here](https://tldraw.dev/releases).
 
-# Build the container as defined in `Dockerfile`.
-docker build . -t trailbase
-```
+For more agent-friendly docs, see our [LLMs.txt](https://tldraw.dev/llms.txt).
+
+From 5.1.x onward, published packages also include a `DOCS.md` file with the appropriate docs-site content and a generated `RELEASE_NOTES.md` file with versioned release notes. If you or your coding agent need release notes for your installed version specifically, check these files alongside the source in your `node_modules` folder.
+
+## Community
+
+- [Discord](https://discord.tldraw.com/?utm_source=github&utm_medium=readme&utm_campaign=sociallink) — questions, feedback, and discussion
+- [Twitter/X](https://twitter.com/tldraw) — news and updates
+- [Submit an issue](https://github.com/tldraw/tldraw/issues/new) — bug reports and feature requests
 
 ## Contributing
 
-Contributions are very much appreciated 🙏. For anything beyond bug fixes,
-let's briefly chat to see how a proposal fits into the overall roadmap and
-avoid any surprises.
-
-We're not sure yet what the best setup or exact license is for compatibility
-between OSL-3.0 and more popular licenses or use as a framework.
-So we'd ask you to sign a simple CLA that retains your copyright, ensures that
-TrailBase will continue to forever be freely available under an OSI-approved
-copyleft license, while allowing for some flexibility and sub-licensing as
-established by much larger, successful projects such as Grafana or Element.
+We are not accepting contributions at this time. If you've found a bug or have a feature request, please [create an issue](https://github.com/tldraw/tldraw/issues/new/choose) and we can discuss it there. See our [contributing guide](https://github.com/tldraw/tldraw/blob/main/CONTRIBUTING.md) for details.
 
 ## License
 
-TrailBase is free software under the terms of the [Open Software License 3.0
-(OSL-3.0)](https://opensource.org/licenses/OSL-3.0).
-Its client libraries are dual licensed under the permissive
-[Apache-2.0](https://opensource.org/license/apache-2-0).
+The tldraw SDK is provided under the [tldraw license](https://github.com/tldraw/tldraw/blob/main/LICENSE.md). You can use the SDK freely in development. Production use requires a [license key](https://tldraw.dev/pricing). Visit [tldraw.dev](https://tldraw.dev) to learn more.
 
-We chose OSL-3.0 over other, better known copyleft licenses due to its
-narrower definition of "derivative work" that **only** covers modifications to
-TrailBase itself.
-This means that your application's original code is **not** subject to the
-OSL-3.0's copyleft provisions. This is true whether you connect over the
-network (e.g. web, mobile, other services, etc.), you're serving static assets,
-using the runtime to write custom server-side logic or using TrailBase as a
-framework.
+## Trademarks
 
-This limited scope is similar to the GPL's classpath or the LGPL's [linking
-exception](https://en.wikipedia.org/wiki/GPL_linking_exception).
-The goal is to allow building on top and around of TrailBase without any
-provisions rubbing off onto your original work, while making sure that fixes
-and improvements find their way back to the community.
-These are our intentions - we felt the need to spell them out explicitly
-because licensing is tricky and we ain't lawyers.
-Graciously, the license's author provides some more
-[explanations](https://rosenlaw.com/OSL3.0-explained.htm).
-If you have any concerns, please reach out.
+Copyright (c) 2024-present tldraw Inc. The tldraw name and logo are trademarks of tldraw.
 
-If you require an
-[exception](https://www.gnu.org/philosophy/selling-exceptions.html), reach out
-to contact@trailbase.io.
+Please see our [trademark guidelines](https://github.com/tldraw/tldraw/blob/main/TRADEMARKS.md) for info on acceptable usage.
 
-## Funding
+## Contributors
 
-This project receives funding through [NGI Zero Core](https://nlnet.nl/core), a
-fund established by [NLnet](https://nlnet.nl) with financial support from the
-European Commission's [Next Generation Internet](https://ngi.eu) program.
-Learn more on our [NLnet project page](https://nlnet.nl/project/Trailbase/).
+<a href="https://github.com/tldraw/tldraw/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=tldraw/tldraw&max=400&columns=20" width="100%"/>
+</a>
 
-<p align="left">
-  <a href="https://nlnet.nl">
-    <img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />
+## Star history
+
+<a href="https://star-history.com/#tldraw/tldraw">
+	<picture>
+	  <source
+	    media="(prefers-color-scheme: dark)"
+	    srcset="https://api.star-history.com/svg?repos=tldraw/tldraw&type=Date&theme=dark"
+	  />
+	  <source
+	    media="(prefers-color-scheme: light)"
+	    srcset="https://api.star-history.com/svg?repos=tldraw/tldraw&type=Date"
+	  />
+	  <img src="https://api.star-history.com/svg?repos=tldraw/tldraw&type=Date" alt="Star History Chart" width="100%" />
+	</picture>
+</a>
+
+=== REPO: bytecodealliance/wasmtime ===
+<div align="center">
+  <h1><code>wasmtime</code></h1>
+
+  <p>
+    <strong>A standalone runtime for
+    <a href="https://webassembly.org/">WebAssembly</a></strong>
+  </p>
+
+  <strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
+
+  <p>
+    <a href="https://github.com/bytecodealliance/wasmtime/actions?query=workflow%3ACI"><img src="https://github.com/bytecodealliance/wasmtime/workflows/CI/badge.svg" alt="build status" /></a>
+    <a href="https://bytecodealliance.zulipchat.com/#narrow/stream/217126-wasmtime"><img src="https://img.shields.io/badge/zulip-join_chat-brightgreen.svg" alt="zulip chat" /></a>
+    <img src="https://img.shields.io/badge/rustc-stable+-green.svg" alt="supported rustc stable" />
+    <a href="https://docs.rs/wasmtime"><img src="https://docs.rs/wasmtime/badge.svg" alt="Documentation Status" /></a>
+  </p>
+
+  <h3>
+    <a href="https://bytecodealliance.github.io/wasmtime/">Guide</a>
+    <span> | </span>
+    <a href="https://bytecodealliance.github.io/wasmtime/contributing.html">Contributing</a>
+    <span> | </span>
+    <a href="https://wasmtime.dev/">Website</a>
+    <span> | </span>
+    <a href="https://bytecodealliance.zulipchat.com/#narrow/stream/217126-wasmtime">Chat</a>
+  </h3>
+</div>
+
+## Installation
+
+The Wasmtime CLI can be installed on Linux and macOS (locally) with a small install
+script:
+
+```console
+curl https://wasmtime.dev/install.sh -sSf | bash
+```
+This script installs into `$WASMTIME_HOME` (defaults to `$HOME/.wasmtime`), and executable is placed in `$WASMTIME_HOME/bin`.
+
+After running the install script above, follow the on-screen instructions.
+
+Windows or otherwise interested users can download installers and
+binaries directly from the [GitHub
+Releases](https://github.com/bytecodealliance/wasmtime/releases) page.
+
+For additional installation options, refer to the [online book CLI installation page](https://docs.wasmtime.dev/cli-install.html).
+
+Documentation on Wasmtime's currently supported versions can be found [in the
+online book
+documentation](https://docs.wasmtime.dev/stability-release.html#current-versions).
+
+## Example
+
+If you've got the [Rust compiler
+installed](https://www.rust-lang.org/tools/install) then you can take some Rust
+source code:
+
+```rust
+fn main() {
+    println!("Hello, world!");
+}
+```
+
+and compile it into a WebAssembly component with:
+
+```console
+rustup target add wasm32-wasip2
+rustc hello.rs --target wasm32-wasip2
+```
+
+Once compiled, you can run your component:
+
+```console
+wasmtime hello.wasm
+```
+
+You should see the following output:
+
+```text
+Hello, world!
+```
+
+(Note: make sure you installed Rust using the [`rustup`][rustup] method in the official
+instructions above, and do not have a copy of the Rust toolchain installed on
+your system in some other way as well (e.g. the system package manager). Otherwise, the `rustup target add...`
+command may not install the target for the correct copy of Rust.)
+
+[rustup]: https://rustup.rs
+
+## Features
+
+* **Fast**. Wasmtime is built on the optimizing [Cranelift] code generator to
+  quickly generate high-quality machine code either at runtime or
+  ahead-of-time. Wasmtime is optimized for efficient instantiation, low-overhead
+  calls between the embedder and wasm, and scalability of concurrent instances.
+
+* **[Secure]**. Wasmtime's development is strongly focused on correctness and
+  security. Building on top of Rust's runtime safety guarantees, each Wasmtime
+  feature goes through careful review and consideration via an [RFC
+  process]. Once features are designed and implemented, they undergo 24/7
+  fuzzing donated by [Google's OSS Fuzz]. As features stabilize they become part
+  of a [release][release policy], and when things go wrong we have a
+  well-defined [security policy] in place to quickly mitigate and patch any
+  issues. We follow best practices for defense-in-depth and integrate
+  protections and mitigations for issues like Spectre. Finally, we're working to
+  push the state-of-the-art by collaborating with academic researchers to
+  formally verify critical parts of Wasmtime and Cranelift.
+
+* **[Configurable]**. Wasmtime uses sensible defaults, but can also be
+  configured to provide more fine-grained control over things like CPU and
+  memory consumption. Whether you want to run Wasmtime in a tiny environment or
+  on massive servers with many concurrent instances, we've got you covered.
+
+* **[WASI]**. Wasmtime supports a rich set of APIs for interacting with the host
+  environment through the [WASI standard](https://wasi.dev).
+
+* **[Standards Compliant]**. Wasmtime passes the [official WebAssembly test
+  suite](https://github.com/WebAssembly/testsuite), implements the [official C
+  API of wasm](https://github.com/WebAssembly/wasm-c-api), and implements
+  [future proposals to WebAssembly](https://github.com/WebAssembly/proposals) as
+  well. Wasmtime developers are intimately engaged with the WebAssembly
+  standards process all along the way too.
+
+[Wasmtime]: https://github.com/bytecodealliance/wasmtime
+[Cranelift]: https://cranelift.dev/
+[Google's OSS Fuzz]: https://google.github.io/oss-fuzz/
+[security policy]: https://bytecodealliance.org/security
+[RFC process]: https://github.com/bytecodealliance/rfcs
+[release policy]: https://docs.wasmtime.dev/stability-release.html
+[Secure]: https://docs.wasmtime.dev/security.html
+[Configurable]: https://docs.rs/wasmtime/latest/wasmtime/struct.Config.html
+[WASI]: https://docs.rs/wasmtime-wasi/latest/wasmtime_wasi/
+[Standards Compliant]: https://docs.wasmtime.dev/stability-tiers.html
+
+## Language Support
+
+You can use Wasmtime from a variety of different languages through embeddings of
+the implementation.
+
+Languages supported by the Bytecode Alliance:
+
+* **[Rust]** - the [`wasmtime` crate]
+* **[C]** - the [`wasm.h`, `wasi.h`, and `wasmtime.h` headers][c-headers], [CMake](crates/c-api/CMakeLists.txt)
+* **C++** - the [`wasmtime.hh` header][c-headers]
+* **[Python]** - the [`wasmtime` PyPI package]
+* **[.NET]** - the [`Wasmtime` NuGet package]
+* **[Go]** - the [`wasmtime-go` repository]
+* **[Ruby]** - the [`wasmtime` gem]
+
+Languages supported by the community:
+
+* **[Elixir]** - the [`wasmex` hex package]
+* **Perl** - the [`Wasm` Perl package's `Wasm::Wasmtime`]
+
+[Rust]: https://bytecodealliance.github.io/wasmtime/lang-rust.html
+[C]: https://bytecodealliance.github.io/wasmtime/lang-c.html
+[`wasmtime` crate]: https://crates.io/crates/wasmtime
+[c-headers]: https://bytecodealliance.github.io/wasmtime/c-api/
+[Python]: https://bytecodealliance.github.io/wasmtime/lang-python.html
+[`wasmtime` PyPI package]: https://pypi.org/project/wasmtime/
+[.NET]: https://bytecodealliance.github.io/wasmtime/lang-dotnet.html
+[`Wasmtime` NuGet package]: https://www.nuget.org/packages/Wasmtime
+[Go]: https://bytecodealliance.github.io/wasmtime/lang-go.html
+[`wasmtime-go` repository]: https://pkg.go.dev/github.com/bytecodealliance/wasmtime-go
+[Ruby]: https://bytecodealliance.github.io/wasmtime/lang-ruby.html
+[`wasmtime` gem]: https://rubygems.org/gems/wasmtime
+[Elixir]: https://docs.wasmtime.dev/lang-elixir.html
+[`wasmex` hex package]: https://hex.pm/packages/wasmex
+[`Wasm` Perl package's `Wasm::Wasmtime`]: https://metacpan.org/pod/Wasm::Wasmtime
+
+## Documentation
+
+[📚 Read the Wasmtime guide here! 📚][guide]
+
+The [wasmtime guide][guide] is the best starting point to learn about what
+Wasmtime can do for you or help answer your questions about Wasmtime. If you're
+curious in contributing to Wasmtime, [it can also help you do
+that][contributing]!
+
+[contributing]: https://bytecodealliance.github.io/wasmtime/contributing.html
+[guide]: https://bytecodealliance.github.io/wasmtime
+
+---
+
+It's Wasmtime.
+
+=== REPO: mendableai/firecrawl ===
+<h3 align="center">
+  <a name="readme-top"></a>
+  <img
+    src="https://raw.githubusercontent.com/firecrawl/firecrawl/main/img/firecrawl_logo.png"
+    height="200"
+  >
+</h3>
+
+<div align="center">
+  <a href="https://github.com/firecrawl/firecrawl/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/firecrawl/firecrawl" alt="License">
   </a>
+  <a href="https://pepy.tech/project/firecrawl-py">
+    <img src="https://static.pepy.tech/badge/firecrawl-py" alt="Downloads">
+  </a>
+  <a href="https://GitHub.com/firecrawl/firecrawl/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors/firecrawl/firecrawl.svg" alt="GitHub Contributors">
+  </a>
+  <a href="https://firecrawl.dev">
+    <img src="https://img.shields.io/badge/Visit-firecrawl.dev-orange" alt="Visit firecrawl.dev">
+  </a>
+</div>
 
-  <a href="https://nlnet.nl/core">
-    <img src="https://nlnet.nl/image/logos/NGI0_tag.svg" alt="NGI Zero Logo" width="20%" />
+<div>
+  <p align="center">
+    <a href="https://twitter.com/firecrawl">
+      <img src="https://img.shields.io/badge/Follow%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow on X" />
+    </a>
+    <a href="https://www.linkedin.com/company/104100957">
+      <img src="https://img.shields.io/badge/Follow%20on%20LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="Follow on LinkedIn" />
+    </a>
+    <a href="https://discord.gg/firecrawl">
+      <img src="https://img.shields.io/badge/Join%20our%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord" />
+    </a>
+  </p>
+</div>
+
+---
+
+# **🔥 Firecrawl**
+
+**The API to search, scrape, and interact with the web at scale. 🔥** The web context API to find sources, extract content, and turn it into clean Markdown or structured data your agents can ship with. Open source and available as a [hosted service](https://firecrawl.dev/?ref=github).
+
+_Pst. Hey, you, join our stargazers :)_
+
+<a href="https://github.com/firecrawl/firecrawl">
+  <img src="https://img.shields.io/github/stars/firecrawl/firecrawl.svg?style=social&label=Star&maxAge=2592000" alt="GitHub stars">
+</a>
+
+---
+
+## Why Firecrawl?
+
+- **Industry-leading reliability**: Covers 96% of the web, including JS-heavy pages — no proxy headaches, just clean data ([see benchmarks](https://www.firecrawl.dev/blog/the-worlds-best-web-data-api-v25))
+- **Blazingly fast**: P95 latency of 3.4s across millions of pages, built for real-time agents and dynamic apps
+- **LLM-ready output**: Clean markdown, structured JSON, screenshots, and more — spend fewer tokens, build better AI apps
+- **We handle the hard stuff**: Rotating proxies, orchestration, rate limits, JS-blocked content, and more — zero configuration
+- **Agent ready**: Connect Firecrawl to any AI agent or MCP client with a single command
+- **Media parsing**: Parse and extract content from web-hosted PDFs, DOCX, and more
+- **Actions**: Click, scroll, write, wait, and press before extracting content
+- **Open source**: Developed transparently and collaboratively — [join our community](https://github.com/firecrawl/firecrawl)
+
+---
+
+## Feature Overview
+
+**Core Endpoints**
+
+| Feature | Description |
+|---------|-------------|
+| [**Search**](#search) | Search the web and get full page content from results |
+| [**Scrape**](#scrape) | Convert any URL to markdown, HTML, screenshots, or structured JSON |
+| [**Interact**](#interact) | Scrape a page, then interact with it using AI prompts or code |
+
+**More**
+
+| Feature | Description |
+|---------|-------------|
+| [**Agent**](#agent) | Automated data gathering, just describe what you need |
+| [**Crawl**](#crawl) | Scrape all URLs of a website with a single request |
+| [**Map**](#map) | Discover all URLs on a website instantly |
+| [**Batch Scrape**](#batch-scrape) | Scrape thousands of URLs asynchronously |
+
+---
+
+## Quick Start
+
+Sign up at [firecrawl.dev](https://firecrawl.dev) to get your API key. Try the [playground](https://firecrawl.dev/playground) to test it out.
+
+### Search
+
+Search the web and get full content from results.
+
+```python
+from firecrawl import Firecrawl
+
+app = Firecrawl(api_key="fc-YOUR_API_KEY")
+
+search_result = app.search("firecrawl", limit=5)
+```
+
+<details>
+<summary><b>Node.js / cURL / CLI</b></summary>
+
+**Node.js**
+```javascript
+import { Firecrawl } from 'firecrawl';
+
+const app = new Firecrawl({apiKey: "fc-YOUR_API_KEY"});
+
+app.search("firecrawl", { limit: 5 })
+```
+
+**cURL**
+```bash
+curl -X POST 'https://api.firecrawl.dev/v2/search' \
+-H 'Authorization: Bearer fc-YOUR_API_KEY' \
+-H 'Content-Type: application/json' \
+-d '{
+  "query": "firecrawl",
+  "limit": 5
+}'
+```
+
+**CLI**
+```bash
+firecrawl search "firecrawl" --limit 5
+```
+</details>
+
+Output:
+```json
+[
+  {
+    "url": "https://firecrawl.dev",
+    "title": "Firecrawl",
+    "markdown": "Turn websites into..."
+  },
+  {
+    "url": "https://docs.firecrawl.dev",
+    "title": "Firecrawl Docs",
+    "markdown": "# Getting Started..."
+  }
+]
+```
+
+### Scrape
+
+Get LLM-ready data from any website — markdown, JSON, screenshots, and more.
+
+```python
+from firecrawl import Firecrawl
+
+app = Firecrawl(api_key="fc-YOUR_API_KEY")
+
+result = app.scrape('firecrawl.dev')
+```
+
+<details>
+<summary><b>Node.js / cURL / CLI</b></summary>
+
+**Node.js**
+```javascript
+import { Firecrawl } from 'firecrawl';
+
+const app = new Firecrawl({ apiKey: "fc-YOUR_API_KEY" });
+
+app.scrape('firecrawl.dev')
+```
+
+**cURL**
+```bash
+curl -X POST 'https://api.firecrawl.dev/v2/scrape' \
+-H 'Authorization: Bearer fc-YOUR_API_KEY' \
+-H 'Content-Type: application/json' \
+-d '{
+  "url": "firecrawl.dev"
+}'
+```
+
+**CLI**
+```bash
+firecrawl scrape https://firecrawl.dev
+firecrawl https://firecrawl.dev --only-main-content
+```
+</details>
+
+Output:
+```
+# Firecrawl
+
+Firecrawl helps AI systems search, scrape, and interact with the web.
+
+## Features
+- Search: Find information across the web
+- Scrape: Clean data from any page
+- Interact: Click, navigate, and operate pages
+- Agent: Autonomous data gathering
+```
+
+### Interact
+
+Scrape a page, then interact with it using AI prompts or code.
+
+```python
+from firecrawl import Firecrawl
+
+app = Firecrawl(api_key="fc-YOUR_API_KEY")
+
+result = app.scrape("https://amazon.com")
+scrape_id = result.metadata.scrape_id
+
+app.interact(scrape_id, prompt="Search for 'mechanical keyboard'")
+app.interact(scrape_id, prompt="Click the first result")
+```
+
+<details>
+<summary><b>Node.js / cURL / CLI</b></summary>
+
+**Node.js**
+```javascript
+import { Firecrawl } from 'firecrawl';
+
+const app = new Firecrawl({apiKey: "fc-YOUR_API_KEY"});
+
+const result = await app.scrape("https://amazon.com");
+
+await app.interact(result.metadata.scrapeId, {
+  prompt: "Search for 'mechanical keyboard'"
+});
+await app.interact(result.metadata.scrapeId, {
+  prompt: "Click the first result"
+});
+```
+
+**cURL**
+```bash
+# 1. Scrape the page
+curl -X POST 'https://api.firecrawl.dev/v2/scrape' \
+-H 'Authorization: Bearer fc-YOUR_API_KEY' \
+-H 'Content-Type: application/json' \
+-d '{"url": "https://amazon.com"}'
+
+# 2. Interact with the page (use scrapeId from step 1)
+curl -X POST 'https://api.firecrawl.dev/v2/scrape/SCRAPE_ID/interact' \
+-H 'Authorization: Bearer fc-YOUR_API_KEY' \
+-H 'Content-Type: application/json' \
+-d '{"prompt": "Search for mechanical keyboard"}'
+```
+
+**CLI**
+```bash
+firecrawl scrape https://amazon.com
+firecrawl interact exec --prompt "Search for 'mechanical keyboard'"
+firecrawl interact exec --prompt "Click the first result"
+```
+</details>
+
+Output:
+```json
+{
+  "success": true,
+  "output": "Keyboard available at $100",
+  "liveViewUrl": "https://liveview.firecrawl.dev/..."
+}
+```
+
+---
+
+## Power Your Agent
+
+Connect Firecrawl to any AI agent or MCP client in minutes.
+
+### Skill
+
+Give your agent easy access to real-time web data with one command.
+
+```bash
+npx -y firecrawl-cli@latest init --all --browser
+```
+
+Restart your agent after installing. Works with [Claude Code](https://claude.ai/code), [Antigravity](https://antigravity.google), [OpenCode](https://opencode.ai), and more.
+
+### MCP
+
+Connect any MCP-compatible client to the web in seconds.
+
+```json
+{
+  "mcpServers": {
+    "firecrawl-mcp": {
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_KEY": "fc-YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+### Agent Onboarding
+
+Are you an AI agent? Fetch this skill to sign up your user, get an API key, and start building with Firecrawl.
+
+```bash
+curl -s https://firecrawl.dev/agent-onboarding/SKILL.md
+```
+
+See the [Skill + CLI documentation](https://docs.firecrawl.dev/sdks/cli) for all available commands. For MCP, see [firecrawl-mcp-server](https://github.com/firecrawl/firecrawl-mcp-server).
+
+---
+
+## More Endpoints
+
+### Agent
+
+**The easiest way to get data from the web.** Describe what you need, and our AI agent searches, navigates, and retrieves it. No URLs required.
+
+Agent is the evolution of our `/extract` endpoint: faster, more reliable, and doesn't require you to know the URLs upfront.
+```bash
+curl -X POST 'https://api.firecrawl.dev/v2/agent' \
+  -H 'Authorization: Bearer fc-YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "prompt": "Find the pricing plans for Notion"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "result": "Notion offers the following pricing plans:\n\n1. Free - $0/month...\n2. Plus - $10/seat/month...\n3. Business - $18/seat/month...",
+    "sources": ["https://www.notion.so/pricing"]
+  }
+}
+```
+
+#### Agent with Structured Output
+
+Use a schema to get structured data:
+```python
+from firecrawl import Firecrawl
+from pydantic import BaseModel, Field
+from typing import List, Optional
+
+app = Firecrawl(api_key="fc-YOUR_API_KEY")
+
+class Founder(BaseModel):
+    name: str = Field(description="Full name of the founder")
+    role: Optional[str] = Field(None, description="Role or position")
+
+class FoundersSchema(BaseModel):
+    founders: List[Founder] = Field(description="List of founders")
+
+result = app.agent(
+    prompt="Find the founders of Firecrawl",
+    schema=FoundersSchema
+)
+
+print(result.data)
+```
+```json
+{
+  "founders": [
+    {"name": "Eric Ciarla", "role": "Co-founder"},
+    {"name": "Nicolas Camara", "role": "Co-founder"},
+    {"name": "Caleb Peffer", "role": "Co-founder"}
+  ]
+}
+```
+
+#### Agent with URLs (Optional)
+
+Focus the agent on specific pages:
+```python
+result = app.agent(
+    urls=["https://docs.firecrawl.dev", "https://firecrawl.dev/pricing"],
+    prompt="Compare the features and pricing information"
+)
+```
+
+#### Model Selection
+
+Choose between two models based on your needs:
+
+| Model | Cost | Best For |
+|-------|------|----------|
+| `spark-1-mini` (default) | 60% cheaper | Most tasks |
+| `spark-1-pro` | Standard | Complex research, critical data gathering |
+```python
+result = app.agent(
+    prompt="Compare enterprise features across Firecrawl, Apify, and ScrapingBee",
+    model="spark-1-pro"
+)
+```
+
+**When to use Pro:**
+- Comparing data across multiple websites
+- Extracting from sites with complex navigation or auth
+- Research tasks where the agent needs to explore multiple paths
+- Critical data where accuracy is paramount
+
+Learn more about Spark models in our [Agent documentation](https://docs.firecrawl.dev/features/agent).
+
+### Crawl
+
+Crawl an entire website and get content from all pages.
+```bash
+curl -X POST 'https://api.firecrawl.dev/v2/crawl' \
+  -H 'Authorization: Bearer fc-YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "url": "https://docs.firecrawl.dev",
+    "limit": 100,
+    "scrapeOptions": {
+      "formats": ["markdown"]
+    }
+  }'
+```
+
+Returns a job ID:
+```json
+{
+  "success": true,
+  "id": "123-456-789",
+  "url": "https://api.firecrawl.dev/v2/crawl/123-456-789"
+}
+```
+
+#### Check Crawl Status
+```bash
+curl -X GET 'https://api.firecrawl.dev/v2/crawl/123-456-789' \
+  -H 'Authorization: Bearer fc-YOUR_API_KEY'
+```
+```json
+{
+  "status": "completed",
+  "total": 50,
+  "completed": 50,
+  "creditsUsed": 50,
+  "data": [
+    {
+      "markdown": "# Page Title\n\nContent...",
+      "metadata": {"title": "Page Title", "sourceURL": "https://..."}
+    }
+  ]
+}
+```
+
+**Note:** The [SDKs](#sdks) handle polling automatically for a better developer experience.
+
+### Map
+
+Discover all URLs on a website instantly.
+```bash
+curl -X POST 'https://api.firecrawl.dev/v2/map' \
+  -H 'Authorization: Bearer fc-YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://firecrawl.dev"}'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "links": [
+    {"url": "https://firecrawl.dev", "title": "Firecrawl", "description": "Turn websites into LLM-ready data"},
+    {"url": "https://firecrawl.dev/pricing", "title": "Pricing", "description": "Firecrawl pricing plans"},
+    {"url": "https://firecrawl.dev/blog", "title": "Blog", "description": "Firecrawl blog"}
+  ]
+}
+```
+
+#### Map with Search
+
+Find specific URLs within a site:
+```python
+from firecrawl import Firecrawl
+
+app = Firecrawl(api_key="fc-YOUR_API_KEY")
+
+result = app.map("https://firecrawl.dev", search="pricing")
+# Returns URLs ordered by relevance to "pricing"
+```
+
+### Batch Scrape
+
+Scrape multiple URLs at once:
+```python
+from firecrawl import Firecrawl
+
+app = Firecrawl(api_key="fc-YOUR_API_KEY")
+
+job = app.batch_scrape([
+    "https://firecrawl.dev",
+    "https://docs.firecrawl.dev",
+    "https://firecrawl.dev/pricing"
+], formats=["markdown"])
+
+for doc in job.data:
+    print(doc.metadata.source_url)
+```
+
+---
+
+## SDKs
+
+Our SDKs provide a convenient way to use all Firecrawl features and automatically handle polling for async operations.
+
+### Python
+
+Install the SDK:
+```bash
+pip install firecrawl-py
+```
+```python
+from firecrawl import Firecrawl
+
+app = Firecrawl(api_key="fc-YOUR_API_KEY")
+
+# Scrape a single URL
+doc = app.scrape("https://firecrawl.dev", formats=["markdown"])
+print(doc.markdown)
+
+# Use the Agent for autonomous data gathering
+result = app.agent(prompt="Find the founders of Stripe")
+print(result.data)
+
+# Crawl a website (automatically waits for completion)
+docs = app.crawl("https://docs.firecrawl.dev", limit=50)
+for doc in docs.data:
+    print(doc.metadata.source_url, doc.markdown[:100])
+
+# Search the web
+results = app.search("best AI data tools 2024", limit=10)
+print(results)
+```
+
+### Node.js
+
+Install the SDK:
+```bash
+npm install firecrawl
+```
+```javascript
+import { Firecrawl } from 'firecrawl';
+
+const app = new Firecrawl({ apiKey: 'fc-YOUR_API_KEY' });
+
+// Scrape a single URL
+const doc = await app.scrape('https://firecrawl.dev', { formats: ['markdown'] });
+console.log(doc.markdown);
+
+// Use the Agent for autonomous data gathering
+const result = await app.agent({ prompt: 'Find the founders of Stripe' });
+console.log(result.data);
+
+// Crawl a website (automatically waits for completion)
+const docs = await app.crawl('https://docs.firecrawl.dev', { limit: 50 });
+docs.data.forEach(doc => {
+    console.log(doc.metadata.sourceURL, doc.markdown.substring(0, 100));
+});
+
+// Search the web
+const results = await app.search('best AI data tools 2024', { limit: 10 });
+results.data.web.forEach(result => {
+    console.log(`${result.title}: ${result.url}`);
+});
+```
+
+### Go
+
+Install the SDK:
+```bash
+go get github.com/firecrawl/firecrawl/apps/go-sdk
+```
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	firecrawl "github.com/firecrawl/firecrawl/apps/go-sdk"
+	"github.com/firecrawl/firecrawl/apps/go-sdk/option"
+)
+
+func main() {
+	// Create a client (reads FIRECRAWL_API_KEY from environment)
+	client, err := firecrawl.NewClient(option.WithAPIKey("fc-YOUR_API_KEY"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx := context.Background()
+
+	// Scrape a single URL
+	doc, err := client.Scrape(ctx, "https://firecrawl.dev", &firecrawl.ScrapeOptions{
+		Formats: []string{"markdown"},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(doc.Markdown)
+
+	// Use the Agent for autonomous data gathering
+	agent, err := client.Agent(ctx, &firecrawl.AgentOptions{
+		Prompt: "Find the founders of Stripe",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(agent.Data)
+
+	// Crawl a website (automatically waits for completion)
+	job, err := client.Crawl(ctx, "https://docs.firecrawl.dev", &firecrawl.CrawlOptions{
+		Limit: firecrawl.Int(50),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Crawled %d pages\n", len(job.Data))
+
+	// Search the web
+	results, err := client.Search(ctx, "best AI data tools 2024", &firecrawl.SearchOptions{
+		Limit: firecrawl.Int(10),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(results)
+}
+```
+
+### Java
+
+Add the dependency ([Gradle/Maven](https://docs.firecrawl.dev/sdks/java#installation)):
+```groovy
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    implementation 'com.github.firecrawl:firecrawl-java-sdk:2.0'
+}
+```
+```java
+import dev.firecrawl.client.FirecrawlClient;
+import dev.firecrawl.model.*;
+
+FirecrawlClient client = new FirecrawlClient(
+    System.getenv("FIRECRAWL_API_KEY"), null, null
+);
+
+// Scrape a single URL
+ScrapeParams scrapeParams = new ScrapeParams();
+scrapeParams.setFormats(new String[]{"markdown"});
+FirecrawlDocument doc = client.scrapeURL("https://firecrawl.dev", scrapeParams);
+System.out.println(doc.getMarkdown());
+
+// Use the Agent for autonomous data gathering
+AgentParams agentParams = new AgentParams("Find the founders of Stripe");
+AgentResponse start = client.createAgent(agentParams);
+AgentStatusResponse result = client.getAgentStatus(start.getId());
+System.out.println(result.getData());
+
+// Crawl a website (polls until completion)
+CrawlParams crawlParams = new CrawlParams();
+crawlParams.setLimit(50);
+CrawlStatusResponse job = client.crawlURL("https://docs.firecrawl.dev", crawlParams, null, 10);
+for (FirecrawlDocument page : job.getData()) {
+    System.out.println(page.getMetadata().get("sourceURL"));
+}
+
+// Search the web
+SearchParams searchParams = new SearchParams("best AI data tools 2024");
+searchParams.setLimit(10);
+SearchResponse results = client.search(searchParams);
+for (SearchResult r : results.getResults()) {
+    System.out.println(r.getTitle() + ": " + r.getUrl());
+}
+```
+
+### Elixir
+
+Add the dependency:
+```elixir
+def deps do
+  [
+    {:firecrawl, "~> 1.0"}
+  ]
+end
+```
+```elixir
+# Scrape a URL
+{:ok, response} = Firecrawl.scrape_and_extract_from_url(
+  url: "https://firecrawl.dev",
+  formats: ["markdown"]
+)
+
+# Crawl a website
+{:ok, response} = Firecrawl.crawl_urls(
+  url: "https://docs.firecrawl.dev",
+  limit: 50
+)
+
+# Search the web
+{:ok, response} = Firecrawl.search_and_scrape(
+  query: "best AI data tools 2024",
+  limit: 10
+)
+
+# Map URLs
+{:ok, response} = Firecrawl.map_urls(url: "https://example.com")
+```
+
+### Rust
+
+Add the dependency:
+```toml
+[dependencies]
+firecrawl = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+```rust
+use firecrawl::{Client, ScrapeOptions, Format, CrawlOptions};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new("fc-YOUR_API_KEY")?;
+
+    // Scrape a URL
+    let document = client.scrape("https://firecrawl.dev", None).await?;
+    println!("{:?}", document.markdown);
+
+    // Crawl a website
+    let options = CrawlOptions {
+        limit: Some(50),
+        ..Default::default()
+    };
+    let result = client.crawl("https://docs.firecrawl.dev", options).await?;
+    println!("Crawled {} pages", result.data.len());
+
+    // Search the web
+    let response = client.search("best web scraping tools 2024", None).await?;
+    println!("{:?}", response.data);
+
+    Ok(())
+}
+```
+
+### Ruby
+
+Install the SDK:
+```bash
+gem install firecrawl-sdk
+```
+```ruby
+require "firecrawl"
+
+client = Firecrawl::Client.new(api_key: "fc-YOUR_API_KEY")
+
+# Scrape a single URL
+doc = client.scrape("https://firecrawl.dev",
+  Firecrawl::Models::ScrapeOptions.new(formats: ["markdown"]))
+puts doc.markdown
+
+# Use the Agent for autonomous data gathering
+result = client.agent(
+  Firecrawl::Models::AgentOptions.new(prompt: "Find the founders of Stripe"))
+puts result.data
+
+# Crawl a website (automatically waits for completion)
+job = client.crawl("https://docs.firecrawl.dev",
+  Firecrawl::Models::CrawlOptions.new(limit: 50))
+job.data.each { |d| puts d.metadata.source_url }
+
+# Search the web
+results = client.search("best AI data tools 2024",
+  Firecrawl::Models::SearchOptions.new(limit: 10))
+puts results
+```
+
+### .NET
+
+Install the SDK:
+```bash
+dotnet add package firecrawl-sdk
+```
+```csharp
+using Firecrawl;
+using Firecrawl.Models;
+
+var client = new FirecrawlClient("fc-YOUR_API_KEY");
+
+// Scrape a single URL
+var doc = await client.ScrapeAsync("https://firecrawl.dev",
+    new ScrapeOptions { Formats = new List<object> { "markdown" } });
+Console.WriteLine(doc.Markdown);
+
+// Crawl a website (automatically waits for completion)
+var job = await client.CrawlAsync("https://docs.firecrawl.dev",
+    new CrawlOptions { Limit = 50 });
+Console.WriteLine($"Crawled {job.Data.Count} pages");
+
+// Search the web
+var results = await client.SearchAsync("best AI data tools 2024",
+    new SearchOptions { Limit = 10 });
+Console.WriteLine(results);
+```
+
+### PHP
+
+Install the SDK:
+```bash
+composer require firecrawl/firecrawl-sdk
+```
+```php
+<?php
+
+use Firecrawl\Client\FirecrawlClient;
+use Firecrawl\Models\ScrapeOptions;
+use Firecrawl\Models\CrawlOptions;
+use Firecrawl\Models\SearchOptions;
+
+$client = FirecrawlClient::create(apiKey: 'fc-YOUR_API_KEY');
+
+// Scrape a single URL
+$doc = $client->scrape('https://firecrawl.dev', ScrapeOptions::with(
+    formats: ['markdown'],
+));
+echo $doc->getMarkdown();
+
+// Crawl a website (automatically waits for completion)
+$job = $client->crawl('https://docs.firecrawl.dev', CrawlOptions::with(limit: 50));
+foreach ($job->getData() as $page) {
+    echo $page->getMetadata()['sourceURL'] . "\n";
+}
+
+// Search the web
+$results = $client->search('best AI data tools 2024', SearchOptions::with(limit: 10));
+print_r($results);
+```
+
+---
+
+## Integrations
+
+**Agents & AI Tools**
+- [Firecrawl Skill](https://docs.firecrawl.dev/sdks/cli)
+- [Firecrawl CLI Skills](https://github.com/firecrawl/cli#agent-skills)
+- [Firecrawl Workflows](https://github.com/firecrawl/firecrawl-workflows)
+- [Firecrawl MCP](https://github.com/mendableai/firecrawl-mcp-server)
+
+**Platforms**
+- [Lovable](https://docs.lovable.dev/integrations/firecrawl)
+- [Zapier](https://zapier.com/apps/firecrawl/integrations)
+- [n8n](https://n8n.io/integrations/firecrawl/)
+
+[View all integrations →](https://www.firecrawl.dev/integrations)
+
+**Missing your favorite tool?** [Open an issue](https://github.com/mendableai/firecrawl/issues) and let us know!
+
+---
+
+## Resources
+
+- [Documentation](https://docs.firecrawl.dev)
+- [API Reference](https://docs.firecrawl.dev/api-reference/introduction)
+- [Playground](https://firecrawl.dev/playground)
+- [Changelog](https://firecrawl.dev/changelog)
+
+---
+
+## Open Source vs Cloud
+
+Firecrawl is open source under the AGPL-3.0 license. The cloud version at [firecrawl.dev](https://firecrawl.dev) includes additional features:
+
+To run locally, see the [Contributing Guide](https://github.com/firecrawl/firecrawl/blob/main/CONTRIBUTING.md). To self-host, see [Self-Hosting Guide](https://docs.firecrawl.dev/contributing/self-host).
+
+---
+
+## Contributing
+
+We love contributions! Please read our [Contributing Guide](https://github.com/firecrawl/firecrawl/blob/main/CONTRIBUTING.md) before submitting a pull request.
+
+### Contributors
+
+<a href="https://github.com/firecrawl/firecrawl/graphs/contributors">
+  <img alt="contributors" src="https://contrib.rocks/image?repo=firecrawl/firecrawl"/>
+</a>
+
+---
+
+## License
+
+This project is primarily licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). The SDKs and some UI components are licensed under the MIT License. See the LICENSE files in specific directories for details.
+
+---
+
+**It is the sole responsibility of end users to respect websites' policies when scraping.** Users are advised to adhere to applicable privacy policies and terms of use. By default, Firecrawl respects robots.txt directives. By using Firecrawl, you agree to comply with these conditions.
+
+<p align="right" style="font-size: 14px; color: #555; margin-top: 20px;">
+  <a href="#readme-top" style="text-decoration: none; color: #007bff; font-weight: bold;">
+    ↑ Back to Top ↑
   </a>
 </p>

@@ -1,261 +1,1499 @@
 # AUDIT REPORT: blob_05_architecture_map
 # DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
 # PAYLOAD_COLUMN: payload_blob
-# GENERATED_AT: 2026-07-17T15:46:05
+# GENERATED_AT: 2026-07-17T22:45:28
 
-=== REPO: trailbaseio/trailbase ===
+=== REPO: tldraw/tldraw ===
 # Architecture Map
 
-[cli] (6 arquivos)
-  [crates/cli]
-  - crates/cli/Cargo.toml
-  - crates/cli/build.rs
-  [crates/cli/src]
-  - crates/cli/src/args.rs
-  - crates/cli/src/import.rs
-  - crates/cli/src/lib.rs
-  - crates/cli/src/wasm.rs
+[config] (91 arquivos)
+  [.]
+  - package.json
+  [apps/analytics]
+  - apps/analytics/package.json
+  - apps/analytics/tsconfig.json
+  [apps/analytics-worker]
+  - apps/analytics-worker/package.json
+  - apps/analytics-worker/tsconfig.json
+  [apps/bemo-worker]
+  - apps/bemo-worker/package.json
+  - apps/bemo-worker/tsconfig.json
+  [apps/dotcom/asset-upload-worker]
+  - apps/dotcom/asset-upload-worker/package.json
+  - apps/dotcom/asset-upload-worker/tsconfig.json
+  [apps/dotcom/client]
+  - apps/dotcom/client/package.json
+  - apps/dotcom/client/tsconfig.json
+  [apps/dotcom/image-resize-worker]
+  - apps/dotcom/image-resize-worker/package.json
+  - apps/dotcom/image-resize-worker/tsconfig.json
+  [apps/dotcom/sync-worker]
+  - apps/dotcom/sync-worker/package.json
+  - apps/dotcom/sync-worker/tsconfig.json
+  [apps/dotcom/tldrawusercontent-worker]
+  - apps/dotcom/tldrawusercontent-worker/package.json
+  - apps/dotcom/tldrawusercontent-worker/tsconfig.json
+  [apps/dotcom/zero-cache]
+  - apps/dotcom/zero-cache/package.json
+  - apps/dotcom/zero-cache/tsconfig.json
+  [apps/mcp-app]
+  - apps/mcp-app/package.json
+  - apps/mcp-app/tsconfig.json
+  [apps/vscode/editor]
+  - apps/vscode/editor/package.json
+  - apps/vscode/editor/tsconfig.json
+  [apps/vscode/extension]
+  - apps/vscode/extension/package.json
+  - apps/vscode/extension/tsconfig.json
+  [internal/apps-script]
+  - internal/apps-script/package.json
+  - internal/apps-script/tsconfig.json
+  [internal/config]
+  - internal/config/package.json
+  - internal/config/tsconfig.json
+  [internal/health-worker]
+  - internal/health-worker/package.json
+  - internal/health-worker/tsconfig.json
+  [internal/scripts]
+  - internal/scripts/package.json
+  - internal/scripts/tsconfig.json
+  [packages/assets]
+  - packages/assets/package.json
+  - packages/assets/tsconfig.json
+  [packages/create-tldraw]
+  - packages/create-tldraw/package.json
+  - packages/create-tldraw/tsconfig.json
+  [packages/dotcom-shared]
+  - packages/dotcom-shared/package.json
+  - packages/dotcom-shared/tsconfig.json
+  [packages/driver]
+  - packages/driver/package.json
+  - packages/driver/tsconfig.json
+  [packages/editor]
+  - packages/editor/package.json
+  - packages/editor/tsconfig.json
+  [packages/mermaid]
+  - packages/mermaid/package.json
+  - packages/mermaid/tsconfig.json
+  [packages/namespaced-tldraw]
+  - packages/namespaced-tldraw/package.json
+  - packages/namespaced-tldraw/tsconfig.json
+  [packages/state]
+  - packages/state/package.json
+  - packages/state/tsconfig.json
+  [packages/state-react]
+  - packages/state-react/package.json
+  - packages/state-react/tsconfig.json
+  [packages/store]
+  - packages/store/package.json
+  - packages/store/tsconfig.json
+  [packages/sync]
+  - packages/sync/package.json
+  - packages/sync/tsconfig.json
+  [packages/sync-core]
+  - packages/sync-core/package.json
+  - packages/sync-core/tsconfig.json
+  [packages/tldraw]
+  - packages/tldraw/package.json
+  - packages/tldraw/tsconfig.json
+  [packages/tlschema]
+  - packages/tlschema/package.json
+  - packages/tlschema/tsconfig.json
+  [packages/utils]
+  - packages/utils/package.json
+  - packages/utils/tsconfig.json
+  [packages/validate]
+  - packages/validate/package.json
+  - packages/validate/tsconfig.json
+  [packages/worker-shared]
+  - packages/worker-shared/package.json
+  - packages/worker-shared/tsconfig.json
+  [templates/agent]
+  - templates/agent/package.json
+  - templates/agent/tsconfig.json
+  [templates/branching-chat]
+  - templates/branching-chat/package.json
+  - templates/branching-chat/tsconfig.json
+  [templates/chat]
+  - templates/chat/package.json
+  - templates/chat/tsconfig.json
+  [templates/image-pipeline]
+  - templates/image-pipeline/package.json
+  - templates/image-pipeline/tsconfig.json
+  [templates/nextjs]
+  - templates/nextjs/package.json
+  - templates/nextjs/tsconfig.json
+  [templates/shader]
+  - templates/shader/package.json
+  - templates/shader/tsconfig.json
+  [templates/simple-server-example]
+  - templates/simple-server-example/package.json
+  - templates/simple-server-example/tsconfig.json
+  [templates/socketio-server-example]
+  - templates/socketio-server-example/package.json
+  - templates/socketio-server-example/tsconfig.json
+  [templates/sync-cloudflare]
+  - templates/sync-cloudflare/package.json
+  - templates/sync-cloudflare/tsconfig.json
+  [templates/vite]
+  - templates/vite/package.json
+  - templates/vite/tsconfig.json
+  [templates/vue]
+  - templates/vue/package.json
+  - templates/vue/tsconfig.json
+  [templates/workflow]
+  - templates/workflow/package.json
+  - templates/workflow/tsconfig.json
 
-[config] (25 arquivos)
+[core] (228 arquivos)
+  [.]
+  - lazy.config.ts
+  - vitest.config.ts
+  [apps/analytics]
+  - apps/analytics/vite.config.ts
+  - apps/analytics/vitest.config.ts
+  [apps/analytics-worker]
+  - apps/analytics-worker/vitest.config.ts
+  [apps/analytics-worker/src]
+  - apps/analytics-worker/src/worker.ts
+  [apps/analytics/src]
+  - apps/analytics/src/constants.ts
+  - apps/analytics/src/index.ts
+  - apps/analytics/src/types.ts
+  [apps/bemo-worker]
+  - apps/bemo-worker/vitest.config.ts
+  [apps/bemo-worker/src]
+  - apps/bemo-worker/src/BemoDO.ts
+  - apps/bemo-worker/src/makePermissiveSchema.ts
+  - apps/bemo-worker/src/types.ts
+  - apps/bemo-worker/src/worker.ts
+  [apps/dotcom/asset-upload-worker]
+  - apps/dotcom/asset-upload-worker/vitest.config.ts
+  [apps/dotcom/client]
+  - apps/dotcom/client/playwright.config.ts
+  - apps/dotcom/client/sentry-release-name.ts
+  - apps/dotcom/client/sentry.client.config.ts
+  - apps/dotcom/client/setupTests.js
+  - apps/dotcom/client/version.ts
+  - apps/dotcom/client/vite.config.ts
+  - apps/dotcom/client/vitest.config.ts
+  [apps/dotcom/image-resize-worker]
+  - apps/dotcom/image-resize-worker/vitest.config.ts
+  [apps/dotcom/sync-worker]
+  - apps/dotcom/sync-worker/vitest.config.ts
+  [apps/dotcom/zero-cache]
+  - apps/dotcom/zero-cache/migrate.ts
+  - apps/dotcom/zero-cache/validateMigrationFilenames.ts
+  - apps/dotcom/zero-cache/vitest.config.ts
+  [apps/mcp-app]
+  - apps/mcp-app/vite.config.ts
+  [apps/mcp-app/scripts]
+  - apps/mcp-app/scripts/extract-editor-api.ts
+  [apps/mcp-app/src]
+  - apps/mcp-app/src/canvas-store.ts
+  - apps/mcp-app/src/logger.ts
+  - apps/mcp-app/src/register-tools.ts
+  - apps/mcp-app/src/worker.ts
+  [apps/vscode]
+  - apps/vscode/messages.ts
+  [internal/apps-script]
+  - internal/apps-script/build-workspace-app.ts
+  [internal/config/vitest]
+  - internal/config/vitest/node-preset.ts
+  - internal/config/vitest/setup.ts
+  [internal/health-worker/src]
+  - internal/health-worker/src/discord.ts
+  - internal/health-worker/src/index.ts
+  - internal/health-worker/src/updown_types.ts
+  [internal/scripts]
+  - internal/scripts/api-check.ts
+  - internal/scripts/benchmark-dict-validator.ts
+  - internal/scripts/benchmark-validators.ts
+  - internal/scripts/build-api.ts
+  - internal/scripts/build-package.ts
+  - internal/scripts/bump-versions.ts
+  - internal/scripts/check-circular-deps.ts
+  - internal/scripts/check-packages.ts
+  - internal/scripts/check-worker-bundle.ts
+  - internal/scripts/create-docs-reference.ts
+  - internal/scripts/deploy-analytics.ts
+  - internal/scripts/deploy-bemo.ts
+  - internal/scripts/deploy-dotcom.ts
+  - internal/scripts/export-template.ts
+  - internal/scripts/fetch-fly-logs.ts
+  - internal/scripts/fetch-fly-metrics.ts
+  - internal/scripts/fly-common.ts
+  - internal/scripts/generate-test-licenses.ts
+  - internal/scripts/generate-tldraw-package-docs.ts
+  - internal/scripts/i18n-download-strings.ts
+  - internal/scripts/i18n-fix-strings.ts
+  - internal/scripts/i18n-upload-strings.ts
+  - internal/scripts/license-report.ts
+  - internal/scripts/lint-staged.ts
+  - internal/scripts/lint.ts
+  - internal/scripts/prepack.ts
+  - internal/scripts/profile-tsserver.ts
+  - internal/scripts/profile-typescript.ts
+  - internal/scripts/prune-preview-deploys.ts
+  - internal/scripts/publish-editor-extensions.ts
+  - internal/scripts/publish-manual.ts
+  - internal/scripts/publish-new.ts
+  - internal/scripts/publish-patch.ts
+  - internal/scripts/publish-prerelease.ts
+  - internal/scripts/purge-css.ts
+  - internal/scripts/refresh-assets.ts
+  - internal/scripts/refresh-create-templates.ts
+  - internal/scripts/trigger-dotcom-hotfix.ts
+  - internal/scripts/trigger-sdk-hotfix.ts
+  - internal/scripts/typecheck.ts
+  - internal/scripts/update-pr-template.ts
+  [internal/scripts/dotcom]
+  - internal/scripts/dotcom/cleanup-test-files.ts
+  - internal/scripts/dotcom/copy-random-files-to-staging.ts
+  [internal/scripts/lib]
+  - internal/scripts/lib/add-extensions.ts
+  - internal/scripts/lib/deploy.ts
+  - internal/scripts/lib/didAnyPackageChange.ts
+  - internal/scripts/lib/discord.ts
+  - internal/scripts/lib/exec.ts
+  - internal/scripts/lib/file.ts
+  - internal/scripts/lib/kill-tree.ts
+  - internal/scripts/lib/labels.ts
+  - internal/scripts/lib/makeEnv.ts
+  - internal/scripts/lib/nicelog.ts
+  - internal/scripts/lib/pr-info.ts
+  - internal/scripts/lib/publishing.ts
+  - internal/scripts/lib/sort-unions.ts
+  - internal/scripts/lib/types.ts
+  - internal/scripts/lib/upload-static-assets.ts
+  - internal/scripts/lib/worker-externals.ts
+  - internal/scripts/lib/workspace.ts
+  [internal/scripts/oxlint]
+  - internal/scripts/oxlint/tldraw-plugin.mjs
+  [internal/scripts/workers]
+  - internal/scripts/workers/dev.ts
+  [packages/assets]
+  - packages/assets/imports.js
+  - packages/assets/imports.vite.js
+  - packages/assets/selfHosted.js
+  - packages/assets/urls.js
+  - packages/assets/utils.js
+  [packages/create-tldraw]
+  - packages/create-tldraw/vitest.config.ts
+  [packages/create-tldraw/src]
+  - packages/create-tldraw/src/group-select.ts
+  - packages/create-tldraw/src/main.ts
+  - packages/create-tldraw/src/templates.ts
+  - packages/create-tldraw/src/utils.ts
+  - packages/create-tldraw/src/wrap-ansi.ts
+  [packages/dotcom-shared]
+  - packages/dotcom-shared/vitest.config.ts
+  [packages/dotcom-shared/src]
+  - packages/dotcom-shared/src/OptimisticAppStore.ts
+  - packages/dotcom-shared/src/capabilities.ts
+  - packages/dotcom-shared/src/constants.ts
+  - packages/dotcom-shared/src/index.ts
+  - packages/dotcom-shared/src/license.ts
+  - packages/dotcom-shared/src/mutators.ts
+  - packages/dotcom-shared/src/queries.ts
+  - packages/dotcom-shared/src/roles.ts
+  - packages/dotcom-shared/src/routes.ts
+  - packages/dotcom-shared/src/tlaSchema.ts
+  - packages/dotcom-shared/src/types.ts
+  [packages/driver]
+  - packages/driver/vitest.config.ts
+  [packages/driver/src]
+  - packages/driver/src/index.ts
+  [packages/editor]
+  - packages/editor/setupTests.js
+  - packages/editor/setupVitest.js
+  - packages/editor/vitest.config.ts
+  [packages/editor/src]
+  - packages/editor/src/index.ts
+  - packages/editor/src/version.ts
+  [packages/mermaid]
+  - packages/mermaid/vitest.config.ts
+  [packages/mermaid/src]
+  - packages/mermaid/src/blueprint.ts
+  - packages/mermaid/src/colors.ts
+  - packages/mermaid/src/createMermaidDiagram.ts
+  - packages/mermaid/src/defaultMermaidNodeRenderSpec.ts
+  - packages/mermaid/src/flowchartDiagram.ts
+  - packages/mermaid/src/index.ts
+  - packages/mermaid/src/mermaidNodeCreateShape.ts
+  - packages/mermaid/src/mindmapDiagram.ts
+  - packages/mermaid/src/renderBlueprint.ts
+  - packages/mermaid/src/sequenceDiagram.ts
+  - packages/mermaid/src/stateDiagram.ts
+  - packages/mermaid/src/svgParsing.ts
+  - packages/mermaid/src/utils.ts
+  [packages/namespaced-tldraw]
+  - packages/namespaced-tldraw/vitest.config.ts
+  [packages/namespaced-tldraw/scripts]
+  - packages/namespaced-tldraw/scripts/copy-css-files.mjs
+  [packages/namespaced-tldraw/src]
+  - packages/namespaced-tldraw/src/index.ts
+  [packages/state]
+  - packages/state/vitest.config.ts
+  [packages/state-react]
+  - packages/state-react/vitest.config.ts
+  [packages/state-react/src]
+  - packages/state-react/src/index.ts
+  [packages/state/src]
+  - packages/state/src/index.ts
+  [packages/store]
+  - packages/store/setupTests.js
+  - packages/store/vitest.config.ts
+  [packages/store/src]
+  - packages/store/src/index.ts
+  [packages/sync]
+  - packages/sync/setupVitest.js
+  - packages/sync/vitest.config.ts
+  [packages/sync-core]
+  - packages/sync-core/setupVitest.js
+  - packages/sync-core/vitest.config.ts
+  [packages/sync-core/src]
+  - packages/sync-core/src/index.ts
+  [packages/sync/src]
+  - packages/sync/src/index.ts
+  - packages/sync/src/useSync.ts
+  - packages/sync/src/useSyncDemo.ts
+  [packages/tldraw]
+  - packages/tldraw/setupVitest.js
+  - packages/tldraw/vitest.config.ts
+  [packages/tldraw/scripts]
+  - packages/tldraw/scripts/copy-css-files.mjs
+  [packages/tldraw/src]
+  - packages/tldraw/src/index.ts
+  [packages/tlschema]
+  - packages/tlschema/vitest.config.ts
+  [packages/tlschema/src]
+  - packages/tlschema/src/TLStore.ts
+  - packages/tlschema/src/createPresenceStateDerivation.ts
+  - packages/tlschema/src/createTLSchema.ts
+  - packages/tlschema/src/index.ts
+  - packages/tlschema/src/recordsWithProps.ts
+  - packages/tlschema/src/store-migrations.ts
+  - packages/tlschema/src/util-types.ts
+  [packages/utils]
+  - packages/utils/setupTests.js
+  - packages/utils/setupVitest.js
+  - packages/utils/vitest.config.ts
+  [packages/utils/src]
+  - packages/utils/src/index.ts
+  [packages/validate]
+  - packages/validate/vitest.config.ts
+  [packages/validate/src]
+  - packages/validate/src/index.ts
+  [packages/worker-shared]
+  - packages/worker-shared/vitest.config.ts
+  [packages/worker-shared/src]
+  - packages/worker-shared/src/bookmarks.ts
+  - packages/worker-shared/src/env.ts
+  - packages/worker-shared/src/errors.ts
+  - packages/worker-shared/src/handleRequest.ts
+  - packages/worker-shared/src/index.ts
+  - packages/worker-shared/src/origins.ts
+  - packages/worker-shared/src/sentry.ts
+  - packages/worker-shared/src/userAssetUploads.ts
+  [skills/pr-walkthrough/video]
+  - skills/pr-walkthrough/video/build.mjs
+  [skills/simplify-trace/scripts]
+  - skills/simplify-trace/scripts/simplify-trace.mjs
+  [skills/skill-creator/scripts]
+  - skills/skill-creator/scripts/init-skill.ts
+  - skills/skill-creator/scripts/package-skill.ts
+  - skills/skill-creator/scripts/quick-validate.ts
+  [skills/tldraw-migrate]
+  - skills/tldraw-migrate/detect-target.mjs
+  - skills/tldraw-migrate/detect-versions.mjs
+  - skills/tldraw-migrate/fetch-release-notes.mjs
+  [templates/agent]
+  - templates/agent/vite.config.ts
+  [templates/agent/client]
+  - templates/agent/client/AgentHelpers.ts
+  [templates/agent/scripts]
+  - templates/agent/scripts/vite-zod-locale-plugin.js
+  - templates/agent/scripts/zod-locales-shim.js
+  [templates/agent/shared]
+  - templates/agent/shared/models.ts
+  [templates/agent/worker]
+  - templates/agent/worker/environment.ts
+  - templates/agent/worker/worker.ts
+  [templates/branching-chat]
+  - templates/branching-chat/vite.config.ts
+  [templates/branching-chat/worker]
+  - templates/branching-chat/worker/types.ts
+  - templates/branching-chat/worker/worker.ts
+  [templates/chat]
+  - templates/chat/next.config.mjs
+  [templates/image-pipeline]
+  - templates/image-pipeline/vite.config.ts
+  [templates/image-pipeline/src]
+  - templates/image-pipeline/src/utils.ts
+  [templates/image-pipeline/worker]
+  - templates/image-pipeline/worker/worker.ts
+  [templates/nextjs]
+  - templates/nextjs/next.config.mjs
+  [templates/shader]
+  - templates/shader/vite.config.ts
+  [templates/shader/src]
+  - templates/shader/src/WebGLManager.ts
+  [templates/simple-server-example]
+  - templates/simple-server-example/vite.config.mts
+  [templates/socketio-server-example]
+  - templates/socketio-server-example/vite.config.mts
+  [templates/sync-cloudflare]
+  - templates/sync-cloudflare/vite.config.ts
+  [templates/sync-cloudflare/client]
+  - templates/sync-cloudflare/client/localStorage.ts
+  [templates/sync-cloudflare/worker]
+  - templates/sync-cloudflare/worker/TldrawDurableObject.ts
+  - templates/sync-cloudflare/worker/assetUploads.ts
+  - templates/sync-cloudflare/worker/worker.ts
+  [templates/vite]
+  - templates/vite/vite.config.ts
+  [templates/vue]
+  - templates/vue/vite.config.ts
+  [templates/vue/src]
+  - templates/vue/src/main.ts
+  [templates/workflow]
+  - templates/workflow/vite.config.ts
+  [templates/workflow/src]
+  - templates/workflow/src/utils.ts
+
+[docs] (37 arquivos)
+  [apps/docs]
+  - apps/docs/next.config.js
+  - apps/docs/package.json
+  - apps/docs/postcss.config.js
+  - apps/docs/tailwind.config.js
+  - apps/docs/tsconfig.json
+  - apps/docs/version.ts
+  - apps/docs/vitest.config.ts
+  - apps/docs/watcher.ts
+  [apps/docs/app]
+  - apps/docs/app/sitemap.ts
+  [apps/docs/scripts]
+  - apps/docs/scripts/add-framer-rewrites.ts
+  - apps/docs/scripts/check-broken-links.ts
+  - apps/docs/scripts/check-external-links.ts
+  - apps/docs/scripts/create-api-markdown.ts
+  - apps/docs/scripts/create-llms-txt.ts
+  - apps/docs/scripts/fetch-api-source.ts
+  - apps/docs/scripts/fetch-releases.ts
+  - apps/docs/scripts/refresh-content.ts
+  - apps/docs/scripts/reset-db.ts
+  - apps/docs/scripts/submit-newsletter-signup.ts
+  - apps/docs/scripts/update-algolia-index.ts
+  [apps/docs/types]
+  - apps/docs/types/content-types.ts
+  [apps/docs/utils]
+  - apps/docs/utils/ContentDatabase.ts
+  - apps/docs/utils/TldrawApiModel.ts
+  - apps/docs/utils/addAuthors.ts
+  - apps/docs/utils/addContent.ts
+  - apps/docs/utils/algolia.ts
+  - apps/docs/utils/asset-url.ts
+  - apps/docs/utils/autoLinkDocs.ts
+  - apps/docs/utils/cn.ts
+  - apps/docs/utils/config.ts
+  - apps/docs/utils/debounce.ts
+  - apps/docs/utils/nicelog.ts
+  - apps/docs/utils/replace-md-links.ts
+  - apps/docs/utils/request-license.ts
+  - apps/docs/utils/search-api.ts
+  - apps/docs/utils/sitemap-canonical-paths.ts
+  - apps/docs/utils/storage.ts
+
+[frontend] (29 arquivos)
+  [apps/docs/app]
+  - apps/docs/app/analytics.tsx
+  - apps/docs/app/layout.tsx
+  - apps/docs/app/not-found.tsx
+  [apps/docs/utils]
+  - apps/docs/utils/parse-markdown.tsx
+  [internal/scripts]
+  - internal/scripts/extract-draft-changelog.tsx
+  [templates/agent/client]
+  - templates/agent/client/App.tsx
+  - templates/agent/client/main.tsx
+  [templates/branching-chat/client]
+  - templates/branching-chat/client/App.tsx
+  - templates/branching-chat/client/constants.tsx
+  - templates/branching-chat/client/disableTransparency.tsx
+  - templates/branching-chat/client/main.tsx
+  [templates/image-pipeline/src]
+  - templates/image-pipeline/src/App.tsx
+  - templates/image-pipeline/src/constants.tsx
+  - templates/image-pipeline/src/disableTransparency.tsx
+  - templates/image-pipeline/src/main.tsx
+  [templates/shader/src]
+  - templates/shader/src/App.tsx
+  - templates/shader/src/WebGLCanvas.tsx
+  - templates/shader/src/main.tsx
+  [templates/sync-cloudflare/client]
+  - templates/sync-cloudflare/client/getBookmarkPreview.tsx
+  - templates/sync-cloudflare/client/main.tsx
+  - templates/sync-cloudflare/client/multiplayerAssetStore.tsx
+  [templates/vite/src]
+  - templates/vite/src/App.tsx
+  - templates/vite/src/main.tsx
+  [templates/vue/src]
+  - templates/vue/src/App.vue
+  - templates/vue/src/TldrawWrapper.tsx
+  [templates/workflow/src]
+  - templates/workflow/src/App.tsx
+  - templates/workflow/src/constants.tsx
+  - templates/workflow/src/disableTransparency.tsx
+  - templates/workflow/src/main.tsx
+
+[tests] (29 arquivos)
+  [apps/bemo-worker/src]
+  - apps/bemo-worker/src/worker.test.ts
+  [apps/docs/utils]
+  - apps/docs/utils/asset-url.test.ts
+  - apps/docs/utils/parse-markdown.test.tsx
+  - apps/docs/utils/sitemap-canonical-paths.test.ts
+  [apps/dotcom/zero-cache]
+  - apps/dotcom/zero-cache/delete_file_states.test.ts
+  - apps/dotcom/zero-cache/validateMigrationFilenames.test.ts
+  [packages/create-tldraw/src]
+  - packages/create-tldraw/src/utils.test.ts
+  - packages/create-tldraw/src/wrap-ansi.test.ts
+  [packages/dotcom-shared/src]
+  - packages/dotcom-shared/src/index.test.ts
+  - packages/dotcom-shared/src/mutators.test.ts
+  - packages/dotcom-shared/src/roles.test.ts
+  [packages/mermaid/src]
+  - packages/mermaid/src/createMermaidDiagram.test.ts
+  - packages/mermaid/src/layoutParsing.test.ts
+  - packages/mermaid/src/mermaidDiagrams.test.ts
+  - packages/mermaid/src/mermaidNodeCreateShape.test.ts
+  - packages/mermaid/src/svgParsing.test.ts
+  [packages/namespaced-tldraw/src]
+  - packages/namespaced-tldraw/src/index.test.ts
+  [packages/sync/src]
+  - packages/sync/src/index.test.ts
+  - packages/sync/src/useSyncDemo.test.ts
+  [packages/tlschema/src]
+  - packages/tlschema/src/TLStore.test.ts
+  - packages/tlschema/src/createPresenceStateDerivation.test.ts
+  - packages/tlschema/src/createTLSchema.test.ts
+  - packages/tlschema/src/migrations.test.ts
+  - packages/tlschema/src/recordsWithProps.test.ts
+  - packages/tlschema/src/store-migrations.test.ts
+  [packages/worker-shared/src]
+  - packages/worker-shared/src/bookmarks.test.ts
+  - packages/worker-shared/src/index.test.ts
+  - packages/worker-shared/src/sentry.test.ts
+  - packages/worker-shared/src/userAssetUploads.test.ts
+
+=== REPO: bytecodealliance/wasmtime ===
+# Architecture Map
+
+[cli] (12 arquivos)
+  [cranelift/assembler-x64/src]
+  - cranelift/assembler-x64/src/main.rs
+  [src/bin]
+  - src/bin/wasmtime.rs
+  [src/commands]
+  - src/commands/compile.rs
+  - src/commands/config.rs
+  - src/commands/explore.rs
+  - src/commands/hot_blocks.rs
+  - src/commands/objdump.rs
+  - src/commands/run.rs
+  - src/commands/serve.rs
+  - src/commands/settings.rs
+  - src/commands/wast.rs
+  - src/commands/wizer.rs
+
+[config] (83 arquivos)
   [.]
   - Cargo.toml
-  [client/go/trailbase]
-  - client/go/trailbase/go.mod
-  [client/python]
-  - client/python/pyproject.toml
-  [crates/assets]
-  - crates/assets/Cargo.toml
-  [crates/auth-config]
-  - crates/auth-config/Cargo.toml
-  [crates/auth-ui]
-  - crates/auth-ui/Cargo.toml
-  [crates/auth-ui/ui]
-  - crates/auth-ui/ui/package.json
-  - crates/auth-ui/ui/tsconfig.json
-  [crates/client]
-  - crates/client/Cargo.toml
+  [cranelift]
+  - cranelift/Cargo.toml
+  [cranelift/assembler-x64]
+  - cranelift/assembler-x64/Cargo.toml
+  [cranelift/assembler-x64/fuzz]
+  - cranelift/assembler-x64/fuzz/Cargo.toml
+  [cranelift/assembler-x64/meta]
+  - cranelift/assembler-x64/meta/Cargo.toml
+  [cranelift/bforest]
+  - cranelift/bforest/Cargo.toml
+  [cranelift/bitset]
+  - cranelift/bitset/Cargo.toml
+  [cranelift/codegen]
+  - cranelift/codegen/Cargo.toml
+  [cranelift/codegen/meta]
+  - cranelift/codegen/meta/Cargo.toml
+  [cranelift/codegen/shared]
+  - cranelift/codegen/shared/Cargo.toml
+  [cranelift/control]
+  - cranelift/control/Cargo.toml
+  [cranelift/entity]
+  - cranelift/entity/Cargo.toml
+  [cranelift/filetests]
+  - cranelift/filetests/Cargo.toml
+  [cranelift/frontend]
+  - cranelift/frontend/Cargo.toml
+  [cranelift/fuzzgen]
+  - cranelift/fuzzgen/Cargo.toml
+  [cranelift/interpreter]
+  - cranelift/interpreter/Cargo.toml
+  [cranelift/isle/fuzz]
+  - cranelift/isle/fuzz/Cargo.toml
+  [cranelift/isle/isle]
+  - cranelift/isle/isle/Cargo.toml
+  [cranelift/isle/islec]
+  - cranelift/isle/islec/Cargo.toml
+  [cranelift/jit]
+  - cranelift/jit/Cargo.toml
+  [cranelift/module]
+  - cranelift/module/Cargo.toml
+  [cranelift/native]
+  - cranelift/native/Cargo.toml
+  [cranelift/object]
+  - cranelift/object/Cargo.toml
+  [cranelift/reader]
+  - cranelift/reader/Cargo.toml
+  [cranelift/serde]
+  - cranelift/serde/Cargo.toml
+  [cranelift/srcgen]
+  - cranelift/srcgen/Cargo.toml
+  [cranelift/umbrella]
+  - cranelift/umbrella/Cargo.toml
+  [crates/bench-api]
+  - crates/bench-api/Cargo.toml
+  [crates/c-api]
+  - crates/c-api/Cargo.toml
+  [crates/c-api-macros]
+  - crates/c-api-macros/Cargo.toml
+  [crates/c-api/artifact]
+  - crates/c-api/artifact/Cargo.toml
+  [crates/cache]
+  - crates/cache/Cargo.toml
+  [crates/cli-flags]
+  - crates/cli-flags/Cargo.toml
+  [crates/component-macro]
+  - crates/component-macro/Cargo.toml
+  [crates/component-macro/test-helpers]
+  - crates/component-macro/test-helpers/Cargo.toml
+  [crates/component-util]
+  - crates/component-util/Cargo.toml
   [crates/core]
   - crates/core/Cargo.toml
-  [crates/extension]
-  - crates/extension/Cargo.toml
-  [crates/extension-so]
-  - crates/extension-so/Cargo.toml
-  [crates/pg-schema]
-  - crates/pg-schema/Cargo.toml
-  [crates/qs]
-  - crates/qs/Cargo.toml
-  [crates/reactive]
-  - crates/reactive/Cargo.toml
-  [crates/refinery]
-  - crates/refinery/Cargo.toml
-  [crates/sqlite]
-  - crates/sqlite/Cargo.toml
-  [crates/sqlvalue]
-  - crates/sqlvalue/Cargo.toml
+  [crates/cranelift]
+  - crates/cranelift/Cargo.toml
+  [crates/debugger]
+  - crates/debugger/Cargo.toml
+  [crates/environ]
+  - crates/environ/Cargo.toml
+  [crates/environ/fuzz]
+  - crates/environ/fuzz/Cargo.toml
+  [crates/explorer]
+  - crates/explorer/Cargo.toml
+  - crates/explorer/package.json
+  [crates/fiber]
+  - crates/fiber/Cargo.toml
+  [crates/fuzzing]
+  - crates/fuzzing/Cargo.toml
+  [crates/fuzzing/wasm-spec-interpreter]
+  - crates/fuzzing/wasm-spec-interpreter/Cargo.toml
+  [crates/gdbstub-component]
+  - crates/gdbstub-component/Cargo.toml
+  [crates/gdbstub-component/artifact]
+  - crates/gdbstub-component/artifact/Cargo.toml
+  [crates/jit-debug]
+  - crates/jit-debug/Cargo.toml
+  [crates/jit-icache-coherence]
+  - crates/jit-icache-coherence/Cargo.toml
+  [crates/misc/component-async-tests]
+  - crates/misc/component-async-tests/Cargo.toml
+  [crates/test-macros]
+  - crates/test-macros/Cargo.toml
+  [crates/test-programs]
+  - crates/test-programs/Cargo.toml
+  [crates/test-programs/artifacts]
+  - crates/test-programs/artifacts/Cargo.toml
+  [crates/test-util]
+  - crates/test-util/Cargo.toml
+  [crates/unwinder]
+  - crates/unwinder/Cargo.toml
+  [crates/versioned-export-macros]
+  - crates/versioned-export-macros/Cargo.toml
+  [crates/wasi]
+  - crates/wasi/Cargo.toml
+  [crates/wasi-config]
+  - crates/wasi-config/Cargo.toml
+  [crates/wasi-http]
+  - crates/wasi-http/Cargo.toml
+  [crates/wasi-io]
+  - crates/wasi-io/Cargo.toml
   [crates/wasi-keyvalue]
   - crates/wasi-keyvalue/Cargo.toml
-  [crates/wasm-runtime-axum]
-  - crates/wasm-runtime-axum/Cargo.toml
-  [crates/wasm-runtime-common]
-  - crates/wasm-runtime-common/Cargo.toml
-  [crates/wasm-runtime-guest]
-  - crates/wasm-runtime-guest/Cargo.toml
-  [crates/wasm-runtime-host]
-  - crates/wasm-runtime-host/Cargo.toml
-  [guests/typescript]
-  - guests/typescript/package.json
-  - guests/typescript/tsconfig.json
+  [crates/wasi-nn]
+  - crates/wasi-nn/Cargo.toml
+  [crates/wasi-preview1-component-adapter]
+  - crates/wasi-preview1-component-adapter/Cargo.toml
+  [crates/wasi-preview1-component-adapter/byte-array-literals]
+  - crates/wasi-preview1-component-adapter/byte-array-literals/Cargo.toml
+  [crates/wasi-preview1-component-adapter/verify]
+  - crates/wasi-preview1-component-adapter/verify/Cargo.toml
+  [crates/wasi-tls]
+  - crates/wasi-tls/Cargo.toml
+  [crates/wasmtime]
+  - crates/wasmtime/Cargo.toml
+  [crates/wast]
+  - crates/wast/Cargo.toml
+  [crates/wiggle]
+  - crates/wiggle/Cargo.toml
+  [crates/wiggle/generate]
+  - crates/wiggle/generate/Cargo.toml
+  [crates/wiggle/macro]
+  - crates/wiggle/macro/Cargo.toml
+  [crates/wiggle/test-helpers]
+  - crates/wiggle/test-helpers/Cargo.toml
+  [crates/winch]
+  - crates/winch/Cargo.toml
+  [crates/wit-bindgen]
+  - crates/wit-bindgen/Cargo.toml
+  [crates/wizer]
+  - crates/wizer/Cargo.toml
+  [crates/wizer/fuzz]
+  - crates/wizer/fuzz/Cargo.toml
+  [crates/wmemcheck]
+  - crates/wmemcheck/Cargo.toml
+  [fuzz]
+  - fuzz/Cargo.toml
+  [pulley]
+  - pulley/Cargo.toml
+  [pulley/fuzz]
+  - pulley/fuzz/Cargo.toml
+  [pulley/macros]
+  - pulley/macros/Cargo.toml
+  [winch/codegen]
+  - winch/codegen/Cargo.toml
 
-[core] (116 arquivos)
-  [client/dart/lib]
-  - client/dart/lib/trailbase.dart
-  [client/dotnet/trailbase]
-  - client/dotnet/trailbase/Client.cs
-  - client/dotnet/trailbase/RecordApi.cs
-  - client/dotnet/trailbase/TrailBase.csproj
-  [client/go/trailbase]
-  - client/go/trailbase/client.go
-  - client/go/trailbase/event.go
-  - client/go/trailbase/record_api.go
-  - client/go/trailbase/transport.go
-  [client/kotlin]
-  - client/kotlin/build.gradle.kts
-  - client/kotlin/settings.gradle.kts
-  [client/kotlin/lib]
-  - client/kotlin/lib/build.gradle.kts
-  [client/python/trailbase]
-  - client/python/trailbase/__init__.py
-  [client/swift/trailbase]
-  - client/swift/trailbase/Package.swift
-  [crates/assets]
-  - crates/assets/build.rs
-  [crates/assets/src]
-  - crates/assets/src/assets.rs
-  - crates/assets/src/email.rs
-  - crates/assets/src/lib.rs
-  [crates/auth-config/src]
-  - crates/auth-config/src/lib.rs
-  [crates/auth-ui]
-  - crates/auth-ui/build.rs
-  [crates/auth-ui/src]
-  - crates/auth-ui/src/auth.rs
-  - crates/auth-ui/src/lib.rs
-  [crates/auth-ui/ui]
-  - crates/auth-ui/ui/.prettierrc.mjs
-  - crates/auth-ui/ui/astro.config.mjs
-  - crates/auth-ui/ui/eslint.config.mjs
-  [crates/client/src]
-  - crates/client/src/client.rs
-  - crates/client/src/error.rs
-  - crates/client/src/lib.rs
-  - crates/client/src/record_api.rs
-  - crates/client/src/transport.rs
+[core] (433 arquivos)
+  [.]
+  - build.rs
+  [ci]
+  - ci/build-build-matrix.js
+  - ci/build-test-matrix.js
+  - ci/find-latest-release.rs
+  - ci/run-tests.py
+  - ci/trigger-release-branch-ci.rs
+  [cranelift/assembler-x64]
+  - cranelift/assembler-x64/build.rs
+  [cranelift/assembler-x64/src]
+  - cranelift/assembler-x64/src/api.rs
+  - cranelift/assembler-x64/src/custom.rs
+  - cranelift/assembler-x64/src/evex.rs
+  - cranelift/assembler-x64/src/features.rs
+  - cranelift/assembler-x64/src/fixed.rs
+  - cranelift/assembler-x64/src/fuzz.rs
+  - cranelift/assembler-x64/src/gpr.rs
+  - cranelift/assembler-x64/src/imm.rs
+  - cranelift/assembler-x64/src/inst.rs
+  - cranelift/assembler-x64/src/lib.rs
+  - cranelift/assembler-x64/src/mem.rs
+  - cranelift/assembler-x64/src/rex.rs
+  - cranelift/assembler-x64/src/vex.rs
+  - cranelift/assembler-x64/src/xmm.rs
+  [cranelift/bforest/src]
+  - cranelift/bforest/src/lib.rs
+  - cranelift/bforest/src/map.rs
+  - cranelift/bforest/src/node.rs
+  - cranelift/bforest/src/path.rs
+  - cranelift/bforest/src/pool.rs
+  - cranelift/bforest/src/set.rs
+  [cranelift/bitset/src]
+  - cranelift/bitset/src/compound.rs
+  - cranelift/bitset/src/lib.rs
+  - cranelift/bitset/src/scalar.rs
+  [cranelift/codegen]
+  - cranelift/codegen/build.rs
+  [cranelift/codegen/src]
+  - cranelift/codegen/src/alias_analysis.rs
+  - cranelift/codegen/src/branch_to_trap.rs
+  - cranelift/codegen/src/cfg_printer.rs
+  - cranelift/codegen/src/constant_hash.rs
+  - cranelift/codegen/src/context.rs
+  - cranelift/codegen/src/ctxhash.rs
+  - cranelift/codegen/src/cursor.rs
+  - cranelift/codegen/src/data_value.rs
+  - cranelift/codegen/src/dbg.rs
+  - cranelift/codegen/src/dominator_tree.rs
+  - cranelift/codegen/src/flowgraph.rs
+  - cranelift/codegen/src/incremental_cache.rs
+  - cranelift/codegen/src/inline.rs
+  - cranelift/codegen/src/inst_predicates.rs
+  - cranelift/codegen/src/isle_prelude.rs
+  - cranelift/codegen/src/lib.rs
+  - cranelift/codegen/src/loop_analysis.rs
+  - cranelift/codegen/src/nan_canonicalization.rs
+  - cranelift/codegen/src/opts.rs
+  - cranelift/codegen/src/post_dominator_tree.rs
+  - cranelift/codegen/src/print_errors.rs
+  - cranelift/codegen/src/ranges.rs
+  - cranelift/codegen/src/remove_constant_phis.rs
+  - cranelift/codegen/src/result.rs
+  - cranelift/codegen/src/scoped_hash_map.rs
+  - cranelift/codegen/src/settings.rs
+  - cranelift/codegen/src/souper_harvest.rs
+  - cranelift/codegen/src/take_and_replace.rs
+  - cranelift/codegen/src/timing.rs
+  - cranelift/codegen/src/traversals.rs
+  - cranelift/codegen/src/unreachable_code.rs
+  - cranelift/codegen/src/value_label.rs
+  - cranelift/codegen/src/write.rs
+  [cranelift/control/src]
+  - cranelift/control/src/chaos.rs
+  - cranelift/control/src/lib.rs
+  - cranelift/control/src/zero_sized.rs
+  [cranelift/entity/src]
+  - cranelift/entity/src/boxed_slice.rs
+  - cranelift/entity/src/iter.rs
+  - cranelift/entity/src/keys.rs
+  - cranelift/entity/src/lib.rs
+  - cranelift/entity/src/list.rs
+  - cranelift/entity/src/map.rs
+  - cranelift/entity/src/packed_option.rs
+  - cranelift/entity/src/primary.rs
+  - cranelift/entity/src/set.rs
+  - cranelift/entity/src/sparse.rs
+  [cranelift/filetests/src]
+  - cranelift/filetests/src/concurrent.rs
+  - cranelift/filetests/src/function_runner.rs
+  - cranelift/filetests/src/lib.rs
+  - cranelift/filetests/src/match_directive.rs
+  - cranelift/filetests/src/runner.rs
+  - cranelift/filetests/src/runone.rs
+  - cranelift/filetests/src/subtest.rs
+  - cranelift/filetests/src/test_alias_analysis.rs
+  - cranelift/filetests/src/test_cat.rs
+  - cranelift/filetests/src/test_compile.rs
+  - cranelift/filetests/src/test_domtree.rs
+  - cranelift/filetests/src/test_inline.rs
+  - cranelift/filetests/src/test_interpret.rs
+  - cranelift/filetests/src/test_optimize.rs
+  - cranelift/filetests/src/test_print_cfg.rs
+  - cranelift/filetests/src/test_run.rs
+  - cranelift/filetests/src/test_safepoint.rs
+  - cranelift/filetests/src/test_unwind.rs
+  - cranelift/filetests/src/test_verifier.rs
+  [cranelift/frontend/src]
+  - cranelift/frontend/src/frontend.rs
+  - cranelift/frontend/src/lib.rs
+  - cranelift/frontend/src/ssa.rs
+  - cranelift/frontend/src/switch.rs
+  - cranelift/frontend/src/variable.rs
+  [cranelift/fuzzgen/src]
+  - cranelift/fuzzgen/src/config.rs
+  - cranelift/fuzzgen/src/cranelift_arbitrary.rs
+  - cranelift/fuzzgen/src/function_generator.rs
+  - cranelift/fuzzgen/src/lib.rs
+  - cranelift/fuzzgen/src/print.rs
+  - cranelift/fuzzgen/src/target_isa_extras.rs
+  [cranelift/interpreter/src]
+  - cranelift/interpreter/src/address.rs
+  - cranelift/interpreter/src/environment.rs
+  - cranelift/interpreter/src/frame.rs
+  - cranelift/interpreter/src/instruction.rs
+  - cranelift/interpreter/src/interpreter.rs
+  - cranelift/interpreter/src/lib.rs
+  - cranelift/interpreter/src/state.rs
+  - cranelift/interpreter/src/step.rs
+  - cranelift/interpreter/src/value.rs
+  [cranelift/isle/isle]
+  - cranelift/isle/isle/build.rs
+  [cranelift/jit/src]
+  - cranelift/jit/src/backend.rs
+  - cranelift/jit/src/compiled_blob.rs
+  - cranelift/jit/src/lib.rs
+  [cranelift/module/src]
+  - cranelift/module/src/data_context.rs
+  - cranelift/module/src/lib.rs
+  - cranelift/module/src/module.rs
+  - cranelift/module/src/traps.rs
+  [cranelift/native/src]
+  - cranelift/native/src/lib.rs
+  - cranelift/native/src/riscv.rs
+  [cranelift/object/src]
+  - cranelift/object/src/backend.rs
+  - cranelift/object/src/lib.rs
+  - cranelift/object/src/unwind.rs
+  [cranelift/reader/src]
+  - cranelift/reader/src/error.rs
+  - cranelift/reader/src/isaspec.rs
+  - cranelift/reader/src/lexer.rs
+  - cranelift/reader/src/lib.rs
+  - cranelift/reader/src/parser.rs
+  - cranelift/reader/src/run_command.rs
+  - cranelift/reader/src/sourcemap.rs
+  - cranelift/reader/src/testcommand.rs
+  - cranelift/reader/src/testfile.rs
+  [cranelift/serde/src]
+  - cranelift/serde/src/clif-json.rs
+  [cranelift/src]
+  - cranelift/src/bugpoint.rs
+  - cranelift/src/cat.rs
+  - cranelift/src/clif-util.rs
+  - cranelift/src/compile.rs
+  - cranelift/src/disasm.rs
+  - cranelift/src/interpret.rs
+  - cranelift/src/print_cfg.rs
+  - cranelift/src/run.rs
+  - cranelift/src/souper_harvest.rs
+  - cranelift/src/utils.rs
+  [cranelift/srcgen/src]
+  - cranelift/srcgen/src/error.rs
+  - cranelift/srcgen/src/lib.rs
+  [cranelift/umbrella/src]
+  - cranelift/umbrella/src/lib.rs
+  [crates/bench-api/src]
+  - crates/bench-api/src/lib.rs
+  - crates/bench-api/src/unsafe_send_sync.rs
+  [crates/c-api]
+  - crates/c-api/CMakeLists.txt
+  - crates/c-api/build.rs
+  [crates/c-api-macros/src]
+  - crates/c-api-macros/src/lib.rs
+  [crates/c-api/include]
+  - crates/c-api/include/doc-wasm.h
+  - crates/c-api/include/wasi.h
+  - crates/c-api/include/wasm.h
+  - crates/c-api/include/wasm.hh
+  - crates/c-api/include/wasmtime.h
+  - crates/c-api/include/wasmtime.hh
+  [crates/c-api/src]
+  - crates/c-api/src/anyref.rs
+  - crates/c-api/src/arrayref.rs
+  - crates/c-api/src/async.rs
+  - crates/c-api/src/config.rs
+  - crates/c-api/src/engine.rs
+  - crates/c-api/src/eqref.rs
+  - crates/c-api/src/error.rs
+  - crates/c-api/src/exnref.rs
+  - crates/c-api/src/extern.rs
+  - crates/c-api/src/externref.rs
+  - crates/c-api/src/func.rs
+  - crates/c-api/src/global.rs
+  - crates/c-api/src/instance.rs
+  - crates/c-api/src/lib.rs
+  - crates/c-api/src/linker.rs
+  - crates/c-api/src/memory.rs
+  - crates/c-api/src/module.rs
+  - crates/c-api/src/profiling.rs
+  - crates/c-api/src/ref.rs
+  - crates/c-api/src/sharedmemory.rs
+  - crates/c-api/src/store.rs
+  - crates/c-api/src/structref.rs
+  - crates/c-api/src/table.rs
+  - crates/c-api/src/tag.rs
+  - crates/c-api/src/trap.rs
+  - crates/c-api/src/types.rs
+  - crates/c-api/src/val.rs
+  - crates/c-api/src/vec.rs
+  - crates/c-api/src/wasi.rs
+  - crates/c-api/src/wat2wasm.rs
+  [crates/cache]
+  - crates/cache/build.rs
+  [crates/cache/src]
+  - crates/cache/src/config.rs
+  - crates/cache/src/lib.rs
+  - crates/cache/src/tests.rs
+  - crates/cache/src/worker.rs
+  [crates/cli-flags/src]
+  - crates/cli-flags/src/lib.rs
+  - crates/cli-flags/src/opt.rs
+  [crates/component-macro]
+  - crates/component-macro/build.rs
+  [crates/component-macro/src]
+  - crates/component-macro/src/bindgen.rs
+  - crates/component-macro/src/component.rs
+  - crates/component-macro/src/lib.rs
+  [crates/component-util/src]
+  - crates/component-util/src/lib.rs
   [crates/core]
   - crates/core/build.rs
   [crates/core/src]
-  - crates/core/src/app_state.rs
-  - crates/core/src/backup.rs
-  - crates/core/src/config.rs
-  - crates/core/src/connection.rs
-  - crates/core/src/constants.rs
-  - crates/core/src/data_dir.rs
-  - crates/core/src/email.rs
-  - crates/core/src/encryption.rs
-  - crates/core/src/init_error.rs
+  - crates/core/src/alloc.rs
+  - crates/core/src/array.rs
   - crates/core/src/lib.rs
-  - crates/core/src/listing.rs
-  - crates/core/src/logging.rs
-  - crates/core/src/metadata.rs
-  - crates/core/src/migrations.rs
-  - crates/core/src/scheduler.rs
-  - crates/core/src/schema_metadata.rs
-  - crates/core/src/test.rs
-  - crates/core/src/test_utils.rs
-  - crates/core/src/transaction_recorder.rs
-  - crates/core/src/util.rs
-  [crates/extension-so/src]
-  - crates/extension-so/src/lib.rs
-  [crates/extension/src]
-  - crates/extension/src/base64.rs
-  - crates/extension/src/geoip.rs
-  - crates/extension/src/jsonschema.rs
-  - crates/extension/src/lib.rs
-  - crates/extension/src/password.rs
-  - crates/extension/src/regex.rs
-  - crates/extension/src/uuid.rs
-  - crates/extension/src/validators.rs
-  [crates/pg-schema/src]
-  - crates/pg-schema/src/error.rs
-  - crates/pg-schema/src/index.rs
-  - crates/pg-schema/src/lib.rs
-  - crates/pg-schema/src/table.rs
-  - crates/pg-schema/src/trigger.rs
-  - crates/pg-schema/src/util.rs
-  - crates/pg-schema/src/view.rs
-  [crates/qs/src]
-  - crates/qs/src/column_rel_value.rs
-  - crates/qs/src/filter.rs
-  - crates/qs/src/lib.rs
-  - crates/qs/src/query.rs
-  - crates/qs/src/util.rs
-  - crates/qs/src/value.rs
-  [crates/reactive/src]
-  - crates/reactive/src/async_reactive.rs
-  - crates/reactive/src/lib.rs
-  - crates/reactive/src/macros.rs
-  - crates/reactive/src/merge.rs
-  - crates/reactive/src/reactive.rs
-  [crates/refinery/src]
-  - crates/refinery/src/error.rs
-  - crates/refinery/src/lib.rs
-  - crates/refinery/src/runner.rs
-  - crates/refinery/src/util.rs
-  [crates/sqlite/src]
-  - crates/sqlite/src/database.rs
-  - crates/sqlite/src/error.rs
-  - crates/sqlite/src/from_sql.rs
-  - crates/sqlite/src/generic.rs
-  - crates/sqlite/src/lib.rs
-  - crates/sqlite/src/params.rs
-  - crates/sqlite/src/rows.rs
-  - crates/sqlite/src/statement.rs
-  - crates/sqlite/src/tests.rs
-  - crates/sqlite/src/to_sql.rs
-  - crates/sqlite/src/traits.rs
-  - crates/sqlite/src/type.rs
-  - crates/sqlite/src/value.rs
-  [crates/sqlvalue/src]
-  - crates/sqlvalue/src/lib.rs
+  - crates/core/src/math.rs
+  - crates/core/src/mpk.rs
+  - crates/core/src/non_max.rs
+  - crates/core/src/slab.rs
+  - crates/core/src/truncate.rs
+  - crates/core/src/undo.rs
+  [crates/cranelift]
+  - crates/cranelift/build.rs
+  [crates/cranelift/src]
+  - crates/cranelift/src/alias_region.rs
+  - crates/cranelift/src/bounds_checks.rs
+  - crates/cranelift/src/builder.rs
+  - crates/cranelift/src/compiled_function.rs
+  - crates/cranelift/src/compiler.rs
+  - crates/cranelift/src/debug.rs
+  - crates/cranelift/src/func_environ.rs
+  - crates/cranelift/src/isa_builder.rs
+  - crates/cranelift/src/lib.rs
+  - crates/cranelift/src/obj.rs
+  - crates/cranelift/src/trap.rs
+  [crates/debugger/src]
+  - crates/debugger/src/host.rs
+  - crates/debugger/src/lib.rs
+  [crates/environ/src]
+  - crates/environ/src/address_map.rs
+  - crates/environ/src/builtin.rs
+  - crates/environ/src/bytes.rs
+  - crates/environ/src/collections.rs
+  - crates/environ/src/component.rs
+  - crates/environ/src/demangling.rs
+  - crates/environ/src/ext.rs
+  - crates/environ/src/fact.rs
+  - crates/environ/src/frame_table.rs
+  - crates/environ/src/gc.rs
+  - crates/environ/src/graphs.rs
+  - crates/environ/src/hostcall.rs
+  - crates/environ/src/key.rs
+  - crates/environ/src/lib.rs
+  - crates/environ/src/module.rs
+  - crates/environ/src/module_artifacts.rs
+  - crates/environ/src/module_types.rs
+  - crates/environ/src/obj.rs
+  - crates/environ/src/prelude.rs
+  - crates/environ/src/ref_bits.rs
+  - crates/environ/src/scopevec.rs
+  - crates/environ/src/stack_map.rs
+  - crates/environ/src/stack_switching.rs
+  - crates/environ/src/string_pool.rs
+  - crates/environ/src/trap_encoding.rs
+  - crates/environ/src/tunables.rs
+  - crates/environ/src/types.rs
+  - crates/environ/src/vmoffsets.rs
+  - crates/environ/src/wasm_error.rs
+  [crates/explorer]
+  - crates/explorer/eslint.config.js
+  [crates/explorer/src]
+  - crates/explorer/src/index.js
+  - crates/explorer/src/lib.rs
+  [crates/fiber]
+  - crates/fiber/build.rs
+  [crates/fiber/src]
+  - crates/fiber/src/lib.rs
+  - crates/fiber/src/miri.rs
+  - crates/fiber/src/nostd.rs
+  - crates/fiber/src/stackswitch.rs
+  - crates/fiber/src/unix.rs
+  - crates/fiber/src/windows.c
+  - crates/fiber/src/windows.rs
+  [crates/fuzzing]
+  - crates/fuzzing/build.rs
+  [crates/fuzzing/src]
+  - crates/fuzzing/src/generators.rs
+  - crates/fuzzing/src/lib.rs
+  - crates/fuzzing/src/mutators.rs
+  - crates/fuzzing/src/oom.rs
+  - crates/fuzzing/src/oracles.rs
+  - crates/fuzzing/src/single_module_fuzzer.rs
+  [crates/fuzzing/wasm-spec-interpreter]
+  - crates/fuzzing/wasm-spec-interpreter/build.rs
+  [crates/gdbstub-component/artifact]
+  - crates/gdbstub-component/artifact/build.rs
+  [crates/gdbstub-component/src]
+  - crates/gdbstub-component/src/addr.rs
+  - crates/gdbstub-component/src/api.rs
+  - crates/gdbstub-component/src/lib.rs
+  - crates/gdbstub-component/src/target.rs
+  [crates/jit-debug]
+  - crates/jit-debug/build.rs
+  - crates/jit-debug/gdbjit.c
+  [crates/jit-debug/src]
+  - crates/jit-debug/src/gdb_jit_int.rs
+  - crates/jit-debug/src/lib.rs
+  - crates/jit-debug/src/perf_jitdump.rs
+  [crates/jit-icache-coherence/src]
+  - crates/jit-icache-coherence/src/lib.rs
+  - crates/jit-icache-coherence/src/libc.rs
+  - crates/jit-icache-coherence/src/miri.rs
+  - crates/jit-icache-coherence/src/win.rs
+  [crates/test-macros/src]
+  - crates/test-macros/src/add_variants.rs
+  - crates/test-macros/src/lib.rs
+  [crates/test-programs]
+  - crates/test-programs/build.rs
+  [crates/test-programs/artifacts]
+  - crates/test-programs/artifacts/build.rs
+  [crates/test-programs/src]
+  - crates/test-programs/src/async_.rs
+  - crates/test-programs/src/http.rs
+  - crates/test-programs/src/lib.rs
+  - crates/test-programs/src/nn.rs
+  - crates/test-programs/src/preview1.rs
+  - crates/test-programs/src/sockets.rs
+  - crates/test-programs/src/tls.rs
+  [crates/test-util/src]
+  - crates/test-util/src/component.rs
+  - crates/test-util/src/component_fuzz.rs
+  - crates/test-util/src/lib.rs
+  - crates/test-util/src/wasmtime_wast.rs
+  - crates/test-util/src/wast.rs
+  [crates/unwinder]
+  - crates/unwinder/build.rs
+  [crates/unwinder/src]
+  - crates/unwinder/src/exception_table.rs
+  - crates/unwinder/src/lib.rs
+  - crates/unwinder/src/stackwalk.rs
+  - crates/unwinder/src/throw.rs
+  [crates/versioned-export-macros/src]
+  - crates/versioned-export-macros/src/lib.rs
+  [crates/wasi-config/src]
+  - crates/wasi-config/src/lib.rs
+  [crates/wasi-http/src]
+  - crates/wasi-http/src/ctx.rs
+  - crates/wasi-http/src/default_send_request.rs
+  - crates/wasi-http/src/error.rs
+  - crates/wasi-http/src/field_map.rs
+  - crates/wasi-http/src/handler.rs
+  - crates/wasi-http/src/io.rs
+  - crates/wasi-http/src/lib.rs
+  - crates/wasi-http/src/request_options.rs
+  [crates/wasi-io/src]
+  - crates/wasi-io/src/bindings.rs
+  - crates/wasi-io/src/impls.rs
+  - crates/wasi-io/src/lib.rs
+  - crates/wasi-io/src/poll.rs
+  - crates/wasi-io/src/streams.rs
   [crates/wasi-keyvalue/src]
   - crates/wasi-keyvalue/src/lib.rs
-  [crates/wasm-runtime-axum/src]
-  - crates/wasm-runtime-axum/src/lib.rs
-  [crates/wasm-runtime-common/src]
-  - crates/wasm-runtime-common/src/lib.rs
-  [crates/wasm-runtime-guest/src]
-  - crates/wasm-runtime-guest/src/db.rs
-  - crates/wasm-runtime-guest/src/fetch.rs
-  - crates/wasm-runtime-guest/src/fs.rs
-  - crates/wasm-runtime-guest/src/http.rs
-  - crates/wasm-runtime-guest/src/job.rs
-  - crates/wasm-runtime-guest/src/kv.rs
-  - crates/wasm-runtime-guest/src/lib.rs
-  - crates/wasm-runtime-guest/src/time.rs
-  [crates/wasm-runtime-host/src]
-  - crates/wasm-runtime-host/src/functions.rs
-  - crates/wasm-runtime-host/src/host.rs
-  - crates/wasm-runtime-host/src/lib.rs
-  - crates/wasm-runtime-host/src/sqlite.rs
-  [guests/typescript]
-  - guests/typescript/eslint.config.mjs
-  - guests/typescript/vite.config.ts
-  [guests/typescript/src]
-  - guests/typescript/src/index.ts
-  - guests/typescript/src/json.js
-  - guests/typescript/src/timer.ts
-  - guests/typescript/src/util.ts
+  [crates/wasi-nn]
+  - crates/wasi-nn/build.rs
+  [crates/wasi-nn/src]
+  - crates/wasi-nn/src/lib.rs
+  - crates/wasi-nn/src/wit.rs
+  - crates/wasi-nn/src/witx.rs
+  [crates/wasi-preview1-component-adapter]
+  - crates/wasi-preview1-component-adapter/build.rs
+  [crates/wasi-preview1-component-adapter/src]
+  - crates/wasi-preview1-component-adapter/src/descriptors.rs
+  - crates/wasi-preview1-component-adapter/src/lib.rs
+  - crates/wasi-preview1-component-adapter/src/macros.rs
+  [crates/wasi-tls/src]
+  - crates/wasi-tls/src/error.rs
+  - crates/wasi-tls/src/lib.rs
+  [crates/wasi/src]
+  - crates/wasi/src/cli.rs
+  - crates/wasi/src/clocks.rs
+  - crates/wasi/src/ctx.rs
+  - crates/wasi/src/error.rs
+  - crates/wasi/src/filesystem.rs
+  - crates/wasi/src/lib.rs
+  - crates/wasi/src/p0.rs
+  - crates/wasi/src/p1.rs
+  - crates/wasi/src/random.rs
+  - crates/wasi/src/runtime.rs
+  - crates/wasi/src/view.rs
+  [crates/wasmtime]
+  - crates/wasmtime/build.rs
+  [crates/wasmtime/src]
+  - crates/wasmtime/src/compile.rs
+  - crates/wasmtime/src/config.rs
+  - crates/wasmtime/src/engine.rs
+  - crates/wasmtime/src/lib.rs
+  - crates/wasmtime/src/profiling_agent.rs
+  - crates/wasmtime/src/runtime.rs
+  - crates/wasmtime/src/sync_nostd.rs
+  - crates/wasmtime/src/sync_std.rs
+  [crates/wast/src]
+  - crates/wast/src/component.rs
+  - crates/wast/src/core.rs
+  - crates/wast/src/lib.rs
+  - crates/wast/src/spectest.rs
+  - crates/wast/src/wast.rs
+  [crates/wiggle/macro]
+  - crates/wiggle/macro/build.rs
+  [crates/wiggle/src]
+  - crates/wiggle/src/guest_error.rs
+  - crates/wiggle/src/guest_type.rs
+  - crates/wiggle/src/lib.rs
+  - crates/wiggle/src/region.rs
+  [crates/winch/src]
+  - crates/winch/src/builder.rs
+  - crates/winch/src/compiler.rs
+  - crates/winch/src/lib.rs
+  [crates/wit-bindgen/src]
+  - crates/wit-bindgen/src/config.rs
+  - crates/wit-bindgen/src/lib.rs
+  - crates/wit-bindgen/src/rust.rs
+  - crates/wit-bindgen/src/source.rs
+  - crates/wit-bindgen/src/types.rs
+  [crates/wizer/include]
+  - crates/wizer/include/wizer.h
+  [crates/wizer/src]
+  - crates/wizer/src/component.rs
+  - crates/wizer/src/info.rs
+  - crates/wizer/src/instrument.rs
+  - crates/wizer/src/lib.rs
+  - crates/wizer/src/parse.rs
+  - crates/wizer/src/rayoff.rs
+  - crates/wizer/src/rewrite.rs
+  - crates/wizer/src/snapshot.rs
+  - crates/wizer/src/wasmtime.rs
+  [crates/wmemcheck/src]
+  - crates/wmemcheck/src/lib.rs
+  [fuzz]
+  - fuzz/build.rs
+  [fuzz/fuzz_targets]
+  - fuzz/fuzz_targets/call_async.rs
+  - fuzz/fuzz_targets/compile.rs
+  - fuzz/fuzz_targets/component_api.rs
+  - fuzz/fuzz_targets/cranelift-fuzzgen.rs
+  - fuzz/fuzz_targets/cranelift-icache.rs
+  - fuzz/fuzz_targets/differential.rs
+  - fuzz/fuzz_targets/exception_ops.rs
+  - fuzz/fuzz_targets/gc_ops.rs
+  - fuzz/fuzz_targets/instantiate-many.rs
+  - fuzz/fuzz_targets/instantiate.rs
+  - fuzz/fuzz_targets/misc.rs
+  - fuzz/fuzz_targets/oom.rs
+  - fuzz/fuzz_targets/wast_tests.rs
+  [pulley/fuzz/src]
+  - pulley/fuzz/src/lib.rs
+  - pulley/fuzz/src/roundtrip.rs
+  [pulley/macros/src]
+  - pulley/macros/src/interp_disable_if_cfg.rs
+  - pulley/macros/src/lib.rs
+  [pulley/src]
+  - pulley/src/decode.rs
+  - pulley/src/disas.rs
+  - pulley/src/encode.rs
+  - pulley/src/imms.rs
+  - pulley/src/interp.rs
+  - pulley/src/lib.rs
+  - pulley/src/op.rs
+  - pulley/src/opcode.rs
+  - pulley/src/profile.rs
+  - pulley/src/profile_disabled.rs
+  - pulley/src/regs.rs
+  [pulley/src/interp]
+  - pulley/src/interp/debug.rs
+  - pulley/src/interp/match_loop.rs
+  - pulley/src/interp/tail_loop.rs
+  [scripts]
+  - scripts/coverage.rs
+  - scripts/publish.rs
+  [src]
+  - src/commands.rs
+  - src/common.rs
+  - src/disas.rs
+  - src/lib.rs
+  [winch/codegen]
+  - winch/codegen/build.rs
+  [winch/codegen/src]
+  - winch/codegen/src/constant_pool.rs
+  - winch/codegen/src/lib.rs
+  - winch/codegen/src/masm.rs
+  - winch/codegen/src/regalloc.rs
+  - winch/codegen/src/regset.rs
+  - winch/codegen/src/stack.rs
+  - winch/codegen/src/visitor.rs
 
-[database] (10 arquivos)
-  [crates/schema]
-  - crates/schema/Cargo.toml
-  [crates/schema/src]
-  - crates/schema/src/error.rs
-  - crates/schema/src/file.rs
-  - crates/schema/src/json.rs
-  - crates/schema/src/json_schema.rs
-  - crates/schema/src/lib.rs
-  - crates/schema/src/metadata.rs
-  - crates/schema/src/parse.rs
-  - crates/schema/src/registry.rs
-  - crates/schema/src/sqlite.rs
-
-[docs] (11 arquivos)
-  [docs]
-  - docs/.prettierrc.mjs
-  - docs/astro.config.ts
-  - docs/eslint.config.mjs
-  - docs/package.json
-  - docs/tsconfig.json
-  [docs/src]
-  - docs/src/config.ts
-  - docs/src/content.config.ts
-  [docs/src/layouts]
-  - docs/src/layouts/Base.astro
-  [docs/src/lib]
-  - docs/src/lib/darkmode.ts
-  - docs/src/lib/github.ts
-  - docs/src/lib/utils.ts
-
-[frontend] (5 arquivos)
-  [docs/src/components]
-  - docs/src/components/BarChart.tsx
-  - docs/src/components/LineChart.tsx
-  - docs/src/components/ScatterChart.tsx
-  - docs/src/components/SplitCard.astro
-  [docs/src/pages]
-  - docs/src/pages/blog.astro
+[docs] (8 arquivos)
+  [docs/assemblyscript-hello-world]
+  - docs/assemblyscript-hello-world/package.json
+  - docs/assemblyscript-hello-world/tsconfig.json
+  - docs/assemblyscript-hello-world/wasi-hello.ts
+  [docs/assemblyscript_demo]
+  - docs/assemblyscript_demo/package.json
+  - docs/assemblyscript_demo/tsconfig.json
+  - docs/assemblyscript_demo/wasi-demo.ts
+  [docs/js]
+  - docs/js/index.js
+  - docs/js/langtabs.js
 
 [tests] (2 arquivos)
-  [client/go/trailbase]
-  - client/go/trailbase/client_test.go
-  - client/go/trailbase/record_api_test.go
+  [crates/test-macros/src]
+  - crates/test-macros/src/flags_test.rs
+  - crates/test-macros/src/wasmtime_test.rs
+
+=== REPO: mendableai/firecrawl ===
+# Architecture Map
+
+[backend] (17 arquivos)
+  [apps/api]
+  - apps/api/knip.config.ts
+  - apps/api/package.json
+  - apps/api/tsconfig.json
+  - apps/api/vitest.config.ts
+  [apps/api/native]
+  - apps/api/native/Cargo.toml
+  - apps/api/native/build.rs
+  - apps/api/native/package.json
+  - apps/api/native/tsconfig.json
+  - apps/api/native/wasi-worker-browser.mjs
+  [apps/api/src]
+  - apps/api/src/config.ts
+  - apps/api/src/harness.ts
+  - apps/api/src/index.ts
+  - apps/api/src/natives.ts
+  - apps/api/src/types.ts
+  [apps/api/utils]
+  - apps/api/utils/logview.js
+  - apps/api/utils/urldump-redis.js
+  - apps/api/utils/urldump.js
+
+[cli] (1 arquivos)
+  [apps/go-html-to-md-service]
+  - apps/go-html-to-md-service/main.go
+
+[config] (20 arquivos)
+  [apps/elixir-sdk]
+  - apps/elixir-sdk/mix.exs
+  [apps/go-html-to-md-service]
+  - apps/go-html-to-md-service/go.mod
+  [apps/go-sdk]
+  - apps/go-sdk/go.mod
+  [apps/js-sdk]
+  - apps/js-sdk/package.json
+  - apps/js-sdk/tsconfig.json
+  [apps/js-sdk/firecrawl]
+  - apps/js-sdk/firecrawl/package.json
+  - apps/js-sdk/firecrawl/tsconfig.json
+  [apps/php-sdk]
+  - apps/php-sdk/composer.json
+  [apps/playwright-service-ts]
+  - apps/playwright-service-ts/package.json
+  - apps/playwright-service-ts/tsconfig.json
+  [apps/python-sdk]
+  - apps/python-sdk/pyproject.toml
+  - apps/python-sdk/requirements.txt
+  - apps/python-sdk/setup.py
+  [apps/ruby-sdk]
+  - apps/ruby-sdk/Gemfile
+  [apps/rust-sdk]
+  - apps/rust-sdk/Cargo.toml
+  [apps/test-site]
+  - apps/test-site/package.json
+  - apps/test-site/tsconfig.json
+  [apps/test-suite]
+  - apps/test-suite/package.json
+  [apps/ui/ingestion-ui]
+  - apps/ui/ingestion-ui/package.json
+  - apps/ui/ingestion-ui/tsconfig.json
+
+[core] (71 arquivos)
+  [apps/dot-net-sdk]
+  - apps/dot-net-sdk/Firecrawl.sln
+  [apps/dot-net-sdk/Firecrawl]
+  - apps/dot-net-sdk/Firecrawl/Firecrawl.csproj
+  - apps/dot-net-sdk/Firecrawl/FirecrawlClient.cs
+  - apps/dot-net-sdk/Firecrawl/FirecrawlHttpClient.cs
+  [apps/dot-net-sdk/Firecrawl.Tests]
+  - apps/dot-net-sdk/Firecrawl.Tests/ExceptionsTests.cs
+  - apps/dot-net-sdk/Firecrawl.Tests/Firecrawl.Tests.csproj
+  - apps/dot-net-sdk/Firecrawl.Tests/FirecrawlClientTests.cs
+  - apps/dot-net-sdk/Firecrawl.Tests/ModelsTests.cs
+  - apps/dot-net-sdk/Firecrawl.Tests/ParseTests.cs
+  [apps/elixir-sdk]
+  - apps/elixir-sdk/.formatter.exs
+  - apps/elixir-sdk/generate.exs
+  [apps/elixir-sdk/lib]
+  - apps/elixir-sdk/lib/firecrawl.ex
+  [apps/go-html-to-md-service]
+  - apps/go-html-to-md-service/converter.go
+  - apps/go-html-to-md-service/handler.go
+  [apps/go-sdk]
+  - apps/go-sdk/firecrawl.go
+  - apps/go-sdk/firecrawl_error.go
+  - apps/go-sdk/http_client.go
+  - apps/go-sdk/models.go
+  - apps/go-sdk/options.go
+  - apps/go-sdk/parse.go
+  - apps/go-sdk/version.go
+  [apps/go-sdk/option]
+  - apps/go-sdk/option/option.go
+  [apps/java-sdk]
+  - apps/java-sdk/build.gradle.kts
+  - apps/java-sdk/settings.gradle.kts
+  [apps/js-sdk]
+  - apps/js-sdk/example.js
+  - apps/js-sdk/example.ts
+  - apps/js-sdk/example_pagination.ts
+  - apps/js-sdk/example_v1.js
+  - apps/js-sdk/example_v1.ts
+  - apps/js-sdk/example_watcher.ts
+  [apps/js-sdk/firecrawl]
+  - apps/js-sdk/firecrawl/jest.config.js
+  - apps/js-sdk/firecrawl/tsup.config.ts
+  [apps/php-sdk/config]
+  - apps/php-sdk/config/firecrawl.php
+  [apps/php-sdk/src]
+  - apps/php-sdk/src/Version.php
+  [apps/playwright-service-ts]
+  - apps/playwright-service-ts/api.ts
+  [apps/playwright-service-ts/helpers]
+  - apps/playwright-service-ts/helpers/get_error.ts
+  [apps/python-sdk]
+  - apps/python-sdk/example.py
+  - apps/python-sdk/example_aio.py
+  - apps/python-sdk/example_pagination.py
+  - apps/python-sdk/example_v1.py
+  - apps/python-sdk/example_v2.py
+  - apps/python-sdk/example_ws.py
+  [apps/python-sdk/firecrawl]
+  - apps/python-sdk/firecrawl/__init__.py
+  - apps/python-sdk/firecrawl/client.py
+  - apps/python-sdk/firecrawl/firecrawl.backup.py
+  - apps/python-sdk/firecrawl/types.py
+  [apps/ruby-sdk]
+  - apps/ruby-sdk/Rakefile
+  [apps/ruby-sdk/lib]
+  - apps/ruby-sdk/lib/firecrawl.rb
+  [apps/rust-sdk/src]
+  - apps/rust-sdk/src/agent.rs
+  - apps/rust-sdk/src/batch_scrape.rs
+  - apps/rust-sdk/src/client.rs
+  - apps/rust-sdk/src/crawl.rs
+  - apps/rust-sdk/src/error.rs
+  - apps/rust-sdk/src/lib.rs
+  - apps/rust-sdk/src/map.rs
+  - apps/rust-sdk/src/monitor.rs
+  - apps/rust-sdk/src/parse.rs
+  - apps/rust-sdk/src/research.rs
+  - apps/rust-sdk/src/scrape.rs
+  - apps/rust-sdk/src/search.rs
+  - apps/rust-sdk/src/serde_helpers.rs
+  - apps/rust-sdk/src/types.rs
+  [apps/test-site]
+  - apps/test-site/astro.config.mjs
+  [apps/test-site/src]
+  - apps/test-site/src/consts.ts
+  - apps/test-site/src/content.config.ts
+  [apps/test-suite]
+  - apps/test-suite/jest.config.js
+  - apps/test-suite/jest.setup.js
+  [apps/ui/ingestion-ui]
+  - apps/ui/ingestion-ui/eslint.config.js
+  - apps/ui/ingestion-ui/postcss.config.js
+  - apps/ui/ingestion-ui/tailwind.config.js
+  - apps/ui/ingestion-ui/vite.config.ts
+
+[infra] (5 arquivos)
+  [.github/scripts]
+  - .github/scripts/audit-ci-vuln-scan.mjs
+  - .github/scripts/check_version_has_incremented.py
+  - .github/scripts/eval_run.py
+  - .github/scripts/requirements.txt
+  - .github/scripts/resolve_api_image_version.py
+
+[tests] (4 arquivos)
+  [apps/go-html-to-md-service]
+  - apps/go-html-to-md-service/handler_test.go
+  [apps/go-sdk]
+  - apps/go-sdk/monitor_models_test.go
+  - apps/go-sdk/options_test.go
+  - apps/go-sdk/parse_test.go

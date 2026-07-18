@@ -1,306 +1,2254 @@
 # AUDIT REPORT: blob_03_test_intent
 # DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
 # PAYLOAD_COLUMN: payload_blob
-# GENERATED_AT: 2026-07-17T15:46:05
+# GENERATED_AT: 2026-07-17T22:45:28
 
-=== REPO: trailbaseio/trailbase ===
-[crates/cli/src/import.rs]
-- fn test_auth0_import  // expects: .unwrap()
+=== REPO: tldraw/tldraw ===
+[apps/bemo-worker/src/worker.test.ts]
+- describe "worker"
+- it "works"
 
-[client/go/trailbase/client_test.go]
-- func TestAnonymousAuth(t *testing.T)
-- func TestAuth(t *testing.T)
-- func TestMain(m *testing.M)
-- func TestMultiFactorAuth(t *testing.T)
-- func TestOtpLogin(t *testing.T)
-- func TestRecordApi(t *testing.T)
-- func TestRecordApiSubscriptions(t *testing.T)
+[apps/dotcom/zero-cache/delete_file_states.test.ts]
+- describe "with the fixed function (migration 034)"
+- describe "with the original buggy function (regression guard)"
+- it "demonstrates the bug: group-owned guest state survives because ownerId is NULL"
+- it "leaves still-shared files untouched"
+- it "removes the guest file link but keeps the owner link when a legacy file is unshared"
+- it "removes the guest file link but keeps the owning group row and member links"
+- it "removes the guest state but keeps group members when a group-owned file is unshared"
+- it "removes the guest state but keeps the owner when a legacy file is unshared"
+- it "still works for legacy files (so the regression is group-specific)"
 
-[client/go/trailbase/record_api_test.go]
-- func TestEventParsing(t *testing.T)
-- func TestFilter(t *testing.T)
-- func TestFilterIsNotNullToParams(t *testing.T)
-- func TestFilterIsNullToParams(t *testing.T)
+[apps/dotcom/zero-cache/validateMigrationFilenames.test.ts]
+- describe "validateMigrationFilenames"
+- it "accepts a clean contiguous sequence"
+- it "allows explicitly grandfathered duplicate numbers"
+- it "passes for the migrations checked into this package"
+- it "throws on a duplicate number"
+- it "throws on a gap in the sequence"
+- it "throws on a malformed filename"
+- it "throws when the sequence does not start at 000"
 
-[client/python/tests/test_client.py]
-- def test_anonymous_auth
-- def test_authentication
-- def test_expand_foreign_records
-- def test_filter_is_not_null_factory
-- def test_filter_is_null_factory
-- def test_filter_is_null_repr
-- def test_otp_auth
-- def test_parse_event
-- def test_records
-- def test_second_factor_authentication
-- def test_subscriptions
+[packages/create-tldraw/src/utils.test.ts]
+- describe "isDirEmpty"
+- it "returns false for a regular file"
+- it "treats a directory containing only .git as empty"
 
-[crates/auth-ui/src/auth.rs]
-- fn test_change_email_template_escaping
-- fn test_change_password_template_escaping
-- fn test_login_mfa_template_escaping
-- fn test_login_template_escaping
-- fn test_register_template_escaping
-- fn test_reset_password_request_template_escaping
-- fn test_reset_password_update_template_escaping
+[packages/create-tldraw/src/wrap-ansi.test.ts]
+- describe "ANSI escape codes"
+- describe "basic wrapping"
+- describe "complex scenarios"
+- describe "edge cases"
+- describe "hard wrapping"
+- describe "indentation"
+- describe "newline handling"
+- describe "trimming"
+- describe "word wrapping"
+- describe "wrapAnsi"
+- it "should account for indentation in line length calculations"
+- it "should apply indentation to wrapped lines"
+- it "should break long words in hard mode"
+- it "should handle ANSI hyperlink codes"
+- it "should handle carriage return line feeds"
+- it "should handle empty indentation"
+- it "should handle empty string"
+- it "should handle hard wrapping with ANSI codes"
+- it "should handle indentation with ANSI codes"
+- it "should handle mixed ANSI codes and long text"
+- it "should handle mixed word lengths"
+- it "should handle multiple ANSI codes"
+- it "should handle multiple spaces between words"
+- it "should handle negative column width"
+- it "should handle single word longer than column width"
+- it "should handle single word shorter than column width"
+- it "should handle strings with only ANSI codes"
+- it "should handle strings with unicode characters"
+- it "should handle very long words"
+- it "should handle whitespace-only string"
+- it "should handle wordWrap: false option"
+- it "should handle zero column width"
+- it "should never exceed column width in hard mode"
+- it "should not count ANSI codes towards line length"
+- it "should preserve ANSI color codes across line breaks"
+- it "should preserve existing newlines"
+- it "should preserve original leading whitespace on first line and apply indent to wrapped lines"
+- it "should preserve original leading whitespace only on first line when no indent specified"
+- it "should preserve whitespace when trim: false"
+- it "should respect column limit when first line has original leading whitespace"
+- it "should trim whitespace by default"
+- it "should wrap at word boundaries by default"
+- it "should wrap each line separately"
+- it "should wrap text at specified column width"
 
-[crates/client/src/client.rs]
-- async fn is_send_test  // expects: .unwrap()
+[packages/dotcom-shared/src/index.test.ts]
+- it "works"
 
-[crates/client/src/record_api.rs]
-- fn is_null_filter_builder  // asserts: assert_eq
-- fn is_null_formats_to_is  // asserts: assert_eq
-- fn is_null_wire_values  // asserts: assert_eq
-- fn parse_change_event_test
+[packages/dotcom-shared/src/mutators.test.ts]
+- describe "createFile from source (duplicate) access control"
+- describe "cross-user isolation"
+- describe "file access control logic"
+- describe "file creation"
+- describe "file mutations"
+- describe "file operations across workspaces"
+- describe "file_state mutations"
+- describe "home workspace special case"
+- describe "immutable column bypass attempts"
+- describe "membership"
+- describe "onEnterFile"
+- describe "parseFlags / userHasFlag"
+- describe "regenerateWorkspaceInviteSecret"
+- describe "setWorkspaceInviteLinkEnabled"
+- describe "user mutations"
+- describe "workspace mutations"
+- it "can duplicate a file shared with you"
+- it "can duplicate your own file"
+- it "can rename home workspace"
+- it "cannot change file.ownerId to self"
+- it "cannot change file.owningGroupId"
+- it "cannot change immutable field (email)"
+- it "cannot change immutable field (isDeleted)"
+- it "cannot change immutable field (ownerId)"
+- it "cannot change immutable field (owningGroupId)"
+- it "cannot change immutable file_state field (firstVisitAt)"
+- it "cannot change member roles in home workspace"
+- it "cannot create workspace with an empty name"
+- it "cannot delete home workspace"
+- it "cannot demote last owner to member"
+- it "cannot duplicate a file you cannot access (e.g. access revoked, shared:false)"
+- it "cannot duplicate a file you only know the id of (source not present)"
+- it "cannot duplicate an inaccessible legacy (ownerId-owned) file"
+- it "cannot enter deleted file"
+- it "cannot enter file with neither ownerId nor owningGroupId"
+- it "cannot leave home workspace, even with another owner"
+- it "cannot regenerate invite secret on home workspace"
+- it "cannot remove the last owner"
+- it "cannot set isDeleted:false (falsy value still blocked)"
+- it "cannot set isDeleted:true"
+- it "cannot update file_state for inaccessible file on server"
+- it "does not gate non-file createSource prefixes (e.g. published)"
+- it "does not mirror a file the user already has via a group they belong to"
+- it "entering file already in workspace does not create duplicate group_file"
+- it "handles null/undefined"
+- it "home workspace shortcut passes membership check"
+- it "last owner cannot leave workspace"
+- it "member can remove file from workspace"
+- it "member cannot regenerate invite secret"
+- it "member cannot remove members"
+- it "member cannot set member roles"
+- it "member cannot toggle the invite link"
+- it "member cannot update workspace name"
+- it "member of both workspaces can move file between them"
+- it "member of source workspace only cannot move file to other workspace"
+- it "member of target workspace only cannot move file from other workspace"
+- it "migrated user can create file in own workspace"
+- it "migrated user can create file in their home workspace without a group_user row"
+- it "migrated user can create workspace"
+- it "migrated user cannot create file in another workspace"
+- it "mirrors a group-less (legacy) file into home so it stays findable"
+- it "mirrors another group's shared file into home as a guest file"
+- it "non-member can enter shared file (read access)"
+- it "non-member cannot regenerate invite secret"
+- it "non-member cannot remove file from workspace"
+- it "non-owner cannot delete workspace"
+- it "non-owner member can leave workspace"
+- it "owner can delete workspace"
+- it "owner can regenerate invite secret"
+- it "owner can remove a member"
+- it "owner can set member roles"
+- it "owner can toggle the invite link"
+- it "owner can update workspace name"
+- it "parses comma-separated"
+- it "parses space-separated"
+- it "pinning in a workspace computes the index against that workspace, not home"
+- it "removing a linked file deletes only the link, not the file"
+- it "server cannot update file_state for inaccessible file"
+- it "shared user without workspace membership cannot update file"
+- it "unrelated user cannot update file"
+- it "user A files never accessible to unrelated user B"
+- it "user can change own flags field"
+- it "user can update own file_state"
+- it "user can update own profile"
+- it "user cannot update another user"
+- it "user cannot update another user's file_state"
+- it "user with access can enter file"
+- it "user without access cannot enter file"
+- it "userHasFlag checks presence"
+- it "workspace member can update file"
 
-[crates/client/tests/integration_test.rs]
-- fn integration_test  // expects: .unwrap()
+[packages/dotcom-shared/src/roles.test.ts]
+- describe "can"
+- describe "capabilities"
+- describe "isRole"
+- it "accepts known role strings"
+- it "denies members the administrative capabilities"
+- it "denies unknown, empty, or missing roles every capability"
+- it "grants members the non-administrative capabilities only"
+- it "grants owners every capability"
+- it "is the expected set, with no duplicates"
+- it "members' capabilities are a subset of owners'"
+- it "rejects unknown, empty, or missing values"
 
-[crates/core/src/app_state.rs]
-- pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState>  // expects: .unwrap()
-- pub fn test_config() -> Config
+[packages/mermaid/src/createMermaidDiagram.test.ts]
+- describe "createMermaidDiagram"
+- it "throws MermaidDiagramError for invalid input"
 
-[crates/core/src/backup.rs]
-- async fn test_backup  // expects: .unwrap()
+[packages/mermaid/src/layoutParsing.test.ts]
+- describe "parseFlowchartLayout"
+- describe "parseStateDiagramLayout"
+- it "parses node ids from diagram-id-prefixed dom ids"
+- it "still parses legacy unprefixed dom ids"
 
-[crates/core/src/config.rs]
-- async fn test_config_tests_sequentially
-- async fn test_default_config_is_valid  // expects: .unwrap()
-- fn test_config_merging
-- fn test_config_merging_from_env_and_vault
-- fn test_config_stripping
-- fn test_is_valid_hostname_or_ip  // asserts: assert_eq
-- fn test_strip_and_merge
-- fn test_validate_email_template_empty_or_none_body_passes  // expects: .unwrap()
-- fn test_validate_email_template_password_reset_with_code_passes
-- fn test_validate_email_template_password_reset_with_token_passes
-- fn test_validate_email_template_without_acceptable_var_fails
+[packages/mermaid/src/mermaidDiagrams.test.ts]
+- describe "countSequenceEvents"
+- describe "flowchartToBlueprint"
+- describe "mindmapToBlueprint"
+- describe "sequenceToBlueprint"
+- describe "stateToBlueprint"
+- it "adds autonumber decorations"
+- it "all nodes have solid fill"
+- it "assigns decreasing edge sizes by tree depth"
+- it "colors edges to match their target node"
+- it "computes bend for curved edges"
+- it "computes edge bend from SVG edge waypoints"
+- it "counts only signal and note messages"
+- it "creates activation boxes"
+- it "creates alt/else fragments with separator lines and section labels"
+- it "creates compound state frames from clusters"
+- it "creates edges from parent to children with no arrowheads"
+- it "creates groups for actor elements"
+- it "creates loop fragments"
+- it "creates note nodes with yellow color and correct labels"
+- it "creates note nodes with yellow color"
+- it "creates self-message with non-zero bend"
+- it "creates signal edges with correct labels and dash styles"
+- it "creates subgraph frames with correct parent-child relationships"
+- it "creates top/bottom actor boxes and lifelines"
+- it "defaults to black when no SVG color is extracted"
+- it "filters out edges referencing missing nodes"
+- it "filters out edges referencing nodes missing from SVG layout"
+- it "handles circle type with equal width/height"
+- it "handles created actors with late-appearing top box"
+- it "handles self-loop edges with non-zero bend"
+- it "mapNodeToRenderSpec can set variant shape on blueprint nodes"
+- it "mapNodeToRenderSpec overrides default geo when returning a spec"
+- it "maps actor types to correct geo"
+- it "maps arrow type variations correctly"
+- it "maps bidirectional arrows"
+- it "maps choice states to diamonds"
+- it "maps classDef fill colors"
+- it "maps dotted stroke to dotted dash"
+- it "maps double_arrow edge type to bidirectional arrowheads"
+- it "maps edge dash styles from stroke-dasharray"
+- it "maps edge labels and arrowhead types"
+- it "maps fork/join states to wide bars"
+- it "maps inline style fill/stroke colors"
+- it "maps leaf states with correct geo and labels"
+- it "maps mindmap node types to correct geo shapes"
+- it "maps nodes with correct id, label, default geo render spec, and positions"
+- it "maps root and child nodes with correct labels and positions"
+- it "maps start/end pseudo-states to ellipses"
+- it "maps various geo shape types"
+- it "skips autonumber, fragment, and activation control messages"
+- it "uses SVG-extracted colors, falls back to black"
+- it "uses auto-detected start/end types from ID suffixes"
+- it "uses circle type to equalize width and height"
 
-[crates/core/src/email.rs]
-- async fn test_template_rendering  // expects: .unwrap()
-- fn test_fallback_sender  // expects: .unwrap()
+[packages/mermaid/src/mermaidNodeCreateShape.test.ts]
+- describe "defaultCreateMermaidNodeFromBlueprint"
+- it "creates a custom shape type with merged props"
+- it "creates a geo shape with merged props"
 
-[crates/core/src/encryption.rs]
-- fn test_encryption  // expects: .unwrap()
+[packages/mermaid/src/svgParsing.test.ts]
+- describe "layout parsing tolerates mermaid >= 11.15 prefixed ids"
+- it "parses flowchart nodes and clusters"
+- it "parses state nodes and clusters"
+- it "still parses bare ids from older mermaid versions"
 
-[crates/core/src/lib.rs]
-- fn test_random_alphanumeric  // asserts: assert_eq
-- fn test_random_numberic_and_uppercase  // asserts: assert_eq
+[packages/namespaced-tldraw/src/index.test.ts]
+- it "exports things from tldraw"
+- it "exports types from tldraw"
 
-[crates/core/src/logging.rs]
-- fn test_as_millis_f64  // asserts: assert_eq
-- fn test_as_seconds_f64  // expects: .unwrap()
+[packages/sync/src/index.test.ts]
+- test "make ci pass with empty test"
 
-[crates/core/src/migrations.rs]
-- async fn test_schema_invariants_still_hold_after_migrations  // expects: .unwrap()
-- fn test_load_sql_migrations  // expects: .unwrap()
+[packages/sync/src/useSyncDemo.test.ts]
+- describe "asset upload restrictions"
+- describe "bookmark asset creation"
+- describe "core functionality"
+- describe "file name sanitization"
+- describe "useSyncDemo"
+- it "should allow uploads for non-tldraw domains"
+- it "should block uploads for tldraw domains"
+- it "should construct correct URI with room ID encoding"
+- it "should create bookmark assets with metadata when successful"
+- it "should handle bookmark creation errors gracefully"
+- it "should merge custom binding utils with defaults"
+- it "should merge custom shape utils with defaults"
+- it "should sanitize file names in upload URLs"
+- it "should use custom host when provided"
 
-[crates/core/src/scheduler.rs]
-- async fn test_delete_pending_files_job  // expects: .unwrap()
-- async fn test_scheduler  // expects: .unwrap()
-- fn test_cron  // expects: .unwrap()
+[packages/tlschema/src/TLStore.test.ts]
+- describe "TLStore utility functions"
+- describe "createIntegrityChecker"
+- describe "document and pointer records"
+- describe "instance state management"
+- describe "onValidationFailure"
+- describe "page management"
+- describe "page state and camera management"
+- describe "page state cleanup and validation"
+- describe "recursive integrity checking"
+- describe "redactRecordForErrorReporting"
+- it "should annotate error with correct tags and extras"
+- it "should create default page when none exist"
+- it "should create missing cameras for existing pages"
+- it "should create missing document record"
+- it "should create missing instance state"
+- it "should create missing page states for existing pages"
+- it "should create missing pointer record"
+- it "should handle asset records with only top-level src"
+- it "should handle asset records without src fields gracefully"
+- it "should handle complex integrity violations in sequence"
+- it "should handle different validation phases correctly"
+- it "should handle missing recordBefore"
+- it "should mark initialize phase as existing validation issue"
+- it "should not modify non-asset records"
+- it "should preserve existing pages"
+- it "should recursively call itself when making corrections"
+- it "should redact asset records in error reporting"
+- it "should redact only props.src if top-level src does not exist"
+- it "should redact src field from asset record"
+- it "should remove page states for non-existent pages"
+- it "should update instance to reference valid page when current page is invalid"
+- it "should use structuredClone for records"
 
-[crates/core/src/schema_metadata.rs]
-- async fn test_column_nullability  // expects: .unwrap()
-- async fn test_expanded_foreign_key  // expects: .unwrap()
-- async fn test_expanded_with_multiple_foreign_keys  // expects: .unwrap()
+[packages/tlschema/src/createPresenceStateDerivation.test.ts]
+- describe "basic functionality"
+- describe "createPresenceStateDerivation"
+- describe "error conditions"
+- describe "getDefaultUserPresence"
+- describe "store state integration"
+- it "should be reactive to store changes"
+- it "should create presence state and be reactive to changes"
+- it "should return null when required records are missing"
+- it "should return presence state with user info and default values"
+- it "should use defaults for missing user fields"
 
-[crates/core/src/transaction_recorder.rs]
-- async fn test_transaction_log  // expects: .unwrap()
+[packages/tlschema/src/createTLSchema.test.ts]
+- describe "createTLSchema"
+- describe "defaultBindingSchemas"
+- describe "defaultShapeSchemas"
+- describe "style property collection and validation"
+- it "should contain all default binding types"
+- it "should contain all default shape types"
+- it "should contain style properties in shape props"
+- it "should create a valid schema with default parameters"
+- it "should create schema with additional migrations"
+- it "should create schema with custom bindings"
+- it "should create schema with custom shapes"
+- it "should create schema with only specific shapes"
+- it "should throw error for duplicate style property IDs"
 
-[crates/core/src/util.rs]
-- fn test_urlencode  // asserts: assert_eq
+[packages/tlschema/src/migrations.test.ts]
+- describe "Add camera state to instance"
+- describe "Add crop=null to image shapes"
+- describe "Add duplicate props to instance"
+- describe "Add font size adjustment to notes"
+- describe "Add rich text attrs"
+- describe "Add rich text"
+- describe "Add scale to arrow shape"
+- describe "Add scale to draw shape"
+- describe "Add scale to geo shape"
+- describe "Add scale to highlight shape"
+- describe "Add scale to line shape"
+- describe "Add scale to note shape"
+- describe "Add text align to text shapes"
+- describe "Add verticalAlign to geo shape"
+- describe "Add verticalAlign to props for next shape"
+- describe "Adding canSnap to line handles"
+- describe "Adding check-box to geo shape"
+- describe "Adding croppingShapeId to instancePageState"
+- describe "Adding export background"
+- describe "Adding followingUserId prop to instance"
+- describe "Adding instance.isToolLocked"
+- describe "Adding instance_presence to the schema"
+- describe "Adding isLocked prop"
+- describe "Adding isPen prop"
+- describe "Adding labelColor prop to geo / arrow shapes"
+- describe "Adding labelColor prop to propsForNextShape"
+- describe "Adding name to document"
+- describe "Adding url props"
+- describe "Adding zoomBrush prop to instance"
+- describe "Adds NoteShape vertical alignment"
+- describe "Adds chat message to presence"
+- describe "Adds chat properties to instance"
+- describe "Adds delay to scribble"
+- describe "Adds highlightedUserIds to instance"
+- describe "Bookmark null asset id"
+- describe "Cleaning up junk data in instance.propsForNextShape"
+- describe "Ensure favicons are on bookmarks"
+- describe "Extract bindings from arrows"
+- describe "Fixing index keys"
+- describe "Fractional indexing for line points"
+- describe "Generating original URL from embed URL in GenOriginalUrlInEmbed"
+- describe "Make font size adjustment a ratio on notes"
+- describe "Make urls valid for all the assets"
+- describe "Make urls valid for all the shapes"
+- describe "Migrate GeoShape legacy horizontal alignment"
+- describe "Migrate NoteShape legacy horizontal alignment"
+- describe "Remove extra handle props"
+- describe "Removes does resize from embed"
+- describe "Removes overridePermissions from embed"
+- describe "Removes tmpOldUrl from embed"
+- describe "Removing align=justify from propsForNextShape"
+- describe "Removing align=justify from shape align props"
+- describe "Removing dialogs from instance"
+- describe "Renames selectedShapeIds in presence"
+- describe "Renaming asset props"
+- describe "Renaming properties again in instancePageState"
+- describe "Renaming properties in instancePageState"
+- describe "Restore some handle props"
+- describe "Store removing Icon and Code shapes"
+- describe "TLImageAsset AddFileSize"
+- describe "TLImageAsset AddIsAnimated"
+- describe "TLVideoAsset AddFileSize"
+- describe "TLVideoAsset AddIsAnimated"
+- describe "add AddLabelPosition to arrow handles"
+- describe "add isHoveringCanvas to TLInstance"
+- describe "add isInset to TLInstance"
+- describe "add isPrecise to arrow handles"
+- describe "add scribbles to TLInstance"
+- describe "add white"
+- describe "adding cloud shape"
+- describe "adds lonely properties"
+- describe "adds meta"
+- describe "hoist opacity"
+- describe "making instance state independent"
+- describe "propsForNextShape -> stylesForNextShape"
+- describe "removes can move camera"
+- describe "removes cursor color"
+- describe "rename isReadOnly to isReadonly"
+- describe "user config refactor"
+- it "adds isPenMode and isGridMode to instance state"
+- it "down works as expected"
+- it "removes instanceId and cameraId from instancePageState"
+- it "removes instanceId from instancePresence"
+- it "removes userDocument from the schema"
+- it "up works as expected"
+- it "works for ${assetName}"
+- it "works for ${shapeName}"
+- test "${name}: down works as expected"
+- test "${name}: up works as expected"
+- test "deletes propsForNextShape and adds stylesForNextShape without trying to bring across contents"
+- test "down works as expected"
+- test "hoists opacity from props to the root of the shape"
+- test "hoists opacity from propsForNextShape"
+- test "invalid up works as expected"
+- test "removes user and user_presence types from snapshots"
+- test "removes userId from the instance state"
+- test "up adds the chatMessage property"
+- test "up adds the delay property"
+- test "up converts non-zero to null (needs recomputation)"
+- test "up converts zero to 1 (no adjustment)"
+- test "up does nothing"
+- test "up has no effect when scribble is null"
+- test "up works as expected for"
+- test "up works as expected when converting to pen"
+- test "up works as expected with a shape that is not a pen shape"
+- test "up works as expected"
 
-[crates/core/tests/admin_permissions_test.rs]
-- fn test_admin_permissions  // expects: .unwrap()
+[packages/tlschema/src/recordsWithProps.test.ts]
+- describe "createPropsMigration"
+- describe "processPropsMigrations"
+- it "should apply down migration to record props"
+- it "should apply up migration to record props"
+- it "should create a store migration from props migration"
+- it "should process TLPropsMigrations format"
+- it "should process legacy migrations format"
+- it "should throw error for mismatched sequenceId"
 
-[crates/core/tests/integration_test.rs]
-- async fn test_record_apis  // expects: .unwrap()
-- fn integration_tests  // expects: .unwrap()
+[packages/tlschema/src/store-migrations.test.ts]
+- describe "AddInstancePresenceType migration"
+- describe "RemoveCodeAndIconShapeTypes migration"
+- describe "RemoveTLUserAndPresenceAndAddPointer migration"
+- describe "RemoveUserDocument migration"
+- describe "storeMigrations"
+- it "has valid migration sequence structure"
+- it "is a no-op migration"
+- it "removes icon and code shapes from store"
+- it "removes user and user_presence records"
+- it "removes user_document records"
 
-[crates/core/tests/public_dir_spa_test.rs]
-- async fn test_spa_fallback  // expects: .unwrap()
+[packages/worker-shared/src/bookmarks.test.ts]
+- describe "bookmarks"
+- describe "handleExtractBookmarkMetadataRequest"
+- it "handles complete bookmark extraction workflow with image processing"
+- it "handles image processing failures gracefully"
+- it "handles unfurl bad-param error"
+- it "handles unfurl failed-fetch error"
+- it "processes images when uploadImage is provided"
+- it "skips image processing when URLs are not present"
+- it "successfully extracts metadata"
+- it "throws validation error for invalid URL"
 
-[crates/core/tests/public_dir_test.rs]
-- async fn test_without_spa_fallback  // expects: .unwrap()
+[packages/worker-shared/src/index.test.ts]
+- it "works"
 
-[crates/core/tests/tls_test.rs]
-- fn test_https_serving  // expects: .unwrap()
+[packages/worker-shared/src/sentry.test.ts]
+- describe "createSentry"
+- describe "sentry"
+- it "returns null in development environment"
+- it "throws when SENTRY_DSN is missing in production"
 
-[crates/extension/src/base64.rs]
-- fn test_base64_url_safe_empty_string  // expects: .unwrap()
-- fn test_base64_url_safe_null_handling  // expects: .unwrap()
-- fn test_base64_url_safe_roundtrip  // expects: .unwrap()
-- fn test_base64_url_safe_trimmed_input  // expects: .unwrap()
-- fn test_base64_wrong_number_of_arguments  // expects: .unwrap()
+[packages/worker-shared/src/userAssetUploads.test.ts]
+- describe "handleUserAssetGet"
+- describe "handleUserAssetUpload"
+- describe "userAssetUploads"
+- it "returns 400 when R2 rejects a valid-looking object name as invalid"
+- it "returns 400 without calling R2 when the object name is too long"
 
-[crates/extension/src/geoip.rs]
-- fn test_explicit_jsonschema  // expects: .unwrap()
+=== REPO: bytecodealliance/wasmtime ===
+[benches/thread_eager_init.rs]
+- fn test_setup() -> (Engine, Module)  // expects: .unwrap()
 
-[crates/extension/src/jsonschema.rs]
-- fn test_explicit_jsonschema  // expects: .unwrap()
-- fn test_registerd_jsonschema
+[cranelift/assembler-x64/src/fuzz.rs]
+- fn callq
+- fn remove_after_parenthesis_test  // asserts: assert_eq
+- fn replace  // asserts: assert_eq
+- fn smoke
 
-[crates/extension/src/lib.rs]
-- fn test_connect_and_extensions  // expects: .unwrap()
-- fn test_uuids  // expects: .unwrap()
+[cranelift/bforest/src/lib.rs]
+- fn comparator  // asserts: assert_eq
+- fn slice_insertion  // asserts: assert_eq
+- fn slice_shifting  // asserts: assert_eq
 
-[crates/extension/src/password.rs]
-- fn test_verification  // asserts: assert_eq
+[cranelift/bforest/src/map.rs]
+- fn empty  // asserts: assert_eq
+- fn immutable_cursor
+- fn insert_many  // asserts: assert_eq
+- fn inserting  // asserts: assert_eq
+- fn into_iter
+- fn level3_removes  // asserts: assert_eq
+- fn node_size  // asserts: assert_eq
+- fn range
+- fn range_next_back
+- fn remove_level1  // asserts: assert_eq
+- fn remove_level1_rightmost  // asserts: assert_eq
+- fn split_level0_leaf
+- fn split_level1_leaf
 
-[crates/extension/src/regex.rs]
-- fn test_regexp  // expects: .unwrap()
-- fn test_regexp_impl  // expects: .unwrap()
+[cranelift/bforest/src/node.rs]
+- fn inner  // asserts: assert_eq
+- fn inner_balance  // asserts: assert_eq
+- fn leaf  // asserts: assert_eq
+- fn leaf_balance
+- fn optimal_split_pos  // asserts: assert_eq
 
-[crates/extension/src/uuid.rs]
-- fn test_uuid  // expects: .unwrap()
+[cranelift/bforest/src/path.rs]
+- fn search_single_inner  // asserts: assert_eq
+- fn search_single_leaf  // asserts: assert_eq
 
-[crates/extension/src/validators.rs]
-- fn test_is_email  // expects: .unwrap()
-- fn test_is_json  // expects: .unwrap()
+[cranelift/bforest/src/set.rs]
+- fn empty  // asserts: assert_eq
+- fn four_level  // asserts: assert_eq
+- fn four_level_clear
+- fn node_size  // asserts: assert_eq
+- fn simple_cursor  // asserts: assert_eq
+- fn three_level_sparse_tree  // asserts: assert_eq
+- fn two_level_sparse_tree  // asserts: assert_eq
 
-[crates/pg-schema/src/index.rs]
-- async fn postgres_index_schema_test  // expects: .unwrap()
+[cranelift/bitset/src/compound.rs]
+- fn zero_capacity_no_allocs  // asserts: assert_eq
 
-[crates/pg-schema/src/table.rs]
-- async fn postgres_check_jsonschema_test  // expects: .unwrap()
-- async fn postgres_column_schema_test  // expects: .unwrap()
-- async fn postgres_table_schema_test  // expects: .unwrap()
+[cranelift/bitset/tests/bitset.rs]
+- fn contains
+- fn from_range
+- fn minmax  // asserts: assert_eq
 
-[crates/pg-schema/src/trigger.rs]
-- async fn postgres_trigger_schema_test  // expects: .unwrap()
+[cranelift/codegen/src/ctxhash.rs]
+- fn test_basic
 
-[crates/pg-schema/src/util.rs]
-- pub async fn test_connection() -> (pglite_oxide::PgliteServer, trailbase_sqlite::Connection)  // expects: .unwrap()
+[cranelift/codegen/src/data_value.rs]
+- fn type_conversions  // asserts: assert_eq
 
-[crates/pg-schema/src/view.rs]
-- async fn postgres_view_schema_derived_column_test  // expects: .unwrap()
-- async fn postgres_view_schema_simple_test  // expects: .unwrap()
+[cranelift/codegen/src/dominator_tree.rs]
+- fn backwards_layout  // asserts: assert_eq
+- fn empty  // asserts: assert_eq
+- fn insts_same_block
+- fn unreachable_node  // asserts: assert_eq
 
-[crates/qs/src/filter.rs]
-- fn test_filter_parsing  // expects: .unwrap()
-- fn test_filter_to_sql
+[cranelift/codegen/src/flowgraph.rs]
+- fn branches_and_jumps
+- fn empty
+- fn no_predecessors  // asserts: assert_eq
 
-[crates/qs/src/query.rs]
-- fn test_basic_to_query
-- fn test_date_range_filter  // expects: .expect(...)
-- fn test_geometry_filter
-- fn test_query_basic_parsing  // asserts: assert_eq
-- fn test_query_cursor_parsing  // asserts: assert_eq
-- fn test_query_expand_parsing
-- fn test_query_filter_parsing  // expects: .unwrap()
-- fn test_query_order_parsing  // asserts: assert_eq
+[cranelift/codegen/src/loop_analysis.rs]
+- fn complex_loop_detection
+- fn nested_loops_detection
 
-[crates/qs/src/value.rs]
-- fn test_value  // asserts: assert_eq
+[cranelift/codegen/src/post_dominator_tree.rs]
+- fn empty
+- fn if_else_diamond  // asserts: assert_eq
+- fn infinite_loop  // asserts: assert_eq
+- fn infinite_loop_with_side_exit  // asserts: assert_eq
+- fn insts_post_dominate_same_block
+- fn lifecycle
+- fn multiple_returns  // asserts: assert_eq
+- fn post_dominators_match_oracle() -> mutatis::check::CheckResult<GraphSpec>
+- fn straight_line  // asserts: assert_eq
+- fn terminating_loop  // asserts: assert_eq
+- fn trap_as_exit  // asserts: assert_eq
 
-[crates/reactive/src/async_reactive.rs]
-- async fn async_reactive_test  // asserts: assert_eq
+[cranelift/codegen/src/scoped_hash_map.rs]
+- fn basic
+- fn insert_arbitrary_depth  // asserts: assert_eq
 
-[crates/reactive/src/reactive.rs]
-- async fn derive_async_reactive_test
+[cranelift/codegen/src/settings.rs]
+- fn display_default
+- fn modify_bool  // asserts: assert_eq
+- fn modify_string  // asserts: assert_eq
 
-[crates/reactive/tests/lib_tests.rs]
-- fn can_add_observers
-- fn can_clear_observers  // asserts: assert_eq
-- fn can_merge  // asserts: assert_eq
-- fn can_notify
-- fn can_set  // asserts: assert_eq
-- fn can_update  // asserts: assert_eq
-- fn initial_derived_values_must_not_be_default  // asserts: assert_eq
-- fn update_only_notifies_observers_when_value_changes
-- fn update_unchecked_notifies_observers_without_checking_if_value_changed
+[cranelift/codegen/src/timing.rs]
+- fn display  // asserts: assert_eq
 
-[crates/refinery/src/util.rs]
-- fn finds_mod_migrations  // expects: .unwrap()
-- fn finds_sql_migrations  // expects: .unwrap()
-- fn finds_unversioned_migrations  // expects: .unwrap()
-- fn ignores_mod_files_without_migration_regex_match  // expects: .unwrap()
-- fn ignores_sql_files_without_migration_regex_match  // expects: .unwrap()
-- fn loads_migrations_from_path  // expects: .unwrap()
+[cranelift/codegen/src/traversals.rs]
+- fn multiple_successors_to_the_same_block  // asserts: assert_eq
+- fn test_dfs_traversal  // asserts: assert_eq
 
-[crates/schema/src/file.rs]
-- fn test_build_unique_filename  // asserts: assert_eq
-- fn test_file_upload_input_serialization
+[cranelift/codegen/src/write.rs]
+- fn aliases
+- fn basic  // asserts: assert_eq
+- fn cold_blocks
 
-[crates/schema/src/json.rs]
-- async fn test_parse_string_json_value  // expects: .unwrap()
+[cranelift/entity/src/boxed_slice.rs]
+- fn basic  // asserts: assert_eq
+- fn iter  // asserts: assert_eq
+- fn iter_rev  // asserts: assert_eq
+- fn keys  // asserts: assert_eq
+- fn keys_rev  // asserts: assert_eq
+- fn values
+- fn values_rev
 
-[crates/schema/src/json_schema.rs]
-- fn test_file_uploads_schema  // expects: .unwrap()
-- fn test_geojson_schema  // expects: .unwrap()
-- fn test_parse_table_schema  // expects: .unwrap()
+[cranelift/entity/src/lib.rs]
+- fn cannot_construct_from_reserved_u32
+- fn cannot_construct_from_reserved_usize
+- fn comparisons_work  // asserts: assert_eq
+- fn display_prefix_works  // asserts: assert_eq
+- fn from_u32_to_usize  // asserts: assert_eq
+- fn from_usize_to_u32  // asserts: assert_eq
 
-[crates/schema/src/lib.rs]
-- fn test_qualified_name  // expects: .unwrap()
+[cranelift/entity/src/list.rs]
+- #[should_panic]  // asserts: assert_eq
+- fn block_allocator  // asserts: assert_ne
+- fn copy_from  // asserts: assert_eq
+- fn deep_clone  // asserts: assert_eq
+- fn empty_list  // asserts: assert_eq
+- fn from_slice  // asserts: assert_eq
+- fn growing  // asserts: assert_eq
+- fn insert_remove  // asserts: assert_eq
+- fn push  // asserts: assert_eq
+- fn size_classes  // asserts: assert_eq
+- fn truncate  // asserts: assert_eq
 
-[crates/schema/src/metadata.rs]
-- fn test_extract_json_metadata  // expects: .unwrap()
-- fn test_find_geometry_columns  // asserts: assert_eq
-- fn test_find_record_pk_column_index_for_table  // asserts: assert_eq
-- fn test_parse_create_view  // expects: .unwrap()
-- fn test_parse_create_view_from_issue_99  // expects: .unwrap()
-- fn test_parse_create_view_with_group_by  // expects: .unwrap()
-- fn test_parse_create_view_with_joins  // expects: .unwrap()
-- fn test_parse_create_view_with_subquery  // expects: .unwrap()
+[cranelift/entity/src/map.rs]
+- fn basic  // asserts: assert_eq
 
-[crates/schema/src/registry.rs]
-- fn test_builtin_schemas  // expects: .unwrap()
+[cranelift/entity/src/packed_option.rs]
+- fn copies  // asserts: assert_eq
+- fn moves  // asserts: assert_eq
 
-[crates/sqlite/src/generic.rs]
-- async fn generic_connection_w_pg_create_more_complex_table_test  // expects: .unwrap()
-- async fn generic_connection_w_pg_create_simple_table_test  // expects: .unwrap()
-- async fn generic_connection_w_pg_test  // expects: .unwrap()
-- async fn generic_pg_poc_test  // expects: .unwrap()
-- async fn pg_float_test  // expects: .unwrap()
-- async fn pg_int_test  // expects: .unwrap()
-- async fn pg_json_test  // expects: .unwrap()
-- async fn pg_lite_test  // expects: .unwrap()
-- async fn pg_tid_test  // expects: .unwrap()
-- async fn pg_trigger_test  // expects: .unwrap()
-- async fn pg_uuids_test  // expects: .unwrap()
+[cranelift/entity/src/primary.rs]
+- fn basic  // asserts: assert_eq
+- fn from_iter
+- fn from_vec
+- fn get_many_mut  // asserts: assert_eq
+- fn iter  // asserts: assert_eq
+- fn iter_rev  // asserts: assert_eq
+- fn keys  // asserts: assert_eq
+- fn keys_rev  // asserts: assert_eq
+- fn push  // asserts: assert_eq
+- fn values
+- fn values_rev
 
-[crates/sqlite/src/tests.rs]
-- async fn call_failure_test  // expects: .unwrap()
-- async fn call_success_test  // expects: .unwrap()
-- async fn close_call_test  // expects: .unwrap()
-- async fn close_failure_test  // expects: .unwrap()
-- async fn close_success_test  // expects: .unwrap()
-- async fn debug_format_test  // expects: .unwrap()
-- async fn double_close_test  // expects: .unwrap()
-- async fn open_in_memory_test  // expects: .unwrap()
-- async fn test_attach  // expects: .unwrap()
-- async fn test_backup  // expects: .unwrap()
-- async fn test_ergonomic_errors  // expects: .unwrap()
-- async fn test_error_source  // asserts: assert_eq
-- async fn test_execute_and_query  // expects: .unwrap()
-- async fn test_execute_batch  // expects: .unwrap()
-- async fn test_execute_batch_error  // expects: .unwrap()
-- async fn test_execute_returning_rows  // expects: .unwrap()
-- async fn test_hooks  // expects: .unwrap()
-- async fn test_identity  // expects: .unwrap()
-- async fn test_params
-- fn test_busy  // expects: .unwrap()
-- fn test_locking  // expects: .unwrap()
+[cranelift/entity/src/set.rs]
+- fn basic  // asserts: assert_eq
+- fn fmt_debug  // asserts: assert_eq
+- fn pop_ordered  // asserts: assert_eq
+- fn pop_unordered
 
-[crates/sqlvalue/src/lib.rs]
-- fn decode_hex_test  // asserts: assert_eq
+[cranelift/entity/src/sparse.rs]
+- fn debug_impl  // asserts: assert_eq
+- fn default_impl  // asserts: assert_eq
+- fn empty_immutable_map  // asserts: assert_eq
+- fn entity_set  // asserts: assert_eq
+- fn multiple_entries  // asserts: assert_eq
+- fn single_entry  // asserts: assert_eq
 
-[crates/wasm-runtime-guest/src/db.rs]
-- fn escape_test  // asserts: assert_eq
+[cranelift/filetests/src/function_runner.rs]
+- fn nop
+- fn trampolines
 
-[crates/wasm-runtime-host/src/lib.rs]
-- async fn test_custom_sqlite_function  // expects: .unwrap()
-- async fn test_init  // expects: .unwrap()
-- async fn test_transaction  // expects: .unwrap()
+[cranelift/filetests/src/match_directive.rs]
+- fn test_match_directive  // asserts: assert_eq
 
-[crates/wasm-runtime-host/src/sqlite.rs]
-- async fn handle_sqlite_execute_test  // expects: .unwrap()
-- async fn handle_sqlite_query_test  // expects: .unwrap()
-- fn readonly_select_filter_test
+[cranelift/filetests/src/runone.rs]
+- fn test_tuples<'a>(
 
-[guests/typescript/tests/runtime.test.ts]
-- test "JSON value conversion"
-- test "SQL escape"
-- test "Wit value conversion"
-- test "base64"
+[cranelift/frontend/src/ssa.rs]
+- fn br_table_with_args
+- fn program_with_loop
+- fn sequence_of_blocks
+- fn simple_block
+- fn undef  // asserts: assert_eq
+- fn undef_in_entry  // asserts: assert_eq
+- fn undef_in_entry_sealed_after  // asserts: assert_eq
+- fn undef_values_reordering
+- fn unreachable_use
+
+[cranelift/frontend/src/switch.rs]
+- #[should_panic(
+- fn switch_128bit
+- fn switch_128bit_max_u64
+- fn switch_64bit
+- fn switch_bool  // asserts: assert_eq_output
+- fn switch_empty  // asserts: assert_eq_output
+- fn switch_many  // asserts: assert_eq_output
+- fn switch_max_index_value  // asserts: assert_eq_output
+- fn switch_min_index_value  // asserts: assert_eq_output
+- fn switch_optimal_codegen  // asserts: assert_eq_output
+- fn switch_seal_generated_blocks
+- fn switch_single  // asserts: assert_eq_output
+- fn switch_two_gap  // asserts: assert_eq_output
+- fn switch_zero  // asserts: assert_eq_output
+
+[cranelift/interpreter/src/address.rs]
+- fn address_region_roundtrip_encode_decode  // asserts: assert_eq
+- fn address_roundtrip  // expects: .unwrap()
+
+[cranelift/interpreter/src/environment.rs]
+- fn addition
+- fn from  // asserts: assert_eq
+- fn nonexistence
+
+[cranelift/interpreter/src/frame.rs]
+- #[should_panic(expected = "assertion failed: name.index() < self.registers.len()")]
+- #[should_panic(expected = "empty slot: v10")]  // asserts: assert_eq
+- #[should_panic(expected = "empty slot: v2")]
+- #[should_panic(expected = "empty slot: v5")]  // asserts: assert_eq
+- fn assignment_and_retrieval
+- fn assignment_to_extra_slots
+- fn construction
+
+[cranelift/interpreter/src/interpreter.rs]
+- fn fuel
+- fn function_references
+- fn libcall
+- fn misaligned_load_traps
+- fn misaligned_store_traps
+- fn out_of_slot_read_traps
+- fn out_of_slot_write_traps
+- fn partial_out_of_slot_read_by_addr_traps
+- fn partial_out_of_slot_read_traps
+- fn partial_out_of_slot_write_by_addr_traps
+- fn partial_out_of_slot_write_traps
+- fn sanity
+- fn sdiv_min_by_neg_one_traps_with_overflow
+- fn srem_trap
+- fn stack_slots_multi_functions
+- fn trap_across_call_propagates_correctly
+- fn udiv_by_zero_traps
+
+[cranelift/interpreter/src/value.rs]
+- fn test_iterator_v128  // asserts: assert_eq
+- fn test_iterator_v128_empty  // asserts: assert_eq
+- fn test_iterator_v128_ones  // asserts: assert_eq
+- fn test_iterator_v64  // asserts: assert_eq
+- fn test_iterator_v64_empty  // asserts: assert_eq
+- fn test_iterator_v64_ones  // asserts: assert_eq
+
+[cranelift/jit/tests/basic.rs]
+- fn empty_data_object
+- fn error_on_incompatible_sig_in_declare_function
+- fn libcall_function
+- fn panic_on_define_after_finalize
+- fn switch_error
+
+[cranelift/module/src/data_context.rs]
+- fn basic_data_context  // asserts: assert_eq
+
+[cranelift/native/src/lib.rs]
+- fn test  // expects: .unwrap()
+
+[cranelift/native/src/riscv.rs]
+- fn parse_isa  // asserts: assert_eq
+
+[cranelift/object/src/backend.rs]
+- fn section  // asserts: assert_eq
+
+[cranelift/object/src/unwind.rs]
+- fn absolute_eh_pointer_on_elf  // expects: .unwrap()
+- fn missing_eh_pe_falls_back_to_absolute_pointer  // expects: .unwrap()
+- fn pcrel_on_macho_is_rejected
+- fn pcrel_sdata4_on_coff  // expects: .unwrap()
+- fn pcrel_sdata4_on_elf  // expects: .unwrap()
+- fn unknown_pointer_application_errors
+
+[cranelift/object/tests/basic.rs]
+- #[cfg_attr(not(debug_assertions), ignore = "checks a debug assertion")]  // asserts: should_panic
+- #[should_panic(expected = "Result::unwrap()` on an `Err` value: DuplicateDefinition(\"abc\")")]  // expects: .unwrap()
+- #[should_panic(expected = "has a null byte, which is disallowed")]  // expects: .unwrap()
+- fn aarch64_colocated_data_symbol_reloc  // expects: .unwrap()
+- fn cie_is_shared_across_multiple_functions  // expects: .expect(...)
+- fn emits_eh_frame_for_aarch64_target  // expects: .expect(...)
+- fn emits_eh_frame_for_x86_64_systemv_target  // expects: .expect(...)
+- fn error_on_incompatible_sig_in_declare_function  // expects: .unwrap()
+- fn fde_relocations_target_function_symbols  // expects: .expect(...)
+- fn libcall_function  // expects: .unwrap()
+- fn no_eh_frame_emitted_for_windows_target
+- fn per_function_section_combines_with_unwind_info  // expects: .unwrap()
+- fn switch_error
+- fn unwind_info_disabled_by_default_emits_no_eh_frame  // expects: .unwrap()
+
+[cranelift/reader/src/lexer.rs]
+- fn digits  // asserts: assert_eq
+- fn entity_name  // asserts: assert_eq
+- fn lex_chars
+- fn lex_comment  // asserts: assert_eq
+- fn lex_hex_sequences  // asserts: assert_eq
+- fn lex_identifiers  // asserts: assert_eq
+- fn lex_names  // asserts: assert_eq
+- fn lex_numbers  // asserts: assert_eq
+- fn lex_strings  // asserts: assert_eq
+- fn lex_userrefs  // asserts: assert_eq
+- fn make_lexer  // asserts: assert_eq
+
+[cranelift/reader/src/run_command.rs]
+- fn run_a_command  // expects: .unwrap()
+
+[cranelift/reader/src/sourcemap.rs]
+- fn details
+
+[cranelift/reader/src/testcommand.rs]
+- fn parse_command  // asserts: assert_eq
+- fn parse_option  // asserts: assert_eq
+
+[cranelift/src/bugpoint.rs]
+- fn test_consts
+- fn test_reduce
+
+[cranelift/src/clif-util.rs]
+- fn verify_cli
+
+[cranelift/src/interpret.rs]
+- fn filetests
+- fn nop
+
+[cranelift/src/run.rs]
+- fn nop
+
+[cranelift/srcgen/src/lib.rs]
+- fn adding_arms_works  // asserts: assert_eq
+- fn fmt_can_add_doc_comments  // asserts: assert_eq
+- fn fmt_can_add_doc_comments_with_empty_lines  // asserts: assert_eq
+- fn fmt_can_add_indented_line  // asserts: assert_eq
+- fn fmt_can_add_type_to_lines
+- fn formatter_basic_example_works  // asserts: assert_eq
+- fn get_indent_works
+- fn match_with_catchall_order  // asserts: assert_eq
+- fn parse_multiline_works  // asserts: assert_eq
+
+[cranelift/tests/filetests.rs]
+- fn filetests() -> anyhow::Result<()>
+
+[cranelift/tests/logged-filetests.rs]
+- fn logged_filetests() -> anyhow::Result<()>
+
+[crates/cache/src/tests.rs]
+- fn test_cache_init
+- fn test_write_read_cache
+
+[crates/cache/tests/cache_write_default_config.rs]
+- fn test_cache_write_default_config  // expects: .expect(...)
+
+[crates/cli-flags/src/opt.rs]
+- fn numbers_with_underscores
+
+[crates/component-macro/tests/expanded.rs]
+- fn expand_wits() -> Result<()>
+
+[crates/core/src/array.rs]
+- #[cfg(feature = "std")]  // asserts: assert_eq
+- fn array_try_from_fn_test  // asserts: assert_eq
+- fn smoke_try_from_fn  // expects: .unwrap()
+- fn try_from_fn_dont_drop_on_success  // expects: .unwrap()
+- fn try_from_fn_drop_on_failure
+
+[crates/core/src/undo.rs]
+- fn commit  // asserts: assert_eq
+- fn error_propagation
+- fn panic_unwind
+
+[crates/core/tests/tests.rs]
+- #[cfg(feature = "anyhow")]
+- #[cfg(feature = "anyhow")]  // asserts: assert_eq
+- #[cfg(feature = "backtrace")]  // asserts: assert_eq
+- fn bail_macro
+- fn chain  // expects: .unwrap()
+- fn chain_on_error_with_source  // expects: .unwrap()
+- fn chain_with_leaf_sources
+- fn context_on_err_result  // asserts: assert_eq
+- fn context_on_none_option  // asserts: assert_eq
+- fn context_on_ok_result  // asserts: assert_eq
+- fn context_on_oom
+- fn context_on_some_option  // asserts: assert_eq
+- fn downcast  // asserts: assert_eq
+- fn downcast_drops_everything  // asserts: assert_eq
+- fn downcast_mut  // expects: .unwrap()
+- fn downcast_ref  // asserts: assert_eq
+- fn ensure_macro
+- fn fmt_debug
+- fn fmt_debug_alternate
+- fn fmt_debug_alternate_with_oom
+- fn fmt_debug_with_single_cause
+- fn fmt_display  // asserts: assert_eq
+- fn fmt_display_alternate  // asserts: assert_eq
+- fn format_err_macro_core_error  // asserts: assert_eq
+- fn format_err_macro_core_error_chain  // expects: .unwrap()
+- fn format_err_macro_format_explicit_args
+- fn format_err_macro_format_implicit_args
+- fn format_err_macro_msg  // asserts: assert_eq
+- fn format_err_macro_string_literal  // asserts: assert_eq
+- fn from_error  // asserts: assert_eq
+- fn from_error_with_large_align
+- fn into_boxed_dyn_error  // asserts: assert_eq
+- fn is
+- fn is_for_root_cause_with_initial_error_source
+- fn msg  // asserts: assert_eq
+- fn msg_drops  // asserts: assert_eq
+- fn new  // asserts: assert_eq
+- fn new_drops  // asserts: assert_eq
+- fn oom_requested_allocation_size  // asserts: assert_eq
+- fn root_cause  // asserts: assert_eq
+- fn with_context_on_err_result  // asserts: assert_eq
+- fn with_context_on_none_option  // asserts: assert_eq
+- fn with_context_on_ok_result  // asserts: assert_eq
+- fn with_context_on_some_option  // asserts: assert_eq
+
+[crates/debugger/src/lib.rs]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+
+[crates/environ/src/gc.rs]
+- fn kind_matches
+
+[crates/environ/src/module_artifacts.rs]
+- fn func_locs
+- fn reverse_func_locs  // asserts: assert_eq
+- fn reverse_lookups
+- fn src_locs  // asserts: assert_eq
+
+[crates/environ/src/scopevec.rs]
+- fn smoke  // asserts: assert_eq
+
+[crates/environ/src/string_pool.rs]
+- fn basic() -> Result<()>  // asserts: assert_eq
+- fn roundtrip_serialize_deserialize() -> Result<()>  // asserts: assert_eq
+- fn stress() -> Result<()>
+
+[crates/environ/src/vmoffsets.rs]
+- fn alignment
+
+[crates/fiber/src/lib.rs]
+- #[cfg(feature = "std")]  // expects: .unwrap()
+- // Don't run under `std` -- we assert that the stack is page-aligned there.  // expects: .unwrap()
+- fn backtrace_traces_to_host
+- fn cross_thread_fiber
+- fn fiber_stack_max_size
+- fn small_stacks
+- fn smoke
+- fn suspend_and_resume
+- fn suspend_and_resume_values  // asserts: assert_eq
+
+[crates/fuzzing/src/lib.rs]
+- pub fn test_n_times<T: for<'a> Arbitrary<'a>>(
+
+[crates/fuzzing/src/oom.rs]
+- pub async fn test_async(&self, test_func: impl AsyncFn() -> Result<()>) -> Result<()>
+
+[crates/fuzzing/src/oracles.rs]
+- fn gc_ops_eventually_gcs
+- fn module_generation_uses_expected_proposals
+
+[crates/fuzzing/src/single_module_fuzzer.rs]
+- fn changing_configuration_does_not_change_module  // asserts: assert_eq
+
+[crates/test-util/src/wast.rs]
+- pub fn test_uses_gc_types(&self) -> bool
+
+[crates/unwinder/src/exception_table.rs]
+- fn serialize_exception_table
+
+[crates/wasi-http/src/default_send_request.rs]
+- fn resolves_server_name_from_authority  // asserts: assert_eq
+
+[crates/wasi-http/src/field_map.rs]
+- fn content_length_rejects_non_digits
+- fn test_immutable  // asserts: assert_eq
+- fn test_limits
+- fn test_size() -> Result<(), FieldMapError>  // asserts: assert_eq
+
+[crates/wasi-http/src/lib.rs]
+- fn content_length_must_be_decimal_digits  // asserts: assert_eq
+
+[crates/wasi-keyvalue/src/lib.rs]
+- fn increment_overflow_is_reported_as_error
+- fn list_keys_cursor_past_end_returns_empty
+
+[crates/wasi/src/cli.rs]
+- async fn async_stdin_stream  // expects: .unwrap()
+- async fn async_stdout_stream_unblocks  // expects: .unwrap()
+- fn memory_stdin_stream  // expects: .expect(...)
+
+[crates/wasi/src/random.rs]
+- fn deterministic  // expects: .expect(...)
+
+[crates/wasmtime/src/sync_nostd.rs]
+- #[should_panic(expected = "concurrent read request")]
+- #[should_panic(expected = "concurrent write request")]
+- fn smoke_once_lock  // asserts: assert_eq
+- fn smoke_rwlock  // asserts: assert_eq
+
+[crates/wasmtime/tests/custom_signal_handler.rs]
+- fn test_custom_signal_handler_instance_calling_another_instance() -> Result<()>
+- fn test_custom_signal_handler_multiple_instances() -> Result<()>  // expects: .unwrap()
+- fn test_custom_signal_handler_single_instance() -> Result<()>
+- fn test_custom_signal_handler_single_instance_hostcall() -> Result<()>
+
+[crates/wasmtime/tests/unload-engine.rs]
+- fn test_unload_engine  // expects: .unwrap()
+
+[crates/wiggle/src/region.rs]
+- fn nonoverlapping
+- fn overlapping
+- fn zero_length
+
+[crates/wiggle/tests/atoms.rs]
+- fn double_int_return_float(e in DoubleIntExercise::strat())
+- fn int_float_exercise(e in IntFloatExercise::strat())
+
+[crates/wiggle/tests/atoms_async.rs]
+- fn double_int_return_float(e in DoubleIntExercise::strat())
+- fn int_float_exercise(e in IntFloatExercise::strat())
+
+[crates/wiggle/tests/errors.rs]
+- fn one_error_conversion_test  // expects: .unwrap()
+
+[crates/wiggle/tests/flags.rs]
+- fn configure_car(e in ConfigureCarExercise::strat())
+- fn flags_fmt
+
+[crates/wiggle/tests/handles.rs]
+- fn handle_exercise(e in HandleExercise::strat())
+
+[crates/wiggle/tests/ints.rs]
+- fn cookie_cutter(e in CookieCutterExercise::strat())
+
+[crates/wiggle/tests/lists.rs]
+- fn populate_excuses(e in PopulateExcusesExercise::strat())
+- fn reduce_excuses(e in ReduceExcusesExercise::strat())
+- fn sum_elements(e in SumElementsExercise::strat())
+
+[crates/wiggle/tests/pointers.rs]
+- fn pointers_and_enums(e in PointersAndEnumsExercise::strat())
+
+[crates/wiggle/tests/records.rs]
+- fn pair_different_ints_offsets  // asserts: assert_eq
+- fn pair_int_and_ptr_offsets  // asserts: assert_eq
+- fn pair_int_ptrs_offsets  // asserts: assert_eq
+- fn pair_ints_offsets  // asserts: assert_eq
+- fn pair_record_of_list_offset  // asserts: assert_eq
+- fn return_pair_ints(e in ReturnPairInts::strat())
+- fn return_pair_of_ptrs(e in ReturnPairPtrsExercise::strat())
+- fn sum_of_array(e in SumArrayExercise::strat())
+- fn sum_of_int_and_ptr(e in SumIntAndPtrExercise::strat())
+- fn sum_of_pair(e in SumOfPairExercise::strat())
+- fn sum_of_pair_of_ptrs(e in SumPairPtrsExercise::strat())
+
+[crates/wiggle/tests/strings.rs]
+- fn hello_string(e in HelloStringExercise::strat())
+- fn multi_string(e in MultiStringExercise::strat())
+- fn overlapping_string(e in OverlappingStringExercise::strat())
+
+[crates/wiggle/tests/variant.rs]
+- fn get_tag(e in GetTagExercise::strat())
+- fn reason_mult(e in ReasonMultExercise::strat())
+
+[crates/wiggle/tests/wasi.rs]
+- fn document_equivalent  // expects: .expect(...)
+
+[crates/wiggle/tests/wasmtime_async.rs]
+- async fn test_async_host_func  // expects: .unwrap()
+- async fn test_sync_host_func  // expects: .unwrap()
+
+[crates/wiggle/tests/wasmtime_integration.rs]
+- fn test_async_host_func  // expects: .unwrap()
+- fn test_sync_host_func  // expects: .unwrap()
+
+[crates/wiggle/tests/wasmtime_sync.rs]
+- fn test_async_host_func  // expects: .unwrap()
+- fn test_async_host_func_pending  // expects: .unwrap()
+- fn test_sync_host_func  // expects: .unwrap()
+
+[crates/wit-bindgen/src/source.rs]
+- fn if_else
+- fn newline_remap
+- fn simple_append  // asserts: assert_eq
+- fn trim_ws
+
+[crates/wmemcheck/src/lib.rs]
+- fn bad_stack_malloc  // asserts: assert_eq
+- fn basic_wmemcheck  // asserts: assert_eq
+- fn double_free  // asserts: assert_eq
+- fn double_malloc  // asserts: assert_eq
+- fn error_type  // asserts: assert_eq
+- fn from_test_program
+- fn out_of_bounds_malloc  // asserts: assert_eq
+- fn out_of_bounds_read  // asserts: assert_eq
+- fn read_before_initializing  // asserts: assert_eq
+- fn stack_full_empty  // asserts: assert_eq
+- fn update_sp_no_error  // asserts: assert_eq
+- fn use_after_free  // asserts: assert_eq
+
+[pulley/src/encode.rs]
+- #[cfg(feature = "std")]  // asserts: assert_eq
+
+[pulley/src/interp.rs]
+- fn simple_push_pop  // expects: .unwrap()
+
+[pulley/src/opcode.rs]
+- fn max_values
+
+[pulley/src/regs.rs]
+- #[cfg_attr(miri, ignore)] // takes 30s+ in miri  // expects: .unwrap()
+- fn assert_special_start_is_right  // expects: .unwrap()
+- fn not_special_x_regs  // expects: .unwrap()
+- fn special_x_regs
+
+[pulley/tests/all/disas.rs]
+- fn disassemble_br_table
+- fn no_offsets
+- fn no_offsets_or_hexdump
+- fn simple
+
+[pulley/tests/all/interp.rs]
+- fn bitcast_float_from_int_32
+- fn bitcast_float_from_int_64
+- fn bitcast_int_from_float_32
+- fn bitcast_int_from_float_64
+- fn trap  // expects: .unwrap()
+- fn xadd32
+- fn xadd64
+- fn xconst16
+- fn xconst32
+- fn xconst64
+- fn xconst8
+- fn xeq32
+- fn xeq64
+- fn xload32le_o32
+- fn xload64le_o32
+- fn xneq32
+- fn xneq64
+- fn xslt32
+- fn xslt64
+- fn xslteq32
+- fn xslteq64
+- fn xstore32_le_o32
+- fn xult32
+- fn xult64
+- fn xulteq32
+- fn xulteq64
+
+[pulley/tests/all/main.rs]
+- fn test_call_indirect_host_width  // asserts: assert_eq
+
+[src/bin/wasmtime.rs]
+- fn verify_cli
+
+[src/commands/compile.rs]
+- fn test_aarch64_flags_compile() -> Result<()>  // expects: .unwrap()
+- fn test_successful_compile() -> Result<()>  // expects: .unwrap()
+- fn test_unsupported_flags_compile() -> Result<()>  // expects: .unwrap()
+- fn test_x64_flags_compile() -> Result<()>  // expects: .unwrap()
+- fn test_x64_presets_compile() -> Result<()>  // expects: .unwrap()
+
+[src/commands/hot_blocks.rs]
+- #[cfg(target_arch = "x86_64")]  // expects: .unwrap()
+- fn test_ditto_marks  // expects: .unwrap()
+- fn test_find_function_binary_search
+- fn test_mocked_hot_blocks  // expects: .unwrap()
+- fn test_parse_perf_script  // asserts: assert_eq
+- fn test_parse_perf_script_line_cwasm_dso  // expects: .unwrap()
+- fn test_parse_perf_script_line_map_dso  // expects: .unwrap()
+- fn test_parse_perf_script_line_no_offset  // expects: .unwrap()
+- fn test_parse_perf_script_line_non_map_dso
+- fn test_parse_perf_script_line_trampoline  // expects: .unwrap()
+- fn test_parse_wasm_func_name  // asserts: assert_eq
+- fn test_read_clif_file  // expects: .unwrap()
+- fn test_wat_offset_map  // expects: .unwrap()
+
+[tests/all/arrays.rs]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- #[should_panic = "wrong store"]  // expects: .unwrap()
+- fn anyref_as_array() -> Result<()>  // expects: .unwrap()
+- fn array_elems_empty() -> Result<()>  // asserts: assert_eq
+- fn array_elems_non_empty() -> Result<()>  // asserts: assert_eq
+- fn array_elems_unrooted() -> Result<()>
+- fn array_get_in_bounds() -> Result<()>  // asserts: assert_eq
+- fn array_get_on_unrooted() -> Result<()>
+- fn array_get_out_of_bounds() -> Result<()>
+- fn array_len_empty() -> Result<()>  // asserts: assert_eq
+- fn array_len_non_empty() -> Result<()>  // asserts: assert_eq
+- fn array_new_empty() -> Result<()>  // asserts: assert_eq
+- fn array_new_fixed_empty() -> Result<()>  // asserts: assert_eq
+- fn array_new_fixed_unrooted_initial_elem() -> Result<()>  // expects: .unwrap()
+- fn array_new_fixed_with_elems() -> Result<()>  // asserts: assert_eq
+- fn array_new_unrooted_initial_elem() -> Result<()>  // expects: .unwrap()
+- fn array_new_with_elems() -> Result<()>  // asserts: assert_eq
+- fn array_set_given_unrooted() -> Result<()>  // expects: .unwrap()
+- fn array_set_immutable_elems() -> Result<()>
+- fn array_set_in_bounds() -> Result<()>  // asserts: assert_eq
+- fn array_set_on_unrooted() -> Result<()>
+- fn array_set_out_of_bounds() -> Result<()>
+- fn array_set_wrong_field_type() -> Result<()>
+- fn array_ty() -> Result<()>
+- fn array_ty_unrooted() -> Result<()>
+- fn arrayref_matches_ty() -> Result<()>
+- fn arrayref_owned_to_anyref() -> Result<()>
+- fn arrayref_owned_to_eqref() -> Result<()>
+- fn arrayref_to_anyref_rooted() -> Result<()>
+- fn arrayref_to_eqref_rooted() -> Result<()>
+- fn arrayref_ty() -> Result<()>
+- fn instantiate_with_array_global() -> Result<()>  // expects: .expect(...)
+- fn issue_13034_array_layout_overflow() -> Result<()>
+
+[tests/all/async_functions.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- async fn async_host_func_with_pooling_stacks() -> Result<()>
+- async fn async_with_pooling_stacks  // expects: .unwrap()
+- async fn cancel_during_run  // asserts: assert_eq
+- async fn smoke
+- async fn smoke_host_func() -> Result<()>
+- async fn smoke_host_func_with_suspension() -> Result<()>
+- async fn smoke_with_suspension
+
+[tests/all/call_hook.rs]
+- async fn basic_async_hook() -> Result<(), Error>
+- async fn call_linked_func_async() -> Result<(), Error>  // asserts: assert_eq
+- async fn call_wrapped_async_func() -> Result<(), Error>  // asserts: assert_eq
+- async fn drop_suspended_async_hook() -> Result<(), Error>  // asserts: assert_eq
+- async fn instantiate_async() -> Result<(), Error>  // asserts: assert_eq
+- async fn timeout_async_hook() -> Result<(), Error>
+- fn call_linked_func() -> Result<(), Error>  // asserts: assert_eq
+- fn call_wrapped_func() -> Result<(), Error>  // asserts: assert_eq
+- fn instantiate() -> Result<(), Error>  // asserts: assert_eq
+- fn recursion() -> Result<(), Error>  // asserts: assert_eq
+- fn trapping() -> Result<(), Error>  // asserts: assert_eq
+
+[tests/all/cli_tests.rs]
+- #[cfg(not(target_arch = "s390x"))]
+- #[cfg(unix)]
+- #[cfg_attr(not(feature = "component-model"), ignore)]
+- #[cfg_attr(not(feature = "component-model"), ignore)]  // expects: .unwrap()
+- fn bad_text_syntax() -> Result<()>
+- fn command_invoke() -> Result<()>  // expects: .unwrap()
+- fn component_invoke_multiple_run_exports() -> Result<()>  // asserts: assert_eq
+- fn exit125_wasi_snapshot0() -> Result<()>  // expects: .unwrap()
+- fn exit125_wasi_snapshot1() -> Result<()>  // expects: .unwrap()
+- fn exit126_wasi_snapshot0() -> Result<()>  // expects: .unwrap()
+- fn exit126_wasi_snapshot1() -> Result<()>  // expects: .unwrap()
+- fn exit2_wasi_snapshot0() -> Result<()>  // expects: .unwrap()
+- fn exit2_wasi_snapshot1() -> Result<()>  // expects: .unwrap()
+- fn exit_with_saved_fprs() -> Result<()>  // expects: .unwrap()
+- fn float_args() -> Result<()>  // asserts: assert_eq
+- fn greeter() -> Result<()>  // expects: .unwrap()
+- fn greeter_preload_callable_command() -> Result<()>  // expects: .unwrap()
+- fn greeter_preload_command() -> Result<()>  // expects: .unwrap()
+- fn hello_wasi_snapshot0() -> Result<()>  // asserts: assert_eq
+- fn hello_wasi_snapshot0_from_stdin() -> Result<()>  // expects: .unwrap()
+- fn hello_wasi_snapshot1() -> Result<()>  // asserts: assert_eq
+- fn increase_stack_size() -> Result<()>
+- fn minimal_command() -> Result<()>  // expects: .unwrap()
+- fn minimal_reactor() -> Result<()>  // expects: .unwrap()
+- fn mpk_without_pooling() -> Result<()>
+- fn name_same_as_builtin_command() -> Result<()>
+- fn option_group_boolean_parsing() -> Result<()>
+- fn option_group_comma_separated() -> Result<()>
+- fn option_group_help() -> Result<()>
+- fn p2_cli_args() -> Result<()>
+- fn p2_cli_default_clocks() -> Result<()>
+- fn p2_cli_directory_list() -> Result<()>  // expects: .unwrap()
+- fn p2_cli_env() -> Result<()>
+- fn p2_cli_exit_default() -> Result<()>
+- fn p2_cli_exit_failure() -> Result<()>  // asserts: assert_eq
+- fn p2_cli_exit_panic() -> Result<()>
+- fn p2_cli_exit_success() -> Result<()>
+- fn p2_cli_exit_with_code() -> Result<()>  // asserts: assert_eq
+- fn p2_cli_export_cabi_realloc() -> Result<()>
+- fn p2_cli_file_append() -> Result<()>  // expects: .unwrap()
+- fn p2_cli_file_dir_sync() -> Result<()>  // expects: .unwrap()
+- fn p2_cli_file_read() -> Result<()>  // expects: .unwrap()
+- fn p2_cli_hello_stdout() -> Result<()>
+- fn p2_cli_initial_cwd() -> Result<()>
+- fn p2_cli_no_ip_name_lookup() -> Result<()>
+- fn p2_cli_no_tcp() -> Result<()>
+- fn p2_cli_no_udp() -> Result<()>
+- fn p2_cli_sleep() -> Result<()>
+- fn p2_cli_sleep_forever() -> Result<()>
+- fn p2_cli_splice_stdin() -> Result<()>  // expects: .unwrap()
+- fn p2_cli_stdin() -> Result<()>  // expects: .unwrap()
+- fn p2_cli_stdin_empty() -> Result<()>  // expects: .unwrap()
+- fn p2_cli_stdio_write_flushes() -> Result<()>  // expects: .unwrap()
+- fn preview2_stdin() -> Result<()>
+- fn reactor_invoke() -> Result<()>  // expects: .unwrap()
+- fn run_coredump_smoketest() -> Result<()>
+- fn run_cwasm() -> Result<()>  // expects: .unwrap()
+- fn run_cwasm_from_stdin() -> Result<()>  // expects: .unwrap()
+- fn run_wasi_http_component() -> Result<()>
+- fn run_wasmtime_simple() -> Result<()>  // expects: .unwrap()
+- fn run_wasmtime_simple_fail_no_args() -> Result<()>  // expects: .unwrap()
+- fn run_wasmtime_simple_wat() -> Result<()>  // expects: .unwrap()
+- fn run_wasmtime_unreachable_wat() -> Result<()>  // expects: .unwrap()
+- fn specify_env() -> Result<()>  // asserts: assert_eq
+- fn table_growth_failure() -> Result<()>
+- fn table_growth_failure2() -> Result<()>
+- fn timeout_in_invoke() -> Result<()>  // expects: .unwrap()
+- fn timeout_in_start() -> Result<()>  // expects: .unwrap()
+- fn wasi_misaligned_pointer() -> Result<()>
+- fn wasm_flags() -> Result<()>  // asserts: assert_eq
+- fn wasm_flags_without_subcommand() -> Result<()>  // asserts: assert_eq
+
+[tests/all/compile_time_builtins.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+
+[tests/all/component_model.rs]
+- #[cfg_attr(miri, ignore)]
+
+[tests/all/component_model/aot.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn bare_bones() -> Result<()>  // asserts: assert_eq
+- fn cannot_serialize_exported_module() -> Result<()>  // expects: .unwrap()
+- fn deserialize_from_serialized() -> Result<()>
+- fn module_component_mismatch() -> Result<()>
+- fn reflect_resource_import() -> Result<()>  // expects: .unwrap()
+
+[tests/all/component_model/async.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+
+[tests/all/component_model/async_dynamic.rs]
+- #[cfg_attr(miri, ignore)]
+- fn simple_type_conversions() -> Result<()>
+
+[tests/all/component_model/bindgen.rs]
+- async fn run() -> Result<()>
+- fn add_to_linker_can_instantiate() -> Result<()>
+- fn add_to_linker_instance_can_instantiate() -> Result<()>
+- fn ids_are_threaded_through() -> Result<()>
+- fn lookup_error_is_propagated() -> Result<()>
+- fn resource_ids_are_threaded_through() -> Result<()>
+- fn run() -> Result<()>
+- fn run() -> Result<()>  // asserts: assert_eq
+
+[tests/all/component_model/call_hook.rs]
+- async fn call_wrapped_async_func() -> Result<()>
+- async fn drop_suspended_async_hook() -> Result<()>  // asserts: assert_eq
+- async fn timeout_async_hook() -> Result<()>
+- fn call_func_with_post_return() -> Result<()>  // expects: .expect(...)
+- fn call_func_with_realloc() -> Result<()>
+- fn call_wrapped_func() -> Result<()>
+- fn trapping() -> Result<()>  // asserts: assert_eq
+
+[tests/all/component_model/dynamic.rs]
+- fn everything() -> Result<()>  // expects: .unwrap()
+- fn flags() -> Result<()>  // expects: .unwrap()
+- fn flags_beyond_end() -> Result<()>  // expects: .unwrap()
+- fn introspection() -> Result<()>
+- fn lists() -> Result<()>  // expects: .unwrap()
+- fn maps() -> Result<()>  // expects: .unwrap()
+- fn maps_alignment() -> Result<()>  // expects: .unwrap()
+- fn maps_all_primitive_types() -> Result<()>  // expects: .unwrap()
+- fn maps_complex_types() -> Result<()>  // expects: .unwrap()
+- fn maps_duplicate_keys() -> Result<()>  // expects: .unwrap()
+- fn maps_equality() -> Result<()>  // asserts: assert_eq
+- fn maps_large() -> Result<()>  // expects: .unwrap()
+- fn primitives() -> Result<()>  // expects: .unwrap()
+- fn records() -> Result<()>  // expects: .unwrap()
+- fn strings() -> Result<()>  // expects: .unwrap()
+- fn substituted_component_type_with_exported_resource() -> Result<()>  // expects: .unwrap()
+- fn variants() -> Result<()>  // expects: .unwrap()
+
+[tests/all/component_model/fixed_length_list.rs]
+- fn fixed_length_list() -> Result<()>
+- fn fixed_length_list_length_mismatch_rejected() -> Result<()>  // asserts: assert_eq
+
+[tests/all/component_model/func.rs]
+- async fn many_parameters() -> Result<()>
+- async fn many_parameters_concurrent() -> Result<()>
+- async fn many_parameters_dynamic() -> Result<()>
+- async fn many_parameters_dynamic_concurrent() -> Result<()>
+- async fn many_results() -> Result<()>
+- async fn many_results_concurrent() -> Result<()>
+- async fn many_results_dynamic() -> Result<()>
+- async fn many_results_dynamic_concurrent() -> Result<()>
+- async fn test_many_parameters(dynamic: bool, concurrent: bool) -> Result<()>
+- async fn test_many_results(dynamic: bool, concurrent: bool) -> Result<()>
+- fn bools() -> Result<()>  // asserts: assert_eq
+- fn chars() -> Result<()>  // asserts: assert_eq
+- fn floats() -> Result<()>  // asserts: assert_eq
+- fn integers() -> Result<()>
+- fn strings() -> Result<()>
+- fn thunks() -> Result<()>  // asserts: assert_eq
+- fn tuple_result() -> Result<()>  // asserts: assert_eq
+- fn type_layers() -> Result<()>
+- fn typecheck() -> Result<()>  // expects: .unwrap()
+
+[tests/all/component_model/import.rs]
+- async fn stack_and_heap_args_and_rets() -> Result<()>
+- async fn stack_and_heap_args_and_rets_concurrent() -> Result<()>
+- async fn test_stack_and_heap_args_and_rets(concurrent: bool) -> Result<()>
+- fn attempt_to_leave_during_malloc() -> Result<()>
+- fn attempt_to_reenter_during_host() -> Result<()>
+- fn bad_import_alignment() -> Result<()>
+- fn can_compile() -> Result<()>
+- fn functions_in_instances() -> Result<()>  // expects: .unwrap()
+- fn hostcall_fuel_limits_val() -> Result<()>  // expects: .unwrap()
+- fn no_actual_wasm_code() -> Result<()>
+- fn simple() -> Result<()>
+- fn use_types_across_component_boundaries() -> Result<()>  // expects: .unwrap()
+
+[tests/all/component_model/instance.rs]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn export_new_get_old() -> Result<()>  // expects: .unwrap()
+- fn export_old_get_new() -> Result<()>  // expects: .unwrap()
+
+[tests/all/component_model/linker.rs]
+- #[cfg_attr(miri, ignore)]
+- async fn linker_defines_unknown_async_imports_as_traps() -> Result<()>
+- fn import_both_old_and_new() -> Result<()>  // asserts: assert_eq
+- fn linker_defines_unknown_imports_as_traps() -> Result<()>
+- fn linker_fails_to_define_unknown_core_module_imports_as_traps() -> Result<()>
+- fn missing_import_selects_max() -> Result<()>  // asserts: assert_eq
+- fn new_import_importing_old_item() -> Result<()>  // asserts: assert_eq
+- fn old_import_importing_new_item() -> Result<()>  // asserts: assert_eq
+
+[tests/all/component_model/macros.rs]
+- fn enum_derive() -> Result<()>
+- fn flags() -> Result<()>
+- fn record_derive() -> Result<()>
+- fn variant_derive() -> Result<()>
+
+[tests/all/component_model/missing_async.rs]
+- async fn async_disallows_func_call() -> Result<()>
+- async fn async_disallows_instantiate() -> Result<()>
+- async fn async_disallows_resource_any_drop() -> Result<()>
+- async fn async_disallows_typed_func_call() -> Result<()>
+- async fn func_new_async_cannot_satisfy_async_import() -> Result<()>
+- async fn func_new_concurrent_cannot_satisfy_sync_import() -> Result<()>
+- async fn require_async_after_linker_with_func_new_async() -> Result<()>
+- async fn require_async_after_linker_with_func_new_concurrent() -> Result<()>
+- async fn require_async_after_linker_with_func_wrap_async() -> Result<()>
+- async fn require_async_after_linker_with_func_wrap_concurrent() -> Result<()>
+
+[tests/all/component_model/nested.rs]
+- fn thread_options_through_inner() -> Result<()>
+- fn top_level_instance_two_level() -> Result<()>
+
+[tests/all/component_model/post_return.rs]
+- async fn invoke_post_return_async() -> Result<()>
+- async fn invoke_post_return_async_not_concurrent() -> Result<()>
+- async fn invoke_post_return_async_not_concurrent_dynamic() -> Result<()>
+- async fn invoke_post_return_concurrent() -> Result<()>
+- async fn invoke_post_return_sync() -> Result<()>
+- fn post_return_all_types() -> Result<()>  // asserts: assert_eq
+- fn post_return_string() -> Result<()>  // asserts: assert_eq
+- fn trap_in_post_return_poisons_instance() -> Result<()>  // asserts: assert_eq
+
+[tests/all/component_model/resources.rs]
+- async fn drop_on_owned_resource() -> Result<()>
+- fn active_borrows_at_end_of_call() -> Result<()>  // asserts: assert_eq
+- fn borrows_must_be_dropped_before_lifting() -> Result<()>  // asserts: assert_eq
+- fn can_use_own_for_borrow() -> Result<()>  // expects: .unwrap()
+- fn cannot_reenter_during_import() -> Result<()>  // expects: .unwrap()
+- fn cannot_use_borrow_for_own() -> Result<()>
+- fn drop_guest_twice() -> Result<()>  // asserts: assert_eq
+- fn drop_host_twice() -> Result<()>  // asserts: assert_eq
+- fn drop_in_different_places() -> Result<()>
+- fn drop_no_dtor() -> Result<()>
+- fn dynamic_type() -> Result<()>  // expects: .unwrap()
+- fn dynamic_val() -> Result<()>  // expects: .unwrap()
+- fn guest_different_host_same() -> Result<()>  // asserts: assert_eq
+- fn guest_resource_types() -> Result<()>  // expects: .unwrap()
+- fn host_borrow_as_resource_any() -> Result<()>
+- fn host_resource_types() -> Result<()>  // expects: .unwrap()
+- fn manually_destroy() -> Result<()>
+- fn mismatch_intrinsics() -> Result<()>  // asserts: assert_eq
+- fn mismatch_resource_types() -> Result<()>  // asserts: assert_eq
+- fn pass_guest_back_as_borrow() -> Result<()>  // asserts: assert_eq
+- fn pass_host_borrow_to_guest() -> Result<()>
+- fn pass_moved_resource() -> Result<()>
+- fn passthrough_wrong_type() -> Result<()>
+- fn resource_any() -> Result<()>  // expects: .unwrap()
+- fn resource_any_to_typed_handles_borrow() -> Result<()>  // expects: .unwrap()
+- fn resource_dynamic() -> Result<()>  // asserts: assert_eq
+- fn thread_through_borrow() -> Result<()>  // asserts: assert_eq
+- fn type_mismatch() -> Result<()>
+
+[tests/all/component_model/stream_sync_dropped.rs]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+
+[tests/all/component_model/strings.rs]
+- fn pass_string_on_component_boundary() -> Result<()>
+- fn ptr_out_of_bounds() -> Result<()>
+- fn ptr_overflow() -> Result<()>
+- fn raw_string_encodings() -> Result<()>
+- fn realloc_oob() -> Result<()>
+- fn roundtrip() -> Result<()>
+- fn test_invalid_string_encoding(  // expects: .unwrap()
+- fn test_ptr_out_of_bounds(engine: &Engine, src: &str, dst: &str) -> Result<()>  // expects: .unwrap()
+- fn test_ptr_overflow(engine: &Engine, src: &str, dst: &str) -> Result<()>
+- fn test_raw_when_encoded(
+- fn test_realloc_oob(engine: &Engine, src: &str, dst: &str) -> Result<()>
+- fn test_roundtrip(engine: &Engine, src: &str, dst: &str) -> Result<()>
+- fn test_valid_string_encoding(
+
+[tests/all/component_model/sync_call_inline.rs]
+- async fn host_call_forces_slow_path_preserves_context() -> Result<()>
+- async fn nested_chain_host_force_preserves_all_contexts() -> Result<()>
+- async fn repeated_calls_have_no_state_leak() -> Result<()>
+- async fn trap_then_instantiate_uses_freed_deferred_thread() -> Result<()>
+
+[tests/all/coredump.rs]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+
+[tests/all/custom_code_memory.rs]
+- fn custom_code_publish  // expects: .unwrap()
+
+[tests/all/debug.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // asserts: assert_ne
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn debugging_apis_are_denied_without_debugging() -> wasmtime::Result<()>
+- fn debugging_does_not_work_with_signal_based_traps
+- fn test_stack_values<  // expects: .unwrap()
+
+[tests/all/debug_component.rs]
+- fn debugger_component() -> Result<()>
+- fn debugger_debuggee_loop() -> Result<()>
+- fn debugger_debuggee_simple() -> Result<()>
+
+[tests/all/defaults.rs]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- fn test_tail_call_default() -> Result<()>  // asserts: assert_eq
+
+[tests/all/engine.rs]
+- fn engine_without_compiler_cannot_compile() -> Result<()>
+
+[tests/all/epoch_interruption.rs]
+- async fn drop_future_on_epoch_yield(config: &mut Config) -> Result<()>
+- async fn epoch_callback_continue(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_callback_trap(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_callback_yield(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_callback_yield_custom(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_interrupt_function_entries(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_interrupt_infinite_loop(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_yield_at_func_entry(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_yield_at_loop_header(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_yield_immediate(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- async fn epoch_yield_only_once(config: &mut Config) -> Result<()>  // asserts: assert_eq
+
+[tests/all/eqref.rs]
+- fn eqref_from_arrayref() -> Result<()>
+- fn eqref_from_i31() -> Result<()>  // asserts: assert_eq
+- fn eqref_from_structref() -> Result<()>
+- fn eqref_gc_as_array() -> Result<()>
+- fn eqref_gc_as_i31() -> Result<()>  // asserts: assert_eq
+- fn eqref_gc_as_struct() -> Result<()>
+- fn eqref_gc_is_array() -> Result<()>
+- fn eqref_gc_is_i31() -> Result<()>
+- fn eqref_gc_is_struct() -> Result<()>
+- fn eqref_matches_ty_eq() -> Result<()>
+- fn eqref_owned_from_arrayref() -> Result<()>
+- fn eqref_owned_from_structref() -> Result<()>
+- fn eqref_owned_to_anyref() -> Result<()>
+- fn eqref_rooted_to_anyref() -> Result<()>
+- fn eqref_ty_and_matches_ty_struct() -> Result<()>
+- fn eqref_ty_array() -> Result<()>
+- fn eqref_unwrap_array() -> Result<()>
+- fn eqref_unwrap_i31() -> Result<()>  // asserts: assert_eq
+- fn eqref_unwrap_struct() -> Result<()>
+
+[tests/all/exnrefs.rs]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn exn_objects() -> Result<()>  // expects: .unwrap()
+- fn exn_types() -> Result<()>  // expects: .unwrap()
+- fn tag_objects() -> Result<()>  // expects: .unwrap()
+
+[tests/all/externals.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn bad_globals  // expects: .unwrap()
+- fn bad_tables  // expects: .unwrap()
+- fn create_get_set_externref_tables_via_api() -> wasmtime::Result<()>  // asserts: assert_eq
+- fn create_get_set_funcref_tables_via_api() -> wasmtime::Result<()>
+- fn fill_externref_tables_via_api() -> wasmtime::Result<()>  // expects: .unwrap()
+- fn fill_funcref_tables_via_api() -> wasmtime::Result<()>  // expects: .unwrap()
+- fn get_set_externref_globals_via_api() -> wasmtime::Result<()>  // expects: .unwrap()
+- fn get_set_funcref_globals_via_api() -> wasmtime::Result<()>
+- fn grow_externref_tables_via_api() -> wasmtime::Result<()>  // asserts: assert_eq
+- fn grow_funcref_tables_via_api() -> wasmtime::Result<()>  // asserts: assert_eq
+- fn read_write_memory_via_api  // expects: .unwrap()
+
+[tests/all/fuel.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn manual_edge_cases(config: &mut Config) -> Result<()>  // expects: .unwrap()
+- fn manual_fuel(config: &mut Config) -> Result<()>  // expects: .unwrap()
+
+[tests/all/func.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn call_array_to_native() -> Result<()>
+- fn call_native_to_native() -> Result<()>
+- fn call_wrapped_func() -> Result<()>  // asserts: assert_eq
+- fn dtor_runs
+- fn func_constructors
+- fn get_from_wrapper
+- fn signatures_match
+
+[tests/all/funcref.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn wrong_store() -> wasmtime::Result<()>
+
+[tests/all/gc.rs]
+- #[cfg_attr(any(miri, not(target_pointer_width = "64")), ignore)]  // expects: .unwrap()
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn drc_transitive_drop_nested_arrays_tree() -> Result<()>
+- fn owned_rooted_gets_collected_after_unrooting() -> Result<()>
+- fn ref_matches() -> Result<()>  // asserts: assert_eq
+- fn rooted_gets_collected_after_scope_exit() -> Result<()>
+- fn table_fill_doesnt_leak() -> Result<()>
+- fn test_engine(engine: &Engine) -> Result<()>
+- fn to_raw_from_raw_doesnt_leak() -> Result<()>
+
+[tests/all/globals.rs]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn host_globals_keep_type_registration() -> Result<()>
+- fn i31ref_as_anyref_global_get() -> Result<()>  // expects: .unwrap()
+- fn i31ref_as_anyref_global_new() -> Result<()>  // expects: .unwrap()
+- fn i31ref_as_anyref_global_set() -> Result<()>  // expects: .unwrap()
+- fn i31ref_as_anyref_global_ty() -> Result<()>  // expects: .unwrap()
+- fn i31ref_global_get() -> Result<()>  // expects: .unwrap()
+- fn i31ref_global_new() -> Result<()>  // expects: .unwrap()
+- fn i31ref_global_set() -> Result<()>  // expects: .unwrap()
+- fn i31ref_global_ty() -> Result<()>  // expects: .unwrap()
+- fn mutability() -> wasmtime::Result<()>  // asserts: assert_eq
+- fn smoke() -> wasmtime::Result<()>  // asserts: assert_eq
+- fn use_after_drop() -> wasmtime::Result<()>  // expects: .unwrap()
+- fn v128() -> wasmtime::Result<()>  // asserts: assert_eq
+
+[tests/all/guest_debug/mod.rs]
+- #[ignore]
+- #[ignore]  // expects: .unwrap()
+
+[tests/all/host_funcs.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn call_wrapped_func() -> Result<()>  // asserts: assert_eq
+- fn drop_func() -> Result<()>
+- fn signatures_match() -> Result<()>
+- fn store_with_context() -> Result<()>
+- fn wrap_func() -> Result<()>
+
+[tests/all/i31ref.rs]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn always_pop_i31ref_lifo_roots() -> Result<()>
+- fn i31_get_i32  // asserts: assert_eq
+- fn i31_new_i32  // asserts: assert_eq
+- fn i31_new_u32  // asserts: assert_eq
+- fn i31_wrapping_i32  // asserts: assert_eq
+- fn i31ref_to_raw_round_trip() -> Result<()>  // expects: .expect(...)
+
+[tests/all/iloop.rs]
+- fn function_interrupt_from_afar() -> wasmtime::Result<()>
+- fn functions_interruptible() -> wasmtime::Result<()>
+- fn loop_interrupt_from_afar() -> wasmtime::Result<()>
+- fn loops_interruptible() -> wasmtime::Result<()>  // asserts: assert_eq
+
+[tests/all/import_calling_export.rs]
+- fn test_import_calling_export  // expects: .expect(...)
+- fn test_returns_incorrect_type() -> Result<()>
+
+[tests/all/import_indexes.rs]
+- fn same_import_names_still_distinct() -> wasmtime::Result<()>  // asserts: assert_eq
+
+[tests/all/instance.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+
+[tests/all/intrinsics.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+
+[tests/all/invoke_func_via_table.rs]
+- fn test_invoke_func_via_table() -> Result<()>  // expects: .unwrap()
+
+[tests/all/limits.rs]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- #[should_panic(expected = "async resource limiter memory growing")]  // expects: .unwrap()
+- #[should_panic(expected = "async resource limiter table growing")]  // expects: .unwrap()
+- #[should_panic(expected = "resource limiter memory growing")]  // expects: .unwrap()
+- #[should_panic(expected = "resource limiter table growing")]  // expects: .unwrap()
+- async fn test_custom_memory_limiter_async() -> Result<()>
+- async fn test_limits_async() -> Result<()>
+- fn custom_limiter_detect_grow_failure() -> Result<()>
+- fn test_custom_memory_limiter() -> Result<()>
+- fn test_custom_table_limiter() -> Result<()>
+- fn test_initial_memory_limits_exceeded() -> Result<()>
+- fn test_initial_table_limits_exceeded() -> Result<()>
+- fn test_limits() -> Result<()>  // expects: .unwrap()
+- fn test_limits_memory_only() -> Result<()>  // expects: .unwrap()
+- fn test_limits_table_only() -> Result<()>  // expects: .unwrap()
+- fn test_pooling_allocator_initial_limits_exceeded() -> Result<()>
+
+[tests/all/linker.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .expect(...)
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn alias_one() -> Result<()>
+- fn funcs_live_on_to_fight_another_day() -> Result<()>
+- fn link_twice_bad() -> Result<()>
+- fn test_default_value_unknown_import() -> Result<()>  // expects: .expect(...)
+- fn test_trapping_unknown_import() -> Result<()>  // expects: .expect(...)
+- fn test_unknown_import_error() -> Result<()>  // asserts: assert_eq
+
+[tests/all/memory.rs]
+- #[cfg(not(target_arch = "s390x"))]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn atomic_wait_massive_timeout() -> Result<()>  // asserts: assert_eq
+- fn configure_zero(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- fn dynamic_extra_growth_unchanged_pointer(config: &mut Config) -> Result<()>  // asserts: assert_eq
+- fn new_memory_with_custom_page_size() -> Result<()>  // asserts: assert_eq
+- fn non_page_aligned_static_memory() -> Result<()>
+- fn shared_memory_basics() -> Result<()>  // asserts: assert_eq
+- fn static_forced_max() -> Result<()>  // expects: .unwrap()
+- fn test_traps(store: &mut Store<()>, funcs: &[TestFunc], addr: u32, mem: &Memory)
+
+[tests/all/memory_creator.rs]
+- fn host_memory() -> wasmtime::Result<()>  // asserts: assert_eq
+- fn host_memory_grow() -> wasmtime::Result<()>  // asserts: assert_eq
+
+[tests/all/missing_async.rs]
+- async fn async_disallows_array_ref_new() -> Result<()>
+- async fn async_disallows_array_ref_new_fixed() -> Result<()>
+- async fn async_disallows_exnref_new() -> Result<()>
+- async fn async_disallows_externref_new() -> Result<()>
+- async fn async_disallows_func_call() -> Result<()>
+- async fn async_disallows_gc() -> Result<()>
+- async fn async_disallows_instance_new() -> Result<()>
+- async fn async_disallows_linker_instantiate() -> Result<()>
+- async fn async_disallows_structref_new() -> Result<()>
+- async fn async_disallows_typed_func_call() -> Result<()>
+- async fn async_limiter_disallows_memory_grow() -> Result<()>
+- async fn async_limiter_disallows_memory_new() -> Result<()>
+- async fn async_limiter_disallows_table_grow() -> Result<()>
+- async fn async_limiter_disallows_table_new() -> Result<()>
+- async fn require_async_after_linker_with_func_new() -> Result<()>
+- async fn require_async_after_linker_with_func_wrap() -> Result<()>
+- async fn require_async_with_linker_func_wrap() -> Result<()>
+- fn epoch_yield_disallowed_without_async() -> Result<()>
+- fn require_async_after_async_limiter() -> Result<()>
+- fn require_async_after_epochs() -> Result<()>
+- fn require_async_after_fuel() -> Result<()>
+- fn require_async_after_func_new
+- fn require_async_after_func_wrap
+- fn require_async_with_async_call_hook() -> Result<()>
+- fn require_async_with_debug_handler() -> Result<()>
+- fn start_sync_then_configure_async_then_do_async() -> Result<()>
+
+[tests/all/module.rs]
+- #[cfg_attr(any(not(target_arch = "x86_64"), miri), ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn caches_across_engines  // expects: .unwrap()
+- fn checks_incompatible_target() -> Result<()>
+- fn compile_a_component() -> Result<()>
+
+[tests/all/module_serialize.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- fn test_deserialize_from_file() -> Result<()>  // asserts: assert_eq
+- fn test_module_serialize_fail() -> Result<()>
+- fn test_module_serialize_simple() -> Result<()>
+- fn test_version_mismatch() -> Result<()>  // expects: .unwrap()
+
+[tests/all/name.rs]
+- fn test_module_name() -> wasmtime::Result<()>  // asserts: assert_eq
+- fn test_module_no_name() -> wasmtime::Result<()>  // asserts: assert_eq
+
+[tests/all/native_debug/gdb.rs]
+- #[ignore]
+- fn test_debug_dwarf_gdb() -> Result<()>
+
+[tests/all/native_debug/lldb.rs]
+- #[ignore]
+- fn test_dwarf_simple(wasm: &str, extra_args: &[&str]) -> Result<()>
+
+[tests/all/native_debug/simulate.rs]
+- #[ignore]
+- fn test_debug_dwarf_simulate_simple_x86_64() -> Result<()>
+- fn test_debug_dwarf_simulate_with_imports_x86_64() -> Result<()>
+- fn test_debug_dwarf_simulate_with_invalid_name_x86_64() -> Result<()>
+
+[tests/all/native_debug/translate.rs]
+- #[ignore]
+- fn test_debug_dwarf5_translate() -> Result<()>
+- fn test_debug_dwarf_translate() -> Result<()>
+- fn test_debug_dwarf_translate_dead_code() -> Result<()>
+- fn test_debug_dwarf_translate_fission() -> Result<()>
+- fn test_debug_dwarf_translate_generated() -> Result<()>
+- fn test_debug_split_dwarf4_translate() -> Result<()>
+
+[tests/all/noextern.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+
+[tests/all/piped_tests.rs]
+- fn piped_multiple  // expects: .unwrap()
+- fn piped_polling  // expects: .unwrap()
+- fn piped_simple  // expects: .unwrap()
+
+[tests/all/pooling_allocator.rs]
+- #[cfg(feature = "component-model")]
+- #[cfg(not(miri))]  // expects: .unwrap()
+- #[cfg(target_pointer_width = "64")]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn memory_zeroed() -> Result<()>
+- fn multi_memory_with_imported_memories() -> Result<()>  // expects: .unwrap()
+- fn purge_module_with_mpk() -> Result<()>
+- fn successful_instantiation() -> Result<()>
+- fn table_zeroed() -> Result<()>
+- fn total_core_instances_limit() -> Result<()>
+
+[tests/all/profiling.rs]
+- #[cfg_attr(miri, ignore)]
+
+[tests/all/pulley.rs]
+- #[cfg(not(miri))]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn can_compile_pulley_module() -> Result<()>
+- fn can_deserialize_pulley_module() -> Result<()>
+- fn decode_unaligned() -> Result<()>
+- fn pulley_wrong_architecture_is_rejected() -> Result<()>  // expects: .unwrap()
+
+[tests/all/relocs.rs]
+- fn backwards_call_works() -> Result<()>  // asserts: assert_eq
+- fn forward_call_works() -> Result<()>  // asserts: assert_eq
+- fn mixed() -> Result<()>
+- fn mixed_forced() -> Result<()>
+- fn test_many_call_module(mut store: Store<()>) -> Result<()>
+
+[tests/all/stack_creator.rs]
+- #[cfg_attr(asan, ignore)]  // expects: .unwrap()
+
+[tests/all/stack_overflow.rs]
+- fn big_stack_works_ok(config: &mut Config) -> Result<()>
+- fn host_always_has_some_stack() -> Result<()>
+- fn infinite_wasm_stack_does_not_panic() -> Result<()>
+- fn test_host_stack
+
+[tests/all/store.rs]
+- fn into_inner
+
+[tests/all/structs.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- #[should_panic = "wrong store"]  // expects: .unwrap()
+- fn anyref_as_struct() -> Result<()>  // expects: .unwrap()
+- fn can_put_funcrefs_in_structs() -> Result<()>
+- fn instantiate_with_struct_global() -> Result<()>  // expects: .expect(...)
+- fn struct_field_on_unrooted() -> Result<()>
+- fn struct_field_out_of_bounds() -> Result<()>
+- fn struct_field_simple() -> Result<()>  // asserts: assert_eq
+- fn struct_fields_empty() -> Result<()>  // asserts: assert_eq
+- fn struct_fields_non_empty() -> Result<()>  // asserts: assert_eq
+- fn struct_fields_unrooted() -> Result<()>
+- fn struct_new_empty() -> Result<()>
+- fn struct_new_unrooted_field() -> Result<()>  // expects: .unwrap()
+- fn struct_new_with_fields() -> Result<()>
+- fn struct_set_field_cross_store_value() -> Result<()>
+- fn struct_set_field_immutable() -> Result<()>
+- fn struct_set_field_on_unrooted() -> Result<()>
+- fn struct_set_field_out_of_bounds() -> Result<()>
+- fn struct_set_field_simple() -> Result<()>  // asserts: assert_eq
+- fn struct_set_field_with_unrooted() -> Result<()>
+- fn struct_set_field_wrong_type() -> Result<()>
+- fn struct_ty() -> Result<()>
+- fn struct_ty_unrooted() -> Result<()>
+- fn structref_fields() -> Result<()>  // asserts: assert_eq
+- fn structref_matches_ty() -> Result<()>
+- fn structref_owned_to_anyref() -> Result<()>
+- fn structref_owned_to_eqref() -> Result<()>
+- fn structref_to_anyref_rooted() -> Result<()>
+- fn structref_to_eqref_rooted() -> Result<()>
+- fn structref_ty() -> Result<()>
+
+[tests/all/table.rs]
+- #[cfg_attr(miri, ignore)]
+- fn copy_wrong  // expects: .unwrap()
+- fn fill_wrong  // expects: .unwrap()
+- fn get_none  // expects: .unwrap()
+- fn host_table_keep_type_registration() -> Result<()>
+- fn i31ref_table_copy() -> Result<()>  // expects: .unwrap()
+- fn i31ref_table_fill() -> Result<()>  // expects: .unwrap()
+- fn i31ref_table_get() -> Result<()>  // expects: .unwrap()
+- fn i31ref_table_grow() -> Result<()>  // asserts: assert_eq
+- fn i31ref_table_new() -> Result<()>
+- fn i31ref_table_set() -> Result<()>  // expects: .unwrap()
+
+[tests/all/tags.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn stack_switching_disallows_inlining() -> Result<()>
+
+[tests/all/threads.rs]
+- #[cfg_attr(miri, ignore)]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+- fn create_shared_memory_through_memory() -> Result<()>
+- fn test_export_shared_memory() -> Result<()>
+- fn test_grow_memory_in_multiple_threads() -> Result<()>
+- fn test_import_shared_memory() -> Result<()>
+- fn test_instantiate_shared_memory() -> Result<()>
+- fn test_memory_size_accessibility() -> Result<()>
+- fn test_multi_memory() -> Result<()>
+- fn test_probe_shared_memory_size() -> Result<()>
+- fn test_sharing_of_shared_memory() -> Result<()>
+
+[tests/all/traps.rs]
+- async fn async_then_sync_trap() -> Result<()>
+- fn call_signature_mismatch() -> Result<()>  // expects: .unwrap()
+- fn catch_trap_calling_across_stores() -> Result<()>
+- fn div_plus_load_reported_right() -> Result<()>  // expects: .unwrap()
+- fn dont_see_stale_stack_walking_registers() -> Result<()>  // expects: .unwrap()
+- fn hint_with_dwarf_info() -> Result<()>
+- fn host_return_error_no_backtrace() -> Result<()>
+- fn mismatched_arguments() -> Result<()>  // expects: .unwrap()
+- fn multithreaded_traps() -> Result<()>  // expects: .unwrap()
+- fn no_hint_even_with_dwarf_info() -> Result<()>
+- fn parse_dwarf_info() -> Result<()>
+- fn present_after_module_drop() -> Result<()>  // expects: .unwrap()
+- fn rust_catch_panic_import() -> Result<()>
+- fn rust_panic_import() -> Result<()>
+- fn rust_panic_start_function() -> Result<()>
+- fn same_module_multiple_stores() -> Result<()>  // expects: .unwrap()
+- fn standalone_backtrace() -> Result<()>  // asserts: assert_eq
+- fn standalone_backtrace_disabled() -> Result<()>  // asserts: assert_eq
+- fn start_trap_pretty() -> Result<()>
+- fn test_format_err_error_return() -> Result<()>
+- fn test_trap_backtrace_disabled() -> Result<()>  // expects: .unwrap()
+- fn test_trap_return() -> Result<()>
+- fn test_trap_return_downcast() -> Result<()>
+- fn test_trap_stack_overflow() -> Result<()>  // expects: .unwrap()
+- fn test_trap_through_host() -> Result<()>  // expects: .unwrap()
+- fn test_trap_trace() -> Result<()>  // expects: .unwrap()
+- fn test_trap_trace_cb() -> Result<()>  // expects: .unwrap()
+- fn trap_codes
+- fn trap_display_multi_module() -> Result<()>  // expects: .unwrap()
+- fn trap_display_pretty() -> Result<()>
+- fn trap_start_function_import() -> Result<()>
+- fn trap_with_array_to_wasm_stack_args() -> Result<()>  // expects: .unwrap()
+- fn trap_with_native_to_wasm_stack_args() -> Result<()>  // expects: .unwrap()
+- fn traps_without_address_map() -> Result<()>  // expects: .unwrap()
+- fn wasm_fault_address_reported_by_default() -> Result<()>
+- fn wasm_fault_address_reported_from_mpk_protected_memory() -> Result<()>
+
+[tests/all/types.rs]
+- fn array_subtyping() -> Result<()>  // asserts: assert_eq
+- fn array_subtyping_field_must_match() -> Result<()>  // asserts: assert_eq
+- fn array_subtyping_supertype_and_finality() -> Result<()>  // asserts: assert_eq
+- fn basic_array_types() -> Result<()>  // asserts: assert_eq
+- fn basic_struct_types() -> Result<()>
+- fn empty_struct_type() -> Result<()>  // asserts: assert_eq
+- fn func_subtyping() -> Result<()>  // asserts: assert_eq
+- fn func_subtyping_field_must_match() -> Result<()>  // asserts: assert_eq
+- fn func_subtyping_supertype_and_finality() -> Result<()>  // asserts: assert_eq
+- fn heap_type_matches_noexn() -> Result<()>
+- fn struct_subtyping() -> Result<()>  // asserts: assert_eq
+- fn struct_subtyping_fields_must_match() -> Result<()>  // asserts: assert_eq
+- fn struct_subtyping_supertype_and_finality() -> Result<()>  // asserts: assert_eq
+- fn struct_type_matches() -> Result<()>
+
+[tests/all/wait_notify.rs]
+- fn atomic_wait_notify_basic() -> Result<()>
+- fn atomic_wait_timeout_length() -> Result<()>
+
+[tests/disable_host_trap_handlers.rs]
+- #[cfg_attr(miri, ignore)]  // asserts: assert_eq
+
+[tests/rlimited-memory.rs]
+- #[cfg_attr(miri, ignore)]  // expects: .unwrap()
+
+[winch/codegen/src/regset.rs]
+- fn test_any_gpr
+- fn test_free_reg  // expects: .unwrap()
+- fn test_gpr
+
+[winch/codegen/src/stack.rs]
+- fn test_pop_i32_const  // asserts: assert_eq
+- fn test_pop_named_reg  // asserts: assert_eq
+- fn test_pop_reg  // asserts: assert_eq
+
+=== REPO: mendableai/firecrawl ===
+[apps/elixir-sdk/test/firecrawl_test.exs]
+- test "accepts atom values for enum params"
+- test "accepts string values for enum params (model)"
+- test "accepts string values for enum params (sitemap)"
+- test "all expected API functions are defined with bang variants"
+- test "bang raises Firecrawl.Error for API errors"
+- test "bang raises for missing required params"
+- test "bang raises for unknown keys"
+- test "batch scrape maps redact_pii to redactPII"
+- test "create_monitor accepts a search target"
+- test "does not raise when API key is in application config"
+- test "does not raise when API key is passed as option"
+- test "non-bang returns {:error, %Firecrawl.Error{}} for API errors"
+- test "non-bang returns {:error, _} for missing required params"
+- test "non-bang returns {:error, _} for unknown keys (typo detection)"
+- test "non-bang returns {:error, _} for wrong types"
+- test "non-bang returns {:ok, response} for successful API calls"
+- test "parse_file rejects unknown options"
+- test "parse_file returns error tuple when data is nil"
+- test "parse_file returns error tuple when filename is empty"
+- test "raises when no API key is configured"
+- test "scrape maps redact_pii to redactPII"
+- test "search maps highlights to highlights"
+
+[apps/go-html-to-md-service/handler_test.go]
+- func TestConvertHTML_EmptyHTML(t *testing.T)
+- func TestConvertHTML_InvalidJSON(t *testing.T)
+- func TestConvertHTML_NonZDR_LogsRequestID(t *testing.T)
+- func TestConvertHTML_Success(t *testing.T)
+- func TestConvertHTML_ZeroDataRetention_SuppressesLogs(t *testing.T)
+- func TestConverter_ComplexHTML(t *testing.T)
+- func TestHealthCheck(t *testing.T)
+- func TestIndex(t *testing.T)
+
+[apps/go-sdk/monitor_models_test.go]
+- func TestMonitorPageJudgmentParsesMeaningfulChanges(t *testing.T)
+- func TestMonitorSearchTargetResultParses(t *testing.T)
+- func TestMonitorSearchTargetRoundTrips(t *testing.T)
+
+[apps/go-sdk/options_test.go]
+- func TestScrapeOptionsPreservesStringFormats(t *testing.T)
+- func TestScrapeOptionsSerializesQueryFormatMode(t *testing.T)
+- func TestScrapeOptionsSerializesQuestionAndHighlightsFormats(t *testing.T)
+- func TestScrapeOptionsSerializesRedactPII(t *testing.T)
+- func TestSearchOptionsSerializesHighlights(t *testing.T)
+
+[apps/go-sdk/parse_test.go]
+- func TestDocumentUnmarshalsMenu(t *testing.T)
+- func TestParseRejectsEmptyContent(t *testing.T)
+- func TestParseRejectsEmptyFilename(t *testing.T)
+- func TestParseSendsMultipartRequest(t *testing.T)
+
+[apps/python-sdk/tests/test_agent_integration.py]
+- def test_agent_basic
+- def test_agent_headers
+- def test_agent_pydantic_schema_normalization
+- def test_agent_url_construction
+- def test_agent_with_all_params
+- def test_agent_with_dict_schema
+- def test_agent_with_urls
+
+[apps/python-sdk/tests/test_api_key_handling.py]
+- def test_async_cloud_requires_api_key
+- def test_async_self_host_allows_missing_api_key
+- def test_cloud_requires_api_key
+- def test_self_host_allows_missing_api_key
+
+[apps/python-sdk/tests/test_change_tracking.py]
+- def test_change_tracking_format
+- def test_change_tracking_options
+
+[apps/python-sdk/tests/test_crawl_direct_kwargs.py]
+- def test_async_direct_kwargs_build_scrape_options
+- def test_async_explicit_scrape_options_wins
+- def test_async_integration_preserved_as_crawl_param
+- def test_async_threat_protection_kwarg_lands_in_wire_body
+- def test_crawl_also_builds_scrape_options
+- def test_crawl_signature_accepts_formats
+- def test_crawl_timeout_is_poll_timeout_not_scrape
+- def test_direct_kwargs_build_scrape_options
+- def test_explicit_scrape_options_wins
+- def test_no_scrape_kwargs_means_no_scrape_options
+- def test_start_crawl_accepts_scrape_timeout
+- def test_start_crawl_signature_accepts_formats
+- def test_sync_threat_protection_kwarg_lands_in_wire_body
+- def test_threat_protection_in_scrape_option_keys
+
+[apps/python-sdk/tests/test_format_type_defaults.py]
+- def test_defaults_type
+- def test_defaults_type_to_json
+- def test_does_not_drop_schema
+- def test_explicit_type_json_still_works
+- def test_rejects_wrong_type
+- def test_serializes_through_prepare
+- def test_serializes_with_all_options
+- def test_serializes_with_modes
+
+[apps/python-sdk/tests/test_search_data_property.py]
+- def test_raises_with_empty_response
+- def test_raises_with_multiple_sources
+- def test_raises_with_web_results
+- def test_web_still_works
+
+[apps/python-sdk/tests/test_timeout_conversion.py]
+- def test_post_request_default_timeout
+- def test_post_request_no_timeout_key
+- def test_post_request_timeout_conversion
+- def test_scrape_url_default_timeout
+- def test_scrape_url_timeout_conversion
+- def test_timeout_edge_cases
+
+[apps/python-sdk/tests/test_v1_aliases.py]
+- def test_aliases_delegate
+- def test_aliases_exist
+- def test_aliases_exposed
+
+[apps/python-sdk/tests/test_v1_async_batch_scrape.py]
+- def test_async_batch_scrape_urls_accepts_parsed_json_response
+
+[apps/rust-sdk/src/agent.rs]
+- async fn test_agent_sync_with_mock
+- async fn test_agent_with_model_option
+- async fn test_agent_with_schema
+- async fn test_cancel_agent_with_mock
+- async fn test_get_agent_status_with_mock
+- async fn test_start_agent_with_mock
+
+[apps/rust-sdk/src/batch_scrape.rs]
+- async fn test_batch_scrape_sync
+- async fn test_batch_scrape_with_invalid_urls
+- async fn test_get_batch_scrape_errors
+- async fn test_get_batch_scrape_status_with_mock
+- async fn test_start_batch_scrape_with_mock
+
+[apps/rust-sdk/src/client.rs]
+- fn test_new_client  // expects: .unwrap()
+- fn test_new_client_allows_empty_api_key_for_cloud_keyless
+- fn test_new_client_allows_no_api_key_for_cloud_keyless  // expects: .unwrap()
+- fn test_new_selfhosted_client  // expects: .unwrap()
+- fn test_selfhosted_without_api_key  // expects: .unwrap()
+- fn test_url_builder  // expects: .unwrap()
+- fn test_url_normalization_trailing_slash  // expects: .unwrap()
+
+[apps/rust-sdk/src/crawl.rs]
+- async fn test_cancel_crawl_with_mock
+- async fn test_crawl_with_options
+- async fn test_get_crawl_errors_with_mock
+- async fn test_get_crawl_status_with_mock
+- async fn test_start_crawl_with_mock
+
+[apps/rust-sdk/src/map.rs]
+- async fn test_map_error_response
+- async fn test_map_urls
+- async fn test_map_with_mock
+- async fn test_map_with_options
+- async fn test_map_with_search_filter
+
+[apps/rust-sdk/src/monitor.rs]
+- fn search_target_result_deserializes_from_wire_format
+- fn search_target_round_trips
+- fn search_target_serializes_to_camel_case_wire_format
+
+[apps/rust-sdk/src/parse.rs]
+- async fn test_parse_error_response
+- async fn test_parse_with_mock
+- fn test_parse_file_from_missing_path
+- fn test_parse_rejects_empty_bytes  // expects: .unwrap()
+
+[apps/rust-sdk/src/scrape.rs]
+- async fn test_interact_error_response
+- async fn test_interact_with_mock
+- async fn test_interact_with_prompt
+- async fn test_scrape_error_response
+- async fn test_scrape_with_mock
+- async fn test_scrape_with_options
+- async fn test_scrape_with_schema
+- async fn test_stop_interaction_with_mock
+- fn test_query_format_serializes_mode
+- fn test_question_and_highlights_formats_serialize
+- fn test_scrape_options_serializes_redact_pii
+
+[apps/rust-sdk/src/search.rs]
+- async fn test_search_and_scrape
+- async fn test_search_error_response
+- async fn test_search_mixed_results_deserialization
+- async fn test_search_with_mock
+- async fn test_search_with_options
+- fn serializes_highlights_option
+
+[apps/rust-sdk/src/serde_helpers.rs]
+- fn test_array_value  // expects: .unwrap()
+- fn test_empty_array  // expects: .unwrap()
+- fn test_missing_field  // expects: .unwrap()
+- fn test_null_value  // expects: .unwrap()
+- fn test_serialization_roundtrip  // expects: .unwrap()
+- fn test_single_element_array  // expects: .unwrap()
+- fn test_string_value  // expects: .unwrap()
+
+[apps/rust-sdk/src/types.rs]
+- fn test_document_with_menu
+- fn test_format_menu_round_trip  // expects: .unwrap()
+- fn test_full_document_with_array_metadata
+
+[apps/rust-sdk/tests/v2_e2e.rs]
+- #[ignore = "Requires API access"]  // expects: .expect(...)
+- async fn test_agent_async
+- async fn test_agent_with_schema
+- async fn test_batch_scrape_async  // expects: .expect(...)
+- async fn test_batch_scrape_sync
+- async fn test_crawl_async  // expects: .expect(...)
+- async fn test_crawl_sync
+- async fn test_map  // expects: .expect(...)
+- async fn test_map_with_options
+- async fn test_parse
+- async fn test_scrape  // expects: .expect(...)
+- async fn test_scrape_with_options
+- async fn test_scrape_with_schema
+- async fn test_search  // expects: .expect(...)
+- async fn test_search_with_options
+- fn test_client_creation

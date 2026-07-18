@@ -47,6 +47,10 @@ impl HarvesterOrchestrator {
         conn: Arc<Mutex<Connection>>,
         requested_blobs: Option<BlobSelection>,
     ) -> Result<(), OrchestratorError> {
+        info!("============================================================================");
+        info!("🚀 [SODA ETL] INICIANDO COLHEITA DO REPOSITÓRIO: {}", repo_id);
+        info!("============================================================================");
+
         info!(url = %repo_url, repo_id = %repo_id, "Iniciando HarvesterOrchestrator (N14)");
 
         // 1. [N1] Setup do Shadow Workspace (Fail-Fast)
@@ -217,6 +221,7 @@ impl HarvesterOrchestrator {
                 clean_files: Arc::clone(&clean_files),
             };
             let native_ast_started = Instant::now();
+            info!("---> ⚡ EXTRAINDO BLOB: {}", "blob_04_repo_outline");
             debug!(repo_id = %repo_id, timeout_secs = input.timeout_secs, "N6: Invocando parser AST nativo");
             match NativeAstParser::extract(input).await {
                 Ok(payload) => {
@@ -368,6 +373,12 @@ impl HarvesterOrchestrator {
                 OrchestratorError::InfraError("SandboxHandle indisponivel para executar roteador poliglota de SAST".to_string())
             })?;
             let sast_started = Instant::now();
+            if selection.is_none_or(|selection| selection.contains_artifact("blob_06_unsafe_hotspots")) {
+                info!("---> ⚡ EXTRAINDO BLOB: {}", "blob_06_unsafe_hotspots");
+            }
+            if selection.is_none_or(|selection| selection.contains_artifact("blob_08_health_report")) {
+                info!("---> ⚡ EXTRAINDO BLOB: {}", "blob_08_health_report");
+            }
             debug!(repo_id = %repo_id, "N11: Invocando roteador poliglota de SAST");
             match PolyglotSastSidecar::extract(PolyglotSastInput {
                 executor: Arc::new(sandbox_ref.clone()),
