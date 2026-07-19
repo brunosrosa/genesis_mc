@@ -92,3 +92,10 @@ tauri-app = ["dep:tauri", "dep:tauri-plugin-opener"]
 name = "souls_mc"
 path = "src/main.rs"
 required-features = ["tauri-app"]
+
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false
+

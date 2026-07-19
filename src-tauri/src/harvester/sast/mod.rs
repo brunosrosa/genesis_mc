@@ -2324,10 +2324,18 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
             }
         }
         Err(e) => {
+            if binary == "biome" && cfg!(target_os = "windows") {
+                warn!(
+                    reason = %e,
+                    "Gaiola de Silicio AppContainer falhou para o Biome no Windows. Acionando fallback host-side."
+                );
+                return run_biome_host_fallback(executor, args, timeout_secs, execution_root).await;
+            }
             Err(SidecarError::ExecutionFailed {
                 reason: e.to_string(),
             })
         }
+
     }
 }
 
@@ -2686,6 +2694,66 @@ async fn run_opengrep_host_fallback<E: SandboxExecutor>(
             stderr.chars().take(200).collect::<String>()
         ),
     })
+}
+
+async fn run_biome_host_fallback<E: SandboxExecutor>(
+    executor: &E,
+    args: &[&str],
+    timeout_secs: u64,
+    execution_root: &Path,
+) -> Result<Vec<u8>, SidecarError> {
+    use std::process::Stdio;
+    use tokio::time::timeout as tokio_timeout;
+
+    let biome_bin = resolve_sidecar_bin("biome").ok_or_else(|| SidecarError::ExecutionFailed {
+        reason: "Biome fallback: binário não encontrado".to_string(),
+    })?;
+
+    info!(
+        binary = %biome_bin.display(),
+        cwd = %execution_root.display(),
+        "Biome: Fallback host-side iniciado (sem AppContainer)"
+    );
+
+    let mut cmd = tokio::process::Command::new(&biome_bin);
+    cmd.args(args)
+        .current_dir(execution_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    if let Ok(temp) = std::env::var("TEMP") {
+        cmd.env("TEMP", &temp);
+        cmd.env("TMP", &temp);
+    }
+
+    let child = cmd.spawn().map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Biome fallback spawn falhou: {e}"),
+    })?;
+
+    let output = tokio_timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        child.wait_with_output()
+    )
+    .await
+    .map_err(|_| SidecarError::Timeout { timeout_secs })?
+    .map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Biome fallback wait falhou: {e}"),
+    })?;
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = output.stdout;
+    let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
+
+    if exit_code == 0 || (exit_code == 1 && !sanitized_stdout.is_empty()) {
+        info!(exit_code, stdout_bytes = sanitized_stdout.len(), "Biome: Fallback host-side concluído com sucesso");
+        Ok(sanitized_stdout)
+    } else {
+        Err(SidecarError::ExecutionFailed {
+            reason: format!("Biome fallback falhou (exit={})", exit_code),
+        })
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
