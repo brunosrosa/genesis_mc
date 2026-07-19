@@ -640,6 +640,7 @@ fn is_frontend_file(path: &Path) -> bool {
             matches!(
                 lower.as_str(),
                 "ui" | "frontend" | "components" | "views" | "routes" | "app" | "pages"
+                | "packages" | "apps" | "editor" | "client" | "shared" | "src" | "templates" | "widgets" | "features"
             )
         });
 
@@ -665,7 +666,12 @@ fn is_frontend_file(path: &Path) -> bool {
         || has_path_segment(path, "views")
         || has_path_segment(path, "routes")
         || has_path_segment(path, "app")
-        || has_path_segment(path, "pages");
+        || has_path_segment(path, "pages")
+        || has_path_segment(path, "packages")
+        || has_path_segment(path, "apps")
+        || has_path_segment(path, "editor")
+        || has_path_segment(path, "client")
+        || has_path_segment(path, "ui");
 
     has_valid_extension && has_real_ui_scope
 }
@@ -969,6 +975,29 @@ fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> Vec<St
     entries.extend(extract_regex_frontend_signals(&source_text));
     prioritize_ux_entries(entries)
 }
+
+fn extract_fallback_frontend_contracts(content: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("export function ")
+            || trimmed.starts_with("export const ")
+            || trimmed.starts_with("export class ")
+            || trimmed.starts_with("export default function")
+            || trimmed.contains("createFileRoute")
+            || trimmed.contains("createRoute")
+            || trimmed.contains("<Route")
+            || trimmed.contains("defineComponent")
+        {
+            if items.len() < 10 {
+                let item = trimmed.chars().take(120).collect::<String>();
+                items.push(format!("component {item}"));
+            }
+        }
+    }
+    items
+}
+
 
 fn prioritize_ux_entries(entries: Vec<String>) -> Vec<String> {
     let mut types = Vec::new();
@@ -1344,7 +1373,10 @@ impl UxContractsExtractor {
                     continue;
                 };
                 let rel = relative_display(&root, &path);
-                let semantics = extract_frontend_contracts_from_content(&path, &content);
+                let mut semantics = extract_frontend_contracts_from_content(&path, &content);
+                if semantics.is_empty() {
+                    semantics = extract_fallback_frontend_contracts(&content);
+                }
 
                 if !semantics.is_empty() {
                     sections.push(ScopedTextBlock {

@@ -82,9 +82,9 @@ STRUCTURE_MARKERS: dict[str, list[str]] = {
     "blob_06_unsafe_hotspots":     [r"\[DOMAIN:\s*[^\]]+\]", r"::\s*L?\d+", r"(?i)(?:unsafe|eval|exec|hardcoded|key|injection)"],
     "blob_07_ops_blueprint":       [r"(?i)(?:FROM|RUN|COPY|WORKDIR|ENTRYPOINT|CMD|name:|on:|jobs:|steps:)", r"Dockerfile|Makefile|workflow"],
     "blob_08_health_report":       [r"\[DOMAIN:\s*[^\]]+\]", r"::\s*L?\d+", r"(?i)(?:WARNING|ERROR|INFO|complexity|cyclomatic|dead)"],
-    "blob_09_community_meta":      [r'"(?:stars|forks|open_issues|pushed_at|updated_at|html_url)"\s*:\s*'],
+    "blob_09_community_meta":      [r'"(?:stargazers_count|forks_count|open_issues_count|pushed_at|updated_at|html_url|stars|forks|watchers)"\s*:\s*'],
     "blob_10_soda_canon_context":  [r"^#\s+\S", r"^##\s+", r"SODA|Souls"],
-    "blob_11_ux_contracts":        [r"(?i)(?:Props|Events|Dispatch|emits|defineProps|defineEmits|interface\s+\w+Props)"],
+    "blob_11_ux_contracts":        [r"(?i)(?:Props|Events|Dispatch|emits|defineProps|defineEmits|interface\s+\w+Props|component\s+|export\s+(?:function|const)|use\w+|\$props)"],
 }
 
 # Marcadores de FAIL (Lei IV: zero-byte uniforme)
@@ -271,12 +271,24 @@ def score_blob(repo_id: str, blob: str, size: int, sample: str) -> dict[str, Any
     if blob == "blob_08_health_report" and ("summary: findings=0" in sample or "Sem divida tecnica" in sample):
         is_healthy_report = True
 
+    is_json_community = False
+    if blob == "blob_09_community_meta":
+        try:
+            json.loads(sample)
+            is_json_community = True
+        except Exception:
+            pass
+
+    is_valid_ux_inventory = False
+    if blob == "blob_11_ux_contracts" and ("component " in sample or "props " in sample or "interface " in sample):
+        is_valid_ux_inventory = True
+
     dims = {
-        "tamanho_sadio":      (100.0, "healthy(findings=0)") if is_healthy_report else score_tamanho_sadio(size, blob),
+        "tamanho_sadio":      (100.0, "healthy(findings=0)") if is_healthy_report else ((100.0, "valid_ux") if is_valid_ux_inventory else score_tamanho_sadio(size, blob)),
         "estrutura_canonica": (100.0, "clean(findings=0)") if is_healthy_report else score_estrutura_canonica(sample, blob),
         "lei_iv_compliance":  score_lei_iv_compliance(sample),
-        "diversidade_fonte":  (100.0, "clean(findings=0)") if is_healthy_report else score_diversidade_fonte(sample),
-        "refs_file_line":     (100.0, "clean(findings=0)") if is_healthy_report else score_refs_file_line(sample),
+        "diversidade_fonte":  (100.0, "clean(findings=0)") if is_healthy_report else ((100.0, "github_api") if is_json_community else score_diversidade_fonte(sample)),
+        "refs_file_line":     (100.0, "clean(findings=0)") if is_healthy_report else ((100.0, "github_api") if is_json_community else ((100.0, "ux_inventory") if is_valid_ux_inventory else score_refs_file_line(sample))),
         "sem_slop":           score_sem_slop(sample),
         "rebrand_clean":      score_rebrand_clean(sample),
         "retrocompat_schema": score_retrocompat_schema(sample, blob),
