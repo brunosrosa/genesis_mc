@@ -1,62 +1,9 @@
-base64 v0.21.7
-└── tiktoken-rs v0.5.9
-    └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-
-base64 v0.22.1
-├── hyper-util v0.1.20
-│   ├── axum v0.7.9
-│   │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   ├── hyper-rustls v0.27.9
-│   │   └── octocrab v0.53.1
-│   │       └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   ├── hyper-timeout v0.5.2
-│   │   └── octocrab v0.53.1 (*)
-│   ├── hyper-tls v0.6.0
-│   │   └── reqwest v0.12.28
-│   │       └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   ├── mockito v1.7.2
-│   │   [dev-dependencies]
-│   │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   ├── octocrab v0.53.1 (*)
-│   └── reqwest v0.12.28 (*)
-├── jsonwebtoken v10.4.0
-│   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   └── octocrab v0.53.1 (*)
-├── octocrab v0.53.1 (*)
-├── pem v3.0.6
-│   └── jsonwebtoken v10.4.0 (*)
-├── plist v1.9.0
-│   └── tauri-utils v2.9.3
-│       └── tauri-build v2.6.3
-│           [build-dependencies]
-│           └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-├── reqwest v0.12.28 (*)
-├── ureq v3.3.0
-│   [build-dependencies]
-│   └── tree-sitter-language-pack v1.12.2
-│       └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-└── ureq-proto v0.6.0
-    └── ureq v3.3.0 (*)
-
-bit-set v0.5.3
-└── fancy-regex v0.12.0
-    └── tiktoken-rs v0.5.9 (*)
-
-bit-set v0.8.0
-└── dom_query v0.27.0
-    └── tauri-utils v2.9.3 (*)
-
-bit-vec v0.6.3
-└── bit-set v0.5.3 (*)
-
-bit-vec v0.8.0
-└── bit-set v0.8.0 (*)
-
 block-buffer v0.10.4
 └── digest v0.10.7
     ├── curve25519-dalek v4.1.3
     │   └── ed25519-dalek v2.2.0
-    │       └── jsonwebtoken v10.4.0 (*)
+    │       └── jsonwebtoken v10.4.0
+    │           └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     ├── ecdsa v0.16.9
     │   ├── p256 v0.13.2
     │   │   └── jsonwebtoken v10.4.0 (*)
@@ -81,7 +28,7 @@ block-buffer v0.10.4
     │   └── sha1-checked v0.10.0
     │       └── gix-hash v0.25.1
     │           ├── gix v0.84.0
-    │           │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+    │           │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     │           ├── gix-blame v0.14.0
     │           │   └── gix v0.84.0 (*)
     │           ├── gix-commitgraph v0.37.1
@@ -198,10 +145,10 @@ block-buffer v0.10.4
     ├── sha1-checked v0.10.0 (*)
     ├── sha2 v0.10.9
     │   ├── ed25519-dalek v2.2.0 (*)
-    │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
     │   ├── jsonwebtoken v10.4.0 (*)
     │   ├── p256 v0.13.2 (*)
-    │   └── p384 v0.13.1 (*)
+    │   ├── p384 v0.13.1 (*)
+    │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     └── signature v2.2.0
         ├── ecdsa v0.16.9 (*)
         ├── ed25519 v2.2.3
@@ -213,7 +160,8 @@ block-buffer v0.12.1
 └── digest v0.11.3
     └── sha2 v0.11.0
         [build-dependencies]
-        └── tree-sitter-language-pack v1.12.2 (*)
+        └── tree-sitter-language-pack v1.12.2
+            └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 byteorder v1.5.0
 └── hash32 v0.3.1
@@ -229,22 +177,14 @@ byteorder v1.5.0
 byteorder v1.5.0
 ├── cfb v0.7.3
 │   └── infer v0.19.0
-│       └── tauri-utils v2.9.3 (*)
+│       └── tauri-utils v2.9.3
+│           └── tauri-build v2.6.3
+│               [build-dependencies]
+│               └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 └── socks v0.3.4
-    └── ureq v3.3.0 (*)
-
-cargo-platform v0.1.9
-└── cargo_metadata v0.19.2
-    └── tauri-utils v2.9.3 (*)
-
-cargo-platform v0.3.3
-└── cargo_metadata v0.23.1
-    [build-dependencies]
-    └── octocrab v0.53.1 (*)
-
-cargo_metadata v0.19.2 (*)
-
-cargo_metadata v0.23.1 (*)
+    └── ureq v3.3.0
+        [build-dependencies]
+        └── tree-sitter-language-pack v1.12.2 (*)
 
 const-oid v0.9.6
 ├── der v0.7.10
@@ -293,7 +233,8 @@ fastrand v2.4.1
     ├── phf_codegen v0.13.1
     │   [build-dependencies]
     │   ├── selectors v0.36.1
-    │   │   └── dom_query v0.27.0 (*)
+    │   │   └── dom_query v0.27.0
+    │   │       └── tauri-utils v2.9.3 (*)
     │   └── web_atoms v0.2.5
     │       └── markup5ever v0.38.0
     │           └── html5ever v0.38.0
@@ -306,7 +247,7 @@ fastrand v2.4.1
     │       ├── oxc_ast_macros v0.120.0 (proc-macro)
     │       │   ├── oxc_ast v0.120.0
     │       │   │   ├── oxc v0.120.0
-    │       │   │   │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+    │       │   │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     │       │   │   ├── oxc_ast_visit v0.120.0
     │       │   │   │   └── oxc v0.120.0 (*)
     │       │   │   ├── oxc_ecmascript v0.120.0
@@ -342,7 +283,6 @@ fastrand v2.4.1
         └── web_atoms v0.2.5 (*)
 
 fastrand v2.4.1
-├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 ├── gix-fs v0.21.2
 │   ├── gix v0.84.0 (*)
 │   ├── gix-diff v0.64.0 (*)
@@ -429,17 +369,18 @@ fastrand v2.4.1
 │   │   ├── gix-odb v0.81.0 (*)
 │   │   └── gix-transport v0.57.2 (*)
 │   └── gix-ref v0.64.0 (*)
+├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 └── tempfile v3.27.0
-    ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
     ├── gix-odb v0.81.0 (*)
-    └── gix-tempfile v23.0.2 (*)
+    ├── gix-tempfile v23.0.2 (*)
+    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 flate2 v1.1.9
 └── ureq v3.3.0 (*)
 
 flate2 v1.1.9
 └── zip v2.4.2
-    └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 foldhash v0.2.0
 ├── hashbrown v0.16.1
@@ -465,19 +406,26 @@ foldhash v0.2.0
     └── indexmap v2.14.0
         ├── h2 v0.4.15
         │   ├── hyper v1.10.1
-        │   │   ├── axum v0.7.9 (*)
-        │   │   ├── hyper-rustls v0.27.9 (*)
-        │   │   ├── hyper-timeout v0.5.2 (*)
-        │   │   ├── hyper-tls v0.6.0 (*)
-        │   │   ├── hyper-util v0.1.20 (*)
+        │   │   ├── axum v0.7.9
+        │   │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+        │   │   ├── hyper-tls v0.6.0
+        │   │   │   └── reqwest v0.12.28
+        │   │   │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+        │   │   ├── hyper-util v0.1.20
+        │   │   │   ├── axum v0.7.9 (*)
+        │   │   │   ├── hyper-tls v0.6.0 (*)
+        │   │   │   ├── mockito v1.7.2
+        │   │   │   │   [dev-dependencies]
+        │   │   │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+        │   │   │   └── reqwest v0.12.28 (*)
         │   │   ├── mockito v1.7.2 (*)
-        │   │   ├── octocrab v0.53.1 (*)
         │   │   └── reqwest v0.12.28 (*)
         │   └── reqwest v0.12.28 (*)
-        ├── plist v1.9.0 (*)
+        ├── plist v1.9.0
+        │   └── tauri-utils v2.9.3 (*)
         ├── serde_json v1.0.150
-        │   ├── cargo_metadata v0.19.2 (*)
-        │   ├── cargo_metadata v0.23.1 (*)
+        │   ├── cargo_metadata v0.19.2
+        │   │   └── tauri-utils v2.9.3 (*)
         │   ├── json-patch v3.0.1
         │   │   ├── tauri-build v2.6.3 (*)
         │   │   └── tauri-utils v2.9.3 (*)
@@ -490,58 +438,72 @@ foldhash v0.2.0
         │   └── tauri-utils v2.9.3 (*)
         │   [build-dependencies]
         │   ├── tree-sitter v0.26.10
-        │   │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+        │   │   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
         │   │   └── tree-sitter-language-pack v1.12.2 (*)
         │   └── tree-sitter-language-pack v1.12.2 (*)
         ├── toml_edit v0.20.2
         │   └── toml v0.8.2
-        │       └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+        │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
         └── zip v2.4.2 (*)
 
 foldhash v0.2.0
 └── dom_query v0.27.0 (*)
 
-getrandom v0.2.17
-└── const-random-macro v0.1.16 (proc-macro)
-    └── const-random v0.1.18
-        └── ahash v0.8.12
-            ├── hashbrown v0.14.5
-            │   ├── dashmap v6.2.1
-            │   │   └── gix-tempfile v23.0.2 (*)
-            │   └── hashlink v0.9.1
-            │       └── rusqlite v0.31.0
-            │           └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-            └── tree-sitter-language-pack v1.12.2 (*)
+form_urlencoded v1.2.2
+├── serde_urlencoded v0.7.1
+│   ├── axum v0.7.9 (*)
+│   ├── mockito v1.7.2 (*)
+│   └── reqwest v0.12.28 (*)
+└── url v2.5.8
+    ├── reqwest v0.12.28 (*)
+    ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+    └── tower-http v0.6.11
+        └── reqwest v0.12.28 (*)
+
+form_urlencoded v1.2.2
+└── url v2.5.8
+    ├── schemars v0.8.22 (*)
+    ├── tauri-utils v2.9.3 (*)
+    └── urlpattern v0.3.0
+        └── tauri-utils v2.9.3 (*)
 
 getrandom v0.2.17
-├── octocrab v0.53.1 (*)
-├── rand_core v0.6.4
-│   ├── crypto-bigint v0.5.5
-│   │   └── elliptic-curve v0.13.8 (*)
-│   ├── elliptic-curve v0.13.8 (*)
-│   ├── ff v0.13.1
-│   │   ├── elliptic-curve v0.13.8 (*)
-│   │   └── group v0.13.0
-│   │       └── elliptic-curve v0.13.8 (*)
-│   ├── group v0.13.0 (*)
-│   ├── rand v0.8.6
-│   │   ├── jsonwebtoken v10.4.0 (*)
-│   │   └── num-bigint-dig v0.8.6
-│   │       └── rsa v0.9.10 (*)
-│   ├── rand_chacha v0.3.1
-│   │   └── rand v0.8.6 (*)
-│   ├── rsa v0.9.10 (*)
-│   └── signature v2.2.0 (*)
+├── const-random-macro v0.1.16 (proc-macro)
+│   └── const-random v0.1.18
+│       └── ahash v0.8.12
+│           ├── hashbrown v0.14.5
+│           │   ├── dashmap v6.2.1
+│           │   │   └── gix-tempfile v23.0.2 (*)
+│           │   └── hashlink v0.9.1
+│           │       └── rusqlite v0.31.0
+│           │           └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│           └── tree-sitter-language-pack v1.12.2 (*)
 └── ring v0.17.14
     ├── rustls v0.23.41
-    │   ├── hyper-rustls v0.27.9 (*)
     │   ├── rustls-platform-verifier v0.6.2
     │   │   └── ureq v3.3.0 (*)
-    │   ├── tokio-rustls v0.26.4
-    │   │   └── hyper-rustls v0.27.9 (*)
     │   └── ureq v3.3.0 (*)
     └── rustls-webpki v0.103.13
         └── rustls v0.23.41 (*)
+
+getrandom v0.2.17
+└── rand_core v0.6.4
+    ├── crypto-bigint v0.5.5
+    │   └── elliptic-curve v0.13.8 (*)
+    ├── elliptic-curve v0.13.8 (*)
+    ├── ff v0.13.1
+    │   ├── elliptic-curve v0.13.8 (*)
+    │   └── group v0.13.0
+    │       └── elliptic-curve v0.13.8 (*)
+    ├── group v0.13.0 (*)
+    ├── rand v0.8.7
+    │   ├── jsonwebtoken v10.4.0 (*)
+    │   └── num-bigint-dig v0.8.6
+    │       └── rsa v0.9.10 (*)
+    ├── rand_chacha v0.3.1
+    │   └── rand v0.8.7 (*)
+    ├── rsa v0.9.10 (*)
+    └── signature v2.2.0 (*)
 
 getrandom v0.3.4
 ├── jobserver v0.1.34
@@ -556,15 +518,15 @@ getrandom v0.3.4
 │       │   └── stacker v0.1.24
 │       │       └── recursive v0.1.1
 │       │           └── sqlparser v0.62.0
-│       │               └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│       │               └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │       ├── ring v0.17.14 (*)
 │       ├── stacker v0.1.24 (*)
 │       ├── tree-sitter v0.26.10 (*)
 │       ├── tree-sitter-c-sharp v0.23.5
-│       │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│       │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │       ├── tree-sitter-language-pack v1.12.2 (*)
 │       ├── tree-sitter-yaml v0.7.2
-│       │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│       │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │       ├── vswhom-sys v0.1.3
 │       │   └── vswhom v0.1.0
 │       │       └── embed-resource v3.0.11 (*)
@@ -580,7 +542,9 @@ getrandom v0.3.4
         └── rand v0.9.4 (*)
 
 getrandom v0.4.3
-└── tempfile v3.27.0 (*)
+├── tempfile v3.27.0 (*)
+└── uuid v1.23.4
+    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 hashbrown v0.12.3
 └── indexmap v1.9.3
@@ -593,7 +557,8 @@ hashbrown v0.16.1 (*)
 hashbrown v0.17.1 (*)
 
 httparse v1.10.1
-└── ureq-proto v0.6.0 (*)
+└── ureq-proto v0.6.0
+    └── ureq v3.3.0 (*)
 
 httparse v1.10.1
 └── hyper v1.10.1 (*)
@@ -605,6 +570,7 @@ indexmap v2.14.0 (*)
 log v0.4.33
 ├── html5ever v0.38.0 (*)
 ├── markup5ever v0.38.0 (*)
+├── rustls v0.23.41 (*)
 ├── rustls-platform-verifier v0.6.2 (*)
 ├── selectors v0.36.1 (*)
 ├── tauri-utils v2.9.3 (*)
@@ -614,34 +580,28 @@ log v0.4.33
 log v0.4.33
 ├── globset v0.4.18
 │   └── ignore v0.4.27
-│       └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-├── hyper-rustls v0.27.9 (*)
+│       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── ignore v0.4.27 (*)
 ├── mockito v1.7.2 (*)
 ├── reqwest v0.12.28 (*)
-├── rustls v0.23.41 (*)
 ├── sqlparser v0.62.0 (*)
 ├── tracing v0.1.44
 │   ├── axum v0.7.9 (*)
 │   ├── axum-core v0.4.5
 │   │   └── axum v0.7.9 (*)
-│   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 │   ├── h2 v0.4.15 (*)
 │   ├── hyper-util v0.1.20 (*)
-│   ├── octocrab v0.53.1 (*)
+│   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   ├── tower v0.5.3
 │   │   ├── axum v0.7.9 (*)
-│   │   ├── octocrab v0.53.1 (*)
 │   │   ├── reqwest v0.12.28 (*)
-│   │   └── tower-http v0.6.11
-│   │       ├── octocrab v0.53.1 (*)
-│   │       └── reqwest v0.12.28 (*)
-│   └── tower-http v0.6.11 (*)
-├── tracing-log v0.2.0
+│   │   └── tower-http v0.6.11 (*)
 │   └── tracing-subscriber v0.3.23
-│       └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+├── tracing-log v0.2.0
+│   └── tracing-subscriber v0.3.23 (*)
 ├── windows-projfs v0.1.8
-│   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 └── zopfli v0.8.3
     └── zip v2.4.2 (*)
 
@@ -649,24 +609,24 @@ once_cell v1.21.4
 ├── ahash v0.8.12 (*)
 ├── dashmap v6.2.1 (*)
 ├── gix-features v0.48.1 (*)
-├── rustls v0.23.41 (*)
 ├── sysinfo v0.30.13
-│   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── tempfile v3.27.0 (*)
 ├── tracing-core v0.1.36
 │   ├── tracing v0.1.44 (*)
 │   ├── tracing-log v0.2.0 (*)
 │   └── tracing-subscriber v0.3.23 (*)
-└── tracing-log v0.2.0 (*)
+├── tracing-log v0.2.0 (*)
+└── tracing-subscriber v0.3.23 (*)
 
 once_cell v1.21.4
-└── const-random-macro v0.1.16 (proc-macro) (*)
+├── const-random-macro v0.1.16 (proc-macro) (*)
+└── rustls v0.23.41 (*)
 
 proc-macro2 v1.0.106
 ├── async-trait v0.1.89 (proc-macro)
 │   ├── axum v0.7.9 (*)
-│   ├── axum-core v0.4.5 (*)
-│   └── octocrab v0.53.1 (*)
+│   └── axum-core v0.4.5 (*)
 ├── curve25519-dalek-derive v0.1.1 (proc-macro)
 │   └── curve25519-dalek v4.1.3 (*)
 ├── darling_core v0.23.0
@@ -684,15 +644,8 @@ proc-macro2 v1.0.106
 │   │   ├── icu_normalizer v2.2.0
 │   │   │   └── idna_adapter v1.2.2
 │   │   │       └── idna v1.1.0
-│   │   │           └── url v2.5.8
-│   │   │               ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   │   │               ├── octocrab v0.53.1 (*)
-│   │   │               ├── reqwest v0.12.28 (*)
-│   │   │               ├── schemars v0.8.22 (*)
-│   │   │               ├── tauri-utils v2.9.3 (*)
-│   │   │               ├── tower-http v0.6.11 (*)
-│   │   │               └── urlpattern v0.3.0
-│   │   │                   └── tauri-utils v2.9.3 (*)
+│   │   │           ├── url v2.5.8 (*)
+│   │   │           └── url v2.5.8 (*)
 │   │   └── icu_properties v2.2.0
 │   │       └── idna_adapter v1.2.2 (*)
 │   ├── icu_locale_core v2.2.0
@@ -707,19 +660,6 @@ proc-macro2 v1.0.106
 │   │   ├── icu_properties v2.2.0 (*)
 │   │   └── icu_provider v2.2.0 (*)
 │   └── zip v2.4.2 (*)
-├── futures-macro v0.3.32 (proc-macro)
-│   └── futures-util v0.3.32
-│       ├── axum v0.7.9 (*)
-│       ├── axum-core v0.4.5 (*)
-│       ├── futures v0.3.32
-│       │   └── octocrab v0.53.1 (*)
-│       ├── futures-executor v0.3.32
-│       │   └── futures v0.3.32 (*)
-│       ├── hyper-util v0.1.20 (*)
-│       ├── octocrab v0.53.1 (*)
-│       ├── reqwest v0.12.28 (*)
-│       ├── tower v0.5.3 (*)
-│       └── tower-http v0.6.11 (*)
 ├── maybe-async v0.2.11 (proc-macro)
 │   └── gix-protocol v0.62.0 (*)
 ├── oxc-miette-derive v2.7.1 (proc-macro)
@@ -732,9 +672,6 @@ proc-macro2 v1.0.106
 │       └── oxc_span v0.120.0 (*)
 ├── oxc_ast_macros v0.120.0 (proc-macro) (*)
 ├── phf_macros v0.13.1 (proc-macro) (*)
-├── pin-project-internal v1.1.13 (proc-macro)
-│   └── pin-project v1.1.13
-│       └── octocrab v0.53.1 (*)
 ├── quote v1.0.46
 │   ├── async-trait v0.1.89 (proc-macro) (*)
 │   ├── cssparser-macros v0.6.1 (proc-macro)
@@ -744,22 +681,19 @@ proc-macro2 v1.0.106
 │   ├── darling_macro v0.23.0 (proc-macro) (*)
 │   ├── derive_more-impl v2.1.1 (proc-macro) (*)
 │   ├── displaydoc v0.2.6 (proc-macro) (*)
-│   ├── futures-macro v0.3.32 (proc-macro) (*)
-│   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 │   ├── maybe-async v0.2.11 (proc-macro) (*)
 │   ├── oxc-miette-derive v2.7.1 (proc-macro) (*)
 │   ├── oxc_ast_macros v0.120.0 (proc-macro) (*)
 │   ├── phf_macros v0.13.1 (proc-macro) (*)
-│   ├── pin-project-internal v1.1.13 (proc-macro) (*)
 │   ├── recursive-proc-macro-impl v0.1.1 (proc-macro)
 │   │   └── recursive v0.1.1 (*)
 │   ├── schemars_derive v0.8.22 (proc-macro)
 │   │   └── schemars v0.8.22 (*)
 │   ├── serde_derive v1.0.228 (proc-macro)
 │   │   ├── serde v1.0.228
-│   │   │   ├── cargo-platform v0.1.9 (*)
+│   │   │   ├── cargo-platform v0.1.9
+│   │   │   │   └── cargo_metadata v0.19.2 (*)
 │   │   │   ├── cargo_metadata v0.19.2 (*)
-│   │   │   ├── cargo_metadata v0.23.1 (*)
 │   │   │   ├── cargo_toml v0.22.3
 │   │   │   │   └── tauri-build v2.6.3 (*)
 │   │   │   ├── indexmap v1.9.3 (*)
@@ -769,6 +703,7 @@ proc-macro2 v1.0.106
 │   │   │   ├── schemars v0.8.22 (*)
 │   │   │   ├── tauri-build v2.6.3 (*)
 │   │   │   ├── tauri-utils v2.9.3 (*)
+│   │   │   ├── url v2.5.8 (*)
 │   │   │   └── urlpattern v0.3.0 (*)
 │   │   │   [build-dependencies]
 │   │   │   └── tree-sitter-language-pack v1.12.2 (*)
@@ -778,39 +713,28 @@ proc-macro2 v1.0.106
 │   │   │   │   └── mockito v1.7.2 (*)
 │   │   │   ├── axum v0.7.9 (*)
 │   │   │   ├── chrono v0.4.45
-│   │   │   │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   │   │   │   └── octocrab v0.53.1 (*)
-│   │   │   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
-│   │   │   ├── http-serde v2.1.1
-│   │   │   │   └── octocrab v0.53.1 (*)
+│   │   │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   │   │   ├── jsonwebtoken v10.4.0 (*)
-│   │   │   ├── octocrab v0.53.1 (*)
 │   │   │   ├── oxc_index v4.1.0
 │   │   │   │   └── oxc_syntax v0.120.0 (*)
 │   │   │   ├── quick-xml v0.37.5
-│   │   │   │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│   │   │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   │   │   ├── reqwest v0.12.28 (*)
 │   │   │   ├── serde_spanned v0.6.9
 │   │   │   │   ├── toml v0.8.2 (*)
 │   │   │   │   └── toml_edit v0.20.2 (*)
-│   │   │   ├── serde_urlencoded v0.7.1
-│   │   │   │   ├── axum v0.7.9 (*)
-│   │   │   │   ├── mockito v1.7.2 (*)
-│   │   │   │   ├── octocrab v0.53.1 (*)
-│   │   │   │   └── reqwest v0.12.28 (*)
+│   │   │   ├── serde_urlencoded v0.7.1 (*)
+│   │   │   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   │   │   ├── toml v0.8.2 (*)
 │   │   │   ├── toml_datetime v0.6.3
 │   │   │   │   ├── toml v0.8.2 (*)
 │   │   │   │   └── toml_edit v0.20.2 (*)
-│   │   │   ├── toml_edit v0.20.2 (*)
-│   │   │   └── url v2.5.8 (*)
+│   │   │   └── toml_edit v0.20.2 (*)
 │   │   └── url v2.5.8 (*)
 │   ├── serde_derive_internals v0.29.1
 │   │   └── schemars_derive v0.8.22 (proc-macro) (*)
 │   ├── serde_with_macros v3.21.0 (proc-macro) (*)
-│   ├── snafu-derive v0.8.9 (proc-macro)
-│   │   └── snafu v0.8.9
-│   │       └── octocrab v0.53.1 (*)
+│   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   ├── string_cache_codegen v0.6.1 (*)
 │   ├── syn v2.0.118
 │   │   ├── async-trait v0.1.89 (proc-macro) (*)
@@ -820,18 +744,15 @@ proc-macro2 v1.0.106
 │   │   ├── darling_macro v0.23.0 (proc-macro) (*)
 │   │   ├── derive_more-impl v2.1.1 (proc-macro) (*)
 │   │   ├── displaydoc v0.2.6 (proc-macro) (*)
-│   │   ├── futures-macro v0.3.32 (proc-macro) (*)
 │   │   ├── maybe-async v0.2.11 (proc-macro) (*)
 │   │   ├── oxc-miette-derive v2.7.1 (proc-macro) (*)
 │   │   ├── oxc_ast_macros v0.120.0 (proc-macro) (*)
 │   │   ├── phf_macros v0.13.1 (proc-macro) (*)
-│   │   ├── pin-project-internal v1.1.13 (proc-macro) (*)
 │   │   ├── recursive-proc-macro-impl v0.1.1 (proc-macro) (*)
 │   │   ├── schemars_derive v0.8.22 (proc-macro) (*)
 │   │   ├── serde_derive v1.0.228 (proc-macro) (*)
 │   │   ├── serde_derive_internals v0.29.1 (*)
 │   │   ├── serde_with_macros v3.21.0 (proc-macro) (*)
-│   │   ├── snafu-derive v0.8.9 (proc-macro) (*)
 │   │   ├── synstructure v0.13.2
 │   │   │   ├── yoke-derive v0.8.2 (proc-macro)
 │   │   │   │   └── yoke v0.8.3
@@ -860,8 +781,6 @@ proc-macro2 v1.0.106
 │   │   ├── thiserror-impl v2.0.18 (proc-macro)
 │   │   │   └── thiserror v2.0.18
 │   │   │       ├── cargo_metadata v0.19.2 (*)
-│   │   │       ├── cargo_metadata v0.23.1 (*)
-│   │   │       ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 │   │   │       ├── gix v0.84.0 (*)
 │   │   │       ├── gix-attributes v0.33.2 (*)
 │   │   │       ├── gix-blame v0.14.0 (*)
@@ -936,6 +855,7 @@ proc-macro2 v1.0.106
 │   │   │       ├── oxc-miette v2.7.1 (*)
 │   │   │       ├── simple_asn1 v0.6.4
 │   │   │       │   └── jsonwebtoken v10.4.0 (*)
+│   │   │       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   │   │       ├── tauri-utils v2.9.3 (*)
 │   │   │       ├── tree-sitter-language-pack v1.12.2 (*)
 │   │   │       ├── windows-projfs v0.1.8 (*)
@@ -943,23 +863,18 @@ proc-macro2 v1.0.106
 │   │   ├── tokio-macros v2.7.0 (proc-macro)
 │   │   │   └── tokio v1.52.3
 │   │   │       ├── axum v0.7.9 (*)
-│   │   │       ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 │   │   │       ├── h2 v0.4.15 (*)
 │   │   │       ├── hyper v1.10.1 (*)
-│   │   │       ├── hyper-rustls v0.27.9 (*)
-│   │   │       ├── hyper-timeout v0.5.2 (*)
 │   │   │       ├── hyper-tls v0.6.0 (*)
 │   │   │       ├── hyper-util v0.1.20 (*)
 │   │   │       ├── mockito v1.7.2 (*)
-│   │   │       ├── octocrab v0.53.1 (*)
 │   │   │       ├── reqwest v0.12.28 (*)
+│   │   │       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   │   │       ├── tokio-native-tls v0.3.1
 │   │   │       │   ├── hyper-tls v0.6.0 (*)
 │   │   │       │   └── reqwest v0.12.28 (*)
-│   │   │       ├── tokio-rustls v0.26.4 (*)
 │   │   │       ├── tokio-util v0.7.18
-│   │   │       │   ├── h2 v0.4.15 (*)
-│   │   │       │   └── tower v0.5.3 (*)
+│   │   │       │   └── h2 v0.4.15 (*)
 │   │   │       └── tower v0.5.3 (*)
 │   │   ├── tracing-attributes v0.1.31 (proc-macro)
 │   │   │   └── tracing v0.1.44 (*)
@@ -993,23 +908,18 @@ proc-macro2 v1.0.106
 │   │   │       ├── jsonwebtoken v10.4.0 (*)
 │   │   │       ├── num-bigint-dig v0.8.6 (*)
 │   │   │       ├── rsa v0.9.10 (*)
-│   │   │       ├── rustls v0.23.41 (*)
 │   │   │       ├── rustls-pki-types v1.15.0
 │   │   │       │   ├── reqwest v0.12.28 (*)
 │   │   │       │   ├── rustls v0.23.41 (*)
-│   │   │       │   ├── rustls-native-certs v0.8.4
-│   │   │       │   │   └── hyper-rustls v0.27.9 (*)
 │   │   │       │   ├── rustls-webpki v0.103.13 (*)
 │   │   │       │   ├── ureq v3.3.0 (*)
 │   │   │       │   └── webpki-roots v1.0.8
 │   │   │       │       └── ureq v3.3.0 (*)
-│   │   │       ├── sec1 v0.7.3 (*)
-│   │   │       └── secrecy v0.10.3
-│   │   │           └── octocrab v0.53.1 (*)
+│   │   │       └── sec1 v0.7.3 (*)
 │   │   └── zerovec-derive v0.11.3 (proc-macro)
 │   │       └── zerovec v0.11.6 (*)
 │   ├── syn v2.0.118
-│   │   └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+│   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   ├── synstructure v0.13.2 (*)
 │   ├── tauri-utils v2.9.3 (*)
 │   ├── thiserror-impl v1.0.69 (proc-macro) (*)
@@ -1026,7 +936,6 @@ proc-macro2 v1.0.106
 ├── serde_derive v1.0.228 (proc-macro) (*)
 ├── serde_derive_internals v0.29.1 (*)
 ├── serde_with_macros v3.21.0 (proc-macro) (*)
-├── snafu-derive v0.8.9 (proc-macro) (*)
 ├── string_cache_codegen v0.6.1 (*)
 ├── syn v2.0.118 (*)
 ├── synstructure v0.13.2 (*)
@@ -1050,7 +959,7 @@ quick-xml v0.37.5 (*)
 quick-xml v0.39.4
 └── plist v1.9.0 (*)
 
-rand v0.8.6 (*)
+rand v0.8.7 (*)
 
 rand v0.9.4 (*)
 
@@ -1062,30 +971,18 @@ rand_core v0.6.4 (*)
 
 rand_core v0.9.5 (*)
 
-rustc-hash v1.1.0
-└── tiktoken-rs v0.5.9 (*)
-
-rustc-hash v2.1.3
-├── oxc_allocator v0.120.0 (*)
-├── oxc_parser v0.120.0 (*)
-├── oxc_regular_expression v0.120.0 (*)
-└── selectors v0.36.1 (*)
-
 serde v1.0.228 (*)
 
 serde v1.0.228 (*)
 
 serde_core v1.0.228
 ├── camino v1.2.4
-│   ├── cargo_metadata v0.19.2 (*)
-│   └── cargo_metadata v0.23.1 (*)
-├── cargo-platform v0.3.3 (*)
+│   └── cargo_metadata v0.19.2 (*)
 ├── erased-serde v0.4.10
 │   └── serde-untagged v0.1.9
 │       └── tauri-utils v2.9.3 (*)
 ├── semver v1.0.28
 │   ├── cargo_metadata v0.19.2 (*)
-│   ├── cargo_metadata v0.23.1 (*)
 │   ├── rustc_version v0.4.1
 │   │   └── embed-resource v3.0.11 (*)
 │   │   [build-dependencies]
@@ -1120,14 +1017,12 @@ serde_core v1.0.228
 ├── serde_json v1.0.150
 │   ├── assert-json-diff v2.0.2 (*)
 │   ├── axum v0.7.9 (*)
-│   ├── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
 │   ├── jsonwebtoken v10.4.0 (*)
 │   ├── mockito v1.7.2 (*)
-│   ├── octocrab v0.53.1 (*)
-│   └── reqwest v0.12.28 (*)
+│   ├── reqwest v0.12.28 (*)
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 └── serde_path_to_error v0.1.20
-    ├── axum v0.7.9 (*)
-    └── octocrab v0.53.1 (*)
+    └── axum v0.7.9 (*)
 
 serde_json v1.0.150 (*)
 
@@ -1183,7 +1078,6 @@ smallvec v1.15.2
 │       │   └── gix-features v0.48.1 (*)
 │       ├── string_cache v0.9.0
 │       │   └── web_atoms v0.2.5 (*)
-│       ├── tiktoken-rs v0.5.9 (*)
 │       ├── tokio v1.52.3 (*)
 │       └── windows-projfs v0.1.8 (*)
 ├── rusqlite v0.31.0 (*)
@@ -1196,6 +1090,21 @@ stable_deref_trait v1.2.1
 stable_deref_trait v1.2.1
 └── servo_arc v0.4.3
     └── selectors v0.36.1 (*)
+
+subtle v2.6.1
+└── rustls v0.23.41 (*)
+
+subtle v2.6.1
+├── crypto-bigint v0.5.5 (*)
+├── curve25519-dalek v4.1.3 (*)
+├── digest v0.10.7 (*)
+├── ed25519-dalek v2.2.0 (*)
+├── elliptic-curve v0.13.8 (*)
+├── ff v0.13.1 (*)
+├── group v0.13.0 (*)
+├── rfc6979 v0.4.0 (*)
+├── rsa v0.9.10 (*)
+└── sec1 v0.7.3 (*)
 
 syn v2.0.118 (*)
 
@@ -1236,6 +1145,14 @@ typenum v1.20.1
     ├── block-buffer v0.12.1 (*)
     └── crypto-common v0.2.2 (*)
 
+url v2.5.8 (*)
+
+url v2.5.8 (*)
+
+uuid v1.23.4 (*)
+
+uuid v1.23.4 (*)
+
 winapi v0.3.9
 ├── io-close v0.3.7
 │   └── gix-worktree-state v0.31.0 (*)
@@ -1257,10 +1174,10 @@ windows-core v0.62.2 (*)
 
 windows-sys v0.42.0
 └── enable-ansi-support v0.2.1
-    └── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 windows-sys v0.59.0
-└── genesis_mc v0.1.0 (Z:\genesis_mc\src-tauri)
+└── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 windows-sys v0.59.0
 └── winreg v0.55.0
@@ -1276,16 +1193,18 @@ windows-sys v0.61.2
 │           ├── gix v0.84.0 (*)
 │           └── gix-tempfile v23.0.2 (*)
 ├── gix-sec v0.14.1 (*)
+├── home v0.5.12
+│   └── which v6.0.3
+│       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── mio v1.2.1
 │   └── tokio v1.52.3 (*)
 ├── nu-ansi-term v0.50.3
 │   └── tracing-subscriber v0.3.23 (*)
 ├── schannel v0.1.29
-│   ├── native-tls v0.2.18
-│   │   ├── hyper-tls v0.6.0 (*)
-│   │   ├── reqwest v0.12.28 (*)
-│   │   └── tokio-native-tls v0.3.1 (*)
-│   └── rustls-native-certs v0.8.4 (*)
+│   └── native-tls v0.2.18
+│       ├── hyper-tls v0.6.0 (*)
+│       ├── reqwest v0.12.28 (*)
+│       └── tokio-native-tls v0.3.1 (*)
 ├── socket2 v0.6.4
 │   ├── hyper-util v0.1.20 (*)
 │   └── tokio v1.52.3 (*)
@@ -1330,3 +1249,8 @@ winnow v1.0.3
 └── toml_parser v1.1.2+spec-1.1.0
     ├── toml v0.9.12+spec-1.1.0 (*)
     └── toml v1.1.2+spec-1.1.0 (*)
+
+zeroize v1.9.0
+└── rustls v0.23.41 (*)
+
+zeroize v1.9.0 (*)

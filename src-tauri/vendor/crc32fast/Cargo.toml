@@ -55,17 +55,17 @@ path = "benches/bench.rs"
 harness = false
 
 [dependencies.cfg-if]
-version = "1.0"
+version = "=1.0.4"
 
 [dev-dependencies.bencher]
-version = "0.1"
+version = "=0.1.5"
 
 [dev-dependencies.quickcheck]
-version = "1.0"
+version = "=1.0.3"
 default-features = false
 
 [dev-dependencies.rand]
-version = "0.8"
+version = "=0.8.5"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_arm_crc32_intrinsics)'] }

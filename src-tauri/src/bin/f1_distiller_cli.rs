@@ -375,10 +375,42 @@ fn write_f1_report(root_dir: &Path, conn: &Connection, repo_id: &str) -> io::Res
     Ok(report_path)
 }
 
-fn distillation_prompt(artifact_type: &str) -> String {
-    format!(
-        "Voce e o Destilador do SODA (Souls MC). Converta o blob '{artifact_type}' em uma Essencia objetiva (<= 3000 tokens). Preserve fatos tecnicos, interfaces, invariantes e riscos. Remova redundancia e qualquer recomendacao de stacks proibidas (Node.js/Electron/VDOM). Retorne apenas o texto da essencia.",
-    )
+fn get_system_prompt_for_artifact(artifact_type: &str) -> &'static str {
+    match artifact_type {
+        "blob_01_repo_identity" => {
+            "Você é o Destilador de Promessas. Extraia a visão original do produto e o público-alvo. DESTRUA impiedosamente qualquer jargão de marketing, adjetivos comerciais ou hype. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_02_product_specs" => {
+            "Você é o Destilador de Dependências. Mapeie a stack tecnológica e liste os pacotes. Destaque evidências de 'Lixo Tóxico' (dependência excessiva de Node.js, Electron, VMs pesadas). PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_03_test_intent" => {
+            "Você é o Destilador de Intenções. Extraia estritamente as regras de negócio, fluxos e validações provadas nas assinaturas de testes unitários e E2E. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_04_repo_outline" => {
+            "Você é o Destilador de Estrutura AST. Preserve RIGOROSAMENTE todas as assinaturas matemáticas, rotas, tipos e interfaces. IGNORE as lógicas internas de implementação (o miolo das funções). PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_05_architecture_map" => {
+            "Você é o Destilador Topológico. Mapeie o grafo de diretórios e a hierarquia de importações, evidenciando o acoplamento da arquitetura. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_06_unsafe_hotspots" => {
+            "Você é o Destilador de Risco. Mapeie cicatrizes no código, uso de 'unsafe', chaves hardcoded e alertas de segurança estrutural. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_07_ops_blueprint" => {
+            "Você é o Destilador de Operações. Mapeie o pipeline de CI/CD, Dockerfiles e atritos de infraestrutura. Foque na complexidade de deploy. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_08_health_report" => {
+            "Você é o Destilador de Dívida Técnica. Realize a DEDUPLICAÇÃO ESTRITA de erros de linters, mapeando gargalos de complexidade ciclomática. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_09_community_meta" => {
+            "Você é o Destilador de Comunidade. Condense apenas os fatos vitais: data de atualização, issues abertas e tração do repositório. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        "blob_11_ux_contracts" => {
+            "Você é o Destilador de Contratos UX. Preserve estritamente as Props (entradas) e Eventos (saídas) dos componentes visuais. IGNORE marcações CSS, Tailwind e HTML decorativo. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+        _ => {
+            "Você é o Destilador Factual da Fase 1.5 do SODA. Sua missão é extrair a ESSÊNCIA FACTUAL COMPACTA do artefato fornecido. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+        }
+    }
 }
 
 #[tokio::main]
@@ -427,19 +459,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             yellow_cloud += 1;
         }
 
-        let prompt = distillation_prompt(&blob.artifact_type);
+        if blob.artifact_type == "blob_10_soda_canon_context" {
+            info!(repo_id = %repo_id, "blob_10 mantido no Prompt Caching / Canon sem destilacao iterativa");
+            continue;
+        }
+
+        let prompt = get_system_prompt_for_artifact(&blob.artifact_type);
         let essence_payload = match &decision.destination {
             RoutingDestination::PassThrough => blob.payload.clone(),
             RoutingDestination::LocalModel { path } => {
                 let _distiller: LocalDistiller<TruncatingInferenceEngine> =
                     LocalDistiller::new(path).map_err(|e| io::Error::other(format!("{:?}", e)))?;
                 cascade
-                    .cascade_distill(&blob.payload, &prompt)
+                    .cascade_distill(&blob.payload, prompt)
                     .await
                     .map_err(|e| io::Error::other(format!("{:?}", e)))?
             }
             RoutingDestination::CloudCascade => cascade
-                .cascade_distill(&blob.payload, &prompt)
+                .cascade_distill(&blob.payload, prompt)
                 .await
                 .map_err(|e| io::Error::other(format!("{:?}", e)))?,
         };

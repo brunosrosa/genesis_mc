@@ -1,8 +1,8 @@
-_ENV_CLEAN Gerado em: 2026-07-06 20:00:53
+_ENV_CLEAN Gerado em: 2026-07-20 01:40:07
 
 ### ====================================================================================================
 ARQUIVO: .env (masked)
-CAMINHO: Z:\genesis_mc\.env
+CAMINHO: Z:\souls_mc\.env
 ---
 # =========================================================
 # SODA DEV ENVIRONMENT - SECURE KEYS & MODELS & VARIABLES
@@ -21,28 +21,24 @@ OPENROUTER_API_FAST_KEY="***MASKED***"
 OPENROUTER_API_HEAVY_KEY="***MASKED***"
 OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 
-## OPENROUTER MODELS TYPES ROUTER
+## OPENROUTER MODELS TYPES ROUTER (FINOPS V3)
 # Roteamento inteligente nativo da plataforma para modelos de custo zero
 OPENROUTER_FREE_MODEL=openrouter/free
 # PRIMEIRO (DEFAULT MODEL)
-# FASE 1: Leitura bruta e ingestão de contexto O(1) (Ou Fallback do Local, quando indisponível?)
-OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
-#USADO COMO DEFAULT PRA TUDO QUANDO NÃO DEFINIDO O MODELO ESPECIFICADO PARA A TAREFA
+# FASE 1.5 & FASE 3 (Destilador / Formatter JSON Strict / Base): deepseek/deepseek-v4-flash via baidu/fp8
+OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash:baidu/fp8
 OPENROUTER_FALLBACK_MODEL=moonshotai/kimi-k2.5 
-#FALLBACK DO OPENROUTER_DEFAULT_MODEL
-# FASE 2: Enxame Cognitivo (As 3 Lentes SODA)
-OPENROUTER_HEAVY_DEFAULT_MODEL=deepseek/deepseek-v4-pro 
-#USADO COMO DEFAULT PRA TUDO QUE NECESSITE DE INTELIGÊNCIA 'HEAVY' ('BRAIN') QUANDO NÃO DEFINIDO O MODELO ESPECIFICADO PARA A TAREFA    
-OPENROUTER_HEAVY_MODEL_LENS_PROD_UX=google/gemini-3.5-flash
-OPENROUTER_HEAVY_MODEL_LENS_ARQ=deepseek/deepseek-v4-pro
-OPENROUTER_HEAVY_MODEL_LENS_OPS=qwen/qwen3.7-plus
-OPENROUTER_HEAVY_MODEL_LENS_OPS_2=z-ai/glm-5.1 
-#FALLBACK DO OPENROUTER_HEAVY_MODEL_LENS_OPS
+# FASE 2: Enxame Cognitivo (As 3 Lentes SODA A, B e C): z-ai/glm-5.2 via novita/fp8
+OPENROUTER_HEAVY_DEFAULT_MODEL=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_PROD_UX=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_ARQ=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_OPS=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_OPS_2=z-ai/glm-5.2:novita/fp8
+# FALLBACK DO OPENROUTER_HEAVY_MODEL_LENS_OPS
 # LAST RESOURCE: Última opção caso problemas com algum dos anteriores ou problemas que não estão sendo resolvidos após loops de tentativas. CUIDADO, CREDITO CARO.
 OPENROUTER_HEAVY_MODEL_LAST_RESORCE=anthropic/claude-opus-4.8 
-#FALLBACK DE ÚLTIMA OPÇÃO PARA OPENROUTER_HEAVY_MODEL's (HEAVY) (CUIDADO, CREDITO CARÍSSIMO.)   
 # FASE 3 ETL - : Formatador de JSON Strict (Âncora de baixo custo)
-OPENROUTER_FORMATTER_MODEL=deepseek/deepseek-v4-flash
+OPENROUTER_FORMATTER_MODEL=deepseek/deepseek-v4-flash:baidu/fp8
 
 # 3. GOOGLE AI STUDIO (Gemini CLI / MCPs Nativos)
 GOOGLE_API_KEY="***MASKED***"
@@ -72,5 +68,3 @@ GOOGLE_REFRESH_TOKEN=""
 GOOGLE_ACCESS_TOKEN=""
 MCP_GOOGLE_WORKSPACE_BIN="mcp-google.exe"
 
-# 6. Docfork (Bibliotecas de Documentação)
-DOCFORK_API_KEY="***MASKED***"
