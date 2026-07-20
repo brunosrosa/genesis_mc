@@ -1,7 +1,5 @@
 pub mod cli;
 pub mod cloud_client;
-#[cfg(feature = "cloud-server")]
-pub mod cloud_server;
 pub mod cloud_sync;
 pub mod compound_lexer;
 pub mod config_io;
@@ -12,13 +10,9 @@ pub mod engine;
 pub mod heatmap;
 pub mod hook_handlers;
 pub mod hooks;
-#[cfg(feature = "http-server")]
-pub mod http_server;
 pub mod instructions;
 pub mod marked_block;
 pub mod mcp_stdio;
-#[cfg(feature = "http-server")]
-pub mod proxy;
 pub mod proxy_autostart;
 pub mod proxy_setup;
 pub mod report;

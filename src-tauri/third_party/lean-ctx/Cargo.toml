@@ -41,30 +41,13 @@ license = "Apache-2.0"
 repository = "https://github.com/yvgude/lean-ctx"
 
 [features]
-cloud-server = [
-    "http-server",
-    "dep:deadpool-postgres",
-    "dep:tokio-postgres",
-    "dep:lettre",
-    "dep:jsonwebtoken",
-    "dep:uuid",
-    "dep:hex",
-    "dep:sha2",
-    "dep:rand",
-]
 default = [
     "tree-sitter",
     "embeddings",
-    "http-server",
 ]
 embeddings = [
     "dep:rten",
     "dep:rten-tensor",
-]
-http-server = [
-    "dep:axum",
-    "dep:tower-http",
-    "dep:reqwest",
 ]
 neural = [
     "dep:rten",
@@ -108,21 +91,8 @@ path = "src/bin/gen_tdd_schema.rs"
 name = "lean-ctx"
 path = "src/main.rs"
 
-[[bin]]
-name = "lean-ctx-cloud-api"
-path = "src/cloud_server_main.rs"
-required-features = ["cloud-server"]
-
-[[bin]]
-name = "seed_observatory"
-path = "src/bin/seed_observatory.rs"
-
 [dependencies.anyhow]
 version = "=1.0.102"
-
-[dependencies.axum]
-version = "=0.8.9"
-optional = true
 
 [dependencies.chrono]
 version = "=0.4.44"
@@ -237,8 +207,8 @@ version = "=0.4.45"
 [dependencies.thiserror]
 version = "=2.0.18"
 
-[dependencies.tiktoken-rs]
-version = "=0.6.0"
+[dependencies.tiktoken]
+version = "=3.5.1"
 
 [dependencies.tokio]
 version = "=1.51.1"
@@ -268,14 +238,6 @@ features = ["codec"]
 
 [dependencies.toml]
 version = "=0.8.23"
-
-[dependencies.tower-http]
-version = "=0.6.8"
-features = [
-    "cors",
-    "auth",
-]
-optional = true
 
 [dependencies.tracing]
 version = "=0.1.44"

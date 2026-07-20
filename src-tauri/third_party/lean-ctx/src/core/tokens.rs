@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
-use tiktoken_rs::CoreBPE;
+use std::sync::Mutex;
+use tiktoken::CoreBpe;
 
-static BPE: OnceLock<CoreBPE> = OnceLock::new();
-
-fn get_bpe() -> &'static CoreBPE {
-    BPE.get_or_init(|| tiktoken_rs::o200k_base().expect("failed to load o200k_base tokenizer"))
+fn get_bpe() -> &'static CoreBpe {
+    tiktoken::get_encoding("o200k_base").expect("failed to load o200k_base tokenizer")
 }
 
 const TOKEN_CACHE_MAX: usize = 256;
@@ -77,5 +75,9 @@ pub fn encode_tokens(text: &str) -> Vec<u32> {
     if text.is_empty() {
         return Vec::new();
     }
-    get_bpe().encode_with_special_tokens(text)
+    get_bpe()
+        .encode_with_special_tokens(text)
+        .into_iter()
+        .map(|t| t as u32)
+        .collect()
 }

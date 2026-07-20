@@ -46,10 +46,6 @@ name = "memory-mcp-rs"
 path = "src/main.rs"
 
 [[test]]
-name = "http_transport"
-path = "tests/http_transport.rs"
-
-[[test]]
 name = "integration"
 path = "tests/integration.rs"
 
@@ -59,9 +55,6 @@ path = "tests/schema_validation.rs"
 
 [dependencies.anyhow]
 version = "=1.0.100"
-
-[dependencies.axum]
-version = "=0.8.7"
 
 [dependencies.clap]
 version = "=4.5.53"
@@ -82,7 +75,6 @@ features = [
     "transport-io",
     "server",
     "macros",
-    "transport-streamable-http-server",
 ]
 
 [dependencies.rusqlite]
