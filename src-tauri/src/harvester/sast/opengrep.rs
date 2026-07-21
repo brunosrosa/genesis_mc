@@ -572,7 +572,7 @@ pub fn normalize_semgrep_payload(
         // o fim do scan e o registro da auditoria. Orquestrador pode
         // sobrescrever se quiser garantir coerencia de janela.
         opengrep_version: None,
-        audit_timestamp: Some(chrono::Utc::now().to_rfc3339()),
+        audit_timestamp: Some(crate::telemetry::now_utc_rfc3339()),
     })
 }
 
@@ -617,7 +617,7 @@ fn render_semgrep_header(out: &mut String, payload: &SemgrepNormalizedPayload) {
     let ts = match payload.audit_timestamp.as_deref() {
         Some(v) => v,
         None => {
-            ts_owned = chrono::Utc::now().to_rfc3339();
+            ts_owned = crate::telemetry::now_utc_rfc3339();
             ts_owned.as_str()
         }
     };

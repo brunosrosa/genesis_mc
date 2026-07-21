@@ -1,173 +1,123 @@
-block-buffer v0.10.4
-└── digest v0.10.7
-    ├── curve25519-dalek v4.1.3
-    │   └── ed25519-dalek v2.2.0
-    │       └── jsonwebtoken v10.4.0
-    │           └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-    ├── ecdsa v0.16.9
-    │   ├── p256 v0.13.2
-    │   │   └── jsonwebtoken v10.4.0 (*)
-    │   └── p384 v0.13.1
-    │       └── jsonwebtoken v10.4.0 (*)
-    ├── elliptic-curve v0.13.8
-    │   ├── ecdsa v0.16.9 (*)
-    │   ├── p256 v0.13.2 (*)
-    │   ├── p384 v0.13.1 (*)
-    │   └── primeorder v0.13.6
-    │       ├── p256 v0.13.2 (*)
-    │       └── p384 v0.13.1 (*)
-    ├── hmac v0.12.1
-    │   ├── hkdf v0.12.4
-    │   │   └── elliptic-curve v0.13.8 (*)
-    │   ├── jsonwebtoken v10.4.0 (*)
-    │   └── rfc6979 v0.4.0
-    │       └── ecdsa v0.16.9 (*)
-    ├── rsa v0.9.10
-    │   └── jsonwebtoken v10.4.0 (*)
-    ├── sha1 v0.10.6
-    │   └── sha1-checked v0.10.0
-    │       └── gix-hash v0.25.1
-    │           ├── gix v0.84.0
-    │           │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-    │           ├── gix-blame v0.14.0
-    │           │   └── gix v0.84.0 (*)
-    │           ├── gix-commitgraph v0.37.1
-    │           │   ├── gix v0.84.0 (*)
-    │           │   ├── gix-blame v0.14.0 (*)
-    │           │   ├── gix-negotiate v0.32.0
-    │           │   │   ├── gix v0.84.0 (*)
-    │           │   │   └── gix-protocol v0.62.0
-    │           │   │       └── gix v0.84.0 (*)
-    │           │   ├── gix-revision v0.46.0
-    │           │   │   ├── gix v0.84.0 (*)
-    │           │   │   └── gix-refspec v0.42.0
-    │           │   │       ├── gix v0.84.0 (*)
-    │           │   │       ├── gix-protocol v0.62.0 (*)
-    │           │   │       └── gix-submodule v0.31.0
-    │           │   │           └── gix v0.84.0 (*)
-    │           │   ├── gix-revwalk v0.32.0
-    │           │   │   ├── gix v0.84.0 (*)
-    │           │   │   ├── gix-blame v0.14.0 (*)
-    │           │   │   ├── gix-negotiate v0.32.0 (*)
-    │           │   │   ├── gix-protocol v0.62.0 (*)
-    │           │   │   ├── gix-revision v0.46.0 (*)
-    │           │   │   └── gix-traverse v0.58.0
-    │           │   │       ├── gix v0.84.0 (*)
-    │           │   │       ├── gix-blame v0.14.0 (*)
-    │           │   │       ├── gix-diff v0.64.0
-    │           │   │       │   ├── gix v0.84.0 (*)
-    │           │   │       │   ├── gix-blame v0.14.0 (*)
-    │           │   │       │   └── gix-status v0.31.0
-    │           │   │       │       └── gix v0.84.0 (*)
-    │           │   │       ├── gix-index v0.52.0
-    │           │   │       │   ├── gix v0.84.0 (*)
-    │           │   │       │   ├── gix-diff v0.64.0 (*)
-    │           │   │       │   ├── gix-dir v0.26.0
-    │           │   │       │   │   ├── gix v0.84.0 (*)
-    │           │   │       │   │   └── gix-status v0.31.0 (*)
-    │           │   │       │   ├── gix-status v0.31.0 (*)
-    │           │   │       │   ├── gix-worktree v0.53.0
-    │           │   │       │   │   ├── gix v0.84.0 (*)
-    │           │   │       │   │   ├── gix-blame v0.14.0 (*)
-    │           │   │       │   │   ├── gix-diff v0.64.0 (*)
-    │           │   │       │   │   ├── gix-dir v0.26.0 (*)
-    │           │   │       │   │   ├── gix-status v0.31.0 (*)
-    │           │   │       │   │   └── gix-worktree-state v0.31.0
-    │           │   │       │   │       └── gix v0.84.0 (*)
-    │           │   │       │   └── gix-worktree-state v0.31.0 (*)
-    │           │   │       └── gix-worktree-stream v0.33.0
-    │           │   │           ├── gix v0.84.0 (*)
-    │           │   │           └── gix-archive v0.33.0
-    │           │   │               └── gix v0.84.0 (*)
-    │           │   └── gix-traverse v0.58.0 (*)
-    │           ├── gix-diff v0.64.0 (*)
-    │           ├── gix-filter v0.31.0
-    │           │   ├── gix v0.84.0 (*)
-    │           │   ├── gix-diff v0.64.0 (*)
-    │           │   ├── gix-status v0.31.0 (*)
-    │           │   ├── gix-worktree-state v0.31.0 (*)
-    │           │   └── gix-worktree-stream v0.33.0 (*)
-    │           ├── gix-hashtable v0.15.2
-    │           │   ├── gix v0.84.0 (*)
-    │           │   ├── gix-object v0.61.0
-    │           │   │   ├── gix v0.84.0 (*)
-    │           │   │   ├── gix-archive v0.33.0 (*)
-    │           │   │   ├── gix-blame v0.14.0 (*)
-    │           │   │   ├── gix-diff v0.64.0 (*)
-    │           │   │   ├── gix-dir v0.26.0 (*)
-    │           │   │   ├── gix-filter v0.31.0 (*)
-    │           │   │   ├── gix-index v0.52.0 (*)
-    │           │   │   ├── gix-negotiate v0.32.0 (*)
-    │           │   │   ├── gix-odb v0.81.0
-    │           │   │   │   └── gix v0.84.0 (*)
-    │           │   │   ├── gix-pack v0.71.0
-    │           │   │   │   ├── gix v0.84.0 (*)
-    │           │   │   │   └── gix-odb v0.81.0 (*)
-    │           │   │   ├── gix-protocol v0.62.0 (*)
-    │           │   │   ├── gix-ref v0.64.0
-    │           │   │   │   ├── gix v0.84.0 (*)
-    │           │   │   │   ├── gix-config v0.57.0
-    │           │   │   │   │   ├── gix v0.84.0 (*)
-    │           │   │   │   │   └── gix-submodule v0.31.0 (*)
-    │           │   │   │   ├── gix-discover v0.52.0
-    │           │   │   │   │   ├── gix v0.84.0 (*)
-    │           │   │   │   │   └── gix-dir v0.26.0 (*)
-    │           │   │   │   └── gix-protocol v0.62.0 (*)
-    │           │   │   ├── gix-revision v0.46.0 (*)
-    │           │   │   ├── gix-revwalk v0.32.0 (*)
-    │           │   │   ├── gix-status v0.31.0 (*)
-    │           │   │   ├── gix-traverse v0.58.0 (*)
-    │           │   │   ├── gix-worktree v0.53.0 (*)
-    │           │   │   ├── gix-worktree-state v0.31.0 (*)
-    │           │   │   └── gix-worktree-stream v0.33.0 (*)
-    │           │   ├── gix-odb v0.81.0 (*)
-    │           │   ├── gix-pack v0.71.0 (*)
-    │           │   ├── gix-revision v0.46.0 (*)
-    │           │   ├── gix-revwalk v0.32.0 (*)
-    │           │   └── gix-traverse v0.58.0 (*)
-    │           ├── gix-index v0.52.0 (*)
-    │           ├── gix-negotiate v0.32.0 (*)
-    │           ├── gix-object v0.61.0 (*)
-    │           ├── gix-odb v0.81.0 (*)
-    │           ├── gix-pack v0.71.0 (*)
-    │           ├── gix-protocol v0.62.0 (*)
-    │           ├── gix-ref v0.64.0 (*)
-    │           ├── gix-refspec v0.42.0 (*)
-    │           ├── gix-revision v0.46.0 (*)
-    │           ├── gix-revwalk v0.32.0 (*)
-    │           ├── gix-shallow v0.12.1
-    │           │   ├── gix v0.84.0 (*)
-    │           │   └── gix-protocol v0.62.0 (*)
-    │           ├── gix-status v0.31.0 (*)
-    │           ├── gix-traverse v0.58.0 (*)
-    │           ├── gix-worktree v0.53.0 (*)
-    │           └── gix-worktree-stream v0.33.0 (*)
-    ├── sha1-checked v0.10.0 (*)
-    ├── sha2 v0.10.9
-    │   ├── ed25519-dalek v2.2.0 (*)
-    │   ├── jsonwebtoken v10.4.0 (*)
-    │   ├── p256 v0.13.2 (*)
-    │   ├── p384 v0.13.1 (*)
-    │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-    └── signature v2.2.0
-        ├── ecdsa v0.16.9 (*)
-        ├── ed25519 v2.2.3
-        │   └── ed25519-dalek v2.2.0 (*)
-        ├── jsonwebtoken v10.4.0 (*)
-        └── rsa v0.9.10 (*)
-
-block-buffer v0.12.1
-└── digest v0.11.3
-    └── sha2 v0.11.0
-        [build-dependencies]
-        └── tree-sitter-language-pack v1.12.2
-            └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-
 byteorder v1.5.0
 └── hash32 v0.3.1
     └── heapless v0.8.0
         └── faster-hex v0.10.0
-            ├── gix-hash v0.25.1 (*)
+            ├── gix-hash v0.25.1
+            │   ├── gix v0.84.0
+            │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+            │   ├── gix-blame v0.14.0
+            │   │   └── gix v0.84.0 (*)
+            │   ├── gix-commitgraph v0.37.1
+            │   │   ├── gix v0.84.0 (*)
+            │   │   ├── gix-blame v0.14.0 (*)
+            │   │   ├── gix-negotiate v0.32.0
+            │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   └── gix-protocol v0.62.0
+            │   │   │       └── gix v0.84.0 (*)
+            │   │   ├── gix-revision v0.46.0
+            │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   └── gix-refspec v0.42.0
+            │   │   │       ├── gix v0.84.0 (*)
+            │   │   │       ├── gix-protocol v0.62.0 (*)
+            │   │   │       └── gix-submodule v0.31.0
+            │   │   │           └── gix v0.84.0 (*)
+            │   │   ├── gix-revwalk v0.32.0
+            │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   ├── gix-blame v0.14.0 (*)
+            │   │   │   ├── gix-negotiate v0.32.0 (*)
+            │   │   │   ├── gix-protocol v0.62.0 (*)
+            │   │   │   ├── gix-revision v0.46.0 (*)
+            │   │   │   └── gix-traverse v0.58.0
+            │   │   │       ├── gix v0.84.0 (*)
+            │   │   │       ├── gix-blame v0.14.0 (*)
+            │   │   │       ├── gix-diff v0.64.0
+            │   │   │       │   ├── gix v0.84.0 (*)
+            │   │   │       │   ├── gix-blame v0.14.0 (*)
+            │   │   │       │   └── gix-status v0.31.0
+            │   │   │       │       └── gix v0.84.0 (*)
+            │   │   │       ├── gix-index v0.52.0
+            │   │   │       │   ├── gix v0.84.0 (*)
+            │   │   │       │   ├── gix-diff v0.64.0 (*)
+            │   │   │       │   ├── gix-dir v0.26.0
+            │   │   │       │   │   ├── gix v0.84.0 (*)
+            │   │   │       │   │   └── gix-status v0.31.0 (*)
+            │   │   │       │   ├── gix-status v0.31.0 (*)
+            │   │   │       │   ├── gix-worktree v0.53.0
+            │   │   │       │   │   ├── gix v0.84.0 (*)
+            │   │   │       │   │   ├── gix-blame v0.14.0 (*)
+            │   │   │       │   │   ├── gix-diff v0.64.0 (*)
+            │   │   │       │   │   ├── gix-dir v0.26.0 (*)
+            │   │   │       │   │   ├── gix-status v0.31.0 (*)
+            │   │   │       │   │   └── gix-worktree-state v0.31.0
+            │   │   │       │   │       └── gix v0.84.0 (*)
+            │   │   │       │   └── gix-worktree-state v0.31.0 (*)
+            │   │   │       └── gix-worktree-stream v0.33.0
+            │   │   │           ├── gix v0.84.0 (*)
+            │   │   │           └── gix-archive v0.33.0
+            │   │   │               └── gix v0.84.0 (*)
+            │   │   └── gix-traverse v0.58.0 (*)
+            │   ├── gix-diff v0.64.0 (*)
+            │   ├── gix-filter v0.31.0
+            │   │   ├── gix v0.84.0 (*)
+            │   │   ├── gix-diff v0.64.0 (*)
+            │   │   ├── gix-status v0.31.0 (*)
+            │   │   ├── gix-worktree-state v0.31.0 (*)
+            │   │   └── gix-worktree-stream v0.33.0 (*)
+            │   ├── gix-hashtable v0.15.2
+            │   │   ├── gix v0.84.0 (*)
+            │   │   ├── gix-object v0.61.0
+            │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   ├── gix-archive v0.33.0 (*)
+            │   │   │   ├── gix-blame v0.14.0 (*)
+            │   │   │   ├── gix-diff v0.64.0 (*)
+            │   │   │   ├── gix-dir v0.26.0 (*)
+            │   │   │   ├── gix-filter v0.31.0 (*)
+            │   │   │   ├── gix-index v0.52.0 (*)
+            │   │   │   ├── gix-negotiate v0.32.0 (*)
+            │   │   │   ├── gix-odb v0.81.0
+            │   │   │   │   └── gix v0.84.0 (*)
+            │   │   │   ├── gix-pack v0.71.0
+            │   │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   │   └── gix-odb v0.81.0 (*)
+            │   │   │   ├── gix-protocol v0.62.0 (*)
+            │   │   │   ├── gix-ref v0.64.0
+            │   │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   │   ├── gix-config v0.57.0
+            │   │   │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   │   │   └── gix-submodule v0.31.0 (*)
+            │   │   │   │   ├── gix-discover v0.52.0
+            │   │   │   │   │   ├── gix v0.84.0 (*)
+            │   │   │   │   │   └── gix-dir v0.26.0 (*)
+            │   │   │   │   └── gix-protocol v0.62.0 (*)
+            │   │   │   ├── gix-revision v0.46.0 (*)
+            │   │   │   ├── gix-revwalk v0.32.0 (*)
+            │   │   │   ├── gix-status v0.31.0 (*)
+            │   │   │   ├── gix-traverse v0.58.0 (*)
+            │   │   │   ├── gix-worktree v0.53.0 (*)
+            │   │   │   ├── gix-worktree-state v0.31.0 (*)
+            │   │   │   └── gix-worktree-stream v0.33.0 (*)
+            │   │   ├── gix-odb v0.81.0 (*)
+            │   │   ├── gix-pack v0.71.0 (*)
+            │   │   ├── gix-revision v0.46.0 (*)
+            │   │   ├── gix-revwalk v0.32.0 (*)
+            │   │   └── gix-traverse v0.58.0 (*)
+            │   ├── gix-index v0.52.0 (*)
+            │   ├── gix-negotiate v0.32.0 (*)
+            │   ├── gix-object v0.61.0 (*)
+            │   ├── gix-odb v0.81.0 (*)
+            │   ├── gix-pack v0.71.0 (*)
+            │   ├── gix-protocol v0.62.0 (*)
+            │   ├── gix-ref v0.64.0 (*)
+            │   ├── gix-refspec v0.42.0 (*)
+            │   ├── gix-revision v0.46.0 (*)
+            │   ├── gix-revwalk v0.32.0 (*)
+            │   ├── gix-shallow v0.12.1
+            │   │   ├── gix v0.84.0 (*)
+            │   │   └── gix-protocol v0.62.0 (*)
+            │   ├── gix-status v0.31.0 (*)
+            │   ├── gix-traverse v0.58.0 (*)
+            │   ├── gix-worktree v0.53.0 (*)
+            │   └── gix-worktree-stream v0.33.0 (*)
             └── gix-packetline v0.21.5
                 ├── gix-filter v0.31.0 (*)
                 └── gix-transport v0.57.2
@@ -175,58 +125,12 @@ byteorder v1.5.0
                     └── gix-protocol v0.62.0 (*)
 
 byteorder v1.5.0
-├── cfb v0.7.3
-│   └── infer v0.19.0
-│       └── tauri-utils v2.9.3
-│           └── tauri-build v2.6.3
-│               [build-dependencies]
-│               └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-└── socks v0.3.4
-    └── ureq v3.3.0
-        [build-dependencies]
-        └── tree-sitter-language-pack v1.12.2 (*)
-
-const-oid v0.9.6
-├── der v0.7.10
-│   ├── ecdsa v0.16.9 (*)
-│   ├── pkcs1 v0.7.5
-│   │   └── rsa v0.9.10 (*)
-│   ├── pkcs8 v0.10.2
-│   │   ├── ed25519 v2.2.3 (*)
-│   │   ├── elliptic-curve v0.13.8 (*)
-│   │   ├── pkcs1 v0.7.5 (*)
-│   │   ├── rsa v0.9.10 (*)
-│   │   └── sec1 v0.7.3
-│   │       └── elliptic-curve v0.13.8 (*)
-│   ├── sec1 v0.7.3 (*)
-│   └── spki v0.7.3
-│       ├── ecdsa v0.16.9 (*)
-│       ├── pkcs1 v0.7.5 (*)
-│       ├── pkcs8 v0.10.2 (*)
-│       └── rsa v0.9.10 (*)
-├── digest v0.10.7 (*)
-└── rsa v0.9.10 (*)
-
-const-oid v0.10.2
-└── digest v0.11.3 (*)
-
-cpufeatures v0.2.17
-├── curve25519-dalek v4.1.3 (*)
-├── sha1 v0.10.6 (*)
-└── sha2 v0.10.9 (*)
-
-cpufeatures v0.3.0
-└── sha2 v0.11.0 (*)
-
-crypto-common v0.1.6
-└── digest v0.10.7 (*)
-
-crypto-common v0.2.2
-└── digest v0.11.3 (*)
-
-digest v0.10.7 (*)
-
-digest v0.11.3 (*)
+└── cfb v0.7.3
+    └── infer v0.19.0
+        └── tauri-utils v2.9.3
+            └── tauri-build v2.6.3
+                [build-dependencies]
+                └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 fastrand v2.4.1
 └── phf_generator v0.13.1
@@ -412,26 +316,21 @@ foldhash v0.2.0
         │   └── reqwest v0.12.28 (*)
         ├── plist v1.9.0
         │   └── tauri-utils v2.9.3 (*)
-        ├── serde_json v1.0.150
-        │   ├── cargo_metadata v0.19.2
-        │   │   └── tauri-utils v2.9.3 (*)
-        │   ├── json-patch v3.0.1
-        │   │   ├── tauri-build v2.6.3 (*)
-        │   │   └── tauri-utils v2.9.3 (*)
-        │   ├── jsonptr v0.6.3
-        │   │   └── json-patch v3.0.1 (*)
-        │   ├── schemars v0.8.22
-        │   │   ├── tauri-build v2.6.3 (*)
-        │   │   └── tauri-utils v2.9.3 (*)
-        │   ├── tauri-build v2.6.3 (*)
-        │   └── tauri-utils v2.9.3 (*)
-        │   [build-dependencies]
-        │   ├── tree-sitter v0.26.10
-        │   │   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-        │   │   └── tree-sitter-language-pack v1.12.2 (*)
-        │   └── tree-sitter-language-pack v1.12.2 (*)
-        └── toml_edit v0.20.2
-            └── toml v0.8.2
+        └── serde_json v1.0.150
+            ├── cargo_metadata v0.19.2
+            │   └── tauri-utils v2.9.3 (*)
+            ├── json-patch v3.0.1
+            │   ├── tauri-build v2.6.3 (*)
+            │   └── tauri-utils v2.9.3 (*)
+            ├── jsonptr v0.6.3
+            │   └── json-patch v3.0.1 (*)
+            ├── schemars v0.8.22
+            │   ├── tauri-build v2.6.3 (*)
+            │   └── tauri-utils v2.9.3 (*)
+            ├── tauri-build v2.6.3 (*)
+            └── tauri-utils v2.9.3 (*)
+            [build-dependencies]
+            └── tree-sitter v0.26.10
                 └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 foldhash v0.2.0
@@ -455,40 +354,7 @@ form_urlencoded v1.2.2
         └── tauri-utils v2.9.3 (*)
 
 getrandom v0.2.17
-└── const-random-macro v0.1.16 (proc-macro)
-    └── const-random v0.1.18
-        └── ahash v0.8.12
-            ├── hashbrown v0.14.5
-            │   ├── dashmap v6.2.1
-            │   │   └── gix-tempfile v23.0.2 (*)
-            │   └── hashlink v0.9.1
-            │       └── rusqlite v0.31.0
-            │           └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-            └── tree-sitter-language-pack v1.12.2 (*)
-
-getrandom v0.2.17
-├── rand_core v0.6.4
-│   ├── crypto-bigint v0.5.5
-│   │   └── elliptic-curve v0.13.8 (*)
-│   ├── elliptic-curve v0.13.8 (*)
-│   ├── ff v0.13.1
-│   │   ├── elliptic-curve v0.13.8 (*)
-│   │   └── group v0.13.0
-│   │       └── elliptic-curve v0.13.8 (*)
-│   ├── group v0.13.0 (*)
-│   ├── rand v0.8.7
-│   │   ├── jsonwebtoken v10.4.0 (*)
-│   │   └── num-bigint-dig v0.8.6
-│   │       └── rsa v0.9.10 (*)
-│   ├── rand_chacha v0.3.1
-│   │   └── rand v0.8.7 (*)
-│   ├── rsa v0.9.10 (*)
-│   └── signature v2.2.0 (*)
 └── ring v0.17.14
-    ├── rustls v0.23.41
-    │   ├── rustls-platform-verifier v0.6.2
-    │   │   └── ureq v3.3.0 (*)
-    │   └── ureq v3.3.0 (*)
     ├── rustls v0.23.41
     │   ├── hyper-rustls v0.27.9 (*)
     │   ├── reqwest v0.12.28 (*)
@@ -496,7 +362,6 @@ getrandom v0.2.17
     │       ├── hyper-rustls v0.27.9 (*)
     │       └── reqwest v0.12.28 (*)
     └── rustls-webpki v0.103.13
-        ├── rustls v0.23.41 (*)
         └── rustls v0.23.41 (*)
 
 getrandom v0.3.4
@@ -507,7 +372,8 @@ getrandom v0.3.4
 │               └── tauri-build v2.6.3 (*)
 │       [build-dependencies]
 │       ├── libsqlite3-sys v0.28.0
-│       │   └── rusqlite v0.31.0 (*)
+│       │   └── rusqlite v0.31.0
+│       │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │       ├── psm v0.1.31
 │       │   └── stacker v0.1.24
 │       │       └── recursive v0.1.1
@@ -518,7 +384,6 @@ getrandom v0.3.4
 │       ├── tree-sitter v0.26.10 (*)
 │       ├── tree-sitter-c-sharp v0.23.5
 │       │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-│       ├── tree-sitter-language-pack v1.12.2 (*)
 │       ├── tree-sitter-yaml v0.7.2
 │       │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │       ├── vswhom-sys v0.1.3
@@ -528,8 +393,6 @@ getrandom v0.3.4
 │           └── zstd-safe v7.2.4
 │               └── zstd v0.13.3
 │                   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-│                   [build-dependencies]
-│                   └── tree-sitter-language-pack v1.12.2 (*)
 └── rand_core v0.9.5
     ├── rand v0.9.4
     │   └── mockito v1.7.2 (*)
@@ -545,18 +408,15 @@ hashbrown v0.12.3
 └── indexmap v1.9.3
     └── schemars v0.8.22 (*)
 
-hashbrown v0.14.5 (*)
+hashbrown v0.14.5
+├── dashmap v6.2.1
+│   └── gix-tempfile v23.0.2 (*)
+└── hashlink v0.9.1
+    └── rusqlite v0.31.0 (*)
 
 hashbrown v0.16.1 (*)
 
 hashbrown v0.17.1 (*)
-
-httparse v1.10.1
-└── ureq-proto v0.6.0
-    └── ureq v3.3.0 (*)
-
-httparse v1.10.1
-└── hyper v1.10.1 (*)
 
 indexmap v1.9.3 (*)
 
@@ -565,12 +425,8 @@ indexmap v2.14.0 (*)
 log v0.4.33
 ├── html5ever v0.38.0 (*)
 ├── markup5ever v0.38.0 (*)
-├── rustls v0.23.41 (*)
-├── rustls-platform-verifier v0.6.2 (*)
 ├── selectors v0.36.1 (*)
-├── tauri-utils v2.9.3 (*)
-├── ureq v3.3.0 (*)
-└── ureq-proto v0.6.0 (*)
+└── tauri-utils v2.9.3 (*)
 
 log v0.4.33
 ├── globset v0.4.18
@@ -586,50 +442,31 @@ log v0.4.33
 └── windows-projfs v0.1.8
     └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
-once_cell v1.21.4
-├── ahash v0.8.12 (*)
-├── dashmap v6.2.1 (*)
-├── gix-features v0.48.1 (*)
-├── rustls v0.23.41 (*)
-├── sysinfo v0.30.13
-│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-├── tempfile v3.27.0 (*)
-├── tracing-core v0.1.36
-│   ├── tracing v0.1.44
-│   │   ├── h2 v0.4.15 (*)
-│   │   ├── hyper-util v0.1.20 (*)
-│   │   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-│   │   └── tracing-subscriber v0.3.23 (*)
-│   ├── tracing-log v0.2.0 (*)
-│   └── tracing-subscriber v0.3.23 (*)
-├── tracing-log v0.2.0 (*)
-└── tracing-subscriber v0.3.23 (*)
+percent-encoding v2.3.2
+├── form_urlencoded v1.2.2 (*)
+├── gix-url v0.36.1
+│   ├── gix v0.84.0 (*)
+│   ├── gix-credentials v0.38.1 (*)
+│   ├── gix-submodule v0.31.0 (*)
+│   └── gix-transport v0.57.2 (*)
+├── hyper-util v0.1.20 (*)
+├── oxc_diagnostics v0.120.0
+│   ├── oxc v0.120.0 (*)
+│   ├── oxc_ast v0.120.0 (*)
+│   ├── oxc_parser v0.120.0 (*)
+│   └── oxc_regular_expression v0.120.0 (*)
+├── reqwest v0.12.28 (*)
+└── url v2.5.8 (*)
 
-once_cell v1.21.4
-├── const-random-macro v0.1.16 (proc-macro) (*)
-└── rustls v0.23.41 (*)
+percent-encoding v2.3.2
+├── form_urlencoded v1.2.2 (*)
+└── url v2.5.8 (*)
 
 quick-xml v0.37.5
 └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 quick-xml v0.39.4
 └── plist v1.9.0 (*)
-
-rand v0.8.7 (*)
-
-rand v0.9.4 (*)
-
-rand_chacha v0.3.1 (*)
-
-rand_chacha v0.9.0 (*)
-
-rand_core v0.6.4 (*)
-
-rand_core v0.9.5 (*)
-
-rustls v0.23.41 (*)
-
-rustls v0.23.41 (*)
 
 serde v1.0.228
 ├── cargo-platform v0.1.9
@@ -646,30 +483,20 @@ serde v1.0.228
 ├── tauri-utils v2.9.3 (*)
 ├── url v2.5.8 (*)
 └── urlpattern v0.3.0 (*)
-[build-dependencies]
-└── tree-sitter-language-pack v1.12.2 (*)
 
 serde v1.0.228
-├── ahash v0.8.12 (*)
 ├── assert-json-diff v2.0.2
 │   └── mockito v1.7.2 (*)
 ├── chrono v0.4.45
 │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-├── jsonwebtoken v10.4.0 (*)
+├── jsonwebtoken v10.4.0
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── oxc_index v4.1.0
 │   └── oxc_syntax v0.120.0 (*)
 ├── quick-xml v0.37.5 (*)
 ├── reqwest v0.12.28 (*)
-├── serde_spanned v0.6.9
-│   ├── toml v0.8.2 (*)
-│   └── toml_edit v0.20.2 (*)
 ├── serde_urlencoded v0.7.1 (*)
-├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-├── toml v0.8.2 (*)
-├── toml_datetime v0.6.3
-│   ├── toml v0.8.2 (*)
-│   └── toml_edit v0.20.2 (*)
-└── toml_edit v0.20.2 (*)
+└── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 serde_core v1.0.228
 ├── camino v1.2.4
@@ -682,7 +509,6 @@ serde_core v1.0.228
 │   ├── rustc_version v0.4.1
 │   │   └── embed-resource v3.0.11 (*)
 │   │   [build-dependencies]
-│   │   ├── curve25519-dalek v4.1.3 (*)
 │   │   └── derive_more-impl v2.1.1 (proc-macro)
 │   │       └── derive_more v2.1.1
 │   │           └── selectors v0.36.1 (*)
@@ -696,6 +522,7 @@ serde_core v1.0.228
 │   │   └── cargo_toml v0.22.3 (*)
 │   └── toml v1.1.2+spec-1.1.0
 │       ├── embed-resource v3.0.11 (*)
+│       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │       ├── tauri-utils v2.9.3 (*)
 │       └── tauri-winres v0.3.6 (*)
 ├── serde_with v3.21.0
@@ -724,14 +551,6 @@ serde_json v1.0.150 (*)
 
 serde_json v1.0.150 (*)
 
-serde_spanned v0.6.9 (*)
-
-serde_spanned v1.1.1 (*)
-
-sha2 v0.10.9 (*)
-
-sha2 v0.11.0 (*)
-
 smallvec v1.15.2
 ├── cssparser v0.36.0 (*)
 └── selectors v0.36.1 (*)
@@ -755,7 +574,6 @@ smallvec v1.15.2
 │           ├── url v2.5.8 (*)
 │           └── url v2.5.8 (*)
 ├── idna v1.1.0 (*)
-├── num-bigint-dig v0.8.6 (*)
 ├── parking_lot_core v0.9.12
 │   ├── dashmap v6.2.1 (*)
 │   └── parking_lot v0.12.5
@@ -818,22 +636,6 @@ stable_deref_trait v1.2.1
 └── servo_arc v0.4.3
     └── selectors v0.36.1 (*)
 
-subtle v2.6.1
-└── rustls v0.23.41 (*)
-
-subtle v2.6.1
-├── crypto-bigint v0.5.5 (*)
-├── curve25519-dalek v4.1.3 (*)
-├── digest v0.10.7 (*)
-├── ed25519-dalek v2.2.0 (*)
-├── elliptic-curve v0.13.8 (*)
-├── ff v0.13.1 (*)
-├── group v0.13.0 (*)
-├── rfc6979 v0.4.0 (*)
-├── rsa v0.9.10 (*)
-├── rustls v0.23.41 (*)
-└── sec1 v0.7.3 (*)
-
 thiserror v1.0.69
 └── json-patch v3.0.1 (*)
 
@@ -889,11 +691,7 @@ thiserror v2.0.18
 │   │   └── gix-transport v0.57.2 (*)
 │   ├── gix-status v0.31.0 (*)
 │   ├── gix-submodule v0.31.0 (*)
-│   ├── gix-url v0.36.1
-│   │   ├── gix v0.84.0 (*)
-│   │   ├── gix-credentials v0.38.1 (*)
-│   │   ├── gix-submodule v0.31.0 (*)
-│   │   └── gix-transport v0.57.2 (*)
+│   ├── gix-url v0.36.1 (*)
 │   ├── gix-worktree v0.53.0 (*)
 │   ├── gix-worktree-state v0.31.0 (*)
 │   └── gix-worktree-stream v0.33.0 (*)
@@ -911,17 +709,12 @@ thiserror v2.0.18
 ├── gix-url v0.36.1 (*)
 ├── gix-worktree-state v0.31.0 (*)
 ├── oxc-miette v2.7.1
-│   ├── oxc_diagnostics v0.120.0
-│   │   ├── oxc v0.120.0 (*)
-│   │   ├── oxc_ast v0.120.0 (*)
-│   │   ├── oxc_parser v0.120.0 (*)
-│   │   └── oxc_regular_expression v0.120.0 (*)
+│   ├── oxc_diagnostics v0.120.0 (*)
 │   └── oxc_span v0.120.0 (*)
 ├── simple_asn1 v0.6.4
 │   └── jsonwebtoken v10.4.0 (*)
 ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── tauri-utils v2.9.3 (*)
-├── tree-sitter-language-pack v1.12.2 (*)
 └── windows-projfs v0.1.8 (*)
 
 thiserror-impl v1.0.69 (proc-macro)
@@ -936,32 +729,14 @@ time v0.3.53
 time v0.3.53
 └── simple_asn1 v0.6.4 (*)
 
-toml v0.8.2 (*)
-
 toml v0.9.12+spec-1.1.0 (*)
 
 toml v1.1.2+spec-1.1.0 (*)
-
-toml_datetime v0.6.3 (*)
 
 toml_datetime v0.7.5+spec-1.1.0 (*)
 
 toml_datetime v1.1.1+spec-1.1.0 (*)
 
-typenum v1.20.1
-├── crypto-common v0.1.6 (*)
-└── generic-array v0.14.9
-    ├── block-buffer v0.10.4 (*)
-    ├── crypto-bigint v0.5.5 (*)
-    ├── crypto-common v0.1.6 (*)
-    ├── elliptic-curve v0.13.8 (*)
-    └── sec1 v0.7.3 (*)
-
-typenum v1.20.1
-└── hybrid-array v0.4.13
-    ├── block-buffer v0.12.1 (*)
-    └── crypto-common v0.2.2 (*)
-
 url v2.5.8 (*)
 
 url v2.5.8 (*)
@@ -969,18 +744,10 @@ url v2.5.8 (*)
 uuid v1.23.4 (*)
 
 uuid v1.23.4 (*)
-
-winapi v0.3.9
-├── io-close v0.3.7
-│   └── gix-worktree-state v0.31.0 (*)
-└── ntapi v0.4.3
-    └── sysinfo v0.30.13 (*)
-
-winapi v0.3.9
-└── socks v0.3.4 (*)
 
 windows v0.52.0
-└── sysinfo v0.30.13 (*)
+└── sysinfo v0.30.13
+    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 windows v0.62.2
 └── windows-projfs v0.1.8 (*)
@@ -1043,10 +810,9 @@ windows-sys v0.61.2
     └── walkdir v2.5.0 (*)
 
 windows-sys v0.61.2
-├── dirs-sys v0.5.0
-│   └── dirs v6.0.0
-│       └── tauri-build v2.6.3 (*)
-└── rustls-platform-verifier v0.6.2 (*)
+└── dirs-sys v0.5.0
+    └── dirs v6.0.0
+        └── tauri-build v2.6.3 (*)
 
 windows_x86_64_msvc v0.42.2
 └── windows-sys v0.42.0 (*)
@@ -1058,9 +824,6 @@ windows_x86_64_msvc v0.52.6
     ├── windows-sys v0.59.0 (*)
     └── windows-sys v0.59.0 (*)
 
-winnow v0.5.40
-└── toml_edit v0.20.2 (*)
-
 winnow v0.7.15
 └── toml v0.9.12+spec-1.1.0 (*)
 
@@ -1069,29 +832,3 @@ winnow v1.0.3
 └── toml_parser v1.1.2+spec-1.1.0
     ├── toml v0.9.12+spec-1.1.0 (*)
     └── toml v1.1.2+spec-1.1.0 (*)
-
-zeroize v1.9.0
-└── rustls v0.23.41 (*)
-
-zeroize v1.9.0
-├── crypto-bigint v0.5.5 (*)
-├── curve25519-dalek v4.1.3 (*)
-├── der v0.7.10 (*)
-├── ed25519-dalek v2.2.0 (*)
-├── elliptic-curve v0.13.8 (*)
-├── generic-array v0.14.9 (*)
-├── jsonwebtoken v10.4.0 (*)
-├── num-bigint-dig v0.8.6 (*)
-├── rsa v0.9.10 (*)
-├── rustls v0.23.41 (*)
-├── rustls-pki-types v1.15.0
-│   ├── reqwest v0.12.28 (*)
-│   ├── rustls v0.23.41 (*)
-│   ├── rustls v0.23.41 (*)
-│   ├── rustls-webpki v0.103.13 (*)
-│   ├── ureq v3.3.0 (*)
-│   └── webpki-roots v1.0.8
-│       ├── hyper-rustls v0.27.9 (*)
-│       ├── reqwest v0.12.28 (*)
-│       └── ureq v3.3.0 (*)
-└── sec1 v0.7.3 (*)

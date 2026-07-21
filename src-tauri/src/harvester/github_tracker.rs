@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Once;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -99,7 +98,7 @@ struct GithubSearchIssueItem {
     #[serde(default)]
     reactions: GithubReactionsPayload,
     #[serde(default)]
-    updated_at: Option<DateTime<Utc>>,
+    updated_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -121,9 +120,9 @@ struct GithubPullPayload {
     title: String,
     #[serde(default)]
     state: String,
-    updated_at: DateTime<Utc>,
+    updated_at: String,
     #[serde(default)]
-    merged_at: Option<DateTime<Utc>>,
+    merged_at: Option<String>,
     #[serde(default)]
     draft: bool,
 }
@@ -141,7 +140,7 @@ struct GithubCommitInnerPayload {
 
 #[derive(Debug, Deserialize)]
 struct GithubCommitAuthorPayload {
-    date: DateTime<Utc>,
+    date: Option<String>,
 }
 
 pub async fn fetch_community_meta(
@@ -209,7 +208,7 @@ pub async fn fetch_community_meta(
         .unwrap_or_else(|| "UNKNOWN".to_string());
 
     Ok(CommunityMetaPayload {
-        extracted_at: Utc::now(),
+        extracted_at: crate::telemetry::now_utc_rfc3339(),
         stars_count: repo_payload.stargazers_count,
         forks_count: repo_payload.forks_count,
         open_issues_count: repo_payload.open_issues_count,
@@ -231,7 +230,7 @@ pub async fn fetch_community_meta(
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
         last_commit_sha: last_commit.as_ref().map(|commit| commit.sha.clone()),
-        last_commit_date: last_commit.map(|commit| commit.commit.author.date),
+        last_commit_date: last_commit.and_then(|commit| commit.commit.author.date),
         top_open_issues: top_issues
             .items
             .into_iter()
@@ -375,7 +374,7 @@ fn clone_or_fetch_to_workspace_blocking(
         reason: format!("Falha ao preparar diretório do cache gitoxide: {}", e),
     })?;
 
-    let nonce = format!("{}_{}", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default());
+    let nonce = format!("{}_{}", std::process::id(), crate::telemetry::now_epoch_nanos());
     let staging_path = parent.join(format!(
         ".{}_stage_{}",
         scratchpad_root

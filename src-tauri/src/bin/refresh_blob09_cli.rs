@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("full_name={}", payload.full_name.as_deref().unwrap_or("N/A"));
     println!("stars_count={}", payload.stars_count);
     println!("open_prs_count={}", payload.open_prs_count);
-    println!("extracted_at={}", payload.extracted_at.to_rfc3339());
+    println!("extracted_at={}", payload.extracted_at);
 
     Ok(())
 }

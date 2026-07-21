@@ -5,12 +5,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use tinyrand::Rand;
-use chrono::{FixedOffset, Utc};
 use souls_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use souls_mc_lib::harvester::router::{BlobSelection, PHASE0_BLOB_TYPES};
 use souls_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use souls_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
-use souls_mc_lib::telemetry::{append_plaintext_report, dynamic_wyrand, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::telemetry::{append_plaintext_report, dynamic_wyrand, enable_virtual_terminal, init_cli_tracing, now_brt_rfc3339, parse_log_level_from_env};
 use reqwest::Client;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
@@ -48,12 +47,6 @@ fn sanitize_repo_id(repo_id: &str) -> String {
             _ => '_',
         })
         .collect()
-}
-
-fn now_brt_rfc3339() -> String {
-    Utc::now()
-        .with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
-        .to_rfc3339()
 }
 
 fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {

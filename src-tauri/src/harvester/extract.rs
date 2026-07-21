@@ -2774,7 +2774,7 @@ pub fn render_community_meta_dossier(
 ) -> Vec<u8> {
     let mut text = String::from("# Community Meta\n");
     text.push_str("\nextracted_at: ");
-    text.push_str(&payload.extracted_at.to_rfc3339());
+    text.push_str(&payload.extracted_at);
 
     if let Some(reason) = fetch_error {
         text.push_str("\n\nfallback: true\nreason: ");
@@ -2814,9 +2814,9 @@ pub fn render_community_meta_dossier(
     } else {
         text.push_str("\n- sha: <unknown>");
     }
-    if let Some(date) = payload.last_commit_date {
+    if let Some(date) = &payload.last_commit_date {
         text.push_str("\n- date: ");
-        text.push_str(&date.to_rfc3339());
+        text.push_str(date);
     } else {
         text.push_str("\n- date: <unknown>");
     }
@@ -2848,9 +2848,9 @@ pub fn render_community_meta_dossier(
             text.push_str(&issue.comments.to_string());
             text.push_str("\n  reactions: ");
             text.push_str(&issue.reactions.to_string());
-            if let Some(updated_at) = issue.updated_at {
+            if let Some(updated_at) = &issue.updated_at {
                 text.push_str("\n  updated_at: ");
-                text.push_str(&updated_at.to_rfc3339());
+                text.push_str(updated_at);
             }
         }
     }
@@ -2867,7 +2867,7 @@ pub fn render_community_meta_dossier(
             text.push_str("\n  title: ");
             text.push_str(&sanitize_one_line(&pr.title));
             text.push_str("\n  updated_at: ");
-            text.push_str(&pr.updated_at.to_rfc3339());
+            text.push_str(&pr.updated_at);
         }
     }
 

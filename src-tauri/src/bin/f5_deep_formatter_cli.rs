@@ -9,7 +9,7 @@ use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, now_epoch_secs, parse_log_level_from_env};
 use tracing::{info, warn};
 
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
@@ -884,7 +884,7 @@ async fn main() -> io::Result<()> {
     }
 
     let llm = OpenRouterClient::new().map_err(io::Error::other)?;
-    let now_epoch = chrono::Utc::now().timestamp();
+    let now_epoch = now_epoch_secs();
     let ctx = ProcessCtx {
         spreadsheet_id: &spreadsheet_id,
         cols: &cols,

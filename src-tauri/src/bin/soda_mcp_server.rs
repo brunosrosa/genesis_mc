@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use chrono::{Local, Utc};
 use souls_mc_lib::harvester::ast_parser;
 use souls_mc_lib::harvester::community::RateLimiter;
 use souls_mc_lib::harvester::github_tracker;
@@ -370,22 +369,16 @@ struct SodaTimePayload {
 }
 
 async fn run_sys_time(_params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
-    let local_now = Local::now();
-    let utc_now = Utc::now();
-    let timezone_offset_seconds = local_now.offset().local_minus_utc();
-    let timezone_name = local_now.format("%Z").to_string();
-    let timezone_offset_human = format_timezone_offset(timezone_offset_seconds);
+    let secs = souls_mc_lib::telemetry::now_epoch_secs();
+    let utc_rfc3339 = souls_mc_lib::telemetry::format_utc_rfc3339(secs);
+    let local_rfc3339 = souls_mc_lib::telemetry::format_brt_rfc3339(secs);
     let payload = SodaTimePayload {
-        local_rfc3339: local_now.to_rfc3339(),
-        utc_rfc3339: utc_now.to_rfc3339(),
-        timezone_name: if timezone_name.is_empty() {
-            "Local".to_string()
-        } else {
-            timezone_name
-        },
-        timezone_offset_seconds,
-        timezone_offset_human,
-        unix_epoch_seconds: utc_now.timestamp(),
+        local_rfc3339,
+        utc_rfc3339,
+        timezone_name: "BRT".to_string(),
+        timezone_offset_seconds: -10800,
+        timezone_offset_human: "-03:00".to_string(),
+        unix_epoch_seconds: secs,
     };
     let markdown = format_time_markdown(&payload);
 
@@ -633,6 +626,7 @@ fn format_time_markdown(payload: &SodaTimePayload) -> String {
     out
 }
 
+#[allow(dead_code)]
 fn format_timezone_offset(offset_seconds: i32) -> String {
     let sign = if offset_seconds >= 0 { '+' } else { '-' };
     let total_minutes = offset_seconds.abs() / 60;
