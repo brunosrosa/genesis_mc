@@ -1,13 +1,4 @@
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-
-use axum::extract::State;
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
-use axum::response::IntoResponse;
-use axum::routing::{get, post};
-use axum::{Json, Router};
 use chrono::{Local, Utc};
 use souls_mc_lib::harvester::ast_parser;
 use souls_mc_lib::harvester::community::RateLimiter;
@@ -24,78 +15,35 @@ use sqlparser::parser::Parser;
 use url::Url;
 
 
-const MCP_SESSION_ID_HEADER: &str = "Mcp-Session-Id";
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 const SQLITE_MAX_ROWS: usize = 200;
 
-#[derive(Clone)]
-struct AppState {
-    session_seed: Arc<AtomicU64>,
-}
-
-impl AppState {
-    fn new() -> Self {
-        Self {
-            session_seed: Arc::new(AtomicU64::new(1)),
-        }
-    }
-
-    fn next_session_id(&self) -> String {
-        let id = self.session_seed.fetch_add(1, Ordering::Relaxed);
-        format!("souls-{id}")
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let listen = parse_listen_addr(std::env::args().skip(1))?;
-    let state = AppState::new();
-    let app = Router::new()
-        .route("/healthz", get(healthz))
-        .route("/mcp", post(handle_mcp).get(method_not_allowed))
-        .with_state(state);
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-    let listener = tokio::net::TcpListener::bind(listen).await?;
-    axum::serve(listener, app).await?;
+    let stdin = tokio::io::stdin();
+    let mut stdout = tokio::io::stdout();
+    let mut reader = BufReader::new(stdin).lines();
+
+    while let Ok(Some(line)) = reader.next_line().await {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(payload) = serde_json::from_str::<Value>(trimmed) {
+            if let Some(resp) = handle_mcp(payload).await {
+                let resp_str = serde_json::to_string(&resp)?;
+                stdout.write_all(resp_str.as_bytes()).await?;
+                stdout.write_all(b"\n").await?;
+                stdout.flush().await?;
+            }
+        }
+    }
     Ok(())
 }
 
-fn parse_listen_addr<I>(mut args: I) -> Result<SocketAddr, String>
-where
-    I: Iterator<Item = String>,
-{
-    let mut listen = "127.0.0.1:3002".to_string();
-    while let Some(arg) = args.next() {
-        if arg == "--listen" {
-            let Some(value) = args.next() else {
-                return Err("Parâmetro --listen sem valor".to_string());
-            };
-            listen = value;
-        }
-    }
-    listen
-        .parse::<SocketAddr>()
-        .map_err(|e| format!("Endereço inválido para --listen: {e}"))
-}
-
-async fn healthz() -> impl IntoResponse {
-    (StatusCode::OK, "ok")
-}
-
-async fn method_not_allowed() -> impl IntoResponse {
-    (
-        StatusCode::METHOD_NOT_ALLOWED,
-        Json(json!({
-            "error": "Use POST /mcp para requisições MCP"
-        })),
-    )
-}
-
-async fn handle_mcp(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<Value>,
-) -> impl IntoResponse {
+async fn handle_mcp(payload: Value) -> Option<Value> {
     let request_id = payload.get("id").cloned().unwrap_or(Value::Null);
     let method = payload
         .get("method")
@@ -103,172 +51,143 @@ async fn handle_mcp(
         .unwrap_or_default();
 
     if payload.get("id").is_none() && method != "notifications/initialized" {
-        return (
-            axum::http::StatusCode::OK,
-            [(axum::http::header::CONTENT_TYPE, "application/json")],
-            "{}",
-        )
-            .into_response();
+        return None;
     }
 
     match method {
-        "initialize" => {
-            let session_id = state.next_session_id();
-            jsonrpc_ok(
-                Some(&session_id),
-                request_id,
-                json!({
-                    "protocolVersion": MCP_PROTOCOL_VERSION,
-                    "capabilities": {
-                        "tools": {
-                            "listChanged": false
+        "initialize" => Some(jsonrpc_ok(
+            request_id,
+            json!({
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {
+                    "tools": {
+                        "listChanged": false
+                    }
+                },
+                "serverInfo": {
+                    "name": "souls",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }),
+        )),
+        "notifications/initialized" => None,
+        "ping" => Some(jsonrpc_ok(request_id, json!({}))),
+        "tools/list" => Some(jsonrpc_ok(
+            request_id,
+            json!({
+                "tools": [
+                    {
+                        "name": "repo_ast",
+                        "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "repo_path": {
+                                    "type": "string",
+                                    "description": "Caminho absoluto do diretório do repositório."
+                                }
+                            },
+                            "required": ["repo_path"],
+                            "additionalProperties": false
                         }
                     },
-                    "serverInfo": {
-                        "name": "souls",
-                        "version": env!("CARGO_PKG_VERSION")
-                    }
-                }),
-            )
-        }
-        "notifications/initialized" => {
-            let session_id = existing_session_id(&headers);
-            let mut response_headers = HeaderMap::new();
-            if let Some(session_id) = session_id {
-                if let Ok(value) = HeaderValue::from_str(&session_id) {
-                    response_headers.insert(MCP_SESSION_ID_HEADER, value);
-                }
-            }
-            (StatusCode::ACCEPTED, response_headers, Json(json!({}))).into_response()
-        }
-        "tools/list" => {
-            let session_id = existing_session_id(&headers);
-            jsonrpc_ok(
-                session_id.as_deref(),
-                request_id,
-                json!({
-                    "tools": [
-                        {
-                            "name": "repo_ast",
-                            "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "repo_path": {
-                                        "type": "string",
-                                        "description": "Caminho absoluto do diretório do repositório."
-                                    }
-                                },
-                                "required": ["repo_path"],
-                                "additionalProperties": false
-                            }
-                        },
-                        {
-                            "name": "web_fetch",
-                            "description": "Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "url": {
-                                        "type": "string",
-                                        "description": "URL absoluta a ser buscada com reqwest + fallback robusto."
-                                    }
-                                },
-                                "required": ["url"],
-                                "additionalProperties": false
-                            }
-                        },
-                        {
-                            "name": "sys_time",
-                            "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {},
-                                "additionalProperties": false
-                            }
-                        },
-                        {
-                            "name": "web_search",
-                            "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "query": {
-                                        "type": "string",
-                                        "description": "Consulta textual a ser enviada ao DuckDuckGo HTML."
-                                    },
-                                    "max_results": {
-                                        "type": "integer",
-                                        "description": "Numero maximo de resultados retornados (1-10, padrao 5).",
-                                        "minimum": 1,
-                                        "maximum": 10
-                                    }
-                                },
-                                "required": ["query"],
-                                "additionalProperties": false
-                            }
-                        },
-                        {
-                            "name": "repo_meta",
-                            "description": "Extrai metadados GitHub nativos via octocrab para owner/repo.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "owner_repo": {
-                                        "type": "string",
-                                        "description": "Identificador owner/repo do repositório GitHub."
-                                    }
-                                },
-                                "required": ["owner_repo"],
-                                "additionalProperties": false
-                            }
-                        },
-                        {
-                            "name": "db_query",
-                            "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "query": {
-                                        "type": "string",
-                                        "description": "Consulta SELECT/WITH/PRAGMA de leitura."
-                                    },
-                                    "db_name": {
-                                        "type": "string",
-                                        "description": "Banco alvo: soda_state.db, soda_heuristic_vault.db, state ou heuristic_vault."
-                                    }
-                                },
-                                "required": ["query"],
-                                "additionalProperties": false
-                            }
+                    {
+                        "name": "web_fetch",
+                        "description": "Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "url": {
+                                    "type": "string",
+                                    "description": "URL absoluta a ser buscada com reqwest + fallback robusto."
+                                }
+                            },
+                            "required": ["url"],
+                            "additionalProperties": false
                         }
-                    ]
-                }),
-            )
-        }
-        "tools/call" => {
-            let session_id = existing_session_id(&headers);
-            match handle_tool_call(payload).await {
-                Ok(result) => jsonrpc_ok(session_id.as_deref(), request_id, result),
-                Err(error) => jsonrpc_error(
-                    session_id.as_deref(),
-                    request_id,
-                    error.code,
-                    &error.message,
-                    error.data,
-                ),
-            }
-        }
-        _ => {
-            let session_id = existing_session_id(&headers);
-            jsonrpc_error(
-                session_id.as_deref(),
+                    },
+                    {
+                        "name": "sys_time",
+                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "web_search",
+                        "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Consulta textual a ser enviada ao DuckDuckGo HTML."
+                                },
+                                "max_results": {
+                                    "type": "integer",
+                                    "description": "Numero maximo de resultados retornados (1-10, padrao 5).",
+                                    "minimum": 1,
+                                    "maximum": 10
+                                }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "repo_meta",
+                        "description": "Extrai metadados GitHub nativos via octocrab para owner/repo.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "owner_repo": {
+                                    "type": "string",
+                                    "description": "Identificador owner/repo do repositório GitHub."
+                                }
+                            },
+                            "required": ["owner_repo"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "db_query",
+                        "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Consulta SELECT/WITH/PRAGMA de leitura."
+                                },
+                                "db_name": {
+                                    "type": "string",
+                                    "description": "Banco alvo: soda_state.db, soda_heuristic_vault.db, state ou heuristic_vault."
+                                }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    }
+                ]
+            }),
+        )),
+        "tools/call" => match handle_tool_call(payload).await {
+            Ok(result) => Some(jsonrpc_ok(request_id, result)),
+            Err(error) => Some(jsonrpc_error(
                 request_id,
-                -32601,
-                "Método MCP não suportado",
-                Some(json!({ "method": method })),
-            )
-        }
+                error.code,
+                &error.message,
+                error.data,
+            )),
+        },
+        _ => Some(jsonrpc_error(
+            request_id,
+            -32601,
+            "Método MCP não suportado",
+            Some(json!({ "method": method })),
+        )),
     }
 }
 
@@ -1251,59 +1170,32 @@ fn validate_repo_path(repo_path: &Path) -> Result<(), RpcError> {
     Ok(())
 }
 
-fn existing_session_id(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get(MCP_SESSION_ID_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
-}
-
-fn jsonrpc_ok(session_id: Option<&str>, request_id: Value, result: Value) -> axum::response::Response {
-    let mut headers = HeaderMap::new();
-    if let Some(session_id) = session_id {
-        if let Ok(value) = HeaderValue::from_str(session_id) {
-            headers.insert(MCP_SESSION_ID_HEADER, value);
-        }
-    }
-    (
-        StatusCode::OK,
-        headers,
-        Json(json!({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "result": result
-        })),
-    )
-        .into_response()
+fn jsonrpc_ok(request_id: Value, result: Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "result": result
+    })
 }
 
 fn jsonrpc_error(
-    session_id: Option<&str>,
     request_id: Value,
     code: i64,
     message: &str,
     data: Option<Value>,
-) -> axum::response::Response {
-    let mut headers = HeaderMap::new();
-    if let Some(session_id) = session_id {
-        if let Ok(value) = HeaderValue::from_str(session_id) {
-            headers.insert(MCP_SESSION_ID_HEADER, value);
-        }
+) -> Value {
+    let mut err = json!({
+        "code": code,
+        "message": message
+    });
+    if let Some(d) = data {
+        err["data"] = d;
     }
-    (
-        StatusCode::OK,
-        headers,
-        Json(json!({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "error": {
-                "code": code,
-                "message": message,
-                "data": data
-            }
-        })),
-    )
-        .into_response()
+    json!({
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": err
+    })
 }
 
 #[cfg(test)]

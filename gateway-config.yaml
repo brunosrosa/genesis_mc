@@ -42,5 +42,8 @@ binds:
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: soda
-                      mcp:
-                        host: 'http://127.0.0.1:3002/mcp'
+                      stdio:
+                        cmd: 'src-tauri/target/debug/soda_mcp_server.exe'
+                        args: []
+                        env:
+                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'

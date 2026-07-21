@@ -732,7 +732,8 @@ impl SsotInjector {
                     }
 
                     let jitter = if policy.jitter_ms > 0 {
-                        fastrand::u64(0..=policy.jitter_ms)
+                        use tinyrand::RandRange;
+                        crate::telemetry::dynamic_wyrand().next_range(0..policy.jitter_ms.saturating_add(1))
                     } else {
                         0
                     };

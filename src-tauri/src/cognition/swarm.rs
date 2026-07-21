@@ -508,7 +508,8 @@ impl LensInvoker for HttpLensInvoker {
 
             #[cfg(not(test))]
             {
-                let jitter_ms = fastrand::u64(0..2500);
+                use tinyrand::RandRange;
+                let jitter_ms = crate::telemetry::dynamic_wyrand().next_range(0..2500);
                 tokio::time::sleep(tokio::time::Duration::from_millis(jitter_ms)).await;
             }
 

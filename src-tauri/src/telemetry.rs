@@ -515,3 +515,15 @@ mod tests {
         assert_eq!(kind, EventKind::Warning);
     }
 }
+
+#[inline]
+pub fn dynamic_wyrand() -> tinyrand::Wyrand {
+    use tinyrand::Seeded;
+    let dummy = 0u8;
+    let stack_addr = (&dummy as *const u8 as usize) as u64;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+    tinyrand::Wyrand::seed(nanos ^ stack_addr.rotate_left(13))
+}
