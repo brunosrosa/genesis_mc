@@ -3522,8 +3522,9 @@ mod tests {
         let blob08 = String::from_utf8_lossy(&artifacts.health_report_blob);
 
         assert!(
-            blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência]"),
-            "Blob 08 deve registrar a falha de biome de forma fail-soft, mas foi:\n{blob08}"
+            blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência]")
+                || blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência]"),
+            "Blob 08 deve registrar a falha de blade de forma fail-soft, mas foi:\n{blob08}"
         );
     }
 

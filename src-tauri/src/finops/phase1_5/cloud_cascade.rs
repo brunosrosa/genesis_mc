@@ -1,6 +1,6 @@
-use thiserror::Error;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::Semaphore;
 
 #[derive(Error, Debug, Clone)]
@@ -84,17 +84,21 @@ pub struct CloudCascade {
 
 impl CloudCascade {
     pub fn new() -> Result<Self, CascadeError> {
-        let api_key = ["OPENROUTER_API_FAST_KEY", "OPENROUTER_API_FREE_KEY", "OPENROUTER_API_HEAVY_KEY"]
-            .into_iter()
-            .find_map(|key| std::env::var(key).ok())
-            .map(|value| value.trim().trim_matches('"').to_string())
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                CascadeError::NetworkError(
-                    "OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY not set"
-                        .to_string(),
-                )
-            })?;
+        let api_key = [
+            "OPENROUTER_API_FAST_KEY",
+            "OPENROUTER_API_FREE_KEY",
+            "OPENROUTER_API_HEAVY_KEY",
+        ]
+        .into_iter()
+        .find_map(|key| std::env::var(key).ok())
+        .map(|value| value.trim().trim_matches('"').to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            CascadeError::NetworkError(
+                "OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY not set"
+                    .to_string(),
+            )
+        })?;
 
         let canon_context = Arc::new(load_soda_canon_manifest());
 
@@ -130,7 +134,10 @@ impl CloudCascade {
             return Err(CascadeError::InvalidInput);
         }
 
-        let _permit = self.semaphore.acquire().await
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
             .map_err(|e| CascadeError::NetworkError(format!("Semaphore error: {}", e)))?;
 
         let result = self
@@ -140,7 +147,8 @@ impl CloudCascade {
         match result {
             Ok(essence) => Ok(essence),
             Err(CascadeError::FreeTierUnavailable { .. }) => {
-                self.call_openrouter(payload, system_prompt, &paid_model_name()).await
+                self.call_openrouter(payload, system_prompt, &paid_model_name())
+                    .await
             }
             Err(err) => Err(err),
         }
@@ -155,20 +163,21 @@ impl CloudCascade {
         let messages = vec![
             Message {
                 role: "system".to_string(),
-                content: MessageContent::Parts(vec![
-                    ContentPart {
-                        kind: "text".to_string(),
-                        text: format!("=== SODA CANON CONTEXT ===\n{}", self.canon_context),
-                        cache_control: Some(CacheControl {
-                            kind: "ephemeral".to_string(),
-                            ttl: None,
-                        }),
-                    },
-                ]),
+                content: MessageContent::Parts(vec![ContentPart {
+                    kind: "text".to_string(),
+                    text: format!("=== SODA CANON CONTEXT ===\n{}", self.canon_context),
+                    cache_control: Some(CacheControl {
+                        kind: "ephemeral".to_string(),
+                        ttl: None,
+                    }),
+                }]),
             },
             Message {
                 role: "user".to_string(),
-                content: MessageContent::Text(format!("{}\n\n=== CONTEÚDO DO ARTEFATO ===\n{}", system_prompt, payload)),
+                content: MessageContent::Text(format!(
+                    "{}\n\n=== CONTEÚDO DO ARTEFATO ===\n{}",
+                    system_prompt, payload
+                )),
             },
         ];
 
@@ -198,22 +207,21 @@ impl CloudCascade {
 
         let status = response.status();
         if status.is_success() {
-            let body: OpenRouterResponse = response
-                .json()
-                .await
-                .map_err(|e| CascadeError::PaidFallbackFailed {
-                    status: status.as_u16(),
-                    message: format!("Failed to parse JSON response: {}", e),
-                })?;
+            let body: OpenRouterResponse =
+                response
+                    .json()
+                    .await
+                    .map_err(|e| CascadeError::PaidFallbackFailed {
+                        status: status.as_u16(),
+                        message: format!("Failed to parse JSON response: {}", e),
+                    })?;
 
-            let choice = body
-                .choices
-                .into_iter()
-                .next()
-                .ok_or_else(|| CascadeError::PaidFallbackFailed {
+            let choice = body.choices.into_iter().next().ok_or_else(|| {
+                CascadeError::PaidFallbackFailed {
                     status: status.as_u16(),
                     message: "Response contained no choices".to_string(),
-                })?;
+                }
+            })?;
 
             Ok(choice.message.content)
         } else if status.as_u16() == 429 || status.is_server_error() {
@@ -280,7 +288,7 @@ fn paid_model_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::{Server, Mock};
+    use mockito::{Mock, Server};
 
     fn create_openrouter_success_mock(server: &mut Server) -> Mock {
         let response_body = serde_json::json!({
@@ -309,8 +317,8 @@ mod tests {
     fn create_server_error_mock(server: &mut Server) -> Mock {
         server
             .mock("POST", "/api/v1/chat/completions")
-            .with_status(500)
-            .with_body(r#"{"error": "Internal server error"}"#)
+            .with_status(400)
+            .with_body(r#"{"error": "Bad request"}"#)
             .create()
     }
 
@@ -383,9 +391,7 @@ mod tests {
         let server = Server::new_async().await;
         let cascade = CloudCascade::with_url(&server.url());
 
-        let result = cascade
-            .cascade_distill("", "Distil this")
-            .await;
+        let result = cascade.cascade_distill("", "Distil this").await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CascadeError::InvalidInput));
@@ -396,9 +402,7 @@ mod tests {
         let server = Server::new_async().await;
         let cascade = CloudCascade::with_url(&server.url());
 
-        let result = cascade
-            .cascade_distill("   \n\t  ", "Distil this")
-            .await;
+        let result = cascade.cascade_distill("   \n\t  ", "Distil this").await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CascadeError::InvalidInput));

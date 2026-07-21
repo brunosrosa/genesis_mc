@@ -150,7 +150,7 @@ pub fn build_rust_clippy_plan(manifest: &DiscoveredManifest) -> Result<RustClipp
         )
     })?;
     let manifest_value = manifest_text
-        .parse::<toml::Value>()
+        .parse::<toml::Table>()
         .map_err(|error| format!("manifesto TOML invalido em {}: {error}", manifest.scope))?;
     let package_table = manifest_value
         .get("package")
@@ -231,7 +231,7 @@ pub fn audit_transitive_rust_manifests(
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
             ))
         })?;
-        let _manifest_value = manifest_text.parse::<toml::Value>().map_err(|error| {
+        let _manifest_value = manifest_text.parse::<toml::Table>().map_err(|error| {
             fail_closed_rust_manifest(format!(
                 "manifesto transitivo invalido em '{}': {error}",
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
@@ -254,7 +254,7 @@ pub fn expand_cargo_workspace_wildcards(workspace_root: &Path) -> Result<(), Str
         .map_err(|e| format!("Falha ao ler manifest raiz: {e}"))?;
 
     let mut manifest_value = manifest_text
-        .parse::<toml::Value>()
+        .parse::<toml::Table>()
         .map_err(|e| format!("TOML invalido no manifest raiz: {e}"))?;
 
     let workspace_table = match manifest_value.get_mut("workspace").and_then(|v| v.as_table_mut()) {

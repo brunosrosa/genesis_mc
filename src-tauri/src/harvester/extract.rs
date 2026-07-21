@@ -2435,11 +2435,15 @@ impl ManifestExtractor {
             #[serde(rename = "build-dependencies")]
             build_dependencies: Option<BTreeMap<String, toml::Value>>,
             workspace: Option<CargoWorkspace>,
+            #[serde(flatten)]
+            _extra: BTreeMap<String, toml::Value>,
         }
 
         #[derive(Deserialize)]
         struct CargoWorkspace {
             dependencies: Option<BTreeMap<String, toml::Value>>,
+            #[serde(flatten)]
+            _extra: BTreeMap<String, toml::Value>,
         }
 
         let manifest: CargoManifest = toml::from_str(content).map_err(|e| ExtractionError::ParseError {

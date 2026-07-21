@@ -7,7 +7,6 @@ use ignore::WalkBuilder;
 use regex::Regex;
 use thiserror::Error;
 use tree_sitter::{Language, Node, Parser};
-use tree_sitter_language_pack::{process, ProcessConfig};
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -874,25 +873,7 @@ fn extract_structural_signatures<'arena, 'a>(
     relative_path: &str,
 ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
     let mut import_edges = 0usize;
-    let (signatures, edges) = if language != "svelte" {
-        if let Ok((signatures, edges)) = extract_with_language_pack(arena, source, language, relative_path) {
-            if !signatures.is_empty() {
-                (signatures, edges)
-            } else if let Ok((signatures, edges)) =
-                extract_with_official_tree_sitter(arena, source, language, relative_path)
-            {
-                (signatures, edges)
-            } else {
-                extract_with_regex_fallback(arena, source, language, relative_path)?
-            }
-        } else if let Ok((signatures, edges)) =
-            extract_with_official_tree_sitter(arena, source, language, relative_path)
-        {
-            (signatures, edges)
-        } else {
-            extract_with_regex_fallback(arena, source, language, relative_path)?
-        }
-    } else if let Ok((signatures, edges)) =
+    let (signatures, edges) = if let Ok((signatures, edges)) =
         extract_with_official_tree_sitter(arena, source, language, relative_path)
     {
         (signatures, edges)
@@ -910,37 +891,6 @@ fn extract_structural_signatures<'arena, 'a>(
         });
     }
     Ok((signatures, import_edges))
-}
-
-fn extract_with_language_pack<'arena, 'a>(
-    arena: &'arena bumpalo::Bump,
-    source: &'a str,
-    language: &str,
-    relative_path: &str,
-) -> Result<(Vec<&'arena str>, usize), AstParserError> {
-    let mut config = ProcessConfig::new(language);
-    config.structure = true;
-    config.imports = true;
-    config.exports = false;
-    config.comments = false;
-    config.docstrings = false;
-    config.symbols = false;
-    config.diagnostics = true;
-
-    let processed = process(source, &config).map_err(|e| AstParserError::ParseFailure {
-        file: relative_path.to_string(),
-        language: language.to_string(),
-        reason: e.to_string(),
-    })?;
-
-    let signatures = processed
-        .structure
-        .iter()
-        .flat_map(flatten_structure_signatures)
-        .map(|sig| arena.alloc_str(&sig) as &'arena str)
-        .collect::<Vec<_>>();
-
-    Ok((signatures, processed.imports.len()))
 }
 
 fn extract_with_official_tree_sitter<'arena, 'a>(
@@ -1432,35 +1382,7 @@ fn looks_like_legible_source(source: &str) -> bool {
     non_whitespace >= 12
 }
 
-fn flatten_structure_signatures(
-    item: &tree_sitter_language_pack::StructureItem,
-) -> Vec<String> {
-    let mut out = Vec::new();
-    let rendered = render_signature(item);
-    if !rendered.is_empty() {
-        out.push(rendered);
-    }
-    for child in &item.children {
-        out.extend(flatten_structure_signatures(child));
-    }
-    out
-}
 
-fn render_signature(item: &tree_sitter_language_pack::StructureItem) -> String {
-    let fallback_name = item.name.clone().unwrap_or_else(|| "<anonymous>".to_string());
-    let mut signature = item
-        .signature
-        .clone()
-        .unwrap_or_else(|| format!("{:?} {}", item.kind, fallback_name));
-    signature = signature.replace('\n', " ");
-    signature = signature.split_whitespace().collect::<Vec<_>>().join(" ");
-    if let Some(visibility) = &item.visibility {
-        if !visibility.trim().is_empty() && !signature.starts_with(visibility) {
-            signature = format!("{visibility} {signature}");
-        }
-    }
-    signature.trim().to_string()
-}
 
 fn classify_outline_domain(relative_path: &str, language: &str) -> OutlineDomainTag {
     let normalized = relative_path.replace('\\', "/").to_ascii_lowercase();
