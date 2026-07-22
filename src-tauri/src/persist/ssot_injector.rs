@@ -30,7 +30,7 @@ pub enum SsotError {
 
 pub struct SsotInjector;
 
-const SSOT_EXPECTED_COLUMNS: usize = 82;
+const SSOT_EXPECTED_COLUMNS: usize = 85;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
 #[cfg(not(test))]
@@ -2602,12 +2602,12 @@ mod tests {
         let url = SsotInjector::build_google_sheets_values_url_with_base(
             "https://example.test/v4/spreadsheets",
             "sheet_123",
-            "MASTER_SOLUTIONS!A1:CD1",
+            "MASTER_SOLUTIONS!A1:CG1",
         )
         .unwrap();
         assert_eq!(
             url,
-            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CD1?majorDimension=ROWS"
+            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CG1?majorDimension=ROWS"
         );
     }
 

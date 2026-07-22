@@ -160,10 +160,10 @@ impl<S: OutboxSheetsClient> OutboxSynchronizer<S> {
             return Ok(0);
         }
 
-        // 2. BULK READ O(1) DAS COLUNAS DE IDENTIFICAÇÃO NO GOOGLE SHEETS
+        // 2. BULK READ O(1) DAS COLUNAS DE IDENTIFICAÇÃO NO GOOGLE SHEETS (85 Colunas: A a CG)
         let sheet_data = self
             .sheets
-            .get_sheet_data(&self.spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A1:Z2000".to_string())
+            .get_sheet_data(&self.spreadsheet_id, MASTER_SOLUTIONS_SHEET, "A1:CG2000".to_string())
             .await?;
 
         if sheet_data.is_empty() {
@@ -175,7 +175,7 @@ impl<S: OutboxSheetsClient> OutboxSynchronizer<S> {
         let repo_url_idx = header_row
             .iter()
             .position(|h| h.trim().eq_ignore_ascii_case("repo_url"))
-            .unwrap_or(1);
+            .unwrap_or(4); // Coluna E (Índice 0-based 4)
 
         let lote_id_idx = header_row
             .iter()
