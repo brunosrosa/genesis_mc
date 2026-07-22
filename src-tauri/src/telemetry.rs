@@ -515,3 +515,75 @@ mod tests {
         assert_eq!(kind, EventKind::Warning);
     }
 }
+
+#[inline]
+pub fn dynamic_wyrand() -> tinyrand::Wyrand {
+    use tinyrand::Seeded;
+    let dummy = 0u8;
+    let stack_addr = (&dummy as *const u8 as usize) as u64;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+    tinyrand::Wyrand::seed(nanos ^ stack_addr.rotate_left(13))
+}
+
+// --- Bare-Metal O(1) Time Utilities (SODA Group 9 - Zero-Chrono) ---
+
+#[inline]
+pub fn now_epoch_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+#[inline]
+pub fn now_epoch_nanos() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
+fn epoch_secs_to_date_time(secs: i64) -> (i32, u32, u32, u32, u32, u32) {
+    let secs_u64 = if secs < 0 { 0 } else { secs as u64 };
+    let days = secs_u64 / 86400;
+    let rem = secs_u64 % 86400;
+    let hour = (rem / 3600) as u32;
+    let min = ((rem % 3600) / 60) as u32;
+    let sec = (rem % 60) as u32;
+
+    let z = (days as i64) + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = (yoe as i64) + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
+    let y = (if m <= 2 { y + 1 } else { y }) as i32;
+
+    (y, m, d, hour, min, sec)
+}
+
+pub fn format_utc_rfc3339(epoch_secs: i64) -> String {
+    let (y, m, d, h, min, s) = epoch_secs_to_date_time(epoch_secs);
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, h, min, s)
+}
+
+pub fn format_brt_rfc3339(epoch_secs: i64) -> String {
+    let brt_secs = epoch_secs - 3 * 3600;
+    let (y, m, d, h, min, s) = epoch_secs_to_date_time(brt_secs);
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}-03:00", y, m, d, h, min, s)
+}
+
+pub fn now_utc_rfc3339() -> String {
+    format_utc_rfc3339(now_epoch_secs())
+}
+
+pub fn now_brt_rfc3339() -> String {
+    format_brt_rfc3339(now_epoch_secs())
+}
+

@@ -4,12 +4,12 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use chrono::{FixedOffset, Utc};
+use tinyrand::Rand;
 use souls_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
 use souls_mc_lib::harvester::router::{BlobSelection, PHASE0_BLOB_TYPES};
 use souls_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
 use souls_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
-use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::telemetry::{append_plaintext_report, dynamic_wyrand, enable_virtual_terminal, init_cli_tracing, now_brt_rfc3339, parse_log_level_from_env};
 use reqwest::Client;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
@@ -47,12 +47,6 @@ fn sanitize_repo_id(repo_id: &str) -> String {
             _ => '_',
         })
         .collect()
-}
-
-fn now_brt_rfc3339() -> String {
-    Utc::now()
-        .with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
-        .to_rfc3339()
 }
 
 fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {
@@ -280,7 +274,7 @@ fn backoff_ms_from_attempt(attempt: u32, jitter_seed: u32) -> u64 {
 }
 
 async fn sleep_between_repos_jitter() {
-    let ms = jitter_ms_3_to_7_from_u32(fastrand::u32(..));
+    let ms = jitter_ms_3_to_7_from_u32(dynamic_wyrand().next_u32());
     tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
 }
 
@@ -915,7 +909,7 @@ async fn process_one_repo_f0(
             Err(e) => {
                 let msg = e.to_string();
                 if is_rate_limit_error_text(&msg) && attempt + 1 < max_attempts {
-                    let backoff_ms = backoff_ms_from_attempt(attempt, fastrand::u32(..));
+                    let backoff_ms = backoff_ms_from_attempt(attempt, dynamic_wyrand().next_u32());
                     warn!(
                         repo_id = %repo_id,
                         attempt = attempt + 1,
@@ -1227,7 +1221,7 @@ async fn process_one_repo_f0_direct(
             Err(e) => {
                 let msg = e.to_string();
                 if is_rate_limit_error_text(&msg) && attempt + 1 < max_attempts {
-                    let backoff_ms = backoff_ms_from_attempt(attempt, fastrand::u32(..));
+                    let backoff_ms = backoff_ms_from_attempt(attempt, dynamic_wyrand().next_u32());
                     warn!(
                         repo_id = %repo_id,
                         attempt = attempt + 1,

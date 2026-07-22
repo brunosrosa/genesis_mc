@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use url::Url;
 use thiserror::Error;
 use std::time::Duration;
@@ -8,7 +7,7 @@ use super::github_tracker;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct CommunityMetaPayload {
-    pub extracted_at: DateTime<Utc>,
+    pub extracted_at: String,
     pub stars_count: u64,
     pub forks_count: u64,
     pub open_issues_count: u32,
@@ -18,7 +17,7 @@ pub struct CommunityMetaPayload {
     pub full_name: Option<String>,
     pub name: Option<String>,
     pub last_commit_sha: Option<String>,
-    pub last_commit_date: Option<DateTime<Utc>>,
+    pub last_commit_date: Option<String>,
     pub top_open_issues: Vec<CommunityIssueMeta>,
     pub recent_prs: Vec<CommunityPrMeta>,
 }
@@ -30,7 +29,7 @@ pub struct CommunityIssueMeta {
     pub labels: Vec<String>,
     pub comments: u64,
     pub reactions: u64,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -38,13 +37,13 @@ pub struct CommunityPrMeta {
     pub number: u64,
     pub title: String,
     pub status: String,
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: String,
 }
 
 impl CommunityMetaPayload {
     pub fn empty() -> Self {
         Self {
-            extracted_at: Utc::now(),
+            extracted_at: crate::telemetry::now_utc_rfc3339(),
             licenca: "UNKNOWN".to_string(),
             ..Self::default()
         }
@@ -54,7 +53,7 @@ impl CommunityMetaPayload {
 impl Default for CommunityMetaPayload {
     fn default() -> Self {
         Self {
-            extracted_at: Utc::now(),
+            extracted_at: crate::telemetry::now_utc_rfc3339(),
             stars_count: 0,
             forks_count: 0,
             open_issues_count: 0,

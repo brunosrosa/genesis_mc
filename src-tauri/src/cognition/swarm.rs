@@ -62,9 +62,9 @@ impl LensKind {
 
     fn system_prompt(self) -> &'static str {
         match self {
-            Self::ProductUx => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensA_ProductUX. Analise a inovacao e o valor real de produto. Qual e o 'UAU moment', o 'refreshness' da UX ou o fluxo de trabalho genial que amplia as capacidades do usuario? Avalie estrategicamente como essa solucao se encaixa ou cria novos Canvas no SODA. Valide se essa entrega respeita nossas leis de neuro-inclusao (mitigacao de Flow-Debt, Zero Layout Shift). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, trate como curadoria de conhecimento: avalie clareza, utilidade operacional, reusabilidade como skill e se ha exemplos determinísticos (formatos de saída bem definidos) para virar ferramenta no SODA. Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
-            Self::Architecture => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como LensB_Architecture. Isole a 'alma matematica' e o nucleo transplantavel. A logica e transmutavel e agnostica (recompilavel dinamicamente via CubeCL/Burn)? Avalie a viabilidade do codigo sobreviver ao nosso 'Treino de Gravidade' (limite da RTX 2060m) sem depender de interpretadores presos a arquitetura (Node.js/JVM). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie extraibilidade como biblioteca de habilidades: taxonomia, consistencia de formato, existencia de contratos de I/O (inputs/outputs), facilidade de normalizar para JSON/gramatica e o custo de manutencao do catalogo. Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
-            Self::Operations => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON. Atue como o Auditor Pessimista (FinOps e HardwareOps). Qual a real taxa de entropia? O sistema gera custos em nuvem ou Rate Limits perigosos? Liste o lixo toxico da stack original. O sistema 'fala' quando tem dor (observabilidade) e falha graciosamente? Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie riscos de prompt-injection, licenca, drift temporal (links mortos), custo de curadoria, e se o conteudo incentiva stack proibida. Responda estritamente em JSON com as chaves lens_id, repo_id, model_used, bullets, risk_level, recommendation. Retorne OBRIGATORIAMENTE um JSON valido. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos dentro do array 'bullets' e use 'recommendation' apenas para 1 frase curta conclusiva. Formato exigido: { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" }. Pense o quanto quiser, mas você DEVE retornar o resultado FINAL estritamente dentro de um bloco de código Markdown JSON. Exemplo: ```json { \"bullets\": [\"ponto 1\", \"ponto 2\", \"ponto 3\"], \"risk_level\": \"Baixo/Medio/Alto\", \"recommendation\": \"Veredito em 1 frase\" } ```",
+            Self::ProductUx => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON PURO, SEM MARGINALIZAÇÃO OU BLOCOS DE CÓDIGO (COMO ```json). Atue como LensA_ProductUX. Analise a inovacao e o valor real de produto. Qual e o 'UAU moment', o 'refreshness' da UX ou o fluxo de trabalho genial que amplia as capacidades do usuario? Avalie estrategicamente como essa solucao se encaixa ou cria novos Canvas no SODA. Valide se essa entrega respeita nossas leis de neuro-inclusao (mitigacao de Flow-Debt, Zero Layout Shift). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, trate como curadoria de conhecimento: avalie clareza, utilidade operacional, reusabilidade como skill e se ha exemplos determinísticos (formatos de saída bem definidos) para virar ferramenta no SODA. Responda estritamente em JSON com as chaves: lens_id, repo_id, model_used, bullets. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos factuais dentro do array 'bullets'.\n\nExemplo de formato de saída esperado:\n{\n  \"lens_id\": \"LensA_ProductUX\",\n  \"repo_id\": \"owner/repo\",\n  \"model_used\": \"nome-do-modelo\",\n  \"bullets\": [\n    \"A interface reduz a carga cognitiva ao unificar as ações em um único hub.\",\n    \"Presença de um fluxo de feedback tátil e sonoro inovador para ações críticas.\",\n    \"Otimizado para evitar Layout Shift durante o carregamento assíncrono de dados.\"\n  ]\n}",
+            Self::Architecture => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON PURO, SEM MARGINALIZAÇÃO OU BLOCOS DE CÓDIGO (COMO ```json). Atue como LensB_Architecture. Isole a 'alma matematica' e o nucleo transplantavel. A logica e transmutavel e agnostica (recompilavel dinamicamente via CubeCL/Burn)? Avalie a viabilidade do codigo sobreviver ao nosso 'Treino de Gravidade' (limite da RTX 2060m) sem depender de interpretadores presos a arquitetura (Node.js/JVM). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie extraibilidade como biblioteca de habilidades: taxonomia, consistencia de formato, existencia de contratos de I/O (inputs/outputs), facilidade de normalizar para JSON/gramatica e o custo de manutencao do catalogo. Responda estritamente em JSON com as chaves: lens_id, repo_id, model_used, bullets. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos factuais dentro do array 'bullets'.\n\nExemplo de formato de saída esperado:\n{\n  \"lens_id\": \"LensB_Architecture\",\n  \"repo_id\": \"owner/repo\",\n  \"model_used\": \"nome-do-modelo\",\n  \"bullets\": [\n    \"Código estruturado puramente em Rust com tokio, facilitando compilação zero-dependency.\",\n    \"Gargalo de I/O isolado em threads dedicadas fora do event loop assíncrono.\",\n    \"Ausência de interpretadores pesados, consumindo apenas 50MB de VRAM estática.\"\n  ]\n}",
+            Self::Operations => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON PURO, SEM MARGINALIZAÇÃO OU BLOCOS DE CÓDIGO (COMO ```json). Atue como o Auditor Pessimista (FinOps e HardwareOps). Qual a real taxa de entropia? O sistema gera custos em nuvem ou Rate Limits perigosos? Liste o lixo toxico da stack original. O sistema 'fala' quando tem dor (observabilidade) e falha graciosamente? Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie riscos de prompt-injection, licenca, drift temporal (links mortos), custo de curadoria, e se o conteudo incentiva stack proibida. Responda estritamente em JSON com as chaves: lens_id, repo_id, model_used, bullets. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos factuais dentro do array 'bullets'.\n\nExemplo de formato de saída esperado:\n{\n  \"lens_id\": \"LensC_Operations\",\n  \"repo_id\": \"owner/repo\",\n  \"model_used\": \"nome-do-modelo\",\n  \"bullets\": [\n    \"Uso ineficiente de chamadas consecutivas à API sem mecanismos de caching.\",\n    \"A dependência de bibliotecas de terceiros sem auditoria de segurança ativa.\",\n    \"Falta de telemetria estruturada de erros e alertas de rate limit.\"\n  ]\n}",
         }
     }
 }
@@ -129,10 +129,6 @@ pub struct LensDebatePayload {
     pub model_used: String,
     #[serde(default)]
     pub bullets: Vec<String>,
-    #[serde(default)]
-    pub risk_level: String,
-    #[serde(default)]
-    pub recommendation: String,
 }
 
 pub struct CognitiveSwarmDispatcher<S, I> {
@@ -169,24 +165,65 @@ where
             self.execute_lens(LensKind::Operations, repo_id, &payloads.package_c),
         );
 
-        let debate = match (lens_a, lens_b, lens_c) {
-            (Ok(lente_a), Ok(lente_b), Ok(lente_c)) => SwarmDebate {
-                repo_id: repo_id.to_string(),
-                lente_a,
-                lente_b,
-                lente_c,
-            },
-            (a_res, b_res, c_res) => {
-                let root_error = a_res
-                    .err()
-                    .or_else(|| b_res.err())
-                    .or_else(|| c_res.err())
-                    .expect("at least one lens must have failed");
-                self.store
-                    .mark_phase2_error(repo_id)
-                    .map_err(Phase2Error::Phase2Aborted)?;
-                return Err(root_error);
+        let lens_a_failed = lens_a.is_err();
+        let lens_b_failed = lens_b.is_err();
+        let lens_c_failed = lens_c.is_err();
+
+        // Se TODAS falharem, aí marcamos erro global e abortamos
+        if lens_a_failed && lens_b_failed && lens_c_failed {
+            let root_error = lens_a.err().unwrap_or_else(|| {
+                Phase2Error::EmptyPackage("Todas as lentes do enxame falharam".to_string())
+            });
+            self.store
+                .mark_phase2_error(repo_id)
+                .map_err(Phase2Error::Phase2Aborted)?;
+            return Err(root_error);
+        }
+
+        let lente_a = match lens_a {
+            Ok(val) => val,
+            Err(e) => {
+                tracing::error!(repo_id = %repo_id, error = %e, "Lente ProductUx falhou");
+                serde_json::json!({
+                    "lens_id": "LensA_ProductUX",
+                    "repo_id": repo_id,
+                    "model_used": "unknown",
+                    "bullets": [format!("Lente ProductUx falhou: {}", e)]
+                }).to_string()
             }
+        };
+
+        let lente_b = match lens_b {
+            Ok(val) => val,
+            Err(e) => {
+                tracing::error!(repo_id = %repo_id, error = %e, "Lente Architecture falhou");
+                serde_json::json!({
+                    "lens_id": "LensB_Architecture",
+                    "repo_id": repo_id,
+                    "model_used": "unknown",
+                    "bullets": [format!("Lente Architecture falhou: {}", e)]
+                }).to_string()
+            }
+        };
+
+        let lente_c = match lens_c {
+            Ok(val) => val,
+            Err(e) => {
+                tracing::error!(repo_id = %repo_id, error = %e, "Lente Operations falhou");
+                serde_json::json!({
+                    "lens_id": "LensC_Operations",
+                    "repo_id": repo_id,
+                    "model_used": "unknown",
+                    "bullets": [format!("Lente Operations falhou: {}", e)]
+                }).to_string()
+            }
+        };
+
+        let debate = SwarmDebate {
+            repo_id: repo_id.to_string(),
+            lente_a,
+            lente_b,
+            lente_c,
         };
 
         self.store
@@ -471,7 +508,8 @@ impl LensInvoker for HttpLensInvoker {
 
             #[cfg(not(test))]
             {
-                let jitter_ms = fastrand::u64(0..2500);
+                use tinyrand::RandRange;
+                let jitter_ms = crate::telemetry::dynamic_wyrand().next_range(0..2500);
                 tokio::time::sleep(tokio::time::Duration::from_millis(jitter_ms)).await;
             }
 
@@ -1026,8 +1064,6 @@ fn normalize_lens_payload(
                 repo_id: repo_id.to_string(),
                 model_used: model_used.to_string(),
                 bullets,
-                risk_level: "medium".to_string(),
-                recommendation: "manual-review".to_string(),
             })
             .ok_or_else(|| {
                 format!(
@@ -1055,7 +1091,7 @@ fn normalize_lens_payload(
         .collect();
 
     if parsed.bullets.is_empty() {
-        if let Some(bullets) = extract_bullets_fallback(&parsed.recommendation) {
+        if let Some(bullets) = extract_bullets_fallback(raw) {
             parsed.bullets = bullets;
         }
     }
@@ -1067,9 +1103,6 @@ fn normalize_lens_payload(
             parsed.bullets.len()
         ));
     }
-
-    parsed.risk_level = normalize_risk_level(&parsed.risk_level);
-    parsed.recommendation = normalize_recommendation(&parsed.recommendation);
 
     serde_json::to_string_pretty(&parsed)
         .map_err(|e| format!("Falha ao serializar JSON canonico da lente {}: {}", lens.lens_id(), e))
@@ -1091,28 +1124,6 @@ fn extract_first_json_object(raw: &str) -> Option<String> {
     let start = stripped.find('{')?;
     let end = stripped.rfind('}')?;
     Some(stripped[start..=end].to_string())
-}
-
-fn normalize_risk_level(raw: &str) -> String {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "baixo" | "low" => "Baixo".to_string(),
-        "medio" | "médio" | "medium" => "Medio".to_string(),
-        "alto" | "high" => "Alto".to_string(),
-        _ => "Medio".to_string(),
-    }
-}
-
-fn normalize_recommendation(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return "refine".to_string();
-    }
-    let first_line = trimmed.lines().next().unwrap_or(trimmed).trim();
-    let cutoff = first_line
-        .find(". ")
-        .map(|idx| idx + 1)
-        .unwrap_or(first_line.len());
-    truncate_for_log(&first_line[..cutoff], 180)
 }
 
 fn truncate_for_log(value: &str, max_len: usize) -> String {
@@ -1295,7 +1306,7 @@ mod tests {
 
     fn default_json(lens: LensKind, model_used: &str) -> String {
         format!(
-            "{{\"lens_id\":\"{}\",\"repo_id\":\"repo\",\"model_used\":\"{}\",\"bullets\":[\"ok-1\",\"ok-2\",\"ok-3\"],\"risk_level\":\"low\",\"recommendation\":\"keep\"}}",
+            "{{\"lens_id\":\"{}\",\"repo_id\":\"repo\",\"model_used\":\"{}\",\"bullets\":[\"ok-1\",\"ok-2\",\"ok-3\"]}}",
             lens.lens_id(),
             model_used
         )
@@ -1390,7 +1401,7 @@ mod tests {
 
     #[test]
     fn test_normalize_lens_payload_extracts_json_from_code_fence() {
-        let raw = "```json\n{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"model_used\":\"google/gemini-3.5-flash\",\"bullets\":[\"a\",\"b\",\"c\"],\"risk_level\":\"low\",\"recommendation\":\"keep\"}\n```";
+        let raw = "```json\n{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"model_used\":\"google/gemini-3.5-flash\",\"bullets\":[\"a\",\"b\",\"c\"]}\n```";
         let normalized = normalize_lens_payload(
             LensKind::ProductUx,
             "repo/test",
@@ -1422,12 +1433,11 @@ mod tests {
         assert_eq!(parsed.repo_id, "repo/test");
         assert_eq!(parsed.model_used, "google/gemini-3.5-flash");
         assert_eq!(parsed.bullets.len(), 3);
-        assert_eq!(parsed.recommendation, "manual-review");
     }
 
     #[test]
     fn test_normalize_lens_payload_strips_think_block_before_json() {
-        let raw = "<think>cadeia privada</think>\n{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"bullets\":[\"achado 1\",\"achado 2\",\"achado 3\"],\"risk_level\":\"alto\",\"recommendation\":\"seguir\"}\ntexto residual";
+        let raw = "<think>cadeia privada</think>\n{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"bullets\":[\"achado 1\",\"achado 2\",\"achado 3\"]}\ntexto residual";
         let normalized = normalize_lens_payload(
             LensKind::ProductUx,
             "repo/test",
@@ -1443,7 +1453,7 @@ mod tests {
 
     #[test]
     fn test_normalize_lens_payload_salvages_bullets_from_recommendation_when_empty() {
-        let raw = "{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"bullets\":[],\"risk_level\":\"Alto\",\"recommendation\":\"1. Ponto um\\n2. Ponto dois\\n3. Ponto tres\\nDecisao: rejeitar\"}";
+        let raw = "{\"lens_id\":\"LensA_ProductUX\",\"repo_id\":\"repo/test\",\"bullets\":[]}\n1. Ponto um\n2. Ponto dois\n3. Ponto tres";
         let normalized = normalize_lens_payload(
             LensKind::ProductUx,
             "repo/test",
@@ -1453,8 +1463,6 @@ mod tests {
         .expect("salvage bullets");
         let parsed: LensDebatePayload = serde_json::from_str(&normalized).expect("parsed salvage json");
         assert_eq!(parsed.bullets.len(), 3);
-        assert_eq!(parsed.risk_level, "Alto");
-        assert!(!parsed.recommendation.is_empty());
     }
 
     #[test]
@@ -1565,6 +1573,7 @@ mod tests {
     async fn test_timeout_does_not_hang_join_and_marks_phase2_error() {
         let store = MemoryStore::new(sample_payloads());
         let store_errors = Arc::clone(&store.errors);
+        let store_persisted = Arc::clone(&store.persisted);
         let invoker = RecordingLensInvoker::new(
             HashMap::from([(LensKind::Architecture, 800)]),
             HashMap::new(),
@@ -1575,9 +1584,10 @@ mod tests {
         let result = dispatcher.dispatch_swarm("repo/test").await;
         let elapsed = started.elapsed();
 
-        assert!(result.is_err());
+        assert!(result.is_ok(), "Falha parcial nao deve abortar o debate global: {:?}", result);
         assert!(elapsed < Duration::from_secs(2), "timeout nao abortou em tempo util: {:?}", elapsed);
-        assert_eq!(store_errors.load(Ordering::SeqCst), 1);
+        assert_eq!(store_persisted.load(Ordering::SeqCst), 1);
+        assert_eq!(store_errors.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
@@ -1626,17 +1636,17 @@ mod tests {
         let deepseek_mock = deepseek_server
             .mock("POST", "/deepseek")
             .match_body(Matcher::Regex("PACKAGE_B_ONLY".to_string()))
-            .with_status(200)
-            .with_body(success_body(LensKind::Architecture))
-            .expect(1)
+            .with_status(429)
+            .with_body(r#"{"error":"rate limit"}"#)
+            .expect(5)
             .create();
 
         let glm_mock = glm_server
             .mock("POST", "/glm")
             .match_body(Matcher::Regex("PACKAGE_C_ONLY".to_string()))
-            .with_status(200)
-            .with_body(success_body(LensKind::Operations))
-            .expect(1)
+            .with_status(429)
+            .with_body(r#"{"error":"rate limit"}"#)
+            .expect(6)
             .create();
 
         let store_conn = create_test_db();
@@ -1692,14 +1702,4 @@ mod tests {
         assert_eq!(status, STATUS_ERR);
     }
 
-    fn success_body(lens: LensKind) -> String {
-        serde_json::json!({
-            "choices": [{
-                "message": {
-                    "content": default_json(lens, "mock-model")
-                }
-            }]
-        })
-        .to_string()
-    }
 }

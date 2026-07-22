@@ -1,0 +1,619 @@
+# AUDIT REPORT: blob_02_dependency_manifest
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T22:45:28
+
+=== REPO: tldraw/tldraw ===
+stack_base: TypeScript
+
+[package.json]
+- @lingual/i18n-check ^0.5.5, @microsoft/api-extractor ^7.55.2, @sentry/cli ^2.41.1, @swc/core ^1.15.18, @tldraw/scripts workspace:*, @types/adm-zip ^0.5.7, @types/aws-lambda 8.10.148, @types/glob ^8.1.0
+- @types/node ^22.15.31, @types/react ^19.2.7, @types/react-dom ^19.2.3, @types/semver ^7.5.8, @typescript/native-preview ^7.0.0-dev.20260129.1, @vitest/coverage-v8 ^4.1.7, @vitest/ui ^4.1.7, @yarnpkg/types ^4.0.0
+- adm-zip ^0.5.16, cross-env ^7.0.3, docx ^9.5.1, esbuild ^0.28.0, fs-extra ^11.3.0, husky ^8.0.3, jsdom ^29.1.1, json5 ^2.2.3
+- lazyrepo 0.0.0-alpha.27, license-report ^6.7.1, lint-staged ^15.4.3, mime ^4.0.6, open-cli ^8.0.0, oxfmt ^0.41.0, oxlint ^1.66.0, oxlint-tsgolint ^0.23.0
+- purgecss ^5.0.0, rimraf ^4.4.1, svgo ^3.3.3, tsx ^4.19.2, typescript ^5.8.3, vercel ^52.0.0, vite-plugin-circular-dependency ^0.5.0, vitest ^4.1.7
+- vitest-canvas-mock ^1.1.3
+
+[apps/analytics-worker/package.json]
+- @cloudflare/workers-types ^4.20260302.0, esbuild ^0.28.0, lazyrepo 0.0.0-alpha.27, typescript ^5.8.3, wrangler ^4.75.0
+
+[apps/analytics/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @types/js-cookie ^3.0.6, js-cookie ^3.0.5, posthog-js ^1.281.0, typescript ^5.8.3, vite ^8.0.16, vitest ^4.1.7, wrangler ^4.75.0
+
+[apps/bemo-worker/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @tldraw/dotcom-shared workspace:*, @tldraw/store workspace:*, @tldraw/sync-core workspace:*, @tldraw/tlschema workspace:*, @tldraw/utils workspace:*, @tldraw/validate workspace:*, @tldraw/worker-shared workspace:*
+- @types/react ^19.2.7, @types/react-dom ^19.2.3, esbuild ^0.28.0, itty-router ^5.0.18, lazyrepo 0.0.0-alpha.27, react ^19.2.1, react-dom ^19.2.1, typescript ^5.8.3
+- wrangler ^4.75.0
+
+[apps/docs/package.json]
+- @ariakit/react ^0.4.15, @headlessui/react ^2.2.0, @heroicons/react ^2.2.0, @microsoft/api-extractor-model ^7.30.2, @microsoft/tsdoc patch:@microsoft/tsdoc@npm%3A0.15.1#~/.yarn/patches/@microsoft-tsdoc-npm-0.15.1-e24295d9bd.patch, @shikijs/engine-javascript ^1.29.1, @shikijs/rehype ^1.29.1, @tailwindcss/typography ^0.5.16
+- @tldraw/assets workspace:*, @tldraw/utils workspace:*, @types/js-cookie ^3.0.6, @types/mdast ^4.0.4, @types/node ^22.15.31, @types/react ^19.2.7, @types/react-dom ^19.2.3, @types/sqlite3 ^3.1.11
+- @types/ws ^8.18.1, algoliasearch ^4.24.0, autoprefixer ^10.4.20, clsx ^2.1.1, concurrently ^9.1.2, date-fns ^3.6.0, dotenv ^16.4.7, framer-motion ^11.18.2
+- geist ^1.3.1, github-slugger ^2.0.0, google-auth-library ^9.15.1, gray-matter ^4.0.3, instantsearch.js ^4.77.1, js-cookie ^3.0.5, mdast-util-mdx ^3.0.0, next ^15.5.16
+- next-mdx-remote-client ^1.1.2, next-themes ^0.3.0, octokit ^3.2.1, oxfmt ^0.41.0, patch-package ^8.0.0, postcss ^8.5.1, postinstall-postinstall ^2.1.0, query-string ^9.1.1
+- radix-ui ^1.4.2, react ^19.2.1, react-dom ^19.2.1, react-instantsearch ^7.15.1, rehype-autolink-headings ^7.1.0, rehype-slug ^6.0.0, rehype-slug-custom-id ^2.0.0, remark ^15.0.1
+- remark-gfm ^4.0.0, remark-mdx ^3.1.0, rimraf ^4.4.1, sharp ^0.33.5, shiki ^1.29.1, sqlite ^5.1.1, sqlite3 ^5.1.7, tailwind-merge ^2.6.0
+- tailwindcss ^3.4.17, tldraw workspace:*, tsx ^4.19.2, typescript ^5.8.3, ws ^8.18.0
+
+[apps/mcp-app/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @modelcontextprotocol/ext-apps ^1.0.0, @modelcontextprotocol/sdk 1.26.0, @types/node ^22.15.31, @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, agents ^0.5.0
+- react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, tsx ^4.19.2, typescript ^5.8.3, vite ^8.0.16, vite-plugin-singlefile ^2.3.2, wrangler ^4.75.0
+- zod ^4.1.8
+
+[internal/apps-script/package.json]
+- @google/clasp ^3.2.0, @types/google-apps-script ^1.0.91
+
+[internal/config/package.json]
+- @jest/expect-utils ^30.0.5, @peculiar/webcrypto ^1.5.0, jest-matcher-utils ^30.0.5, lazyrepo 0.0.0-alpha.27, vitest ^4.1.7, vitest-canvas-mock ^1.1.3
+
+[internal/health-worker/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @tldraw/utils workspace:*, @types/node ^22.15.31, discord-api-types ^0.37.118, esbuild ^0.28.0, typescript ^5.8.3, wrangler ^4.75.0
+
+[internal/scripts/package.json]
+- @actions/github ^6.0.0, @aws-sdk/client-s3 ^3.735.0, @aws-sdk/lib-storage ^3.735.0, @lokalise/node-api ^12.8.0, @octokit/rest ^20.1.1, @types/diff ^7.0.1, @types/is-ci ^3.0.4, @types/minimist ^1.2.5
+- @types/node ^22.15.31, @types/proper-lockfile ^4.1.4, @types/tmp ^0.2.6, ast-types ^0.14.2, cross-fetch ^3.2.0, diff ^9.0.0, esbuild ^0.28.0, glob ^13.0.0
+- gray-matter ^4.0.3, ignore ^5.3.2, is-ci ^3.0.1, jszip ^3.10.1, kleur ^4.1.5, lazyrepo 0.0.0-alpha.27, minimist ^1.2.8, proper-lockfile ^4.1.2
+- recast ^0.22.0, rimraf ^4.4.1, semver ^7.6.3, svgo ^3.3.3, tar ^7.5.11, tmp ^0.2.3, toml ^3.0.0, typescript ^5.8.3
+
+[packages/assets/package.json]
+- @tldraw/utils workspace:*, lazyrepo 0.0.0-alpha.27, ts-node-dev ^1.1.8, typescript ^5.8.3
+
+[packages/create-tldraw/package.json]
+- @bomb.sh/args ^0.3.1, @clack/core ^1.0.0-alpha.1, @clack/prompts ^1.0.0-alpha.1, @tldraw/utils workspace:*, ansi-regex ^6.1.0, ansi-styles ^6.2.1, esbuild ^0.28.0, lazyrepo 0.0.0-alpha.27
+- picocolors ^1.1.1, string-width ^7.2.0, strip-ansi ^7.1.0, tar ^7.5.11
+
+[packages/dotcom-shared/package.json]
+- @rocicorp/zero 1.7.0, @tldraw/state workspace:*, @tldraw/store workspace:*, @tldraw/tlschema workspace:*, @tldraw/utils workspace:*, @tldraw/validate workspace:*, @types/react ^19.2.7, @types/react-dom ^19.2.3
+- react ^18.2.0 || ^19.2.1, react ^19.2.1, react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1, tldraw workspace:*
+
+[packages/driver/package.json]
+- @tldraw/editor workspace:*, @tldraw/utils workspace:*, lazyrepo 0.0.0-alpha.27, vitest ^4.1.7
+
+[packages/editor/package.json]
+- @peculiar/webcrypto ^1.5.0, @testing-library/dom ^10.0.0, @testing-library/react ^16.0.0, @tiptap/core ^3.12.1, @tiptap/pm ^3.12.1, @tiptap/react ^3.12.1, @tldraw/state workspace:*, @tldraw/state-react workspace:*
+- @tldraw/store workspace:*, @tldraw/tlschema workspace:*, @tldraw/utils workspace:*, @tldraw/validate workspace:*, @types/benchmark ^2.1.5, @types/rbush ^3.0.0, @types/react ^19.2.7, @types/react-dom ^19.2.3
+- @types/wicg-file-system-access ^2020.9.8, benchmark ^2.1.4, classnames ^2.5.1, eventemitter3 ^4.0.7, fake-indexeddb ^4.0.2, idb ^7.1.1, is-plain-object ^5.0.0, lazyrepo 0.0.0-alpha.27
+- rbush ^3.0.1, react ^18.2.0 || ^19.2.1, react ^19.2.1, react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1, resize-observer-polyfill ^1.5.1, vitest ^4.1.7
+
+[packages/mermaid/package.json]
+- @tldraw/tlschema workspace:*, @tldraw/utils workspace:*, lazyrepo 0.0.0-alpha.27, mermaid 11.15.0, react ^18.2.0 || ^19.2.1, react-dom ^18.2.0 || ^19.2.1, tldraw workspace:*, vitest ^4.1.7
+
+[packages/namespaced-tldraw/package.json]
+- @types/react ^19.2.7, @types/react-dom ^19.2.3, chokidar-cli ^3.0.0, lazyrepo 0.0.0-alpha.27, react ^18.2.0 || ^19.2.1, react ^19.2.1, react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1
+- tldraw workspace:*
+
+[packages/state-react/package.json]
+- @testing-library/dom ^10.0.0, @testing-library/react ^16.0.0, @tldraw/state workspace:*, @tldraw/utils workspace:*, @types/react ^19.2.7, @types/react-dom ^19.2.3, react ^18.2.0 || ^19.2.1, react ^19.2.1
+- react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1, vitest ^4.1.7
+
+[packages/state/package.json]
+- @tldraw/utils workspace:*, @types/lodash ^4.17.14, lodash ^4.17.21, vitest ^4.1.7
+
+[packages/store/package.json]
+- @peculiar/webcrypto ^1.5.0, @tldraw/state workspace:*, @tldraw/utils workspace:*, lazyrepo 0.0.0-alpha.27, raf ^3.4.1, react ^18.2.0 || ^19.2.1, vitest ^4.1.7
+
+[packages/sync-core/package.json]
+- @tldraw/state workspace:*, @tldraw/store workspace:*, @tldraw/tlschema workspace:*, @tldraw/utils workspace:*, @types/react ^19.2.7, @types/react-dom ^19.2.3, @types/uuid-readable ^0.0.3, nanoevents ^7.0.1
+- react ^18.2.0 || ^19.2.1, react ^19.2.1, react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3, uuid-by-string ^4.0.0, uuid-readable ^0.0.2
+- vitest ^4.1.7, ws ^8.18.0
+
+[packages/sync/package.json]
+- @tldraw/state workspace:*, @tldraw/state-react workspace:*, @tldraw/sync-core workspace:*, @tldraw/utils workspace:*, @types/react ^19.2.7, @types/react-dom ^19.2.3, nanoevents ^7.0.1, react ^18.2.0 || ^19.2.1
+- react ^19.2.1, react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3, uuid-by-string ^4.0.0, uuid-readable ^0.0.2, vitest ^4.1.7
+- ws ^8.18.0
+
+[packages/tldraw/package.json]
+- @peculiar/webcrypto ^1.5.0, @testing-library/dom ^10.0.0, @testing-library/react ^16.0.0, @tiptap/core ^3.12.1, @tiptap/extension-code ^3.12.1, @tiptap/extension-highlight ^3.12.1, @tiptap/extension-list ^3.12.1, @tiptap/pm ^3.12.1
+- @tiptap/react ^3.12.1, @tiptap/starter-kit ^3.12.1, @tldraw/driver workspace:*, @tldraw/editor workspace:*, @tldraw/store workspace:*, @types/classnames ^2.3.4, @types/lz-string ^1.5.0, @types/react ^19.2.7
+- @types/react-dom ^19.2.3, chokidar-cli ^3.0.0, classnames ^2.5.1, idb ^7.1.1, lazyrepo 0.0.0-alpha.27, lz-string ^1.5.0, radix-ui ^1.4.2, react ^18.2.0 || ^19.2.1
+- react ^19.2.1, react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1, resize-observer-polyfill ^1.5.1, vitest ^4.1.7
+
+[packages/tlschema/package.json]
+- @tldraw/state workspace:*, @tldraw/store workspace:*, @tldraw/utils workspace:*, @tldraw/validate workspace:*, kleur ^4.1.5, lazyrepo 0.0.0-alpha.27, react ^18.2.0 || ^19.2.1, react ^19.2.1
+- react-dom ^18.2.0 || ^19.2.1, vitest ^4.1.7
+
+[packages/utils/package.json]
+- @types/lodash.isequal ^4.5.8, @types/lodash.isequalwith ^4.4.9, @types/lodash.throttle ^4.1.9, @types/lodash.uniq ^4.5.9, lazyrepo 0.0.0-alpha.27, lodash.isequal ^4.5.0, lodash.isequalwith ^4.4.0, lodash.throttle ^4.1.1
+- lodash.uniq ^4.5.0, vitest ^4.1.7
+
+[packages/validate/package.json]
+- @tldraw/utils workspace:*, lazyrepo 0.0.0-alpha.27
+
+[packages/worker-shared/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @tldraw/utils workspace:*, @tldraw/validate workspace:*, cloudflare-workers-unfurl ^0.0.8, itty-router ^5.0.18, lazyrepo 0.0.0-alpha.27, toucan-js ^3.4.0, typescript ^5.8.3
+- vitest ^4.1.7
+
+[templates/agent/package.json]
+- @ai-sdk/anthropic ^2.0.80, @ai-sdk/google ^2.0.74, @ai-sdk/openai ^2.0.106, @cloudflare/vite-plugin ^1.29.1, @cloudflare/workers-types ^4.20260302.0, @google/generative-ai ^0.24.1, @tldraw/tlschema workspace:*, @types/react ^19.2.7
+- @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, @worker-tools/json-stream ^0.1.0-pre.12, ai ^5.0.194, best-effort-json-parser ^1.1.3, itty-router ^5.0.18, react ^19.2.1, react-dom ^19.2.1
+- react-markdown ^10.1.0, tldraw workspace:*, typescript ^5.8.3, vite ^8.0.16, wrangler ^4.75.0, zod ^4.1.8
+
+[templates/branching-chat/package.json]
+- @ai-sdk/google ^2.0.74, @cloudflare/vite-plugin ^1.29.1, @cloudflare/workers-types ^4.20260302.0, @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, ai ^5.0.194, classnames ^2.5.1
+- itty-router ^5.0.18, radix-ui ^1.4.2, react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3, vite ^8.0.16, wrangler ^4.75.0
+- zod ^4.1.8
+
+[templates/chat/package.json]
+- @ai-sdk/google ^2.0.74, @ai-sdk/react ^2.0.15, @google/genai ^1.17.0, @types/node ^22.15.31, @types/react ^19.2.7, @types/react-dom ^19.2.3, ai ^5.0.194, next ^15.5.16
+- react ^19.2.1, react-dom ^19.2.1, react-markdown ^10.1.0, tldraw workspace:*, typescript ^5.8.3, zod ^4.1.8
+
+[templates/image-pipeline/package.json]
+- @cloudflare/vite-plugin ^1.29.1, @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, classnames ^2.5.1, itty-router ^5.0.18, radix-ui ^1.4.2, react ^19.2.1
+- react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3, vite ^8.0.16, wrangler ^4.75.0
+
+[templates/nextjs/package.json]
+- @types/node ^22.15.31, @types/react ^19.2.7, @types/react-dom ^19.2.3, next ^15.5.16, react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3
+
+[templates/shader/package.json]
+- @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3, vite ^8.0.16
+
+[templates/simple-server-example/package.json]
+- @fastify/cors ^10.0.0, @fastify/websocket ^11.0.0, @tldraw/sync workspace:*, @tldraw/sync-core workspace:*, @types/better-sqlite3 ^7.6.12, @types/express ^4.17.21, @types/react ^19.2.7, @types/react-dom ^19.2.3
+- @types/ws ^8.18.1, @vitejs/plugin-react ^6.0.1, better-sqlite3 ^12.10.0, concurrently ^9.1.2, fastify ^5.8.1, itty-router ^5.0.18, lazyrepo 0.0.0-alpha.27, react ^19.2.1
+- react-dom ^19.2.1, react-router-dom ^6.28.2, tldraw workspace:*, tsx ^4.19.2, typescript ^5.8.3, unfurl.js ^6.4.0, vite ^8.0.16, ws ^8.18.0
+
+[templates/socketio-server-example/package.json]
+- @tldraw/sync workspace:*, @tldraw/sync-core workspace:*, @types/better-sqlite3 ^7.6.12, @types/express ^4.17.21, @types/react ^19.2.7, @types/react-dom ^19.2.3, @types/ws ^8.18.1, @vitejs/plugin-react ^6.0.1
+- better-sqlite3 ^12.10.0, concurrently ^9.1.2, express ^5.1.0, lazyrepo 0.0.0-alpha.27, react ^19.2.1, react-dom ^19.2.1, react-router-dom ^6.28.2, socket.io ^4.8.1
+- socket.io-client ^4.8.1, tldraw workspace:*, tsx ^4.19.2, typescript ^5.8.3, unfurl.js ^6.4.0, vite ^8.0.16
+
+[templates/sync-cloudflare/package.json]
+- @cloudflare/vite-plugin ^1.29.1, @tldraw/sync workspace:*, @tldraw/sync-core workspace:*, @tldraw/tlschema workspace:*, @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, cloudflare-workers-unfurl ^0.0.8
+- concurrently ^9.1.2, itty-router ^5.0.18, react ^19.2.1, react-dom ^19.2.1, react-router-dom ^6.28.2, tldraw workspace:*, typescript ^5.8.3, vite ^8.0.16
+- wrangler ^4.75.0
+
+[templates/vite/package.json]
+- @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3, vite ^8.0.16
+
+[templates/vue/package.json]
+- @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, @vitejs/plugin-vue ^6.0.5, react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, typescript ^5.8.3
+- vite ^8.0.16, vite-plugin-vue-devtools ^8.1.0, vue ^3.5.17, vue-tsc ^3.0.1
+
+[templates/workflow/package.json]
+- @types/react ^19.2.7, @types/react-dom ^19.2.3, @vitejs/plugin-react ^6.0.1, classnames ^2.5.1, radix-ui ^1.4.2, react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*
+- typescript ^5.8.3, vite ^8.0.16
+
+[apps/dotcom/asset-upload-worker/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @tldraw/worker-shared workspace:*, @types/ws ^8.18.1, itty-router ^5.0.18, lazyrepo 0.0.0-alpha.27, wrangler ^4.75.0
+
+[apps/dotcom/client/package.json]
+- @clerk/clerk-react ^5.53.3, @clerk/elements ^0.23.74, @clerk/testing ^1.4.15, @formatjs/cli ^6.5.1, @formatjs/unplugin ^1.1.0, @playwright/test ^1.61.0, @rocicorp/zero 1.7.0, @sentry/cli ^2.41.1
+- @sentry/integrations ^7.120.3, @sentry/react ^7.120.3, @tldraw/assets workspace:*, @tldraw/dotcom-shared workspace:*, @tldraw/mermaid workspace:*, @tldraw/sync workspace:*, @tldraw/sync-core workspace:*, @tldraw/utils workspace:*
+- @tldraw/validate workspace:*, @types/md5 ^2.3.5, @types/node ^22.15.31, @types/qrcode ^1.5.5, @types/react ^19.2.7, @types/react-dom ^19.2.3, @types/regexgen ^1, @vitejs/plugin-react ^6.0.1
+- axe-core ^4.10.3, browser-fs-access ^0.35.0, classnames ^2.5.1, dotenv ^16.4.7, fast-glob ^3.3.3, idb ^7.1.1, identity-obj-proxy ^3.0.0, intl-messageformat ^11.1.2
+- json5 ^2.2.3, kysely ^0.28.12, lazyrepo 0.0.0-alpha.27, pg ^8.16.3, posthog-js ^1.281.0, qrcode ^1.5.4, radix-ui ^1.4.2, react ^19.2.1
+- react-dom ^19.2.1, react-ga4 ^2.1.0, react-helmet-async ^1.3.0, react-intl ^8.1.3, react-markdown ^10.1.0, react-router-dom ^6.28.2, regexgen ^1.3.0, tldraw workspace:*
+- vite ^8.0.16, vitest ^4.1.7, ws ^8.18.0
+
+[apps/dotcom/image-resize-worker/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @tldraw/dotcom-shared workspace:*, @tldraw/validate workspace:*, @tldraw/worker-shared workspace:*, itty-router ^5.0.18, lazyrepo 0.0.0-alpha.27, react ^19.2.1, react-dom ^19.2.1
+- wrangler ^4.75.0
+
+[apps/dotcom/sync-worker/package.json]
+- @clerk/backend ^1.23.7, @cloudflare/workers-types ^4.20260302.0, @pierre/storage ^1.1.0, @rocicorp/zero 1.7.0, @supabase/auth-helpers-remix ^0.2.6, @supabase/supabase-js ^2.48.1, @tldraw/dotcom-shared workspace:*, @tldraw/state workspace:*
+- @tldraw/store workspace:*, @tldraw/sync-core workspace:*, @tldraw/tlschema workspace:*, @tldraw/utils workspace:*, @tldraw/validate workspace:*, @tldraw/worker-shared workspace:*, @types/pg ^8.11.11, @types/react ^19.2.7
+- esbuild ^0.28.0, itty-router ^5.0.18, jose ^5.9.6, kysely ^0.28.12, lazyrepo 0.0.0-alpha.27, lodash.throttle ^4.1.1, pg ^8.16.3, pg-logical-replication ^2.0.7
+- react ^19.2.1, react-dom ^19.2.1, typescript ^5.8.3, vitest ^4.1.7, wrangler ^4.75.0
+
+[apps/dotcom/tldrawusercontent-worker/package.json]
+- @cloudflare/workers-types ^4.20260302.0, @tldraw/worker-shared workspace:*, @types/ws ^8.18.1, itty-router ^5.0.18, lazyrepo 0.0.0-alpha.27, wrangler ^4.75.0
+
+[apps/dotcom/zero-cache/package.json]
+- @rocicorp/zero 1.7.0, concurrently ^9.1.2, dotenv ^16.4.7, kysely ^0.28.12, lazyrepo 0.0.0-alpha.27, pg ^8.16.3, tsx ^4.19.2
+
+[apps/vscode/editor/package.json]
+- @tldraw/assets workspace:*, @types/fs-extra ^11.0.4, @types/node ^22.15.31, @types/react ^19.2.7, @types/react-dom ^19.2.3, @types/react-router-dom ^5.3.3, concurrently ^9.1.2, create-serve 1.0.1
+- dotenv ^16.4.7, esbuild ^0.28.0, fs-extra ^11.3.0, lazyrepo 0.0.0-alpha.27, react ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, tslib ^2.8.1
+
+[apps/vscode/extension/package.json]
+- @tldraw/editor workspace:*, @types/fs-extra ^11.0.4, @types/lodash ^4.17.14, @types/node-fetch ^2.6.12, @types/react ^19.2.7, @types/react-dom ^19.2.3, @types/vscode ^1.96.0, assert ^2.1.0
+- cheerio ^1.0.0, esbuild ^0.28.0, fs-extra ^11.3.0, lazyrepo 0.0.0-alpha.27, lodash ^4.17.21, mocha ^9.2.2, node-fetch ^2.7.0, ovsx ^0.10.7
+- process ^0.11.10, react ^18.2.0 || ^19.2.1, react ^19.2.1, react-dom ^18.2.0 || ^19.2.1, react-dom ^19.2.1, tldraw workspace:*, ts-loader ^9.5.2, tslib ^2.8.1
+- tsx ^4.19.2, typescript ^5.8.3, vsce ^2.15.0, webpack ^5.97.1
+
+=== REPO: bytecodealliance/wasmtime ===
+stack_base: TypeScript, Rust, C/C++
+
+[Cargo.toml]
+- addr2line 0.26.0, anyhow 1.0.103, anyhow-for-testing 1.0.100, anyhow-for-testing *, arbitrary 1.4.2, arbtest 0.3.2, async-trait 0.1.89, async-trait *
+- async-trait *, backtrace 0.3.76, base64 0.22.1, bitflags 2.9.4, bstr 1.6.0, bumpalo 3.20.2, byte-array-literals *, bytes 1.11.1
+- bytes *, bytesize 2.0.1, cap-fs-ext-avoid-using-this 4.0.2, cap-primitives 4.0.2, capstone 0.14.0, capstone *, capstone *, cc 1.2.0
+- clap 4.5.48, clap *, clap_complete 4.5.58, clap_complete *, component-async-tests *, cranelift 0.135.0, cranelift-assembler-x64 0.135.0, cranelift-bforest 0.135.0
+- cranelift-bitset 0.135.0, cranelift-codegen 0.135.0, cranelift-codegen *, cranelift-codegen *, cranelift-control 0.135.0, cranelift-entity 0.135.0, cranelift-filetests *, cranelift-filetests *
+- cranelift-frontend 0.135.0, cranelift-fuzzgen *, cranelift-interpreter 0.135.0, cranelift-jit 0.135.0, cranelift-module 0.135.0, cranelift-native 0.135.0, cranelift-native *, cranelift-object 0.135.0
+- cranelift-reader 0.135.0, cranelift-reader *, cranelift-srcgen 0.135.0, criterion 0.8.2, criterion *, env_logger 0.11.5, env_logger *, file-per-thread-logger 0.2.0
+- filecheck 0.5.0, filecheck *, flate2 1.1.4, futures 0.3.31, futures *, futures *, gdbstub 0.7.10, gdbstub-component-artifact =48.0.0
+- gdbstub-component-artifact *, gdbstub_arch 0.3.3, gimli 0.33.0, gimli *, glob 0.3.3, hashbrown 0.17, heck 0.5, http 1.3.1
+- http *, http-body 1.0.1, http-body-util 0.1.3, http-body-util *, hyper 1.9.0, hyper *, indexmap 2.14.0, itertools 0.14.0
+- ittapi 0.4.0, json-from-wast 0.253.0, libc 0.2.185, libc *, libfuzzer-sys 0.4.10, libm 0.2.16, libtest-mimic 0.8.1, libtest-mimic *
+- log 0.4.28, log *, log *, mach2 0.6, memchr 2.4, memfd 0.6.5, mutatis 0.5.2, native-tls 0.2.11
+- num_cpus 1.17.0, object 0.39.0, object *, object *, openssl 0.10.80, openssl-sys 0.9.116, pin-project-lite 0.2.14, pin-project-lite *
+- postcard 1.1.3, proc-macro2 1.0.101, proptest 1.11.0, psm 0.1.11, pulley-interpreter =48.0.0, pulley-interpreter *, pulley-interpreter *, pulley-interpreter-fuzz *
+- pulley-macros =48.0.0, quote 1.0.41, rand 0.10.1, rand *, rayon 1.5.3, rayon 1.5.0, regalloc2 0.15.1, regex 1.9.1
+- rustc-hash 2.1.1, rustix 1.1.4, rustls 0.23, semver 1.0.27, serde 1.0.228, serde *, serde *, serde_derive 1.0.228
+- serde_derive *, serde_json 1.0.80, serde_json *, serde_json *, sha2 0.10.2, similar 3.1.1, similar *, smallvec 1.15.1
+- smallvec *, syn 2.0.106, target-lexicon 0.13.5, target-lexicon *, tempfile 3.27.0, tempfile *, tempfile *, termcolor 1.4.1
+- termcolor *, termcolor *, test-log 0.2.18, test-programs-artifacts *, test-programs-artifacts *, thiserror 2.0.17, tokio 1.51.1, tokio *
+- tokio *, tokio-native-tls 0.3.1, tokio-openssl 0.6.5, tokio-rustls 0.26.4, tokio-util 0.7.16, toml 0.9.8, toml *, tracing 0.1.41
+- tracing *, tracing-subscriber 0.3.20, url 2.5.7, walkdir 2.5.0, walkdir *, wasi-preview1-component-adapter *, wasip1 1.0.0, wasip2 1.0
+- wasm-compose 0.253.0, wasm-encoder 0.253.0, wasm-encoder *, wasm-mutate 0.253.0, wasm-smith 0.253.0, wasm-wave 0.253.0, wasmparser 0.253.0, wasmparser *
+- wasmprinter 0.253.0, wasmprinter *, wasmtime 48.0.0, wasmtime *, wasmtime *, wasmtime-c-api-macros =48.0.0, wasmtime-cache =48.0.0, wasmtime-cache *
+- wasmtime-cli-flags =48.0.0, wasmtime-cli-flags *, wasmtime-component-macro =48.0.0, wasmtime-component-util =48.0.0, wasmtime-component-util *, wasmtime-core =48.0.0, wasmtime-cranelift =48.0.0, wasmtime-cranelift *
+- wasmtime-debugger =48.0.0, wasmtime-debugger *, wasmtime-environ =48.0.0, wasmtime-environ *, wasmtime-explorer =48.0.0, wasmtime-explorer *, wasmtime-fiber =48.0.0, wasmtime-fuzzing *
+- wasmtime-jit-debug =48.0.0, wasmtime-jit-icache-coherence =48.0.0, wasmtime-test-macros *, wasmtime-test-util *, wasmtime-test-util *, wasmtime-unwinder =48.0.0, wasmtime-unwinder *, wasmtime-versioned-export-macros =48.0.0
+- wasmtime-wasi 48.0.0, wasmtime-wasi *, wasmtime-wasi-config 48.0.0, wasmtime-wasi-config *, wasmtime-wasi-http 48.0.0, wasmtime-wasi-http *, wasmtime-wasi-io 48.0.0, wasmtime-wasi-keyvalue 48.0.0
+- wasmtime-wasi-keyvalue *, wasmtime-wasi-nn 48.0.0, wasmtime-wasi-nn *, wasmtime-wasi-tls 48.0.0, wasmtime-wasi-tls *, wasmtime-wast =48.0.0, wasmtime-wast *, wasmtime-wast *
+- wasmtime-winch =48.0.0, wasmtime-wit-bindgen =48.0.0, wasmtime-wizer 48.0.0, wasmtime-wizer *, wasmtime-wmemcheck =48.0.0, wast 253.0.0, wast *, wat 1.253.0
+- wat *, wat *, webpki-roots 1.0.7, wiggle =48.0.0, wiggle-generate =48.0.0, wiggle-macro =48.0.0, winch-codegen =48.0.0, windows-sys 0.61.2
+- wit-bindgen 0.59.0, wit-bindgen-rust-macro 0.59.0, wit-component 0.253.0, wit-component *, wit-parser 0.253.0, wstd 0.6.5
+
+[cranelift/Cargo.toml]
+- anyhow *, capstone *, clap *, cranelift *, cranelift-codegen *, cranelift-entity *, cranelift-filetests *, cranelift-frontend *
+- cranelift-interpreter *, cranelift-jit *, cranelift-module *, cranelift-native *, cranelift-object *, cranelift-reader *, env_logger *, filecheck *
+- log *, pulley-interpreter *, rayon 1, regalloc2 *, rustc-hash *, serde *, similar *, target-lexicon *
+- thiserror *, toml *, walkdir *
+
+[fuzz/Cargo.toml]
+- anyhow *, arbitrary *, cranelift-assembler-x64 *, cranelift-codegen *, cranelift-control *, cranelift-filetests *, cranelift-fuzzgen *, cranelift-interpreter *
+- cranelift-native *, cranelift-reader *, env_logger *, libfuzzer-sys *, log *, mutatis *, postcard *, proc-macro2 *
+- pulley-interpreter-fuzz *, quote *, rand *, rand *, smallvec *, target-lexicon *, wasmparser *, wasmtime *
+- wasmtime *, wasmtime-core *, wasmtime-fuzzing *, wasmtime-test-util *, wasmtime-test-util *
+
+[pulley/Cargo.toml]
+- anyhow *, anyhow *, arbitrary *, clap *, cranelift-bitset *, env_logger *, log *, pulley-macros *
+- termcolor *, wasmtime-core *
+
+[cranelift/assembler-x64/Cargo.toml]
+- arbitrary *, arbitrary *, arbtest *, capstone *, capstone *, cranelift-assembler-x64-meta 0.135.0
+
+[cranelift/bforest/Cargo.toml]
+- cranelift-entity *, wasmtime-core *
+
+[cranelift/bitset/Cargo.toml]
+- arbitrary *, serde *, serde_derive *, wasmtime-core *
+
+[cranelift/codegen/Cargo.toml]
+- anyhow *, bumpalo *, capstone *, cranelift-assembler-x64 *, cranelift-bforest *, cranelift-bitset *, cranelift-codegen-meta 0.135.0, cranelift-codegen-shared 0.135.0
+- cranelift-control *, cranelift-entity *, cranelift-isle =0.135.0, criterion *, env_logger *, gimli *, hashbrown *, libm *
+- log *, mutatis *, postcard *, proptest *, pulley-interpreter *, regalloc2 *, rustc-hash *, serde *
+- serde_derive *, sha2 *, similar *, smallvec *, souper-ir 2.1.0, target-lexicon *, wasmtime-core *
+
+[cranelift/control/Cargo.toml]
+- arbitrary *
+
+[cranelift/entity/Cargo.toml]
+- cranelift-bitset *, serde *, serde_derive *, wasmtime-core *
+
+[cranelift/filetests/Cargo.toml]
+- anyhow *, cranelift *, cranelift-codegen *, cranelift-control *, cranelift-frontend *, cranelift-interpreter *, cranelift-jit *, cranelift-module *
+- cranelift-native *, cranelift-reader *, file-per-thread-logger *, filecheck *, gimli *, libm *, log *, num_cpus 1.8.0
+- pulley-interpreter *, serde *, serde_derive *, similar *, smallvec *, target-lexicon *, thiserror *, toml *
+- wasmtime-unwinder *, wat *
+
+[cranelift/frontend/Cargo.toml]
+- cranelift-codegen *, cranelift-codegen *, env_logger *, hashbrown *, log *, similar *, smallvec *, target-lexicon *
+
+[cranelift/fuzzgen/Cargo.toml]
+- anyhow *, arbitrary *, cranelift *, cranelift-native *, rand *, target-lexicon *
+
+[cranelift/interpreter/Cargo.toml]
+- cranelift-codegen *, cranelift-entity *, cranelift-frontend *, cranelift-reader *, log *, smallvec *, thiserror *
+
+[cranelift/jit/Cargo.toml]
+- anyhow *, cranelift *, cranelift-codegen *, cranelift-control *, cranelift-entity *, cranelift-entity *, cranelift-frontend *, cranelift-module *
+- cranelift-native *, libc *, log *, memmap2 0.9.11, region 3.0.2, target-lexicon *, wasmtime-jit-icache-coherence *, wasmtime-unwinder *
+
+[cranelift/module/Cargo.toml]
+- anyhow *, cranelift-codegen *, cranelift-control *, hashbrown *, serde *, serde_derive *
+
+[cranelift/native/Cargo.toml]
+- cranelift-codegen *, target-lexicon *
+
+[cranelift/object/Cargo.toml]
+- anyhow *, cranelift-codegen *, cranelift-codegen *, cranelift-control *, cranelift-entity *, cranelift-frontend *, cranelift-module *, gimli *
+- log *, object *, target-lexicon *
+
+[cranelift/reader/Cargo.toml]
+- anyhow *, cranelift-codegen *, cranelift-codegen *, smallvec *, target-lexicon *
+
+[cranelift/serde/Cargo.toml]
+- clap *, cranelift-codegen *, cranelift-reader *, serde_json *
+
+[cranelift/umbrella/Cargo.toml]
+- cranelift-codegen *, cranelift-frontend *, cranelift-interpreter *, cranelift-jit *, cranelift-module *, cranelift-native *, cranelift-object *
+
+[crates/bench-api/Cargo.toml]
+- clap *, shuffling-allocator 1.1.1, target-lexicon *, wasmtime *, wasmtime-cli-flags *, wasmtime-wasi *, wasmtime-wasi-nn *, wat *
+
+[crates/c-api-macros/Cargo.toml]
+- proc-macro2 *, quote *
+
+[crates/c-api/Cargo.toml]
+- async-trait *, bytes *, env_logger *, futures *, log *, tokio *, tracing *, wasmtime *
+- wasmtime-c-api-macros *, wasmtime-wasi *, wasmtime-wasi-http *, wasmtime-wasi-io *, wat *
+
+[crates/cache/Cargo.toml]
+- base64 *, directories-next 2.0, env_logger *, filetime 0.2.7, log *, postcard *, serde *, serde_derive *
+- sha2 *, tempfile 3, toml *, wasmtime-environ *, zstd 0.13.0
+
+[crates/cli-flags/Cargo.toml]
+- clap *, file-per-thread-logger *, rayon 1.5.0, serde *, serde_derive *, toml *, tracing-subscriber *, wasmtime *
+
+[crates/component-macro/Cargo.toml]
+- anyhow *, component-macro-test-helpers *, prettyplease 0.2.31, proc-macro2 *, quote *, serde *, serde_json *, similar *
+- syn *, tracing *, wasmtime *, wasmtime-component-util *, wasmtime-wit-bindgen *, wasmtime-wit-bindgen *, wit-parser *
+
+[crates/core/Cargo.toml]
+- anyhow *, hashbrown *, libm *, serde *
+
+[crates/cranelift/Cargo.toml]
+- cranelift-codegen *, cranelift-control *, cranelift-entity *, cranelift-frontend *, cranelift-native *, gimli *, itertools *, log *
+- object *, pulley-interpreter *, smallvec *, target-lexicon *, thiserror *, wasmparser *, wasmtime-core *, wasmtime-environ *
+- wasmtime-unwinder *, wasmtime-versioned-export-macros *
+
+[crates/debugger/Cargo.toml]
+- async-trait *, env_logger *, log *, tokio *, wasmtime *, wasmtime *, wasmtime-wasi *, wasmtime-wasi-io *
+
+[crates/environ/Cargo.toml]
+- anyhow *, arbitrary *, arbtest *, clap *, cpp_demangle 0.5.1, cranelift-bforest *, cranelift-bitset *, cranelift-entity *
+- env_logger *, gimli *, hashbrown *, indexmap *, log *, object *, object *, postcard *
+- rustc-demangle 0.1.16, semver *, serde *, serde_derive *, sha2 *, smallvec *, target-lexicon *, wasm-encoder *
+- wasmparser *, wasmprinter *, wasmtime-component-util *, wasmtime-core *, wat *
+
+[crates/explorer/Cargo.toml]
+- capstone *, serde *, serde_derive *, serde_json *, target-lexicon *, wasmprinter *, wasmtime *, wasmtime-environ *
+
+[crates/fiber/Cargo.toml]
+- backtrace 0.3.68, cc 1.0, wasmtime-environ *, wasmtime-versioned-export-macros *, wasmtime-versioned-export-macros *
+
+[crates/fuzzing/Cargo.toml]
+- arbitrary *, backtrace *, cranelift-bforest *, cranelift-bitset *, env_logger *, futures *, log *, mutatis *
+- rand *, rand *, rayon 1.2.1, serde *, serde_json *, smallvec *, target-lexicon *, tempfile 3.3.0
+- tokio *, wasm-encoder *, wasm-mutate *, wasm-smith *, wasm-spec-interpreter *, wasmi 1.0.8, wasmparser *, wasmprinter *
+- wasmtime *, wasmtime-cli-flags *, wasmtime-core *, wasmtime-environ *, wasmtime-environ *, wasmtime-test-util *, wasmtime-test-util *, wasmtime-wast *
+- wat *
+
+[crates/gdbstub-component/Cargo.toml]
+- anyhow *, clap *, env_logger *, futures *, gdbstub *, gdbstub_arch *, log *, wasip2 *
+- wit-bindgen *, wstd *
+
+[crates/jit-debug/Cargo.toml]
+- cc *, object *, wasmtime-versioned-export-macros *, wasmtime-versioned-export-macros *
+
+[crates/jit-icache-coherence/Cargo.toml]
+- wasmtime-core *
+
+[crates/test-macros/Cargo.toml]
+- anyhow *, proc-macro2 *, quote *, syn *, wasmtime-test-util *
+
+[crates/test-programs/Cargo.toml]
+- anyhow *, base64 *, flate2 1.0.28, futures *, libc *, once_cell 1.19.0, regex *, sha2 *
+- url *, wasi-nn 0.6.0, wasip1 1.0.0, wasip2 1.0.0, wit-bindgen *
+
+[crates/test-util/Cargo.toml]
+- arbitrary *, arbtest *, env_logger *, indexmap *, proc-macro2 *, quote *, rand *, serde *
+- serde_derive *, target-lexicon *, toml *, wasmparser *, wasmprinter *, wasmtime *, wasmtime-component-util *, wasmtime-environ *
+- wat *
+
+[crates/unwinder/Cargo.toml]
+- cranelift-codegen *, log *, object *, wasmtime-environ *
+
+[crates/versioned-export-macros/Cargo.toml]
+- proc-macro2 *, quote *, syn *
+
+[crates/wasi-config/Cargo.toml]
+- test-programs-artifacts *, tokio *, wasmtime *, wasmtime-wasi *
+
+[crates/wasi-http/Cargo.toml]
+- async-trait *, base64 *, bytes *, env_logger *, flate2 *, futures *, futures *, http *
+- http-body *, http-body-util *, hyper *, pin-project-lite *, rustls *, sha2 *, tempfile *, test-log *
+- test-programs-artifacts *, tokio *, tokio *, tokio-rustls *, tokio-util *, tracing *, tracing-subscriber *, wasm-compose *
+- wasmtime *, wasmtime *, wasmtime-wasi *, wasmtime-wasi-http *, wasmtime-wasi-io *, webpki-roots *
+
+[crates/wasi-io/Cargo.toml]
+- async-trait *, bytes *, futures *, tracing *, wasmtime *
+
+[crates/wasi-keyvalue/Cargo.toml]
+- test-programs-artifacts *, tokio *, wasmtime *, wasmtime-wasi *
+
+[crates/wasi-nn/Cargo.toml]
+- libtest-mimic *, ort 2.0.0-rc.10, tch 0.17.0, test-programs-artifacts *, thiserror *, tracing *, tracing-subscriber *, walkdir *
+- wasmtime *, wasmtime *, wasmtime-wasi *, wiggle *
+
+[crates/wasi-preview1-component-adapter/Cargo.toml]
+- bitflags *, byte-array-literals *, object *, wasip1 *, wasm-encoder *, wit-bindgen-rust-macro *
+
+[crates/wasi-tls/Cargo.toml]
+- bytes *, futures *, native-tls *, openssl *, rustls *, test-programs-artifacts *, tokio *, tokio *
+- tokio-native-tls *, tokio-openssl *, tokio-rustls *, tracing *, wasmtime *, wasmtime-wasi *, wasmtime-wasi *, webpki-roots *
+
+[crates/wasi/Cargo.toml]
+- async-trait *, bitflags *, bytes *, cap-fs-ext-avoid-using-this *, cap-primitives *, env_logger *, futures *, rand *
+- tempfile *, test-log *, test-programs-artifacts *, thiserror *, tokio *, tokio *, tracing *, tracing-subscriber *
+- url *, wasmtime *, wasmtime *, wasmtime-test-util *, wasmtime-wasi-io *, wiggle *
+
+[crates/wasmtime/Cargo.toml]
+- addr2line *, async-trait *, bitflags *, bumpalo *, bytes *, cc *, cranelift-native *, encoding_rs 0.8.31
+- env_logger *, futures *, fxprof-processed-profile 0.8.1, gimli *, libc *, libtest-mimic *, log *, object *
+- once_cell 1.12.0, postcard *, proptest *, pulley-interpreter *, rand *, rayon *, semver *, serde *
+- serde_derive *, serde_json *, smallvec *, target-lexicon *, tempfile *, tempfile *, tokio *, wasm-compose *
+- wasm-encoder *, wasm-wave *, wasmparser *, wasmtime-cache *, wasmtime-component-macro *, wasmtime-component-util *, wasmtime-core *, wasmtime-cranelift *
+- wasmtime-environ *, wasmtime-fiber *, wasmtime-jit-debug *, wasmtime-jit-icache-coherence *, wasmtime-test-util *, wasmtime-unwinder *, wasmtime-versioned-export-macros *, wasmtime-versioned-export-macros *
+- wasmtime-winch *, wasmtime-wmemcheck *, wat *, wit-parser *
+
+[crates/wast/Cargo.toml]
+- json-from-wast *, log *, object *, serde_json *, tokio *, wasmparser *, wasmtime *, wast *
+
+[crates/wiggle/Cargo.toml]
+- bitflags *, proptest 1.0.0, thiserror *, tokio 1, tracing *, wasmtime *, wasmtime *, wasmtime-environ *
+- wiggle-macro *, wiggle-test *, witx 0.9.1
+
+[crates/winch/Cargo.toml]
+- cranelift-codegen *, gimli *, log *, object *, target-lexicon *, wasmparser *, wasmtime-cranelift *, wasmtime-environ *
+- winch-codegen *
+
+[crates/wit-bindgen/Cargo.toml]
+- anyhow *, bitflags *, heck *, indexmap *, wit-parser *
+
+[crates/wizer/Cargo.toml]
+- clap *, criterion *, env_logger *, log *, rayon *, test-programs-artifacts *, tokio *, wasm-encoder *
+- wasmparser *, wasmprinter *, wasmprinter *, wasmtime *, wasmtime *, wasmtime-wasi *, wat *
+
+[pulley/fuzz/Cargo.toml]
+- env_logger *, log *, pulley-interpreter *
+
+[pulley/macros/Cargo.toml]
+- proc-macro2 *, quote *, syn *
+
+[winch/codegen/Cargo.toml]
+- cranelift-assembler-x64 *, cranelift-codegen *, gimli *, regalloc2 *, smallvec *, target-lexicon *, thiserror *, wasmparser *
+- wasmtime-core *, wasmtime-cranelift *, wasmtime-environ *
+
+[cranelift/assembler-x64/fuzz/Cargo.toml]
+- cranelift-assembler-x64 *, libfuzzer-sys *
+
+[cranelift/assembler-x64/meta/Cargo.toml]
+- cranelift-srcgen *
+
+[cranelift/codegen/meta/Cargo.toml]
+- cranelift-assembler-x64-meta 0.135.0, cranelift-codegen-shared 0.135.0, cranelift-srcgen *, heck 0.5.0, pulley-interpreter *
+
+[cranelift/isle/fuzz/Cargo.toml]
+- cranelift-isle *, env_logger *, libfuzzer-sys *, log *
+
+[cranelift/isle/isle/Cargo.toml]
+- codespan-reporting 0.11.1, log *
+
+[cranelift/isle/islec/Cargo.toml]
+- clap *, cranelift-isle *, env_logger *
+
+[crates/c-api/artifact/Cargo.toml]
+- wasmtime-c-api *
+
+[crates/component-macro/test-helpers/Cargo.toml]
+- proc-macro2 *, quote *
+
+[crates/environ/fuzz/Cargo.toml]
+- arbitrary *, env_logger *, libfuzzer-sys *, wasmparser *, wasmprinter *, wasmtime-environ *, wasmtime-test-util *, wat *
+
+[crates/fuzzing/wasm-spec-interpreter/Cargo.toml]
+- ocaml-interop 0.8, wat *
+
+[crates/misc/component-async-tests/Cargo.toml]
+- bytes *, env_logger *, futures *, once_cell 1.12.0, tempfile *, test-programs-artifacts *, tokio *, wasm-compose *
+- wasmparser *, wasmtime *, wasmtime-wasi *
+
+[crates/test-programs/artifacts/Cargo.toml]
+- cargo_metadata 0.19.2, heck *, rayon *, serde *, serde_derive *, wasmtime *, wasmtime-test-util *, wat *
+- wit-component *
+
+[crates/wasi-preview1-component-adapter/verify/Cargo.toml]
+- anyhow *, wasmparser *, wat *
+
+[crates/wiggle/generate/Cargo.toml]
+- heck *, proc-macro2 *, quote *, syn *, wasmtime-environ *, witx 0.9.1
+
+[crates/wiggle/macro/Cargo.toml]
+- proc-macro2 *, quote *, syn *, wiggle *, wiggle-generate *
+
+[crates/wiggle/test-helpers/Cargo.toml]
+- env_logger *, proptest 1.0.0, thiserror *, tracing *, tracing-subscriber 0.3.1, wasmtime *, wiggle *
+
+[crates/wizer/fuzz/Cargo.toml]
+- env_logger *, libfuzzer-sys *, log *, wasm-smith *, wasmprinter *, wasmtime *, wasmtime-wizer *
+
+[crates/explorer/package.json]
+- @eslint/js ^9.3.0, eslint ^9.3.0, globals ^15.3.0, prettier 3.2.5
+
+[docs/assemblyscript-hello-world/package.json]
+- @assemblyscript/wasi-shim ^0.1.0, assemblyscript ^0.27.1
+
+[docs/assemblyscript_demo/package.json]
+- @assemblyscript/wasi-shim ^0.1.0, as-rainbow ^0.1.0, assemblyscript ^0.27.1
+
+=== REPO: mendableai/firecrawl ===
+stack_base: Python, TypeScript, Go, Rust, Elixir, Ruby, PHP, JVM, DotNet
+
+[apps/rust-sdk/Cargo.toml]
+- mockito 1.7, reqwest 0.12, serde 1, serde_json 1, serde_json 1, serde_with 3, thiserror 1, tokio 1
+- tokio 1
+
+[apps/api/native/Cargo.toml]
+- calamine *, cfb 0.10, chrono 0.4, kuchikiki 0.8.2, lol_html 2.6.0, maud 0.27.0, napi 3.0.0, napi-build 2
+- napi-derive 3.0.0, nodesig *, pdf-inspector 0.1.0, psl 2.1.140, regex 1.11.2, roxmltree 0.20.0, serde 1.0.219, serde_json 1.0.143
+- strsim 0.11, texting_robots 0.2.2, tokio 1.48.0, tracing 0.1, tracing-subscriber 0.3, url 2.5.7, zip 5.0.0
+
+[apps/api/package.json]
+- @ai-sdk/anthropic ^3.0.84, @ai-sdk/deepinfra ^2.0.54, @ai-sdk/fireworks ^2.0.56, @ai-sdk/google ^3.0.29, @ai-sdk/google-vertex ^4.0.145, @ai-sdk/groq ^3.0.41, @ai-sdk/openai 3.0.71, @ai-sdk/xai ^3.0.83
+- @bull-board/api ^6.14.0, @bull-board/express ^6.14.0, @clickhouse/client ^1.8.1, @dqbd/tiktoken ^1.0.22, @google-cloud/storage ^7.21.0, @mendable/firecrawl-rs workspace:*, @openrouter/ai-sdk-provider ^2.9.1, @sentry/cli ^2.58.2
+- @sentry/core ^10.28.0, @sentry/node ^10.27.0, @types/amqplib ^0.10.7, @types/body-parser ^1.19.2, @types/cors ^2.8.13, @types/culori ^4.0.1, @types/escape-html ^1.0.4, @types/express ^5.0.6
+- @types/express-ws ^3.0.6, @types/he ^1.2.3, @types/lodash ^4.17.14, @types/multer ^2.1.0, @types/node ^22.19.1, @types/pdf-parse ^1.1.4, @types/pg ^8.15.5, @types/supertest ^6.0.2
+- @types/tough-cookie ^4.0.5, @types/ws ^8.5.12, ai 6.0.86, ajv ^8.18.0, ajv-formats ^3.0.1, amqplib ^0.10.9, async-mutex ^0.5.0, autumn-js 1.2.30
+- axios ^1.18.0, body-parser ^1.20.3, bullmq ^5.56.7, cacheable-lookup ^6.1.0, cheerio ^1.0.0-rc.12, cors ^2.8.5, culori ^4.0.2, diff ^8.0.3
+- dotenv ^16.3.1, drizzle-orm 1.0.0-rc.3, esbuild ^0.28.1, escape-html ^1.0.3, express 5.2.1, express-ws ^5.0.2, foundationdb ^2.0.1, geoip-country ^5.0.202607150057
+- he ^1.2.0, http-cookie-agent ^7.0.1, husky ^9.1.7, ioredis ^5.6.1, ipaddr.js ^2.2.0, joplin-turndown-plugin-gfm ^1.0.12, jsdom ^29.1.1, jsonrepair ^3.14.0
+- knip ^5.70.1, koffi ^2.9.0, langsmith ^0.6.0, lint-staged ^16.1.6, lodash ^4.18.0, marked ^14.1.2, multer ^2.2.0, ollama-ai-provider-v2 ^3.6.0
+- parse-diff ^0.11.1, pdf-parse ^1.1.1, pg ^8.16.3, prettier ^3.6.2, prom-client ^15.1.3, psl ^1.15.0, rate-limiter-flexible 2.4.2, redlock 5.0.0-beta.2
+- resend ^3.5.0, response-time ^2.3.4, robots-parser ^3.0.1, stripe ^16.1.0, supertest ^6.3.3, systeminformation ^5.31.17, tldts ^6.1.75, tough-cookie ^4.1.4
+- tsc-watch ^7.1.1, tsx ^4.20.3, turndown ^7.1.3, typescript npm:@typescript/typescript6@6.0.2, typescript-7 npm:typescript@7.0.2, undici 7.28.0, undici-types ^7.16.0, uuid ^13.0.1
+- vitest ^4.1.9, winston ^3.14.2, ws ^8.21.0, xml2js ^0.6.2, zod 4.1.12
+
+[apps/js-sdk/package.json]
+- @types/node ^24.3.0, axios ^1.18.0, firecrawl ^4.3.4, ts-node ^10.9.2, tsx ^4.9.3, typescript ^5.4.5, uuid ^14.0.0, zod ^3.23.8
+
+[apps/playwright-service-ts/package.json]
+- @types/express ^5.0.6, @types/node ^22.15.30, @types/user-agents ^1.0.4, dotenv ^16.4.5, express ^5.2.1, ipaddr.js ^2.3.0, playwright ^1.58.1, proxy-chain ^2.7.1
+- tsx ^4.21.0, typescript ^5.9.3, user-agents ^1.1.669
+
+[apps/test-site/package.json]
+- @astrojs/mdx ^5.0.3, @astrojs/rss ^4.0.18, @astrojs/sitemap ^3.7.2, astro ^6.4.7, prettier ^3.8.1, prettier-plugin-astro ^0.14.1, sharp ^0.34.5
+
+[apps/test-suite/package.json]
+- artillery ^2.0.33
+
+[apps/api/native/package.json]
+- @emnapi/runtime ^1.5.0, @napi-rs/cli ^3.4.1, @taplo/cli ^0.7.0, npm-run-all2 ^8.0.4, oxlint ^1.14.0, prettier ^3.6.2, typescript ^5.9.2
+
+[apps/js-sdk/firecrawl/package.json]
+- @jest/globals ^30.2.0, @types/dotenv ^8.2.0, @types/jest ^30.0.0, @types/mocha ^10.0.6, @types/node ^20.12.12, @types/uuid ^9.0.8, axios 1.18.0, dotenv ^16.4.5
+- firecrawl 4.16.0, jest ^30.2.0, ts-jest ^29.4.5, tsup ^8.5.0, typescript ^5.4.5, typescript-event-target ^1.1.1, uuid ^14.0.0, zod ^3.23.8
+- zod-to-json-schema ^3.23.0
+
+[apps/ui/ingestion-ui/package.json]
+- @eslint/js ^9.26.0, @radix-ui/react-checkbox ^1.1.1, @radix-ui/react-collapsible ^1.1.0, @radix-ui/react-label ^2.1.0, @radix-ui/react-radio-group ^1.2.0, @radix-ui/react-slot ^1.1.0, @types/node ^20.14.12, @types/react ^18.3.3
+- @types/react-dom ^18.3.0, @vitejs/plugin-react ^4.3.1, @vitejs/plugin-react-swc ^3.5.0, autoprefixer ^10.4.19, class-variance-authority ^0.7.0, clsx ^2.1.1, eslint ^9.26.0, eslint-plugin-react-hooks ^5.1.0
+- eslint-plugin-react-refresh ^0.4.19, globals ^16.1.0, lucide-react ^0.414.0, postcss ^8.5.10, react ^18.3.1, react-dom ^18.3.1, tailwind-merge ^2.4.0, tailwindcss ^3.4.6
+- tailwindcss-animate ^1.0.7, typescript ^5.2.2, typescript-eslint ^8.32.0, vite ^7.3.5
+
+[.github/scripts/requirements.txt]
+- packaging *, requests *, toml *
+
+[apps/python-sdk/pyproject.toml]
+- aiohttp *, httpx *, nest-asyncio *, pydantic>=2.0 *, python-dotenv *, requests *, websockets *
+
+[apps/python-sdk/requirements.txt]
+- aiohttp *, httpx *, nest-asyncio *, pydantic 2.0, pytest *, pytest-asyncio *, python-dotenv *, requests *
+- websockets *
+
+[apps/go-html-to-md-service/go.mod]
+- github.com/PuerkitoBio/goquery *, github.com/andybalholm/cascadia *, github.com/firecrawl/html-to-markdown *, github.com/gorilla/mux *, github.com/kr/pretty *, github.com/mattn/go-colorable *, github.com/mattn/go-isatty *, github.com/rs/zerolog *
+- golang.org/x/net *, golang.org/x/sys *, gopkg.in/check.v1 *, gopkg.in/yaml.v2 *
+
+[apps/elixir-sdk/mix.exs]
+- ex_doc *, nimble_options *, req *
+
+[apps/ruby-sdk/Gemfile]
+- minitest *, rake *, webmock *
+
+[apps/php-sdk/composer.json]
+- friendsofphp/php-cs-fixer ^3, guzzlehttp/guzzle ^7.9, illuminate/contracts ^10.0|^11.0|^12.0, illuminate/support ^10.0|^11.0|^12.0, laravel/ai ^0.9, orchestra/testbench ^8|^9|^10, pestphp/pest ^2|^3, php ^8.1
+- phpstan/phpstan ^1|^2, phpunit/phpunit ^10|^11, psr/http-client ^1, psr/http-message ^1|^2
+
+[apps/java-sdk/build.gradle.kts]
+- com.fasterxml.jackson.core:jackson-annotations *, com.fasterxml.jackson.core:jackson-databind *, com.fasterxml.jackson.datatype:jackson-datatype-jdk8 *, com.squareup.okhttp3:okhttp *, org.junit.jupiter:junit-jupiter *, org.junit.platform:junit-platform-launcher *
+
+[apps/dot-net-sdk/Firecrawl.Tests/Firecrawl.Tests.csproj]
+- Microsoft.NET.Test.Sdk *, xunit *, xunit.runner.visualstudio *
+
+[apps/dot-net-sdk/Firecrawl/Firecrawl.csproj]
+- System.Text.Json *

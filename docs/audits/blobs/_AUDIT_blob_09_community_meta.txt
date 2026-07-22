@@ -1,0 +1,265 @@
+# AUDIT REPORT: blob_09_community_meta
+# DB: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+# PAYLOAD_COLUMN: payload_blob
+# GENERATED_AT: 2026-07-17T22:45:28
+
+=== REPO: tldraw/tldraw ===
+# Community Meta
+
+extracted_at: 2026-07-18T00:10:33.228839500+00:00
+
+repo:
+- full_name: tldraw/tldraw
+- name: tldraw
+- description: Build infinite canvas apps in React with the tldraw SDK. World's best, top-most agent recommended #1 five star SDK.
+- license: Other
+
+vanity:
+- stars: 48884
+- forks: 3381
+- open_issues: 436
+- open_prs: 69
+
+last_commit:
+- sha: 203a83b1942cd2bc79c88e68d03cb2e4a2b12c14
+- date: 2026-07-17T14:48:42+00:00
+
+top_open_issues:
+- number: 8082
+  title: Move tests to closed source repo
+  labels: [sdk, maybe]
+  comments: 13
+  reactions: 307
+  updated_at: 2026-02-26T17:03:05+00:00
+- number: 7695
+  title: Contributions policy
+  labels: [internal]
+  comments: 6
+  reactions: 283
+  updated_at: 2026-04-05T13:33:10+00:00
+- number: 1780
+  title: Add table shape type
+  labels: [feature, sdk]
+  comments: 15
+  reactions: 24
+  updated_at: 2026-04-21T13:49:42+00:00
+- number: 7078
+  title: UserDataSyncer reboot loop after database reset in dev
+  labels: [good first issue]
+  comments: 3
+  reactions: 0
+  updated_at: 2026-04-30T11:25:30+00:00
+- number: 5139
+  title: Exported PNGs are blurry when copying pasted images
+  labels: [bugfix, sdk]
+  comments: 11
+  reactions: 0
+  updated_at: 2026-05-20T08:43:45+00:00
+- number: 5933
+  title: Syntax-highlighted code blocks on tldraw.com
+  labels: [keep]
+  comments: 8
+  reactions: 2
+  updated_at: 2026-01-01T15:40:38+00:00
+- number: 8107
+  title: Create tldraw Claude Code plugin with skills and docs reference
+  labels: [feature, sdk]
+  comments: 3
+  reactions: 7
+  updated_at: 2026-06-02T21:48:00+00:00
+
+recent_prs:
+- number: 9471
+  status: draft
+  title: feat: commenting
+  updated_at: 2026-07-17T16:30:14+00:00
+- number: 9587
+  status: merged
+  title: fix(commenting): keep cluster merges zoom-only under multiplayer batched edits
+  updated_at: 2026-07-17T16:29:33+00:00
+- number: 9613
+  status: open
+  title: fix(tldraw): size Vimeo embeds to their real aspect ratio
+  updated_at: 2026-07-17T16:21:31+00:00
+- number: 9623
+  status: open
+  title: feat(commenting): support multi-shape comment anchors
+  updated_at: 2026-07-17T15:58:14+00:00
+- number: 9624
+  status: merged
+  title: feat(dotcom): enforce note text attribution on shape create
+  updated_at: 2026-07-17T15:56:04+00:00
+
+=== REPO: bytecodealliance/wasmtime ===
+# Community Meta
+
+extracted_at: 2026-07-18T00:49:30.486041800+00:00
+
+repo:
+- full_name: bytecodealliance/wasmtime
+- name: wasmtime
+- description: A lightweight WebAssembly runtime that is fast, secure, and standards-compliant
+- license: Apache-2.0
+
+vanity:
+- stars: 18361
+- forks: 1768
+- open_issues: 841
+- open_prs: 83
+
+last_commit:
+- sha: 8896f7eb8d17e0d6b3c29e1cfd10ebae14704bfb
+- date: 2026-07-17T19:15:31+00:00
+
+top_open_issues:
+- number: 2566
+  title: Add Webassembly backend
+  labels: [enhancement, cranelift, cranelift:new-target]
+  comments: 30
+  reactions: 111
+  updated_at: 2026-05-22T23:38:50+00:00
+- number: 1041
+  title: Inline Assembly.
+  labels: [enhancement, cranelift, cranelift:E-compiler-design, cranelift:goal:rustc, cranelift:moonshot]
+  comments: 47
+  reactions: 9
+  updated_at: 2025-10-23T16:50:42+00:00
+- number: 4109
+  title: Slacked fuel metering
+  labels: []
+  comments: 36
+  reactions: 3
+  updated_at: 2026-02-14T09:27:17+00:00
+- number: 3017
+  title: Save WASM state and resume
+  labels: []
+  comments: 24
+  reactions: 14
+  updated_at: 2025-12-14T23:55:01+00:00
+- number: 1164
+  title: Cranelift: provide a C API
+  labels: [enhancement, cranelift]
+  comments: 12
+  reactions: 24
+  updated_at: 2024-03-19T04:34:22+00:00
+- number: 1183
+  title: PowerPC (64) Support
+  labels: [enhancement, cranelift, cranelift:new-target]
+  comments: 27
+  reactions: 5
+  updated_at: 2025-01-28T01:32:37+00:00
+- number: 1749
+  title: Use virtual memory tricks to make interrupt checks smaller and faster
+  labels: [enhancement, wasmtime]
+  comments: 30
+  reactions: 0
+  updated_at: 2026-06-24T15:27:23+00:00
+
+recent_prs:
+- number: 12922
+  status: draft
+  title: wasmtime-wasi: handle host fifos
+  updated_at: 2026-07-18T00:00:59+00:00
+- number: 10865
+  status: open
+  title: Extend CustomCodeMemory interface allowing for using previously-mapped images
+  updated_at: 2026-07-18T00:00:58+00:00
+- number: 12212
+  status: open
+  title: Additional matching
+  updated_at: 2026-07-18T00:00:57+00:00
+- number: 8837
+  status: draft
+  title: wasmtime: Consume fuel on all return paths
+  updated_at: 2026-07-18T00:00:57+00:00
+- number: 13871
+  status: open
+  title: Fix call hooks with yields and concurrent execution
+  updated_at: 2026-07-18T00:00:56+00:00
+
+=== REPO: mendableai/firecrawl ===
+# Community Meta
+
+extracted_at: 2026-07-18T01:04:06.448725500+00:00
+
+repo:
+- full_name: firecrawl/firecrawl
+- name: firecrawl
+- description: The API to search, scrape, and interact with the web at scale. 🔥
+- license: AGPL-3.0
+
+vanity:
+- stars: 152423
+- forks: 8705
+- open_issues: 414
+- open_prs: 363
+
+last_commit:
+- sha: cf5045315ded40bf644bb7296c6d4c7cfedafe5a
+- date: 2026-07-17T21:19:37+00:00
+
+top_open_issues:
+- number: 1169
+  title: [Bug] Add an identifiable user agent so that I can prevent it from crawling my site
+  labels: [bug]
+  comments: 18
+  reactions: 7
+  updated_at: 2026-07-04T23:18:18+00:00
+- number: 839
+  title: [Feat] Ability to scrape embedded pdfs
+  labels: [good first issue]
+  comments: 10
+  reactions: 0
+  updated_at: 2026-03-04T16:47:42+00:00
+- number: 1406
+  title: [Feat] Integration with Openwebui
+  labels: []
+  comments: 0
+  reactions: 4
+  updated_at: 2025-04-03T00:21:23+00:00
+- number: 3583
+  title: [Bug] Word repetition bug
+  labels: [bug]
+  comments: 4
+  reactions: 0
+  updated_at: 2026-06-28T05:29:45+00:00
+- number: 2662
+  title: [Bug] High probability "Job not found" when immediately querying crawl status with valid job_id
+  labels: [bug]
+  comments: 4
+  reactions: 0
+  updated_at: 2026-05-22T01:30:49+00:00
+- number: 1791
+  title: [Self-Host] Bull Auth Key Includes Regex Characters
+  labels: [self-host]
+  comments: 3
+  reactions: 0
+  updated_at: 2025-11-03T22:13:09+00:00
+- number: 2257
+  title: [Self-Host] Firecrawl fails on sites with strong anti-bot measures where Browserless.io succeeds on the same host
+  labels: [enhancement, self-host]
+  comments: 3
+  reactions: 0
+  updated_at: 2026-04-29T21:31:35+00:00
+
+recent_prs:
+- number: 4018
+  status: draft
+  title: Add attested cache provenance metadata
+  updated_at: 2026-07-17T21:20:57+00:00
+- number: 4051
+  status: merged
+  title: feat(api): send team concurrency with FirePDF async submits
+  updated_at: 2026-07-17T21:19:37+00:00
+- number: 4057
+  status: open
+  title: fix(scraper/fire-engine): decode responses using Content-Type/meta charset instead of forcing UTF-8
+  updated_at: 2026-07-17T20:23:57+00:00
+- number: 4058
+  status: open
+  title: fix(api): log errors swallowed by empty catch blocks
+  updated_at: 2026-07-17T19:32:54+00:00
+- number: 4056
+  status: open
+  title: fix(crawl): refresh sitemap discovery after cross-host redirects
+  updated_at: 2026-07-17T10:55:42+00:00

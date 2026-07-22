@@ -30,7 +30,7 @@ pub enum SsotError {
 
 pub struct SsotInjector;
 
-const SSOT_EXPECTED_COLUMNS: usize = 82;
+const SSOT_EXPECTED_COLUMNS: usize = 85;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
 #[cfg(not(test))]
@@ -732,7 +732,8 @@ impl SsotInjector {
                     }
 
                     let jitter = if policy.jitter_ms > 0 {
-                        fastrand::u64(0..=policy.jitter_ms)
+                        use tinyrand::RandRange;
+                        crate::telemetry::dynamic_wyrand().next_range(0..policy.jitter_ms.saturating_add(1))
                     } else {
                         0
                     };
@@ -2601,12 +2602,12 @@ mod tests {
         let url = SsotInjector::build_google_sheets_values_url_with_base(
             "https://example.test/v4/spreadsheets",
             "sheet_123",
-            "MASTER_SOLUTIONS!A1:CD1",
+            "MASTER_SOLUTIONS!A1:CG1",
         )
         .unwrap();
         assert_eq!(
             url,
-            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CD1?majorDimension=ROWS"
+            "https://example.test/v4/spreadsheets/sheet_123/values/MASTER_SOLUTIONS!A1:CG1?majorDimension=ROWS"
         );
     }
 

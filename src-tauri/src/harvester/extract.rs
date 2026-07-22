@@ -640,20 +640,40 @@ fn is_frontend_file(path: &Path) -> bool {
             matches!(
                 lower.as_str(),
                 "ui" | "frontend" | "components" | "views" | "routes" | "app" | "pages"
+                | "packages" | "apps" | "editor" | "client" | "shared" | "src" | "templates" | "widgets" | "features"
             )
         });
-    let valid_extension = matches!(
-        path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.to_ascii_lowercase()),
-        Some(ext) if matches!(ext.as_str(), "ts" | "tsx" | "js" | "jsx" | "svelte" | "vue")
-    );
+
+    let ext_lower = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+
+    let has_valid_extension = if in_frontend_dir {
+        matches!(
+            ext_lower.as_deref(),
+            Some("ts" | "tsx" | "js" | "jsx" | "svelte" | "vue")
+        )
+    } else {
+        matches!(
+            ext_lower.as_deref(),
+            Some("tsx" | "jsx" | "svelte" | "vue")
+        )
+    };
+
     let has_real_ui_scope = has_path_segment(path, "src")
         || has_path_segment(path, "components")
         || has_path_segment(path, "views")
         || has_path_segment(path, "routes")
         || has_path_segment(path, "app")
-        || has_path_segment(path, "pages");
+        || has_path_segment(path, "pages")
+        || has_path_segment(path, "packages")
+        || has_path_segment(path, "apps")
+        || has_path_segment(path, "editor")
+        || has_path_segment(path, "client")
+        || has_path_segment(path, "ui");
 
-    in_frontend_dir && valid_extension && has_real_ui_scope
+    has_valid_extension && has_real_ui_scope
 }
 
 fn should_skip_documentation_path(path: &Path) -> bool {
@@ -955,6 +975,29 @@ fn extract_frontend_contracts_from_content(path: &Path, content: &str) -> Vec<St
     entries.extend(extract_regex_frontend_signals(&source_text));
     prioritize_ux_entries(entries)
 }
+
+fn extract_fallback_frontend_contracts(content: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("export function ")
+            || trimmed.starts_with("export const ")
+            || trimmed.starts_with("export class ")
+            || trimmed.starts_with("export default function")
+            || trimmed.contains("createFileRoute")
+            || trimmed.contains("createRoute")
+            || trimmed.contains("<Route")
+            || trimmed.contains("defineComponent")
+        {
+            if items.len() < 10 {
+                let item = trimmed.chars().take(120).collect::<String>();
+                items.push(format!("component {item}"));
+            }
+        }
+    }
+    items
+}
+
 
 fn prioritize_ux_entries(entries: Vec<String>) -> Vec<String> {
     let mut types = Vec::new();
@@ -1330,7 +1373,10 @@ impl UxContractsExtractor {
                     continue;
                 };
                 let rel = relative_display(&root, &path);
-                let semantics = extract_frontend_contracts_from_content(&path, &content);
+                let mut semantics = extract_frontend_contracts_from_content(&path, &content);
+                if semantics.is_empty() {
+                    semantics = extract_fallback_frontend_contracts(&content);
+                }
 
                 if !semantics.is_empty() {
                     sections.push(ScopedTextBlock {
@@ -2389,11 +2435,15 @@ impl ManifestExtractor {
             #[serde(rename = "build-dependencies")]
             build_dependencies: Option<BTreeMap<String, toml::Value>>,
             workspace: Option<CargoWorkspace>,
+            #[serde(flatten)]
+            _extra: BTreeMap<String, toml::Value>,
         }
 
         #[derive(Deserialize)]
         struct CargoWorkspace {
             dependencies: Option<BTreeMap<String, toml::Value>>,
+            #[serde(flatten)]
+            _extra: BTreeMap<String, toml::Value>,
         }
 
         let manifest: CargoManifest = toml::from_str(content).map_err(|e| ExtractionError::ParseError {
@@ -2724,7 +2774,7 @@ pub fn render_community_meta_dossier(
 ) -> Vec<u8> {
     let mut text = String::from("# Community Meta\n");
     text.push_str("\nextracted_at: ");
-    text.push_str(&payload.extracted_at.to_rfc3339());
+    text.push_str(&payload.extracted_at);
 
     if let Some(reason) = fetch_error {
         text.push_str("\n\nfallback: true\nreason: ");
@@ -2764,9 +2814,9 @@ pub fn render_community_meta_dossier(
     } else {
         text.push_str("\n- sha: <unknown>");
     }
-    if let Some(date) = payload.last_commit_date {
+    if let Some(date) = &payload.last_commit_date {
         text.push_str("\n- date: ");
-        text.push_str(&date.to_rfc3339());
+        text.push_str(date);
     } else {
         text.push_str("\n- date: <unknown>");
     }
@@ -2798,9 +2848,9 @@ pub fn render_community_meta_dossier(
             text.push_str(&issue.comments.to_string());
             text.push_str("\n  reactions: ");
             text.push_str(&issue.reactions.to_string());
-            if let Some(updated_at) = issue.updated_at {
+            if let Some(updated_at) = &issue.updated_at {
                 text.push_str("\n  updated_at: ");
-                text.push_str(&updated_at.to_rfc3339());
+                text.push_str(updated_at);
             }
         }
     }
@@ -2817,7 +2867,7 @@ pub fn render_community_meta_dossier(
             text.push_str("\n  title: ");
             text.push_str(&sanitize_one_line(&pr.title));
             text.push_str("\n  updated_at: ");
-            text.push_str(&pr.updated_at.to_rfc3339());
+            text.push_str(&pr.updated_at);
         }
     }
 
@@ -3362,7 +3412,7 @@ serde = { version = "1.0.210", features = ["derive"] }
     async fn test_ux_contracts_skips_documentation_and_keeps_real_ui() {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("documentation/src/components")).await.unwrap();
-        fs::create_dir_all(dir.path().join("ui/desktop/src/components")).await.unwrap();
+        fs::create_dir_all(dir.path().join("ui/src/components")).await.unwrap();
 
         fs::write(
             dir.path().join("documentation/src/components/MarketingCard.tsx"),
@@ -3371,7 +3421,7 @@ serde = { version = "1.0.210", features = ["derive"] }
         .await
         .unwrap();
         fs::write(
-            dir.path().join("ui/desktop/src/components/AppShell.tsx"),
+            dir.path().join("ui/src/components/AppShell.tsx"),
             "type AppShellProps = { title: string }\nfunction AppShell(props: AppShellProps) { const [state] = useState('app'); return <main>{props.title}</main>; }\n",
         )
         .await
@@ -3382,7 +3432,7 @@ serde = { version = "1.0.210", features = ["derive"] }
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
         assert!(!text.contains("documentation/src/components/MarketingCard.tsx"));
-        assert!(text.contains("[ui/desktop/src/components/AppShell.tsx]"));
+        assert!(text.contains("[ui/src/components/AppShell.tsx]"));
         assert!(text.contains("- type AppShellProps"));
         assert!(text.contains("- props: AppShellProps"));
         assert!(text.contains("- state [state] = useState()"));
@@ -3391,29 +3441,29 @@ serde = { version = "1.0.210", features = ["derive"] }
     #[tokio::test]
     async fn test_ux_contracts_skips_config_generated_and_test_noise() {
         let dir = TempDir::new().unwrap();
-        fs::create_dir_all(dir.path().join("ui/desktop/src/components")).await.unwrap();
-        fs::create_dir_all(dir.path().join("ui/desktop/src/api")).await.unwrap();
+        fs::create_dir_all(dir.path().join("ui/src/components")).await.unwrap();
+        fs::create_dir_all(dir.path().join("ui/src/api")).await.unwrap();
 
         fs::write(
-            dir.path().join("ui/desktop/eslint.config.js"),
+            dir.path().join("ui/eslint.config.js"),
             "description: 'lint rule'\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("ui/desktop/src/App.test.tsx"),
+            dir.path().join("ui/src/App.test.tsx"),
             "const [value, setValue] = useState(false)\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("ui/desktop/src/api/types.gen.ts"),
+            dir.path().join("ui/src/api/types.gen.ts"),
             "description: string;\n",
         )
         .await
         .unwrap();
         fs::write(
-            dir.path().join("ui/desktop/src/components/AppShell.tsx"),
+            dir.path().join("ui/src/components/AppShell.tsx"),
             "interface AppShellProps {\n  title: string;\n}\nfunction AppShell(props: AppShellProps) {\n  console.log(props.title);\n  try {\n    toast.error('noisy');\n  } catch (_error) {}\n  const [open, setOpen] = useState(false);\n  return <section>{props.title}</section>;\n}\n",
         )
         .await
@@ -3423,10 +3473,10 @@ serde = { version = "1.0.210", features = ["derive"] }
         let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
-        assert!(!text.contains("ui/desktop/eslint.config.js"));
-        assert!(!text.contains("ui/desktop/src/App.test.tsx"));
-        assert!(!text.contains("ui/desktop/src/api/types.gen.ts"));
-        assert!(text.contains("[ui/desktop/src/components/AppShell.tsx]"));
+        assert!(!text.contains("ui/eslint.config.js"));
+        assert!(!text.contains("ui/src/App.test.tsx"));
+        assert!(!text.contains("ui/src/api/types.gen.ts"));
+        assert!(text.contains("[ui/src/components/AppShell.tsx]"));
         assert!(text.contains("- interface AppShellProps"));
         assert!(text.contains("- state [open, setOpen] = useState()"));
         assert!(text.contains("- props: AppShellProps"));
@@ -3438,9 +3488,9 @@ serde = { version = "1.0.210", features = ["derive"] }
     #[tokio::test]
     async fn test_ux_contracts_preserve_all_items_per_file() {
         let dir = TempDir::new().unwrap();
-        fs::create_dir_all(dir.path().join("ui/desktop/src/components")).await.unwrap();
+        fs::create_dir_all(dir.path().join("ui/src/components")).await.unwrap();
         fs::write(
-            dir.path().join("ui/desktop/src/components/ComplexPanel.tsx"),
+            dir.path().join("ui/src/components/ComplexPanel.tsx"),
             "interface A {}\ninterface B {}\ninterface C {}\ninterface D {}\nfunction ComplexPanel(props: A) { const [a, setA] = useState(false); const [b, setB] = useState(false); const [c, setC] = useState(false); const [d, setD] = useState(false); const [e, setE] = useState(false); return <main />; }\n",
         )
         .await
@@ -3450,7 +3500,7 @@ serde = { version = "1.0.210", features = ["derive"] }
         let blob = UxContractsExtractor::extract_blob(&repo_path).await.unwrap();
         let text = String::from_utf8_lossy(&blob.payload_blob);
 
-        assert!(text.contains("[ui/desktop/src/components/ComplexPanel.tsx]"));
+        assert!(text.contains("[ui/src/components/ComplexPanel.tsx]"));
         assert!(text.contains("- props: A"));
         assert!(text.contains("- state [a, setA] = useState()"));
         assert!(text.contains("- state [e, setE] = useState()"));

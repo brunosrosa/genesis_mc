@@ -30,18 +30,6 @@ struct Args {
     #[arg(long)]
     db_path: Option<PathBuf>,
 
-    /// Enable streamable HTTP mode (default: stdio)
-    #[arg(short = 's', long = "stream")]
-    stream_mode: bool,
-
-    /// HTTP port for stream mode
-    #[arg(short = 'p', long, default_value = "8000")]
-    port: u16,
-
-    /// Bind address for stream mode
-    #[arg(short = 'b', long, default_value = "127.0.0.1")]
-    bind: String,
-
     /// Enable file logging. Optionally specify log file name (default: memory-mcp-rs.log)
     #[arg(short = 'l', long, value_name = "FILE", num_args = 0..=1, default_missing_value = "memory-mcp-rs.log")]
     log: Option<String>,
@@ -362,42 +350,6 @@ async fn run_stdio_mode(server: MemoryServer) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-/// Run server in streamable HTTP mode
-async fn run_stream_mode(
-    server: MemoryServer,
-    bind: &str,
-    port: u16,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-    use rmcp::transport::StreamableHttpService;
-
-    let addr = format!("{}:{}", bind, port);
-    tracing::info!("Starting MCP HTTP server on http://{}/mcp", addr);
-
-    // Create service with session management
-    let service = StreamableHttpService::new(
-        move || Ok(server.clone()),
-        LocalSessionManager::default().into(),
-        Default::default(),
-    );
-
-    // Build router with MCP endpoint and health check
-    let router = axum::Router::new()
-        .nest_service("/mcp", service)
-        .route("/health", axum::routing::get(|| async { "OK" }));
-
-    let tcp_listener = tokio::net::TcpListener::bind(&addr).await?;
-
-    // Start server with graceful shutdown
-    axum::serve(tcp_listener, router)
-        .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c().await.ok();
-        })
-        .await?;
-
-    Ok(())
-}
-
 /// Canonicalize database path to prevent path traversal attacks
 /// Extension validation is done in storage::Database::open()
 fn canonicalize_db_path(path: &std::path::Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -428,17 +380,8 @@ fn canonicalize_db_path(path: &std::path::Path) -> Result<PathBuf, Box<dyn std::
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    // Determine transport mode
-    let mode = if args.stream_mode {
-        TransportMode::Stream
-    } else {
-        TransportMode::Stdio
-    };
-
-    // Initialize logging based on mode
-    // CRITICAL: stdio mode MUST NOT log to stderr by default!
-    // Any stderr output during handshake causes "connection closed" in MCP clients
-    init_logging(mode, args.log)?;
+    // Initialize logging strictly in Stdio mode
+    init_logging(TransportMode::Stdio, args.log)?;
 
     // Get database path from args or environment or use default
     let db_path = args
@@ -465,9 +408,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create server
     let server = MemoryServer::new(manager);
 
-    // Run in selected mode
-    match mode {
-        TransportMode::Stdio => run_stdio_mode(server).await,
-        TransportMode::Stream => run_stream_mode(server, &args.bind, args.port).await,
-    }
+    // Run server strictly via stdio
+    run_stdio_mode(server).await
 }

@@ -74,6 +74,7 @@ pub fn cargo_metadata_args(manifest_path: &Path, use_locked: bool) -> Vec<String
         "metadata".to_string(),
         "--format-version".to_string(),
         "1".to_string(),
+        "--no-deps".to_string(),
     ];
     if use_locked {
         args.push("--locked".to_string());
@@ -149,7 +150,7 @@ pub fn build_rust_clippy_plan(manifest: &DiscoveredManifest) -> Result<RustClipp
         )
     })?;
     let manifest_value = manifest_text
-        .parse::<toml::Value>()
+        .parse::<toml::Table>()
         .map_err(|error| format!("manifesto TOML invalido em {}: {error}", manifest.scope))?;
     let package_table = manifest_value
         .get("package")
@@ -230,7 +231,7 @@ pub fn audit_transitive_rust_manifests(
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
             ))
         })?;
-        let _manifest_value = manifest_text.parse::<toml::Value>().map_err(|error| {
+        let _manifest_value = manifest_text.parse::<toml::Table>().map_err(|error| {
             fail_closed_rust_manifest(format!(
                 "manifesto transitivo invalido em '{}': {error}",
                 sanitize_host_paths_in_text(repo_path, &manifest_path.display().to_string())
@@ -253,7 +254,7 @@ pub fn expand_cargo_workspace_wildcards(workspace_root: &Path) -> Result<(), Str
         .map_err(|e| format!("Falha ao ler manifest raiz: {e}"))?;
 
     let mut manifest_value = manifest_text
-        .parse::<toml::Value>()
+        .parse::<toml::Table>()
         .map_err(|e| format!("TOML invalido no manifest raiz: {e}"))?;
 
     let workspace_table = match manifest_value.get_mut("workspace").and_then(|v| v.as_table_mut()) {
@@ -462,7 +463,13 @@ pub async fn run_rust_clippy_preflight<E: SandboxExecutor>(
         metadata_run_dir = ws_root.as_path();
         // Build args WITHOUT --manifest-path and WITHOUT --locked for workspace root.
         // The --locked flag is unsafe for workspace root (may not have a lockfile for root).
-        metadata_args_for_run = vec!["metadata".to_string(), "--format-version".to_string(), "1".to_string(), "--offline".to_string()];
+        metadata_args_for_run = vec![
+            "metadata".to_string(),
+            "--format-version".to_string(),
+            "1".to_string(),
+            "--offline".to_string(),
+            "--no-deps".to_string(),
+        ];
     } else {
         // Não é workspace — usar o manifest do sub-crate como antes.
         metadata_run_dir = execution_root;
@@ -701,7 +708,7 @@ members = ["crates/*"]
         assert_eq!(payload.effective_blade, StaticAnalysisBlade::RustClippy);
         assert!(!payload.bytes.is_empty());
         assert!(calls[0].starts_with("cargo fetch --locked --manifest-path "));
-        assert!(calls[1].starts_with("cargo metadata --format-version 1 --locked --offline --manifest-path "));
+        assert!(calls[1].starts_with("cargo metadata --format-version 1 --no-deps --locked --offline --manifest-path "));
         assert!(calls[2].starts_with("cargo clippy --manifest-path "));
         assert!(calls[2].contains("-p sdk"));
         assert!(calls[2].contains("--no-deps"));
@@ -831,7 +838,7 @@ members = ["crates/*"]
         assert_eq!(calls.len(), 3);
         assert!(calls[0].starts_with("cargo fetch --manifest-path "));
         assert!(!calls[0].contains("--locked"));
-        assert!(calls[1].starts_with("cargo metadata --format-version 1 --offline --manifest-path "));
+        assert!(calls[1].starts_with("cargo metadata --format-version 1 --no-deps --offline --manifest-path "));
         assert!(!calls[1].contains("--locked"));
         assert!(calls[2].starts_with("cargo clippy"));
     }

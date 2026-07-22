@@ -1,5 +1,5 @@
 [package]
-name = "genesis_mc"
+name = "souls_mc"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -11,52 +11,51 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "genesis_mc_lib"
+name = "souls_mc_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"], optional = true }
-tauri-plugin-opener = { version = "2", optional = true }
-oxc = { version = "0.120.0", features = ["ast_visit"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-jsonwebtoken = { version = "10", default-features = false, features = ["use_pem"] }
-regex = "1"
-pulldown-cmark = "0.13.3"
-fastrand = "2"
-tokio = { version = "1", features = ["full"] }
-sysinfo = "0.30"
-thiserror = { version = "2", default-features = false }
-ignore = "0.4"
-tracing = "0.1"
-url = "2"
-sha2 = "0.10"
-toml = "0.8"
-tiktoken-rs = "0.5"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
-astral-tl = "0.7.11"
-octocrab = "0.53.1"
-gix = { version = "0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
-axum = "0.7"
-chrono = { version = "0.4", features = ["serde"] }
-rusqlite = { version = "0.31", features = ["bundled"] }
-sqlparser = "0.62"
-quick-xml = { version = "0.37", features = ["serialize"] }
-tracing-subscriber = "0.3"
-tempfile = "3"
-dotenvy = "0.15"
-quote = "1"
-syn = { version = "2", features = ["full", "visit"] }
-tree-sitter = "0.26.2"
-tree-sitter-c-sharp = "0.23.5"
-tree-sitter-language-pack = { version = "1.9.1", default-features = false, features = ["dynamic-loading"] }
-tree-sitter-yaml = "0.7.2"
+tauri = { version = "=2.11.5", features = ["tray-icon"], optional = true }
+tauri-plugin-opener = { version = "=2.5.4", optional = true }
+oxc = { version = "=0.120.0", features = ["ast_visit"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+jsonwebtoken = { version = "=10.4.0", default-features = false, features = ["use_pem"] }
+regex = "=1.12.4"
+pulldown-cmark = "=0.13.4"
+tinyrand = "=0.5.0"
+tokio = { version = "=1.52.3", features = ["full"] }
+sysinfo = "=0.30.13"
+thiserror = { version = "=2.0.18", default-features = false }
+ignore = "=0.4.27"
+dunce = "=1.0.5"
+tracing = "=0.1.44"
+url = "=2.5.8"
+sha2 = "=0.10.9"
+toml = "=1.1.2"
+tiktoken = "=3.5.1"
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
+astral-tl = "=0.7.11"
+gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
+rusqlite = { version = "=0.31.0", features = ["bundled"] }
+sqlparser = "=0.62.0"
+quick-xml = "=0.39.4"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+tempfile = "=3.27.0"
+dotenvy = "=0.15.7"
+quote = "=1.0.46"
+tree-sitter = "=0.26.10"
+tree-sitter-c-sharp = "=0.23.5"
+tree-sitter-yaml = "=0.7.2"
+bumpalo = { version = "=3.20.3", features = ["collections"] }
+memmap2 = "=0.9.11"
 # html-to-markdown-rs removido — extração de texto via astral-tl zero-copy
-enable-ansi-support = "0.2.1"
-windows-sys = { version = "0.59", features = [
+enable-ansi-support = "=0.2.1"
+uuid = { version = "=1.23.4", features = ["v4"] }
+windows-sys = { version = "=0.59.0", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Authorization",
@@ -66,23 +65,33 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_JobObjects",
     "Win32_System_Pipes",
     "Win32_System_Threading",
+    "Win32_System_StationsAndDesktops",
 ] }
+rustc-hash = "=2.1.3"
+which = "=6.0.3"
+zstd = "=0.13.3"
 
 [target.'cfg(windows)'.dependencies]
-windows-projfs = "0.1.7"
-zip = { version = "2.2.0", default-features = false, features = ["deflate"] }
+windows-projfs = "=0.1.8"
 
 [patch.crates-io]
 crc32fast = { path = "vendor/crc32fast" }
 
 [dev-dependencies]
-mockito = "1.5"
+mockito = "=1.7.2"
 
 [features]
 default = []
 tauri-app = ["dep:tauri", "dep:tauri-plugin-opener"]
 
 [[bin]]
-name = "genesis_mc"
+name = "souls_mc"
 path = "src/main.rs"
 required-features = ["tauri-app"]
+
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false
+

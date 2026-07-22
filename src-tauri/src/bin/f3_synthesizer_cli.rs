@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use chrono::{FixedOffset, Utc};
 use souls_mc_lib::cognition::synthesizer::{
     run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, DEFAULT_BLOCK3_MODEL_CANDIDATES,
     OFFICIAL_FORMATTER_MODEL,
@@ -12,7 +11,7 @@ use souls_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination};
 use souls_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
 use souls_mc_lib::persist::ssot_injector::SsotInjector;
 use souls_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, find_col_idx};
-use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, now_brt_rfc3339, parse_log_level_from_env};
 use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::Deserialize;
@@ -44,7 +43,7 @@ async fn retry_backoff_sleep(attempt: u32, max_attempts: u32, base_ms: u64) -> b
     if attempt >= max_attempts {
         return false;
     }
-    let jitter_ms = (Utc::now().timestamp_subsec_millis() % 250) as u64;
+    let jitter_ms = ((souls_mc_lib::telemetry::now_epoch_nanos() / 1_000_000) % 250) as u64;
     let exp = attempt.saturating_sub(1).min(10);
     let delay_ms = base_ms.saturating_mul(1_u64 << exp).saturating_add(jitter_ms);
     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
@@ -335,12 +334,6 @@ fn sanitize_repo_id(repo_id: &str) -> String {
             _ => '_',
         })
         .collect()
-}
-
-fn now_brt_rfc3339() -> String {
-    Utc::now()
-        .with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
-        .to_rfc3339()
 }
 
 fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {

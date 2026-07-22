@@ -12,7 +12,8 @@ use tracing::{error, info, warn};
 
 use rusqlite::{params, Connection};
 use souls_mc_lib::cognition::synthesizer::master_solutions_header_range;
-use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use souls_mc_lib::telemetry::{dynamic_wyrand, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
+use tinyrand::RandRange;
 
 type SheetsDataFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
@@ -250,7 +251,7 @@ impl JitterPolicy {
         let jitter = if self.jitter_max_ms == 0 {
             0
         } else {
-            fastrand::u64(0..=self.jitter_max_ms)
+            dynamic_wyrand().next_range(0..self.jitter_max_ms.saturating_add(1))
         };
         Duration::from_millis(self.base_ms.saturating_add(jitter))
     }
@@ -292,7 +293,7 @@ impl<S: Sleeper> BackoffGuard<S> {
         let jitter = if self.policy.jitter_max_ms == 0 {
             0
         } else {
-            fastrand::u64(0..=self.policy.jitter_max_ms)
+            dynamic_wyrand().next_range(0..self.policy.jitter_max_ms.saturating_add(1))
         };
         let delay = Duration::from_millis(base.saturating_add(jitter));
         self.sleeper.sleep(delay).await;
@@ -930,7 +931,6 @@ mod tests {
 
     #[test]
     fn jitter_respects_base_plus_random_fluctuation() {
-        fastrand::seed(42);
         let p = JitterPolicy {
             base_ms: 100,
             jitter_max_ms: 50,

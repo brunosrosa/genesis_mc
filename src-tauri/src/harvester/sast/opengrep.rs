@@ -572,7 +572,7 @@ pub fn normalize_semgrep_payload(
         // o fim do scan e o registro da auditoria. Orquestrador pode
         // sobrescrever se quiser garantir coerencia de janela.
         opengrep_version: None,
-        audit_timestamp: Some(chrono::Utc::now().to_rfc3339()),
+        audit_timestamp: Some(crate::telemetry::now_utc_rfc3339()),
     })
 }
 
@@ -617,7 +617,7 @@ fn render_semgrep_header(out: &mut String, payload: &SemgrepNormalizedPayload) {
     let ts = match payload.audit_timestamp.as_deref() {
         Some(v) => v,
         None => {
-            ts_owned = chrono::Utc::now().to_rfc3339();
+            ts_owned = crate::telemetry::now_utc_rfc3339();
             ts_owned.as_str()
         }
     };
@@ -1061,13 +1061,6 @@ mod tests {
         .to_string();
 
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
-            Ok(Vec::new()), // consumed by cargo fetch in preflight
-            Ok(metadata_payload.as_bytes().to_vec()), // consumed by cargo metadata in preflight
-            Err(SandboxError::ProcessNonZeroExit { // consumed by cargo clippy
-                exit_code: 1,
-                stderr: "findings".to_string(),
-                stdout: clippy_payload.as_bytes().to_vec(),
-            }),
             Err(SandboxError::ProcessNonZeroExit { // consumed by cppcheck
                 exit_code: 1,
                 stderr: cppcheck_payload.to_string(),
@@ -1075,6 +1068,13 @@ mod tests {
             }),
             Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep .::unsafe
             Ok(opengrep_payload.as_bytes().to_vec()), // consumed by opengrep .::health
+            Ok(Vec::new()), // consumed by cargo fetch in preflight
+            Ok(metadata_payload.as_bytes().to_vec()), // consumed by cargo metadata in preflight
+            Err(SandboxError::ProcessNonZeroExit { // consumed by cargo clippy
+                exit_code: 1,
+                stderr: "findings".to_string(),
+                stdout: clippy_payload.as_bytes().to_vec(),
+            }),
         ]);
 
         executor.write_repo_file("native/bridge.cpp", "void foo() {}");
@@ -1173,11 +1173,11 @@ mod tests {
         .to_string();
 
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
+            Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep security
+            Ok(br#"{"results":[], "soda.tech-debt.todo-fixme": true}"#.to_vec()), // consumed by opengrep health
             Ok(Vec::new()), // consumed by cargo fetch in preflight
             Ok(metadata_payload.as_bytes().to_vec()), // consumed by cargo metadata in preflight
             Ok(clippy_payload.as_bytes().to_vec()), // consumed by cargo clippy (simula warnings coletados com sucesso)
-            Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep security
-            Ok(br#"{"results":[], "soda.tech-debt.todo-fixme": true}"#.to_vec()), // consumed by opengrep health
         ]);
 
         let artifacts = PolyglotSastSidecar::extract(PolyglotSastInput {

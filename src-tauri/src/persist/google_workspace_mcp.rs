@@ -5,7 +5,6 @@ use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
-use chrono::Utc;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -68,7 +67,7 @@ fn read_service_account_key() -> Result<ServiceAccountKey, String> {
 }
 
 fn build_service_account_assertion(key: &ServiceAccountKey) -> Result<String, String> {
-    let now = Utc::now().timestamp();
+    let now = crate::telemetry::now_epoch_secs();
     let claims = ServiceAccountClaims {
         iss: &key.client_email,
         scope: GOOGLE_SHEETS_SCOPE,

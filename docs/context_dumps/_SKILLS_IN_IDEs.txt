@@ -1,8 +1,8 @@
-_SKILLS_IN_IDEs Gerado em: 2026-07-06 20:00:53
+_SKILLS_IN_IDEs Gerado em: 2026-07-20 01:40:07
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-ast-master\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-ast-master\SKILL.md
 ---
 ---
 name: mcp-ast-master
@@ -51,7 +51,7 @@ Sempre que precisar ler código local, investigar a origem de um bug ou extrair 
 
 ### ====================================================================================================
 ARQUIVO: mcp-google-sheets-master/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-google-sheets-master\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-google-sheets-master\SKILL.md
 ---
 ---
 name: mcp-google-sheets-master
@@ -101,7 +101,7 @@ Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Bluepr
 
 ### ====================================================================================================
 ARQUIVO: mcp-lean-ctx-master/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-lean-ctx-master\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-lean-ctx-master\SKILL.md
 ---
 ---
 name: mcp-lean-ctx-master
@@ -136,6 +136,12 @@ Sempre que precisar investigar arquivos locais, explorar diretórios ou vasculha
    * A edição deve respeitar as travas de concorrência (Mutex do Tokio). Falhas na gravação devem preservar o *inode* original intacto.
 
 #### Constraints
+* **PROIBIÇÃO DE PARÂMETROS NATIVOS:** É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath, EndLine, etc.) no `lean_ctx_read` (ou `ctx_read`). A assinatura da ferramenta exige estritamente `path` (caminho do arquivo) e `mode` (ex: 'full', 'signatures', etc.). Valide o schema da ferramenta antes de chamar.
+* **PROIBIÇÃO DO MODO TASK ANTES DE EDIÇÃO:** Nunca use `mode="task"` para arquivos que planeja modificar; ele embaralha o arquivo estruturalmente.
+* **INVALIDAÇÃO DE CACHE (fresh: true):** Se um arquivo for modificado em disco por compiladores ou testes externos, force a re-leitura usando `fresh: true`.
+* **UNICIDADE NO CTX_EDIT:** A string `old_string` no `ctx_edit` deve conter 2-3 linhas de contexto adjacentes para garantir correspondência única no arquivo.
+* **LEITURAS FATIADAS (lines:N-M):** Para arquivos grandes, prefira `mode="lines:N-M"` em vez de `full` para economizar tokens.
+* **CTX_SHELL APENAS DE LEITURA:** Use `ctx_shell` apenas para comandos diagnósticos passivos; nunca para mutação de arquivos (como `sed`/`awk`).
 * **O FORMATO LEAN É INEGOCIÁVEL:** Rejeite TOON ou JSON denso para leituras extensas. O formato LEAN garante 93% de precisão de Recall consumindo 48% menos tokens.
 * **SEM ALUCINAÇÕES DE PATH:** Use `ctx_tree` antes de `ctx_read`.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
@@ -152,7 +158,7 @@ Sempre que precisar investigar arquivos locais, explorar diretórios ou vasculha
 
 ### ====================================================================================================
 ARQUIVO: mcp-memory-master/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-memory-master\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-memory-master\SKILL.md
 ---
 ---
 name: mcp-memory-master
@@ -205,7 +211,7 @@ Sempre que precisar consultar o histórico, regras de arquitetura antigas ou rel
 
 ### ====================================================================================================
 ARQUIVO: mcp-search-master/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-search-master\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-search-master\SKILL.md
 ---
 ---
 name: mcp-search-master
@@ -260,7 +266,7 @@ Sempre que uma pesquisa web, leitura de documentação ou "Deep Research" for so
 
 ### ====================================================================================================
 ARQUIVO: mcp-sequential-thinking/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-sequential-thinking\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-sequential-thinking\SKILL.md
 ---
 ---
 name: mcp-sequential-thinking
@@ -321,7 +327,7 @@ Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruí
 
 ### ====================================================================================================
 ARQUIVO: mcp-sqlite-master/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-sqlite-master\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-sqlite-master\SKILL.md
 ---
 ---
 name: mcp-sqlite-master
@@ -378,7 +384,7 @@ Sempre que precisar acessar a memória relacional do SODA, utilize exclusivament
 
 ### ====================================================================================================
 ARQUIVO: mcp-time-master/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\mcp-time-master\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\mcp-time-master\SKILL.md
 ---
 ---
 name: mcp-time-master
@@ -430,7 +436,7 @@ Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções 
 
 ### ====================================================================================================
 ARQUIVO: notebooklm-context/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\notebooklm-context\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\notebooklm-context\SKILL.md
 ---
 ---
 name: notebooklm-context
@@ -479,7 +485,7 @@ Sempre que for invocado para pesquisar fundamentos da arquitetura ou atualizar a
 
 ### ====================================================================================================
 ARQUIVO: skill-creator/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\skill-creator\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\skill-creator\SKILL.md
 ---
 ---
 name: skill-creator
@@ -539,7 +545,7 @@ Sempre que for instruído a criar uma skill ou canibalizar uma solução, execut
 
 ### ====================================================================================================
 ARQUIVO: soda-archivist/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-archivist\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-archivist\SKILL.md
 ---
 ---
 name: soda-archivist
@@ -596,7 +602,7 @@ Sempre que o ciclo de uma tarefa findar, um *Ralph Loop* despejar lixo, ou você
 
 ### ====================================================================================================
 ARQUIVO: soda-brainstorm/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-brainstorm\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-brainstorm\SKILL.md
 ---
 ---
 name: soda-brainstorm
@@ -649,7 +655,7 @@ Ao receber uma nova intenção de produto ou arquitetura, execute OBRIGATORIAMEN
 
 ### ====================================================================================================
 ARQUIVO: soda-docs-hydrator/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-docs-hydrator\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-docs-hydrator\SKILL.md
 ---
 ---
 name: soda-docs-hydrator
@@ -701,7 +707,7 @@ Sempre que for solicitado a implementar uma funcionalidade usando os frameworks 
 
 ### ====================================================================================================
 ARQUIVO: soda-executive-coach/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-executive-coach\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-executive-coach\SKILL.md
 ---
 ---
 name: soda-executive-coach
@@ -756,7 +762,7 @@ Sempre que o usuário demonstrar sobrecarga operacional, dilemas de liderança, 
 
 ### ====================================================================================================
 ARQUIVO: soda-frontend-expert/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-frontend-expert\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-frontend-expert\SKILL.md
 ---
 ---
 name: soda-frontend-expert
@@ -767,7 +773,7 @@ triggers: ["soda-frontend-expert", "criar UI", "estilizar", "escrever frontend",
 ### skill: SODA Frontend Expert (O Códice Visual Mestre V6.0)
 
 #### Goal
-Atuar como o Arquiteto Frontend Oficial do SODA (Genesis MC). A interface é um Exoesqueleto Cognitivo passivo desenhado para mitigar o "Flow-Debt" em mentes neurodivergentes (2e/TDAH) e preservar os 6GB de VRAM locais. Seu objetivo inegociável é impor uma arquitetura estritamente reativa (sem lógica de negócios), blindando o sistema contra *Layout Shifts* letais, engasgos no motor V8 (GC Spikes), sobrecarga sensorial (banindo spinners) e garantindo o congelamento de segurança (HITL) em operações destrutivas.
+Atuar como o Arquiteto Frontend Oficial do SODA (Souls MC). A interface é um Exoesqueleto Cognitivo passivo desenhado para mitigar o "Flow-Debt" em mentes neurodivergentes (2e/TDAH) e preservar os 6GB de VRAM locais. Seu objetivo inegociável é impor uma arquitetura estritamente reativa (sem lógica de negócios), blindando o sistema contra *Layout Shifts* letais, engasgos no motor V8 (GC Spikes), sobrecarga sensorial (banindo spinners) e garantindo o congelamento de segurança (HITL) em operações destrutivas.
 
 #### Instructions
 Sempre que for gerar código frontend, OBRIGATORIAMENTE obedeça a esta máquina de estados visual:
@@ -811,7 +817,7 @@ Sempre que for gerar código frontend, OBRIGATORIAMENTE obedeça a esta máquina
 
 ### ====================================================================================================
 ARQUIVO: soda-gemini-worker/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-gemini-worker\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-gemini-worker\SKILL.md
 ---
 ---
 name: soda-gemini-worker
@@ -867,7 +873,7 @@ Sempre que for exigido analisar arquiteturas massivas, orquestrar refatorações
 
 ### ====================================================================================================
 ARQUIVO: soda-github-orchestrator/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-github-orchestrator\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-github-orchestrator\SKILL.md
 ---
 ---
 name: soda-github-orchestrator
@@ -924,7 +930,7 @@ Sempre que for invocado para planejar código, gerenciar fluxo de versionamento 
 
 ### ====================================================================================================
 ARQUIVO: soda-knowledge-curator/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-knowledge-curator\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-knowledge-curator\SKILL.md
 ---
 ---
 name: soda-knowledge-curator
@@ -978,7 +984,7 @@ Sempre que for instruído a realizar varreduras de contradição, arquivar ou re
 
 ### ====================================================================================================
 ARQUIVO: soda-life-coach/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-life-coach\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-life-coach\SKILL.md
 ---
 ---
 name: soda-life-coach
@@ -1034,7 +1040,7 @@ Sempre que o usuário entrar em uma zona de reflexão pessoal ou bloqueio emocio
 
 ### ====================================================================================================
 ARQUIVO: soda-ralph-loop/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-ralph-loop\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-ralph-loop\SKILL.md
 ---
 ---
 name: soda-ralph-loop
@@ -1095,7 +1101,7 @@ Sempre que finalizar a escrita de código, ou a compilação falhar, execute est
 
 ### ====================================================================================================
 ARQUIVO: soda-repo-analysis/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-repo-analysis\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-repo-analysis\SKILL.md
 ---
 ---
 name: soda-repo-analysis
@@ -1149,7 +1155,7 @@ Ao receber a ordem de analisar um repositório ou processar um lote, execute EXC
 
 ### ====================================================================================================
 ARQUIVO: soda-rust-expert/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-rust-expert\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-rust-expert\SKILL.md
 ---
 ---
 name: soda-rust-expert
@@ -1233,18 +1239,18 @@ Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBR
 
 ### ====================================================================================================
 ARQUIVO: soda-sdd/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-sdd\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-sdd\SKILL.md
 ---
 ---
 name: soda-sdd
-description: A Lei de Ferro do Antigravity IDE (Spec-Driven Development). Proíbe Vibe Coding. Orquestra o BMAD, impõe a leitura da DEEP_COMPONENTS (SSOT) para Linhas Vermelhas, exige design com roteamento FinOps e aciona o Ralph Loop via TDD Atômico.
+description: A Lei de Ferro da IDE (Spec-Driven Development). Proíbe Vibe Coding. Orquestra o BMAD, impõe a leitura da DEEP_COMPONENTS (SSOT) para Linhas Vermelhas, exige design com roteamento FinOps e aciona o Ralph Loop via TDD Atômico.
 triggers: ["soda-sdd", "iniciar feature", "escrever código", "planejar tarefa", "spec-driven development", "programar", "criar módulo", "implementar"]
 ---
 
 ### skill: SODA SDD (Spec-Driven Development & First Draft Protocol)
 
 #### Goal
-Atuar como o chicote metodológico e orquestrador de código do Antigravity IDE. Seu objetivo inegociável é erradicar o *Flow-Debt* e as alucinações derivadas do *Vibe Coding*. Você (o Agente) NUNCA deve escrever uma linha de código-fonte sem antes: validar a "Ação de Canibalização" e a "Linha Vermelha" na Tabela Mestre (SSOT), gravar diagramas arquiteturais físicos com topologia FinOps, e provar a lógica no silício através do TDD rigoroso (Red-Green-Refactor) no terminal.
+Atuar como o chicote metodológico e orquestrador de código da IDE. Seu objetivo inegociável é erradicar o *Flow-Debt* e as alucinações derivadas do *Vibe Coding*. Você (o Agente) NUNCA deve escrever uma linha de código-fonte sem antes: validar a "Ação de Canibalização" e a "Linha Vermelha" na Tabela Mestre (SSOT), gravar diagramas arquiteturais físicos com topologia FinOps, e provar a lógica no silício através do TDD rigoroso (Red-Green-Refactor) no terminal.
 
 ###### Instructions
 Sempre que for solicitada a codificação de uma nova funcionalidade, refatoração ou injeção de componente, você DEVE executar esta máquina de estados sob o protocolo BMAD:
@@ -1300,7 +1306,7 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
 
 ### ====================================================================================================
 ARQUIVO: soda-subrepo-manager/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\soda-subrepo-manager\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-subrepo-manager\SKILL.md
 ---
 ---
 name: soda-subrepo-manager
@@ -1358,7 +1364,7 @@ Sempre que for invocado para puxar dependências externas ou canibalizar reposit
 
 ### ====================================================================================================
 ARQUIVO: weevolve/SKILL.md
-CAMINHO: Z:\genesis_mc\.agents\skills\weevolve\SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\weevolve\SKILL.md
 ---
 ---
 name: weevolve

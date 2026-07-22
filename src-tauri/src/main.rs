@@ -40,10 +40,7 @@ fn main() {
                 .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
             let soda_mcp_server = spawn_supervised(
                 soda_mcp_program,
-                vec![
-                    "--listen".to_string(),
-                    "127.0.0.1:3002".to_string(),
-                ],
+                vec![],
                 project_root.clone(),
             );
             let agentgateway = spawn_supervised(

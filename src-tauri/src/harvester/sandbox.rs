@@ -12,6 +12,8 @@ use tracing::{debug, error, info, trace, warn};
 use super::git::RepoPath;
 
 static APPCONTAINER_SETUP_SEMAPHORE: OnceLock<Semaphore> = OnceLock::new();
+static APPCONTAINER_SETUP_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static APPCONTAINER_ACL_CACHE: OnceLock<Mutex<FxHashSet<(PathBuf, String, u32, u32)>>> = OnceLock::new();
 
 #[cfg(target_os = "windows")]
 use std::mem::size_of;
@@ -129,7 +131,6 @@ pub struct SandboxHandle {
     policy: SandboxPolicy,
     host_write_roots: Vec<PathBuf>,
     active_pids: Arc<Mutex<HashSet<u32>>>,
-    acl_cache: Arc<Mutex<FxHashSet<(PathBuf, u32, u32)>>>,
 }
 
 #[cfg(target_os = "windows")]
@@ -345,10 +346,13 @@ fn create_appcontainer_profile(
 fn grant_ntfs_acl(
     path: &std::path::Path,
     sid: PSID,
+    container_name: &str,
     access_mask: u32,
     inheritance_flag: u32,
-    cache: &Mutex<FxHashSet<(PathBuf, u32, u32)>>,
 ) -> Result<(), SandboxError> {
+    if sid.is_null() {
+        return Ok(());
+    }
     let path_buf = path.to_path_buf();
     let resolved_inheritance = if path.is_file() {
         NO_INHERITANCE
@@ -375,9 +379,11 @@ fn grant_ntfs_acl(
     }
 
     {
+        let cache = APPCONTAINER_ACL_CACHE.get_or_init(|| Mutex::new(FxHashSet::default()));
         let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
-        let has_sufficient = guard.iter().any(|(p, m, i)| {
+        let has_sufficient = guard.iter().any(|(p, c, m, i)| {
             p == &path_buf
+                && c == container_name
                 && (*m & resolved_access_mask) == resolved_access_mask
                 && (*i == resolved_inheritance || *i == SUB_CONTAINERS_AND_OBJECTS_INHERIT)
         });
@@ -507,8 +513,9 @@ fn grant_ntfs_acl(
     }
 
     {
+        let cache = APPCONTAINER_ACL_CACHE.get_or_init(|| Mutex::new(FxHashSet::default()));
         let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
-        guard.insert((path_buf, resolved_access_mask, resolved_inheritance));
+        guard.insert((path_buf, container_name.to_string(), resolved_access_mask, resolved_inheritance));
     }
     Ok(())
 }
@@ -641,9 +648,9 @@ fn is_blocked_os_directory(path: &std::path::Path) -> bool {
 fn grant_ntfs_acl_with_parents(
     path: &std::path::Path,
     sid: PSID,
+    container_name: &str,
     access_mask: u32,
     inheritance_flag: u32,
-    cache: &Mutex<FxHashSet<(PathBuf, u32, u32)>>,
 ) -> Result<(), SandboxError> {
     let path_str = path.to_string_lossy().to_lowercase();
     if path_str.contains("nodejs")
@@ -672,7 +679,7 @@ fn grant_ntfs_acl_with_parents(
         target_path = %path.display(),
         "grant_ntfs_acl_with_parents: Iniciando para o alvo principal..."
     );
-    grant_ntfs_acl(path, sid, access_mask, inheritance_flag, cache)?;
+    grant_ntfs_acl(path, sid, container_name, access_mask, inheritance_flag)?;
     trace!(
         target_path = %path.display(),
         "grant_ntfs_acl_with_parents: Alvo principal concluido com sucesso."
@@ -705,7 +712,7 @@ fn grant_ntfs_acl_with_parents(
                 parent_path = %p.display(),
                 "grant_ntfs_acl_with_parents: Concedendo travessia ao pai..."
             );
-            if let Err(e) = grant_ntfs_acl(p, sid, 0x0012_00A9u32, NO_INHERITANCE, cache) {
+            if let Err(e) = grant_ntfs_acl(p, sid, container_name, 0x0012_00A9u32, NO_INHERITANCE) {
                 let is_access_denied = match &e {
                     SandboxError::AclInjectionFailed { detail } => {
                         detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -732,7 +739,6 @@ fn grant_ntfs_acl_for_all_application_packages(
     path: &std::path::Path,
     access_mask: u32,
     inheritance_flag: u32,
-    cache: &Mutex<FxHashSet<(PathBuf, u32, u32)>>,
 ) {
     let mut all_app_packages_sid: PSID = std::ptr::null_mut();
     let sid_str_wide = str_to_wide("S-1-15-2-1");
@@ -743,7 +749,7 @@ fn grant_ntfs_acl_for_all_application_packages(
         )
     };
     if sid_ok != 0 && !all_app_packages_sid.is_null() {
-        let _ = grant_ntfs_acl_with_parents(path, all_app_packages_sid, access_mask, inheritance_flag, cache);
+        let _ = grant_ntfs_acl(path, all_app_packages_sid, "ALL_APPLICATION_PACKAGES", access_mask, inheritance_flag);
         unsafe {
             windows_sys::Win32::Foundation::LocalFree(all_app_packages_sid as *mut _);
         }
@@ -1797,8 +1803,8 @@ fn resolve_real_binary_from_trampoline(program: PathBuf, command: &str, repo_pat
 fn grant_runtime_and_tool_acls(
     repo_path: &Path,
     sid: PSID,
+    container_name: &str,
     command: &str,
-    cache: &Mutex<FxHashSet<(PathBuf, u32, u32)>>,
     env: &mut std::collections::BTreeMap<String, String>,
 ) -> Result<(), SandboxError> {
     let mut paths_to_grant = Vec::new();
@@ -1827,9 +1833,9 @@ fn grant_runtime_and_tool_acls(
                 let _ = grant_ntfs_acl_with_parents(
                     parent,
                     sid,
+                    container_name,
                     FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
                     SUB_CONTAINERS_AND_OBJECTS_INHERIT,
-                    cache,
                 );
 
                 // Append parent to PATH env case-insensitively
@@ -1855,9 +1861,9 @@ fn grant_runtime_and_tool_acls(
             let _ = grant_ntfs_acl_with_parents(
                 &canonical_node_path,
                 sid,
+                container_name,
                 FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
                 SUB_CONTAINERS_AND_OBJECTS_INHERIT,
-                cache,
             );
         }
     }
@@ -1923,13 +1929,15 @@ fn grant_runtime_and_tool_acls(
 
     // 3. Global tool directories (pnpm, npm, uv, yarn)
     if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-        let pnpm_dir = PathBuf::from(&localappdata).join("pnpm");
-        if pnpm_dir.is_dir() {
-            paths_to_grant.push(pnpm_dir);
-        }
-        let yarn_dir = PathBuf::from(&localappdata).join("Yarn");
-        if yarn_dir.is_dir() {
-            paths_to_grant.push(yarn_dir);
+        if needs_js_runtime {
+            let pnpm_dir = PathBuf::from(&localappdata).join("pnpm");
+            if pnpm_dir.is_dir() {
+                paths_to_grant.push(pnpm_dir);
+            }
+            let yarn_dir = PathBuf::from(&localappdata).join("Yarn");
+            if yarn_dir.is_dir() {
+                paths_to_grant.push(yarn_dir);
+            }
         }
         if is_python_cmd {
             let uv_local = PathBuf::from(&localappdata).join("uv");
@@ -1953,9 +1961,11 @@ fn grant_runtime_and_tool_acls(
                 paths_to_grant.push(npm_dir);
             }
         }
-        let uv_dir = PathBuf::from(&appdata).join("uv");
-        if uv_dir.is_dir() {
-            paths_to_grant.push(uv_dir);
+        if is_python_cmd {
+            let uv_dir = PathBuf::from(&appdata).join("uv");
+            if uv_dir.is_dir() {
+                paths_to_grant.push(uv_dir);
+            }
         }
     }
 
@@ -1975,7 +1985,7 @@ fn grant_runtime_and_tool_acls(
                     path = %canonical_path.display(),
                     "AppContainer: Concedendo ACL NTFS para runtime/ferramenta global/local"
                 );
-                if let Err(e) = grant_ntfs_acl_with_parents(&canonical_path, sid, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, cache) {
+                if let Err(e) = grant_ntfs_acl_with_parents(&canonical_path, sid, container_name, GENERIC_READ | GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
                     let is_access_denied = match &e {
                         SandboxError::AclInjectionFailed { detail } => {
                             detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -3188,17 +3198,17 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         self.enforce_host_path_policy(&resolved)?;
 
         let uuid_str = uuid::Uuid::new_v4().simple().to_string();
-        // Gera nome do perfil AppContainer baseado no comando/lâmina para permitir a
-        // reutilização do perfil no registro/firewall do Windows, evitando o gargalo de criação de novos perfis.
-        let container_name = format!("soda-ac-{}", command);
+        let slot = APPCONTAINER_SETUP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst) % 4;
+        // Gera nome do perfil AppContainer baseado no comando/lâmina e slot exclusivo de concorrência para evitar colisões
+        let container_name = format!("soda-ac-{}-{}", command, slot);
         let container_name = if container_name.len() > 64 {
             container_name[..64].to_string()
         } else {
             container_name
         };
 
-        // Adquire o semáforo de setup (limite 1) para serializar as chamadas NTFS e criação de profiles de AppContainer
-        let setup_semaphore = APPCONTAINER_SETUP_SEMAPHORE.get_or_init(|| Semaphore::new(1));
+        // Adquire o semáforo de setup (limite 4) para serializar as chamadas NTFS e criação de profiles de AppContainer
+        let setup_semaphore = APPCONTAINER_SETUP_SEMAPHORE.get_or_init(|| Semaphore::new(4));
         let setup_permit = setup_semaphore.acquire().await.ok();
 
         info!(
@@ -3216,10 +3226,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let repo_path_clone = self.repo_path.clone();
         let host_write_roots_clone = self.host_write_roots.clone();
         let command_clone = command.to_string();
-        let mut extra_acl_paths_clone = extra_acl_paths.clone();
+        let extra_acl_paths_clone = extra_acl_paths.clone();
         let mut resolved_clone = resolved.clone();
         let uuid_str_clone = uuid_str.clone();
-        let acl_cache_clone = self.acl_cache.clone();
 
         let preflight_result = tokio::task::spawn_blocking(move || -> Result<(AppContainerProfile, PathBuf, SendHandle, ResolvedCommand), SandboxError> {
             // ── Passo 1: Cria o perfil AppContainer ──────────────────────────────
@@ -3256,7 +3265,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             // Concede permissão total com herança para todas as pastas de cache do sidecar
             let clean_dir_mask = FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE;
             for dir in &host_dirs_to_materialize {
-                grant_ntfs_acl_with_parents(dir, profile.sid, clean_dir_mask, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)
+                grant_ntfs_acl_with_parents(dir, profile.sid, &container_name_clone, clean_dir_mask, SUB_CONTAINERS_AND_OBJECTS_INHERIT)
                     .map_err(|e| {
                         SandboxError::AppContainerSetupFailed {
                             detail: format!("Falha ao conceder permissões NTFS de cache para '{}': {e:?}", dir.display()),
@@ -3289,7 +3298,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     })?;
                 }
 
-                grant_ntfs_acl_with_parents(&container_packages_dir, profile.sid, clean_dir_mask, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone).map_err(|e| {
+                grant_ntfs_acl_with_parents(&container_packages_dir, profile.sid, &container_name_clone, clean_dir_mask, SUB_CONTAINERS_AND_OBJECTS_INHERIT).map_err(|e| {
                     SandboxError::AppContainerSetupFailed {
                         detail: format!("Falha ao conceder NTFS write ACL para a pasta do AppContainer Packages: {e:?}"),
                     }
@@ -3307,23 +3316,12 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             grant_ntfs_acl(
                 &ephemeral_dir,
                 profile.sid,
+                &container_name_clone,
                 0x001201bf,
                 SUB_CONTAINERS_AND_OBJECTS_INHERIT,
-                &acl_cache_clone,
             ).map_err(|e| SandboxError::AppContainerSetupFailed {
                 detail: format!("Falha ao conceder ACL total para diretório efêmero '{}': {e:?}", ephemeral_dir.display()),
             })?;
-
-            // PRD-031 §E: O ephemeral_dir DEVE ser adicionado ao extra_acl_paths_clone
-            // para que o AppContainer possa ler os arquivos pré-extracted pelo Host (Nuitka).
-            // O grant_ntfs_acl acima concede ACL ao diretório, mas arquivos novos criados pelo Host
-            // (Nuitka desidratação) não herdam automaticamente —必须 injeção explícita.
-            extra_acl_paths_clone.push(ephemeral_dir.clone());
-            debug!(
-                ephemeral_dir = %ephemeral_dir.display(),
-                extra_acl_paths_count = extra_acl_paths_clone.len(),
-                "AppContainer: ephemeral_dir adicionado a extra_acl_paths para ACL recursiva"
-            );
 
             // Injeta FORÇOSAMENTE no bloco de variáveis de ambiente do comando resolvida
             // as variáveis do cache do Opengrep/Semgrep apontando para o diretório efêmero do AppContainer
@@ -3372,9 +3370,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             // FILE_GENERIC_READ | FILE_GENERIC_EXECUTE = 0x0012_00A9
             
             // Concede permissão de Leitura para ALL APPLICATION PACKAGES (S-1-15-2-1) diretamente na raiz do execution_root e repo_path para mitigar erros de ProjFS (OS Error 5)
-            grant_ntfs_acl_for_all_application_packages(&execution_root_clean_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone);
+            grant_ntfs_acl_for_all_application_packages(&execution_root_clean_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
             if repo_path_clone != execution_root_clean_clone {
-                grant_ntfs_acl_for_all_application_packages(&repo_path_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone);
+                grant_ntfs_acl_for_all_application_packages(&repo_path_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
             }
 
             // PRD-031 §E (Monorepo Awareness): Concede FILE_GENERIC_READ na raiz ABSOLUTA do
@@ -3398,17 +3396,17 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 }
             };
             // Leitura (sem escrita) na raiz absoluta do repo — cobre ../vendor e Cargo.lock pai
-            grant_ntfs_acl_with_parents(&repo_root_for_acl, profile.sid, FILE_GENERIC_READ, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
+            grant_ntfs_acl_with_parents(&repo_root_for_acl, profile.sid, &container_name_clone, FILE_GENERIC_READ, SUB_CONTAINERS_AND_OBJECTS_INHERIT)?;
             // Leitura+escrita apenas no cwd efêmero do crate (execution_root)
             if repo_root_for_acl != execution_root_clean_clone {
-                grant_ntfs_acl_with_parents(&execution_root_clean_clone, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_WRITE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
+                grant_ntfs_acl_with_parents(&execution_root_clean_clone, profile.sid, &container_name_clone, FILE_GENERIC_READ | FILE_GENERIC_WRITE, SUB_CONTAINERS_AND_OBJECTS_INHERIT)?;
             }
 
             // Concede permissões para as runtimes e ferramentas globais/locais usadas
-            grant_runtime_and_tool_acls(&repo_path_clone, profile.sid, &command_clone, &acl_cache_clone, &mut resolved_clone.env)?;
+            grant_runtime_and_tool_acls(&repo_path_clone, profile.sid, &container_name_clone, &command_clone, &mut resolved_clone.env)?;
 
             // Concede FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE na pasta temporária.
-            grant_ntfs_acl_with_parents(&ephemeral_dir, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
+            grant_ntfs_acl_with_parents(&ephemeral_dir, profile.sid, &container_name_clone, FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT)?;
 
             // Concede permissões de leitura/execução no CARGO_HOME e RUSTUP_HOME do Host
             let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
@@ -3421,21 +3419,21 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             if command_clone == "cargo" || command_clone == "clippy" || command_clone == "rustc" {
                 if cargo_home.exists() {
                     // Herança NTFS completa — leitura e travessia com propagação
-                    let _ = grant_ntfs_acl_with_parents(&cargo_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone);
+                    let _ = grant_ntfs_acl_with_parents(&cargo_home, profile.sid, &container_name_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
                 }
                 if rustup_home.exists() {
-                    let _ = grant_ntfs_acl_with_parents(&rustup_home, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone);
+                    let _ = grant_ntfs_acl_with_parents(&rustup_home, profile.sid, &container_name_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT);
                 }
             }
 
             // Concede leitura/escrita/execução nas pastas de escrita permitidas do host
             for root in &host_write_roots_clone {
-                grant_ntfs_acl_with_parents(root, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone)?;
+                grant_ntfs_acl_with_parents(root, profile.sid, &container_name_clone, FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT)?;
             }
 
             // Concede leitura/execução na pasta pai do executável resolvido (para trampolins/libs locais)
             if let Some(parent) = resolved_clone.program.parent() {
-                if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
+                if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, &container_name_clone, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
                     let is_access_denied = match &e {
                         SandboxError::AclInjectionFailed { detail } => {
                             detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -3469,7 +3467,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             }
 
             // Concede leitura/execução explicitamente no arquivo binário executável resolvido.
-            if let Err(e) = grant_ntfs_acl_with_parents(&resolved_clone.program, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
+            if let Err(e) = grant_ntfs_acl_with_parents(&resolved_clone.program, profile.sid, &container_name_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
                 let is_access_denied = match &e {
                     SandboxError::AclInjectionFailed { detail } => {
                         detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -3484,7 +3482,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             // Concede leitura/execução nos caminhos adicionais do trampolim (scripts e pastas pai do script)
             for path in &extra_acl_paths_clone {
                 if let Some(parent) = path.parent() {
-                    if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
+                    if let Err(e) = grant_ntfs_acl_with_parents(parent, profile.sid, &container_name_clone, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
                         let is_access_denied = match &e {
                             SandboxError::AclInjectionFailed { detail } => {
                                 detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -3496,7 +3494,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                         }
                     }
                 }
-                if let Err(e) = grant_ntfs_acl_with_parents(path, profile.sid, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT, &acl_cache_clone) {
+                if let Err(e) = grant_ntfs_acl_with_parents(path, profile.sid, &container_name_clone, 0x0012_00A9u32, SUB_CONTAINERS_AND_OBJECTS_INHERIT) {
                     let is_access_denied = match &e {
                         SandboxError::AclInjectionFailed { detail } => {
                             detail.contains("Win32=0x00000005") || detail.contains("Win32=5")
@@ -3508,6 +3506,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     }
                 }
             }
+            println!("DEBUG PREFLIGHT 17: Extra paths concedidos");
 
             // ── Passo 5: Loopback Exemption (best-effort) ────────────────────────
             // Permite ao sidecar se conectar via loopback ao Named Pipe do Gateway.
@@ -3609,9 +3608,9 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                 let _ = grant_ntfs_acl_with_parents(
                     &ephemeral_dir,
                     profile.sid,
+                    &container_name_clone,
                     clean_dir_mask,
                     SUB_CONTAINERS_AND_OBJECTS_INHERIT,
-                    &acl_cache_clone
                 );
             }
 
@@ -3873,7 +3872,6 @@ impl SandboxOrchestrator {
             policy,
             host_write_roots: build_host_write_roots(&clean_path, policy)?,
             active_pids: Arc::new(Mutex::new(HashSet::new())),
-            acl_cache: Arc::new(Mutex::new(FxHashSet::default())),
         })
     }
 }
@@ -3894,9 +3892,8 @@ mod tests {
     async fn test_create_sandbox_success() {
         let _guard = get_test_mutex().await.lock().await;
         
-        // Criamos um mock RepoPath usando o diretório temporário nativo do sistema operacional
-        let temp_dir = std::env::temp_dir();
-        let repo_path = RepoPath(temp_dir);
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = RepoPath(temp_dir.path().to_path_buf());
 
         let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly)
             .await
@@ -3910,8 +3907,8 @@ mod tests {
     async fn test_execute_in_sandbox() {
         let _guard = get_test_mutex().await.lock().await;
         
-        let temp_dir = std::env::temp_dir();
-        let repo_path = RepoPath(temp_dir);
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = RepoPath(temp_dir.path().to_path_buf());
 
         let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly)
             .await
@@ -4054,8 +4051,6 @@ mod tests {
     fn test_sandbox_path_injection_contains_system32() {
         // RED → GREEN: Após grant_runtime_and_tool_acls, o env["PATH"] DEVE conter System32.
         // PRD-031 §C: Sem System32, scripts .cmd (biome.cmd, oxlint.cmd) não executam.
-        use rustc_hash::FxHashSet;
-        use std::sync::Mutex;
 
         let temp_dir = TempDir::new().unwrap();
         let repo_dir = temp_dir.path().join("owner").join("repo");
@@ -4064,16 +4059,11 @@ mod tests {
         // Monta env vazio como ponto de partida (simula ambiente da gaiola antes da injeção)
         let mut env: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
 
-        // Dummy SID nulo — grant_runtime_and_tool_acls aceita PSID mas as chamadas
-        // Win32 de ACL são ignoradas se o caminho não existe (graceful fail).
-        // O que testamos é APENAS a mutação do env["PATH"].
-        let dummy_cache: Mutex<FxHashSet<(PathBuf, u32, u32)>> =
-            Mutex::new(FxHashSet::default());
         let _ = grant_runtime_and_tool_acls(
             &repo_dir,
             std::ptr::null_mut(), // PSID nulo — ACL Win32 falha gracefully
+            "soda-ac-test",
             "opengrep",
-            &dummy_cache,
             &mut env,
         );
 
@@ -4101,8 +4091,6 @@ mod tests {
     #[test]
     fn test_sandbox_path_injection_no_duplicate_system32() {
         // RED → GREEN: Injetar System32 duas vezes não deve criar duplicatas.
-        use rustc_hash::FxHashSet;
-        use std::sync::Mutex;
 
         let temp_dir = TempDir::new().unwrap();
         let repo_dir = temp_dir.path().join("owner").join("repo");
@@ -4112,13 +4100,11 @@ mod tests {
         let mut env: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
         env.insert("PATH".to_string(), r"C:\Windows\System32;C:\Windows".to_string());
 
-        let dummy_cache: Mutex<FxHashSet<(PathBuf, u32, u32)>> =
-            Mutex::new(FxHashSet::default());
         let _ = grant_runtime_and_tool_acls(
             &repo_dir,
             std::ptr::null_mut(),
+            "soda-ac-test",
             "opengrep",
-            &dummy_cache,
             &mut env,
         );
 
@@ -4192,12 +4178,8 @@ mod tests {
     async fn test_execute_uses_repo_root_as_cwd() {
         let _guard = get_test_mutex().await.lock().await;
 
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let repo_dir = std::env::temp_dir().join(format!("soda-test-cwd-{ts}"));
-        std::fs::create_dir_all(&repo_dir).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let repo_dir = temp_dir.path().to_path_buf();
         let repo_path = RepoPath(repo_dir.clone());
 
         let sandbox = SandboxOrchestrator::create(&repo_path, SandboxPolicy::ReadOnly)
@@ -4215,9 +4197,6 @@ mod tests {
 
         let output_str = String::from_utf8_lossy(&output).trim().replace('\\', "/");
         let expected = repo_dir.to_string_lossy().replace('\\', "/");
-        
-        // Remove a pasta temporária de teste de forma limpa antes de asserir
-        let _ = std::fs::remove_dir_all(&repo_dir);
 
         assert_eq!(output_str, expected);
     }

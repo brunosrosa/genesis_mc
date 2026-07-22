@@ -156,6 +156,14 @@ fn is_supported_test_file(profile: &StackProfile, path: &Path) -> bool {
         .extension()
         .and_then(|value| value.to_str())
         .map(|value| value.to_ascii_lowercase());
+
+    // Filtro explícito de extensões de lixo e mocks (Lei I e reforço anti-lixo)
+    if let Some(ext) = extension.as_deref() {
+        if matches!(ext, "snap" | "lock" | "log" | "tmp" | "temp" | "md" | "txt" | "json" | "yaml" | "yml") {
+            return false;
+        }
+    }
+
     let normalized = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
 
     if is_inline_test_candidate_source_file(profile, path) {
@@ -286,13 +294,14 @@ fn extract_rust_test_entries_shallow(content: &str) -> Vec<String> {
             // Pula ate o final do bloco (heuristica: brace_depth).
             // Importante: comecar pela linha da assinatura para que o `{` seja contado.
             i = sig_line_idx;
+            let start_i = i;
             let mut brace_depth: i32 = 0;
             while i < lines.len() {
                 let l = lines[i];
                 brace_depth += l.matches('{').count() as i32;
                 brace_depth -= l.matches('}').count() as i32;
                 // Termo do bloco: brace_depth voltou a zero E a linha tem `}`
-                // (ex: `fn test_x() {}` em uma unica linha).
+                // (ex: `fn test_x() {}` in uma unica linha).
                 if brace_depth <= 0 && l.contains('}') {
                     i += 1;
                     // Se a proxima linha for o inicio de um novo teste (`#[test]`
@@ -311,9 +320,13 @@ fn extract_rust_test_entries_shallow(content: &str) -> Vec<String> {
                     }
                     break;
                 }
-                if trimmed_is_new_top_level_fn(l) {
+                if i > sig_line_idx && trimmed_is_new_top_level_fn(l) {
                     break;
                 }
+                i += 1;
+            }
+            // Salvaguarda absoluta contra loops infinitos: se por algum motivo i não avançar, força avanço de 1
+            if i == start_i {
                 i += 1;
             }
         } else {
@@ -816,5 +829,19 @@ fn test_unwrap_path() {
         // O segundo teste tem // expects: .unwrap() (vem antes do assert)
         let unwrap = entries.iter().find(|e| e.contains("test_unwrap_path")).unwrap();
         assert!(unwrap.contains("// expects: .unwrap()"), "Esperava contexto do unwrap, got: {unwrap}");
+    }
+
+    #[test]
+    fn test_extract_rust_test_entries_no_brace_on_same_line_does_not_loop_infinitely() {
+        let content = "\
+#[test]
+fn test_multiline_signature()
+{
+    assert!(true);
+}
+";
+        let entries = extract_rust_test_entries_shallow(content);
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].contains("test_multiline_signature"));
     }
 }

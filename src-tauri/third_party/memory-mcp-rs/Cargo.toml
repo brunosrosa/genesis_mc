@@ -46,10 +46,6 @@ name = "memory-mcp-rs"
 path = "src/main.rs"
 
 [[test]]
-name = "http_transport"
-path = "tests/http_transport.rs"
-
-[[test]]
 name = "integration"
 path = "tests/integration.rs"
 
@@ -58,62 +54,58 @@ name = "schema_validation"
 path = "tests/schema_validation.rs"
 
 [dependencies.anyhow]
-version = "1.0"
-
-[dependencies.axum]
-version = "0.8"
+version = "=1.0.100"
 
 [dependencies.clap]
-version = "4.5"
+version = "=4.5.53"
 features = ["derive"]
 
 [dependencies.dirs]
-version = "6.0"
+version = "=6.0.0"
 
 [dependencies.r2d2]
-version = "0.8"
+version = "=0.8.10"
 
 [dependencies.r2d2_sqlite]
-version = "0.31"
+version = "=0.31.0"
 
 [dependencies.rmcp]
-version = "0.10.0"
+version = "=0.10.0"
 features = [
     "transport-io",
     "server",
     "macros",
-    "transport-streamable-http-server",
 ]
 
 [dependencies.rusqlite]
-version = "0.37"
+version = "=0.37.0"
 features = ["bundled"]
 
 [dependencies.schemars]
-version = "1.1.0"
+version = "=1.1.0"
 features = ["derive"]
 
 [dependencies.serde]
-version = "1.0"
+version = "=1.0.228"
 features = ["derive"]
 
 [dependencies.serde_json]
-version = "1.0"
+version = "=1.0.145"
 
 [dependencies.tokio]
-version = "1.48.0"
+version = "=1.48.0"
 features = ["full"]
 
 [dependencies.tracing]
-version = "0.1"
+version = "=0.1.43"
 
 [dependencies.tracing-subscriber]
-version = "0.3"
+version = "=0.3.20"
 features = ["env-filter"]
 
 [dev-dependencies.reqwest]
-version = "0.12"
+version = "=0.12.24"
 features = ["json"]
 
 [dev-dependencies.tempfile]
-version = "3.23"
+version = "=3.23.0"

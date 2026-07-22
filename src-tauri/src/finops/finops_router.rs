@@ -67,9 +67,9 @@ fn decision_for_token_count(token_count: usize) -> RoutingDecision {
 }
 
 fn tiktoken_count(text: &str) -> Result<usize, FinOpsRouterError> {
-    let encoding = tiktoken_rs::cl100k_base()
-        .map_err(|e| FinOpsRouterError::TiktokenError(e.to_string()))?;
-    Ok(encoding.encode_ordinary(text).len())
+    let enc = tiktoken::get_encoding("cl100k_base")
+        .ok_or_else(|| FinOpsRouterError::TiktokenError("Failed to get cl100k_base encoding".to_string()))?;
+    Ok(enc.count(text))
 }
 
 #[cfg(test)]
@@ -197,8 +197,8 @@ mod tests {
         match result {
             Ok(payload) => {
                 let token_count = {
-                    let encoding = tiktoken_rs::cl100k_base().expect("Failed to create tiktoken encoder");
-                    encoding.encode_ordinary(&payload).len()
+                    let enc = tiktoken::get_encoding("cl100k_base").expect("Failed to create tiktoken encoder");
+                    enc.count(&payload)
                 };
 
                 let zone = if token_count < GREEN_THRESHOLD {

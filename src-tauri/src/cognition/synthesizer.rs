@@ -4,7 +4,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
 use crate::persist::ssot_injector::SsotInjector;
 use crate::persist::sheets_utils::col_idx_to_a1;
 use rusqlite::params;
@@ -1126,11 +1125,7 @@ fn format_epoch_utc(epoch: i64) -> String {
     if epoch <= 0 {
         return String::new();
     }
-    let Some(dt) = DateTime::<Utc>::from_timestamp(epoch, 0) else {
-        return String::new();
-    };
-    dt.with_timezone(&FixedOffset::west_opt(3 * 3600).unwrap())
-        .to_rfc3339_opts(SecondsFormat::Secs, true)
+    crate::telemetry::format_brt_rfc3339(epoch)
 }
 
 fn embargo_label(value: i64) -> &'static str {

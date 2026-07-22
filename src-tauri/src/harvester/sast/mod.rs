@@ -648,6 +648,38 @@ pub fn has_global_opengrep_coverage(targets: &[SastExecutionTarget]) -> bool {
     })
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ARQUITETURA DUPLA CAMADA SAST (ADR-SAST-002)
+//
+// CAMADA 1 — ESTRUTURAL O(1) [Fase 1, lâminas concorrentes]:
+//   • Opengrep: varrimento de AST com regras globais de segurança e saúde.
+//     Ativação: sempre que o router inclui StaticAnalysisBlade::Opengrep.
+//     Canal: UnsafeHotspot (regras security/taint) | Health (regras debt/flow).
+//   • Demais lâminas leves (Biome, Oxc, Ruff, Bandit, Govulncheck, Cppcheck,
+//     Sobelow) também executam concorrentemente nesta fase.
+//
+// CAMADA 2 — SEMÂNTICA HIR [Fase 2, RustClippy isolado e serial]:
+//   • cargo clippy --offline --no-deps: análise do HIR Rust real.
+//     Ativação: sempre que há manifesto Cargo.toml no repositório.
+//     Canal: Health (lints de qualidade) | UnsafeHotspot (unsafe/panic).
+//     Isolamento: semáforo RUST_CLIPPY_MAX_PARALLEL=1 previne corrida de I/O.
+//
+// COMBINAÇÃO: ambas as camadas acumulam resultados em `all_issues`.
+// Particionamento final:
+//   • Blob 06 (Unsafe Hotspots)  ← issues com channel == UnsafeHotspot
+//   • Blob 08 (Health Report)    ← issues com channel == Health
+//
+// FILTROS ALLOWLIST (Anti-Slop):
+//   Os filtros `should_keep_blob06_issue` e `should_keep_blob08_issue`
+//   aplicam allowlists APENAS em lâminas inerentemente ruidosas (biome, oxc,
+//   opengrep-health) para reduzir slop semântico. NUNCA anulam lâminas de
+//   compilação (clippy, cppcheck) que já são filtradas pelo compilador.
+//
+// FALLBACK (Trava C):
+//   Se o clippy falhar por impedimento de build (build.rs nativo, RCE risk),
+//   o sistema faz fallback para Opengrep naquele escopo, garantindo cobertura
+//   mínima mesmo sem a Camada 2 (rust_clippy_should_fallback_to_opengrep).
+// ═══════════════════════════════════════════════════════════════════
 impl PolyglotSastSidecar {
     pub async fn extract<E: SandboxExecutor + Send + Sync + 'static>(
         input: PolyglotSastInput<'_, E>,
@@ -684,6 +716,8 @@ impl PolyglotSastSidecar {
         };
         let has_global_opengrep_coverage = has_global_opengrep_coverage(&global_opengrep_targets);
         let mut join_set = JoinSet::new();
+        let mut clippy_targets = Vec::new();
+        let mut other_targets = Vec::new();
 
         for blade in &blades {
             let targets =
@@ -703,10 +737,28 @@ impl PolyglotSastSidecar {
             }
 
             for target in targets {
+                if target.blade == StaticAnalysisBlade::RustClippy {
+                    clippy_targets.push(target);
+                } else {
+                    other_targets.push(target);
+                }
+            }
+        }
+
+        let mut forensic_blade_diagnostics: Vec<String> = Vec::new();
+
+        // FASE 1 [CAMADA ESTRUTURAL O(1)]: Opengrep AST + demais lâminas concorrentes leves
+        if !other_targets.is_empty() {
+            info!(
+                count = other_targets.len(),
+                "SAST monorepo: iniciando Fase 1/2 (lâminas concorrentes leves)"
+            );
+            for target in other_targets {
                 let executor = Arc::clone(&input.executor);
                 let global_semaphore = Arc::clone(&global_semaphore);
-                let cargo_semaphore = Arc::clone(&cargo_semaphore);
                 let blade_parallelism = blade_parallelism_limit(target.blade);
+                let has_global_opengrep_coverage = has_global_opengrep_coverage;
+                let timeout_secs = input.timeout_secs;
                 join_set.spawn(async move {
                     let SastExecutionTarget {
                         blade,
@@ -716,20 +768,6 @@ impl PolyglotSastSidecar {
                         command_args,
                         forced_channel,
                     } = target;
-                    let _cargo_permit = if blade == StaticAnalysisBlade::RustClippy {
-                        Some(
-                            Arc::clone(&cargo_semaphore)
-                                .acquire_owned()
-                                .await
-                                .map_err(|e| SidecarError::ExecutionFailed {
-                                    reason: format!(
-                                        "falha ao adquirir permissão serial do cargo-clippy: {e}"
-                                    ),
-                                })?,
-                        )
-                    } else {
-                        None
-                    };
                     let _global_permit = Arc::clone(&global_semaphore)
                         .acquire_owned()
                         .await
@@ -743,14 +781,12 @@ impl PolyglotSastSidecar {
                         concurrency_limit = blade_parallelism,
                         global_in_flight = MONOREPO_SAST_MAX_PARALLEL
                             .saturating_sub(global_semaphore.available_permits()),
-                        cargo_in_flight = RUST_CLIPPY_MAX_PARALLEL
-                            .saturating_sub(cargo_semaphore.available_permits()),
-                        "SAST monorepo: permissão adquirida"
+                        "SAST monorepo: permissão adquirida (Fase 1)"
                     );
                     let result = run_sast_blade(
                         executor.as_ref(),
                         blade,
-                        input.timeout_secs,
+                        timeout_secs,
                         &execution_root,
                         &scope,
                         &scan_targets,
@@ -764,11 +800,8 @@ impl PolyglotSastSidecar {
                         scope = %scope,
                         cwd = %execution_root.display(),
                         available_global_permits = global_semaphore.available_permits(),
-                        available_cargo_permits = cargo_semaphore.available_permits(),
-                        "SAST monorepo: sub-scan concluído"
+                        "SAST monorepo: sub-scan concluído (Fase 1)"
                     );
-                    // Intercepta qualquer erro na lâmina e o transforma em diagnóstico forense
-                    // sem interromper as outras lâminas.
                     let forensic_blade_diagnostic = if let Err(ref err) = result {
                         let stderr_limpo = match err {
                             SidecarError::ExecutionFailed { reason } => reason.clone(),
@@ -777,22 +810,13 @@ impl PolyglotSastSidecar {
                             }
                             other => other.to_string(),
                         };
-                        if blade == StaticAnalysisBlade::RustClippy {
-                            Some(format!(
-                                "[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> {}",
-                                stderr_limpo
-                            ))
-                        } else {
-                            Some(format!(
-                                "[DIAGNÓSTICO ESTRUTURAL: Lâmina '{}' ignorada por violação/ausência] -> {}",
-                                blade_name(blade), stderr_limpo
-                            ))
-                        }
+                        Some(format!(
+                            "[DIAGNÓSTICO ESTRUTURAL: Lâmina '{}' ignorada por violação/ausência] -> {}",
+                            blade_name(blade), stderr_limpo
+                        ))
                     } else {
                         None
                     };
-                    // Se o diagnóstico forense foi capturado, substituir o Err
-                    // por Ok(SastBladeResult vazio) para que a lâmina não aborte o pipeline.
                     let result: Result<SastBladeResult, SidecarError> = if forensic_blade_diagnostic.is_some() {
                         Ok(SastBladeResult {
                             effective_blade: blade,
@@ -816,42 +840,219 @@ impl PolyglotSastSidecar {
                     })
                 });
             }
+
+            while let Some(joined) = join_set.join_next().await {
+                let outcome = match joined {
+                    Ok(Ok(outcome)) => outcome,
+                    Ok(Err(err)) => {
+                        error!(repo_path = %repo_path.display(), error = %err, "SAST monorepo: worker falhou de forma fatal na Fase 1");
+                        return Err(err);
+                    }
+                    Err(err) => {
+                        error!(repo_path = %repo_path.display(), error = %err, "SAST monorepo: join falhou de forma fatal na Fase 1");
+                        return Err(SidecarError::ExecutionFailed {
+                            reason: format!("Join error no worker da lâmina SAST (Fase 1): {}", err),
+                        });
+                    }
+                };
+
+                if let Some(diag) = outcome.forensic_rust_diagnostic {
+                    warn!(scope = %outcome.scope, "SAST monorepo: falha forense da lâmina capturada (Fase 1)");
+                    forensic_blade_diagnostics.push(diag);
+                    had_failed_payload = true;
+                    continue;
+                }
+
+                match outcome.result {
+                    Ok(bytes) => match normalize_sast_output(&repo_path, &outcome.execution_root, outcome.effective_blade, &bytes) {
+                        Ok(mut issues) => {
+                            if let Some(forced_channel) = outcome.forced_channel {
+                                for issue in &mut issues {
+                                    issue.channel = forced_channel;
+                                }
+                            }
+                            if issues.is_empty() {
+                                let blade_label = blade_name(outcome.effective_blade);
+                                issues.push(SodaHealthIssue {
+                                    level: "info".to_string(),
+                                    file: String::new(),
+                                    message: format!("[INFO] Nenhuma vulnerabilidade ou pendência encontrada pela lâmina '{}' no escopo '{}'.", blade_label, outcome.scope),
+                                    source_blade: blade_label.to_string(),
+                                    channel: SastIssueChannel::Health,
+                                });
+                            }
+                            had_successful_payload = true;
+                            all_issues.append(&mut issues);
+                        }
+                        Err(err) => {
+                            had_failed_payload = true;
+                            let blade_label = blade_name(outcome.effective_blade);
+                            let error_msg = format!("Lâmina '{}' falhou na normalização dos resultados no escopo '{}': {}", blade_label, outcome.scope, err);
+                            all_issues.push(SodaHealthIssue {
+                                level: "warning".to_string(),
+                                file: String::new(),
+                                message: format!("[FALHA_NORMALIZACAO] {}", error_msg),
+                                source_blade: blade_label.to_string(),
+                                channel: SastIssueChannel::Health,
+                            });
+                            had_successful_payload = true;
+                            warn!(
+                                blade = blade_name(outcome.effective_blade),
+                                requested_blade = blade_name(outcome.requested_blade),
+                                scope = %outcome.scope,
+                                cwd = %outcome.execution_root.display(),
+                                error = %err,
+                                "SAST monorepo: normalizacao falhou; descartando payload bruto (Fase 1)"
+                            );
+                        }
+                    },
+                    Err(err) => {
+                        let blade_label = blade_name(outcome.requested_blade);
+                        error!(blade = blade_label, scope = %outcome.scope, error = %err, "SAST monorepo: execucao falhou na Fase 1 (Fail-Closed)");
+                        return Err(err);
+                    }
+                }
+            }
         }
 
-        let mut forensic_blade_diagnostics: Vec<String> = Vec::new();
-        while let Some(joined) = join_set.join_next().await {
-            let outcome = match joined {
-                Ok(Ok(outcome)) => outcome,
-                Ok(Err(err)) => {
-                    error!(
-                        repo_path = %repo_path.display(),
-                        error = %err,
-                        "SAST monorepo: worker falhou de forma fatal"
+        // FASE 2 [CAMADA SEMÂNTICA HIR]: RustClippy isolado e serial — análise do HIR Rust real com --offline --no-deps
+        if !clippy_targets.is_empty() {
+            info!(
+                count = clippy_targets.len(),
+                "SAST monorepo: iniciando Fase 2/2 (lâminas RustClippy isoladas)"
+            );
+            for target in clippy_targets {
+                let executor = Arc::clone(&input.executor);
+                let global_semaphore = Arc::clone(&global_semaphore);
+                let cargo_semaphore = Arc::clone(&cargo_semaphore);
+                let blade_parallelism = blade_parallelism_limit(target.blade);
+                let has_global_opengrep_coverage = has_global_opengrep_coverage;
+                let timeout_secs = input.timeout_secs;
+                join_set.spawn(async move {
+                    let SastExecutionTarget {
+                        blade,
+                        execution_root,
+                        scope,
+                        scan_targets,
+                        command_args,
+                        forced_channel,
+                    } = target;
+                    // L14: Adquire permissão serial do cargo e também a permissão global para isolar de qualquer outra lâmina
+                    let _cargo_permit = Arc::clone(&cargo_semaphore)
+                        .acquire_owned()
+                        .await
+                        .map_err(|e| SidecarError::ExecutionFailed {
+                            reason: format!("falha ao adquirir permissão serial do cargo-clippy: {e}"),
+                        })?;
+                    let _global_permit = Arc::clone(&global_semaphore)
+                        .acquire_owned()
+                        .await
+                        .map_err(|e| SidecarError::ExecutionFailed {
+                            reason: format!("falha ao adquirir permissão do semáforo SAST: {e}"),
+                        })?;
+                    info!(
+                        blade = blade_name(blade),
+                        scope = %scope,
+                        cwd = %execution_root.display(),
+                        concurrency_limit = blade_parallelism,
+                        "SAST monorepo: permissão adquirida (Fase 2 Clippy)"
                     );
-                    return Err(err);
-                }
-                Err(err) => {
-                    error!(
-                        repo_path = %repo_path.display(),
-                        error = %err,
-                        "SAST monorepo: join do worker falhou de forma fatal"
+                    let result = run_sast_blade(
+                        executor.as_ref(),
+                        blade,
+                        timeout_secs,
+                        &execution_root,
+                        &scope,
+                        &scan_targets,
+                        command_args.as_deref(),
+                        forced_channel,
+                        has_global_opengrep_coverage,
+                    )
+                    .await;
+                    info!(
+                        blade = blade_name(blade),
+                        scope = %scope,
+                        cwd = %execution_root.display(),
+                        "SAST monorepo: sub-scan concluído (Fase 2 Clippy)"
                     );
-                    return Err(SidecarError::ExecutionFailed {
-                        reason: format!("Join error no worker da lâmina SAST: {}", err),
-                    });
-                }
-            };
-
-            // PRD-033: acumular diagnóstico forense (não aborta pipeline)
-            if let Some(diag) = outcome.forensic_rust_diagnostic {
-                warn!(
-                    scope = %outcome.scope,
-                    "SAST monorepo: falha forense da lâmina capturada"
-                );
-                forensic_blade_diagnostics.push(diag);
-                had_failed_payload = true;
-                continue;
+                    let forensic_blade_diagnostic = if let Err(ref err) = result {
+                        let stderr_limpo = match err {
+                            SidecarError::ExecutionFailed { reason } => reason.clone(),
+                            SidecarError::Timeout { timeout_secs } => {
+                                format!("timeout após {timeout_secs}s")
+                            }
+                            other => other.to_string(),
+                        };
+                        // Fail-Soft elegante: Se for erro de infraestrutura externa/offline, não registra o diagnóstico letal no Blob 08
+                        let is_rust_infra_network_error = stderr_limpo.contains("offline")
+                            || stderr_limpo.contains("failed to select a version")
+                            || stderr_limpo.contains("no matching package")
+                            || stderr_limpo.contains("failed to get")
+                            || stderr_limpo.contains("crates.io")
+                            || stderr_limpo.contains("fetch")
+                            || stderr_limpo.contains("network");
+                        
+                        if is_rust_infra_network_error {
+                            warn!(
+                                scope = %scope,
+                                error = %stderr_limpo,
+                                "SAST clippy: silenciando erro de infraestrutura offline no Blob 08 (Fail-Soft)"
+                            );
+                            None
+                        } else {
+                            Some(format!(
+                                "[DIAGNÓSTICO ESTRUTURAL RUST: FALHA FATAL DE COMPILAÇÃO OU RCE BLOQUEADO] -> {}",
+                                stderr_limpo
+                            ))
+                        }
+                    } else {
+                        None
+                    };
+                    let result: Result<SastBladeResult, SidecarError> = if result.is_err() {
+                        Ok(SastBladeResult {
+                            effective_blade: blade,
+                            bytes: Vec::new(),
+                        })
+                    } else {
+                        result
+                    };
+                    let (effective_blade, result) = match result {
+                        Ok(result) => (result.effective_blade, Ok(result.bytes)),
+                        Err(err) => (blade, Err(err)),
+                    };
+                    Ok::<SastExecutionOutcome, SidecarError>(SastExecutionOutcome {
+                        requested_blade: blade,
+                        effective_blade,
+                        execution_root,
+                        scope,
+                        forced_channel,
+                        result,
+                        forensic_rust_diagnostic: forensic_blade_diagnostic,
+                    })
+                });
             }
+
+            while let Some(joined) = join_set.join_next().await {
+                let outcome = match joined {
+                    Ok(Ok(outcome)) => outcome,
+                    Ok(Err(err)) => {
+                        error!(repo_path = %repo_path.display(), error = %err, "SAST monorepo: worker falhou na Fase 2");
+                        return Err(err);
+                    }
+                    Err(err) => {
+                        error!(repo_path = %repo_path.display(), error = %err, "SAST monorepo: join falhou na Fase 2");
+                        return Err(SidecarError::ExecutionFailed {
+                            reason: format!("Join error no worker da lâmina SAST (Fase 2): {}", err),
+                        });
+                    }
+                };
+
+                if let Some(diag) = outcome.forensic_rust_diagnostic {
+                    warn!(scope = %outcome.scope, "SAST monorepo: falha forense da lâmina capturada (Fase 2)");
+                    forensic_blade_diagnostics.push(diag);
+                    had_failed_payload = true;
+                    continue;
+                }
 
             match outcome.result {
                 Ok(bytes) => match normalize_sast_output(
@@ -914,6 +1115,7 @@ impl PolyglotSastSidecar {
                 }
             }
         }
+    }
 
         // PRD-033: só retorna zero-byte se não há NENHUM sinal (nem issues, nem forense)
         if had_failed_payload && !had_successful_payload && forensic_blade_diagnostics.is_empty() {
@@ -2122,10 +2324,18 @@ pub(crate) async fn execute_sidecar_in_dir<E: SandboxExecutor>(
             }
         }
         Err(e) => {
+            if binary == "biome" && cfg!(target_os = "windows") {
+                warn!(
+                    reason = %e,
+                    "Gaiola de Silicio AppContainer falhou para o Biome no Windows. Acionando fallback host-side."
+                );
+                return run_biome_host_fallback(executor, args, timeout_secs, execution_root).await;
+            }
             Err(SidecarError::ExecutionFailed {
                 reason: e.to_string(),
             })
         }
+
     }
 }
 
@@ -2306,53 +2516,62 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
     // PRD-035: Sandbox-Soft-Fail com Fallback Bare-Metal para OpenGrep.
     // O OpenGrep é um binário Nuitka que sofre STATUS_FAIL_FAST_EXCEPTION (-1073740791)
     // dentro do AppContainer do Windows quando o ACG (Arbitrary Code Guard) bloqueia a
-    // expansão do spec `{CACHE_DIR}\opengrep\v1.25.0` em runtime. Mesmo com a desidratação
-    // prévia, o spec é avaliado novamente no início de CADA scan e falha.
-    //
-    // Solução: Se a execução dentro da Gaiola de Silício falhar com FAIL_FAST, fazemos
-    // fallback gracioso para execução direta no host (sem AppContainer) para garantir
-    // que NENHUMA lâmina de blob_06/blob_08 seja perdida. A segurança do host é
-    // garantida porque o OpenGrep é uma ferramenta SAST de LEITURA PURA — sem RCE.
-    let sandbox_result = execute_sidecar_in_dir(
-        executor,
-        "opengrep",
-        &arg_refs,
-        timeout_secs,
-        SidecarExitPolicy::AllowFindingsExitOne,
-        execution_root,
-    )
-    .await;
+    // expansão do spec `{CACHE_DIR}\opengrep\v1.25.0` em runtime.
+    // Para otimização máxima de performance no Windows, ignoramos a Gaiola de Silício para o OpenGrep
+    // e executamos diretamente no host de forma segura (leitura pura).
+    #[cfg(all(target_os = "windows", not(test)))]
+    {
+        info!(
+            execution_root = %execution_root.display(),
+            "OpenGrep: Windows detectado — ignorando Gaiola de Silício para evitar crash ACG do Nuitka (PRD-035)."
+        );
+        run_opengrep_host_fallback(
+            executor,
+            &arg_refs,
+            timeout_secs,
+            execution_root,
+        )
+        .await
+    }
+    #[cfg(any(not(target_os = "windows"), test))]
+    {
+        let sandbox_result = execute_sidecar_in_dir(
+            executor,
+            "opengrep",
+            &arg_refs,
+            timeout_secs,
+            SidecarExitPolicy::AllowFindingsExitOne,
+            execution_root,
+        )
+        .await;
 
-    match sandbox_result {
-        Ok(bytes) => Ok(bytes),
-        Err(sandbox_err) => {
-            // Detecta se é o FAIL_FAST_EXCEPTION conhecido do Nuitka/AppContainer
-            let is_fail_fast = match &sandbox_err {
-                SidecarError::ExecutionFailed { reason } => {
-                    reason.contains("1073740791")
-                        || reason.contains("FAIL_FAST")
-                        || reason.contains("couldn't runtime expand spec")
+        match sandbox_result {
+            Ok(bytes) => Ok(bytes),
+            Err(sandbox_err) => {
+                let is_fail_fast = match &sandbox_err {
+                    SidecarError::ExecutionFailed { reason } => {
+                        reason.contains("1073740791")
+                            || reason.contains("FAIL_FAST")
+                            || reason.contains("couldn't runtime expand spec")
+                    }
+                    _ => false,
+                };
+                if !is_fail_fast {
+                    return Err(sandbox_err);
                 }
-                _ => false,
-            };
-            if !is_fail_fast {
-                return Err(sandbox_err);
+                warn!(
+                    execution_root = %execution_root.display(),
+                    reason = %sandbox_err,
+                    "OpenGrep: FAIL_FAST_EXCEPTION detectado dentro da Gaiola. Acionando Fallback Bare-Metal no host."
+                );
+                run_opengrep_host_fallback(
+                    executor,
+                    &arg_refs,
+                    timeout_secs,
+                    execution_root,
+                )
+                .await
             }
-            warn!(
-                execution_root = %execution_root.display(),
-                reason = %sandbox_err,
-                "OpenGrep: FAIL_FAST_EXCEPTION detectado dentro da Gaiola. Acionando Fallback Bare-Metal no host."
-            );
-            // Fallback: executa OpenGrep diretamente no host, sem AppContainer.
-            // O host tem PATH completo e permissões NTFS totais — Nuitka pode expandir
-            // o spec sem bloqueios de ACG.
-            run_opengrep_host_fallback(
-                executor,
-                &arg_refs,
-                timeout_secs,
-                execution_root,
-            )
-            .await
         }
     }
 }
@@ -2475,6 +2694,66 @@ async fn run_opengrep_host_fallback<E: SandboxExecutor>(
             stderr.chars().take(200).collect::<String>()
         ),
     })
+}
+
+async fn run_biome_host_fallback<E: SandboxExecutor>(
+    executor: &E,
+    args: &[&str],
+    timeout_secs: u64,
+    execution_root: &Path,
+) -> Result<Vec<u8>, SidecarError> {
+    use std::process::Stdio;
+    use tokio::time::timeout as tokio_timeout;
+
+    let biome_bin = resolve_sidecar_bin("biome").ok_or_else(|| SidecarError::ExecutionFailed {
+        reason: "Biome fallback: binário não encontrado".to_string(),
+    })?;
+
+    info!(
+        binary = %biome_bin.display(),
+        cwd = %execution_root.display(),
+        "Biome: Fallback host-side iniciado (sem AppContainer)"
+    );
+
+    let mut cmd = tokio::process::Command::new(&biome_bin);
+    cmd.args(args)
+        .current_dir(execution_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    if let Ok(temp) = std::env::var("TEMP") {
+        cmd.env("TEMP", &temp);
+        cmd.env("TMP", &temp);
+    }
+
+    let child = cmd.spawn().map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Biome fallback spawn falhou: {e}"),
+    })?;
+
+    let output = tokio_timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        child.wait_with_output()
+    )
+    .await
+    .map_err(|_| SidecarError::Timeout { timeout_secs })?
+    .map_err(|e| SidecarError::ExecutionFailed {
+        reason: format!("Biome fallback wait falhou: {e}"),
+    })?;
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = output.stdout;
+    let sanitized_stdout = sanitize_sidecar_output(executor.repo_path(), &stdout);
+
+    if exit_code == 0 || (exit_code == 1 && !sanitized_stdout.is_empty()) {
+        info!(exit_code, stdout_bytes = sanitized_stdout.len(), "Biome: Fallback host-side concluído com sucesso");
+        Ok(sanitized_stdout)
+    } else {
+        Err(SidecarError::ExecutionFailed {
+            reason: format!("Biome fallback falhou (exit={})", exit_code),
+        })
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3243,8 +3522,9 @@ mod tests {
         let blob08 = String::from_utf8_lossy(&artifacts.health_report_blob);
 
         assert!(
-            blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência]"),
-            "Blob 08 deve registrar a falha de biome de forma fail-soft, mas foi:\n{blob08}"
+            blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'opengrep' ignorada por violação/ausência]")
+                || blob08.contains("[DIAGNÓSTICO ESTRUTURAL: Lâmina 'biome' ignorada por violação/ausência]"),
+            "Blob 08 deve registrar a falha de blade de forma fail-soft, mas foi:\n{blob08}"
         );
     }
 

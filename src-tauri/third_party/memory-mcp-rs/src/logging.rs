@@ -3,42 +3,19 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 /// Transport mode for MCP server
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportMode {
-    /// stdio transport (default) - for local MCP clients
+    /// stdio transport - for local MCP clients
     Stdio,
-    /// Streamable HTTP transport - for remote/web access
-    Stream,
 }
 
 /// Initialize logging based on transport mode
-///
-/// # stdio mode
-/// - NO stderr output by default (prevents connection issues with MCP clients)
-/// - File logging only when log_file is Some
-///
-/// # Stream mode
-/// - Normal console (stderr) logging enabled
-/// - File logging when log_file is Some (in addition to console)
 pub fn init_logging(
-    mode: TransportMode,
+    _mode: TransportMode,
     log_file: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match mode {
-        TransportMode::Stdio => {
-            // CRITICAL: stdio NEVER logs to stderr unless --log is explicitly enabled
-            // Any stderr output during handshake causes "connection closed" in MCP clients
-            if let Some(filename) = log_file {
-                init_file_logging(filename)?;
-            }
-            // Otherwise: no logging initialization at all
-        }
-        TransportMode::Stream => {
-            // Stream: Always log to stderr, optionally to file
-            if let Some(filename) = log_file {
-                init_dual_logging(filename)?;
-            } else {
-                init_console_logging()?;
-            }
-        }
+    // CRITICAL: stdio NEVER logs to stderr unless --log is explicitly enabled
+    // Any stderr output during handshake causes "connection closed" in MCP clients
+    if let Some(filename) = log_file {
+        init_file_logging(filename)?;
     }
     Ok(())
 }

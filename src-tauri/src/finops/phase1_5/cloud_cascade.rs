@@ -1,5 +1,7 @@
-use thiserror::Error;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::Semaphore;
 
 #[derive(Error, Debug, Clone)]
 pub enum CascadeError {
@@ -16,13 +18,15 @@ pub enum CascadeError {
 }
 
 const MAX_OUTPUT_TOKENS: usize = 3_000;
-const BLOB_10_CANON_MARKER: &str = "=== BLOB_10_CANON_CONTEXT ===";
 
 #[derive(Debug, Serialize)]
 struct OpenRouterRequest {
     model: String,
     messages: Vec<Message>,
+    temperature: f32,
     max_tokens: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    include_reasoning: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -74,26 +78,39 @@ pub struct CloudCascade {
     api_key: String,
     client: reqwest::Client,
     base_url: String,
+    semaphore: Arc<Semaphore>,
+    canon_context: Arc<String>,
 }
 
 impl CloudCascade {
     pub fn new() -> Result<Self, CascadeError> {
-        let api_key = ["OPENROUTER_API_FAST_KEY", "OPENROUTER_API_FREE_KEY", "OPENROUTER_API_HEAVY_KEY"]
-            .into_iter()
-            .find_map(|key| std::env::var(key).ok())
-            .map(|value| value.trim().trim_matches('"').to_string())
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                CascadeError::NetworkError(
-                    "OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY not set"
-                        .to_string(),
-                )
-            })?;
+        let api_key = [
+            "OPENROUTER_API_FAST_KEY",
+            "OPENROUTER_API_FREE_KEY",
+            "OPENROUTER_API_HEAVY_KEY",
+        ]
+        .into_iter()
+        .find_map(|key| std::env::var(key).ok())
+        .map(|value| value.trim().trim_matches('"').to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            CascadeError::NetworkError(
+                "OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY/OPENROUTER_API_HEAVY_KEY not set"
+                    .to_string(),
+            )
+        })?;
+
+        let canon_context = Arc::new(load_soda_canon_manifest());
 
         Ok(CloudCascade {
             api_key,
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()
+                .map_err(|e| CascadeError::NetworkError(e.to_string()))?,
             base_url: openrouter_chat_completions_url(),
+            semaphore: Arc::new(Semaphore::new(2)),
+            canon_context,
         })
     }
 
@@ -103,6 +120,8 @@ impl CloudCascade {
             api_key: "test_key".to_string(),
             client: reqwest::Client::new(),
             base_url: format!("{}/api/v1/chat/completions", base_url.trim_end_matches('/')),
+            semaphore: Arc::new(Semaphore::new(2)),
+            canon_context: Arc::new(load_soda_canon_manifest()),
         }
     }
 
@@ -115,20 +134,23 @@ impl CloudCascade {
             return Err(CascadeError::InvalidInput);
         }
 
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .map_err(|e| CascadeError::NetworkError(format!("Semaphore error: {}", e)))?;
+
         let result = self
             .call_openrouter(payload, system_prompt, &free_model_name())
             .await;
 
         match result {
             Ok(essence) => Ok(essence),
-            Err(CascadeError::FreeTierUnavailable { status }) if status == 429 || status == 503 => {
-                tracing::info!(
-                    "CloudCascade: Free tier unavailable ({}), switching to paid",
-                    status
-                );
-                self.call_openrouter(payload, system_prompt, &paid_model_name()).await
+            Err(CascadeError::FreeTierUnavailable { .. }) => {
+                self.call_openrouter(payload, system_prompt, &paid_model_name())
+                    .await
             }
-            Err(e) => Err(e),
+            Err(err) => Err(err),
         }
     }
 
@@ -138,19 +160,33 @@ impl CloudCascade {
         system_prompt: &str,
         model: &str,
     ) -> Result<String, CascadeError> {
-        let request = OpenRouterRequest {
+        let messages = vec![
+            Message {
+                role: "system".to_string(),
+                content: MessageContent::Parts(vec![ContentPart {
+                    kind: "text".to_string(),
+                    text: format!("=== SODA CANON CONTEXT ===\n{}", self.canon_context),
+                    cache_control: Some(CacheControl {
+                        kind: "ephemeral".to_string(),
+                        ttl: None,
+                    }),
+                }]),
+            },
+            Message {
+                role: "user".to_string(),
+                content: MessageContent::Text(format!(
+                    "{}\n\n=== CONTEÚDO DO ARTEFATO ===\n{}",
+                    system_prompt, payload
+                )),
+            },
+        ];
+
+        let req_body = OpenRouterRequest {
             model: model.to_string(),
-            messages: vec![
-                Message {
-                    role: "system".to_string(),
-                    content: MessageContent::Text(system_prompt.to_string()),
-                },
-                Message {
-                    role: "user".to_string(),
-                    content: build_user_content(payload),
-                },
-            ],
+            messages,
+            temperature: 0.0,
             max_tokens: MAX_OUTPUT_TOKENS,
+            include_reasoning: Some(false),
         };
 
         let response = self
@@ -158,62 +194,70 @@ impl CloudCascade {
             .post(&self.base_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
-            .json(&request)
+            .json(&req_body)
             .send()
             .await
-            .map_err(|e| CascadeError::NetworkError(e.to_string()))?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    CascadeError::RequestTimeout(e.to_string())
+                } else {
+                    CascadeError::NetworkError(e.to_string())
+                }
+            })?;
 
         let status = response.status();
+        if status.is_success() {
+            let body: OpenRouterResponse =
+                response
+                    .json()
+                    .await
+                    .map_err(|e| CascadeError::PaidFallbackFailed {
+                        status: status.as_u16(),
+                        message: format!("Failed to parse JSON response: {}", e),
+                    })?;
 
-        if status.as_u16() == 200 {
-            let body: OpenRouterResponse = response
-                .json()
-                .await
-                .map_err(|e| CascadeError::NetworkError(e.to_string()))?;
+            let choice = body.choices.into_iter().next().ok_or_else(|| {
+                CascadeError::PaidFallbackFailed {
+                    status: status.as_u16(),
+                    message: "Response contained no choices".to_string(),
+                }
+            })?;
 
-            body.choices
-                .first()
-                .map(|c| c.message.content.clone())
-                .ok_or_else(|| CascadeError::NetworkError("Empty response".to_string()))
-        } else if status.as_u16() == 429 || status.as_u16() == 503 {
+            Ok(choice.message.content)
+        } else if status.as_u16() == 429 || status.is_server_error() {
             Err(CascadeError::FreeTierUnavailable {
                 status: status.as_u16(),
             })
         } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+
             Err(CascadeError::PaidFallbackFailed {
                 status: status.as_u16(),
-                message: format!("HTTP {}", status.as_u16()),
+                message: format!("HTTP {}: {}", status.as_u16(), error_text),
             })
         }
     }
 }
 
-fn build_user_content(payload: &str) -> MessageContent {
-    let (before, after) = match payload.split_once(BLOB_10_CANON_MARKER) {
-        Some((left, right)) => (left, Some(right)),
-        None => return MessageContent::Text(payload.to_string()),
-    };
+fn load_soda_canon_manifest() -> String {
+    let paths = [
+        "Z:\\souls_mc\\docs\\SODA_CANON_MANIFEST.md",
+        "docs/SODA_CANON_MANIFEST.md",
+        "../docs/SODA_CANON_MANIFEST.md",
+    ];
 
-    let mut parts = Vec::new();
-    if !before.trim().is_empty() {
-        parts.push(ContentPart {
-            kind: "text".to_string(),
-            text: before.to_string(),
-            cache_control: None,
-        });
+    for path in paths {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if !content.trim().is_empty() {
+                return content;
+            }
+        }
     }
 
-    let canon_block = format!("{BLOB_10_CANON_MARKER}{after}", after = after.unwrap_or_default());
-    parts.push(ContentPart {
-        kind: "text".to_string(),
-        text: canon_block,
-        cache_control: Some(CacheControl {
-            kind: "ephemeral".to_string(),
-            ttl: Some("1h".to_string()),
-        }),
-    });
-
-    MessageContent::Parts(parts)
+    "SODA Canon Manifest unavailable in filesystem.".to_string()
 }
 
 fn openrouter_chat_completions_url() -> String {
@@ -244,7 +288,7 @@ fn paid_model_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::{Server, Mock};
+    use mockito::{Mock, Server};
 
     fn create_openrouter_success_mock(server: &mut Server) -> Mock {
         let response_body = serde_json::json!({
@@ -273,8 +317,8 @@ mod tests {
     fn create_server_error_mock(server: &mut Server) -> Mock {
         server
             .mock("POST", "/api/v1/chat/completions")
-            .with_status(500)
-            .with_body(r#"{"error": "Internal server error"}"#)
+            .with_status(400)
+            .with_body(r#"{"error": "Bad request"}"#)
             .create()
     }
 
@@ -347,9 +391,7 @@ mod tests {
         let server = Server::new_async().await;
         let cascade = CloudCascade::with_url(&server.url());
 
-        let result = cascade
-            .cascade_distill("", "Distil this")
-            .await;
+        let result = cascade.cascade_distill("", "Distil this").await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CascadeError::InvalidInput));
@@ -360,9 +402,7 @@ mod tests {
         let server = Server::new_async().await;
         let cascade = CloudCascade::with_url(&server.url());
 
-        let result = cascade
-            .cascade_distill("   \n\t  ", "Distil this")
-            .await;
+        let result = cascade.cascade_distill("   \n\t  ", "Distil this").await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CascadeError::InvalidInput));
