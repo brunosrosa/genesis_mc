@@ -49,6 +49,7 @@ embeddings = [
     "dep:rten",
     "dep:rten-tensor",
 ]
+http-server = []
 neural = [
     "dep:rten",
     "dep:rten-tensor",

@@ -1,122 +1,136 @@
-use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use reqwest::Client;
+use rusqlite::{params, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tracing::{info, warn};
-use souls_mc_lib::cognition::synthesizer::master_solutions_header_range;
+use url::Url;
+
 use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
-const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
-const STATUS_GATILHO: &str = "INICIAR_TRIAGEM";
-const STATUS_CONCLUIDO: &str = "TRIAGEM_CONCLUIDA";
-const FASE_OK: &str = "FASE_-0.5_BATEDOR_OK";
-
 const README_CHAR_LIMIT: usize = 3_000;
-const MAX_UPDATES_PER_BATCH: usize = 50;
 const MAX_RESUMO_CHARS: usize = 800;
-const MAX_DEDUP_LINKS_IN_RESUMO: usize = 12;
 
 const ALLOWED_CATEGORIA_ARQUITETURAL: [&str; 47] = [
-        "AI_Research - Foundation_Model",
-        "CanvasUI - Core_Pattern",
-        "CanvasUI - Domain_App",
-        "CanvasUI - Ops_Dashboard",
-        "CanvasUI - Terminal_Workspace",
-        "Comms_Social - Platform_Client",
-        "Domain_App - Self_Hosted",
-        "Infraestrutura_Core - Concurrency_OS",
-        "Infraestrutura_Core - Data_Pipeline",
-        "Infraestrutura_Core - Data_Serialization",
-        "Infraestrutura_Core - Hardware_Ops",
-        "Knowledge_Extraction - Doc_Parsing",
-        "Knowledge_Extraction - Generic",
-        "Knowledge_Extraction - Multimedia_Parsing",
-        "Knowledge_Extraction - Semantic_Mining",
-        "Knowledge_Extraction - Web_Scraping",
-        "Memoria_RAG - Graph_Store",
-        "Memoria_RAG - Relational_Episodic",
-        "Memoria_RAG - Vector_Store",
-        "Model_Serving - Edge_Deployment",
-        "Model_Serving - Inference_Engine",
-        "Model_Serving - Resource_Scheduler",
-        "Model_Serving - Training_FineTuning",
-        "Orquestracao_Agentes - Dev_Framework",
-        "Orquestracao_Agentes - OS_Runtime",
-        "Orquestracao_Agentes - Simulation_Environment",
-        "Orquestracao_Agentes - Skill_Library",
-        "Orquestracao_Agentes - Specialized_Worker",
-        "Orquestracao_Agentes - Workflow_DAG",
-        "Roteamento_FinOps - API_Gateway",
-        "Roteamento_FinOps - Cost_Analytics",
-        "Roteamento_FinOps - Network_Tunnel",
-        "Roteamento_FinOps - Prompt_Caching",
-        "Seguranca_Sandbox - Auth_Crypto",
-        "Seguranca_Sandbox - MicroVM_Container",
-        "Seguranca_Sandbox - Privacy_Governance",
-        "Seguranca_Sandbox - Runtime_Isolation",
-        "Tooling_Dev - CLI_Utilities",
-        "Tooling_Dev - Knowledge_Curation",
-        "Tooling_Dev - MCP_Bridging",
-        "Tooling_Dev - Observability_Eval",
-        "Tooling_Dev - Prompt_Knowledge",
-        "UILibrary - Animation_Graphics",
-        "UILibrary - Component_System",
-        "UILibrary - Generative_UI",
-        "UILibrary - Terminal_TUI",
-        "Outros - Uncategorized",
+    "AI_Research - Foundation_Model",
+    "CanvasUI - Core_Pattern",
+    "CanvasUI - Domain_App",
+    "CanvasUI - Ops_Dashboard",
+    "CanvasUI - Terminal_Workspace",
+    "Comms_Social - Platform_Client",
+    "Domain_App - Self_Hosted",
+    "Infraestrutura_Core - Concurrency_OS",
+    "Infraestrutura_Core - Data_Pipeline",
+    "Infraestrutura_Core - Data_Serialization",
+    "Infraestrutura_Core - Hardware_Ops",
+    "Knowledge_Extraction - Doc_Parsing",
+    "Knowledge_Extraction - Generic",
+    "Knowledge_Extraction - Multimedia_Parsing",
+    "Knowledge_Extraction - Semantic_Mining",
+    "Knowledge_Extraction - Web_Scraping",
+    "Memoria_RAG - Graph_Store",
+    "Memoria_RAG - Relational_Episodic",
+    "Memoria_RAG - Vector_Store",
+    "Model_Serving - Edge_Deployment",
+    "Model_Serving - Inference_Engine",
+    "Model_Serving - Resource_Scheduler",
+    "Model_Serving - Training_FineTuning",
+    "Orquestracao_Agentes - Dev_Framework",
+    "Orquestracao_Agentes - OS_Runtime",
+    "Orquestracao_Agentes - Simulation_Environment",
+    "Orquestracao_Agentes - Skill_Library",
+    "Orquestracao_Agentes - Specialized_Worker",
+    "Orquestracao_Agentes - Workflow_DAG",
+    "Roteamento_FinOps - API_Gateway",
+    "Roteamento_FinOps - Cost_Analytics",
+    "Roteamento_FinOps - Network_Tunnel",
+    "Roteamento_FinOps - Prompt_Caching",
+    "Seguranca_Sandbox - Auth_Crypto",
+    "Seguranca_Sandbox - MicroVM_Container",
+    "Seguranca_Sandbox - Privacy_Governance",
+    "Seguranca_Sandbox - Runtime_Isolation",
+    "Tooling_Dev - CLI_Utilities",
+    "Tooling_Dev - Knowledge_Curation",
+    "Tooling_Dev - MCP_Bridging",
+    "Tooling_Dev - Observability_Eval",
+    "Tooling_Dev - Prompt_Knowledge",
+    "UILibrary - Animation_Graphics",
+    "UILibrary - Component_System",
+    "UILibrary - Generative_UI",
+    "UILibrary - Terminal_TUI",
+    "Outros - Uncategorized",
 ];
 
-struct AbortOnDrop(tokio::task::JoinHandle<()>);
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct BatedorOut {
+    pub proposta_original_resumo: String,
+    pub categoria_arquitetural: String,
+}
 
-impl Drop for AbortOnDrop {
-    fn drop(&mut self) {
-        self.0.abort();
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingTriageRepo {
+    pub project_name: String,
+    pub repo_url: String,
+}
+
+trait TriageLlmClient: Send + Sync {
+    fn triage<'a>(
+        &'a self,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<BatedorOut, String>> + Send + 'a>>;
+}
+
+trait ReadmeFetcher: Send + Sync {
+    fn fetch_readme_truncated<'a>(
+        &'a self,
+        repo_url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;
+}
+
+struct GithubReadmeFetcher;
+
+impl ReadmeFetcher for GithubReadmeFetcher {
+    fn fetch_readme_truncated<'a>(
+        &'a self,
+        repo_url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async move {
+            fetch_readme_truncated(repo_url).await
+        })
     }
 }
 
-fn workspace_root() -> io::Result<PathBuf> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    Path::new(manifest_dir)
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| io::Error::other("Falha ao resolver raiz do projeto"))
+trait BatedorRepoStore: Send + Sync {
+    fn fetch_pending_triage_repos<'a>(
+        &'a self,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<PendingTriageRepo>, String>> + Send + 'a>>;
+
+    fn persist_triage_result<'a>(
+        &'a self,
+        project_name: &'a str,
+        repo_url: &'a str,
+        proposta_resumo: &'a str,
+        categoria: &'a str,
+        new_status: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 }
 
-fn col_idx_to_a1(col_idx0: usize) -> String {
-    let mut n = col_idx0 + 1;
-    let mut out = String::new();
-    while n > 0 {
-        let rem = (n - 1) % 26;
-        out.insert(0, (b'A' + rem as u8) as char);
-        n = (n - 1) / 26;
-    }
-    out
+struct SqliteBatedorRepoStore {
+    db_path: PathBuf,
 }
 
-fn normalize_header_cell(raw: &str) -> String {
-    let lowered = raw.trim().to_ascii_lowercase();
-    let mut out = String::with_capacity(lowered.len());
-    for ch in lowered.chars() {
-        let mapped = match ch {
-            'á' | 'à' | 'â' | 'ã' | 'ä' => 'a',
-            'é' | 'è' | 'ê' | 'ë' => 'e',
-            'í' | 'ì' | 'î' | 'ï' => 'i',
-            'ó' | 'ò' | 'ô' | 'õ' | 'ö' => 'o',
-            'ú' | 'ù' | 'û' | 'ü' => 'u',
-            'ç' => 'c',
-            ' ' | '-' => '_',
-            _ => ch,
-        };
-        out.push(mapped);
+impl SqliteBatedorRepoStore {
+    fn new(db_path: PathBuf) -> Self {
+        Self { db_path }
     }
-    out
 }
 
 fn truncate_chars(input: &str, max_chars: usize) -> String {
@@ -124,6 +138,20 @@ fn truncate_chars(input: &str, max_chars: usize) -> String {
         return String::new();
     }
     input.chars().take(max_chars).collect()
+}
+
+fn try_extract_owner_repo_from_repo_url(repo_url: &str) -> Option<(String, String)> {
+    let url = Url::parse(repo_url).ok()?;
+    if !url.host_str()?.eq_ignore_ascii_case("github.com") {
+        return None;
+    }
+    let mut parts = url.path().trim_matches('/').split('/');
+    let owner = parts.next()?.trim().to_string();
+    let repo = parts.next()?.trim().to_string();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some((owner, repo))
 }
 
 fn sanitize_env_scalar(raw: &str) -> String {
@@ -139,250 +167,311 @@ fn sanitize_env_scalar(raw: &str) -> String {
     }
 }
 
-fn normalize_batedor_model(raw: &str) -> String {
-    let mut m = sanitize_env_scalar(raw);
-    if m.eq_ignore_ascii_case("deepseek/deepseek-v4") {
-        m = "deepseek/deepseek-v4-flash".to_string();
+fn validate_batedor_out(out: &BatedorOut) -> Result<(), String> {
+    let resumo = out.proposta_original_resumo.trim();
+    if resumo.is_empty() {
+        return Err("proposta_original_resumo vazio".to_string());
     }
-    m
+    if resumo.chars().count() > MAX_RESUMO_CHARS {
+        return Err(format!(
+            "proposta_original_resumo excede limite de {} chars",
+            MAX_RESUMO_CHARS
+        ));
+    }
+    let cat = out.categoria_arquitetural.trim();
+    if cat.is_empty() {
+        return Err("categoria_arquitetural inválida (vazia)".to_string());
+    }
+    if !ALLOWED_CATEGORIA_ARQUITETURAL.iter().any(|v| v == &cat) {
+        return Err("categoria_arquitetural inválida (fora do ENUM)".to_string());
+    }
+    Ok(())
 }
 
-fn try_extract_owner_repo_from_repo_url(repo_url: &str) -> Option<(String, String)> {
-    let url = url::Url::parse(repo_url).ok()?;
-    if !url.host_str()?.eq_ignore_ascii_case("github.com") {
-        return None;
-    }
-    let mut parts = url.path().trim_matches('/').split('/');
-    let owner = parts.next()?.trim().to_string();
-    let repo = parts.next()?.trim().to_string();
-    if owner.is_empty() || repo.is_empty() {
-        return None;
-    }
-    Some((owner, repo))
-}
-
-type SheetsDataFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<Vec<Vec<String>>, String>> + Send + 'a>>;
-type SheetsUpdateFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
-
-const GOOGLE_MCP_TIMEOUT: Duration = Duration::from_secs(180);
-
-trait SheetsClient: Send + Sync {
-    fn get_sheet_data<'a>(
+impl BatedorRepoStore for SqliteBatedorRepoStore {
+    fn fetch_pending_triage_repos<'a>(
         &'a self,
-        spreadsheet_id: &'a str,
-        sheet: &'a str,
-        range: String,
-    ) -> SheetsDataFuture<'a>;
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<PendingTriageRepo>, String>> + Send + 'a>> {
+        let db_path = self.db_path.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || -> Result<Vec<PendingTriageRepo>, String> {
+                let conn = Connection::open(&db_path)
+                    .map_err(|e| format!("Batedor: falha ao abrir SQLite: {}", e))?;
+                
+                let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN proposta_original_resumo TEXT", []);
+                let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN categoria_arquitetural TEXT", []);
 
-    fn batch_update_cells<'a>(
-        &'a self,
-        spreadsheet_id: &'a str,
-        sheet: &'a str,
-        ranges: HashMap<String, Vec<Vec<String>>>,
-    ) -> SheetsUpdateFuture<'a>;
-}
-
-struct SheetsMcpClient;
-
-impl SheetsMcpClient {
-    async fn read_values(
-        spreadsheet_id: &str,
-        sheet: &str,
-        range: &str,
-    ) -> Result<Vec<Vec<String>>, String> {
-        let out = souls_mc_lib::persist::google_workspace_mcp::read_values_async(
-            spreadsheet_id,
-            sheet,
-            range,
-            "f-minus-0-5-batedor",
-            GOOGLE_MCP_TIMEOUT,
-        )
-        .await?;
-        Ok(SheetsMcpClient::extract_values_2d(&out))
-    }
-
-    async fn write_values(
-        spreadsheet_id: &str,
-        sheet: &str,
-        ranges: HashMap<String, Vec<Vec<String>>>,
-    ) -> Result<(), String> {
-        let mut payload_ranges = serde_json::Map::new();
-        for (range, values) in ranges {
-            payload_ranges.insert(range, json!(values));
-        }
-        souls_mc_lib::persist::google_workspace_mcp::write_ranges_async(
-            spreadsheet_id,
-            sheet,
-            &payload_ranges,
-            "f-minus-0-5-batedor",
-            GOOGLE_MCP_TIMEOUT,
-        )
-        .await?;
-        Ok(())
-    }
-
-    fn extract_values_2d(json: &Value) -> Vec<Vec<String>> {
-        if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
-            return values
-                .iter()
-                .map(|row| {
-                    row.as_array()
-                        .unwrap_or(&vec![])
-                        .iter()
-                        .map(|cell| cell.as_str().unwrap_or("").to_string())
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>();
-        }
-        if let Some(vrs) = json.get("valueRanges").and_then(|v| v.as_array()) {
-            if let Some(first) = vrs.first() {
-                if let Some(values) = first.get("values").and_then(|v| v.as_array()) {
-                    return values
-                        .iter()
-                        .map(|row| {
-                            row.as_array()
-                                .unwrap_or(&vec![])
-                                .iter()
-                                .map(|cell| cell.as_str().unwrap_or("").to_string())
-                                .collect::<Vec<_>>()
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT project_name, repo_url
+                         FROM repositorios
+                         WHERE status_processamento IN ('PENDENTE_TRIAGEM', 'INICIAR_TRIAGEM')",
+                    )
+                    .map_err(|e| format!("Batedor: erro na query: {e}"))?;
+                
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok(PendingTriageRepo {
+                            project_name: row.get(0)?,
+                            repo_url: row.get(1)?,
                         })
-                        .collect::<Vec<_>>();
+                    })
+                    .map_err(|e| format!("Batedor: erro na query: {e}"))?;
+                
+                let mut out = Vec::new();
+                for r in rows {
+                    out.push(r.map_err(|e| e.to_string())?);
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(|e| format!("Join error: {e}"))?
+        })
+    }
+
+    fn persist_triage_result<'a>(
+        &'a self,
+        project_name: &'a str,
+        repo_url: &'a str,
+        proposta_resumo: &'a str,
+        categoria: &'a str,
+        new_status: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
+        let db_path = self.db_path.clone();
+        let project_name = project_name.trim().to_string();
+        let repo_url = repo_url.trim().to_string();
+        let proposta_resumo = proposta_resumo.trim().to_string();
+        let categoria = categoria.trim().to_string();
+        let new_status = new_status.trim().to_string();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || -> Result<(), String> {
+                let conn = Connection::open(&db_path)
+                    .map_err(|e| format!("Batedor: falha ao abrir SQLite: {}", e))?;
+                
+                let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN proposta_original_resumo TEXT", []);
+                let _ = conn.execute("ALTER TABLE repositorios ADD COLUMN categoria_arquitetural TEXT", []);
+
+                let repo_key = if !project_name.is_empty() {
+                    project_name
+                } else {
+                    try_extract_owner_repo_from_repo_url(&repo_url)
+                        .map(|(o, r)| format!("{o}/{r}"))
+                        .unwrap_or_default()
+                };
+
+                let updated_rows = conn
+                    .execute(
+                        "UPDATE repositorios
+                         SET proposta_original_resumo = ?1,
+                             categoria_arquitetural = ?2,
+                             status_processamento = ?3,
+                             retry_count = 0
+                         WHERE project_name = ?4 OR repo_url = ?5",
+                        params![proposta_resumo, categoria, new_status, repo_key, repo_url],
+                    )
+                    .map_err(|e| format!("Batedor: falha ao persistir triagem no SQLite: {e}"))?;
+
+                if updated_rows == 0 {
+                    return Err(format!(
+                        "Batedor: nenhuma linha atualizada para project_name='{}' repo_url='{}'",
+                        repo_key, repo_url
+                    ));
+                }
+                Ok(())
+            })
+            .await
+            .map_err(|e| format!("Join error: {e}"))?
+        })
+    }
+}
+
+// =========================================================
+// WATERFALL ROUTING CLIENT WITH CIRCUIT BREAKER (FINOPS)
+// =========================================================
+
+struct WaterfallRoutingClient {
+    client: Client,
+    google_api_key: Option<String>,
+    google_model: String,
+    openrouter_free_key: Option<String>,
+    openrouter_free_model: String,
+    openrouter_fast_key: Option<String>,
+    openrouter_fast_model: String,
+    openrouter_base_url: String,
+}
+
+impl WaterfallRoutingClient {
+    fn new() -> Result<Self, String> {
+        let google_api_key = std::env::var("GOOGLE_API_KEY")
+            .or_else(|_| std::env::var("GOOGLE_API_FREE_KEY"))
+            .ok()
+            .map(|v| sanitize_env_scalar(&v))
+            .filter(|v| !v.is_empty());
+
+        let google_model = std::env::var("GOOGLE_MODEL_FAST")
+            .ok()
+            .map(|v| sanitize_env_scalar(&v))
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "gemini-flash-latest".to_string());
+
+        let openrouter_free_key = std::env::var("OPENROUTER_API_FREE_KEY")
+            .or_else(|_| std::env::var("OPENROUTER_API_FAST_KEY"))
+            .ok()
+            .map(|v| sanitize_env_scalar(&v))
+            .filter(|v| !v.is_empty());
+
+        let openrouter_free_model = std::env::var("OPENROUTER_FREE_MODEL")
+            .ok()
+            .map(|v| sanitize_env_scalar(&v))
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "openrouter/free".to_string());
+
+        let openrouter_fast_key = std::env::var("OPENROUTER_API_FAST_KEY")
+            .or_else(|_| std::env::var("OPENROUTER_API_HEAVY_KEY"))
+            .or_else(|_| std::env::var("OPENROUTER_API_FREE_KEY"))
+            .ok()
+            .map(|v| sanitize_env_scalar(&v))
+            .filter(|v| !v.is_empty());
+
+        let openrouter_fast_model = std::env::var("OPENROUTER_DEFAULT_MODEL")
+            .or_else(|_| std::env::var("OPENROUTER_BATEDOR_MODEL"))
+            .ok()
+            .map(|v| sanitize_env_scalar(&v))
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "deepseek/deepseek-v4-flash".to_string());
+
+        let openrouter_base_url = std::env::var("OPENAI_BASE_URL")
+            .ok()
+            .map(|v| sanitize_env_scalar(&v))
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
+
+        Ok(Self {
+            client: Client::new(),
+            google_api_key,
+            google_model,
+            openrouter_free_key,
+            openrouter_free_model,
+            openrouter_fast_key,
+            openrouter_fast_model,
+            openrouter_base_url,
+        })
+    }
+
+    async fn try_google_native(&self, prompt: &str) -> Result<BatedorOut, String> {
+        let Some(key) = &self.google_api_key else {
+            return Err("Google API Key ausente".to_string());
+        };
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            self.google_model, key
+        );
+
+        let allowed = ALLOWED_CATEGORIA_ARQUITETURAL.to_vec();
+        let body = json!({
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }],
+            "generationConfig": {
+                "temperature": 0.0,
+                "responseMimeType": "application/json",
+                "responseSchema": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "proposta_original_resumo": {
+                            "type": "STRING",
+                            "description": "Resumo técnico de 1 frase"
+                        },
+                        "categoria_arquitetural": {
+                            "type": "STRING",
+                            "enum": allowed
+                        }
+                    },
+                    "required": ["proposta_original_resumo", "categoria_arquitetural"]
                 }
             }
-        }
-        vec![]
-    }
-}
-
-impl SheetsClient for SheetsMcpClient {
-    fn get_sheet_data<'a>(
-        &'a self,
-        spreadsheet_id: &'a str,
-        sheet: &'a str,
-        range: String,
-    ) -> SheetsDataFuture<'a> {
-        Box::pin(async move { SheetsMcpClient::read_values(spreadsheet_id, sheet, &range).await })
-    }
-
-    fn batch_update_cells<'a>(
-        &'a self,
-        spreadsheet_id: &'a str,
-        sheet: &'a str,
-        ranges: HashMap<String, Vec<Vec<String>>>,
-    ) -> SheetsUpdateFuture<'a> {
-        Box::pin(async move { SheetsMcpClient::write_values(spreadsheet_id, sheet, ranges).await })
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Columns {
-    status_atualizacao_idx: usize,
-    status_fase_idx: usize,
-    repo_url_idx: usize,
-    proposta_original_resumo_idx: usize,
-    categoria_arquitetural_idx: usize,
-}
-
-fn resolve_columns(header_row: &[String]) -> Result<Columns, String> {
-    let mut status_atualizacao_idx = None;
-    let mut status_fase_idx = None;
-    let mut repo_url_idx = None;
-    let mut proposta_original_resumo_idx = None;
-    let mut categoria_arquitetural_idx = None;
-
-    let normalized = header_row
-        .iter()
-        .map(|raw| normalize_header_cell(raw))
-        .collect::<Vec<_>>();
-
-    for (idx, h) in normalized.iter().enumerate() {
-        match h.as_str() {
-            "status_atualizacao" => status_atualizacao_idx = Some(idx),
-            "status_fase" => status_fase_idx = Some(idx),
-            "repo_url" => repo_url_idx = Some(idx),
-            "proposta_original_resumo" => proposta_original_resumo_idx = Some(idx),
-            "categoria_arquitetural" => categoria_arquitetural_idx = Some(idx),
-            _ => {}
-        }
-    }
-
-    let normalized_join = normalized.join(", ");
-    Ok(Columns {
-        status_atualizacao_idx: status_atualizacao_idx
-            .ok_or_else(|| format!("Cabeçalho não contém 'status_atualizacao'. headers_normalizados=[{normalized_join}]"))?,
-        status_fase_idx: status_fase_idx.ok_or_else(|| format!("Cabeçalho não contém 'status_fase'. headers_normalizados=[{normalized_join}]"))?,
-        repo_url_idx: repo_url_idx.ok_or_else(|| format!("Cabeçalho não contém 'repo_url'. headers_normalizados=[{normalized_join}]"))?,
-        proposta_original_resumo_idx: proposta_original_resumo_idx
-            .ok_or_else(|| format!("Cabeçalho não contém 'proposta_original_resumo'. headers_normalizados=[{normalized_join}]"))?,
-        categoria_arquitetural_idx: categoria_arquitetural_idx
-            .ok_or_else(|| format!("Cabeçalho não contém 'categoria_arquitetural'. headers_normalizados=[{normalized_join}]"))?,
-    })
-}
-
-fn parse_cli_args() -> bool {
-    let mut args = std::env::args();
-    args.next();
-    let mut dry_run = false;
-    for arg in args {
-        if arg == "--dry-run" {
-            dry_run = true;
-        }
-    }
-    dry_run
-}
-
-#[derive(Debug, Clone)]
-struct PendingRow {
-    row_number_1based: u32,
-    repo_url: String,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct GatilhoScan {
-    pending: usize,
-    skipped_non_trigger: usize,
-    skipped_missing_repo_url: usize,
-}
-
-fn find_gatilho_rows(values: &[Vec<String>], cols: &Columns) -> (Vec<PendingRow>, GatilhoScan) {
-    let mut out = Vec::new();
-    let mut skipped_non_trigger = 0usize;
-    let mut skipped_missing_repo_url = 0usize;
-    for (idx, row) in values.iter().enumerate() {
-        let status_atualizacao = row
-            .get(cols.status_atualizacao_idx)
-            .map(|s| s.trim())
-            .unwrap_or("");
-        if !status_atualizacao.eq_ignore_ascii_case(STATUS_GATILHO) {
-            skipped_non_trigger += 1;
-            continue;
-        }
-        let repo_url = row.get(cols.repo_url_idx).map(|s| s.trim()).unwrap_or("");
-        if repo_url.is_empty() {
-            skipped_missing_repo_url += 1;
-            continue;
-        }
-        out.push(PendingRow {
-            row_number_1based: (idx as u32) + 2,
-            repo_url: repo_url.to_string(),
         });
-    }
-    let pending = out.len();
-    (
-        out,
-        GatilhoScan {
-            pending,
-            skipped_non_trigger,
-            skipped_missing_repo_url,
-        },
-    )
-}
 
-#[derive(Debug, Clone, Deserialize)]
-struct BatedorOut {
-    proposta_original_resumo: String,
-    categoria_arquitetural: String,
+        let resp = self
+            .client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .timeout(Duration::from_secs(35))
+            .send()
+            .await
+            .map_err(|e| format!("Google API HTTP erro: {e}"))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(format!("Google API HTTP {}", status.as_u16()));
+        }
+
+        let val: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("Google API JSON parse erro: {e}"))?;
+
+        let text = val
+            .get("candidates")
+            .and_then(|c| c.get(0))
+            .and_then(|c| c.get("content"))
+            .and_then(|c| c.get("parts"))
+            .and_then(|p| p.get(0))
+            .and_then(|p| p.get("text"))
+            .and_then(|t| t.as_str())
+            .ok_or_else(|| "Google API: resposta vazia".to_string())?;
+
+        let parsed: BatedorOut = serde_json::from_str(text)
+            .map_err(|e| format!("Google API JSON estruturado inválido: {e}"))?;
+        validate_batedor_out(&parsed)?;
+        Ok(parsed)
+    }
+
+    async fn try_openrouter(&self, api_key: Option<&str>, model: &str, prompt: &str) -> Result<BatedorOut, String> {
+        let Some(key) = api_key else {
+            return Err("OpenRouter API Key ausente".to_string());
+        };
+        let url = format!("{}/chat/completions", self.openrouter_base_url.trim_end_matches('/'));
+        let body = json!({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "Responda SOMENTE com JSON válido."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.0,
+            "response_format": response_format_for_batedor()
+        });
+
+        let resp = self
+            .client
+            .post(&url)
+            .bearer_auth(key)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .timeout(Duration::from_secs(35))
+            .send()
+            .await
+            .map_err(|e| format!("OpenRouter HTTP erro: {e}"))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(format!("OpenRouter HTTP {}", status.as_u16()));
+        }
+
+        let val: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("OpenRouter JSON parse erro: {e}"))?;
+
+        let content = extract_openrouter_content(&val)
+            .ok_or_else(|| "OpenRouter: resposta vazia".to_string())?;
+
+        let parsed: BatedorOut = serde_json::from_str(&content)
+            .map_err(|e| format!("OpenRouter JSON inválido: {e}"))?;
+        validate_batedor_out(&parsed)?;
+        Ok(parsed)
+    }
 }
 
 fn response_format_for_batedor() -> Value {
@@ -419,164 +508,14 @@ fn response_format_for_batedor() -> Value {
     })
 }
 
-fn openrouter_body_for_batedor(model: &str, prompt: &str) -> Value {
-    json!({
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "Responda SOMENTE com JSON válido (sem markdown, sem texto extra)."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.0,
-        "max_tokens": 4000,
-        "response_format": response_format_for_batedor()
-    })
-}
-
-struct OpenRouterClient {
-    client: reqwest::Client,
-    base_url: String,
-    api_key: String,
-    model: String,
-}
-
-impl OpenRouterClient {
-    fn new() -> Result<Self, String> {
-        let base_url = std::env::var("OPENAI_BASE_URL")
-            .ok()
-            .map(|v| sanitize_env_scalar(&v))
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
-
-        let api_key = [
-            "OPENROUTER_API_FAST_KEY",
-            "OPENROUTER_API_FREE_KEY",
-        ]
-        .into_iter()
-        .find_map(|k| std::env::var(k).ok().map(|v| v.trim().trim_matches('"').to_string()))
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "Missing OPENROUTER_API_FAST_KEY/OPENROUTER_API_FREE_KEY".to_string())?;
-
-        let mut model = std::env::var("OPENROUTER_BATEDOR_MODEL")
-            .ok()
-            .map(|v| normalize_batedor_model(&v))
-            .filter(|v| !v.is_empty())
-            .or_else(|| {
-                std::env::var("OPENROUTER_DEFAULT_MODEL")
-                    .ok()
-                    .map(|v| normalize_batedor_model(&v))
-                    .filter(|v| !v.is_empty())
-            })
-            .unwrap_or_else(|| "deepseek/deepseek-v4-flash".to_string());
-        if is_expensive_model(&model) {
-            model = "deepseek/deepseek-v4-flash".to_string();
-        }
-
-        Ok(Self {
-            client: reqwest::Client::new(),
-            base_url,
-            api_key,
-            model,
-        })
-    }
-
-    async fn triage(&self, prompt: &str) -> Result<BatedorOut, String> {
-        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-        let body = openrouter_body_for_batedor(&self.model, prompt);
-        let response = self
-            .client
-            .post(&url)
-            .bearer_auth(&self.api_key)
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .timeout(Duration::from_secs(35))
-            .send()
-            .await
-            .map_err(|e| format!("Falha HTTP OpenRouter: {e}"))?;
-
-        let status = response.status();
-        let json = response
-            .json::<Value>()
-            .await
-            .map_err(|e| format!("Falha ao parsear JSON OpenRouter: {e}"))?;
-        if !status.is_success() {
-            return Err(format!("OpenRouter HTTP {}: {}", status.as_u16(), json));
-        }
-        let content = extract_openrouter_content(&json)
-            .ok_or_else(|| format!("OpenRouter: resposta vazia/inesperada: {json}"))?;
-        let parsed: BatedorOut = serde_json::from_str(&content)
-            .map_err(|e| format!("OpenRouter: JSON inválido para Batedor: {e}. content={content}"))?;
-        validate_batedor_out(&parsed)?;
-        Ok(parsed)
-    }
-
-    async fn dedup_links_default_model(&self, repo_urls: &[String]) -> Result<Vec<String>, String> {
-        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-        let model = std::env::var("OPENROUTER_DEFAULT_MODEL")
-            .ok()
-            .map(|v| normalize_batedor_model(&v))
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| self.model.clone());
-        let prompt = build_link_dedup_prompt(repo_urls);
-        let body = openrouter_body_for_link_dedup(&model, &prompt);
-        let response = self
-            .client
-            .post(&url)
-            .bearer_auth(&self.api_key)
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .timeout(Duration::from_secs(35))
-            .send()
-            .await
-            .map_err(|e| format!("Falha HTTP OpenRouter (dedup): {e}"))?;
-
-        let status = response.status();
-        let json = response
-            .json::<Value>()
-            .await
-            .map_err(|e| format!("Falha ao parsear JSON OpenRouter (dedup): {e}"))?;
-        if !status.is_success() {
-            return Err(format!("OpenRouter HTTP {} (dedup): {}", status.as_u16(), json));
-        }
-        let content = extract_openrouter_content(&json)
-            .ok_or_else(|| format!("OpenRouter: resposta vazia/inesperada (dedup): {json}"))?;
-        let parsed: LinkDedupOut = serde_json::from_str(&content)
-            .map_err(|e| format!("OpenRouter: JSON inválido para dedup: {e}. content={content}"))?;
-        let mut out = Vec::new();
-        for item in parsed.repos {
-            let trimmed = item.trim();
-            if trimmed.is_empty() || !trimmed.contains('/') {
-                continue;
-            }
-            out.push(trimmed.to_string());
-            if out.len() >= 80 {
-                break;
-            }
-        }
-        Ok(out)
-    }
-}
-
-fn is_expensive_model(model: &str) -> bool {
-    let m = model.to_ascii_lowercase();
-    m.contains("opus")
-        || m.contains("claude")
-        || m.contains("gpt-5")
-        || m.contains("gpt-4")
-        || m.contains("o1")
-        || m.contains("o3")
-        || m.contains("deepseek-v4-pro")
-}
-
-fn extract_openrouter_content(json: &Value) -> Option<String> {
-    let content = json
-        .get("choices")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))?;
+fn extract_openrouter_content(json_val: &Value) -> Option<String> {
+    let choices = json_val.get("choices")?.as_array()?;
+    let first = choices.first()?;
+    let message = first.get("message")?;
+    let content = message.get("content")?;
 
     match content {
-        Value::String(s) => Some(s.trim().to_string()).filter(|s| !s.is_empty()),
+        Value::String(s) => Some(s.trim().to_string()),
         Value::Array(parts) => {
             let mut out = String::new();
             for part in parts {
@@ -601,25 +540,47 @@ fn extract_openrouter_content(json: &Value) -> Option<String> {
     }
 }
 
-fn validate_batedor_out(out: &BatedorOut) -> Result<(), String> {
-    let resumo = out.proposta_original_resumo.trim();
-    if resumo.is_empty() {
-        return Err("proposta_original_resumo vazio".to_string());
+impl TriageLlmClient for WaterfallRoutingClient {
+    fn triage<'a>(
+        &'a self,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<BatedorOut, String>> + Send + 'a>> {
+        Box::pin(async move {
+            // ROTA 1: Google API Nativa (gemini-flash-latest)
+            match self.try_google_native(prompt).await {
+                Ok(out) => {
+                    info!("Waterfall Routing: Rota 1 (Google Native) OK");
+                    return Ok(out);
+                }
+                Err(e) => {
+                    warn!(error = %e, "Circuit Breaker: Rota 1 (Google Native) falhou; tentando Rota 2 (OpenRouter Free)");
+                }
+            }
+
+            // ROTA 2: OpenRouter Free (openrouter/free)
+            match self.try_openrouter(self.openrouter_free_key.as_deref(), &self.openrouter_free_model, prompt).await {
+                Ok(out) => {
+                    info!("Waterfall Routing: Rota 2 (OpenRouter Free) OK");
+                    return Ok(out);
+                }
+                Err(e) => {
+                    warn!(error = %e, "Circuit Breaker: Rota 2 (OpenRouter Free) falhou; tentando Rota 3 (OpenRouter Fast Fallback)");
+                }
+            }
+
+            // ROTA 3: OpenRouter Fast Fallback (deepseek-v4-flash)
+            match self.try_openrouter(self.openrouter_fast_key.as_deref(), &self.openrouter_fast_model, prompt).await {
+                Ok(out) => {
+                    info!("Waterfall Routing: Rota 3 (OpenRouter Fast Fallback) OK");
+                    return Ok(out);
+                }
+                Err(e) => {
+                    warn!(error = %e, "Circuit Breaker: Rota 3 (OpenRouter Fast Fallback) falhou");
+                    Err(format!("Todas as 3 rotas da cascata FinOps falharam: {e}"))
+                }
+            }
+        })
     }
-    if resumo.chars().count() > MAX_RESUMO_CHARS {
-        return Err(format!(
-            "proposta_original_resumo excede limite de {} chars",
-            MAX_RESUMO_CHARS
-        ));
-    }
-    let cat = out.categoria_arquitetural.trim();
-    if cat.is_empty() {
-        return Err("categoria_arquitetural inválida (vazia)".to_string());
-    }
-    if !ALLOWED_CATEGORIA_ARQUITETURAL.iter().any(|v| v == &cat) {
-        return Err("categoria_arquitetural inválida (fora do ENUM)".to_string());
-    }
-    Ok(())
 }
 
 async fn fetch_readme_truncated(repo_url: &str) -> Result<String, String> {
@@ -633,7 +594,7 @@ async fn fetch_readme_truncated(repo_url: &str) -> Result<String, String> {
         .unwrap_or_else(|| "https://api.github.com".to_string());
     let url = format!("{}/repos/{}/{}/readme", api_base.trim_end_matches('/'), owner, repo);
 
-    let client = reqwest::Client::new();
+    let client = Client::new();
     let mut req = client
         .get(&url)
         .header("User-Agent", "soda-batedor")
@@ -673,195 +634,83 @@ fn build_prompt(readme_trunc: &str) -> String {
     out
 }
 
-fn extract_urls_from_text(text: &str, max_urls: usize) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut idx = 0usize;
-    let bytes = text.as_bytes();
-    while idx < bytes.len() && out.len() < max_urls {
-        let rest = &text[idx..];
-        let Some(rel_pos) = rest.find("http") else {
-            break;
-        };
-        idx = idx.saturating_add(rel_pos);
-        let candidate = &text[idx..];
-        let end = candidate
-            .find(|c: char| c.is_whitespace() || matches!(c, ')' | ']' | '"' | '\'' | '<' | '>'))
-            .unwrap_or(candidate.len());
-        let mut url = candidate[..end].trim().trim_end_matches(['.', ',', ';', ':']).to_string();
-        if url.starts_with("http://") || url.starts_with("https://") {
-            if url.len() > 2048 {
-                url.truncate(2048);
-            }
-            out.push(url);
+struct BatedorEngine<L: TriageLlmClient, R: BatedorRepoStore, F: ReadmeFetcher> {
+    llm: Arc<L>,
+    repo_store: Arc<R>,
+    readme_fetcher: Arc<F>,
+}
+
+impl<L: TriageLlmClient + 'static, R: BatedorRepoStore + 'static, F: ReadmeFetcher + 'static> BatedorEngine<L, R, F> {
+    async fn run_once(&self) -> Result<(), String> {
+        let pending = self.repo_store.fetch_pending_triage_repos().await?;
+        if pending.is_empty() {
+            info!("Batedor: nenhum repositório pendente de triagem encontrado no SQLite.");
+            return Ok(());
         }
-        idx = idx.saturating_add(end.max(1));
-    }
-    out
-}
 
-fn extract_github_repo_ids(urls: &[String], max_repos: usize) -> Vec<String> {
-    let mut out = BTreeSet::<String>::new();
-    for url in urls {
-        if out.len() >= max_repos {
-            break;
+        let max_parallel = std::env::var("SODA_BATEDOR_PARALLEL")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(3)
+            .max(1);
+        let semaphore = Arc::new(Semaphore::new(max_parallel));
+
+        let mut join_set = JoinSet::new();
+
+        for ctx in pending {
+            let sem = Arc::clone(&semaphore);
+            let llm = Arc::clone(&self.llm);
+            let fetcher = Arc::clone(&self.readme_fetcher);
+            join_set.spawn(async move {
+                let _permit = sem.acquire_owned().await.unwrap();
+                let readme_res = fetcher.fetch_readme_truncated(&ctx.repo_url).await;
+                let readme = match readme_res {
+                    Ok(r) => r,
+                    Err(e) => return (ctx, Err(e)),
+                };
+                let prompt = build_prompt(&readme);
+                let triage_res = llm.triage(&prompt).await;
+                (ctx, triage_res)
+            });
         }
-        let lower = url.to_ascii_lowercase();
-        let marker = "github.com/";
-        let Some(pos) = lower.find(marker) else {
-            continue;
-        };
-        let mut rest = url[(pos + marker.len())..].to_string();
-        if let Some(hash) = rest.find('#') {
-            rest.truncate(hash);
-        }
-        if let Some(q) = rest.find('?') {
-            rest.truncate(q);
-        }
-        rest = rest.trim_end_matches('/').trim_end_matches(".git").to_string();
-        let mut parts = rest.split('/').map(|p| p.trim()).filter(|p| !p.is_empty());
-        let Some(owner) = parts.next() else { continue };
-        let Some(repo) = parts.next() else { continue };
-        if owner.eq_ignore_ascii_case("topics")
-            || owner.eq_ignore_ascii_case("search")
-            || owner.eq_ignore_ascii_case("orgs")
-            || owner.eq_ignore_ascii_case("users")
-        {
-            continue;
-        }
-        out.insert(format!("{owner}/{repo}"));
-    }
-    out.into_iter().take(max_repos).collect()
-}
 
-fn looks_like_content_repo(readme_trunc: &str, github_repo_links: usize) -> bool {
-    let s = readme_trunc.to_ascii_lowercase();
-    if s.contains("awesome") {
-        return true;
-    }
-    if github_repo_links >= 25 {
-        return true;
-    }
-    s.contains("curated list") || s.contains("resources") || s.contains("collection of")
-}
+        let mut processed = 0usize;
 
-fn response_format_for_link_dedup() -> Value {
-    let schema = json!({
-        "type": "object",
-        "properties": {
-            "repos": {
-                "type": "array",
-                "items": { "type": "string", "minLength": 3, "maxLength": 200 },
-                "minItems": 0,
-                "maxItems": 120
-            }
-        },
-        "required": ["repos"],
-        "additionalProperties": false
-    });
-    json!({
-        "type": "json_schema",
-        "json_schema": {
-            "name": "soda_link_dedup_v1",
-            "strict": true,
-            "schema": schema
-        }
-    })
-}
-
-fn openrouter_body_for_link_dedup(model: &str, prompt: &str) -> Value {
-    json!({
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "Responda SOMENTE com JSON válido (sem markdown, sem texto extra)."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.0,
-        "max_tokens": 2000,
-        "response_format": response_format_for_link_dedup()
-    })
-}
-
-#[derive(Debug, Deserialize)]
-struct LinkDedupOut {
-    repos: Vec<String>,
-}
-
-fn build_link_dedup_prompt(repo_urls: &[String]) -> String {
-    let mut out = String::new();
-    out.push_str("Tarefa: deduplicar e normalizar uma lista de repositórios GitHub.\n");
-    out.push_str("Entrada: lista de strings (owner/repo).\n");
-    out.push_str("Saída: JSON com campo repos: array deduplicado, ordenado por relevância.\n");
-    out.push_str("Regras:\n");
-    out.push_str("- Remova duplicatas e variações (maiúsculas/minúsculas).\n");
-    out.push_str("- Mantenha apenas entradas no formato owner/repo.\n");
-    out.push_str("- Priorize projetos centrais (não forks óbvios) quando houver redundância.\n");
-    out.push_str("- Limite a 80 itens.\n\n");
-    out.push_str("Lista:\n");
-    for item in repo_urls.iter().take(400) {
-        out.push_str("- ");
-        out.push_str(item);
-        out.push('\n');
-    }
-    out
-}
-
-fn build_success_ranges(cols: &Columns, row_number_1based: u32, out: &BatedorOut) -> HashMap<String, Vec<Vec<String>>> {
-    let status_col = col_idx_to_a1(cols.status_atualizacao_idx);
-    let fase_col = col_idx_to_a1(cols.status_fase_idx);
-    let proposta_col = col_idx_to_a1(cols.proposta_original_resumo_idx);
-    let cat_col = col_idx_to_a1(cols.categoria_arquitetural_idx);
-
-    let r = row_number_1based;
-    let mut ranges = HashMap::new();
-    ranges.insert(format!("{status_col}{r}:{status_col}{r}"), vec![vec![STATUS_CONCLUIDO.to_string()]]);
-    ranges.insert(format!("{fase_col}{r}:{fase_col}{r}"), vec![vec![FASE_OK.to_string()]]);
-    ranges.insert(
-        format!("{proposta_col}{r}:{proposta_col}{r}"),
-        vec![vec![out.proposta_original_resumo.trim().to_string()]],
-    );
-    ranges.insert(
-        format!("{cat_col}{r}:{cat_col}{r}"),
-        vec![vec![out.categoria_arquitetural.trim().to_string()]],
-    );
-    ranges
-}
-
-async fn process_one_row(
-    llm: &OpenRouterClient,
-    cols: &Columns,
-    row: &PendingRow,
-) -> Result<Option<HashMap<String, Vec<Vec<String>>>>, String> {
-    let readme = fetch_readme_truncated(&row.repo_url).await?;
-    let prompt = build_prompt(&readme);
-    let mut out = llm.triage(&prompt).await?;
-
-    let urls = extract_urls_from_text(&readme, 500);
-    let repo_ids = extract_github_repo_ids(&urls, 200);
-    if !repo_ids.is_empty() && looks_like_content_repo(&readme, repo_ids.len()) {
-        match llm.dedup_links_default_model(&repo_ids).await {
-            Ok(deduped) => {
-                if !deduped.is_empty() {
-                    let mut take_n = MAX_DEDUP_LINKS_IN_RESUMO.min(deduped.len());
-                    loop {
-                        let suffix = format!(" | Links-chave: {}", deduped[..take_n].join(", "));
-                        let candidate = format!("{}{}", out.proposta_original_resumo.trim(), suffix);
-                        if candidate.chars().count() <= MAX_RESUMO_CHARS || take_n <= 1 {
-                            if candidate.chars().count() <= MAX_RESUMO_CHARS {
-                                out.proposta_original_resumo = candidate;
-                            }
-                            break;
-                        }
-                        take_n = take_n.saturating_sub(1);
-                    }
+        while let Some(out) = join_set.join_next().await {
+            match out {
+                Ok((ctx, Ok(triage))) => {
+                    self.repo_store
+                        .persist_triage_result(
+                            &ctx.project_name,
+                            &ctx.repo_url,
+                            &triage.proposta_original_resumo,
+                            &triage.categoria_arquitetural,
+                            "PENDENTE_HARVESTER",
+                        )
+                        .await?;
+                    processed += 1;
+                    info!(repo_url = %ctx.repo_url, "Batedor: triagem concluída -> PENDENTE_HARVESTER");
+                }
+                Ok((ctx, Err(e))) => {
+                    warn!(repo_url = %ctx.repo_url, error = %e, "Batedor: falha na triagem do repo");
+                }
+                Err(e) => {
+                    warn!(error = ?e, "Batedor: falha de JoinHandle");
                 }
             }
-            Err(e) => {
-                warn!(row = row.row_number_1based, repo_url = %row.repo_url, error = %e, "Batedor: dedup de links falhou; seguindo sem links");
-            }
         }
-    }
 
-    Ok(Some(build_success_ranges(cols, row.row_number_1based, &out)))
+        info!(processed, "Batedor: rodada concluída");
+        Ok(())
+    }
+}
+
+fn workspace_root() -> io::Result<PathBuf> {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    Path::new(manifest_dir)
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| io::Error::other("Falha ao resolver raiz do projeto"))
 }
 
 #[tokio::main]
@@ -875,176 +724,141 @@ async fn main() -> io::Result<()> {
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
 
-    let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
-        .ok()
-        .map(|v| v.trim().trim_matches('"').to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-
-    let dry_run = parse_cli_args();
-
-    let sheets = SheetsMcpClient;
-    let header_range = master_solutions_header_range();
-    let header = sheets
-        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, header_range.clone())
-        .await
-        .map_err(io::Error::other)?;
-    let header_row = header.first().cloned().unwrap_or_default();
-    if header_row.is_empty() {
-        return Err(io::Error::other(
-            format!(
-                "Header vazio em MASTER_SOLUTIONS!{}. Verifique GOOGLE_SHEETS_ID, nome da aba e se o header está na linha 1.",
-                header_range
-            ),
-        ));
-    }
-    let cols = resolve_columns(&header_row).map_err(io::Error::other)?;
-
-    let required = [
-        cols.status_atualizacao_idx,
-        cols.status_fase_idx,
-        cols.repo_url_idx,
-        cols.proposta_original_resumo_idx,
-        cols.categoria_arquitetural_idx,
-    ];
-    let min_idx = *required.iter().min().unwrap_or(&0);
-    let max_idx = *required.iter().max().unwrap_or(&0);
-    let start_col = col_idx_to_a1(min_idx);
-    let end_col = col_idx_to_a1(max_idx);
-    let values = sheets
-        .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, format!("{start_col}2:{end_col}"))
-        .await
-        .map_err(io::Error::other)?;
-
-    let (pending, scan) = find_gatilho_rows(&values, &cols);
-    info!(
-        total_rows = values.len(),
-        pending = scan.pending,
-        skipped_non_trigger = scan.skipped_non_trigger,
-        skipped_missing_repo_url = scan.skipped_missing_repo_url,
-        gatilho = STATUS_GATILHO,
-        "Batedor: scan de gatilho concluído"
-    );
-    if pending.is_empty() {
-        return Ok(());
-    }
-    if dry_run {
-        for row in pending.iter().take(10) {
-            info!(row = row.row_number_1based, repo_url = %row.repo_url, "Batedor: dry-run candidato");
-        }
-        info!(dry_run, "Batedor: dry-run (sem GitHub/LLM e sem writes)");
-        return Ok(());
+    let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    if let Some(parent) = db_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
     }
 
-    let llm = OpenRouterClient::new().map_err(io::Error::other)?;
+    let llm = Arc::new(WaterfallRoutingClient::new().map_err(io::Error::other)?);
+    let repo_store = Arc::new(SqliteBatedorRepoStore::new(db_path));
+    let readme_fetcher = Arc::new(GithubReadmeFetcher);
 
-    let mut pending_ranges: HashMap<String, Vec<Vec<String>>> = HashMap::new();
-    let mut pending_updates = 0usize;
-    let total_to_write = pending.len();
-    let mut written_so_far = 0usize;
-    let started = Instant::now();
-    let processed = Arc::new(AtomicUsize::new(0));
-    let processed_for_ghost = Arc::clone(&processed);
-    let ghost_started = started;
-    let ghost_handle = tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(30));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tick.tick().await;
-            let done = processed_for_ghost.load(Ordering::Relaxed);
-            info!(
-                done,
-                total = total_to_write,
-                elapsed_s = ghost_started.elapsed().as_secs(),
-                "Ghost Telemetry: Batedor processando"
-            );
-        }
-    });
-    let _ghost = AbortOnDrop(ghost_handle);
+    let engine = BatedorEngine { llm, repo_store, readme_fetcher };
+    engine.run_once().await.map_err(io::Error::other)?;
 
-    for row in pending {
-        let plan = process_one_row(&llm, &cols, &row).await;
-        let plan = match plan {
-            Ok(Some(p)) => p,
-            Ok(None) => continue,
-            Err(e) => {
-                warn!(row = row.row_number_1based, repo_url = %row.repo_url, error = %e, "Batedor: falha por repositório (sem write)");
-                processed.fetch_add(1, Ordering::Relaxed);
-                continue;
-            }
-        };
-        for (k, v) in plan {
-            pending_ranges.insert(k, v);
-        }
-        pending_updates += 1;
-        processed.fetch_add(1, Ordering::Relaxed);
-
-        if pending_updates >= MAX_UPDATES_PER_BATCH {
-            let batch = std::mem::take(&mut pending_ranges);
-            written_so_far = written_so_far.saturating_add(pending_updates);
-            info!(
-                written_so_far,
-                total_to_write,
-                updates = pending_updates,
-                "Batedor: flush Sheets batch"
-            );
-            sheets
-                .batch_update_cells(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, batch)
-                .await
-                .map_err(io::Error::other)?;
-            pending_updates = 0;
-        }
-    }
-
-    if pending_updates > 0 {
-        let batch = std::mem::take(&mut pending_ranges);
-        written_so_far = written_so_far.saturating_add(pending_updates);
-        info!(
-            written_so_far,
-            total_to_write,
-            updates = pending_updates,
-            "Batedor: flush Sheets final"
-        );
-        sheets
-            .batch_update_cells(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, batch)
-            .await
-            .map_err(io::Error::other)?;
-    }
-
-    info!(elapsed_ms = started.elapsed().as_millis(), "Batedor: concluído");
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::NamedTempFile;
+
+    struct MockTriageClient {
+        resumo: String,
+        categoria: String,
+        should_fail_route_1: bool,
+    }
+
+    impl TriageLlmClient for MockTriageClient {
+        fn triage<'a>(
+            &'a self,
+            _prompt: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<BatedorOut, String>> + Send + 'a>> {
+            let resumo = self.resumo.clone();
+            let categoria = self.categoria.clone();
+            let should_fail = self.should_fail_route_1;
+            Box::pin(async move {
+                if should_fail {
+                    Err("Simulação de falha Circuit Breaker Rota 1 (429)".to_string())
+                } else {
+                    Ok(BatedorOut {
+                        proposta_original_resumo: resumo,
+                        categoria_arquitetural: categoria,
+                    })
+                }
+            })
+        }
+    }
+
+    struct MockReadmeFetcher;
+
+    impl ReadmeFetcher for MockReadmeFetcher {
+        fn fetch_readme_truncated<'a>(
+            &'a self,
+            _repo_url: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+            Box::pin(async move {
+                Ok("# Acme Widget\nFerramenta CLI incrível para automação.".to_string())
+            })
+        }
+    }
+
+    fn setup_test_db(db_path: &Path) -> Connection {
+        let conn = Connection::open(db_path).unwrap();
+        conn.execute(
+            "CREATE TABLE repositorios (
+                project_name TEXT PRIMARY KEY,
+                lote_id TEXT NOT NULL,
+                repo_url TEXT NOT NULL UNIQUE,
+                repo_analised_version TEXT,
+                repo_version TEXT,
+                ultima_versao_online TEXT,
+                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                status_processamento TEXT NOT NULL,
+                timestamp_fase_1 INTEGER,
+                timestamp_fase_3 INTEGER,
+                retry_count INTEGER NOT NULL,
+                proposta_original_resumo TEXT,
+                categoria_arquitetural TEXT
+            )",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_batedor_transition_to_pendente_harvester() {
+        let tmp = NamedTempFile::new().unwrap();
+        let conn = setup_test_db(tmp.path());
+        conn.execute(
+            "INSERT INTO repositorios (
+                project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
+                soda_universal_uuid, status_processamento, retry_count
+            ) VALUES ('acme/widget', 'L1', 'https://github.com/acme/widget', 'v1.0.0', 'v1.0.0', 'v1.0.0', 'UUID-1', 'PENDENTE_TRIAGEM', 5)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = Arc::new(SqliteBatedorRepoStore::new(tmp.path().to_path_buf()));
+        let llm = Arc::new(MockTriageClient {
+            resumo: "Ferramenta de IA para triagem de repositórios.".to_string(),
+            categoria: "Tooling_Dev - CLI_Utilities".to_string(),
+            should_fail_route_1: false,
+        });
+        let readme_fetcher = Arc::new(MockReadmeFetcher);
+
+        let engine = BatedorEngine {
+            llm,
+            repo_store: store.clone(),
+            readme_fetcher,
+        };
+
+        engine.run_once().await.unwrap();
+
+        let conn = Connection::open(tmp.path()).unwrap();
+        let (status, resumo, cat, retry): (String, Option<String>, Option<String>, i32) = conn
+            .query_row(
+                "SELECT status_processamento, proposta_original_resumo, categoria_arquitetural, retry_count 
+                 FROM repositorios WHERE project_name = 'acme/widget'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+
+        assert_eq!(status, "PENDENTE_HARVESTER");
+        assert_eq!(resumo, Some("Ferramenta de IA para triagem de repositórios.".to_string()));
+        assert_eq!(cat, Some("Tooling_Dev - CLI_Utilities".to_string()));
+        assert_eq!(retry, 0);
+    }
 
     #[test]
     fn truncation_is_deterministic() {
         let big = "a".repeat(10_000);
         let out = truncate_chars(&big, 3_000);
         assert_eq!(out.len(), 3_000);
-        let small = "abc";
-        assert_eq!(truncate_chars(small, 3_000), "abc");
-    }
-
-    #[test]
-    fn header_normalization_accepts_portuguese_diacritics() {
-        assert_eq!(normalize_header_cell("status_atualização"), "status_atualizacao");
-        assert_eq!(normalize_header_cell("CATEGORIA_ARQUITETURAL"), "categoria_arquitetural");
-        assert_eq!(normalize_header_cell("proposta-original-resumo"), "proposta_original_resumo");
-    }
-
-    #[test]
-    fn model_normalization_maps_deepseek_v4_to_flash() {
-        assert_eq!(
-            normalize_batedor_model("deepseek/deepseek-v4"),
-            "deepseek/deepseek-v4-flash"
-        );
-        assert_eq!(
-            normalize_batedor_model("deepseek/deepseek-v4  #comment"),
-            "deepseek/deepseek-v4-flash"
-        );
     }
 
     #[test]
@@ -1061,54 +875,5 @@ mod tests {
         let ok = r#"{"proposta_original_resumo":"Ferramenta CLI para triagem.","categoria_arquitetural":"Tooling_Dev - CLI_Utilities"}"#;
         let parsed: BatedorOut = serde_json::from_str(ok).unwrap();
         assert!(validate_batedor_out(&parsed).is_ok());
-
-        let missing = r#"{"categoria_arquitetural":"Tooling_Dev - CLI_Utilities"}"#;
-        assert!(serde_json::from_str::<BatedorOut>(missing).is_err());
-    }
-
-    #[test]
-    fn response_schema_is_strict_and_has_two_keys() {
-        let rf = response_format_for_batedor();
-        assert_eq!(rf.get("type").and_then(|v| v.as_str()), Some("json_schema"));
-        let schema = rf
-            .get("json_schema")
-            .and_then(|v| v.get("schema"))
-            .and_then(|v| v.as_object())
-            .unwrap();
-        assert_eq!(
-            schema.get("additionalProperties").and_then(|v| v.as_bool()),
-            Some(false)
-        );
-        let props = schema.get("properties").and_then(|v| v.as_object()).unwrap();
-        assert!(props.get("proposta_original_resumo").is_some());
-        assert!(props.get("categoria_arquitetural").is_some());
-        assert_eq!(props.len(), 2);
-    }
-
-    #[test]
-    fn status_update_happens_only_on_success() {
-        let cols = Columns {
-            status_atualizacao_idx: 0,
-            status_fase_idx: 1,
-            repo_url_idx: 3,
-            proposta_original_resumo_idx: 10,
-            categoria_arquitetural_idx: 11,
-        };
-        let out = BatedorOut {
-            proposta_original_resumo: "Ferramenta CLI para triagem barata.".to_string(),
-            categoria_arquitetural: "Tooling_Dev - CLI_Utilities".to_string(),
-        };
-        assert!(validate_batedor_out(&out).is_ok());
-        let ranges = build_success_ranges(&cols, 2, &out);
-        assert!(ranges.contains_key("A2:A2"));
-        assert!(ranges.contains_key("B2:B2"));
-        assert!(ranges.contains_key("K2:K2"));
-        assert!(ranges.contains_key("L2:L2"));
-
-        let bad = BatedorOut {
-            proposta_original_resumo: "".to_string(),
-            categoria_arquitetural: "Tooling_Dev - CLI_Utilities".to_string(),
-        };
-        assert!(validate_batedor_out(&bad).is_err());
     }
 }

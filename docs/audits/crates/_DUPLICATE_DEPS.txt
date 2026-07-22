@@ -462,12 +462,6 @@ percent-encoding v2.3.2
 ├── form_urlencoded v1.2.2 (*)
 └── url v2.5.8 (*)
 
-quick-xml v0.37.5
-└── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-
-quick-xml v0.39.4
-└── plist v1.9.0 (*)
-
 serde v1.0.228
 ├── cargo-platform v0.1.9
 │   └── cargo_metadata v0.19.2 (*)
@@ -487,13 +481,10 @@ serde v1.0.228
 serde v1.0.228
 ├── assert-json-diff v2.0.2
 │   └── mockito v1.7.2 (*)
-├── chrono v0.4.45
-│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── jsonwebtoken v10.4.0
 │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── oxc_index v4.1.0
 │   └── oxc_syntax v0.120.0 (*)
-├── quick-xml v0.37.5 (*)
 ├── reqwest v0.12.28 (*)
 ├── serde_urlencoded v0.7.1 (*)
 └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)

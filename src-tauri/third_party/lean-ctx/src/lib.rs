@@ -8,11 +8,15 @@ pub mod dashboard;
 pub mod doctor;
 pub mod engine;
 pub mod heatmap;
+#[cfg(feature = "http-server")]
+pub mod http_server;
 pub mod hook_handlers;
 pub mod hooks;
 pub mod instructions;
 pub mod marked_block;
 pub mod mcp_stdio;
+#[cfg(feature = "http-server")]
+pub mod proxy;
 pub mod proxy_autostart;
 pub mod proxy_setup;
 pub mod report;
