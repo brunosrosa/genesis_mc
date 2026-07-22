@@ -11,12 +11,16 @@ binds:
                 allowHeaders: ['*']
                 exposeHeaders: ['Mcp-Session-Id']
               mcpAuthorization:
-                # VÁLVULA INTELIGENTE CEL (FIREWALL L7) (v1.2 07/05/2026)
-                # Usando short-circuit com !has() para proteger o handshake de inicialização
+                # VÁLVULA INTELIGENTE CEL (FIREWALL L7) (v1.3 Zero-Brand & SODA Data Governance)
+                # Permite a passagem do namespace souls_ctx_ e protege o handshake de inicialização
                 rules:
                   - >
                     !has(mcp.tool)
-                    || !mcp.tool.name.matches("^(.*_edit|.*_task|.*_workflow|.*_share|.*_handoff|.*_overview|.*_prefetch|.*_preload|.*_fill|.*_routes|.*_response|.*_dedup|.*_agent|.*_knowledge|.*_benchmark|.*_cache|.*_cost|.*_analyze|.*_discover|.*delete.*|clear_values)$")
+                    || mcp.tool.name.startsWith("souls_ctx_")
+                    || mcp.tool.name.startsWith("soda_")
+                    || mcp.tool.name.startsWith("core_")
+                    || mcp.tool.name.startsWith("mem_")
+                    || !mcp.tool.name.matches("^(.*delete.*|clear_values)$")
             backends:
               # ==========================================
               # NÚCLEO COGNITIVO SODA (FAIL CLOSED)
@@ -24,10 +28,14 @@ binds:
               - mcp:
                   failureMode: failClosed
                   targets:
-                    - name: lean
+                    - name: souls_ctx
                       stdio:
                         cmd: 'src-tauri/target/debug/mcp_stdio_guard.exe'
                         args: ['--timeout-ms', '30000', '--', 'src-tauri/target/debug/lean-ctx.exe']
+                        env:
+                          LEAN_CTX_DATA_DIR: 'Z:/souls_mc/.soda_data'
+                          LEAN_CTX_CACHE_DIR: 'Z:/souls_mc/.soda_cache'
+                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: core
                       stdio:
                         cmd: 'sequential-thinking-server.exe'
@@ -47,3 +55,4 @@ binds:
                         args: []
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+

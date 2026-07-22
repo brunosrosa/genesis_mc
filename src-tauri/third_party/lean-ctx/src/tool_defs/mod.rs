@@ -11,10 +11,25 @@ pub fn tool_def(name: &'static str, description: &'static str, schema_value: Val
         Value::Object(map) => map,
         _ => Map::new(),
     };
-    Tool::new(name, description, Arc::new(schema))
+    let souls_name = if name.starts_with("souls_") {
+        name.to_string()
+    } else if name.starts_with("ctx_") {
+        format!("souls_{}", name)
+    } else {
+        format!("souls_ctx_{}", name)
+    };
+    Tool::new(souls_name, description, Arc::new(schema))
 }
 
 const CORE_TOOL_NAMES: &[&str] = &[
+    "souls_ctx_read",
+    "souls_ctx_multi_read",
+    "souls_ctx_shell",
+    "souls_ctx_search",
+    "souls_ctx_tree",
+    "souls_ctx_edit",
+    "souls_ctx_session",
+    "souls_ctx_knowledge",
     "ctx_read",
     "ctx_multi_read",
     "ctx_shell",
@@ -33,8 +48,8 @@ pub fn lazy_tool_defs() -> Vec<Tool> {
         .collect();
 
     core.push(tool_def(
-        "ctx_discover_tools",
-        "Search available lean-ctx tools by keyword. Returns matching tool names + descriptions for on-demand loading.",
+        "souls_ctx_discover_tools",
+        "Search available SODA context tools by keyword. Returns matching tool names + descriptions for on-demand loading.",
         json!({
             "type": "object",
             "properties": {
