@@ -120,7 +120,7 @@ Write-Host "=======================================================" -Foreground
 try {
     # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
     Write-Host "`n[1/5] Expurgando processos supervisionados do ecossistema Souls..." -ForegroundColor Yellow
-    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-mcp", "leanctx", "biome", "opengrep", "oxlint")
+    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-server", "sequential-thinking-mcp", "lean-ctx", "leanctx", "biome", "opengrep", "oxlint")
     $killed = @()
     foreach ($z in $zombies) {
         $existing = Get-Process -Name $z -ErrorAction SilentlyContinue
@@ -216,8 +216,8 @@ try {
             -Label "cargo-build-lean-ctx" `
             -WorkingDirectory $srcTauriDir
 
-        # 5. PRE-AQUECIMENTO DE CACHE EM BACKGROUND
-        Write-Host "`n[5/5] Pre-aquecendo o cache do lean-ctx em background..." -ForegroundColor Yellow
+        # 5. PRE-AQUECIMENTO DE CACHE EM BACKGROUND (AST Graph + BM25 Semantic Index)
+        Write-Host "`n[5/5] Pre-aquecendo o cache do lean-ctx (AST Graph + BM25 Semantico) em background..." -ForegroundColor Yellow
         $leanCtxPath = Join-Path $srcTauriDir "target\debug\lean-ctx.exe"
         if (Test-Path $leanCtxPath) {
             $leanProc = Start-Process -FilePath $leanCtxPath -ArgumentList "graph", "build" -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru -ErrorAction SilentlyContinue

@@ -146,6 +146,40 @@ def compile_mcp_inventory(output_dir):
         if not content.endswith("\n"):
             outfile.write("\n")
 
+def compile_mcps_list(output_dir):
+    mcp_dir = r"C:\Users\rosas\.gemini\antigravity-ide\mcp\souls"
+    output_path = os.path.join(output_dir, "_MCPS_LIST.txt")
+    delete_if_exists(output_path)
+    timestamp = get_timestamp()
+    
+    tools = []
+    if os.path.exists(mcp_dir):
+        json_files = glob.glob(os.path.join(mcp_dir, "*.json"))
+        json_files.sort(key=lambda x: os.path.basename(x).lower())
+        
+        for json_path in json_files:
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    schema = json.load(f)
+                name = schema.get("name", os.path.splitext(os.path.basename(json_path))[0])
+                desc = schema.get("description", "Sem descrição.")
+                tools.append((name, desc))
+            except Exception:
+                pass
+                
+    lines = []
+    lines.append(f"=== SODA MCPs LIST (ZERO-BRAND CANONICAL) ===")
+    lines.append(f"GERADO EM: {timestamp}")
+    lines.append(f"TOTAL DE FERRAMENTAS: {len(tools)}")
+    lines.append("----------------------------------------------------------------------------------------------------")
+    for name, desc in tools:
+        lines.append(f"• {name}: {desc}")
+    lines.append("----------------------------------------------------------------------------------------------------")
+    
+    content = "\n".join(lines)
+    with open(output_path, "w", encoding="utf-8") as outfile:
+        outfile.write(content + "\n")
+
 def compile_rules_in_ides(output_dir):
     primary_rules = [
         r"Z:\souls_mc\GEMINI.md",
@@ -257,6 +291,7 @@ def main():
     compile_env_clean(output_dir)
     compile_ignition_scripts(output_dir)
     compile_mcp_inventory(output_dir)
+    compile_mcps_list(output_dir)
     compile_rules_in_ides(output_dir)
     compile_skills_in_ides(output_dir)
     compile_workspace_map(output_dir)

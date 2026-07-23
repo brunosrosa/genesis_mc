@@ -84,6 +84,7 @@ pub fn auto_approve_tools() -> Vec<&'static str> {
         "ctx_impact",
         "ctx_architecture",
         "ctx_workflow",
+        "ctx_cost",
         "ctx",
     ]
 }

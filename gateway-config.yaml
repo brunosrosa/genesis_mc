@@ -31,7 +31,7 @@ binds:
                     - name: souls_ctx
                       stdio:
                         cmd: 'src-tauri/target/debug/mcp_stdio_guard.exe'
-                        args: ['--timeout-ms', '30000', '--', 'src-tauri/target/debug/lean-ctx.exe']
+                        args: ['--timeout-ms', '60000', '--', 'src-tauri/target/debug/lean-ctx.exe']
                         env:
                           LEAN_CTX_DATA_DIR: 'Z:/souls_mc/.soda_data'
                           LEAN_CTX_CACHE_DIR: 'Z:/souls_mc/.soda_cache'

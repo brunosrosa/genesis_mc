@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-07-20 01:40:07
+_MCP_INVENTORY Gerado em: 2026-07-22 20:26:14
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -8,11 +8,11 @@ CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
 SERVER_NAME: souls
 LEGACY_REPORT_PATH: Z:\souls_mc\.soda_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt
 SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
-TOOL_COUNT: 43
+TOOL_COUNT: 58
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .soda_scratchpad/reports.
 
 === SUMMARY ===
-OK_COUNT: 43
+OK_COUNT: 58
 WARN_COUNT: 0
 FAIL_COUNT: 0
 OVERALL_STATUS: HEALTHY
@@ -35,141 +35,6 @@ TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: core_think
 DESCRIPTION: Dynamic CoT tool. Break down complex problems, branch, backtrack, and verify hypotheses iteratively.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_architecture
-DESCRIPTION: Graph-based architecture analysis. Actions: overview|clusters|layers|cycles|entrypoints|module.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_callees
-DESCRIPTION: Find all functions/methods called by a given symbol. Returns callee name, file, and line.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_callers
-DESCRIPTION: Find all symbols that call a given function/method. Returns caller file, symbol, and line.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_compress
-DESCRIPTION: Checkpoint context to compress conversation history.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_compress_memory
-DESCRIPTION: Compress a memory/config file (CLAUDE.md, .cursorrules, etc.) to save tokens on every session start. Preserves code blocks, URLs, paths, headings, tables. Creates .original.md backup.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_context
-DESCRIPTION: Session context overview — cached files, seen files, session state.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_delta
-DESCRIPTION: Incremental diff — sends only changed lines since last read.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_execute
-DESCRIPTION: Run code in sandbox (11 languages). Only stdout enters context. Raw data never leaves subprocess. Languages: javascript, typescript, python, shell, ruby, go, rust, php, perl, r, elixir.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_feedback
-DESCRIPTION: Harness feedback for LLM output tokens/latency (local-first). Actions: record|report|json|reset|status.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_gain
-DESCRIPTION: Gain report.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_graph
-DESCRIPTION: Code dependency graph. Actions: build (index project), related (find files connected to path), symbol (lookup definition/usages as file::name), impact (blast radius of changes to path), status (index stats).
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_graph_diagram
-DESCRIPTION: Generate a Mermaid diagram of the dependency or call graph. Useful for understanding architecture.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_heatmap
-DESCRIPTION: File access heatmap (local-first). Actions: status|directory|cold|json.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_impact
-DESCRIPTION: Graph-based impact analysis. Actions: analyze|chain|build|status.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_intent
-DESCRIPTION: Structured intent input (optional) — submit compact JSON or short text; server also infers intents automatically from tool calls.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_metrics
-DESCRIPTION: Show token usage metrics and cache efficiency stats.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_multi_read
-DESCRIPTION: Batch read files. Same modes as ctx_read.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_outline
-DESCRIPTION: List all symbols in a file (functions, structs, classes, methods) with signatures. Much fewer tokens than reading the full file.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_read
-DESCRIPTION: Read file (cached, compressed). Auto-selects optimal mode. Modes: full, map, signatures, diff, lines:N-M. fresh=true forces re-read.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_search
-DESCRIPTION: Search files using regular expressions. Respects .gitignore patterns.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_semantic_search
-DESCRIPTION: Semantic code search (BM25 + optional embeddings/hybrid). action=reindex to rebuild.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_session
-DESCRIPTION: Cross-session memory (CCP). Actions: load (restore previous session ~400 tok), save, status, task (set current task), finding (record discovery), decision (record choice), reset, list (show sessions), cleanup.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_shell
-DESCRIPTION: Run shell command with pattern-based output compression. Use strictly for fast context compression (git/cargo). DO NOT use for long-running builds. Will be SIGKILLED after 30s.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_smart_read
-DESCRIPTION: Auto-select optimal read mode for a file.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_symbol
-DESCRIPTION: Read a specific symbol (function, struct, class) by name. Returns only the symbol code block instead of the entire file. 90-97% fewer tokens than full file read.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_tree
-DESCRIPTION: Directory listing with file counts. Recursively lists directory contents up to max depth.
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: lean_ctx_wrapped
-DESCRIPTION: Savings report card. Periods: week|month|all.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -230,6 +95,216 @@ TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: soda_web_search
 DESCRIPTION: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_agent
+DESCRIPTION: Multi-agent coordination.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_architecture
+DESCRIPTION: Graph-based architecture analysis.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_callees
+DESCRIPTION: Find all functions called by a given symbol.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_callers
+DESCRIPTION: Find all symbols that call a given function.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_compress
+DESCRIPTION: Checkpoint context to compress conversation history.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_compress_memory
+DESCRIPTION: Compress a memory/config file.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_context
+DESCRIPTION: Session context overview.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_cost
+DESCRIPTION: Cost attribution.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_dedup
+DESCRIPTION: Cross-file dedup: analyze or apply shared block references.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_delta
+DESCRIPTION: Incremental diff — sends only changed lines since last read.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_edit
+DESCRIPTION: Edit a file via search-and-replace.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_execute
+DESCRIPTION: Run code in sandbox.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_feedback
+DESCRIPTION: Harness feedback for LLM tokens/latency.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_fill
+DESCRIPTION: Budget-aware context fill.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_gain
+DESCRIPTION: Gain report.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_graph
+DESCRIPTION: Code dependency graph.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_graph_diagram
+DESCRIPTION: Generate a Mermaid diagram.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_handoff
+DESCRIPTION: Context Ledger Protocol.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_heatmap
+DESCRIPTION: File access heatmap.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_impact
+DESCRIPTION: Graph-based impact analysis.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_intent
+DESCRIPTION: Structured intent input.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_knowledge
+DESCRIPTION: Persistent project knowledge.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_metrics
+DESCRIPTION: Show token usage metrics and cache efficiency stats.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_multi_read
+DESCRIPTION: Batch read files. Same modes as ctx_read.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_outline
+DESCRIPTION: List all symbols in a file.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_overview
+DESCRIPTION: Task-relevant project map.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_prefetch
+DESCRIPTION: Predictive prefetch.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_preload
+DESCRIPTION: Proactive context loader.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_read
+DESCRIPTION: Read file (cached, compressed). Auto-selects optimal mode. Modes: full, map, signatures, diff, lines:N-M. fresh=true forces re-read.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_response
+DESCRIPTION: Compress LLM response text.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_routes
+DESCRIPTION: List HTTP routes/endpoints.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_search
+DESCRIPTION: Search files using regular expressions. Respects .gitignore patterns.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_semantic_search
+DESCRIPTION: Semantic code search.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_session
+DESCRIPTION: Cross-session memory (CCP).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_share
+DESCRIPTION: Share cached file contexts between agents.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_shell
+DESCRIPTION: Run shell command with pattern-based output compression. Will be SIGKILLED after 30s.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_smart_read
+DESCRIPTION: Auto-select optimal read mode for a file.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_symbol
+DESCRIPTION: Read a specific symbol.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_task
+DESCRIPTION: Multi-agent task orchestration.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_tree
+DESCRIPTION: Directory listing with file counts. Recursively lists directory contents up to max depth.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_workflow
+DESCRIPTION: Workflow rails.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_ctx_wrapped
+DESCRIPTION: Savings report card.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

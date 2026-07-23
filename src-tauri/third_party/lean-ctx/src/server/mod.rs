@@ -613,14 +613,14 @@ mod tests {
     fn disabled_tools_filters_list() {
         let all = crate::tool_defs::granular_tool_defs();
         let total = all.len();
-        let disabled = ["ctx_graph".to_string(), "ctx_agent".to_string()];
+        let disabled = ["graph", "agent"];
         let filtered: Vec<_> = all
             .into_iter()
-            .filter(|t| !disabled.iter().any(|d| t.name.as_ref() == d.as_str()))
+            .filter(|t| !disabled.iter().any(|d| crate::tool_defs::extract_action(t.name.as_ref()) == *d))
             .collect();
         assert_eq!(filtered.len(), total - 2);
-        assert!(!filtered.iter().any(|t| t.name.as_ref() == "ctx_graph"));
-        assert!(!filtered.iter().any(|t| t.name.as_ref() == "ctx_agent"));
+        assert!(!filtered.iter().any(|t| crate::tool_defs::extract_action(t.name.as_ref()) == "graph"));
+        assert!(!filtered.iter().any(|t| crate::tool_defs::extract_action(t.name.as_ref()) == "agent"));
     }
 
     #[test]

@@ -1,0 +1,63 @@
+=== SODA MCPs LIST (ZERO-BRAND CANONICAL) ===
+GERADO EM: 2026-07-22 20:26:14
+TOTAL DE FERRAMENTAS: 58
+----------------------------------------------------------------------------------------------------
+• core_analyze_session: Analyze the current thinking session and provide insights
+• core_export_session: Export the current thinking session in various formats
+• core_merge_sessions: Merge multiple thinking sessions into one
+• core_think: Dynamic CoT tool. Break down complex problems, branch, backtrack, and verify hypotheses iteratively.
+• mem_add_observations: Add new observations to existing entities in the knowledge graph.
+• mem_create_entities: Create multiple new entities with their types and observations in the knowledge graph.
+• mem_create_relations: Create multiple new directed relations between existing entities in the knowledge graph.
+• mem_graph: Retrieve the complete knowledge graph structure containing all entities and relations.
+• mem_open_nodes: Retrieve specific entities by name with their observations and relations.
+• mem_search: Search the knowledge graph using full-text search over node names, types, and observations.
+• soda_db_query: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.
+• soda_repo_ast: Extrai o blueprint AST do repositório usando o parser nativo em Rust.
+• soda_repo_meta: Extrai metadados GitHub nativos via octocrab para owner/repo.
+• soda_sys_time: Retorna data/hora local, UTC e fuso atual via chrono nativo.
+• soda_web_fetch: Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo.
+• soda_web_search: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.
+• souls_ctx_agent: Multi-agent coordination.
+• souls_ctx_architecture: Graph-based architecture analysis.
+• souls_ctx_callees: Find all functions called by a given symbol.
+• souls_ctx_callers: Find all symbols that call a given function.
+• souls_ctx_compress: Checkpoint context to compress conversation history.
+• souls_ctx_compress_memory: Compress a memory/config file.
+• souls_ctx_context: Session context overview.
+• souls_ctx_cost: Cost attribution.
+• souls_ctx_dedup: Cross-file dedup: analyze or apply shared block references.
+• souls_ctx_delta: Incremental diff — sends only changed lines since last read.
+• souls_ctx_edit: Edit a file via search-and-replace.
+• souls_ctx_execute: Run code in sandbox.
+• souls_ctx_feedback: Harness feedback for LLM tokens/latency.
+• souls_ctx_fill: Budget-aware context fill.
+• souls_ctx_gain: Gain report.
+• souls_ctx_graph: Code dependency graph.
+• souls_ctx_graph_diagram: Generate a Mermaid diagram.
+• souls_ctx_handoff: Context Ledger Protocol.
+• souls_ctx_heatmap: File access heatmap.
+• souls_ctx_impact: Graph-based impact analysis.
+• souls_ctx_intent: Structured intent input.
+• souls_ctx_knowledge: Persistent project knowledge.
+• souls_ctx_metrics: Show token usage metrics and cache efficiency stats.
+• souls_ctx_multi_read: Batch read files. Same modes as ctx_read.
+• souls_ctx_outline: List all symbols in a file.
+• souls_ctx_overview: Task-relevant project map.
+• souls_ctx_prefetch: Predictive prefetch.
+• souls_ctx_preload: Proactive context loader.
+• souls_ctx_read: Read file (cached, compressed). Auto-selects optimal mode. Modes: full, map, signatures, diff, lines:N-M. fresh=true forces re-read.
+• souls_ctx_response: Compress LLM response text.
+• souls_ctx_routes: List HTTP routes/endpoints.
+• souls_ctx_search: Search files using regular expressions. Respects .gitignore patterns.
+• souls_ctx_semantic_search: Semantic code search.
+• souls_ctx_session: Cross-session memory (CCP).
+• souls_ctx_share: Share cached file contexts between agents.
+• souls_ctx_shell: Run shell command with pattern-based output compression. Will be SIGKILLED after 30s.
+• souls_ctx_smart_read: Auto-select optimal read mode for a file.
+• souls_ctx_symbol: Read a specific symbol.
+• souls_ctx_task: Multi-agent task orchestration.
+• souls_ctx_tree: Directory listing with file counts. Recursively lists directory contents up to max depth.
+• souls_ctx_workflow: Workflow rails.
+• souls_ctx_wrapped: Savings report card.
+----------------------------------------------------------------------------------------------------

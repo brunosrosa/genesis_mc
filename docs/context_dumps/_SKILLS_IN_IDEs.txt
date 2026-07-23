@@ -1,4 +1,4 @@
-_SKILLS_IN_IDEs Gerado em: 2026-07-20 01:40:07
+_SKILLS_IN_IDEs Gerado em: 2026-07-22 20:26:14
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md
@@ -105,56 +105,14 @@ CAMINHO: Z:\souls_mc\.agents\skills\mcp-lean-ctx-master\SKILL.md
 ---
 ---
 name: mcp-lean-ctx-master
-description: O Navegador Token-Aware e Escudo Anti-Context Rot do SODA. Impõe compressão LEAN (Lossless 48%). Bane comandos nativos crus. Exige Sandboxing (Landlock/AppContainer) para qualquer 'ctx_shell'. Impõe a 'Poda Ativa de Cache' para evitar vazamento de RAM e blinda as edições ('ctx_edit') com Hard Links (snapsafe) e Mutex atômico contra Corrupção Silenciosa de Dados (SDC).
-triggers: ["mcp-lean-ctx-master", "ler arquivo", "lean-ctx", "buscar no texto", "listar diretório", "ctx_read", "context engineering"]
+description: Deprecated legacy alias. Transmuted into @soda-context-master under Zero-Brand governance (ADR-026).
+triggers: ["mcp-lean-ctx-master", "lean-ctx"]
 ---
 
-### skill: MCP LEAN Context Master (Engenharia LEAN e Sandboxing V6.0)
+### Redirecionamento Canônico Zero-Brand (ADR-026)
 
-#### Goal
-Atuar como o Escudo Anti-Context Rot e o Navegador Supremo do Antigravity IDE. O seu objetivo inegociável é proteger os 6GB de VRAM e o host local. Você está **TERMINANTEMENTE PROIBIDO** de utilizar comandos nativos crus (`cat`, `grep`, `ls`). Toda a varredura deve passar pelas ferramentas do `lean-ctx` no formato LEAN. Além da economia de 48% de tokens, você DEVE enjaular execuções de shell (Landlock), aplicar a higiene de RAM (poda de cache) e proteger as edições contra a Corrupção Silenciosa de Dados (SDC) usando Mutex e *Hard Links* $\mathcal{O}(1)$.
-
-#### Instructions
-Sempre que precisar investigar arquivos locais, explorar diretórios ou vasculhar logs, engatilhe esta Máquina de Estados:
-
-1. **A Lei da Compressão LEAN (Morte aos comandos puros):**
-   * PROIBIDO usar `cat` ou `grep`.
-   * Use OBRIGATORIAMENTE `ctx_read(path, mode)` para leituras e `ctx_search(pattern, path)` para buscas. Os dados retornarão na notação LEAN altamente comprimida.
-   * PROIBIDO usar `ls`. Use `ctx_tree(path, depth)`.
-
-2. **A Guilhotina de Shell (Prevenção Anti-RCE):**
-   * Se precisar invocar processos no terminal usando `ctx_shell(command)`, você opera sob restrição de privilégio mínimo.
-   * **Lei do Sandboxing:** O comando DEVE rodar sob contenção do Kernel Host (Landlock no Linux ou AppContainer/LPAC no Windows). O comando gerado não pode ter acesso global de escrita no disco nem portas de rede abertas sem autorização explícita (Fail-Closed).
-
-3. **Higiene de RAM (A Lei do Descarte):**
-   * A leitura via `lean-ctx` faz cache agressivo. Se você abrir múltiplos arquivos durante o *Ralph Loop*, a RAM do host sangrará.
-   * Assim que a utilidade de um arquivo lido for esgotada (ex: você percebeu que o bug não está no `header.rs`), dê o comando lógico de **Poda de Cache** no servidor e limpe seu próprio *context window* mental.
-
-4. **Blindagem de Edição (Anti-SDC):**
-   * A ferramenta `ctx_edit(path, old_string, new_string)` **NÃO PODE** ser invocada cegamente.
-   * Antes de acionar qualquer edição estrutural baseada no contexto LEAN que você leu, garanta que o arquivo está protegido por um *Hard Link* em $\mathcal{O}(1)$ (`snapsafe`).
-   * A edição deve respeitar as travas de concorrência (Mutex do Tokio). Falhas na gravação devem preservar o *inode* original intacto.
-
-#### Constraints
-* **PROIBIÇÃO DE PARÂMETROS NATIVOS:** É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath, EndLine, etc.) no `lean_ctx_read` (ou `ctx_read`). A assinatura da ferramenta exige estritamente `path` (caminho do arquivo) e `mode` (ex: 'full', 'signatures', etc.). Valide o schema da ferramenta antes de chamar.
-* **PROIBIÇÃO DO MODO TASK ANTES DE EDIÇÃO:** Nunca use `mode="task"` para arquivos que planeja modificar; ele embaralha o arquivo estruturalmente.
-* **INVALIDAÇÃO DE CACHE (fresh: true):** Se um arquivo for modificado em disco por compiladores ou testes externos, force a re-leitura usando `fresh: true`.
-* **UNICIDADE NO CTX_EDIT:** A string `old_string` no `ctx_edit` deve conter 2-3 linhas de contexto adjacentes para garantir correspondência única no arquivo.
-* **LEITURAS FATIADAS (lines:N-M):** Para arquivos grandes, prefira `mode="lines:N-M"` em vez de `full` para economizar tokens.
-* **CTX_SHELL APENAS DE LEITURA:** Use `ctx_shell` apenas para comandos diagnósticos passivos; nunca para mutação de arquivos (como `sed`/`awk`).
-* **O FORMATO LEAN É INEGOCIÁVEL:** Rejeite TOON ou JSON denso para leituras extensas. O formato LEAN garante 93% de precisão de Recall consumindo 48% menos tokens.
-* **SEM ALUCINAÇÕES DE PATH:** Use `ctx_tree` antes de `ctx_read`.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
-
-#### Examples
-**Entrada do Usuário:** "SODA, busca onde está declarada a função de roteamento IPC, lê a lógica dela e aplica a correção."
-**Ação do Agente:**
-1. Aborta o instinto de usar `grep`. Invoca `ctx_search(pattern: "transmit_ipc", path: "src/")`.
-2. Localiza o arquivo e usa `ctx_read`. O servidor devolve a função em formato LEAN comprimido.
-3. O agente descobre o erro. Imediatamente faz a *Poda de Cache* dos arquivos não relacionados que abriu no caminho.
-4. Aciona a trava O(1) de `snapsafe` sobre o arquivo alvo.
-5. Invoca `ctx_edit` para corrigir a assinatura.
-6. Reporta: *"-> Busca e edição concluídas via notação LEAN em O(1). Cache RAM podado e arquivo blindado via snapsafe."*
+Esta skill foi transmutada e incorporada à skill canônica **`@soda-context-master`**.
+Invoque obrigatoriamente **`@soda-context-master`** para todas as operações do pacote `souls_ctx_*`.
 
 ### ====================================================================================================
 ARQUIVO: mcp-memory-master/SKILL.md
@@ -652,6 +610,92 @@ Ao receber uma nova intenção de produto ou arquitetura, execute OBRIGATORIAMEN
 1. *Stealth Assessment:* O usuário foi direto. O agente entende a necessidade operacional.
 2. *Invocação MCP (Silencioso):* Usa `sequentialthinking` para debater. Conclui que processar diffs de commits na nuvem vai falir a cota da API. Conclui que gráficos 3D causam *Flow-Debt*.
 3. *Encerra Pensamento e Responde no Canvas:* "Arquiteto, a ideia é sólida, mas gráficos na tela inicial rompem nossa lei de Fricção Cognitiva e usar a nuvem para isso fura o FinOps. Proponho: 1) O resumo dos commits será feito localmente pelo Qwen 2.5 3B (Custo Zero). 2) Exibiremos isso no *Kanban Swarm Canvas* usando apenas tipografia limpa, sem WebGL. Autoriza a criação do `proposal.md` com este DAG de roteamento?"
+
+### ====================================================================================================
+ARQUIVO: soda-context-master/SKILL.md
+CAMINHO: Z:\souls_mc\.agents\skills\soda-context-master\SKILL.md
+---
+---
+name: soda-context-master
+description: O Motor de Engenharia de Contexto Canônico e Escudo Anti-Context Rot do SODA (souls_ctx_*). Governa o protocolo CRP v2, memória CCP entre sessões (.soda_data/), tríade de conhecimento/enxame (souls_ctx_knowledge, souls_ctx_agent, souls_ctx_share) e fatiamento AST tree-sitter.
+triggers: ["soda-context-master", "souls_ctx", "ler arquivo", "buscar no texto", "listar diretório", "context engineering", "memoria de sessao", "ccp"]
+---
+
+### skill: SODA Context Master (Engenharia LEAN & Zero-Brand v12.0)
+
+#### Goal
+Atuar como o Orquestrador Supremo de Engenharia de Contexto do SODA. Seu objetivo inegociável é proteger os 6GB de VRAM e o host local contra o *Context Rot* (Asfixia de Contexto) e o alucinamento, garantindo máxima fidelidade semântica em tempo $\mathcal{O}(1)$. Você está **TERMINANTEMENTE PROIBIDO** de utilizar leituras nativas puras (`cat`, `grep`, `ls`) para exploração de código. Toda a interação de contexto DEVE passar pelo pacote `souls_ctx_*`.
+
+---
+
+#### 1. A Matriz de Ferramentas Zero-Brand (`souls_ctx_*`)
+
+| Ferramenta Canônica | Finalidade & Modo Operacional | Destino de I/O |
+|---|---|---|
+| `souls_ctx_read(path, mode)` | Leitura de arquivo comprimida com cache MD5 (`mode`: `auto`, `map`, `signatures`, `full`, `diff`, `lines:N-M`). Use `fresh=true` para invalidação | `.soda_cache/` |
+| `souls_ctx_smart_read(path)` | Leitura adaptativa automática baseada na estrutura e tamanho do arquivo | `.soda_cache/` |
+| `souls_ctx_delta(path)` | Retorna apenas os hunks alterados (Myers diff) desde a última leitura | `.soda_cache/` |
+| `souls_ctx_search(pattern, path)` | Busca regex agrupada e pré-filtrada sem ruído | RAM |
+| `souls_ctx_tree(path, depth)` | Árvores compactas de diretório com estatísticas de contagem | RAM |
+| `souls_ctx_symbol(name)` / `souls_ctx_outline` | Leitura cirúrgica de símbolos e assinaturas via AST tree-sitter em 18 linguagens | RAM |
+| `souls_ctx_semantic_search(query)` | Busca código por significado via BM25 e TF-IDF cosine similarity | `.soda_cache/` |
+| `souls_ctx_shell(command)` | Execução CLI com compressão de 90+ padrões (git, cargo, npm, docker) | Logs efêmeros |
+| `souls_ctx_overview()` / `souls_ctx_preload` | Orientação de projeto no arranque da sessão e pré-aquecimento de cache | RAM / Cache |
+| `souls_ctx_session(action, value)` | Context Continuity Protocol (CCP): `task`, `finding`, `decision`, `save`, `load` | `.soda_data/sessions/` |
+| `souls_ctx_knowledge(action, ...)` | Base de conhecimento permanente de projeto (`remember`, `recall`, `consolidate`) | `.soda_data/souls_context_memory.db` |
+| `souls_ctx_agent(action, ...)` | Barramento de enxame de subagentes (`register`, `post`, `read`, `handoff`, `sync`) | RAM / IPC |
+| `souls_ctx_share(action, ...)` | Compartilhamento de arquivos em cache entre subagentes (`push`, `pull`, `list`) | `.soda_cache/` |
+| `souls_ctx_edit(path, old, new)` | Edição com substituição cirúrgica protegida por Mutex e `snapsafe` | Disco |
+
+---
+
+#### 2. Protocolo de Resposta Compacta (CRP v2)
+
+Every token costs money and context space. Applies to input, output AND thinking tokens:
+
+##### Thinking Reduction (30–60% economia de tokens de raciocínio)
+1. **Hipótese Única:** Formule uma hipótese por vez e teste-a no silício. Não enumere 5 abordagens abstratas.
+2. **Parada Prematura:** Encerre o pensamento imediatamente assim que a resposta técnica for encontrada.
+3. **Rastreamento por Referências:** Use referências persistentes `F1=src/main.rs`, `F2=Cargo.toml` em toda a sessão.
+
+##### Output Reduction (50–80% economia de tokens de saída)
+1. **Prosa Zero:** Forneça apenas código, tabelas e resumos executivos. Proibido ecoar trechos lidos.
+2. **Resumo de 1 Linha:** Ferramentas e builds devem ser ressumidos em 1 linha max: `-> Built: 0 errors`.
+3. **Notação Compacta:**
+   - `F:path` — lendo arquivo
+   - `+file` — criado / adicionado
+   - `~file` — modificado
+   - `!file` — erro / falha
+4. **Estrutura:** Bullets > Parágrafos. Tabelas > Listas.
+
+---
+
+#### 3. Protocolo de Memória CCP & Tríade de Conhecimento (`.soda_data/`)
+
+1. **Arranque do Chat / Sessão:**
+   - Execute `souls_ctx_session(action="load")` para restaurar o estado da tarefa anterior (`task`, `findings`, `decisions`).
+   - Se for o primeiro acesso no projeto, rode `souls_ctx_overview()` para carregar o mapa AST básico.
+2. **Durante a Execução:**
+   - Ao descobrir um Gotcha ou bug estrutural, registre via `souls_ctx_knowledge(action="remember", category="gotcha", key="...", value="...")`.
+   - Ao definir uma arquitetura, salve via `souls_ctx_session(action="decision", value="...")`.
+3. **Enxame Agêntico (Subagentes):**
+   - Subagentes devem rodar `souls_ctx_agent(action="register", role="worker")`.
+   - Para evitar re-ler arquivos do disco, subagentes compartilham contexto via `souls_ctx_share(action="push", paths="...")` e `pull`.
+
+---
+
+#### 4. Cascata de Fallback Gracioso
+
+1. **Nível 1 (MANDATÓRIO):** Ferramentas MCP `souls_ctx_*`.
+2. **Nível 2 (RETAGUARDA CLI):** Se o MCP server responder com erro de conexão, utilize o CLI envelopado `lean-ctx -c "<comando>"`.
+3. **Nível 3 (ÚLTIMO RECURSO):** Utilize ferramentas nativas da IDE (`view_file`, `grep_search`, `list_dir`, `run_command`) **APENAS** se os Níveis 1 e 2 falharem catastroficamente.
+
+---
+
+#### Constraints
+* **PROIBIÇÃO DE PARÂMETROS NATIVOS:** É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath) no `souls_ctx_read`. A assinatura exige estritamente `path` e `mode`.
+* **SUBAGENTES (fresh=true):** Ao instanciar subagentes ou após compilações externas (`cargo build`), force `fresh=true` na releitura de arquivos modificados.
+* **I/O HYGIENE:** É proibida qualquer gravação fora de `.soda_data/` e `.soda_cache/`.
 
 ### ====================================================================================================
 ARQUIVO: soda-docs-hydrator/SKILL.md

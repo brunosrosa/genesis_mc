@@ -11,10 +11,9 @@ impl LeanCtxServer {
         name: &str,
         args: &Option<serde_json::Map<String, Value>>,
     ) -> Result<String, ErrorData> {
-        let name = name.strip_prefix("souls_").unwrap_or(name);
-        let name = name.strip_prefix("lean_").unwrap_or(name);
-        let name = name.strip_prefix("lean-").unwrap_or(name);
-        Ok(match name {
+        let action = crate::tool_defs::extract_action(name);
+        let internal_name = format!("ctx_{}", action);
+        Ok(match internal_name.as_str() {
             "ctx_read" => {
                 let path = match get_str(args, "path") {
                     Some(p) => self

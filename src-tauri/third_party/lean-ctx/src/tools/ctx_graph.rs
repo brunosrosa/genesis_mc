@@ -22,6 +22,7 @@ pub fn handle(
 }
 
 fn handle_build(root: &str) -> String {
+    crate::core::index_orchestrator::ensure_all_background(root);
     let index = graph_index::scan(root);
 
     let mut by_lang: HashMap<&str, (usize, usize)> = HashMap::new();
