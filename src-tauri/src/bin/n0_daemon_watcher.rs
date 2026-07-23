@@ -821,7 +821,9 @@ async fn main() -> io::Result<()> {
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    let run_once = std::env::args().any(|arg| arg == "--once" || arg == "--dry-run");
+    let run_once = std::env::args().any(|arg| {
+        arg == "--once" || arg == "--dry-run" || arg == "--one-shot" || arg == "--run-once"
+    });
 
     let watcher = DaemonWatcher {
         sheets: Arc::new(SheetsMcpClient),

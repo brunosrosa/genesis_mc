@@ -28,12 +28,14 @@ impl CodeGraph {
         std::fs::create_dir_all(&db_dir)?;
         let db_path = db_dir.join("graph.db");
         let conn = Connection::open(&db_path)?;
+        conn.execute_batch("PRAGMA busy_timeout = 2000;")?;
         schema::initialize(&conn)?;
         Ok(Self { conn, db_path })
     }
 
     pub fn open_in_memory() -> anyhow::Result<Self> {
         let conn = Connection::open_in_memory()?;
+        conn.execute_batch("PRAGMA busy_timeout = 2000;")?;
         schema::initialize(&conn)?;
         Ok(Self {
             conn,

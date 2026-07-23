@@ -28,11 +28,12 @@ binds:
               - mcp:
                   failureMode: failClosed
                   targets:
-                    - name: souls_ctx
+                    - name: souls
                       stdio:
-                        cmd: 'src-tauri/target/debug/mcp_stdio_guard.exe'
-                        args: ['--timeout-ms', '60000', '--', 'src-tauri/target/debug/lean-ctx.exe']
+                        cmd: 'Z:/souls_mc/src-tauri/target/debug/lean-ctx.exe'
+                        args: []
                         env:
+                          LEAN_CTX_PROJECT_ROOT: 'Z:/souls_mc'
                           LEAN_CTX_DATA_DIR: 'Z:/souls_mc/.soda_data'
                           LEAN_CTX_CACHE_DIR: 'Z:/souls_mc/.soda_cache'
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
@@ -51,7 +52,7 @@ binds:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: soda
                       stdio:
-                        cmd: 'src-tauri/target/debug/soda_mcp_server.exe'
+                        cmd: 'Z:/souls_mc/src-tauri/target/debug/soda_mcp_server.exe'
                         args: []
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'

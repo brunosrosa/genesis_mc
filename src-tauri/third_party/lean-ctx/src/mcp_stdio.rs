@@ -195,12 +195,14 @@ fn is_standard_notification(method: &str) -> bool {
 
 fn should_ignore_notification(json_value: &serde_json::Value, method: &str) -> bool {
     let is_notification = json_value.get("id").is_none();
-    if is_notification && !is_standard_method(method) {
-        tracing::trace!(
-            "Ignoring non-MCP notification '{}' for compatibility",
-            method
-        );
-        return true;
+    if is_notification {
+        if method == "notifications/initialized" || !is_standard_method(method) {
+            tracing::trace!(
+                "Ignoring notification '{}' for compatibility",
+                method
+            );
+            return true;
+        }
     }
 
     matches!(
@@ -213,30 +215,34 @@ fn should_ignore_notification(json_value: &serde_json::Value, method: &str) -> b
 }
 
 fn try_parse_with_compatibility<T: DeserializeOwned>(
-    payload: &[u8],
+    mut payload: &[u8],
     context: &str,
 ) -> Result<Option<T>, HybridCodecError> {
+    if payload.starts_with(b"\xef\xbb\xbf") {
+        payload = &payload[3..];
+    }
+    let trimmed_str = std::str::from_utf8(payload)
+        .map(|s| s.trim_start_matches('\u{feff}'))
+        .unwrap_or("");
+    let payload = trimmed_str.as_bytes();
+
     if let Ok(line_str) = std::str::from_utf8(payload) {
+        if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(line_str) {
+            if let Some(method) = json_value.get("method").and_then(serde_json::Value::as_str) {
+                if should_ignore_notification(&json_value, method) {
+                    return Ok(None);
+                }
+                if json_value.get("params").is_none() {
+                    json_value["params"] = serde_json::json!({});
+                }
+                if let Ok(item) = serde_json::from_value::<T>(json_value) {
+                    return Ok(Some(item));
+                }
+            }
+        }
         match serde_json::from_slice(payload) {
             Ok(item) => Ok(Some(item)),
             Err(error) => {
-                if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(line_str) {
-                    if let Some(method) =
-                        json_value.get("method").and_then(serde_json::Value::as_str)
-                    {
-                        if should_ignore_notification(&json_value, method) {
-                            return Ok(None);
-                        }
-
-                        if json_value.get("params").is_none() {
-                            json_value["params"] = serde_json::json!({});
-                            if let Ok(item) = serde_json::from_value::<T>(json_value) {
-                                return Ok(Some(item));
-                            }
-                        }
-                    }
-                }
-
                 tracing::debug!(
                     "Failed to parse message {}: {} | Error: {}",
                     context,
@@ -431,7 +437,7 @@ impl<T: Serialize> Encoder<T> for HybridJsonRpcMessageCodec<T> {
     fn encode(&mut self, item: T, buf: &mut BytesMut) -> Result<(), HybridCodecError> {
         let payload = serde_json::to_vec(&item)?;
 
-        match self.protocol.get().unwrap_or(WireProtocol::ContentLength) {
+        match self.protocol.get().unwrap_or(WireProtocol::JsonLine) {
             WireProtocol::ContentLength => {
                 buf.extend_from_slice(
                     format!("Content-Length: {}\r\n\r\n", payload.len()).as_bytes(),

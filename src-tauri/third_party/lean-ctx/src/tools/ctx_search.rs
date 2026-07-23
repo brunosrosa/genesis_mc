@@ -30,9 +30,20 @@ pub fn handle(
         return (format!("ERROR: {dir} does not exist"), 0);
     }
 
+    let is_workspace_root = dir == "."
+        || dir == "./"
+        || dir.eq_ignore_ascii_case("z:\\souls_mc")
+        || dir.eq_ignore_ascii_case("z:/souls_mc")
+        || std::env::current_dir()
+            .map(|cwd| cwd == root || root.canonicalize().ok() == cwd.canonicalize().ok())
+            .unwrap_or(false);
+
+    let effective_max_depth = if is_workspace_root { 2 } else { MAX_WALK_DEPTH };
+    let hard_max_results = max_results.min(150);
+
     let walker = WalkBuilder::new(root)
         .hidden(true)
-        .max_depth(Some(MAX_WALK_DEPTH))
+        .max_depth(Some(effective_max_depth))
         .git_ignore(respect_gitignore)
         .git_global(respect_gitignore)
         .git_exclude(respect_gitignore)
@@ -89,13 +100,13 @@ pub fn handle(
                 let full_path = path.to_string_lossy();
                 raw_result_lines.push(format!("{full_path}:{}: {}", i + 1, line.trim()));
                 matches.push(format!("{short_path}:{} {}", i + 1, line.trim()));
-                if matches.len() >= max_results {
+                if matches.len() >= hard_max_results {
                     break;
                 }
             }
         }
 
-        if matches.len() >= max_results {
+        if matches.len() >= hard_max_results {
             break;
         }
     }
@@ -119,6 +130,10 @@ pub fn handle(
         files_searched,
         matches.join("\n")
     );
+
+    if matches.len() >= hard_max_results {
+        result.push_str("\n\nALERTA: Mais resultados encontrados. Refine o 'path' do seu prompt para não asfixiar a VRAM");
+    }
 
     if files_skipped_size > 0 {
         result.push_str(&format!("\n({files_skipped_size} files >512KB skipped)"));

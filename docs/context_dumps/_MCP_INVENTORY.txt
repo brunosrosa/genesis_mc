@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-07-22 20:26:14
+_MCP_INVENTORY Gerado em: 2026-07-22 21:37:04
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -99,22 +99,22 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_agent
-DESCRIPTION: Multi-agent coordination.
+DESCRIPTION: Multi-agent coordination (shared message bus + persistent diaries). Actions: register (join with agent_type+role), post (broadcast or direct message with category), read (poll messages), status (update state: active|idle|finished), handoff (transfer task to another agent with summary), sync (overview of all agents + pending messages + shared contexts), diary (log discovery/decision/blocker/progress/insight — persisted across sessions), recall_diary (read agent diary), diaries (list all agent diaries), list, info.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_architecture
-DESCRIPTION: Graph-based architecture analysis.
+DESCRIPTION: Graph-based architecture analysis. Actions: overview|clusters|layers|cycles|entrypoints|module.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_callees
-DESCRIPTION: Find all functions called by a given symbol.
+DESCRIPTION: Find all functions/methods called by a given symbol. Returns callee name, file, and line.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_callers
-DESCRIPTION: Find all symbols that call a given function.
+DESCRIPTION: Find all symbols that call a given function/method. Returns caller file, symbol, and line.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -124,17 +124,17 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_compress_memory
-DESCRIPTION: Compress a memory/config file.
+DESCRIPTION: Compress a memory/config file (CLAUDE.md, .cursorrules, etc.) to save tokens on every session start. Preserves code blocks, URLs, paths, headings, tables. Creates .original.md backup.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_context
-DESCRIPTION: Session context overview.
+DESCRIPTION: Session context overview — cached files, seen files, session state.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_cost
-DESCRIPTION: Cost attribution.
+DESCRIPTION: Cost attribution (local-first). Actions: report|agent|tools|json|reset.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -149,22 +149,22 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_edit
-DESCRIPTION: Edit a file via search-and-replace.
+DESCRIPTION: Edit a file via search-and-replace. Works without native Read/Edit tools. Use this when the IDE's Edit tool requires Read but Read is unavailable.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_execute
-DESCRIPTION: Run code in sandbox.
+DESCRIPTION: Run code in sandbox (11 languages). Only stdout enters context. Raw data never leaves subprocess. Languages: javascript, typescript, python, shell, ruby, go, rust, php, perl, r, elixir.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_feedback
-DESCRIPTION: Harness feedback for LLM tokens/latency.
+DESCRIPTION: Harness feedback for LLM output tokens/latency (local-first). Actions: record|report|json|reset|status.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_fill
-DESCRIPTION: Budget-aware context fill.
+DESCRIPTION: Budget-aware context fill — auto-selects compression per file within token limit.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -174,37 +174,37 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_graph
-DESCRIPTION: Code dependency graph.
+DESCRIPTION: Code dependency graph. Actions: build (index project), related (find files connected to path), symbol (lookup definition/usages as file::name), impact (blast radius of changes to path), status (index stats).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_graph_diagram
-DESCRIPTION: Generate a Mermaid diagram.
+DESCRIPTION: Generate a Mermaid diagram of the dependency or call graph. Useful for understanding architecture.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_handoff
-DESCRIPTION: Context Ledger Protocol.
+DESCRIPTION: Context Ledger Protocol (hashed, deterministic, local-first). Actions: create|show|list|pull|clear.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_heatmap
-DESCRIPTION: File access heatmap.
+DESCRIPTION: File access heatmap (local-first). Actions: status|directory|cold|json.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_impact
-DESCRIPTION: Graph-based impact analysis.
+DESCRIPTION: Graph-based impact analysis. Actions: analyze|chain|build|status.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_intent
-DESCRIPTION: Structured intent input.
+DESCRIPTION: Structured intent input (optional) — submit compact JSON or short text; server also infers intents automatically from tool calls.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_knowledge
-DESCRIPTION: Persistent project knowledge.
+DESCRIPTION: Persistent project knowledge (survives sessions). Actions: remember (store fact with temporal tracking + contradiction detection), recall (search), pattern (record convention), consolidate (extract session findings), gotcha (record a bug/mistake to never repeat — trigger+resolution required), timeline (view fact history for a category), rooms (list knowledge categories), search (cross-session search across ALL projects), wakeup (compact AAAK briefing), status (list all), remove, export, embeddings_status|embeddings_reset|embeddings_reindex (local semantic index management for recall).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -219,22 +219,22 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_outline
-DESCRIPTION: List all symbols in a file.
+DESCRIPTION: List all symbols in a file (functions, structs, classes, methods) with signatures. Much fewer tokens than reading the full file.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_overview
-DESCRIPTION: Task-relevant project map.
+DESCRIPTION: Task-relevant project map — use at session start.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_prefetch
-DESCRIPTION: Predictive prefetch.
+DESCRIPTION: Predictive prefetch — prewarm cache for blast radius files (graph + task signals) within budgets.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_preload
-DESCRIPTION: Proactive context loader.
+DESCRIPTION: Proactive context loader — caches task-relevant files, returns L-curve-optimized summary (~50-100 tokens vs ~5000 for individual reads).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -244,12 +244,12 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_response
-DESCRIPTION: Compress LLM response text.
+DESCRIPTION: Compress LLM response text (remove filler, apply TDD).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_routes
-DESCRIPTION: List HTTP routes/endpoints.
+DESCRIPTION: List HTTP routes/endpoints extracted from the project. Supports Express, Flask, FastAPI, Actix, Spring, Rails, Next.js.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -259,22 +259,22 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_semantic_search
-DESCRIPTION: Semantic code search.
+DESCRIPTION: Semantic code search (BM25 + optional embeddings/hybrid). action=reindex to rebuild.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_session
-DESCRIPTION: Cross-session memory (CCP).
+DESCRIPTION: Cross-session memory (CCP). Actions: load (restore previous session ~400 tok), save, status, task (set current task), finding (record discovery), decision (record choice), reset, list (show sessions), cleanup.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_share
-DESCRIPTION: Share cached file contexts between agents.
+DESCRIPTION: Share cached file contexts between agents. Actions: push (share files from your cache to another agent), pull (receive files shared by other agents), list (show all shared contexts), clear (remove your shared contexts).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_shell
-DESCRIPTION: Run shell command with pattern-based output compression. Will be SIGKILLED after 30s.
+DESCRIPTION: Run shell command with pattern-based output compression. Use strictly for fast context compression (git/cargo). DO NOT use for long-running builds. Will be SIGKILLED after 30s.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -284,12 +284,12 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_symbol
-DESCRIPTION: Read a specific symbol.
+DESCRIPTION: Read a specific symbol (function, struct, class) by name. Returns only the symbol code block instead of the entire file. 90-97% fewer tokens than full file read.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_task
-DESCRIPTION: Multi-agent task orchestration.
+DESCRIPTION: Multi-agent task orchestration. Actions: create|update|list|get|cancel|message|info.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -299,12 +299,12 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_workflow
-DESCRIPTION: Workflow rails.
+DESCRIPTION: Workflow rails (state machine + evidence). Actions: start|status|transition|complete|evidence_add|evidence_list|stop.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_ctx_wrapped
-DESCRIPTION: Savings report card.
+DESCRIPTION: Savings report card. Periods: week|month|all.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

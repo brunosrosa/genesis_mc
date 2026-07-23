@@ -285,7 +285,30 @@ impl ServerHandler for LeanCtxServer {
             };
 
         let tool_start = std::time::Instant::now();
-        let result_text = self.dispatch_tool(name, args).await?;
+        let timeout_duration = match name {
+            n if n.ends_with("_read")
+                || n.ends_with("_search")
+                || n.ends_with("_tree")
+                || n.ends_with("_smart_read")
+                || n.ends_with("_delta")
+                || n.ends_with("_outline")
+                || n.ends_with("_symbol")
+                || n == "read"
+                || n == "search"
+                || n == "tree" => std::time::Duration::from_secs(15),
+            _ => std::time::Duration::from_secs(240),
+        };
+
+        let result_text = match tokio::time::timeout(timeout_duration, self.dispatch_tool(name, args)).await {
+            Ok(Ok(text)) => text,
+            Ok(Err(err)) => return Err(err),
+            Err(_) => {
+                let secs = timeout_duration.as_secs();
+                return Ok(CallToolResult::success(vec![Content::text(format!(
+                    "ERROR: Tool execution timed out ({secs}s limit)"
+                ))]));
+            }
+        };
 
         let mut result_text = result_text;
 
@@ -532,6 +555,11 @@ fn git_toplevel_from(dir: &std::path::Path) -> Option<String> {
 }
 
 pub fn derive_project_root_from_cwd() -> Option<String> {
+    if let Ok(env_root) = std::env::var("LEAN_CTX_PROJECT_ROOT") {
+        if !env_root.trim().is_empty() {
+            return Some(env_root);
+        }
+    }
     let cwd = std::env::current_dir().ok()?;
     let canonical = crate::core::pathutil::safe_canonicalize_or_self(&cwd);
 

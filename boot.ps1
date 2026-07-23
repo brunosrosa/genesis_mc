@@ -230,14 +230,14 @@ try {
             Write-BootWarn "Binario lean-ctx.exe nao encontrado em $leanCtxPath - pre-aquecimento pulado."
         }
 
-        # 6. IGNIÇÃO DO DAEMON JÁ COMPILADO
-        Write-Host "`n[6/6] Iniciando o daemon compilado (souls_mc)..." -ForegroundColor Yellow
+        # 6. IGNIÇÃO DO DAEMON SUPERVISOR COMPILADO (souls_mc)
+        Write-Host "`n[6/6] Iniciando o daemon supervisor compilado (souls_mc)..." -ForegroundColor Yellow
         $daemonPath = Join-Path $srcTauriDir "target\debug\souls_mc.exe"
         if (-not (Test-Path $daemonPath)) {
             throw "Binario esperado nao encontrado apos a build: $daemonPath"
         }
 
-        Write-BootOk "Build finalizada. Daemon sera iniciado sem passar de novo pelo cargo run."
+        Write-BootOk "Build finalizada. Daemon (supervisor do agentgateway + proxy) sera iniciado."
         $daemonProc = Start-Process -FilePath $daemonPath -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru
         Write-Host ("[DAEMON] souls_mc iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
         # Daemon deve continuar vivo; se cair em <2s, algo esta muito errado.

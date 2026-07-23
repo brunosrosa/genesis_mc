@@ -77,5 +77,6 @@ Every token costs money and context space. Applies to input, output AND thinking
 
 #### Constraints
 * **PROIBIÇÃO DE PARÂMETROS NATIVOS:** É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath) no `souls_ctx_read`. A assinatura exige estritamente `path` e `mode`.
+* **PROIBIDO BUSCAS CEGAS:** Nunca use `souls_ctx_search` passando a raiz do projeto como `path`. Você DEVE mapear o terreno com `souls_ctx_tree` e apontar o `search` para a sub-pasta exata (ex: `src/modules/`). O descumprimento causará truncamento algorítmico.
 * **SUBAGENTES (fresh=true):** Ao instanciar subagentes ou após compilações externas (`cargo build`), force `fresh=true` na releitura de arquivos modificados.
 * **I/O HYGIENE:** É proibida qualquer gravação fora de `.soda_data/` e `.soda_cache/`.

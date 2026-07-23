@@ -249,7 +249,8 @@ switch ($choice) {
     }
     'C' {
         $dry = if ($isDryRun) { @("--dry-run") } else { @() }
-        $pipeline += @{ Bin = "n0_daemon_watcher"; Name = "CASCATA [1/4]: N0 (DAEMON WATCHER)"; Args = $dry }
+        $n0Args = @("--one-shot") + $dry
+        $pipeline += @{ Bin = "n0_daemon_watcher"; Name = "CASCATA [1/4]: N0 (DAEMON WATCHER)"; Args = $n0Args }
         $pipeline += @{ Bin = "f_minus_1_guardian"; Name = "CASCATA [2/4]: N1 (GUARDIÃO)"; Args = $dry }
         $pipeline += @{ Bin = "f_minus_0_5_batedor_cli"; Name = "CASCATA [3/4]: N2 (BATEDOR FINOPS)"; Args = $dry }
         $pipeline += @{ Bin = "outbox_sync"; Name = "CASCATA [4/4]: OUTBOX SYNC"; Args = $dry }
