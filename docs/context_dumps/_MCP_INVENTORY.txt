@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-07-22 21:37:04
+_MCP_INVENTORY Gerado em: 2026-07-23 23:48:00
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -98,212 +98,212 @@ DESCRIPTION: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, 
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_agent
+NAME: souls_agent
 DESCRIPTION: Multi-agent coordination (shared message bus + persistent diaries). Actions: register (join with agent_type+role), post (broadcast or direct message with category), read (poll messages), status (update state: active|idle|finished), handoff (transfer task to another agent with summary), sync (overview of all agents + pending messages + shared contexts), diary (log discovery/decision/blocker/progress/insight — persisted across sessions), recall_diary (read agent diary), diaries (list all agent diaries), list, info.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_architecture
+NAME: souls_architecture
 DESCRIPTION: Graph-based architecture analysis. Actions: overview|clusters|layers|cycles|entrypoints|module.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_callees
+NAME: souls_callees
 DESCRIPTION: Find all functions/methods called by a given symbol. Returns callee name, file, and line.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_callers
+NAME: souls_callers
 DESCRIPTION: Find all symbols that call a given function/method. Returns caller file, symbol, and line.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_compress
+NAME: souls_compress
 DESCRIPTION: Checkpoint context to compress conversation history.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_compress_memory
+NAME: souls_compress_memory
 DESCRIPTION: Compress a memory/config file (CLAUDE.md, .cursorrules, etc.) to save tokens on every session start. Preserves code blocks, URLs, paths, headings, tables. Creates .original.md backup.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_context
+NAME: souls_context
 DESCRIPTION: Session context overview — cached files, seen files, session state.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_cost
+NAME: souls_cost
 DESCRIPTION: Cost attribution (local-first). Actions: report|agent|tools|json|reset.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_dedup
+NAME: souls_dedup
 DESCRIPTION: Cross-file dedup: analyze or apply shared block references.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_delta
+NAME: souls_delta
 DESCRIPTION: Incremental diff — sends only changed lines since last read.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_edit
+NAME: souls_edit
 DESCRIPTION: Edit a file via search-and-replace. Works without native Read/Edit tools. Use this when the IDE's Edit tool requires Read but Read is unavailable.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_execute
+NAME: souls_execute
 DESCRIPTION: Run code in sandbox (11 languages). Only stdout enters context. Raw data never leaves subprocess. Languages: javascript, typescript, python, shell, ruby, go, rust, php, perl, r, elixir.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_feedback
+NAME: souls_feedback
 DESCRIPTION: Harness feedback for LLM output tokens/latency (local-first). Actions: record|report|json|reset|status.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_fill
+NAME: souls_fill
 DESCRIPTION: Budget-aware context fill — auto-selects compression per file within token limit.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_gain
+NAME: souls_gain
 DESCRIPTION: Gain report.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_graph
+NAME: souls_graph
 DESCRIPTION: Code dependency graph. Actions: build (index project), related (find files connected to path), symbol (lookup definition/usages as file::name), impact (blast radius of changes to path), status (index stats).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_graph_diagram
+NAME: souls_graph_diagram
 DESCRIPTION: Generate a Mermaid diagram of the dependency or call graph. Useful for understanding architecture.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_handoff
+NAME: souls_handoff
 DESCRIPTION: Context Ledger Protocol (hashed, deterministic, local-first). Actions: create|show|list|pull|clear.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_heatmap
+NAME: souls_heatmap
 DESCRIPTION: File access heatmap (local-first). Actions: status|directory|cold|json.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_impact
+NAME: souls_impact
 DESCRIPTION: Graph-based impact analysis. Actions: analyze|chain|build|status.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_intent
+NAME: souls_intent
 DESCRIPTION: Structured intent input (optional) — submit compact JSON or short text; server also infers intents automatically from tool calls.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_knowledge
+NAME: souls_knowledge
 DESCRIPTION: Persistent project knowledge (survives sessions). Actions: remember (store fact with temporal tracking + contradiction detection), recall (search), pattern (record convention), consolidate (extract session findings), gotcha (record a bug/mistake to never repeat — trigger+resolution required), timeline (view fact history for a category), rooms (list knowledge categories), search (cross-session search across ALL projects), wakeup (compact AAAK briefing), status (list all), remove, export, embeddings_status|embeddings_reset|embeddings_reindex (local semantic index management for recall).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_metrics
+NAME: souls_metrics
 DESCRIPTION: Show token usage metrics and cache efficiency stats.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_multi_read
+NAME: souls_multi_read
 DESCRIPTION: Batch read files. Same modes as ctx_read.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_outline
+NAME: souls_outline
 DESCRIPTION: List all symbols in a file (functions, structs, classes, methods) with signatures. Much fewer tokens than reading the full file.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_overview
+NAME: souls_overview
 DESCRIPTION: Task-relevant project map — use at session start.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_prefetch
+NAME: souls_prefetch
 DESCRIPTION: Predictive prefetch — prewarm cache for blast radius files (graph + task signals) within budgets.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_preload
+NAME: souls_preload
 DESCRIPTION: Proactive context loader — caches task-relevant files, returns L-curve-optimized summary (~50-100 tokens vs ~5000 for individual reads).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_read
+NAME: souls_read
 DESCRIPTION: Read file (cached, compressed). Auto-selects optimal mode. Modes: full, map, signatures, diff, lines:N-M. fresh=true forces re-read.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_response
+NAME: souls_response
 DESCRIPTION: Compress LLM response text (remove filler, apply TDD).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_routes
+NAME: souls_routes
 DESCRIPTION: List HTTP routes/endpoints extracted from the project. Supports Express, Flask, FastAPI, Actix, Spring, Rails, Next.js.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_search
+NAME: souls_search
 DESCRIPTION: Search files using regular expressions. Respects .gitignore patterns.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_semantic_search
+NAME: souls_semantic_search
 DESCRIPTION: Semantic code search (BM25 + optional embeddings/hybrid). action=reindex to rebuild.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_session
+NAME: souls_session
 DESCRIPTION: Cross-session memory (CCP). Actions: load (restore previous session ~400 tok), save, status, task (set current task), finding (record discovery), decision (record choice), reset, list (show sessions), cleanup.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_share
+NAME: souls_share
 DESCRIPTION: Share cached file contexts between agents. Actions: push (share files from your cache to another agent), pull (receive files shared by other agents), list (show all shared contexts), clear (remove your shared contexts).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_shell
+NAME: souls_shell
 DESCRIPTION: Run shell command with pattern-based output compression. Use strictly for fast context compression (git/cargo). DO NOT use for long-running builds. Will be SIGKILLED after 30s.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_smart_read
+NAME: souls_smart_read
 DESCRIPTION: Auto-select optimal read mode for a file.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_symbol
+NAME: souls_symbol
 DESCRIPTION: Read a specific symbol (function, struct, class) by name. Returns only the symbol code block instead of the entire file. 90-97% fewer tokens than full file read.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_task
+NAME: souls_task
 DESCRIPTION: Multi-agent task orchestration. Actions: create|update|list|get|cancel|message|info.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_tree
+NAME: souls_tree
 DESCRIPTION: Directory listing with file counts. Recursively lists directory contents up to max depth.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_workflow
+NAME: souls_workflow
 DESCRIPTION: Workflow rails (state machine + evidence). Actions: start|status|transition|complete|evidence_add|evidence_list|stop.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_ctx_wrapped
+NAME: souls_wrapped
 DESCRIPTION: Savings report card. Periods: week|month|all.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.

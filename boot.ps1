@@ -199,10 +199,38 @@ try {
                 "--bin", "soda_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
+                "--bin", "scan_local_models_cli",
                 "--bin", "souls_mc"
             ) `
             -Label "cargo-build-supervisores" `
             -WorkingDirectory $srcTauriDir
+
+        # 4.5. VARREDURA DE MODELOS LOCAIS (Fase 1.5 Model Manager Sync)
+        Write-Host "`n[4.5] Sincronizando inventario de modelos locais no SQLite Vault..." -ForegroundColor Yellow
+        $scannerPath = Join-Path $srcTauriDir "target\debug\scan_local_models_cli.exe"
+        if (Test-Path $scannerPath) {
+            Invoke-TrackedProcess `
+                -FilePath $scannerPath `
+                -Arguments @("C:\Users\rosas\.lmstudio\models") `
+                -Label "scan-local-models" `
+                -WorkingDirectory $PSScriptRoot
+        } else {
+            Write-BootWarn "Binario scan_local_models_cli.exe nao encontrado em $scannerPath"
+        }
+
+        # 4.6. COMPILAÇÃO DE CONTEXT DUMPS (Exporta inventario de modelos para TXT)
+        Write-Host "`n[4.6] Compilando dumps de contexto (_MODELS_INVENTORY.txt)..." -ForegroundColor Yellow
+        $dumpsCompilerScript = Join-Path $PSScriptRoot "docs\scripts\soda_context_dumps_compiler.py"
+        $pyCmd = if (Get-Command "python" -ErrorAction SilentlyContinue) { "python" } elseif (Test-Path "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe") { "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" } else { "py" }
+        if (Test-Path $dumpsCompilerScript) {
+            Invoke-TrackedProcess `
+                -FilePath $pyCmd `
+                -Arguments @($dumpsCompilerScript) `
+                -Label "compile-context-dumps" `
+                -WorkingDirectory $PSScriptRoot
+        } else {
+            Write-BootWarn "Script soda_context_dumps_compiler.py nao encontrado em $dumpsCompilerScript"
+        }
 
         Invoke-TrackedProcess `
             -FilePath "cargo" `

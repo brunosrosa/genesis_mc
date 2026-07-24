@@ -1,4 +1,4 @@
-_SKILLS_IN_IDEs Gerado em: 2026-07-22 21:37:04
+_SKILLS_IN_IDEs Gerado em: 2026-07-23 23:48:00
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md
@@ -98,21 +98,6 @@ Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Bluepr
 3. Estrutura o payload do `batch_update_cells` fatiando os dados: joga a matriz primária na `MASTER_SOLUTIONS`, os algoritmos perigosos na `QUARANTINE_RADAR` e as tarefas braçais de Rust na `ACTION_MATRIX`.
 4. Dispara a chamada atômica O(1) para o Gateway.
 5. Retorna no Canvas: *"-> SSOT atualizada via batchUpdate atômico. Disjuntor 60 RPM respeitado. Componentes perigosos movidos para a Aba de Quarentena."*
-
-### ====================================================================================================
-ARQUIVO: mcp-lean-ctx-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-lean-ctx-master\SKILL.md
----
----
-name: mcp-lean-ctx-master
-description: Deprecated legacy alias. Transmuted into @soda-context-master under Zero-Brand governance (ADR-026).
-triggers: ["mcp-lean-ctx-master", "lean-ctx"]
----
-
-### Redirecionamento Canônico Zero-Brand (ADR-026)
-
-Esta skill foi transmutada e incorporada à skill canônica **`@soda-context-master`**.
-Invoque obrigatoriamente **`@soda-context-master`** para todas as operações do pacote `souls_ctx_*`.
 
 ### ====================================================================================================
 ARQUIVO: mcp-memory-master/SKILL.md
@@ -694,6 +679,7 @@ Every token costs money and context space. Applies to input, output AND thinking
 
 #### Constraints
 * **PROIBIÇÃO DE PARÂMETROS NATIVOS:** É EXPRESSAMENTE PROIBIDO injetar parâmetros nativos (StartLine, AbsolutePath) no `souls_ctx_read`. A assinatura exige estritamente `path` e `mode`.
+* **PROIBIDO BUSCAS CEGAS:** Nunca use `souls_ctx_search` passando a raiz do projeto como `path`. Você DEVE mapear o terreno com `souls_ctx_tree` e apontar o `search` para a sub-pasta exata (ex: `src/modules/`). O descumprimento causará truncamento algorítmico.
 * **SUBAGENTES (fresh=true):** Ao instanciar subagentes ou após compilações externas (`cargo build`), force `fresh=true` na releitura de arquivos modificados.
 * **I/O HYGIENE:** É proibida qualquer gravação fora de `.soda_data/` e `.soda_cache/`.
 

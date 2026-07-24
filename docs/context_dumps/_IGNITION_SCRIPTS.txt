@@ -1,4 +1,4 @@
-_IGNITION_SCRIPTS Gerado em: 2026-07-22 21:37:04
+_IGNITION_SCRIPTS Gerado em: 2026-07-23 23:48:00
 
 ### ====================================================================================================
 ARQUIVO: boot.ps1
@@ -205,10 +205,38 @@ try {
                 "--bin", "soda_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
+                "--bin", "scan_local_models_cli",
                 "--bin", "souls_mc"
             ) `
             -Label "cargo-build-supervisores" `
             -WorkingDirectory $srcTauriDir
+
+        # 4.5. VARREDURA DE MODELOS LOCAIS (Fase 1.5 Model Manager Sync)
+        Write-Host "`n[4.5] Sincronizando inventario de modelos locais no SQLite Vault..." -ForegroundColor Yellow
+        $scannerPath = Join-Path $srcTauriDir "target\debug\scan_local_models_cli.exe"
+        if (Test-Path $scannerPath) {
+            Invoke-TrackedProcess `
+                -FilePath $scannerPath `
+                -Arguments @("C:\Users\rosas\.lmstudio\models") `
+                -Label "scan-local-models" `
+                -WorkingDirectory $PSScriptRoot
+        } else {
+            Write-BootWarn "Binario scan_local_models_cli.exe nao encontrado em $scannerPath"
+        }
+
+        # 4.6. COMPILAÇÃO DE CONTEXT DUMPS (Exporta inventario de modelos para TXT)
+        Write-Host "`n[4.6] Compilando dumps de contexto (_MODELS_INVENTORY.txt)..." -ForegroundColor Yellow
+        $dumpsCompilerScript = Join-Path $PSScriptRoot "docs\scripts\soda_context_dumps_compiler.py"
+        $pyCmd = if (Get-Command "python" -ErrorAction SilentlyContinue) { "python" } elseif (Test-Path "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe") { "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" } else { "py" }
+        if (Test-Path $dumpsCompilerScript) {
+            Invoke-TrackedProcess `
+                -FilePath $pyCmd `
+                -Arguments @($dumpsCompilerScript) `
+                -Label "compile-context-dumps" `
+                -WorkingDirectory $PSScriptRoot
+        } else {
+            Write-BootWarn "Script soda_context_dumps_compiler.py nao encontrado em $dumpsCompilerScript"
+        }
 
         Invoke-TrackedProcess `
             -FilePath "cargo" `
@@ -236,14 +264,14 @@ try {
             Write-BootWarn "Binario lean-ctx.exe nao encontrado em $leanCtxPath - pre-aquecimento pulado."
         }
 
-        # 6. IGNIÇÃO DO DAEMON JÁ COMPILADO
-        Write-Host "`n[6/6] Iniciando o daemon compilado (souls_mc)..." -ForegroundColor Yellow
+        # 6. IGNIÇÃO DO DAEMON SUPERVISOR COMPILADO (souls_mc)
+        Write-Host "`n[6/6] Iniciando o daemon supervisor compilado (souls_mc)..." -ForegroundColor Yellow
         $daemonPath = Join-Path $srcTauriDir "target\debug\souls_mc.exe"
         if (-not (Test-Path $daemonPath)) {
             throw "Binario esperado nao encontrado apos a build: $daemonPath"
         }
 
-        Write-BootOk "Build finalizada. Daemon sera iniciado sem passar de novo pelo cargo run."
+        Write-BootOk "Build finalizada. Daemon (supervisor do agentgateway + proxy) sera iniciado."
         $daemonProc = Start-Process -FilePath $daemonPath -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru
         Write-Host ("[DAEMON] souls_mc iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
         # Daemon deve continuar vivo; se cair em <2s, algo esta muito errado.
@@ -519,7 +547,8 @@ switch ($choice) {
     }
     'C' {
         $dry = if ($isDryRun) { @("--dry-run") } else { @() }
-        $pipeline += @{ Bin = "n0_daemon_watcher"; Name = "CASCATA [1/4]: N0 (DAEMON WATCHER)"; Args = $dry }
+        $n0Args = @("--one-shot") + $dry
+        $pipeline += @{ Bin = "n0_daemon_watcher"; Name = "CASCATA [1/4]: N0 (DAEMON WATCHER)"; Args = $n0Args }
         $pipeline += @{ Bin = "f_minus_1_guardian"; Name = "CASCATA [2/4]: N1 (GUARDIÃO)"; Args = $dry }
         $pipeline += @{ Bin = "f_minus_0_5_batedor_cli"; Name = "CASCATA [3/4]: N2 (BATEDOR FINOPS)"; Args = $dry }
         $pipeline += @{ Bin = "outbox_sync"; Name = "CASCATA [4/4]: OUTBOX SYNC"; Args = $dry }

@@ -2,6 +2,7 @@ import os
 import glob
 import re
 import json
+import sqlite3
 from datetime import datetime
 
 def get_timestamp():
@@ -284,6 +285,85 @@ def compile_yaml_json_outputs(output_dir):
                 if not content.endswith("\n"):
                     outfile.write("\n")
 
+def parse_params_numeric(params_str):
+    if not params_str or params_str == "Unknown":
+        return 999999.0
+    val_str = params_str.upper().replace("B", "").replace("M", "").strip()
+    try:
+        val = float(val_str)
+        if "M" in params_str.upper():
+            val = val / 1000.0
+        return val
+    except ValueError:
+        return 999999.0
+
+def cap_priority_score(caps_json):
+    try:
+        caps = json.loads(caps_json) if isinstance(caps_json, str) else caps_json
+    except Exception:
+        caps = []
+    score = 0
+    if "MTP" in caps:
+        score += 20
+    if "THINKING" in caps:
+        score += 10
+    if "TOOL_CALLING" in caps:
+        score += 1
+    return -score
+
+def compile_models_inventory(output_dir):
+    db_path = r"Z:\souls_mc\.soda_data\soda_heuristic_vault.db"
+    output_path = os.path.join(output_dir, "_MODELS_INVENTORY.txt")
+    delete_if_exists(output_path)
+    timestamp = get_timestamp()
+    
+    lines = []
+    lines.append("=== SODA LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===")
+    lines.append(f"GERADO EM: {timestamp}")
+    lines.append(f"FONTE DE ESTADO SQLITE: {db_path} (VIEW NATIVA: vw_finops_routing)")
+    lines.append("------------------------------------------------------------------------------------------------------------------------------------------------------")
+    
+    if os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            # Leitura direta e burra da VIEW nativa de ordenação FinOps (vw_finops_routing)
+            cursor.execute("""
+                SELECT family, model_name, parameters, quantization, context_length, capabilities, file_size_bytes, file_path
+                FROM vw_finops_routing
+            """)
+            rows = cursor.fetchall()
+            conn.close()
+            
+            total_count = len(rows)
+            total_size_bytes = sum(r[6] for r in rows) if rows else 0
+            total_size_gb = total_size_bytes / (1024 ** 3)
+            
+            lines.append(f"TOTAL DE MODELOS ENCONTRADOS: {total_count}")
+            lines.append(f"ESPAÇO TOTAL EM DISCO: {total_size_gb:.2f} GB")
+            lines.append("------------------------------------------------------------------------------------------------------------------------------------------------------")
+            lines.append(f"{'FAMÍLIA':<15} | {'NOME REAL DO MODELO':<45} | {'PARAMS':<8} | {'QUANT':<10} | {'CONTEXTO':<10} | {'CAPACIDADES':<30} | {'TAMANHO (GB)':<12} | CAMINHO FÍSICO")
+            lines.append("------------------------------------------------------------------------------------------------------------------------------------------------------")
+            
+            for row in rows:
+                family, model_name, params, quant, ctx, caps_json, size_b, path = row
+                size_gb = size_b / (1024 ** 3)
+                try:
+                    caps_list = json.loads(caps_json)
+                    caps_str = ", ".join(caps_list)
+                except Exception:
+                    caps_str = caps_json
+                lines.append(f"{family:<15} | {model_name:<45} | {params:<8} | {quant:<10} | {ctx:<10} | {caps_str:<30} | {size_gb:<12.2f} | {path}")
+            lines.append("------------------------------------------------------------------------------------------------------------------------------------------------------")
+        except Exception as e:
+            lines.append(f"ERRO AO ACESSAR BANCO SQLITE: {e}")
+    else:
+        lines.append("AVISO: Banco de dados soda_heuristic_vault.db não encontrado.")
+        
+    content = "\n".join(lines)
+    with open(output_path, "w", encoding="utf-8") as outfile:
+        outfile.write(content + "\n")
+
 def main():
     output_dir = r"Z:\souls_mc\docs\context_dumps"
     os.makedirs(output_dir, exist_ok=True)
@@ -292,6 +372,7 @@ def main():
     compile_ignition_scripts(output_dir)
     compile_mcp_inventory(output_dir)
     compile_mcps_list(output_dir)
+    compile_models_inventory(output_dir)
     compile_rules_in_ides(output_dir)
     compile_skills_in_ides(output_dir)
     compile_workspace_map(output_dir)
@@ -301,3 +382,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
