@@ -1,5 +1,5 @@
 === SODA LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===
-GERADO EM: 2026-07-23 23:48:00
+GERADO EM: 2026-07-24 19:10:09
 FONTE DE ESTADO SQLITE: Z:\souls_mc\.soda_data\soda_heuristic_vault.db (VIEW NATIVA: vw_finops_routing)
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 TOTAL DE MODELOS ENCONTRADOS: 32
@@ -7,7 +7,7 @@ ESPAÇO TOTAL EM DISCO: 61.86 GB
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 FAMÍLIA         | NOME REAL DO MODELO                           | PARAMS   | QUANT      | CONTEXTO   | CAPACIDADES                    | TAMANHO (GB) | CAMINHO FÍSICO
 ------------------------------------------------------------------------------------------------------------------------------------------------------
-bitnet-b1.58    | bitnet2b                                      | 2B       | GGUF_CUSTOM| 4096       | BASE                           | 1.11         | C:\Users\rosas\.lmstudio\models\microsoft\bitnet-b1.58-2B-4T-gguf\ggml-model-i2_s.gguf
+bitnet-b1.58    | bitnet2b                                      | 2B       | GGUF_CUSTOM | 4096       | BASE                           | 1.11         | C:\Users\rosas\.lmstudio\models\microsoft\bitnet-b1.58-2B-4T-gguf\ggml-model-i2_s.gguf
 clip            | Qwopus3.5-4B-Coder-MTP-GGUF                   | 4B       | IQ4_NL     | 4096       | VISION, TOOL_CALLING, MTP      | 0.63         | C:\Users\rosas\.lmstudio\models\Jackrong\Qwopus3.5-4B-Coder-MTP-GGUF\mmproj-F32.gguf
 clip            | SmolVLM2 2.2B Instruct                        | 2.2B     | Q8_0       | 4096       | VISION, TOOL_CALLING           | 0.55         | C:\Users\rosas\.lmstudio\models\flyingfishinwater\good_and_small_models\mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf
 clip            | Qwen3.5-4B                                    | 4B       | F32        | 4096       | VISION                         | 1.24         | C:\Users\rosas\.lmstudio\models\unsloth\Qwen3.5-4B-GGUF\mmproj-F32.gguf
@@ -16,7 +16,7 @@ clip            | Qwen_Qwen3.5 4B                               | 4B       | F16
 clip            | 4b                                            | 4B       | F16        | 4096       | VISION                         | 0.63         | C:\Users\rosas\.lmstudio\models\Nimbus-Labs\Nimbus-4B-GGUF\mmproj-Nimbus-4B-F16.gguf
 clip            | Base 9b                                       | 9B       | F16        | 4096       | VISION                         | 0.86         | C:\Users\rosas\.lmstudio\models\ZERO-POINT-AI\MARTHA-LXVII.8B_QWEN-3.5-3.6_prune_9b-3.6_base\mmproj-MARTHA-EYES-f16.gguf
 clip            | Gemma-4-26B-A4B-It                            | 26B      | F32        | 4096       | VISION                         | 2.13         | C:\Users\rosas\.lmstudio\models\unsloth\gemma-4-26B-A4B-it-GGUF\mmproj-F32.gguf
-gemma4-assistant| 26B A4B                                       | 26B      | Q8_0       | 262144     | MTP                            | 0.43         | C:\Users\rosas\.lmstudio\models\unsloth\gemma-4-26B-A4B-it-GGUF\mtp-gemma-4-26B-A4B-it-Q8_0.gguf
+gemma4-assistant | 26B A4B                                       | 26B      | Q8_0       | 262144     | MTP                            | 0.43         | C:\Users\rosas\.lmstudio\models\unsloth\gemma-4-26B-A4B-it-GGUF\mtp-gemma-4-26B-A4B-it-Q8_0.gguf
 granite         | Merged 8b                                     | 8B       | Q4_K_M     | 131072     | TOOL_CALLING                   | 4.77         | C:\Users\rosas\.lmstudio\models\AnkitAI\Parable-Granite-4.1-8B-Claude-Fable-5-GGUF\Parable-Granite-4.1-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
 hunyuan-dense   | 7B                                            | 7B       | Q4_K_M     | 262144     | BASE                           | 4.31         | C:\Users\rosas\.lmstudio\models\tencent\Hy-MT2-7B-GGUF\Hy-MT2-7B-Q4_K_M.gguf
 lfm2            | LiquidAI_LFM2.5 1.2B Instruct                 | 1.2B     | Q4_K_M     | 128000     | TOOL_CALLING                   | 0.68         | C:\Users\rosas\.lmstudio\models\lmstudio-community\LFM2.5-1.2B-Instruct-GGUF\LFM2.5-1.2B-Instruct-Q4_K_M.gguf
@@ -31,9 +31,9 @@ qwen3           | Parable_V2_4B_Merged                          | 4B       | Q4_
 qwen35          | Qwopus3.5 4B Coder MTP HF                     | 4B       | Q4_K_S     | 262144     | THINKING, TOOL_CALLING, MTP    | 2.45         | C:\Users\rosas\.lmstudio\models\Jackrong\Qwopus3.5-4B-Coder-MTP-GGUF\Qwopus3.5-4B-Coder-MTP-Q4_K_S.gguf
 qwen35          | Qwen3.5-0.8B                                  | 0.8B     | Q4_0       | 262144     | THINKING, TOOL_CALLING         | 0.47         | C:\Users\rosas\.lmstudio\models\flyingfishinwater\good_and_small_models\Qwen3.5-0.8B-Q4_0.gguf
 qwen35          | Nimbus-4B                                     | 4B       | Q4_K_M     | 262144     | THINKING, TOOL_CALLING         | 2.52         | C:\Users\rosas\.lmstudio\models\Nimbus-Labs\Nimbus-4B-GGUF\Nimbus-4B-Q4_K_M.gguf
-qwen35          | Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16| 4B       | Q4_K_M     | 262144     | THINKING, TOOL_CALLING         | 2.52         | C:\Users\rosas\.lmstudio\models\HauhauCS\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+qwen35          | Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16 | 4B       | Q4_K_M     | 262144     | THINKING, TOOL_CALLING         | 2.52         | C:\Users\rosas\.lmstudio\models\HauhauCS\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
 qwen35          | Qwen_Qwen3.5 4B                               | 4B       | Q4_K_M     | 262144     | THINKING, TOOL_CALLING         | 2.52         | C:\Users\rosas\.lmstudio\models\lmstudio-community\Qwen3.5-4B-GGUF\Qwen3.5-4B-Q4_K_M.gguf
-qwen35          | Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16| 4B       | Q4_K_M     | 262144     | THINKING, TOOL_CALLING         | 2.52         | C:\Users\rosas\.lmstudio\models\flyingfishinwater\good_and_small_models\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+qwen35          | Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16 | 4B       | Q4_K_M     | 262144     | THINKING, TOOL_CALLING         | 2.52         | C:\Users\rosas\.lmstudio\models\flyingfishinwater\good_and_small_models\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
 qwen35          | qwen3.5-4B-super-coder                        | 4B       | Q4_0       | 262144     | THINKING, TOOL_CALLING         | 2.43         | C:\Users\rosas\.lmstudio\models\jica98\qwen3.5-4B-super-coder\qwen3.5-4B-super-coder.Q4_0.gguf
 qwen35          | Qwen3.5-4B                                    | 4B       | Q4_K_S     | 262144     | THINKING, TOOL_CALLING         | 2.41         | C:\Users\rosas\.lmstudio\models\unsloth\Qwen3.5-4B-GGUF\Qwen3.5-4B-Q4_K_S.gguf
 qwen35          | Q9 Martha Merged                              | 8B       | Q3_K_M     | 262144     | THINKING, TOOL_CALLING         | 3.91         | C:\Users\rosas\.lmstudio\models\ZERO-POINT-AI\MARTHA-LXVII.8B_QWEN-3.5-3.6_prune_9b-3.6_base\MARTHA-LXVII.8b-Q3_K_M.gguf
