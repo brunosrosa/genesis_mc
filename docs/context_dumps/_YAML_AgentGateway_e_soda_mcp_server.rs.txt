@@ -1,4 +1,4 @@
-_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-24 19:10:09
+_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-25 18:38:02
 
 ### ====================================================================================================
 ARQUIVO: gateway-config.yaml
@@ -22,6 +22,7 @@ binds:
                 rules:
                   - >
                     !has(mcp.tool)
+                    || mcp.tool.name.startsWith("souls_")
                     || mcp.tool.name.startsWith("souls_ctx_")
                     || mcp.tool.name.startsWith("soda_")
                     || mcp.tool.name.startsWith("core_")

@@ -8304,6 +8304,7 @@ dependencies = [
  "tree-sitter-yaml",
  "url",
  "uuid 1.23.4",
+ "walkdir",
  "which",
  "windows-projfs",
  "windows-sys 0.59.0",

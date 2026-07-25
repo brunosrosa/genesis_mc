@@ -15,6 +15,21 @@ use crate::core::inference_adapter::{
 use crate::soda_thermal_governor::SystemState;
 use tokio::sync::watch;
 
+use std::sync::OnceLock;
+
+static GLOBAL_LLAMA_BACKEND: OnceLock<Result<LlamaBackend, String>> = OnceLock::new();
+
+fn get_global_llama_backend() -> Result<&'static LlamaBackend, InferenceError> {
+    let res = GLOBAL_LLAMA_BACKEND.get_or_init(|| {
+        LlamaBackend::init().map_err(|e| format!("Falha ao inicializar LlamaBackend: {}", e))
+    });
+
+    match res {
+        Ok(backend) => Ok(backend),
+        Err(err_msg) => Err(InferenceError::ExecutionError(err_msg.clone())),
+    }
+}
+
 pub struct LlamaCppEngine;
 
 fn build_chat_prompt(system_prompt: &str, few_shots: &[(String, String)], user_query: &str) -> String {
@@ -50,10 +65,8 @@ impl EphemeralInferEngine for LlamaCppEngine {
             return Err(InferenceError::ModelNotFound(req.model_path.clone()));
         }
 
-        // 1. Inicializa backend bare-metal do llama.cpp
-        let backend = LlamaBackend::init().map_err(|e| {
-            InferenceError::ExecutionError(format!("Falha ao inicializar LlamaBackend: {}", e))
-        })?;
+        // 1. Inicializa backend bare-metal do llama.cpp (Singleton em OnceLock para prevenir BackendAlreadyInitialized)
+        let backend = get_global_llama_backend()?;
 
         // 2. Parâmetros do modelo - ADR-027: use_mmap = true por padrão no LlamaModelParams
         let model_params = LlamaModelParams::default();
