@@ -41,7 +41,7 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
 * **PROIBIÇÃO ABSOLUTA DE VIBE CODING:** O "Plan" documentado em disco precede o "Mutate". Pular direto para o código falha a execução.
 * **BLINDAGEM CONCORRENTE:** Edições de arquivo devem prever colisões. Se outro agente estiver tocando no mesmo arquivo, aplique as regras de travamento (Mutex/Atomic).
 * **FRONTMATTER ABSOLUTA:** O bloco YAML `---` no topo desta skill é a fundação do roteamento $\mathcal{O}(1)$.
-* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `souls_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `souls_shell` é apenas para contexto MCP.
 * **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 
 #### Examples

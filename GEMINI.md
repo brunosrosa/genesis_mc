@@ -17,8 +17,8 @@ O fluxo obrigatório para novas lógicas é solicitar ao usuário o comando `/gr
 ## 4. SKILLS E LATE-BINDING
 As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em `.agents/skills/`. Invoque-as de forma semântica apenas quando precisar. Não assuma regras além das descritas neste arquivo sem consultar suas Skills.
 
-# souls_ctx — Context Engineering Layer (Late-Binding)
-<!-- souls-context-rules-v12-zerobrand -->
+# souls — Context Engineering Layer (Late-Binding)
+<!-- souls-context-rules-v13-zerobrand -->
 
-CRITICAL: É terminantemente proibido usar comandos nativos do sistema (cat, grep, etc) para leitura massiva. O uso do pacote `souls_ctx_*` é MANDATÓRIO. Para sintaxe, modos de leitura (LEAN) e Memória de Sessão (CCP), invoque a skill @soda-context-master imediatamente.
+CRITICAL: É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read, Grep, Terminal) para navegação de código. O uso das ferramentas MCP de contexto (ex: `souls_read`, `souls_search`, `souls_tree`, `souls_shell`) é MANDATÓRIO e inegociável para economizar tokens. Para sintaxe, modos de leitura (LEAN) e Memória de Sessão (CCP), invoque a skill @soda-context-master imediatamente.
 <!-- /souls-context -->

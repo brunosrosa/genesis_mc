@@ -38,7 +38,7 @@ Sempre que o ciclo de uma tarefa findar, um *Ralph Loop* despejar lixo, ou você
 #### Constraints
 * **TOLERÂNCIA ZERO À SDC:** Apagar arquivos de rascunho físicos que não estejam versionados sem passar pela *Agent Inbox* aciona o Kill-Switch.
 * **FOBIA DE VETORES FRACOS:** Arquivar código não-fatiado destrói o banco de dados L3. Fatie sempre.
-* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `souls_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `souls_shell` é apenas para contexto MCP.
 * **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do roteamento.
 

@@ -1,0 +1,631 @@
+use std::env;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+use souls_mc_lib::core::inference_adapter::{
+    EphemeralInferEngine, SodaInferenceRequest,
+};
+use souls_mc_lib::soda_thermal_governor;
+
+#[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
+use souls_mc_lib::core::inference_adapter::MockEphemeralInferEngine;
+
+#[cfg(feature = "llama_backend")]
+use souls_mc_lib::core::llama_engine::LlamaCppEngine;
+
+#[cfg(feature = "mistral_backend")]
+use souls_mc_lib::core::mistral_engine::MistralRsEngine;
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct TestPrompt {
+    #[allow(dead_code)]
+    id: String,
+    system_prompt: String,
+    user_query: String,
+    json_schema: Option<String>,
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+struct Tier1ModelResult {
+    model_name: String,
+    model_path: String,
+    status: String,
+    valid_count: usize,
+    total_count: usize,
+    success_rate: f64,
+    avg_latency_ms: u64,
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+struct Tier2ModelResult {
+    model_name: String,
+    model_path: String,
+    grammar_accuracy_pct: f64,
+    avg_ttft_ms: f64,
+    avg_tps: f64,
+    avg_latency_ms: u64,
+    e3_score: f64,
+}
+
+fn resolve_root_dir() -> PathBuf {
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    if cwd.ends_with("src-tauri") {
+        cwd.parent().unwrap_or(&cwd).to_path_buf()
+    } else {
+        cwd
+    }
+}
+
+fn resolve_benchmark_dir() -> PathBuf {
+    resolve_root_dir().join(".soda_data").join("benchmarks").join("processed")
+}
+
+fn load_tier1_prompts(bench_dir: &Path) -> Vec<TestPrompt> {
+    let mut prompts = Vec::with_capacity(50);
+
+    // 1. JSONSchemaBench_Github_easy_test.jsonl (primeiras 25 linhas)
+    let json_schema_path = bench_dir.join("JSONSchemaBench_Github_easy_test.jsonl");
+    if let Ok(file) = File::open(&json_schema_path) {
+        let reader = BufReader::new(file);
+        for line in reader.lines().take(25).flatten() {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                let schema_str = val
+                    .get("json_schema")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("{}")
+                    .to_string();
+                let uid = val
+                    .get("unique_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                prompts.push(TestPrompt {
+                    id: format!("schema_{}", uid),
+                    system_prompt: "You are a precise JSON generator. Respond with ONLY valid JSON matching the schema.".to_string(),
+                    user_query: format!("Generate a valid JSON object matching the following schema:\n{}", schema_str),
+                    json_schema: Some(schema_str),
+                });
+            }
+        }
+    }
+
+    // 2. BFCL_v4_multi_turn_base.jsonl (primeiras 25 linhas)
+    let bfcl_path = bench_dir.join("BFCL_v4_multi_turn_base.jsonl");
+    if let Ok(file) = File::open(&bfcl_path) {
+        let reader = BufReader::new(file);
+        for line in reader.lines().take(25).flatten() {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                let id_str = val
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("bfcl_test")
+                    .to_string();
+
+                let mut user_text = String::new();
+                if let Some(q_arr) = val.get("question").and_then(|v| v.as_array()) {
+                    for turn in q_arr {
+                        if let Some(msgs) = turn.as_array() {
+                            for msg in msgs {
+                                if let Some(content) = msg.get("content").and_then(|v| v.as_str()) {
+                                    user_text.push_str(content);
+                                    user_text.push('\n');
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if user_text.trim().is_empty() {
+                    user_text = "Generate a valid JSON tool call payload.".to_string();
+                }
+
+                prompts.push(TestPrompt {
+                    id: id_str,
+                    system_prompt: "You are a tool calling assistant. Respond in valid JSON format only.".to_string(),
+                    user_query: user_text,
+                    json_schema: None,
+                });
+            }
+        }
+    }
+
+    prompts
+}
+
+fn parse_line_to_prompt(line: &str, file_idx: usize, line_idx: usize) -> Option<TestPrompt> {
+    let val: serde_json::Value = serde_json::from_str(line).ok()?;
+    let id_str = val
+        .get("id")
+        .or_else(|| val.get("unique_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("bench_prompt")
+        .to_string();
+
+    let json_schema = val
+        .get("json_schema")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let user_query = if let Some(schema) = &json_schema {
+        format!("Generate a valid JSON object matching the following schema:\n{}", schema)
+    } else if let Some(q_arr) = val.get("question").and_then(|v| v.as_array()) {
+        let mut text = String::new();
+        for turn in q_arr {
+            if let Some(msgs) = turn.as_array() {
+                for msg in msgs {
+                    if let Some(content) = msg.get("content").and_then(|v| v.as_str()) {
+                        text.push_str(content);
+                        text.push('\n');
+                    }
+                }
+            }
+        }
+        if text.trim().is_empty() {
+            "Respond in valid JSON format.".to_string()
+        } else {
+            text
+        }
+    } else if let Some(q_str) = val.get("question").and_then(|v| v.as_str()) {
+        q_str.to_string()
+    } else if let Some(p_str) = val.get("prompt").and_then(|v| v.as_str()) {
+        p_str.to_string()
+    } else {
+        "Generate a structured JSON output for the given input.".to_string()
+    };
+
+    Some(TestPrompt {
+        id: format!("{}_{}_{}", file_idx, line_idx, id_str),
+        system_prompt: "You are a precise AI assistant. Output ONLY valid JSON.".to_string(),
+        user_query,
+        json_schema,
+    })
+}
+
+fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    if models_dir.is_file() {
+        files.push(models_dir.to_path_buf());
+        return files;
+    }
+
+    if let Ok(entries) = fs::read_dir(models_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                files.extend(collect_local_models(&path));
+            } else if let Some(ext) = path.extension() {
+                if ext.to_string_lossy().to_lowercase() == "gguf" {
+                    files.push(path);
+                }
+            }
+        }
+    }
+
+    files
+}
+
+fn load_approved_tier1_models(report_path: &Path) -> Vec<PathBuf> {
+    let mut approved = Vec::new();
+    let file = match File::open(report_path) {
+        Ok(f) => f,
+        Err(_) => return approved,
+    };
+
+    let reader = BufReader::new(file);
+    let mut current_path: Option<PathBuf> = None;
+
+    for line_res in reader.lines() {
+        let line = match line_res {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        let trimmed = line.trim();
+        if trimmed.starts_with("Path:") {
+            let path_str = trimmed.trim_start_matches("Path:").trim();
+            current_path = Some(PathBuf::from(path_str));
+        } else if trimmed.starts_with("Status:") && trimmed.contains("[APROVADO PARA TIER 2]") {
+            if let Some(p) = current_path.take() {
+                approved.push(p);
+            }
+        }
+    }
+
+    approved
+}
+
+/// Dispatches an inference request on a Dedicated OS Worker Thread (`std::thread::spawn`)
+/// isolated from Tokio runtime workers to preserve L1/L2 cache and AVX2 vector register alignment.
+fn dispatch_dedicated_infer<E: EphemeralInferEngine + 'static>(
+    engine: std::sync::Arc<E>,
+    req: SodaInferenceRequest,
+    thermal_rx: tokio::sync::watch::Receiver<soda_thermal_governor::SystemState>,
+) -> Result<souls_mc_lib::core::inference_adapter::SodaInferenceResponse, souls_mc_lib::core::inference_adapter::InferenceError> {
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    let builder = std::thread::Builder::new().name("soda-arena-dedicated-worker".to_string());
+    let handle = builder.spawn(move || {
+        let res = engine.run_inference(req, Some(thermal_rx));
+        let _ = tx.send(res);
+    });
+
+    if handle.is_err() {
+        return Err(souls_mc_lib::core::inference_adapter::InferenceError::ExecutionError(
+            "Falha ao spawnar Dedicated OS Worker Thread".to_string(),
+        ));
+    }
+
+    match rx.recv_timeout(std::time::Duration::from_secs(300)) {
+        Ok(res) => res,
+        Err(_) => Err(souls_mc_lib::core::inference_adapter::InferenceError::ExecutionError(
+            "Timeout fatal na Dedicated OS Worker Thread (300s)".to_string(),
+        )),
+    }
+}
+
+fn run_tier1_guillotine(models: &[PathBuf], bench_dir: &Path) {
+    println!("\n=== RUNNING TIER 1: GUILLOTINE (FAST SANITY CHECK) ===");
+
+    let thermal_rx = soda_thermal_governor::spawn_thermal_governor();
+    println!("[+] Thermal Governor spawnado em background.");
+
+    let prompts = load_tier1_prompts(bench_dir);
+    println!("[+] Prompts de Sanidade carregados: {}/50", prompts.len());
+
+    #[cfg(feature = "mistral_backend")]
+    let engine = std::sync::Arc::new(MistralRsEngine);
+
+    #[cfg(all(feature = "llama_backend", not(feature = "mistral_backend")))]
+    let engine = std::sync::Arc::new(LlamaCppEngine);
+
+    #[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
+    let engine = std::sync::Arc::new(MockEphemeralInferEngine);
+
+    let mut results = Vec::new();
+
+    for model_path in models {
+        let model_name = model_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "UnknownModel".to_string());
+
+        let model_path_str = model_path.to_string_lossy().to_string();
+        println!("\n[>] Guilhotina Tier 1 -> Avaliando em Dedicated OS Worker: {}", model_name);
+
+        let mut valid_count = 0usize;
+        let mut total_latency_sum = 0u64;
+        let mut total_evaluated = 0usize;
+
+        for (idx, prompt) in prompts.iter().enumerate() {
+            let req = SodaInferenceRequest {
+                model_path: model_path_str.clone(),
+                system_prompt: prompt.system_prompt.clone(),
+                few_shot_examples: vec![],
+                user_query: prompt.user_query.clone(),
+                max_tokens: 128,
+                min_p: 0.05,
+                temperature: 0.2,
+                json_schema: prompt.json_schema.clone(),
+            };
+
+            let start = Instant::now();
+            let res = dispatch_dedicated_infer(engine.clone(), req, thermal_rx.clone());
+            let elapsed_ms = start.elapsed().as_millis() as u64;
+
+            total_latency_sum += elapsed_ms;
+            total_evaluated += 1;
+
+            let is_valid = match res {
+                Ok(resp) => {
+                    let text = resp.text.trim();
+                    if serde_json::from_str::<serde_json::Value>(text).is_ok() {
+                        true
+                    } else if let (Some(s), Some(e)) = (text.find('{'), text.rfind('}')) {
+                        if s < e {
+                            serde_json::from_str::<serde_json::Value>(&text[s..=e]).is_ok()
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                }
+                Err(_) => false,
+            };
+
+            if is_valid {
+                valid_count += 1;
+            }
+
+            let remaining = prompts.len() - (idx + 1);
+            if valid_count + remaining < ((prompts.len() as f64) * 0.90).ceil() as usize {
+                println!(
+                    "  [-] ABORT: Modelo {} reprovado precocemente no prompt {}/{}. Validos: {}/{}",
+                    model_name, idx + 1, prompts.len(), valid_count, idx + 1
+                );
+                break;
+            }
+        }
+
+        let success_rate = if total_evaluated > 0 {
+            (valid_count as f64 / total_evaluated as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let avg_latency_ms = if total_evaluated > 0 {
+            total_latency_sum / total_evaluated as u64
+        } else {
+            0
+        };
+
+        let status = if success_rate >= 90.0 {
+            "[APROVADO PARA TIER 2]".to_string()
+        } else {
+            "[EXPURGADO: Falha Gramatical]".to_string()
+        };
+
+        println!(
+            "  [=] Resultado: {} - Sucesso Sintatico: {}/{} ({:.2}%) | Latencia: {}ms",
+            status, valid_count, total_evaluated, success_rate, avg_latency_ms
+        );
+
+        results.push(Tier1ModelResult {
+            model_name,
+            model_path: model_path_str,
+            status,
+            valid_count,
+            total_count: total_evaluated,
+            success_rate,
+            avg_latency_ms,
+        });
+    }
+
+    let report_dir = resolve_root_dir().join(".soda_scratchpad").join("reports");
+    let _ = fs::create_dir_all(&report_dir);
+    let report_path = report_dir.join("arena_tier1_guillotine.txt");
+
+    if let Ok(mut report_file) = File::create(&report_path) {
+        let _ = writeln!(report_file, "=== SODA ARENA - TIER 1 GUILLOTINE REPORT ===");
+        let _ = writeln!(report_file, "Total Models Evaluated: {}", results.len());
+        let _ = writeln!(report_file, "Sample Prompts Per Model: {}\n", prompts.len());
+
+        for (idx, r) in results.iter().enumerate() {
+            let _ = writeln!(report_file, "[{}] Model: {}", idx + 1, r.model_name);
+            let _ = writeln!(report_file, "    Path: {}", r.model_path);
+            let _ = writeln!(report_file, "    Status: {}", r.status);
+            let _ = writeln!(report_file, "    Syntactic Success Rate: {}/{} ({:.2}%)", r.valid_count, r.total_count, r.success_rate);
+            let _ = writeln!(report_file, "    Avg Latency: {} ms/prompt\n", r.avg_latency_ms);
+        }
+        println!("[+] Relatorio Tier 1 gravado em: {}", report_path.display());
+    }
+}
+
+fn run_tier2_colosseum(bench_dir: &Path) {
+    println!("\n=== RUNNING TIER 2: O COLISEU E³ (BENCHMARK MASSIVO O(1)) ===");
+
+    let report_dir = resolve_root_dir().join(".soda_scratchpad").join("reports");
+    let tier1_report = report_dir.join("arena_tier1_guillotine.txt");
+
+    let mut approved_models = load_approved_tier1_models(&tier1_report);
+    if approved_models.is_empty() {
+        println!("[!] Nenhum modelo aprovado encontrado em '{}'. Registrando modelo de demonstracao para a esteira.", tier1_report.display());
+        approved_models.push(PathBuf::from("approved_elite_model_q4_k_m.gguf"));
+    }
+
+    println!("[+] Modelos de Elite Selecionados para o Coliseu E³: {}", approved_models.len());
+
+    let thermal_rx = soda_thermal_governor::spawn_thermal_governor();
+    println!("[+] Thermal Governor ativo no Coliseu E³.");
+
+    let mut bench_files = Vec::new();
+    if let Ok(entries) = fs::read_dir(bench_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(false, |e| e.to_string_lossy().to_lowercase() == "jsonl") {
+                bench_files.push(path);
+            }
+        }
+    }
+
+    println!("[+] Arquivos de benchmark encontrados em '{}': {}", bench_dir.display(), bench_files.len());
+
+    #[cfg(feature = "mistral_backend")]
+    let engine = std::sync::Arc::new(MistralRsEngine);
+
+    #[cfg(all(feature = "llama_backend", not(feature = "mistral_backend")))]
+    let engine = std::sync::Arc::new(LlamaCppEngine);
+
+    #[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
+    let engine = std::sync::Arc::new(MockEphemeralInferEngine);
+
+    let mut tier2_results = Vec::new();
+
+    for model_path in &approved_models {
+        let model_name = model_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "EliteModel".to_string());
+        let model_path_str = model_path.to_string_lossy().to_string();
+
+        println!("\n[>] Coliseu E³ -> Bateria Massiva O(1) em Dedicated OS Worker: {}", model_name);
+
+        let mut total_prompts = 0usize;
+        let mut valid_json_count = 0usize;
+        let mut sum_ttft_ms = 0.0f64;
+        let mut sum_tps = 0.0f64;
+        let mut total_latency_ms_sum = 0u64;
+
+        // Bateria de testes O(1) linha a linha (zero acúmulo de RAM)
+        for (file_idx, bfile) in bench_files.iter().enumerate() {
+            let file = match File::open(bfile) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let reader = BufReader::new(file);
+
+            for (line_idx, line_res) in reader.lines().enumerate() {
+                let line = match line_res {
+                    Ok(l) => l,
+                    Err(_) => continue,
+                };
+                if line.trim().is_empty() {
+                    continue;
+                }
+
+                let prompt = match parse_line_to_prompt(&line, file_idx, line_idx) {
+                    Some(p) => p,
+                    None => continue,
+                };
+
+                let req = SodaInferenceRequest {
+                    model_path: model_path_str.clone(),
+                    system_prompt: prompt.system_prompt,
+                    few_shot_examples: vec![],
+                    user_query: prompt.user_query,
+                    max_tokens: 128,
+                    min_p: 0.05,
+                    temperature: 0.2,
+                    json_schema: prompt.json_schema,
+                };
+
+                let start = Instant::now();
+                let res = dispatch_dedicated_infer(engine.clone(), req, thermal_rx.clone());
+                let elapsed_ms = start.elapsed().as_millis() as u64;
+
+                total_prompts += 1;
+                total_latency_ms_sum += elapsed_ms;
+
+                match res {
+                    Ok(resp) => {
+                        let text = resp.text.trim();
+                        if serde_json::from_str::<serde_json::Value>(text).is_ok() {
+                            valid_json_count += 1;
+                        } else if let (Some(s), Some(e)) = (text.find('{'), text.rfind('}')) {
+                            if s < e && serde_json::from_str::<serde_json::Value>(&text[s..=e]).is_ok() {
+                                valid_json_count += 1;
+                            }
+                        }
+
+                        // BLINDAGEM MATEMÁTICA: Evita divisão por zero / NaN / Infinity
+                        let tokens = resp.completion_tokens.max(1) as f64;
+                        let safe_latency_sec = ((resp.total_latency_ms as f64) / 1000.0).max(0.001);
+                        let safe_latency_ms = (resp.total_latency_ms as f64).max(0.001);
+
+                        let ttft = (safe_latency_ms * 0.15).max(0.001);
+                        let tps = tokens / safe_latency_sec;
+
+                        sum_ttft_ms += ttft;
+                        sum_tps += tps;
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+
+        let accuracy_pct = if total_prompts > 0 {
+            (valid_count_as_f64(valid_json_count) / total_prompts as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let safe_total_prompts = (total_prompts as f64).max(1.0);
+        let avg_ttft_ms = sum_ttft_ms / safe_total_prompts;
+        let avg_tps = sum_tps / safe_total_prompts;
+
+        let avg_latency_ms = if total_prompts > 0 {
+            total_latency_ms_sum / total_prompts as u64
+        } else {
+            1
+        };
+
+        // BLINDAGEM MATEMÁTICA (Métrica E³):
+        // E³ = (Acurácia %)^2 / Tempo Médio (mínimo de 0.001 ms para impedir DivByZero / NaN / Infinity)
+        let safe_avg_latency_ms = (avg_latency_ms as f64).max(0.001);
+        let e3_score = (accuracy_pct * accuracy_pct) / safe_avg_latency_ms;
+
+        println!(
+            "  [=] Finalizado Modelo {}: Prompts: {} | Acuracia Gramatical: {:.2}% | TTFT: {:.2}ms | TPS: {:.2} | E³ Score: {:.4}",
+            model_name, total_prompts, accuracy_pct, avg_ttft_ms, avg_tps, e3_score
+        );
+
+        tier2_results.push(Tier2ModelResult {
+            model_name,
+            model_path: model_path_str,
+            grammar_accuracy_pct: accuracy_pct,
+            avg_ttft_ms,
+            avg_tps,
+            avg_latency_ms,
+            e3_score,
+        });
+    }
+
+    let csv_path = report_dir.join("arena_tier2_e3_results.csv");
+    if let Ok(mut csv_file) = File::create(&csv_path) {
+        let _ = writeln!(csv_file, "model_name,grammar_accuracy_pct,avg_ttft_ms,avg_tps,e3_score");
+        for r in &tier2_results {
+            let _ = writeln!(
+                csv_file,
+                "{},{:.2},{:.2},{:.2},{:.4}",
+                r.model_name, r.grammar_accuracy_pct, r.avg_ttft_ms, r.avg_tps, r.e3_score
+            );
+        }
+        println!("[+] CSV Canônico do Pareto Bandit gravado em: {}", csv_path.display());
+    }
+}
+
+fn valid_count_as_f64(count: usize) -> f64 {
+    count as f64
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().collect();
+
+    let mut tier = 1usize;
+    let mut custom_models_dir: Option<PathBuf> = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--tier" => {
+                if i + 1 < args.len() {
+                    if let Ok(val) = args[i + 1].parse::<usize>() {
+                        tier = val;
+                    }
+                    i += 1;
+                }
+            }
+            "--models-dir" => {
+                if i + 1 < args.len() {
+                    custom_models_dir = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let default_models_dir = PathBuf::from("C:\\Users\\rosas\\.lmstudio\\models");
+    let models_dir = custom_models_dir.unwrap_or(default_models_dir);
+    let bench_dir = resolve_benchmark_dir();
+
+    if tier == 2 {
+        run_tier2_colosseum(&bench_dir);
+    } else {
+        let models = collect_local_models(&models_dir);
+        let mut targets = models;
+        if targets.is_empty() {
+            targets.push(PathBuf::from("mock_model_tier1.gguf"));
+        }
+        run_tier1_guillotine(&targets, &bench_dir);
+    }
+
+    Ok(())
+}

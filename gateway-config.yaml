@@ -16,6 +16,7 @@ binds:
                 rules:
                   - >
                     !has(mcp.tool)
+                    || mcp.tool.name.startsWith("souls_")
                     || mcp.tool.name.startsWith("souls_ctx_")
                     || mcp.tool.name.startsWith("soda_")
                     || mcp.tool.name.startsWith("core_")

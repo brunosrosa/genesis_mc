@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::watch;
+use crate::soda_thermal_governor::SystemState;
 
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
 pub enum InferenceError {
@@ -38,14 +40,28 @@ pub struct SodaInferenceResponse {
 }
 
 pub trait EphemeralInferEngine: Send + Sync {
-    fn run_inference(&self, req: SodaInferenceRequest) -> Result<SodaInferenceResponse, InferenceError>;
+    fn run_inference(
+        &self,
+        req: SodaInferenceRequest,
+        thermal_rx: Option<watch::Receiver<SystemState>>,
+    ) -> Result<SodaInferenceResponse, InferenceError>;
 }
 
 /// Implementação Mock do Motor de Inferência Efêmero (Fase 4.3 - Estrutura Few-Shot e Telemetria E³)
 pub struct MockEphemeralInferEngine;
 
 impl EphemeralInferEngine for MockEphemeralInferEngine {
-    fn run_inference(&self, req: SodaInferenceRequest) -> Result<SodaInferenceResponse, InferenceError> {
+    fn run_inference(
+        &self,
+        req: SodaInferenceRequest,
+        thermal_rx: Option<watch::Receiver<SystemState>>,
+    ) -> Result<SodaInferenceResponse, InferenceError> {
+        if let Some(ref rx) = thermal_rx {
+            while *rx.borrow() == SystemState::Paused {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+
         if req.model_path.contains("non_existent") {
             return Err(InferenceError::ModelNotFound(req.model_path));
         }

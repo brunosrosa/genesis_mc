@@ -35,7 +35,7 @@ Ao receber a ordem de analisar um repositório ou processar um lote, execute EXC
 * **FOBIA DE "N/A" E VIBE CODING TABULAR:** Se o Enxame não souber um dado, falhe intencionalmente para acionar o *Human-in-the-Loop* (HITL).
 * **FOBIA DE LENTE C ANTIGA:** A Lente C não é mais só sobre RCE. Ela deve avaliar estritamente: "Isso sobrevive ao uso real ao longo dos meses?".
 * **PROIBIÇÃO DO MONÓLITO:** Se o repositório for um monólito preso a interpretadores (V8/JVM) e não puder ser recompilado dinamicamente para outros hardwares, ele deve ser rejeitado pela Lente B.
-* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `souls_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `souls_shell` é apenas para contexto MCP.
 * **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo é a âncora inegociável de descoberta do SODA.
 

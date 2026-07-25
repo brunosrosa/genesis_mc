@@ -12,6 +12,9 @@ use crate::core::inference_adapter::{
     EphemeralInferEngine, InferenceError, SodaInferenceRequest, SodaInferenceResponse,
 };
 
+use crate::soda_thermal_governor::SystemState;
+use tokio::sync::watch;
+
 pub struct LlamaCppEngine;
 
 fn build_chat_prompt(system_prompt: &str, few_shots: &[(String, String)], user_query: &str) -> String {
@@ -35,7 +38,11 @@ fn build_chat_prompt(system_prompt: &str, few_shots: &[(String, String)], user_q
 }
 
 impl EphemeralInferEngine for LlamaCppEngine {
-    fn run_inference(&self, req: SodaInferenceRequest) -> Result<SodaInferenceResponse, InferenceError> {
+    fn run_inference(
+        &self,
+        req: SodaInferenceRequest,
+        thermal_rx: Option<watch::Receiver<SystemState>>,
+    ) -> Result<SodaInferenceResponse, InferenceError> {
         let start_time = Instant::now();
 
         let model_path = Path::new(&req.model_path);
@@ -126,6 +133,17 @@ impl EphemeralInferEngine for LlamaCppEngine {
         let max_gen = if req.max_tokens == 0 { 256 } else { req.max_tokens };
 
         while completion_tokens_count < max_gen {
+            // Freio Térmico Bare-Metal (Zero-Busy-Wait via std::thread::sleep em thread dedicada)
+            if let Some(ref rx) = thermal_rx {
+                while *rx.borrow() == SystemState::Paused {
+                    tracing::warn!("Thermal Governor: Interrompendo esteira de tokens devido a teto termico (82C) ou atividade do usuario. Resfriando...");
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                if *rx.borrow() == SystemState::Throttled {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            }
+
             let token = sampler.sample(&ctx, batch.n_tokens() - 1);
             if model.is_eog_token(token) {
                 break;

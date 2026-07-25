@@ -45,11 +45,26 @@ async fn main() {
     #[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
     let engine = MockEphemeralInferEngine;
 
+    let thermal_rx = souls_mc_lib::soda_thermal_governor::spawn_thermal_governor();
+
+    // BARE-METAL PURIFICATION: Dedicated OS Worker Thread via std::thread::spawn
+    // Replaces tokio::task::spawn_blocking to preserve CPU L1/L2 cache and AVX2 vector alignment.
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let thermal_rx_clone = thermal_rx.clone();
+
+    if let Err(spawn_err) = std::thread::Builder::new()
+        .name("soda-ephemeral-worker".to_string())
+        .spawn(move || {
+            let res = engine.run_inference(request, Some(thermal_rx_clone));
+            let _ = tx.send(res);
+        })
+    {
+        eprintln!("ERR: Falha ao spawnar Dedicated OS Worker Thread: {}", spawn_err);
+        std::process::exit(1);
+    }
+
     let timeout_duration = Duration::from_secs(300);
-    let infer_result = tokio::time::timeout(
-        timeout_duration,
-        tokio::task::spawn_blocking(move || engine.run_inference(request))
-    ).await;
+    let infer_result = tokio::time::timeout(timeout_duration, rx).await;
 
     match infer_result {
         Ok(Ok(Ok(response))) => {
@@ -60,7 +75,9 @@ async fn main() {
                 "completion_tokens": response.completion_tokens,
                 "total_latency_ms": response.total_latency_ms
             });
-            println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
+            if let Ok(pretty) = serde_json::to_string_pretty(&json_output) {
+                println!("{}", pretty);
+            }
             std::process::exit(0);
         }
         Ok(Ok(Err(err))) => {
@@ -68,15 +85,19 @@ async fn main() {
                 "status": "error",
                 "error": err.to_string()
             });
-            eprintln!("{}", serde_json::to_string_pretty(&err_output).unwrap());
+            if let Ok(pretty) = serde_json::to_string_pretty(&err_output) {
+                eprintln!("{}", pretty);
+            }
             std::process::exit(1);
         }
-        Ok(Err(join_err)) => {
+        Ok(Err(recv_err)) => {
             let err_output = json!({
                 "status": "error",
-                "error": format!("Falha de thread no Tokio: {}", join_err)
+                "error": format!("Falha no canal oneshot da Dedicated Worker Thread: {}", recv_err)
             });
-            eprintln!("{}", serde_json::to_string_pretty(&err_output).unwrap());
+            if let Ok(pretty) = serde_json::to_string_pretty(&err_output) {
+                eprintln!("{}", pretty);
+            }
             std::process::exit(1);
         }
         Err(_elapsed) => {
@@ -85,7 +106,9 @@ async fn main() {
                 "text": "TIMEOUT_FATAL",
                 "error": "Tempo limite de inferencia excedido (300s)"
             });
-            println!("{}", serde_json::to_string_pretty(&err_output).unwrap());
+            if let Ok(pretty) = serde_json::to_string_pretty(&err_output) {
+                println!("{}", pretty);
+            }
             std::process::exit(1);
         }
     }

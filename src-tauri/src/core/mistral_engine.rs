@@ -1,4 +1,6 @@
 use std::time::Instant;
+use tokio::sync::watch;
+use crate::soda_thermal_governor::SystemState;
 
 use crate::core::inference_adapter::{
     EphemeralInferEngine, InferenceError, SodaInferenceRequest, SodaInferenceResponse,
@@ -13,7 +15,17 @@ pub struct MistralRsEngine;
 
 #[cfg(feature = "mistral_backend")]
 impl EphemeralInferEngine for MistralRsEngine {
-    fn run_inference(&self, req: SodaInferenceRequest) -> Result<SodaInferenceResponse, InferenceError> {
+    fn run_inference(
+        &self,
+        req: SodaInferenceRequest,
+        thermal_rx: Option<watch::Receiver<SystemState>>,
+    ) -> Result<SodaInferenceResponse, InferenceError> {
+        if let Some(ref rx) = thermal_rx {
+            while *rx.borrow() == SystemState::Paused {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+
         let start_time = Instant::now();
 
         let model_path = std::path::Path::new(&req.model_path);
@@ -74,7 +86,17 @@ impl EphemeralInferEngine for MistralRsEngine {
 
 #[cfg(not(feature = "mistral_backend"))]
 impl EphemeralInferEngine for MistralRsEngine {
-    fn run_inference(&self, req: SodaInferenceRequest) -> Result<SodaInferenceResponse, InferenceError> {
+    fn run_inference(
+        &self,
+        req: SodaInferenceRequest,
+        thermal_rx: Option<watch::Receiver<SystemState>>,
+    ) -> Result<SodaInferenceResponse, InferenceError> {
+        if let Some(ref rx) = thermal_rx {
+            while *rx.borrow() == SystemState::Paused {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+
         let start_time = Instant::now();
 
         if req.model_path.contains("non_existent") {

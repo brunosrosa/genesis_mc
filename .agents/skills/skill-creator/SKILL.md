@@ -17,7 +17,7 @@ Sempre que for instruído a criar uma skill ou canibalizar uma solução, execut
    * Aplique a decomposição OBRIGATÓRIA: identifique o que é **Must** (o núcleo transplantável), o que é **Nice** e o que é **Não** (o lixo tóxico que deve ser sumariamente ignorado).
 
 2. **Ingestão $\mathcal{O}(1)$ e Paradigma NextPlaid (Zero Força Bruta):**
-   * Utilize `lean-ctx` (`ctx_tree`, `ctx_search`) para o mapeamento e NÃO leia repositórios inteiros por força bruta.
+   * Utilize as ferramentas MCP de contexto (`souls_tree`, `souls_search`) para o mapeamento e NÃO leia repositórios inteiros por força bruta.
    * Acione `repo_ast` para rasgar a Árvore de Sintaxe Abstrata (AST) do alvo.
    * Aplique o **Paradigma NextPlaid**: fatie a lógica extraída em vetores menores e atômicos, proibindo a criação de monolitos de código inavegáveis na memória.
 

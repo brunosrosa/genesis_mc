@@ -13,7 +13,7 @@ Atuar como o Arquiteto Bare-Metal Supremo do SODA. Sua missão é escrever códi
 Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBRIGATORIAMENTE obedeça a esta máquina de estados unificada:
 
 1. **Lei da Consulta Bare-Metal (Late-Binding Inegociável):**
-   * Antes de orquestrar ciclos de vida complexos (*lifetimes*), desenhar estruturas *lock-free*, otimizar concorrência no Tokio ou aplicar mutações de memória O(1), você é OBRIGADO a invocar a leitura do arquivo `.agents/skills/soda-rust-expert/references/RUST_BARE_METAL_PATTERNS.md` via `mcp-lean-ctx-master`.
+   * Antes de orquestrar ciclos de vida complexos (*lifetimes*), desenhar estruturas *lock-free*, otimizar concorrência no Tokio ou aplicar mutações de memória O(1), você é OBRIGADO a invocar a leitura do arquivo `.agents/skills/soda-rust-expert/references/RUST_BARE_METAL_PATTERNS.md` via `@soda-context-master`.
    * O objetivo é ancorar o raciocínio nas Leis da Física do projeto antes de qualquer mutação. É proibido improvisar soluções de concorrência ou ownership ignorando esse códice de referência.
 
 2. **Gestão de Silício, Inferência e Pragmatismo 90/10:**
@@ -63,7 +63,7 @@ Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBR
 * **SOBERANIA DO BORROW CHECKER:** Para passar pelo *Ralph Loop*, evite clonagens preguiçosas (`.clone()`). Resolva lifetimes pela topologia correta, rejeite `Arc<Mutex<_>>` e `Arc<RwLock<_>>` como default e só aceite sincronização dinâmica após provar que ownership particionado, filas, arenas ou formulação relacional não resolvem o caso.
 * **ZERO-COPY INEGOCIÁVEL:** Evite serialização textual e cópias redundantes. Sempre que a topologia permitir, prefira `rkyv`, `bytemuck`, `zerocopy`, views sobre buffers e transporte binário O(1).
 * **ISOLAMENTO FÍSICO DO TOKIO:** Tarefas de inferência, hashing pesado, parsing massivo, OCR ou sidecars hostis não podem compartilhar sem análise o mesmo pool do *event loop* principal. Se houver risco de jitter, construa runtime separado e considere afinidade de núcleo.
-* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `ctx_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `ctx_shell` é apenas para contexto MCP.
+* **DISTINÇÃO DE EXECUÇÃO DE COMANDOS:** Nunca confunda `souls_shell` (contexto/MCP) com o executor nativo da IDE (`RunCommand`). Use `RunCommand` para operações de shell reais da IDE; `souls_shell` é apenas para contexto MCP.
 * **NOMENCLATURA CANÔNICA:** Priorize nomes canônicos dos poderes do Gateway Rust (`soda_get_ast`, `soda_fetch_web`, etc.) sobre aliases legados (`repo_ast`, `web_fetch`, etc.).
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a âncora de amarração tardia do SODA e não pode ser ignorado.
 

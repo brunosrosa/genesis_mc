@@ -5,4 +5,5 @@ pub mod cognition;
 pub mod telemetry;
 pub mod process_guard;
 pub mod core;
+pub mod soda_thermal_governor;
 
