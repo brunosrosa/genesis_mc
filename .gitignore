@@ -38,3 +38,4 @@ dist-ssr
 .pytest_cache/
 .lean-ctx/
 src-tauri/third_party/ultrafast-mcp-sequential-thinking/
+docs/audits/blobs/inspect/
