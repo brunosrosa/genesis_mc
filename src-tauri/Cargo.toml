@@ -75,7 +75,7 @@ which = "=6.0.3"
 zstd = "=0.13.3"
 walkdir = "=2.5.0"
 
-llama-cpp-2 = { version = "0.1", optional = true }
+llama-cpp-2 = { version = "0.1", optional = true, features = ["cuda"] }
 mistralrs = { version = "0.8", optional = true }
 llguidance = { version = "1.7", optional = true }
 
@@ -91,7 +91,7 @@ mockito = "=1.7.2"
 [features]
 default = []
 tauri-app = ["dep:tauri", "dep:tauri-plugin-opener"]
-llama_backend = ["dep:llama-cpp-2"]
+llama_backend = ["dep:llama-cpp-2", "llama-cpp-2/cuda"]
 mistral_backend = ["dep:mistralrs"]
 grammar_backend = ["dep:llguidance"]
 
