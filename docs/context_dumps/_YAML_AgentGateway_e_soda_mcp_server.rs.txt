@@ -1,4 +1,4 @@
-_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-25 18:38:02
+_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-26 00:00:19
 
 ### ====================================================================================================
 ARQUIVO: gateway-config.yaml

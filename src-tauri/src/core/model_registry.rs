@@ -3,9 +3,55 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use memmap2::MmapOptions;
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct ModelArchitectureParams {
+    pub block_count: u32,         // n_layer
+    pub embedding_length: u32,    // n_embd
+    pub head_count: u32,          // n_head
+    pub head_count_kv: u32,       // n_head_kv
+    pub feed_forward_length: u32, // n_ff
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[allow(non_camel_case_types)]
+pub enum KvQuantPrecision {
+    F16,
+    Q8_0,
+    Q4_K,
+    Q4_0,
+    Custom(f32),
+}
+
+impl KvQuantPrecision {
+    pub fn bytes_per_element(&self) -> f32 {
+        match self {
+            KvQuantPrecision::F16 => 2.0,
+            KvQuantPrecision::Q8_0 => 1.0,
+            KvQuantPrecision::Q4_K | KvQuantPrecision::Q4_0 => 0.5,
+            KvQuantPrecision::Custom(b) => *b,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VramProfileEstimate {
+    pub weights_vram_bytes: u64,
+    pub kv_cache_vram_bytes: u64,
+    pub compute_scratch_vram_bytes: u64,
+    pub lora_overhead_vram_bytes: u64,
+    pub total_estimated_vram_bytes: u64,
+    pub max_supported_context: u64,
+    pub fits_in_vram: bool,
+    pub k_precision_bytes: f32,
+    pub v_precision_bytes: f32,
+    pub batch_size: u32,
+    pub supports_flash_attention: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelMetadata {
     pub file_path: String,
     pub model_name: String,
@@ -19,6 +65,95 @@ pub struct ModelMetadata {
     pub tier1_passed: bool,
     pub success_rate_ema: f64,
     pub ema_latency_ms: f64,
+    pub architecture: ModelArchitectureParams,
+}
+
+/// Calcula a estimativa termodinâmica de consumo de VRAM (pesos + KV cache assimétrico + scratch O(N)/O(N^2) + LoRA) em O(1), desmembrada de forma agnóstica para qualquer limite dinâmico de VRAM.
+pub fn estimate_vram_thermodynamics(
+    meta: &ModelMetadata,
+    target_context_len: u64,
+    offload_ratio: f32,
+    k_precision_bytes: f32,
+    v_precision_bytes: f32,
+    batch_size: u32,
+    supports_flash_attention: bool,
+    active_lora_overhead_bytes: u64,
+    available_vram_bytes: u64,
+) -> VramProfileEstimate {
+    let weights_vram = (meta.file_size_bytes as f32 * offload_ratio.clamp(0.0, 1.0)) as u64;
+
+    let arch = &meta.architecture;
+    let layers = if arch.block_count > 0 { arch.block_count as u64 } else { 32 };
+    let head_count = if arch.head_count > 0 { arch.head_count as u64 } else { 16 };
+    let head_count_kv = if arch.head_count_kv > 0 { arch.head_count_kv as u64 } else { head_count };
+    let embd = if arch.embedding_length > 0 { arch.embedding_length as u64 } else { 2560 };
+    let head_dim = embd / head_count;
+
+    let effective_batch = if batch_size > 0 { batch_size as u64 } else { 1 };
+    let total_kv_bytes_per_elem = k_precision_bytes + v_precision_bytes;
+
+    // Formula Bare-Metal Assimétrica (ADR-027): 
+    // layers * n_head_kv * head_dim * context_len * batch_size * (k_bytes + v_bytes)
+    let kv_cache_vram = (layers as f32
+        * (head_count_kv as f32)
+        * (head_dim as f32)
+        * (target_context_len as f32)
+        * (effective_batch as f32)
+        * total_kv_bytes_per_elem) as u64;
+
+    let base_scratch = 256 * 1024 * 1024; // 256 MB base CUDA graph / activation buffers
+
+    // Bifurcação Termodinâmica: Flash Attention O(N) tile-based vs Atenção Tradicional O(N^2)
+    let ctx_scratch = if supports_flash_attention {
+        // Flash Attention O(N): tile-based scratch
+        target_context_len * head_count * 64 * effective_batch
+    } else {
+        // Atenção Tradicional O(N^2): Matriz de pontuação de atenção (QK^T em FP16 = 2 bytes)
+        target_context_len * target_context_len * head_count * 2 * effective_batch
+    };
+
+    let compute_scratch = base_scratch + ctx_scratch;
+
+    let total = weights_vram + kv_cache_vram + compute_scratch + active_lora_overhead_bytes;
+
+    VramProfileEstimate {
+        weights_vram_bytes: weights_vram,
+        kv_cache_vram_bytes: kv_cache_vram,
+        compute_scratch_vram_bytes: compute_scratch,
+        lora_overhead_vram_bytes: active_lora_overhead_bytes,
+        total_estimated_vram_bytes: total,
+        max_supported_context: meta.context_length,
+        fits_in_vram: total <= available_vram_bytes,
+        k_precision_bytes,
+        v_precision_bytes,
+        batch_size: effective_batch as u32,
+        supports_flash_attention,
+    }
+}
+
+/// Conecta a topologia de hardware detectada dinamicamente ao calculador termodinâmico de VRAM.
+pub fn estimate_vram_for_topology(
+    meta: &ModelMetadata,
+    target_context_len: u64,
+    offload_ratio: f32,
+    k_precision_bytes: f32,
+    v_precision_bytes: f32,
+    batch_size: u32,
+    supports_flash_attention: bool,
+    active_lora_overhead_bytes: u64,
+    topology: &crate::core::hardware_profiler::SystemTopology,
+) -> VramProfileEstimate {
+    estimate_vram_thermodynamics(
+        meta,
+        target_context_len,
+        offload_ratio,
+        k_precision_bytes,
+        v_precision_bytes,
+        batch_size,
+        supports_flash_attention,
+        active_lora_overhead_bytes,
+        topology.vram_total_bytes,
+    )
 }
 
 struct ByteCursor<'a> {
@@ -124,6 +259,7 @@ pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> 
     let mut chat_template = String::new();
     let mut context_length: u64 = 4096;
     let mut file_type_enum: Option<u32> = None;
+    let mut arch_params = ModelArchitectureParams::default();
 
     for _ in 0..kv_count {
         let key = match cursor.read_string() {
@@ -155,6 +291,66 @@ pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> 
             } else if val_type == 10 {
                 if let Some(val) = cursor.read_u64() {
                     context_length = val;
+                }
+            } else {
+                cursor.skip_value(val_type);
+            }
+        } else if key.ends_with(".block_count") || key == "general.block_count" {
+            if val_type == 4 || val_type == 2 {
+                if let Some(val) = cursor.read_u32() {
+                    arch_params.block_count = val;
+                }
+            } else if val_type == 10 {
+                if let Some(val) = cursor.read_u64() {
+                    arch_params.block_count = val as u32;
+                }
+            } else {
+                cursor.skip_value(val_type);
+            }
+        } else if key.ends_with(".embedding_length") || key == "general.embedding_length" {
+            if val_type == 4 || val_type == 2 {
+                if let Some(val) = cursor.read_u32() {
+                    arch_params.embedding_length = val;
+                }
+            } else if val_type == 10 {
+                if let Some(val) = cursor.read_u64() {
+                    arch_params.embedding_length = val as u32;
+                }
+            } else {
+                cursor.skip_value(val_type);
+            }
+        } else if key.ends_with(".attention.head_count") {
+            if val_type == 4 || val_type == 2 {
+                if let Some(val) = cursor.read_u32() {
+                    arch_params.head_count = val;
+                }
+            } else if val_type == 10 {
+                if let Some(val) = cursor.read_u64() {
+                    arch_params.head_count = val as u32;
+                }
+            } else {
+                cursor.skip_value(val_type);
+            }
+        } else if key.ends_with(".attention.head_count_kv") {
+            if val_type == 4 || val_type == 2 {
+                if let Some(val) = cursor.read_u32() {
+                    arch_params.head_count_kv = val;
+                }
+            } else if val_type == 10 {
+                if let Some(val) = cursor.read_u64() {
+                    arch_params.head_count_kv = val as u32;
+                }
+            } else {
+                cursor.skip_value(val_type);
+            }
+        } else if key.ends_with(".feed_forward_length") {
+            if val_type == 4 || val_type == 2 {
+                if let Some(val) = cursor.read_u32() {
+                    arch_params.feed_forward_length = val;
+                }
+            } else if val_type == 10 {
+                if let Some(val) = cursor.read_u64() {
+                    arch_params.feed_forward_length = val as u32;
                 }
             } else {
                 cursor.skip_value(val_type);
@@ -209,6 +405,68 @@ pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> 
         tier1_passed: false,
         success_rate_ema: 0.0,
         ema_latency_ms: 0.0,
+        architecture: arch_params,
+    })
+}
+
+/// Extrai metadados do cabeçalho Safetensors em O(1) e Zero-Copy via mmap.
+pub fn parse_safetensors_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> {
+    let f = File::open(file_path).ok()?;
+    let meta = f.metadata().ok()?;
+    let file_size = meta.len();
+    if file_size < 8 {
+        return None;
+    }
+
+    let mmap = unsafe { MmapOptions::new().map(&f).ok()? };
+    if mmap.len() < 8 {
+        return None;
+    }
+    let header_bytes: [u8; 8] = mmap[..8].try_into().ok()?;
+    let header_len = u64::from_le_bytes(header_bytes) as usize;
+    if mmap.len() < 8 + header_len {
+        return None;
+    }
+
+    let json_bytes = &mmap[8..8 + header_len];
+    let val: serde_json::Value = serde_json::from_slice(json_bytes).ok()?;
+    let filename = file_path.file_name()?.to_string_lossy();
+    let parent_dir = file_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let model_name = filename.to_string();
+    let family = infer_family(&filename, "");
+    let parameters = infer_params(&parent_dir, &filename, "");
+    let quantization = "BF16/F16".to_string();
+
+    let mut context_length = 4096;
+    if let Some(meta_val) = val.get("__metadata__") {
+        if let Some(ctx) = meta_val.get("max_position_embeddings") {
+            if let Some(c) = ctx.as_u64() {
+                context_length = c;
+            }
+        }
+    }
+
+    let capabilities = infer_capabilities(&family, &model_name, &filename, "");
+
+    Some(ModelMetadata {
+        file_path: file_path.to_string_lossy().to_string(),
+        model_name,
+        family,
+        parameters,
+        context_length,
+        quantization,
+        capabilities,
+        file_size_bytes: file_size,
+        is_active: true,
+        tier1_passed: false,
+        success_rate_ema: 0.0,
+        ema_latency_ms: 0.0,
+        architecture: ModelArchitectureParams::default(),
     })
 }
 
@@ -492,3 +750,130 @@ pub fn load_approved_tier1_models(report_path: &Path) -> Vec<PathBuf> {
 
     approved
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_qwen_metadata() -> ModelMetadata {
+        ModelMetadata {
+            file_path: "test_qwen.gguf".to_string(),
+            model_name: "Qwen3.5-4B-Q4_K_M".to_string(),
+            family: "Qwen3.5".to_string(),
+            parameters: "4B".to_string(),
+            context_length: 262144,
+            quantization: "Q4_K_M".to_string(),
+            capabilities: vec!["TOOL_CALLING".to_string()],
+            file_size_bytes: 2_700_000_000, // ~2.51 GiB
+            is_active: true,
+            tier1_passed: true,
+            success_rate_ema: 1.0,
+            ema_latency_ms: 100.0,
+            architecture: ModelArchitectureParams {
+                block_count: 32,
+                embedding_length: 2560,
+                head_count: 16,
+                head_count_kv: 4, // GQA 4:1
+                feed_forward_length: 9216,
+            },
+        }
+    }
+
+    #[test]
+    fn test_vram_thermodynamics_gqa_asymmetric_kv_and_batch() {
+        let meta = dummy_qwen_metadata();
+        let ctx = 30_000u64;
+        let lora_bytes = 64 * 1024 * 1024; // 64 MB LoRA
+        let vram_6gb = 6 * 1024 * 1024 * 1024;
+
+        // Symmetric FP16 K (2.0) + FP16 V (2.0) = 4.0 bytes per element per head_dim token
+        let est_f16 = estimate_vram_thermodynamics(&meta, ctx, 1.0, 2.0, 2.0, 1, true, 0, vram_6gb);
+
+        // Asymmetric K in FP16 (2.0 bytes) and V in Q4_K (0.5 bytes) = 2.5 bytes total per element
+        let est_asymmetric = estimate_vram_thermodynamics(&meta, ctx, 1.0, 2.0, 0.5, 1, true, 0, vram_6gb);
+
+        // Symmetric Q4_K (0.5 + 0.5 = 1.0 byte total per element) with LoRA overhead
+        let est_q4_lora = estimate_vram_thermodynamics(&meta, ctx, 1.0, 0.5, 0.5, 1, true, lora_bytes, vram_6gb);
+
+        // Batch size 2 test with asymmetric K/V (2.0 + 0.5 = 2.5 bytes)
+        let est_batch2 = estimate_vram_thermodynamics(&meta, ctx, 1.0, 2.0, 0.5, 2, true, 0, vram_6gb);
+
+        // head_dim = 2560 / 16 = 160
+        // FP16 KV (b=1): 32 layers * 4 heads_kv * 160 head_dim * 30000 ctx * (2.0 + 2.0) = 2,457,600,000 bytes
+        assert_eq!(est_f16.kv_cache_vram_bytes, 2_457_600_000);
+
+        // Asymmetric KV (K=2.0, V=0.5, b=1): 32 * 4 * 160 * 30000 * 2.5 = 1,536,000,000 bytes (~1.43 GB)
+        assert_eq!(est_asymmetric.kv_cache_vram_bytes, 1_536_000_000);
+
+        // Symmetric Q4_K KV (K=0.5, V=0.5, b=1): 32 * 4 * 160 * 30000 * 1.0 = 614,400,000 bytes (~0.57 GB)
+        assert_eq!(est_q4_lora.kv_cache_vram_bytes, 614_400_000);
+        assert_eq!(est_q4_lora.lora_overhead_vram_bytes, lora_bytes);
+
+        // Batch 2 Asymmetric (b=2): 1,536,000,000 * 2 = 3,072,000,000 bytes (~2.86 GB)
+        assert_eq!(est_batch2.kv_cache_vram_bytes, 3_072_000_000);
+
+        // Check if Q4_K with 64MB LoRA fits in dynamic 6GB VRAM limit
+        assert!(est_q4_lora.fits_in_vram);
+    }
+
+    #[test]
+    fn test_vram_thermodynamics_preventive_oom_without_flash_attention() {
+        let meta = dummy_qwen_metadata();
+        let ctx = 30_000u64;
+        let lora_bytes = 64 * 1024 * 1024; // 64 MB LoRA
+        let vram_6gb = 6 * 1024 * 1024 * 1024;
+
+        // Flash Attention DISABLED (FA = false): Scratch escala O(N^2)
+        // 30,000^2 * 16 heads * 2 bytes = 28,800,000,000 bytes (~28.8 GB scratch!)
+        let est_no_fa = estimate_vram_thermodynamics(&meta, ctx, 1.0, 0.5, 0.5, 1, false, lora_bytes, vram_6gb);
+
+        // Flash Attention ENABLED (FA = true): Scratch escala O(N)
+        // 30,000 * 16 * 64 = 30,720,000 bytes (~30.7 MB scratch)
+        let est_with_fa = estimate_vram_thermodynamics(&meta, ctx, 1.0, 0.5, 0.5, 1, true, lora_bytes, vram_6gb);
+
+        // Sem Flash Attention em contexto longo (30k tokens), a alocação estoura o limite de 6GB VRAM preventivamente
+        assert!(!est_no_fa.fits_in_vram);
+        assert!(est_no_fa.total_estimated_vram_bytes > 30_000_000_000);
+
+        // Com Flash Attention ativado, o modelo cabe confortavelmente na VRAM dinamicamente fornecida
+        assert!(est_with_fa.fits_in_vram);
+        assert!(est_with_fa.total_estimated_vram_bytes < 4_000_000_000);
+    }
+
+    #[test]
+    fn test_vram_thermodynamics_system_topology_integration() {
+        let meta = dummy_qwen_metadata();
+        let ctx = 30_000u64;
+        let lora_bytes = 64 * 1024 * 1024; // 64 MB LoRA
+
+        let mock_topology = crate::core::hardware_profiler::SystemTopology {
+            gpu_name: "NVIDIA GeForce RTX 2060".to_string(),
+            vram_total_bytes: 6 * 1024 * 1024 * 1024,
+            ram_total_bytes: 16 * 1024 * 1024 * 1024,
+            is_dedicated_gpu: true,
+        };
+
+        let est = estimate_vram_for_topology(
+            &meta,
+            ctx,
+            1.0,
+            0.5,
+            0.5,
+            1,
+            true,
+            lora_bytes,
+            &mock_topology,
+        );
+
+        assert!(est.fits_in_vram);
+        assert_eq!(
+            est.total_estimated_vram_bytes,
+            2_700_000_000 + 614_400_000 + (256 * 1024 * 1024 + 30_000 * 16 * 64) + lora_bytes
+        );
+    }
+}
+
+
+
+
+

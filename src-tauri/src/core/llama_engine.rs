@@ -80,8 +80,10 @@ impl EphemeralInferEngine for LlamaCppEngine {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
         })?;
 
-        // 3. Alocação do contexto com KV Cache nativo F16
+        // 3. Alocação do contexto com KV Cache nativo F16 e Janela Expandida n_ctx=4096 (ADR-028)
         let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(std::num::NonZeroU32::new(4096))
+            .with_n_batch(4096)
             .with_type_k(KvCacheType::F16)
             .with_type_v(KvCacheType::F16);
 

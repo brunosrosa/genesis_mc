@@ -1,3 +1,4 @@
+pub mod hardware_profiler;
 pub mod inference_adapter;
 pub mod model_registry;
 
