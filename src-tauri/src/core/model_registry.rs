@@ -373,7 +373,7 @@ pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> 
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    let model_name = if !name.trim().is_empty() {
+    let raw_model_name = if !name.trim().is_empty() {
         name.trim().to_string()
     } else {
         file_path
@@ -381,6 +381,8 @@ pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> 
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "UnknownModel".to_string())
     };
+
+    let model_name = format_model_canonical_name(&raw_model_name, Some(&parent_dir));
 
     if family.is_empty() {
         family = infer_family(&filename, &model_name);
@@ -798,9 +800,181 @@ pub fn load_approved_tier1_models(report_path: &Path) -> Vec<PathBuf> {
     approved
 }
 
+pub fn format_model_canonical_name(filename_or_path: &str, parent_dir: Option<&str>) -> String {
+    let path = Path::new(filename_or_path);
+    let raw_stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| filename_or_path.to_string());
+
+    // 1. Extração da Quantização
+    let quant_regex = regex::Regex::new(r"(?i)(Q[0-9]_[K01]_[MSL01]|Q[0-9]_[01K]|IQ[0-9]_[MSL]|BF16|F16|F32|i2_s)").unwrap();
+    let quant_str = if let Some(mat) = quant_regex.find(&raw_stem) {
+        mat.as_str().to_uppercase()
+    } else if let Some(mat) = quant_regex.find(filename_or_path) {
+        mat.as_str().to_uppercase()
+    } else {
+        "GGUF".to_string()
+    };
+
+    let stem_no_quant = if quant_str != "GGUF" {
+        let re_quant = regex::Regex::new(&format!(r"(?i)[-_\s]*\b{}\b[-_\s]*", regex::escape(&quant_str))).unwrap();
+        re_quant.replace_all(&raw_stem, "-").to_string()
+    } else {
+        raw_stem.clone()
+    };
+
+    // 2. Extração do Criador / Publisher
+    let creators = [
+        ("nvidia", "NVIDIA"),
+        ("unsloth", "Unsloth"),
+        ("lmstudio-community", "LMStudio"),
+        ("lmstudio", "LMStudio"),
+        ("ankitai", "AnkitAI"),
+        ("hauhaucs", "HauhauCS"),
+        ("jackrong", "Jackrong"),
+        ("mradermacher", "Mradermacher"),
+        ("nimbus-labs", "Nimbus Labs"),
+        ("nimbus", "Nimbus Labs"),
+        ("owao", "Owao"),
+        ("tencent", "Tencent"),
+        ("zero-point-ai", "Zero-Point AI"),
+        ("zero-point", "Zero-Point AI"),
+        ("flyingfishinwater", "Flyingfishinwater"),
+        ("jica98", "Jica98"),
+        ("microsoft", "Microsoft"),
+        ("meta", "Meta"),
+        ("google", "Google"),
+        ("mistralai", "Mistral"),
+        ("mistral", "Mistral"),
+        ("qwen", "Qwen"),
+        ("deepseek-ai", "DeepSeek"),
+        ("deepseek", "DeepSeek"),
+    ];
+
+    let stem_lower = stem_no_quant.to_lowercase();
+    let parent_lower = parent_dir.unwrap_or_default().to_lowercase();
+
+    let mut found_creator: Option<&str> = None;
+    let mut creator_token_in_stem: Option<&str> = None;
+
+    for &(key, display_name) in &creators {
+        if stem_lower.contains(key) {
+            found_creator = Some(display_name);
+            creator_token_in_stem = Some(key);
+            break;
+        }
+    }
+
+    if found_creator.is_none() {
+        for &(key, display_name) in &creators {
+            if parent_lower.contains(key) {
+                found_creator = Some(display_name);
+                break;
+            }
+        }
+    }
+
+    let creator = found_creator.unwrap_or("Local");
+
+    // 3. Limpeza e Formatação do Nome Base do Modelo
+    let mut cleaned_stem = stem_no_quant;
+    if let Some(token) = creator_token_in_stem {
+        let re_token = regex::Regex::new(&format!(r"(?i)[-_\s]*\b{}\b[-_\s]*", regex::escape(token))).unwrap();
+        cleaned_stem = re_token.replace_all(&cleaned_stem, "-").to_string();
+    }
+
+    cleaned_stem = cleaned_stem.replace('_', " ").replace('.', " ");
+
+    let parts: Vec<&str> = cleaned_stem
+        .split('-')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut formatted_parts = Vec::new();
+    for part in parts {
+        let words: Vec<&str> = part.split_whitespace().collect();
+        let mut formatted_words = Vec::new();
+        for word in words {
+            let lower = word.to_lowercase();
+            if lower == "gguf" || lower == "bin" {
+                continue;
+            }
+            if lower == "nvidia" {
+                formatted_words.push("NVIDIA".to_string());
+            } else if lower == "phi" {
+                formatted_words.push("Phi".to_string());
+            } else if word.chars().all(|c| c.is_ascii_uppercase()) && word.len() <= 4 {
+                formatted_words.push(word.to_string());
+            } else if word.chars().any(|c| c.is_numeric()) && word.chars().any(|c| c.is_alphabetic()) {
+                formatted_words.push(capitalize_alphanumeric(word));
+            } else {
+                formatted_words.push(to_title_case(word));
+            }
+        }
+        if !formatted_words.is_empty() {
+            formatted_parts.push(formatted_words.join(" "));
+        }
+    }
+
+    let mut base_model = formatted_parts.join(" ");
+    base_model = base_model
+        .replace("Phi 4", "Phi-4")
+        .replace("Nemotron 3", "Nemotron-3")
+        .replace("Hy MT2", "Hy-MT2")
+        .replace("Hy Mt2", "Hy-MT2")
+        .replace("HY MT2", "Hy-MT2")
+        .trim()
+        .to_string();
+
+    if base_model.is_empty() {
+        base_model = "Base Model".to_string();
+    }
+
+    format!("{} - {} ({})", creator, base_model, quant_str)
+}
+
+fn to_title_case(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str().to_lowercase().as_str(),
+    }
+}
+
+fn capitalize_alphanumeric(s: &str) -> String {
+    let mut result = String::new();
+    for chunk in s.split_inclusive(|c: char| !c.is_alphanumeric()) {
+        let mut chars = chunk.chars();
+        if let Some(first) = chars.next() {
+            result.push(first.to_ascii_uppercase());
+            for rest in chars {
+                result.push(rest);
+            }
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_format_model_canonical_name() {
+        let input1 = "Phi-4-mini-instruct-unsloth-Q4_K_M.gguf";
+        let formatted1 = format_model_canonical_name(input1, None);
+        assert_eq!(formatted1, "Unsloth - Phi-4 Mini Instruct (Q4_K_M)");
+
+        let input2 = "NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf";
+        let formatted2 = format_model_canonical_name(input2, Some("lmstudio-community"));
+        assert_eq!(formatted2, "NVIDIA - Nemotron-3 Nano 4B (Q4_K_M)");
+
+        let input3 = "Hy-MT2-7B-Q4_K_M.gguf";
+        let formatted3 = format_model_canonical_name(input3, Some("tencent"));
+        assert_eq!(formatted3, "Tencent - Hy-MT2 7B (Q4_K_M)");
+    }
 
     fn dummy_qwen_metadata() -> ModelMetadata {
         ModelMetadata {

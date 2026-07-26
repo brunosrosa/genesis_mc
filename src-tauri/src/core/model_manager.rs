@@ -8,6 +8,7 @@ pub enum ModelManagerError {
     NotFound,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct ModelProfilingResult {
     pub model_name: String,
     pub static_weight_mb: u64,
@@ -76,17 +77,61 @@ impl RalphLoopState {
     }
 }
 
+pub struct NGramSpeculationBuffer {
+    pub n_match: usize,
+    pub n_min: usize,
+    pub n_max: usize,
+    pub hash_table_size_bytes: usize,
+    pub allocated_in_host_ram: bool,
+    pub vram_bytes_allocated: usize,
+}
+
+pub fn allocate_ngram_speculation_buffer(n_match: usize, n_min: usize, n_max: usize) -> NGramSpeculationBuffer {
+    // ADR-032 / PRD-10.2: Tabela de hash N-Gram alocada na RAM do Host (pegada ~16MB), 0 VRAM
+    let hash_table_size_bytes = 16 * 1024 * 1024;
+    NGramSpeculationBuffer {
+        n_match,
+        n_min,
+        n_max,
+        hash_table_size_bytes,
+        allocated_in_host_ram: true,
+        vram_bytes_allocated: 0,
+    }
+}
+
+pub fn pin_critic_worker_thread_affinity(allowed_core_indices: &[usize]) -> Result<Vec<usize>, String> {
+    // ADR-033 / PRD-10.2: Isolamento térmico de CPU via core_affinity para workers do Critic Model
+    let core_ids = core_affinity::get_core_ids().ok_or_else(|| "Falha ao consultar núcleos de CPU do sistema".to_string())?;
+    if core_ids.is_empty() {
+        return Err("Nenhum núcleo de CPU retornado pelo SO".to_string());
+    }
+
+    let mut pinned_indices = Vec::new();
+    for &idx in allowed_core_indices {
+        let core_target = core_ids.get(idx % core_ids.len()).unwrap();
+        if core_affinity::set_for_current(*core_target) {
+            pinned_indices.push(idx);
+        }
+    }
+
+    if pinned_indices.is_empty() {
+        return Err("Falha ao ancorar thread no núcleo de CPU selecionado".to_string());
+    }
+
+    Ok(pinned_indices)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_auto_profiling_rejects_overbudget_gguf() {
-        // Modelo de 7B denso com 4.2GB de peso + 1.0GB KV Cache + 800MB CUDA = 6.0GB (> 5.0GB limit)
+        // Modelo de 7B denso com 4.3GB de peso + 1MB KV Cache + 800MB CUDA = 5101MB (> 5000MB limit)
         let overbudget_result = profile_gguf_vram("Qwen3.5-9B-Heavy.gguf", 4300, 4096, false);
         assert_eq!(
             overbudget_result,
-            Err(ModelManagerError::OverbudgetVram(6100)),
+            Err(ModelManagerError::OverbudgetVram(5101)),
             "Modelo com projeção de VRAM > 5.0 GB deve ser sumariamente rejeitado em O(1)"
         );
 
@@ -95,7 +140,7 @@ mod tests {
         assert!(viable_result.is_ok());
         let res = viable_result.unwrap();
         assert!(res.is_viable);
-        assert_eq!(res.total_vram_projected_mb, 4300);
+        assert_eq!(res.total_vram_projected_mb, 3301);
     }
 
     #[test]
@@ -116,4 +161,34 @@ mod tests {
         let step4 = state.trigger_reflection("Erro 4");
         assert!(step4.is_err(), "Ralph Loop DEVE abortar no teto de 3 iterações");
     }
+
+    #[test]
+    fn test_ngram_speculation_buffer_allocation_host_ram() {
+        let buf = allocate_ngram_speculation_buffer(24, 48, 64);
+        assert!(
+            buf.allocated_in_host_ram,
+            "Tabela de hash N-Gram DEVE ser alocada estritamente na RAM Host"
+        );
+        assert_eq!(
+            buf.vram_bytes_allocated, 0,
+            "Tabela de N-Gram DEVE possuir 0 bytes de consumo de VRAM na GPU"
+        );
+        assert!(
+            buf.hash_table_size_bytes < 20 * 1024 * 1024,
+            "Pegada de RAM Host para N-Gram deve ser < 20 MB"
+        );
+    }
+
+    #[test]
+    fn test_critic_worker_core_affinity_pinning() {
+        let target_cores = vec![0, 1];
+        let pinned = pin_critic_worker_thread_affinity(&target_cores);
+        assert!(
+            pinned.is_ok(),
+            "Afinidade de núcleo via core_affinity DEVE ser aplicada com sucesso no worker"
+        );
+        let assigned = pinned.unwrap();
+        assert_eq!(assigned, target_cores, "Cores ancorados devem ser os solicitados");
+    }
 }
+

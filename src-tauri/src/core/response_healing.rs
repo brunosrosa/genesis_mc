@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 /// Intercepta buffers de streaming/resposta de LLMs e realiza cura sintática zero-token em < 1ms.
 /// Remove cercas Markdown, limpa trailing commas, fecha delimitadores truncados e normaliza literais.
 pub fn repair_json_buffer(input: &str) -> String {
@@ -119,6 +117,7 @@ pub fn repair_json_buffer(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
 
     #[test]
     fn test_response_healing_sub_millisecond_json_repair() {

@@ -57,6 +57,14 @@ fn build_chat_prompt(system_prompt: &str, few_shots: &[(String, String)], user_q
     prompt
 }
 
+pub fn build_default_context_params() -> LlamaContextParams {
+    LlamaContextParams::default()
+        .with_n_ctx(std::num::NonZeroU32::new(4096))
+        .with_n_batch(4096)
+        .with_type_k(KvCacheType::F16)
+        .with_type_v(KvCacheType::Q4_K)
+}
+
 impl EphemeralInferEngine for LlamaCppEngine {
     fn run_inference(
         &self,
@@ -79,14 +87,6 @@ impl EphemeralInferEngine for LlamaCppEngine {
         let model = LlamaModel::load_from_file(&backend, model_path, &model_params).map_err(|e| {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
         })?;
-
-pub fn build_default_context_params() -> LlamaContextParams {
-    LlamaContextParams::default()
-        .with_n_ctx(std::num::NonZeroU32::new(4096))
-        .with_n_batch(4096)
-        .with_type_k(KvCacheType::F16)
-        .with_type_v(KvCacheType::Q4_K)
-}
 
         // 3. Alocação do contexto com KV Cache Assimétrico (ADR-027 / PRD-10.1)
         let ctx_params = build_default_context_params();
