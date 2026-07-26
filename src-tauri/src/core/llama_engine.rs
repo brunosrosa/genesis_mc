@@ -80,12 +80,16 @@ impl EphemeralInferEngine for LlamaCppEngine {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
         })?;
 
-        // 3. Alocação do contexto com KV Cache nativo F16 e Janela Expandida n_ctx=4096 (ADR-028)
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(std::num::NonZeroU32::new(4096))
-            .with_n_batch(4096)
-            .with_type_k(KvCacheType::F16)
-            .with_type_v(KvCacheType::F16);
+pub fn build_default_context_params() -> LlamaContextParams {
+    LlamaContextParams::default()
+        .with_n_ctx(std::num::NonZeroU32::new(4096))
+        .with_n_batch(4096)
+        .with_type_k(KvCacheType::F16)
+        .with_type_v(KvCacheType::Q4_K)
+}
+
+        // 3. Alocação do contexto com KV Cache Assimétrico (ADR-027 / PRD-10.1)
+        let ctx_params = build_default_context_params();
 
         let mut ctx = model.new_context(&backend, ctx_params).map_err(|_| {
             InferenceError::GpuOom
@@ -275,3 +279,18 @@ impl EphemeralInferEngine for LlamaCppEngine {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_llama_engine_context_init_asymmetric_kv_cache() {
+        let params = build_default_context_params();
+        let type_k = params.type_k();
+        let type_v = params.type_v();
+        assert_eq!(type_k, KvCacheType::F16, "Keys no KV Cache devem ser F16 para rotação RoPE");
+        assert_eq!(type_v, KvCacheType::Q4_K, "Values no KV Cache devem ser Q4_K para esmagar o footprint < 1GB");
+    }
+}
+

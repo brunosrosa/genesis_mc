@@ -84,6 +84,23 @@ $$x_{\text{clique}} = \frac{x_0 + x_2}{2}$$$$y_{\text{clique}} = \frac{y_0 + y_2
 
 Os cliques operam com precisão de silício sub-milisegundo sem gastar um único byte de memória de vídeo [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md].
 
+### 2.1 Métrica de Eficiência Termodinâmica de Visão ($\eta_{\text{vis}}$)
+
+Quando a execução exigir o uso pontual de projetores visuais (`.mmproj`), o módulo VLM DEVE ser avaliado sob a **Eficiência Termodinâmica de Visão** ($\eta_{\text{vis}}$), que quantifica o rendimento de acurácia em extração estruturada (avaliado em *golden datasets* como CORD, SROIE, DocVQA, ChartQA e AECV-Bench) por megabyte de VRAM consumido no pico da inferência:
+
+$$\eta_{\text{vis}} = \frac{\text{Score}_{\text{Dataset}} (\%)}{\text{VRAM}_{\text{Estática}} + \text{VRAM}_{\text{Dinâmica\_KV}} \text{ (MB)}}$$
+
+- **Critério de Corte Cânone V5:** É terminantemente **PROIBIDO** o uso de projetores visuais `.mmproj` ou encoders de visão que apresentem $\eta_{\text{vis}} < 0.12 \text{ pontos/MB}$.
+- **Controle de Spillage:** O profiling via NVML monitora dinamicamente a expansão da KV Cache gerada por tokens visuais. Se o pico dinâmico ameaçar o teto dos 6GB de VRAM, a inferência é abortada antes de acionar paginação via PCIe.
+
+### 2.2 Ciclo de Vida Reativo e Desalocação Atômica do Módulo VLM (`.mmproj`)
+
+A integração de capacidades visuais no SODA V5 respeita estritamente o **Ciclo de Vida Reativo**:
+
+1. **Gatilho de Fallback:** O projetor `.mmproj` permanece descarregado por padrão (VRAM footprint $= 0\text{ MB}$). Ele só pode ser alocado na VRAM sob demanda extrema, quando o agente falhar no parsing de estruturas de texto (DOM/AST) e se deparar com documentos não estruturados (ex: comprovantes fiscais físicos, faturas digitalizadas com ruído).
+2. **Expurgo Atômico Síncrono:** Tão logo a inferência visual finalize e o JSON estruturado seja emitido para o pipeline agêntico, o Gateway Rust DEVE invocar a desalocação atômica imediata do arquivo `.mmproj` e a purga dos tokens visuais alocados na cache Key-Value da GPU.
+3. **Preservação de Headroom:** A desalocação restitui instantaneamente ~750MB de VRAM para o modelo de linguagem principal, garantindo estabilidade e impedindo OOM no barramento PCIe.
+
 ### 3. O Bypass de OOM Documental (Kreuzberg Streaming e pdfsink-rs)
 
 Para impedir picos letais de memória RAM central ($> 2.5\text{ GB}$) que causem o pânico do Tokio Event Loop e ativem o Linux OOM Killer no hospedeiro, o processamento de arquivos pesados (PDFs, planilhas massivas) é redimensionado para operar em fluxo sínclono linearizado.

@@ -132,6 +132,30 @@ byteorder v1.5.0
                 [build-dependencies]
                 └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
+darling v0.20.11
+└── wrapcenum-derive v0.4.1 (proc-macro)
+    └── nvml-wrapper v0.10.0
+        └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+
+darling v0.23.0
+└── serde_with_macros v3.21.0 (proc-macro)
+    └── serde_with v3.21.0
+        └── tauri-utils v2.9.3 (*)
+
+darling_core v0.20.11
+├── darling v0.20.11 (*)
+└── darling_macro v0.20.11 (proc-macro)
+    └── darling v0.20.11 (*)
+
+darling_core v0.23.0
+├── darling v0.23.0 (*)
+└── darling_macro v0.23.0 (proc-macro)
+    └── darling v0.23.0 (*)
+
+darling_macro v0.20.11 (proc-macro) (*)
+
+darling_macro v0.23.0 (proc-macro) (*)
+
 fastrand v2.4.1
 └── phf_generator v0.13.1
     ├── phf_codegen v0.13.1
@@ -564,8 +588,7 @@ serde_core v1.0.228
 │       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │       ├── tauri-utils v2.9.3 (*)
 │       └── tauri-winres v0.3.6 (*)
-├── serde_with v3.21.0
-│   └── tauri-utils v2.9.3 (*)
+├── serde_with v3.21.0 (*)
 ├── toml v0.9.12+spec-1.1.0 (*)
 ├── toml v1.1.2+spec-1.1.0 (*)
 ├── toml_datetime v0.7.5+spec-1.1.0
@@ -677,7 +700,8 @@ stable_deref_trait v1.2.1
     └── selectors v0.36.1 (*)
 
 thiserror v1.0.69
-└── json-patch v3.0.1 (*)
+├── json-patch v3.0.1 (*)
+└── nvml-wrapper v0.10.0 (*)
 
 thiserror v2.0.18
 ├── cargo_metadata v0.19.2 (*)
@@ -845,6 +869,7 @@ windows-sys v0.61.2
     │   └── walkdir v2.5.0
     │       ├── gix-features v0.48.1 (*)
     │       ├── ignore v0.4.27 (*)
+    │       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     │       ├── tauri-build v2.6.3 (*)
     │       └── tauri-utils v2.9.3 (*)
     └── walkdir v2.5.0 (*)

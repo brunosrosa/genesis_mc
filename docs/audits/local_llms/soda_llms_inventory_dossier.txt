@@ -1,0 +1,317 @@
+================================================================================
+                DOSSIÊ DE INVENTÁRIO LLM - SODA SSOT BARE-METAL                 
+================================================================================
+Banco de Dados SSOT: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+Total de Arquivos GGUF no SSD: 32
+LLMs Principais de Texto: 21
+Módulos Auxiliares (Visão/MTP/Sidecars): 11
+================================================================================
+
+================================================================================
+                       PARTE 1: LLMs PRINCIPAIS DE TEXTO                        
+================================================================================
+
+==================================================
+LLM #1: Lmstudio Community_Nn
+> ID / Path: C:\Users\rosas\.lmstudio\models\lmstudio-community\NVIDIA-Nemotron-3-Nano-4B-GGUF\NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf
+> Status Tier 1: Aprovado (Tier 1 Passed)
+> Performance: Latência: 3564.00 ms | Sucesso Sintático: 90.0%
+> Metadados Físicos: Família: nemotron_h | Parâmetros: 4B | Contexto Máximo: 1048576 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.64 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:01
+> Módulos Anexados: Nenhum
+> Veredito do SODA: RETENÇÃO RECOMENDADA: Modelo de alta performance e sintaxe estável (Aprovado no Tier 1).
+==================================================
+
+==================================================
+LLM #2: 7B
+> ID / Path: C:\Users\rosas\.lmstudio\models\tencent\Hy-MT2-7B-GGUF\Hy-MT2-7B-Q4_K_M.gguf
+> Status Tier 1: Aprovado (Tier 1 Passed)
+> Performance: Latência: 5155.00 ms | Sucesso Sintático: 86.0%
+> Metadados Físicos: Família: hunyuan-dense | Parâmetros: 7B | Contexto Máximo: 262144 | Quantização: Q4_K_M
+> Tamanho / VRAM: 4.31 GB | Capacidades: ["BASE"] | Visto em: 2026-07-26 16:53:54
+> Módulos Anexados: Nenhum
+> Veredito do SODA: RETENÇÃO RECOMENDADA: Modelo de alta performance e sintaxe estável (Aprovado no Tier 1).
+==================================================
+
+==================================================
+LLM #3: Nimbus-4B
+> ID / Path: C:\Users\rosas\.lmstudio\models\Nimbus-Labs\Nimbus-4B-GGUF\Nimbus-4B-Q4_K_M.gguf
+> Status Tier 1: Aprovado (Tier 1 Passed)
+> Performance: Latência: 4562.00 ms | Sucesso Sintático: 84.0%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 4B | Contexto Máximo: 262144 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.52 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:49:36
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-Nimbus-4B-F16.gguf (641.27 MB)]
+> Veredito do SODA: RETENÇÃO RECOMENDADA: Modelo de alta performance e sintaxe estável (Aprovado no Tier 1).
+==================================================
+
+==================================================
+LLM #4: Parable_V2_4B_Merged
+> ID / Path: C:\Users\rosas\.lmstudio\models\AnkitAI\Parable-Qwen3-4B-Claude-Fable-5-GGUF\Parable-Qwen3-4B-Claude-Fable-5-GGUF-Q4_K_M.gguf
+> Status Tier 1: Aprovado (Tier 1 Passed)
+> Performance: Latência: 4017.00 ms | Sucesso Sintático: 72.0%
+> Metadados Físicos: Família: qwen3 | Parâmetros: 4B | Contexto Máximo: 40960 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.33 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:30:23
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf (644.27 MB)], [VISION_PROJECTOR: mmproj-Qwen3.5-4B-BF16.gguf (644.27 MB)]
+> Veredito do SODA: RETENÇÃO RECOMENDADA: Modelo de alta performance e sintaxe estável (Aprovado no Tier 1).
+==================================================
+
+==================================================
+LLM #5: Qwen3.5-4B
+> ID / Path: C:\Users\rosas\.lmstudio\models\unsloth\Qwen3.5-4B-GGUF\Qwen3.5-4B-Q4_K_S.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 4569.00 ms | Sucesso Sintático: 65.2%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 4B | Contexto Máximo: 262144 | Quantização: Q4_K_S
+> Tamanho / VRAM: 2.41 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:59:46
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-F32.gguf (1.24 GB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #6: Qwen_Qwen3.5 4B
+> ID / Path: C:\Users\rosas\.lmstudio\models\lmstudio-community\Qwen3.5-4B-GGUF\Qwen3.5-4B-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 4440.00 ms | Sucesso Sintático: 63.6%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 4B | Contexto Máximo: 262144 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.52 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:01
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-Qwen3.5-4B-BF16.gguf (644.27 MB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #7: LiquidAI_LFM2.5 1.2B Instruct
+> ID / Path: C:\Users\rosas\.lmstudio\models\lmstudio-community\LFM2.5-1.2B-Instruct-GGUF\LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 1379.00 ms | Sucesso Sintático: 62.8%
+> Metadados Físicos: Família: lfm2 | Parâmetros: 1.2B | Contexto Máximo: 128000 | Quantização: Q4_K_M
+> Tamanho / VRAM: 697.04 MB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:01
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #8: Phi 4 Mini Reasoning
+> ID / Path: C:\Users\rosas\.lmstudio\models\lmstudio-community\Phi-4-mini-reasoning-GGUF\Phi-4-mini-reasoning-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 3770.00 ms | Sucesso Sintático: 62.8%
+> Metadados Físicos: Família: phi3 | Parâmetros: Unknown | Contexto Máximo: 131072 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.32 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:01
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #9: Smollm3-3B
+> ID / Path: C:\Users\rosas\.lmstudio\models\unsloth\SmolLM3-3B-GGUF\SmolLM3-3B-Q4_K_S.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 3204.00 ms | Sucesso Sintático: 61.9%
+> Metadados Físicos: Família: smollm3 | Parâmetros: 3B | Contexto Máximo: 65536 | Quantização: Q4_K_S
+> Tamanho / VRAM: 1.69 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 17:02:01
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #10: Merged 8b
+> ID / Path: C:\Users\rosas\.lmstudio\models\AnkitAI\Parable-Granite-4.1-8B-Claude-Fable-5-GGUF\Parable-Granite-4.1-8B-Claude-Fable-5-GGUF-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 9844.00 ms | Sucesso Sintático: 60.0%
+> Metadados Físicos: Família: granite | Parâmetros: 8B | Contexto Máximo: 131072 | Quantização: Q4_K_M
+> Tamanho / VRAM: 4.77 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:01
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #11: Qwen3 4B Qwen3.6 Plus Reasoning Slerp
+> ID / Path: C:\Users\rosas\.lmstudio\models\mradermacher\Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp-i1-GGUF\Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp.i1-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 4015.00 ms | Sucesso Sintático: 57.9%
+> Metadados Físicos: Família: qwen3 | Parâmetros: 4B | Contexto Máximo: 262144 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.33 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:45:48
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf (644.27 MB)], [VISION_PROJECTOR: mmproj-Qwen3.5-4B-BF16.gguf (644.27 MB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #12: Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16
+> ID / Path: C:\Users\rosas\.lmstudio\models\HauhauCS\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 4883.00 ms | Sucesso Sintático: 57.9%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 4B | Contexto Máximo: 262144 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.52 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:36:35
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf (644.27 MB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #13: Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16
+> ID / Path: C:\Users\rosas\.lmstudio\models\flyingfishinwater\good_and_small_models\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 4888.00 ms | Sucesso Sintático: 57.9%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 4B | Contexto Máximo: 262144 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.52 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:33:29
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf (565.07 MB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #14: Qwen3.5-0.8B
+> ID / Path: C:\Users\rosas\.lmstudio\models\flyingfishinwater\good_and_small_models\Qwen3.5-0.8B-Q4_0.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 2456.00 ms | Sucesso Sintático: 55.6%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 0.8B | Contexto Máximo: 262144 | Quantização: Q4_0
+> Tamanho / VRAM: 483.66 MB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:01
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf (565.07 MB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #15: Unsloth_Gguf_Nbtyw0Rt
+> ID / Path: C:\Users\rosas\.lmstudio\models\jica98\qwen3.5-4B-super-coder\qwen3.5-4B-super-coder.Q4_0.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 4900.00 ms | Sucesso Sintático: 55.6%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 4B | Contexto Máximo: 262144 | Quantização: Q4_0
+> Tamanho / VRAM: 2.43 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:42:21
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #16: Qwen3-0.6B
+> ID / Path: C:\Users\rosas\.lmstudio\models\unsloth\Qwen3-0.6B-GGUF\Qwen3-0.6B-Q8_0.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 1972.00 ms | Sucesso Sintático: 54.3%
+> Metadados Físicos: Família: qwen3 | Parâmetros: 0.6B | Contexto Máximo: 40960 | Quantização: Q8_0
+> Tamanho / VRAM: 609.82 MB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:02
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf (644.27 MB)], [VISION_PROJECTOR: mmproj-Qwen3.5-4B-BF16.gguf (644.27 MB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #17: Q9 Martha Merged
+> ID / Path: C:\Users\rosas\.lmstudio\models\ZERO-POINT-AI\MARTHA-LXVII.8B_QWEN-3.5-3.6_prune_9b-3.6_base\MARTHA-LXVII.8b-Q3_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 6100.00 ms | Sucesso Sintático: 54.3%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 8B | Contexto Máximo: 262144 | Quantização: Q3_K_M
+> Tamanho / VRAM: 3.91 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 17:05:35
+> Módulos Anexados: [VISION_PROJECTOR: mmproj-MARTHA-EYES-f16.gguf (879.01 MB)]
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #18: 719b5158bed2e3f88829e1d1509a036fe7edac7d
+> ID / Path: C:\Users\rosas\.lmstudio\models\Jackrong\Qwen3.5-9B-DeepSeek-V4-Flash-GGUF\Qwen3.5-9B-DeepSeek-V4-Flash-Q3_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 7364.00 ms | Sucesso Sintático: 51.5%
+> Metadados Físicos: Família: qwen35 | Parâmetros: 9B | Contexto Máximo: 262144 | Quantização: Q3_K_M
+> Tamanho / VRAM: 4.31 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:27:01
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #19: Minicpm5 1B GLM 5.2 Agentic v9
+> ID / Path: C:\Users\rosas\.lmstudio\models\mradermacher\minicpm5-1B-GLM-5.2-Agentic-v9-GGUF\minicpm5-1B-GLM-5.2-Agentic-v9.Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 1628.00 ms | Sucesso Sintático: 51.5%
+> Metadados Físicos: Família: llama | Parâmetros: 1B | Contexto Máximo: 131072 | Quantização: Q4_K_M
+> Tamanho / VRAM: 656.19 MB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:43:15
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #20: Phi 4 Mini Instruct
+> ID / Path: C:\Users\rosas\.lmstudio\models\unsloth\Phi-4-mini-instruct-GGUF\Phi-4-mini-instruct-Q4_K_M.gguf
+> Status Tier 1: Reprovado (Guilhotina)
+> Performance: Latência: 4378.00 ms | Sucesso Sintático: 50.0%
+> Metadados Físicos: Família: phi3 | Parâmetros: Unknown | Contexto Máximo: 131072 | Quantização: Q4_K_M
+> Tamanho / VRAM: 2.32 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:56:16
+> Módulos Anexados: Nenhum
+> Veredito do SODA: CANDIDATO À PURGA DO SSD: Falhas sintáticas recorrentes ou reprovação na Guilhotina Tier 1.
+==================================================
+
+==================================================
+LLM #21: Af90333052B2D92Bada95Fb7C908D3048F9A7B6F
+> ID / Path: C:\Users\rosas\.lmstudio\models\owao\Nanbeige4.2-3B-GGUF\nanbeige4.2-3b-Q4_K_S.gguf
+> Status Tier 1: Pendente (Não Testado)
+> Performance: Latência: N/A (Não medido) | Sucesso Sintático: N/A
+> Metadados Físicos: Família: nanbeige | Parâmetros: 3B | Contexto Máximo: 262144 | Quantização: Q4_K_S
+> Tamanho / VRAM: 2.33 GB | Capacidades: ["TOOL_CALLING"] | Visto em: 2026-07-26 16:49:36
+> Módulos Anexados: Nenhum
+> Veredito do SODA: AGUARDANDO AVALIAÇÃO: Modelo ainda não submetido à suíte de benchmarking Tier 1.
+==================================================
+
+================================================================================
+              PARTE 2: MÓDULOS AUXILIARES E SIDECARS (VISÃO / MTP)             
+================================================================================
+
+MÓDULO #1: mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 565.07 MB
+> Path: C:\Users\rosas\.lmstudio\models\flyingfishinwater\good_and_small_models\mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+MÓDULO #2: mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 644.27 MB
+> Path: C:\Users\rosas\.lmstudio\models\HauhauCS\Qwen3.5-4B-Uncensored-HauhauCS-Aggressive\mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+MÓDULO #3: mmproj-F32.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 644.27 MB
+> Path: C:\Users\rosas\.lmstudio\models\Jackrong\Qwopus3.5-4B-Coder-MTP-GGUF\mmproj-F32.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+MÓDULO #4: Qwopus3.5-4B-Coder-MTP-Q4_K_S.gguf
+> Tipo: MTP_ADAPTER | Tamanho: 2.45 GB
+> Path: C:\Users\rosas\.lmstudio\models\Jackrong\Qwopus3.5-4B-Coder-MTP-GGUF\Qwopus3.5-4B-Coder-MTP-Q4_K_S.gguf
+> Função: Adaptador de Especulação MTP
+--------------------------------------------------
+
+MÓDULO #5: mmproj-Qwen3.5-4B-BF16.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 644.27 MB
+> Path: C:\Users\rosas\.lmstudio\models\lmstudio-community\Qwen3.5-4B-GGUF\mmproj-Qwen3.5-4B-BF16.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+MÓDULO #6: ggml-model-i2_s.gguf
+> Tipo: SPECIALIZED_QUANT | Tamanho: 1.11 GB
+> Path: C:\Users\rosas\.lmstudio\models\microsoft\bitnet-b1.58-2B-4T-gguf\ggml-model-i2_s.gguf
+> Função: Quantização Especializada
+--------------------------------------------------
+
+MÓDULO #7: mmproj-Nimbus-4B-F16.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 641.27 MB
+> Path: C:\Users\rosas\.lmstudio\models\Nimbus-Labs\Nimbus-4B-GGUF\mmproj-Nimbus-4B-F16.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+MÓDULO #8: mmproj-F32.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 2.13 GB
+> Path: C:\Users\rosas\.lmstudio\models\unsloth\gemma-4-26B-A4B-it-GGUF\mmproj-F32.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+MÓDULO #9: mtp-gemma-4-26B-A4B-it-Q8_0.gguf
+> Tipo: MTP_ADAPTER | Tamanho: 440.38 MB
+> Path: C:\Users\rosas\.lmstudio\models\unsloth\gemma-4-26B-A4B-it-GGUF\mtp-gemma-4-26B-A4B-it-Q8_0.gguf
+> Função: Adaptador de Especulação MTP
+--------------------------------------------------
+
+MÓDULO #10: mmproj-F32.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 1.24 GB
+> Path: C:\Users\rosas\.lmstudio\models\unsloth\Qwen3.5-4B-GGUF\mmproj-F32.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+MÓDULO #11: mmproj-MARTHA-EYES-f16.gguf
+> Tipo: VISION_PROJECTOR | Tamanho: 879.01 MB
+> Path: C:\Users\rosas\.lmstudio\models\ZERO-POINT-AI\MARTHA-LXVII.8B_QWEN-3.5-3.6_prune_9b-3.6_base\mmproj-MARTHA-EYES-f16.gguf
+> Função: Encoder de Visão (Projetor de Imagens)
+--------------------------------------------------
+
+================================================================================
+ FIM DO DOSSIÊ - GERADO AUTOMATICAMENTE PELO VISUALIZADOR DE INVENTÁRIO SODA  
+================================================================================

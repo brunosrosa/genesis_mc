@@ -568,13 +568,31 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
             tier1_passed INTEGER NOT NULL DEFAULT 0,
             success_rate_ema REAL NOT NULL DEFAULT 0.0,
             ema_latency_ms REAL NOT NULL DEFAULT 0.0,
+            module_type TEXT NOT NULL DEFAULT 'PRIMARY_LLM',
             last_seen TEXT NOT NULL DEFAULT (DATETIME('now'))
         );",
         [],
     )
     .map_err(|e| format!("Falha ao criar tabela model_registry: {e}"))?;
 
+    // Migration idempotente para adicionar a coluna module_type se nao existir
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN module_type TEXT NOT NULL DEFAULT 'PRIMARY_LLM'", []);
+
     Ok(conn)
+}
+
+/// Helper para categorizar a função do arquivo GGUF
+pub fn infer_module_type(filename: &str) -> &'static str {
+    let lower = filename.to_lowercase();
+    if lower.contains("mmproj") {
+        "VISION_PROJECTOR"
+    } else if lower.contains("mtp") {
+        "MTP_ADAPTER"
+    } else if lower.contains("bitnet") {
+        "SPECIALIZED_QUANT"
+    } else {
+        "PRIMARY_LLM"
+    }
 }
 
 /// Sincroniza os modelos locais para a tabela `model_registry`.
@@ -592,39 +610,41 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                         .map(|n| n.to_string_lossy().to_lowercase())
                         .unwrap_or_default();
 
-                    if !filename.contains("mmproj") {
-                        if let Some(m) = parse_gguf_metadata_zero_copy(path) {
-                            scanned_paths.push(m.file_path.clone());
-                            let caps_json = serde_json::to_string(&m.capabilities).unwrap_or_else(|_| "[]".to_string());
+                    let mod_type = infer_module_type(&filename);
 
-                            let res = conn.execute(
-                                "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, last_seen)
-                                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, DATETIME('now'))
-                                 ON CONFLICT(file_path) DO UPDATE SET
-                                    model_name=excluded.model_name,
-                                    family=excluded.family,
-                                    parameters=excluded.parameters,
-                                    context_length=excluded.context_length,
-                                    quantization=excluded.quantization,
-                                    capabilities=excluded.capabilities,
-                                    file_size_bytes=excluded.file_size_bytes,
-                                    is_active=1,
-                                    last_seen=DATETIME('now');",
-                                params![
-                                    m.file_path,
-                                    m.model_name,
-                                    m.family,
-                                    m.parameters,
-                                    m.context_length as i64,
-                                    m.quantization,
-                                    caps_json,
-                                    m.file_size_bytes as i64,
-                                ],
-                            );
+                    if let Some(m) = parse_gguf_metadata_zero_copy(path) {
+                        scanned_paths.push(m.file_path.clone());
+                        let caps_json = serde_json::to_string(&m.capabilities).unwrap_or_else(|_| "[]".to_string());
 
-                            if let Err(e) = res {
-                                tracing::error!("Falha ao registrar modelo no SQLite: {e}");
-                            }
+                        let res = conn.execute(
+                            "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, last_seen)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, DATETIME('now'))
+                             ON CONFLICT(file_path) DO UPDATE SET
+                                model_name=excluded.model_name,
+                                family=excluded.family,
+                                parameters=excluded.parameters,
+                                context_length=excluded.context_length,
+                                quantization=excluded.quantization,
+                                capabilities=excluded.capabilities,
+                                file_size_bytes=excluded.file_size_bytes,
+                                is_active=1,
+                                module_type=excluded.module_type,
+                                last_seen=DATETIME('now');",
+                            params![
+                                m.file_path,
+                                m.model_name,
+                                m.family,
+                                m.parameters,
+                                m.context_length as i64,
+                                m.quantization,
+                                caps_json,
+                                m.file_size_bytes as i64,
+                                mod_type,
+                            ],
+                        );
+
+                        if let Err(e) = res {
+                            tracing::error!("Falha ao registrar modelo no SQLite: {e}");
                         }
                     }
                 }
@@ -680,6 +700,33 @@ pub fn update_tier1_result(
     Ok(())
 }
 
+/// Verifica se o modelo já foi testado no SQLite SSOT para garantir idempotência.
+pub fn check_already_evaluated(model_id: &str, conn: &Connection) -> bool {
+    let mut stmt = match conn.prepare(
+        "SELECT tier1_passed, success_rate_ema, ema_latency_ms 
+         FROM model_registry 
+         WHERE file_path = ?1 OR model_name = ?1",
+    ) {
+        Ok(stmt) => stmt,
+        Err(_) => return false,
+    };
+
+    let mut rows = match stmt.query(params![model_id]) {
+        Ok(rows) => rows,
+        Err(_) => return false,
+    };
+
+    if let Ok(Some(row)) = rows.next() {
+        let tier1_passed: i32 = row.get(0).unwrap_or(0);
+        let success_rate: f64 = row.get(1).unwrap_or(0.0);
+        let latency: f64 = row.get(2).unwrap_or(0.0);
+        tier1_passed > 0 || success_rate > 0.0 || latency > 0.0
+    } else {
+        false
+    }
+}
+
+
 /// Consulta os modelos locais que foram APROVADOS no Tier 1 e estão ATIVOS em disco.
 pub fn fetch_approved_tier1_models(conn: &Connection) -> Result<Vec<PathBuf>, String> {
     let mut stmt = conn
@@ -710,7 +757,7 @@ pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
                         .file_name()
                         .map(|n| n.to_string_lossy().to_lowercase())
                         .unwrap_or_default();
-                    if !filename.contains("mmproj") {
+                    if infer_module_type(&filename) == "PRIMARY_LLM" {
                         files.push(path.to_path_buf());
                     }
                 }

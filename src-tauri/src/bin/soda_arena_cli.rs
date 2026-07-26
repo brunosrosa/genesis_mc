@@ -292,7 +292,12 @@ fn dispatch_dedicated_infer<E: EphemeralInferEngine + 'static>(
     }
 }
 
+fn check_already_evaluated(model_id: &str, conn: &Connection) -> bool {
+    model_registry::check_already_evaluated(model_id, conn)
+}
+
 fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path) {
+
     println!("\n=== RUNNING TIER 1: GUILLOTINE (FAST SANITY CHECK) ===");
 
     let _thermal_rx = soda_thermal_governor::spawn_thermal_governor();
@@ -311,6 +316,10 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
     let engine = std::sync::Arc::new(MockEphemeralInferEngine);
 
     let mut results = Vec::new();
+    let total_candidates = models.len();
+    let mut skipped_count = 0usize;
+    let mut evaluated_count = 0usize;
+    let mut saved_to_db_count = 0usize;
 
     for model_path in models {
         let model_name = model_path
@@ -319,6 +328,14 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
             .unwrap_or_else(|| "UnknownModel".to_string());
 
         let model_path_str = model_path.to_string_lossy().to_string();
+
+        if check_already_evaluated(&model_path_str, conn) || check_already_evaluated(&model_name, conn) {
+            skipped_count += 1;
+            println!("[SKIPPED] Modelo já avaliado em execuções anteriores: {}", model_name);
+            continue;
+        }
+
+        evaluated_count += 1;
         println!("\n[>] Guilhotina Tier 1 -> Avaliando em Dedicated OS Worker: {}", model_name);
 
         // TODO: SODA Epic 10.1 - Local Model Manager: Inspeção de metadados via parse_gguf_metadata_zero_copy
@@ -416,7 +433,9 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
         };
 
         // PASSO 3: Atualiza resultado diretamente no banco de dados SQLite SSOT
-        let _ = model_registry::update_tier1_result(conn, &model_path_str, success_rate / 100.0, avg_latency_ms as f64, passed);
+        if model_registry::update_tier1_result(conn, &model_path_str, success_rate / 100.0, avg_latency_ms as f64, passed).is_ok() {
+            saved_to_db_count += 1;
+        }
 
         println!(
             "  [=] Resultado SSOT: {} - Sucesso Sintatico: {}/{} ({:.2}%) | Latencia: {}ms",
@@ -452,6 +471,16 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
         }
         println!("[+] Relatorio Tier 1 sincronizado com SQLite SSOT e gravado em: {}", report_path.display());
     }
+
+    println!("\n================================================================================");
+    println!("             RESUMO EXECUTIVO DE EXECUÇÃO TIER 1 SODA SSOT                     ");
+    println!("================================================================================");
+    println!("[+] LLMs Principais de Texto Identificadas: {}", total_candidates);
+    println!("[+] Modelos Pulados (Já salvos no SQLite SSOT): {}", skipped_count);
+    println!("[+] Modelos Avaliados nesta Rodada: {}", evaluated_count);
+    println!("[+] Resultados Salvos com Sucesso no SQLite SSOT: {}", saved_to_db_count);
+    println!("[i] Nota: Módulos de Visão (mmproj) e Adaptadores MTP são rastreados como sidecars no SQLite.");
+    println!("================================================================================\n");
 }
 
 fn run_tier2_colosseum(bench_dir: &Path, approved_models_input: &[PathBuf]) {

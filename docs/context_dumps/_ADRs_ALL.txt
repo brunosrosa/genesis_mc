@@ -1,4 +1,4 @@
-_ADRs_ALL Gerado em: 2026-07-23 23:48:07
+_ADRs_ALL Gerado em: 2026-07-26 18:45:30
 
 ### ====================================================================================================
 ARQUIVO: ADR-001-Core-Stack-Restrita.md
@@ -1420,6 +1420,23 @@ $$x_{\text{clique}} = \frac{x_0 + x_2}{2}$$$$y_{\text{clique}} = \frac{y_0 + y_2
 
 Os cliques operam com precisão de silício sub-milisegundo sem gastar um único byte de memória de vídeo [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md].
 
+### 2.1 Métrica de Eficiência Termodinâmica de Visão ($\eta_{\text{vis}}$)
+
+Quando a execução exigir o uso pontual de projetores visuais (`.mmproj`), o módulo VLM DEVE ser avaliado sob a **Eficiência Termodinâmica de Visão** ($\eta_{\text{vis}}$), que quantifica o rendimento de acurácia em extração estruturada (avaliado em *golden datasets* como CORD, SROIE, DocVQA, ChartQA e AECV-Bench) por megabyte de VRAM consumido no pico da inferência:
+
+$$\eta_{\text{vis}} = \frac{\text{Score}_{\text{Dataset}} (\%)}{\text{VRAM}_{\text{Estática}} + \text{VRAM}_{\text{Dinâmica\_KV}} \text{ (MB)}}$$
+
+- **Critério de Corte Cânone V5:** É terminantemente **PROIBIDO** o uso de projetores visuais `.mmproj` ou encoders de visão que apresentem $\eta_{\text{vis}} < 0.12 \text{ pontos/MB}$.
+- **Controle de Spillage:** O profiling via NVML monitora dinamicamente a expansão da KV Cache gerada por tokens visuais. Se o pico dinâmico ameaçar o teto dos 6GB de VRAM, a inferência é abortada antes de acionar paginação via PCIe.
+
+### 2.2 Ciclo de Vida Reativo e Desalocação Atômica do Módulo VLM (`.mmproj`)
+
+A integração de capacidades visuais no SODA V5 respeita estritamente o **Ciclo de Vida Reativo**:
+
+1. **Gatilho de Fallback:** O projetor `.mmproj` permanece descarregado por padrão (VRAM footprint $= 0\text{ MB}$). Ele só pode ser alocado na VRAM sob demanda extrema, quando o agente falhar no parsing de estruturas de texto (DOM/AST) e se deparar com documentos não estruturados (ex: comprovantes fiscais físicos, faturas digitalizadas com ruído).
+2. **Expurgo Atômico Síncrono:** Tão logo a inferência visual finalize e o JSON estruturado seja emitido para o pipeline agêntico, o Gateway Rust DEVE invocar a desalocação atômica imediata do arquivo `.mmproj` e a purga dos tokens visuais alocados na cache Key-Value da GPU.
+3. **Preservação de Headroom:** A desalocação restitui instantaneamente ~750MB de VRAM para o modelo de linguagem principal, garantindo estabilidade e impedindo OOM no barramento PCIe.
+
 ### 3. O Bypass de OOM Documental (Kreuzberg Streaming e pdfsink-rs)
 
 Para impedir picos letais de memória RAM central ($> 2.5\text{ GB}$) que causem o pânico do Tokio Event Loop e ativem o Linux OOM Killer no hospedeiro, o processamento de arquivos pesados (PDFs, planilhas massivas) é redimensionado para operar em fluxo sínclono linearizado.
@@ -1601,3 +1618,482 @@ Cada blob é uma **lâmina tática isolada** com missão própria. O arsenal é 
 - **Zero Mentira no SQLite:** ou 100% verdade, ou 0 bytes. Nunca warning truncado.
 - **Zero Timeout Cego:** timeouts são sempre adaptativos ou eliminados. O relógio não governa a extração; o sucesso governa.
 - **Zero Lockfile Ignorado:** o Blob 02 inclui **sempre** os lockfiles (cross-ref ADR-024 §B). Filtros podem amputar `tests/`, mas `Cargo.lock` e `package-lock.json` são sagrados.
+
+### ====================================================================================================
+ARQUIVO: ADR-032-Especulacao-N-Gram.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-032-Especulacao-N-Gram.md
+---
+---
+id: "ADR-032"
+title: "ADR-032-A-Guilhotina-da-Especulacao-Neural-e-Adocao-N-Gram"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Proíbe modelos de rascunho neurais (MTP/EAGLE-3) na VRAM e impõe especulação N-Gram na RAM do Host para hardware restrito de 6GB."
+---
+
+# ADR-032: A Guilhotina da Especulação Neural e Adoção N-Gram
+
+## Status
+
+Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+
+## Contexto Técnico e Restrições de Hardware
+
+A especulação de tokens e a predição multi-token (MTP) foram concebidas para contornar o gargalo de largura de banda de memória na fase autorregressiva de LLMs. No entanto, a implementação dessa técnica em hardware restrito como a dGPU NVIDIA RTX 2060m ($6.0 \text{ GB}$ VRAM, barramento PCIe Gen3 x8) impõe desafios térmicos e de memória severos:
+
+1. **Modelos de Rascunho Neurais e Cabeças EAGLE-3/MTP (`draft-simple`, `draft-eagle3`):** Exigem a alocação de um segundo modelo neural na VRAM (ex: 0.5B a 1.5B parameters) ou cabeças de projeção conectadas aos hidden states.
+2. **O Problema da Cache KV Dupla:** A especulação neural obriga o motor de inferência (`llama.cpp` / `mistral.rs`) a gerenciar **duas caches Key-Value independentes na VRAM** (uma para o modelo principal de 4B/7B e outra para o modelo de rascunho).
+3. **Contenção no Barramento e Aceleração Negativa:** O consumo de VRAM estática pelos pesos do rascunho comprimem o headroom disponível para a KV Cache do modelo base. Além disso, a verificação paralela e o chaveamento constante de tensores no barramento GDDR6 resultam em razões de aceleração nulas ou **negativas** ($S < 1,0$), onde o sistema opera mais devagar do que a inferência monolítica simples, mesmo sob taxas de aceitação razoáveis ($\alpha > 70\%$).
+
+## Declaração do Problema
+
+Como obter aceleração na taxa de geração de tokens ($S > 1.0$) em estruturas altamente padronizadas (JSONs estruturados, chamadas de função, sintaxe de código) dentro do limite físico inflexível de $6.0 \text{ GB}$ de VRAM, sem consumir memória de vídeo adicional e sem induzir paginação para a memória RAM do sistema através do barramento PCIe?
+
+## Decisões Arquiteturais da SODA V5
+
+```
+                                [ PROMPT ENTRADA ]
+                                         |
+                                         v
+                         [ Host RAM: Trie / Hash Table ]
+                         (ngram-mod: Pegada ~16 MB RAM)
+                                         |
+                       (Rascunho de Sequências Repetitivas)
+                                         |
+                                         v
+                         [ VRAM: LLM Principal (Qwen 3.5 4B) ]
+                         (Verificação Paralela em 1 Passo)
+                                         |
+                                         v
+                         [ Taxa de Aceleração S = 1.15x - 1.45x ]
+                         [ VRAM Footprint Especulativo = 0 MB ]
+```
+
+### 1. A Guilhotina da Especulação Neural (`.mtp` / `draft-simple`)
+
+Fica terminantemente **PROIBIDO** o carregamento de arquivos de rascunho neurais (`.gguf` secundários), cabeças MTP ou adaptadores EAGLE-3 (`.mtp`) na VRAM em qualquer componente da Arquitetura SODA V5.
+
+- Qualquer tentativa de inicializar o motor de inferência com a flag `--spec-type draft-simple` ou `-md <draft_model>` em dGPUs de 6GB é barrada no carregamento pelo Gateway Rust.
+- O carregamento de rascunhos neurais introduz risco iminente de OOM e degradação térmica por desacoplamento de cache KV.
+
+### 2. Adoção Compulsória da Especulação N-Gram (`ngram-mod`)
+
+O SODA V5 adota **exclusivamente** a especulação baseada em n-gramas (`ngram-mod`) para aceleração de geração autorregressiva.
+
+- **Mecanismo:** O algoritmo `ngram-mod` analisa em tempo real as janelas de contexto geradas, construindo tabelas de hash dinâmicas baseadas na frequência de n-gramas (tamanho de correspondência min/max configurável).
+- **Zero VRAM Footprint:** As tabelas de n-gramas residem estritamente na memória RAM central do sistema (pegada estática insignificante de $\sim 16 \text{ MB}$), sem alocar um único byte na VRAM da RTX 2060m.
+- **Sem Concorrência de CUDA Stream:** Não há execução de redes neurais auxiliares. O GPU CUDA stream permanece $100\%$ dedicado à passagem direta do modelo de linguagem principal.
+
+### 3. Parâmetros Canônicos de Execução (`llama-cli` / `mistral.rs` Bindings)
+
+A invocação do motor de inferência para tarefas estruturadas DEVE utilizar os seguintes parâmetros de especulação n-gram:
+
+```bash
+llama-cli -m qwen3.5-4b-instruct-q4_k_m.gguf \
+  -c 4096 \
+  -ngl 999 \
+  --spec-type ngram-mod \
+  --spec-ngram-mod-n-match 24 \
+  --spec-ngram-mod-n-min 48 \
+  --spec-ngram-mod-n-max 64 \
+  --perf \
+  -p "<PROMPT_ESTRUTURADO>"
+```
+
+- **Métrica de Validação:** A flag `--perf` deve emitir relatórios contínuos de profilação. Se o speedup estatístico $S = \frac{\text{Tokens/s}_{\text{espec}}}{\text{Tokens/s}_{\text{base}}}$ cair abaixo de $1,0$ em tarefas específicas, o mecanismo especulativo é desativado dinamicamente via fallback para geração monolítica simples.
+
+## Consequências e Trade-offs
+
+### Impactos Positivos:
+
+- **Preservação de VRAM:** Liberação imediata de $800\text{ MB}$ a $1.5\text{ GB}$ de VRAM que seriam desperdiçados por modelos de rascunho neurais.
+- **Aceleração Termodinâmica Real:** Ganhos comprovados de $15\%$ a $45\%$ ($S = 1,15 \text{ a } 1,45$) na velocidade de saída para geração de JSONs, ASTs, SQL e schemas estruturados.
+- **Simplicidade de Execução:** Eliminação da complexidade de sincronização de múltiplos modelos e artefatos de rascunho na esteira de deploy.
+
+### Impactos Negativos:
+
+- **Ineficiência em Prosa Não Estruturada:** Em tarefas de escrita criativa ou respostas abertas sem padrões repetitivos, a taxa de aceitação de n-gramas pode cair. No entanto, por ter custo zero de VRAM e processamento de hash insignificante na CPU, essa desativação virtual não impõe qualquer penalidade de OOM ou desaceleração do sistema.
+
+### Comportamento Fail-Closed
+
+Se o profiling NVML ou a telemetria do motor Rust detectar qualquer tentativa de alocação de modelo secundário na GPU durante a fase de especulação, o Gateway abortará o processo síncronamente via `SIGKILL`, registrando a violação no log de auditoria `FINOPS_TELEMETRY`.
+
+### ====================================================================================================
+ARQUIVO: ADR-033-Isolamento-Termico-Micro-Sidecars.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-033-Isolamento-Termico-Micro-Sidecars.md
+---
+---
+id: "ADR-033"
+title: "ADR-033-Isolamento-Termico-Micro-Sidecars-em-CPU-Afinidade-de-Nucleo"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Impõe a execução de micro-sidecars (Embeddings e TTS/STT) estritamente na CPU via afinidade de núcleos (taskset/pinning), preservando VRAM e o Event Loop do Tokio."
+---
+
+# ADR-033: Isolamento Térmico de Micro-Sidecars em CPU (Afinidade de Núcleo)
+
+## Status
+
+Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+
+## Contexto Técnico e Restrições de Concorrência
+
+A operação de um Sistema Operacional Agêntico Local (SODA V5) exige a execução concorrente de múltiplos serviços utilitários além do modelo de linguagem principal. Estes incluem:
+
+- **Encoders de Embeddings Locais:** Responsáveis pela vetorização semântica de curto prazo e busca RAG em memória (ex: `bge-small-en-v1.5`, `all-MiniLM-L6-v2`).
+- **Módulos de Áudio (STT / TTS):** Motores de transcrição de fala (`Moonshine`, `Whisper-Tiny`) e síntese de voz (`Kokoro-82M`).
+
+Quando esses micro-sidecars são incorretamente alocados na VRAM da dGPU NVIDIA RTX 2060m ou tentam compartilhar o *stream* CUDA com o LLM principal, surgem graves patologias de sistema:
+
+1. **Fragmentação de VRAM & Picos de OOM:** Pequenas matrizes alocadas dinamicamente na VRAM fragmentam a memória de vídeo, reduzindo a janela contígua necessária para estender a cache KV do modelo base.
+2. **Context Switching na GPU & Stuttering:** Disputas pelo CUDA stream paralisam temporariamente a inferência autorregressiva, provocando surtos imprevisíveis de latência no *Time-To-First-Token* (TTFT) e micro-congelamentos na síntese de áudio em tempo real.
+3. **Contenção no Event Loop Assíncrono:** A execução de tarefas intensivas de CPU/GPU em threads genéricas do runtime assíncrono Tokio bloqueia os *workers* de I/O, aumentando a latência de respostas do gateway Rust.
+
+## Declaração do Problema
+
+Como garantir a execução contínua de micro-sidecars utilitários (Embeddings e Áudio) com alta throughput e baixa latência sem alocar um único megabyte de VRAM, sem induzir *stuttering* na inferência do LLM e sem degradar a estabilidade do Event Loop Tokio?
+
+## Decisões Arquiteturais da SODA V5
+
+```
+                                [ PROCESSADOR INTEL / AMD ]
+                                             |
+     +---------------------------------------+---------------------------------------+
+     |                                                                               |
+     v                                                                               v
+[ NÚCLEOS 0-3: Taskset Dedicated ]                                 [ NÚCLEOS 4-N: Tokio Event Loop ]
+(Micro-Sidecars em CPU Host RAM)                                    (Orquestração & GPU Stream Manager)
+  - Embeddings: bge-small (~130 MB RAM)                                              |
+  - TTS: Kokoro-82M (~200 MB RAM)                                                    v
+  - RTF <= 0.25 | TTFA Sub-100ms                                  [ dGPU RTX 2060m: 100% VRAM Dedicada ]
+                                                                    (LLM Qwen 3.5 4B + KV Cache)
+```
+
+### 1. Offloading Obrigatório de Micro-Sidecars para a CPU
+
+Fica terminantemente **PROIBIDO** o carregamento e a execução de encoders de embeddings locais e motores de síntese/transcrição de áudio na VRAM da GPU.
+
+- **Embeddings:** O SODA V5 padroniza a vetorização local no modelo **`bge-small-en-v1.5`** (ou `BGE-micro-v2`), executado estritamente via runtime CPU (`ONNX Runtime` CPU EP ou `sentence-transformers` via C++ bindings).
+  - *Desempenho Comprovado:* Atinge $>93\%$ da acurácia do `text-embedding-3-small` da OpenAI no benchmark MTEB com pegada de apenas $\sim 130 \text{ MB}$ na RAM do host.
+- **Síntese de Voz (TTS):** O motor **`Kokoro-82M`** deve ser instanciado em modo `ONNX CPU`, consumindo $\sim 200 \text{ MB}$ de RAM e mantendo um *Real-Time Factor* $\text{RTF} \le 0,25$.
+
+### 2. Isolamento Físico via Afinidade de Núcleo (Thread Pinning / `taskset`)
+
+Para eliminar o risco de contaminação cruzada de cache L3 e contenção de processamento na CPU, os workers de micro-sidecars DEVEM ser fisicamente isolados em núcleos de CPU específicos via **Afinidade de Núcleo** (_Core Affinity_):
+
+- **Linux OS:** Utilização da utilidade `taskset` ou chamadas de sistema `sched_setaffinity` no momento do *fork/spawn* dos processos sidecar.
+  ```bash
+  # Invocação isolada do worker TTS Kokoro-82M nos núcleos 0 a 3 da CPU
+  taskset -c 0-3 python -m kokoro_runner \
+    --model kokoro-82m.onnx \
+    --threads 4
+  ```
+- **Windows OS:** Definição compulsória da máscara de afinidade de processo via `SetProcessAffinityMask` na inicialização do worker sidecar pelo daemon Rust.
+- **Preservação do Event Loop do Tokio:** Os núcleos alocados para os micro-sidecars (ex: Cores 0-3) são expressamente excluídos da piscina de threads do runtime Tokio (`tokio::runtime::Builder::new_multi_thread`), garantindo que o orquestrador agêntico mantenha latência determinística.
+
+### 3. Métricas de Aceitação Termodinâmica de Áudio e Embeddings
+
+A integridade dos micro-sidecars operando em CPU DEVE ser validada sob os seguintes limites operacionais:
+
+1. **Fator de Tempo Real (TTS):**
+   $$\text{RTF} = \frac{\text{Tempo de Processamento do Áudio (s)}}{\text{Duração Total do Áudio (s)}} \le 0,25$$
+2. **Tempo até o Primeiro Áudio (TTFA):** $\text{TTFA} \le 150 \text{ ms}$ a partir do recebimento da primeira frase emitida pelo LLM.
+3. **Latência de Embeddings:** $\text{Latência} \le 15 \text{ ms}$ por chunk de texto vetorizado na CPU.
+
+## Consequências e Trade-offs
+
+### Impactos Positivos:
+
+- **VRAM Totalmente Livre para o LLM:** $100\%$ da memória de vídeo ($6.0 \text{ GB}$) fica reservada exclusivamente para os pesos do modelo de linguagem (Qwen 3.5 4B) e expansão da cache KV.
+- **Zero Stuttering e Zero Jitter:** Síntese de voz fluida em tempo real sem engasgos causados por rajadas de computação da GPU.
+- **Isolamento de Falhas (Fail-Isolate):** Um travamento ou pico de consumo no worker de áudio/embedding em CPU não afeta o pipeline de inferência da GPU nem o runtime principal em Rust.
+
+### Impactos Negativos:
+
+- **Carga Contínua na CPU Host:** Os núcleos isolados (ex: 0 a 3) operarão em pico durante a síntese de áudio ou reindexação RAG. Essa carga é absorvida pelo dimensionamento do processador e mitigada pela execução em lote de requisições de embeddings.
+
+### Comportamento Fail-Closed
+
+Se o daemon do SODA detectar que um micro-sidecar foi instanciado sem a máscara de afinidade de núcleo válida ou se o worker tentar alocar contexto no dispositivo CUDA, o processo worker sofre `SIGKILL` imediato, gerando alerta crítico na tabela `SYSTEM_AUDIT`.
+
+### ====================================================================================================
+ARQUIVO: ADR-034-Engenharia-de-Representacao-RepE.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-034-Engenharia-de-Representacao-RepE.md
+---
+---
+id: "ADR-034"
+title: "ADR-034-Injecao-de-Vetores-de-Controle-RepE-em-Runtime"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Impõe o uso de Engenharia de Representação (RepE) via interceptação de cb_eval para modulação de ativação em camadas intermediárias."
+---
+
+# ADR-034: Injeção de Vetores de Controle (RepE) em Runtime
+
+## Status
+
+Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+
+## Contexto Técnico e Restrições de Quantização
+
+A execução de Small Language Models (SLMs de 3B a 4B parâmetros, como Qwen 3.5 4B) em hardware de consumo com 6GB de VRAM exige a aplicação de quantização agressiva em bloco (`Q4_K_M` ou `IQ3_M`). Embora a quantização reduza a pegada estática de memória de ~9GB para ~2.5GB de VRAM, ela introduz perturbações numéricas nos tensores de pesos:
+
+1. **Distorção de Trajetória de Atenção:** Pequenos erros de arredondamento nos pesos quantizados alteram a projeção dos tensores de ativação intermediários ($h_l$) ao longo das camadas do Transformer.
+2. **Surtos de Recusas Indevidas e Alucinações:** A degradação estatística faz com que o modelo perca o rastreio de regras complexas de sistema, levando a alucinações sintáticas, perda de contexto agêntico ou recusas indevidas (*refusal trigger*).
+3. **Inviabilidade de Fine-Tuning Tradicional:** Re-treinar ou aplicar fine-tuning pesado sobre o modelo base para corrigir desvios sintáticos/comportamentais exige infraestrutura massiva de GPU e cria múltiplos checkpoints gigantescos, inviabilizando a flexibilidade de manutenção no ecossistema local.
+
+## Declaração do Problema
+
+Como recuperar a acurácia comportamental, suprimir alucinações e alinhar a execução de um SLM 4B quantizado aos níveis de um modelo de 7B/8B sem aumentar o footprint de VRAM, sem re-treinar os pesos base e com impacto insignificante no throughput de inferência?
+
+## Decisões Arquiteturais da SODA V5
+
+```
+                                [ PROMPT ENTRADA ]
+                                         |
+                                         v
+                      [ Tensor de Entrada h_l (Camada l) ]
+                                         |
+                                         v
+                         [ llama.cpp / mistral.rs cb_eval ]
+                         (Interceptação de Callback em Rust)
+                                         |
+                         h_l' = h_l + alpha * v_l (GGUF Vector)
+                         (alpha in [0.15, 0.6] | Layers 10-24)
+                                         |
+                                         v
+                      [ Projeção de Ativação Modulada h_l' ]
+                                         |
+                                         v
+                        [ Saída Fluida & Livre de OOM ]
+```
+
+### 1. Interceptação em Runtime via Callbacks (`cb_eval`)
+
+O SODA V5 impõe o uso de **Engenharia de Representação** (*Representation Engineering* - RepE) para modulação de ativação em tempo de execução.
+
+- O backend de inferência em Rust (`llama-cpp-2` / `mistral.rs` bindings) DEVE registrar um manipulador na função de callback de avaliação de tensores (`cb_eval`).
+- A cada passagem direta (*forward pass*), o manipulador intercepta os tensores de ativação ocultos das camadas intermediárias ($h_l$) e injeta um vetor de deslocamento comportamental ($v_l$) derivado de um arquivo de vetor de controle em formato GGUF:
+
+$$h_l' = h_l + \alpha \cdot v_l$$
+
+### 2. Parâmetros e Janelas de Camadas Estritas
+
+- **Faixa de Camadas de Interceptação:** A injeção de vetores de controle DEVE ocorrer exclusivamente nas **camadas intermediárias (faixa de 10 a 24)** em modelos de 32 camadas.
+  - *Proibição:* É terminantemente **PROIBIDO** aplicar vetores de controle nas primeiras camadas (0 a 9), sob pena de corromper a extração de primitivas sintáticas e léxicas básicas.
+- **Fator de Escala Dinâmico ($\alpha$):**
+  - Para modelos densos (ex: Qwen 3.5 4B), o fator de escala DEVE ser parametrizado no intervalo $\alpha \in [0,15; 0,60]$.
+  - Para arquiteturas Mixture-of-Experts (MoE), o fator de escala fica restrito ao intervalo $\alpha \in [0,01; 0,05]$.
+
+### 3. Proibição de Fine-Tuning Pesado para Correção Comportamental
+
+Fica expressamente **PROIBIDO** instanciar rotinas de fine-tuning (LoRA pesado ou full fine-tuning) com o propósito exclusivo de alinhar regras de raciocínio passo a passo ou suprimir recusas indevidas em modelos base. A modulação comportamental DEVE ser tratada como um *sidecar* computacional em tempo de execução via vetores de controle RepE em formato GGUF (tamanho $< 1\text{ MB}$).
+
+## Consequências e Trade-offs
+
+### Impactos Positivos:
+
+- **Impacto Nulo na VRAM:** O vetor de controle GGUF ocupa menos de $1\text{ MB}$ de memória e adiciona zero peso à GPU.
+- **Recuperação Cognitiva Instantânea:** Aumento de $+10\%$ a $+20\%$ na consistência lógica e alinhamento a regras agênticas complexas.
+- **Desempenho de Inferência:** A adição de vetor em C++/Rust via AVX2/CUDA tem sobrecarga irrisória ($< 2\%$ de impacto no throughput de tokens).
+
+### Impactos Negativos:
+
+- **Necessidade de Profiling de Fator $\alpha$:** Exige a calibração prévia da escala $\alpha$ por família de modelo para evitar distorções semânticas se $\alpha$ for configurado acima do teto de estabilidade.
+
+### Comportamento Fail-Closed
+
+Se o callback `cb_eval` falhar ao aplicar o vetor ou se o fator $\alpha$ induzir divergência numérica (detectada por NaNs nos logits), o Gateway reduzirá $\alpha$ instantaneamente para $0.0$ (fallback monolítico) e emitirá um log de alerta na tabela `SYSTEM_TELEMETRY`.
+
+### ====================================================================================================
+ARQUIVO: ADR-035-Response-Healing-Zero-Token.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-035-Response-Healing-Zero-Token.md
+---
+---
+id: "ADR-035"
+title: "ADR-035-Reparo-Sintatico-Zero-Token-via-IPC"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Impõe a interceptação do buffer IPC de saída do LLM por um motor Rust (jsonrepair) para cura sintática zero-token em sub-milissegundo."
+---
+
+# ADR-035: Reparo Sintático Zero-Token via IPC
+
+## Status
+
+Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+
+## Contexto Técnico e Desperdício de Tokens
+
+Mesmo quando a amostragem de tokens é governada por decodificação restrita (`llguidance`), Small Language Models (SLMs) operando em hardware restrito estão sujeitos a estouros de limite de contexto ou interrupções abruptas que geram payloads malformados. Em arquiteturas agênticas tradicionais, um erro de parse sintático (como um JSON com chaves não fechadas ou cercas Markdown indesejadas) resulta em duas abordagens ineficientes:
+
+1. **Re-prefill e Re-geração Completa:** Reenviar o prompt corrigido ao modelo, gerando novo consumo de tokens, desperdício de energia térmica na GPU e latência adicional de $1.5\text{s}$ a $4.0\text{s}$.
+2. **Falha Fatal e Cancelamento:** Reportar erro imediato ao pipeline agêntico, interrompendo a cadeia de execução do usuário.
+
+## Declaração do Problema
+
+Como sanar 99% das falhas sintáticas em respostas de SLMs (JSONs truncados, falta de aspas, vírgulas no último elemento, blocos Markdown) com latência sub-milissegundo e **custo zero de tokens e VRAM**, eliminando re-prefills desnecessários na GPU?
+
+## Decisões Arquiteturais da SODA V5
+
+```
+                       [ BUFFER IPC STREAMING (GPU/LLM) ]
+                                       |
+                                       v
+                     [ Parser Estrito (serde_json) ]
+                                       |
+                     +-----------------+-----------------+
+                     |                                   |
+              (Sucesso / Valido)                  (Falha Sintática)
+                     |                                   |
+                     v                                   v
+             [ Payload Aceito ]           [ Motor Rust: jsonrepair ]
+                                          (&str Slicing Zero-Copy < 1ms)
+                                                         |
+                                                         v
+                                              [ Payload Curado & RFC 8259 ]
+                                                         |
+                                                         v
+                                              [ Custo VRAM = 0 MB ]
+                                              [ Tokens Extra = 0 ]
+```
+
+### 1. Interceptação Obrigatória no Buffer IPC de Saída
+
+Fica **OBRIGATÓRIO** que toda a resposta emitida pelo motor de inferência (`llama.cpp` / `mistral.rs`) seja interceptada na camada de transporte IPC do Gateway Rust antes de ser exposta ao executor do agente ou ao cliente de interface.
+
+- Se a desserialização via parser estrito (`serde_json`) falhar, o Gateway DEVE submeter o buffer bruto ao pipeline nativo de **Response Healing** em Rust.
+- É terminantemente **PROIBIDO** disparar uma nova requisição de geração à GPU sem antes esgotar a tentativa de reparo sintático no Host.
+
+### 2. Stack de Reparo Zero-Token em Rust (`jsonrepair` / `llm_json`)
+
+O motor de cura sintática opera via crates compilados nativamente em Rust (ex: `jsonrepair`, `llm_json`, `fast_json_repair`) aplicando transformações baseadas em autômatos finitos e *zero-copy slicing* (`&str`):
+
+1. **Sanitização de Cercas Markdown:** Stripping síncrono de tags de bloco (ex: ` ```json ... ``` `) e fragmentos de texto conversacional anexados nas bordas do payload.
+2. **Correção de Delimitadores e Aspas:** Conversão de aspas simples para duplas, ajuste de aspas não escapadas e saneamento de identificadores de chave desaspados.
+3. **Remoção de Trailing Commas & Inserção de Vírgulas Múltiplas:** Saneamento de listas e dicionários com vírgulas sobressalentes ou ausentes entre elementos.
+4. **Fechamento por Pilha de Delimitadores (Truncamento):** Em fluxos interrompidos por limite de tokens, o motor varre a pilha de estados e injeta automaticamente os delimitadores de fechamento (`}` e `]`) necessários para validar o trecho parcial de dados.
+5. **Coerção de Literais:** Normalização instantânea de primitivas Python/JS (`True`, `False`, `None`, `undefined`) para a especificação JSON RFC 8259 (`true`, `false`, `null`).
+
+### 3. Latência e Custo Termodinâmico
+
+- **Custo de VRAM:** $0\text{ MB}$ (processamento $100\%$ executado na CPU do Host).
+- **Orçamento de Latência:** O pipeline de *Response Healing* em Rust DEVE ser concluído em **menos de $1,0 \text{ ms}$** para payloads de até $64\text{ KB}$.
+- **Métrica de Desempenho:** A taxa de resgate sintático zero-token DEVE atingir $\ge 95\%$ das falhas de formatação capturadas em ambiente de produção.
+
+## Consequências e Trade-offs
+
+### Impactos Positivos:
+
+- **Redução Drástica de Re-prefills:** Elimina o desperdício de VRAM e energia térmica decorrentes de re-gerações provocadas por erros sintáticos triviais.
+- **Robustez Agêntica:** O agente mantém a fluidez operacional mesmo quando a saída do SLM 4B é cortada no limite da janela de contexto.
+- **Transparência Total:** A cura sintática é invisível para a camada superior do sistema, registrando estatísticas de resgate na telemetria sem atrasar a UX.
+
+### Impactos Negativos:
+
+- **Risco de Resgate de Dados Incompletos:** Se a resposta for truncada no meio de um valor numérico ou string crítica, o auto-fechamento do JSON salvará a estrutura parcial, exigindo validação de esquema de negócio na camada agêntica posterior.
+
+### Comportamento Fail-Closed
+
+Se o motor `jsonrepair` em Rust não conseguir produzir um JSON válido e tipado após a passagem heurística, o evento é classificado como falha estrutural insuperável. Nesse caso específico, a requisição é direcionada ao **Ralph Loop Sequencial** (ADR-036) para tratamento com traço de erro explícito.
+
+### ====================================================================================================
+ARQUIVO: ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
+---
+---
+id: "ADR-036"
+title: "ADR-036-VRAM-Assimetrica-e-Ralph-Loop-Sequencial"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Proíbe amostragem paralela (Best-of-N) na GPU e impõe o Ralph Loop Sequencial com Critic desacoplado em CPU RAM e KV-Cache Prefix Reuse."
+---
+
+# ADR-036: VRAM Assimétrica e Ralph Loop Sequencial
+
+## Status
+
+Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+
+## Contexto Técnico e Gargalo da KV Cache Paralela
+
+O paradigma de *Test-Time Compute* (TTC) demonstra que atribuir tempo adicional de raciocínio no momento da inferência eleva a capacidade lógica de modelos compactos. No entanto, em literatura de nuvem, o TTC é frequentemente implementado por meio de amostragem paralela (ex: *Best-of-N*, *Self-Consistency*, *Majority Voting*), onde $N$ sequências concorrentes são geradas e avaliadas simultaneamente.
+
+Em hardware restrito como a dGPU NVIDIA RTX 2060m ($6.0 \text{ GB}$ VRAM):
+
+1. **Multiplicação da KV Cache:** Gerar $N$ caminhos paralelos multiplica a alocação de memória da KV Cache por um fator $N$. Para um contexto de 4096 tokens, $N=4$ exige $>4.4\text{ GB}$ apenas para tensores de atenção, estourando instantaneamente o teto físico da VRAM e forçando paginação para a RAM via PCIe.
+2. **Degradação Térmica:** O descarte das $N-1$ respostas rejeitadas desperdiça ciclos de GPU e energia térmica em execuções redundantes.
+
+## Declaração do Problema
+
+Como aplicar *Test-Time Compute* e ciclos de reflexão de auto-correção para resgatar erros lógicos complexos em SLMs de 3B a 4B parâmetros sem estourar o limite de 6GB de VRAM, sem induzir paginação PCIe e sem desacelerar a inferência com re-prefills integrais?
+
+## Decisões Arquiteturais da SODA V5
+
+```
+                                [ PROMPT INICIAL ]
+                                         |
+                                         v
+                         [ VRAM (GPU): Modelo Primário 4B ]
+                         (KV Cache Prefix Preservado)
+                                         |
+                                         v
+                         [ Resposta Preliminar Emitida ]
+                                         |
+                                         v
+                         [ RAM Host (CPU AVX2): Critic ]
+                         (Zero VRAM | Validador Desacoplado)
+                                         |
+                       +-----------------+-----------------+
+                       |                                   |
+                (Aprovado: Sucesso)                (Rejeitado: Erro)
+                       |                                   |
+                       v                                   v
+               [ Output Final ]                 [ Traço de Erro Sintetizado ]
+                                                           |
+                                                           v
+                                                [ Reinjeção de Contexto ]
+                                                (KV Cache Prefix Reuse)
+```
+
+### 1. Proibição Absoluta de Amostragem Paralela (`Best-of-N`)
+
+Fica terminantemente **PROIBIDO** o uso de estratégias de amostragem paralela (*Best-of-N*, *Self-Consistency*, *Beam Search* paralelo) que aloquem múltiplas sequências de KV Cache simultâneas na VRAM da GPU.
+
+- O motor de inferência SODA V5 operará sob amostragem estritamente sequencial.
+
+### 2. O Padrão "VRAM Assimétrica e Ralph Loop Sequencial"
+
+O SODA V5 padroniza a execução do **Ralph Loop Sequencial**, governado por uma arquitetura de VRAM assimétrica:
+
+- **Modelo Primário (3B-4B):** Alocado exclusivamente na VRAM da GPU (~2.5GB a 3.2GB), encarregado da geração rápida de hipóteses e raciocínio.
+- **Modelo Verificador (*Critic Desacoplado*):** Fica estritamente **proibido** alocar o modelo *Critic* na VRAM. O verificador (seja um validador heurístico determinístico em Rust ou um SLM ultraleve como `GLiClass` / `Phi-4-mini` de 0.5B-1.5B em GGUF) DEVE rodar exclusivamente na memória RAM do Host, processado via CPU através de instruções vetoriais AVX2 / AVX-512.
+
+### 3. Reutilização Obrigatória de Prefixos de KV Cache (`Prefix Reuse`)
+
+Quando o *Critic* na CPU detectar uma falha semântica ou quebra de invariante de negócio, a auto-correção DEVE seguir o protocolo de **KV Cache Prefix Reuse**:
+
+1. O traço do erro é formatado sinteticamente e anexado ao final do contexto.
+2. O Gateway Rust envia a nova tentativa reaproveitando os tensores de atenção já computados do prompt original na VRAM.
+3. É terminantemente **PROIBIDO** zerar o buffer da KV Cache ou refazer o *prefill* dos tokens iniciais, garantindo que o custo computacional da re-geração se limite estritamente aos novos tokens de resposta e correção.
+
+## Consequências e Trade-offs
+
+### Impactos Positivos:
+
+- **Imunidade a OOM de VRAM:** O consumo da KV Cache permanece de complexidade $\mathcal{O}(1)$ em relação ao paralelismo de amostragem.
+- **Eficiência de CPU/GPU:** A GPU executa apenas o modelo principal; a CPU absorve a validação sem afetar os registradores CUDA.
+- **Aumento Cognitivo:** Elevação de $+20\%$ a $+35\%$ na taxa de sucesso de tarefas lógicas e agênticas difíceis sem alterar o peso do modelo base.
+
+### Impactos Negativos:
+
+- **Latência Linear por Passo de Reflexão:** Cada ciclo de reflexão sequencial adiciona a latência da re-geração de tokens. Isso é mitigado pelo limite rígido de no máximo **3 iterações de reflexão** por tarefa (Fail-Closed).
+
+### Comportamento Fail-Closed
+
+Se o Ralph Loop atingir a 3ª iteração sem obter aprovação do *Critic*, a execução é abortada, descarregando o contexto de reflexão e registrando o snapshot na tabela `SYSTEM_AUDIT` para auditoria do usuário no Agent Inbox (HITL).
