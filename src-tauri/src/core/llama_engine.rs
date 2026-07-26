@@ -122,9 +122,16 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         // 6. Decodificação Restrita via `llguidance` (ADR-028)
         let mut ll_constraint = if let Some(ref schema_str) = req.json_schema {
-            let schema_val: serde_json::Value = serde_json::from_str(schema_str).map_err(|e| {
+            let mut schema_val: serde_json::Value = serde_json::from_str(schema_str).map_err(|e| {
                 InferenceError::GrammarMaskError(format!("JSON Schema inválido fornecido para llguidance: {}", e))
             })?;
+
+            if let Some(obj) = schema_val.as_object_mut() {
+                obj.insert("x-guidance".to_string(), serde_json::json!({
+                    "coerce_one_of": true,
+                    "lenient": true
+                }));
+            }
 
             let top_grammar = TopLevelGrammar {
                 grammars: vec![GrammarWithLexer {

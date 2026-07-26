@@ -851,6 +851,9 @@ mod tests {
             vram_total_bytes: 6 * 1024 * 1024 * 1024,
             ram_total_bytes: 16 * 1024 * 1024 * 1024,
             is_dedicated_gpu: true,
+            primary_simd_extension: crate::core::hardware_profiler::CpuInstructionSet::Avx2,
+            is_nvme_ssd: true,
+            pcie_bandwidth_estimated_gbps: Some(15.75),
         };
 
         let est = estimate_vram_for_topology(
