@@ -1,7 +1,10 @@
 use std::{
     future::Future,
     marker::PhantomData,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use futures::{SinkExt, StreamExt};
@@ -135,6 +138,7 @@ pub struct HybridJsonRpcMessageCodec<T> {
     max_length: usize,
     is_discarding: bool,
     protocol: SharedProtocol,
+    is_initialized: Arc<AtomicBool>,
 }
 
 impl<T> HybridJsonRpcMessageCodec<T> {
@@ -145,6 +149,7 @@ impl<T> HybridJsonRpcMessageCodec<T> {
             max_length: usize::MAX,
             is_discarding: false,
             protocol,
+            is_initialized: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -193,9 +198,21 @@ fn is_standard_notification(method: &str) -> bool {
     )
 }
 
-fn should_ignore_notification(json_value: &serde_json::Value, method: &str) -> bool {
+fn should_ignore_notification(
+    json_value: &serde_json::Value,
+    method: &str,
+    is_initialized: &AtomicBool,
+) -> bool {
     let is_notification = json_value.get("id").is_none();
     if is_notification {
+        if !is_initialized.load(Ordering::SeqCst) {
+            tracing::debug!(
+                "Ignoring pre-initialize notification '{}' for handshake resilience",
+                method
+            );
+            return true;
+        }
+
         if method == "notifications/initialized" || !is_standard_method(method) {
             tracing::trace!(
                 "Ignoring notification '{}' for compatibility",
@@ -217,6 +234,7 @@ fn should_ignore_notification(json_value: &serde_json::Value, method: &str) -> b
 fn try_parse_with_compatibility<T: DeserializeOwned>(
     mut payload: &[u8],
     context: &str,
+    is_initialized: &AtomicBool,
 ) -> Result<Option<T>, HybridCodecError> {
     if payload.starts_with(b"\xef\xbb\xbf") {
         payload = &payload[3..];
@@ -229,7 +247,11 @@ fn try_parse_with_compatibility<T: DeserializeOwned>(
     if let Ok(line_str) = std::str::from_utf8(payload) {
         if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(line_str) {
             if let Some(method) = json_value.get("method").and_then(serde_json::Value::as_str) {
-                if should_ignore_notification(&json_value, method) {
+                if method == "initialize" && json_value.get("id").is_some() {
+                    is_initialized.store(true, Ordering::SeqCst);
+                }
+
+                if should_ignore_notification(&json_value, method, is_initialized) {
                     return Ok(None);
                 }
                 if json_value.get("params").is_none() {
@@ -345,7 +367,7 @@ impl<T: DeserializeOwned> HybridJsonRpcMessageCodec<T> {
         let payload = &frame[body_start..];
         self.protocol.set_if_unset(WireProtocol::ContentLength);
 
-        try_parse_with_compatibility(payload, "decode_content_length")
+        try_parse_with_compatibility(payload, "decode_content_length", &self.is_initialized)
     }
 
     fn decode_json_line(&mut self, buf: &mut BytesMut) -> Result<Option<T>, HybridCodecError> {
@@ -376,7 +398,7 @@ impl<T: DeserializeOwned> HybridJsonRpcMessageCodec<T> {
                     let payload = without_carriage_return(line);
                     self.protocol.set_if_unset(WireProtocol::JsonLine);
 
-                    if let Some(item) = try_parse_with_compatibility(payload, "decode_json_line")? {
+                    if let Some(item) = try_parse_with_compatibility(payload, "decode_json_line", &self.is_initialized)? {
                         return Ok(Some(item));
                     }
                 }
@@ -423,7 +445,7 @@ impl<T: DeserializeOwned> Decoder for HybridJsonRpcMessageCodec<T> {
                     } else {
                         let line = buf.split_to(buf.len());
                         let payload = without_carriage_return(&line);
-                        try_parse_with_compatibility(payload, "decode_eof")?
+                        try_parse_with_compatibility(payload, "decode_eof", &self.is_initialized)?
                     }
                 }
             }),
@@ -519,5 +541,48 @@ mod tests {
         assert!(std::str::from_utf8(&buf)
             .unwrap()
             .starts_with("Content-Length: "));
+    }
+
+    #[test]
+    fn ignores_pre_initialize_notification() {
+        let protocol = SharedProtocol::new();
+        let mut codec = HybridJsonRpcMessageCodec::<serde_json::Value>::new(protocol);
+        let notification = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/roots/list_changed"
+        });
+        let payload = serde_json::to_vec(&notification).unwrap();
+        let mut buf = BytesMut::from(&payload[..]);
+        buf.put_u8(b'\n');
+
+        let item = codec.decode(&mut buf).unwrap();
+        assert!(item.is_none());
+    }
+
+    #[test]
+    fn allows_notification_after_initialize_request() {
+        let protocol = SharedProtocol::new();
+        let mut codec = HybridJsonRpcMessageCodec::<serde_json::Value>::new(protocol);
+
+        // 1. Send initialize request
+        let init_msg = sample_message();
+        let payload1 = serde_json::to_vec(&init_msg).unwrap();
+        let mut buf1 = BytesMut::from(&payload1[..]);
+        buf1.put_u8(b'\n');
+
+        let init_item = codec.decode(&mut buf1).unwrap();
+        assert!(init_item.is_some());
+
+        // 2. Send notification post-initialize
+        let notification = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/roots/list_changed"
+        });
+        let payload2 = serde_json::to_vec(&notification).unwrap();
+        let mut buf2 = BytesMut::from(&payload2[..]);
+        buf2.put_u8(b'\n');
+
+        let notif_item = codec.decode(&mut buf2).unwrap();
+        assert!(notif_item.is_some());
     }
 }

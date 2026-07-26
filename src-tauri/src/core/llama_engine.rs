@@ -1,12 +1,17 @@
 use std::path::Path;
 use std::time::Instant;
+use std::sync::Arc;
 
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::context::params::{LlamaContextParams, KvCacheType};
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::LlamaModel;
+use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::sampling::LlamaSampler;
+
+use llguidance::{Constraint, ParserFactory, api::{TopLevelGrammar, GrammarWithLexer}};
+use llguidance::toktrie::{TokTrie, TokRxInfo, ApproximateTokEnv, TokEnv};
 
 use crate::core::inference_adapter::{
     EphemeralInferEngine, InferenceError, SodaInferenceRequest, SodaInferenceResponse,
@@ -68,17 +73,17 @@ impl EphemeralInferEngine for LlamaCppEngine {
         // 1. Inicializa backend bare-metal do llama.cpp (Singleton em OnceLock para prevenir BackendAlreadyInitialized)
         let backend = get_global_llama_backend()?;
 
-        // 2. Parâmetros do modelo - ADR-027: use_mmap = true por padrão no LlamaModelParams
-        let model_params = LlamaModelParams::default();
+        // 2. Parâmetros do modelo - ADR-027: use_mmap = true por padrão no LlamaModelParams, n_gpu_layers = 99 para GPU offload
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(99);
 
         let model = LlamaModel::load_from_file(&backend, model_path, &model_params).map_err(|e| {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
         })?;
 
-        // 3. Alocação do contexto com KV Cache comprimido em 4-bit (KvCacheType::Q4_K para economizar VRAM)
+        // 3. Alocação do contexto com KV Cache nativo F16
         let ctx_params = LlamaContextParams::default()
-            .with_type_k(KvCacheType::Q4_K)
-            .with_type_v(KvCacheType::Q4_K);
+            .with_type_k(KvCacheType::F16)
+            .with_type_v(KvCacheType::F16);
 
         let mut ctx = model.new_context(&backend, ctx_params).map_err(|_| {
             InferenceError::GpuOom
@@ -113,24 +118,64 @@ impl EphemeralInferEngine for LlamaCppEngine {
             InferenceError::ExecutionError(format!("Falha ao decodificar batch inicial: {}", e))
         })?;
 
-        // 6. Construção da Cadeia de Samplers com Algema Gramatical JSON (ADR-028) e DRY / Repetition Penalty
-        let mut samplers = Vec::new();
-
-        if let Some(ref schema) = req.json_schema {
-            let gbnf_grammar = llama_cpp_2::json_schema_to_grammar(schema).map_err(|e| {
-                InferenceError::GrammarMaskError(format!("Falha ao converter JSON schema para GBNF: {}", e))
+        // 6. Decodificação Restrita via `llguidance` (ADR-028)
+        let mut ll_constraint = if let Some(ref schema_str) = req.json_schema {
+            let schema_val: serde_json::Value = serde_json::from_str(schema_str).map_err(|e| {
+                InferenceError::GrammarMaskError(format!("JSON Schema inválido fornecido para llguidance: {}", e))
             })?;
-            let grammar_sampler = LlamaSampler::grammar(&model, &gbnf_grammar, "root").map_err(|e| {
-                InferenceError::GrammarMaskError(format!("Falha ao inicializar sampler de gramática: {}", e))
-            })?;
-            samplers.push(grammar_sampler);
-        }
 
+            let top_grammar = TopLevelGrammar {
+                grammars: vec![GrammarWithLexer {
+                    name: None,
+                    json_schema: Some(schema_val),
+                    lark_grammar: None,
+                }],
+                max_tokens: None,
+            };
+
+            let n_vocab = model.n_vocab();
+            let mut words = Vec::with_capacity(n_vocab as usize);
+            for i in 0..n_vocab {
+                let token = LlamaToken(i);
+                let bytes = model.token_to_piece_bytes(token, 256, true, None).unwrap_or_default();
+                words.push(bytes);
+            }
+
+            let eos_id = model.token_eos().0 as u32;
+            let bos_id = if model.token_bos().0 >= 0 { Some(model.token_bos().0 as u32) } else { None };
+
+            let rx_info = TokRxInfo {
+                vocab_size: n_vocab as u32,
+                tok_eos: eos_id,
+                tok_bos: bos_id,
+                tok_pad: None,
+                tok_unk: None,
+                tok_end_of_turn: None,
+            };
+
+            let tok_trie = TokTrie::from(&rx_info, &words);
+            let tok_env: TokEnv = Arc::new(ApproximateTokEnv::new(tok_trie));
+
+            let factory = ParserFactory::new_simple(&tok_env).map_err(|e| {
+                InferenceError::GrammarMaskError(format!("Falha ao criar ParserFactory do llguidance: {}", e))
+            })?;
+
+            let token_parser = factory.create_parser(top_grammar).map_err(|e| {
+                InferenceError::GrammarMaskError(format!("Falha ao compilar JSON schema no llguidance: {}", e))
+            })?;
+
+            Some(Constraint::new(token_parser))
+        } else {
+            None
+        };
+
+        // 7. Cadeia de Samplers Nativos (DRY, Temp, Min-P, Dist)
         let sampler_dry = LlamaSampler::dry(&model, 0.8, 1.75, 2, 512, ["\n", ":", "\"", "{", "}"]);
         let sampler_temp = LlamaSampler::temp(req.temperature);
         let sampler_min_p = LlamaSampler::min_p(req.min_p, 1);
         let sampler_dist = LlamaSampler::dist(0);
 
+        let mut samplers = Vec::new();
         samplers.push(sampler_dry);
         samplers.push(sampler_temp);
         samplers.push(sampler_min_p);
@@ -138,7 +183,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         let mut sampler = LlamaSampler::chain_simple(samplers);
 
-        // 7. Loop de Geração Autoregressiva Efêmera
+        // 8. Loop de Geração Autoregressiva Efêmera com Interceptação de Logits llguidance
         let mut generated_text = String::new();
         let mut completion_tokens_count = 0u32;
         let mut current_pos = prompt_tokens_vec.len() as i32;
@@ -157,7 +202,37 @@ impl EphemeralInferEngine for LlamaCppEngine {
                 }
             }
 
-            let token = sampler.sample(&ctx, batch.n_tokens() - 1);
+            let token = if let Some(ref mut constraint) = ll_constraint {
+                match constraint.compute_mask() {
+                    Ok(step_res) => {
+                        if step_res.is_stop() {
+                            break;
+                        }
+                        let mut candidates = ctx.token_data_array_ith(batch.n_tokens() - 1);
+                        if let Some(ref mask) = step_res.sample_mask {
+                            for item in &mut candidates.data {
+                                let tok_id = item.id().0 as u32;
+                                if !mask.is_allowed(tok_id) {
+                                    item.set_logit(f32::NEG_INFINITY);
+                                }
+                            }
+                        }
+                        candidates.apply_sampler(&sampler);
+                        let sampled = candidates.selected_token().unwrap_or_else(|| {
+                            sampler.sample(&ctx, batch.n_tokens() - 1)
+                        });
+                        let _ = constraint.commit_token(Some(sampled.0 as u32));
+                        sampled
+                    }
+                    Err(e) => {
+                        tracing::warn!("llguidance compute_mask error: {}", e);
+                        sampler.sample(&ctx, batch.n_tokens() - 1)
+                    }
+                }
+            } else {
+                sampler.sample(&ctx, batch.n_tokens() - 1)
+            };
+
             if model.is_eog_token(token) {
                 break;
             }

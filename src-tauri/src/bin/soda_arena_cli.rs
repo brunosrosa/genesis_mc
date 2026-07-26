@@ -269,13 +269,12 @@ fn parse_line_to_prompt(line: &str, file_idx: usize, line_idx: usize) -> Option<
 fn dispatch_dedicated_infer<E: EphemeralInferEngine + 'static>(
     engine: std::sync::Arc<E>,
     req: SodaInferenceRequest,
-    thermal_rx: tokio::sync::watch::Receiver<soda_thermal_governor::SystemState>,
 ) -> Result<souls_mc_lib::core::inference_adapter::SodaInferenceResponse, souls_mc_lib::core::inference_adapter::InferenceError> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let builder = std::thread::Builder::new().name("soda-arena-dedicated-worker".to_string());
     let handle = builder.spawn(move || {
-        let res = engine.run_inference(req, Some(thermal_rx));
+        let res = engine.run_inference(req, None);
         let _ = tx.send(res);
     });
 
@@ -296,8 +295,8 @@ fn dispatch_dedicated_infer<E: EphemeralInferEngine + 'static>(
 fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path) {
     println!("\n=== RUNNING TIER 1: GUILLOTINE (FAST SANITY CHECK) ===");
 
-    let thermal_rx = soda_thermal_governor::spawn_thermal_governor();
-    println!("[+] Thermal Governor spawnado em background.");
+    let _thermal_rx = soda_thermal_governor::spawn_thermal_governor();
+    println!("[+] Thermal Governor spawnado em background (modo monitoria).");
 
     let prompts = load_tier1_prompts(bench_dir);
     println!("[+] Prompts de Sanidade carregados: {}/50", prompts.len());
@@ -348,7 +347,7 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
             };
 
             let start = Instant::now();
-            let res = dispatch_dedicated_infer(engine.clone(), req, thermal_rx.clone());
+            let res = dispatch_dedicated_infer(engine.clone(), req);
             let elapsed_ms = start.elapsed().as_millis() as u64;
 
             match res {
@@ -474,8 +473,8 @@ fn run_tier2_colosseum(bench_dir: &Path, approved_models_input: &[PathBuf]) {
 
     println!("[+] Modelos Selecionados para o Coliseu E³: {}", approved_models.len());
 
-    let thermal_rx = soda_thermal_governor::spawn_thermal_governor();
-    println!("[+] Thermal Governor ativo no Coliseu E³.");
+    let _thermal_rx = soda_thermal_governor::spawn_thermal_governor();
+    println!("[+] Thermal Governor ativo no Coliseu E³ (modo monitoria).");
 
     let mut bench_files = Vec::new();
     if let Ok(entries) = fs::read_dir(bench_dir) {
@@ -550,7 +549,7 @@ fn run_tier2_colosseum(bench_dir: &Path, approved_models_input: &[PathBuf]) {
                 };
 
                 let start = Instant::now();
-                let res = dispatch_dedicated_infer(engine.clone(), req, thermal_rx.clone());
+                let res = dispatch_dedicated_infer(engine.clone(), req);
                 let elapsed_ms = start.elapsed().as_millis() as u64;
 
                 total_prompts += 1;

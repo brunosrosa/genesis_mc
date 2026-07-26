@@ -91,7 +91,7 @@ mockito = "=1.7.2"
 [features]
 default = []
 tauri-app = ["dep:tauri", "dep:tauri-plugin-opener"]
-llama_backend = ["dep:llama-cpp-2", "llama-cpp-2/cuda"]
+llama_backend = ["dep:llama-cpp-2", "llama-cpp-2/cuda", "dep:llguidance"]
 mistral_backend = ["dep:mistralrs"]
 grammar_backend = ["dep:llguidance"]
 
