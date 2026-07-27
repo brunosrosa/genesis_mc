@@ -8275,6 +8275,7 @@ dependencies = [
  "astral-tl",
  "bumpalo",
  "core_affinity",
+ "dashmap",
  "dotenvy",
  "dunce",
  "enable-ansi-support",

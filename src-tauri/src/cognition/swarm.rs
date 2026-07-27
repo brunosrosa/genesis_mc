@@ -146,6 +146,9 @@ where
     }
 
     pub async fn dispatch_swarm(&self, repo_id: &str) -> Result<(), Phase2Error> {
+        // ADR-033 / PRD-10.2: Pinning de CPU isolando workers do enxame nos núcleos do Intel i9 (Fail-Soft)
+        let _ = crate::core::model_manager::pin_critic_worker_thread_affinity(&[0, 1]);
+
         if repo_id.trim().is_empty() {
             return Err(Phase2Error::InvalidRepoId(repo_id.to_string()));
         }

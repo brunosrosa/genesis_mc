@@ -16,7 +16,7 @@ use llguidance::toktrie::{TokTrie, TokRxInfo, ApproximateTokEnv, TokEnv};
 use crate::core::inference_adapter::{
     EphemeralInferEngine, InferenceError, SodaInferenceRequest, SodaInferenceResponse,
 };
-
+use crate::core::model_registry::{self, parse_gguf_metadata_zero_copy};
 use crate::soda_thermal_governor::SystemState;
 use tokio::sync::watch;
 
@@ -31,20 +31,20 @@ fn get_global_llama_backend() -> Result<&'static LlamaBackend, InferenceError> {
 
     match res {
         Ok(backend) => Ok(backend),
-        Err(err_msg) => Err(InferenceError::ExecutionError(err_msg.clone())),
+        Err(err) => Err(InferenceError::ExecutionError(err.clone())),
     }
 }
 
 pub struct LlamaCppEngine;
 
-fn build_chat_prompt(system_prompt: &str, few_shots: &[(String, String)], user_query: &str) -> String {
+fn build_chat_prompt(system: &str, few_shot: &[(String, String)], user_query: &str) -> String {
     let mut prompt = String::new();
-    if !system_prompt.trim().is_empty() {
+    if !system.trim().is_empty() {
         prompt.push_str("<|im_start|>system\n");
-        prompt.push_str(system_prompt.trim());
+        prompt.push_str(system.trim());
         prompt.push_str("<|im_end|>\n");
     }
-    for (input, output) in few_shots {
+    for (input, output) in few_shot {
         prompt.push_str("<|im_start|>user\n");
         prompt.push_str(input.trim());
         prompt.push_str("<|im_end|>\n<|im_start|>assistant\n");
@@ -57,12 +57,42 @@ fn build_chat_prompt(system_prompt: &str, few_shots: &[(String, String)], user_q
     prompt
 }
 
-pub fn build_default_context_params() -> LlamaContextParams {
+pub fn calculate_kv_cache_v_type(n_embd_head_v: u32) -> KvCacheType {
+    if n_embd_head_v > 0 && n_embd_head_v % 256 == 0 {
+        KvCacheType::Q4_K
+    } else {
+        // Fallback matemático silencioso para Q8_0 (tamanho de bloco 32) prevenindo pânico na C-FFI
+        KvCacheType::Q8_0
+    }
+}
+
+pub fn cap_context_length_for_family(family: &str, declared_ctx: u32) -> u32 {
+    let lower = family.to_lowercase();
+    if lower.contains("gemma") {
+        // Hard Cap de contenção térmica na família Gemma (Gemma2/Gemma4) estancando Stack Buffer Overrun (0xc0000409) em SWA
+        declared_ctx.min(32768)
+    } else {
+        declared_ctx
+    }
+}
+
+pub fn build_context_params_with_fallback(
+    n_embd_head_v: u32,
+    declared_n_ctx: u32,
+    family: &str,
+) -> LlamaContextParams {
+    let type_v = calculate_kv_cache_v_type(n_embd_head_v);
+    let n_ctx = cap_context_length_for_family(family, declared_n_ctx);
+
     LlamaContextParams::default()
-        .with_n_ctx(std::num::NonZeroU32::new(4096))
+        .with_n_ctx(std::num::NonZeroU32::new(n_ctx.max(512)))
         .with_n_batch(4096)
         .with_type_k(KvCacheType::F16)
-        .with_type_v(KvCacheType::Q4_K)
+        .with_type_v(type_v)
+}
+
+pub fn build_default_context_params() -> LlamaContextParams {
+    build_context_params_with_fallback(256, 4096, "")
 }
 
 impl EphemeralInferEngine for LlamaCppEngine {
@@ -78,6 +108,16 @@ impl EphemeralInferEngine for LlamaCppEngine {
             return Err(InferenceError::ModelNotFound(req.model_path.clone()));
         }
 
+        // 0. Validação O(1) de Arquitetura Suportada (Fail-Closed)
+        if let Some(meta) = parse_gguf_metadata_zero_copy(model_path) {
+            if !model_registry::is_architecture_supported(&meta.family) {
+                return Err(InferenceError::ExecutionError(format!(
+                    "Arquitetura '{}' não suportada pelo motor bare-metal SODA (Fail-Closed)",
+                    meta.family
+                )));
+            }
+        }
+
         // 1. Inicializa backend bare-metal do llama.cpp (Singleton em OnceLock para prevenir BackendAlreadyInitialized)
         let backend = get_global_llama_backend()?;
 
@@ -88,8 +128,20 @@ impl EphemeralInferEngine for LlamaCppEngine {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
         })?;
 
-        // 3. Alocação do contexto com KV Cache Assimétrico (ADR-027 / PRD-10.1)
-        let ctx_params = build_default_context_params();
+        // 3. Alocação do contexto com KV Cache Assimétrico & Fallbacks Matemáticos (ADR-027 / PRD-10.1 / Hotfix)
+        let (n_embd_head_v, declared_ctx, family) = if let Some(meta) = parse_gguf_metadata_zero_copy(model_path) {
+            let h_kv = meta.architecture.head_count_kv.max(1);
+            let head_v = if meta.architecture.embedding_length > 0 {
+                meta.architecture.embedding_length / h_kv
+            } else {
+                128
+            };
+            (head_v, meta.context_length as u32, meta.family)
+        } else {
+            (256, 4096, String::new())
+        };
+
+        let ctx_params = build_context_params_with_fallback(n_embd_head_v, declared_ctx, &family);
 
         let mut ctx = model.new_context(&backend, ctx_params).map_err(|_| {
             InferenceError::GpuOom
@@ -270,9 +322,12 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         let total_latency_ms = start_time.elapsed().as_millis() as u64;
 
+        // ADR-035: Reparação Sintática Zero-Token de JSON truncado antes de devolver a resposta
+        let healed_text = crate::core::response_healing::heal_malformed_json(&generated_text).into_owned();
+
         Ok(SodaInferenceResponse {
             status: "success".to_string(),
-            text: generated_text,
+            text: healed_text,
             prompt_tokens: prompt_tokens_count,
             completion_tokens: completion_tokens_count,
             total_latency_ms,
@@ -291,6 +346,31 @@ mod tests {
         let type_v = params.type_v();
         assert_eq!(type_k, KvCacheType::F16, "Keys no KV Cache devem ser F16 para rotação RoPE");
         assert_eq!(type_v, KvCacheType::Q4_K, "Values no KV Cache devem ser Q4_K para esmagar o footprint < 1GB");
+    }
+
+    #[test]
+    fn test_kv_cache_v_type_fallback_math() {
+        assert_eq!(calculate_kv_cache_v_type(256), KvCacheType::Q4_K);
+        assert_eq!(calculate_kv_cache_v_type(128), KvCacheType::Q8_0);
+        assert_eq!(calculate_kv_cache_v_type(64), KvCacheType::Q8_0);
+    }
+
+    #[test]
+    fn test_gemma_family_thermal_context_cap() {
+        assert_eq!(cap_context_length_for_family("gemma4", 131072), 32768);
+        assert_eq!(cap_context_length_for_family("gemma2", 65536), 32768);
+        assert_eq!(cap_context_length_for_family("qwen3", 40960), 40960);
+    }
+
+    #[test]
+    fn test_unsupported_architecture_rejection() {
+        assert!(!model_registry::is_architecture_supported("zamba2"));
+        assert!(!model_registry::is_architecture_supported("mamba"));
+        assert!(!model_registry::is_architecture_supported("rwkv"));
+
+        assert!(model_registry::is_architecture_supported("llama"));
+        assert!(model_registry::is_architecture_supported("qwen3"));
+        assert!(model_registry::is_architecture_supported("gemma4"));
     }
 }
 

@@ -13,7 +13,10 @@ try { Clear-Host } catch {}
 # Filtro cirurgico: preserva debug do core, silencia o ruido do `ignore`/`globset`/`walkdir`
 # que polui logs com ~600 linhas de "built glob set" durante o build.
 # Pos-B: crate agora chama souls_mc_lib (renomeada em B).
-$env:RUST_LOG = "souls_mc_lib=info,soda_sast=debug,soda_harvester=debug,ignore=warn,globset=warn,walkdir=warn"
+$env:RUST_LOG = "souls_mc_lib=info,soda_sast=debug,soda_harvester=debug,headroom_engine=debug,llama_engine=info,hardware_profiler=info,model_manager=debug,soda_ccr=debug,ignore=warn,globset=warn,walkdir=warn"
+$env:SODA_CCR_MAX_RAM_MB = "256"
+$env:SODA_HEADROOM_SAFETY_MARGIN = "512"
+$env:SODA_HEADROOM_OUTPUT_BUFFER = "4096"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -195,11 +198,12 @@ try {
             -Arguments @(
                 "build",
                 "--message-format", "short",
-                "--features", "tauri-app",
+                "--features", "tauri-app,gateway_ccr,llama_backend",
                 "--bin", "soda_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
                 "--bin", "scan_local_models_cli",
+                "--bin", "soda_ephemeral_infer_cli",
                 "--bin", "souls_mc"
             ) `
             -Label "cargo-build-supervisores" `

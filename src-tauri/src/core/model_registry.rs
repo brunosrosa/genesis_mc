@@ -597,6 +597,39 @@ pub fn infer_module_type(filename: &str) -> &'static str {
     }
 }
 
+/// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SODA.
+pub fn is_architecture_supported(arch: &str) -> bool {
+    let lower = arch.trim().to_lowercase();
+    if lower.is_empty() {
+        return true; // Tenta compatibilidade se não informado
+    }
+    matches!(
+        lower.as_str(),
+        "llama"
+            | "qwen"
+            | "qwen2"
+            | "qwen3"
+            | "phi"
+            | "phi2"
+            | "phi3"
+            | "phi4"
+            | "gemma"
+            | "gemma2"
+            | "gemma3"
+            | "gemma4"
+            | "mistral"
+            | "mixtral"
+            | "deepseek"
+            | "deepseek2"
+            | "starcoder"
+            | "starcoder2"
+            | "command-r"
+            | "stablelm"
+            | "bert"
+            | "bloom"
+    )
+}
+
 /// Sincroniza os modelos locais para a tabela `model_registry`.
 /// Regra de Ouro (Garbage Collection): Modelos que sumiram do disco sofrem SOFT DELETION (`is_active = 0`). DELETE físico é proibido!
 pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Result<usize, String> {
@@ -617,10 +650,11 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                     if let Some(m) = parse_gguf_metadata_zero_copy(path) {
                         scanned_paths.push(m.file_path.clone());
                         let caps_json = serde_json::to_string(&m.capabilities).unwrap_or_else(|_| "[]".to_string());
+                        let is_active_val = if is_architecture_supported(&m.family) { 1 } else { 0 };
 
                         let res = conn.execute(
                             "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, last_seen)
-                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, DATETIME('now'))
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, DATETIME('now'))
                              ON CONFLICT(file_path) DO UPDATE SET
                                 model_name=excluded.model_name,
                                 family=excluded.family,
@@ -629,7 +663,7 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                                 quantization=excluded.quantization,
                                 capabilities=excluded.capabilities,
                                 file_size_bytes=excluded.file_size_bytes,
-                                is_active=1,
+                                is_active=excluded.is_active,
                                 module_type=excluded.module_type,
                                 last_seen=DATETIME('now');",
                             params![
@@ -641,6 +675,7 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                                 m.quantization,
                                 caps_json,
                                 m.file_size_bytes as i64,
+                                is_active_val,
                                 mod_type,
                             ],
                         );

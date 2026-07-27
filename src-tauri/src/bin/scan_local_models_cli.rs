@@ -152,6 +152,22 @@ fn main() {
 
     for file_path in &files {
         if let Some(m) = parse_gguf_metadata_zero_copy(file_path) {
+            let size_mb = (m.file_size_bytes / (1024 * 1024)) as u64;
+            let is_ssm = m.family.to_lowercase().contains("mamba") || m.family.to_lowercase().contains("zamba");
+            let profile = souls_mc_lib::core::model_manager::profile_gguf_vram(
+                &m.model_name,
+                size_mb,
+                m.context_length as u32,
+                is_ssm,
+            );
+            match profile {
+                Ok(p) => {
+                    println!("[PROFILER-OK] {} -> VRAM Estimada: {} MB", m.model_name, p.total_vram_projected_mb);
+                }
+                Err(e) => {
+                    eprintln!("[PROFILER-WARN] {} -> Rejeitado por VRAM Overbudget: {:?}", m.model_name, e);
+                }
+            }
             scanned_models.push(m);
         } else if let Some(m) = parse_safetensors_metadata_zero_copy(file_path) {
             scanned_models.push(m);
