@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use souls_mc_lib::cognition::lean_vacuum;
 use souls_mc_lib::harvester::ast_parser;
 use souls_mc_lib::harvester::community::RateLimiter;
 use souls_mc_lib::harvester::github_tracker;
@@ -122,8 +123,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
             json!({
                 "tools": [
                     {
-                        "name": "repo_ast",
-                        "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust.",
+                        "name": "souls_get_ast",
+                        "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SODA, ex-repo_ast)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -137,8 +138,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "web_fetch",
-                        "description": "Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo.",
+                        "name": "souls_fetch_web",
+                        "description": "Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo. (Cânone SODA, ex-web_fetch)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -152,8 +153,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "sys_time",
-                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo.",
+                        "name": "souls_sys_time",
+                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SODA, ex-sys_time)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {},
@@ -161,8 +162,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "web_search",
-                        "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets.",
+                        "name": "souls_web_search",
+                        "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SODA, ex-web_search)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -182,8 +183,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "repo_meta",
-                        "description": "Extrai metadados GitHub nativos via octocrab para owner/repo.",
+                        "name": "souls_repo_meta",
+                        "description": "Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SODA, ex-repo_meta)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -197,8 +198,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "db_query",
-                        "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.",
+                        "name": "souls_sqlite_query",
+                        "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA. (Cânone SODA, ex-db_query)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -214,7 +215,52 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "required": ["query"],
                             "additionalProperties": false
                         }
-                    }
+                    },
+                    // ============================================================
+                    // SODA-CANIBALIZED: 17 tools canônicas (2 implementadas + 15 stubs)
+                    // ============================================================
+                    {
+                        "name": "souls_read",
+                        "description": "Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string" }
+                            },
+                            "required": ["path"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "souls_delta_diff",
+                        "description": "Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "before": { "type": "string" },
+                                "after": { "type": "string" }
+                            },
+                            "required": ["before", "after"],
+                            "additionalProperties": false
+                        }
+                    },
+                    // Stubs (15) - contratos canônicos souls_* para cobertura semântica.
+                    // Implementação real virá em iterações SODA-SDD subsequentes (Fase 4+).
+                    { "name": "souls_multi_read", "description": "not_implemented_yet: Leitura em batch com dedup via SharedBlock.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_smart_read", "description": "not_implemented_yet: Leitura com adaptive depth (LRU + auto-shrink).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_search", "description": "not_implemented_yet: Regex search com output LEAN.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_semantic_search", "description": "not_implemented_yet: BM25 + cosine fusion (gated embeddings).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_tree", "description": "not_implemented_yet: Árvore de diretórios com max_depth(5).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_outline", "description": "not_implemented_yet: Outline de símbolos via tree-sitter (gated tree-sitter-rust).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_symbol", "description": "not_implemented_yet: Resolve symbol name → file:line.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_callers", "description": "not_implemented_yet: Call graph: quem chama esta fn.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_callees", "description": "not_implemented_yet: Call graph: o que esta fn chama.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_shell", "description": "not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_compress", "description": "not_implemented_yet: Aplica compressor LEAN a texto arbitrário.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_dedup", "description": "not_implemented_yet: Detecta/aplica dedup cross-file (5-line blocks).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "souls_intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } }
                 ]
             }),
         )),
@@ -261,19 +307,208 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
             data: None,
         })?;
 
+    // SODA-CANIBALIZED: higiene canônica. Aceita tanto nomes canônicos souls_*
+    // quanto aliases legados (para compatibilidade transitória).
     match tool_name {
-        "repo_ast" => run_repo_ast(params).await,
-        "web_fetch" => run_web_fetch(params).await,
-        "sys_time" => run_sys_time(params).await,
-        "web_search" => run_web_search(params).await,
-        "repo_meta" => run_repo_meta(params).await,
-        "db_query" => run_db_query(params).await,
+        // Cânone SODA (preferido)
+        "souls_get_ast" | "repo_ast" => run_repo_ast(params).await,
+        "souls_fetch_web" | "web_fetch" => run_web_fetch(params).await,
+        "souls_sys_time" | "sys_time" => run_sys_time(params).await,
+        "souls_web_search" | "web_search" => run_web_search(params).await,
+        "souls_repo_meta" | "repo_meta" => run_repo_meta(params).await,
+        "souls_sqlite_query" | "db_query" => run_db_query(params).await,
+        // 17 tools canônicas (2 implementadas + 15 stubs)
+        // SODA-CANIBALIZED Fase 3: souls_read + souls_delta_diff agora usam o lean_vacuum nativo.
+        "souls_read" => run_souls_read(params).await,
+        "souls_delta_diff" => run_souls_delta_diff(params).await,
+        "souls_multi_read" | "souls_smart_read" | "souls_search"
+        | "souls_semantic_search" | "souls_tree" | "souls_outline"
+        | "souls_symbol" | "souls_callers" | "souls_callees"
+        | "souls_compress" | "souls_dedup" | "souls_metrics"
+        | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
+        "souls_execute" | "souls_shell" => Ok(stub_sandbox_audit_pending(tool_name)),
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
             data: Some(json!({ "tool_name": other })),
         }),
     }
+}
+
+// =============================================================================
+// SODA-CANIBALIZED Fase 3: Implementação real das 2 ferramentas vitais.
+// O transplante usa o módulo nativo `lean_vacuum` (cognition/lean_vacuum/).
+// As outras 15 ferramentas permanecem como `not_implemented_yet` stubs.
+// =============================================================================
+
+/// `souls_read` — Lê arquivo + Saco a Vácuo nativo.
+async fn run_souls_read(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+    let path_str = arguments
+        .get("path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento path é obrigatório".to_string(),
+            data: Some(json!({ "required": "path" })),
+        })?;
+
+    let path = PathBuf::from(path_str);
+    if !path.exists() {
+        return Err(RpcError {
+            code: -32010,
+            message: "Arquivo não existe".to_string(),
+            data: Some(json!({ "path": path.display().to_string() })),
+        });
+    }
+    if !path.is_file() {
+        return Err(RpcError {
+            code: -32011,
+            message: "path não aponta para um arquivo regular".to_string(),
+            data: Some(json!({ "path": path.display().to_string() })),
+        });
+    }
+
+    let raw = std::fs::read_to_string(&path).map_err(|e| RpcError {
+        code: -32012,
+        message: "Falha ao ler arquivo (pode ser > 5MB ou binário)".to_string(),
+        data: Some(json!({
+            "path": path.display().to_string(),
+            "reason": e.to_string(),
+        })),
+    })?;
+
+    let original_chars = raw.chars().count();
+    let ext = path.extension().and_then(|e| e.to_str());
+    let compressed = lean_vacuum::compress_to_lean(&raw, ext);
+    let compressed_chars = compressed.chars().count();
+
+    let ratio = if original_chars == 0 {
+        1.0
+    } else {
+        compressed_chars as f64 / original_chars as f64
+    };
+    let saved_pct = ((1.0 - ratio) * 100.0).round() as i64;
+
+    let header = format!(
+        "# {path} ({original}→{compressed} chars, {saved}% saved)\n\n",
+        path = path.display(),
+        original = original_chars,
+        compressed = compressed_chars,
+        saved = saved_pct,
+    );
+    let body = format!("```\n{compressed}\n```");
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!("{header}{body}")
+        }],
+        "structuredContent": {
+            "path": path.display().to_string(),
+            "original_chars": original_chars,
+            "compressed_chars": compressed_chars,
+            "compression_ratio": ratio,
+            "saved_percent": saved_pct,
+            "ext": ext,
+            "engine": "lean_vacuum.native (Fase 3)",
+        },
+        "isError": false
+    }))
+}
+
+/// `souls_delta_diff` — Myers Diff estrutural via crate `similar` 2.7.0.
+async fn run_souls_delta_diff(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+    let before = arguments
+        .get("before")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento before é obrigatório (string)".to_string(),
+            data: Some(json!({ "required": "before" })),
+        })?;
+    let after = arguments
+        .get("after")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento after é obrigatório (string)".to_string(),
+            data: Some(json!({ "required": "after" })),
+        })?;
+
+    let (text, stats) = lean_vacuum::myers_diff::myers_diff_with_stats(before, after);
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": text
+        }],
+        "structuredContent": {
+            "before_chars": before.chars().count(),
+            "after_chars": after.chars().count(),
+            "additions": stats.additions,
+            "deletions": stats.deletions,
+            "unchanged": stats.unchanged,
+            "engine": "similar 2.7.0 (Myers)",
+        },
+        "isError": false
+    }))
+}
+
+// =============================================================================
+// SODA-CANIBALIZED: Stub helpers para tools canônicas (Fase 3).
+// As 2 vitais (souls_read + souls_delta_diff) já estão transmutadas em
+// `run_souls_read` / `run_souls_delta_diff` (ver bloco anterior). As 15
+// ferramentas restantes usam `stub_not_implemented_yet` abaixo.
+// =============================================================================
+
+fn stub_not_implemented_yet(tool_name: &str) -> Value {
+    json!({
+        "content": [{
+            "type": "text",
+            "text": format!(
+                "not_implemented_yet: tool '{}' reconhecida no cânone SODA. \
+                 Aguardando Fase 4+ para transplante da lógica adicional \
+                 (Canibalização Tipo A Fase 3 cobriu apenas souls_read + souls_delta_diff).",
+                tool_name
+            )
+        }],
+        "is_error": true
+    })
+}
+
+fn stub_sandbox_audit_pending(tool_name: &str) -> Value {
+    json!({
+        "content": [{
+            "type": "text",
+            "text": format!(
+                "SANDBOX_AUDIT_PENDING: tool '{}' requer auditoria de core/sandbox.rs antes de transplante. \
+                 Conforme briefing do Arquiteto (Pessimismo da Razão), nenhum subprocess é executado \
+                 sem whitelist + timeout + cleanup explícitos.",
+                tool_name
+            )
+        }],
+        "is_error": true
+    })
 }
 
 async fn run_repo_ast(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {

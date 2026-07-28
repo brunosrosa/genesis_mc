@@ -1,35 +1,31 @@
-pub mod cli;
-pub mod cloud_client;
-pub mod cloud_sync;
+// ============================================================================
+// SODA-CANIBALIZED: Comentários físicos via "Pessimismo da Razão".
+// Tudo abaixo foi CONGELADO e NÃO compila. O código permanece na pasta
+// para canibalização futura caso a SSOT do SODA autorize.
+//
+// Desplugados nesta fase (F2/Alvo3, branch feat/lean-mcp-integration):
+//   - proxy*, http_server, server     -> Conflitam com nosso gateway/TCP
+//   - tui, terminal_ui, dashboard     -> ratatui/crossterm (bloat TUI)
+//   - cloud_client, cloud_sync        -> Lettre/JSONWebToken (cloud lock-in)
+//   - engine, setup, doctor, status   -> Orquestração externa ao MCP
+//   - shell, shell_hook, proxy_autostart, proxy_setup
+//                                     -> Acoplamento ao proxy HTTP morto
+//   - token_report, report, uninstall -> CLI helpers não-MCP
+//
+// Desplugar é IRREVERSÍVEL sem reabrir a SSOT.
+// ============================================================================
+
+pub mod cli; // Mantido: utilitários CLI puros
 pub mod compound_lexer;
 pub mod config_io;
 pub mod core;
-pub mod dashboard;
-pub mod doctor;
-pub mod engine;
 pub mod heatmap;
-#[cfg(feature = "http-server")]
-pub mod http_server;
-pub mod hook_handlers;
-pub mod hooks;
+// pub mod hook_handlers; // SODA-CANIBALIZED Fase 2.5: depende de setup (congelado)
+// pub mod hooks; // SODA-CANIBALIZED Fase 2.5: depende de setup (congelado)
 pub mod instructions;
 pub mod marked_block;
 pub mod mcp_stdio;
-#[cfg(feature = "http-server")]
-pub mod proxy;
-pub mod proxy_autostart;
-pub mod proxy_setup;
-pub mod report;
 pub mod rewrite_registry;
 pub mod rules_inject;
-pub mod server;
-pub mod setup;
-pub mod shell;
-pub mod shell_hook;
-pub mod status;
-pub mod terminal_ui;
-pub mod token_report;
-pub mod tool_defs;
+// pub mod tool_defs; // SODA-CANIBALIZED Fase 2.5: congelado (depende de rmcp::model::Tool)
 pub mod tools;
-pub mod tui;
-pub mod uninstall;
