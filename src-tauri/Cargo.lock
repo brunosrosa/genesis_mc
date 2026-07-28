@@ -8280,6 +8280,7 @@ dependencies = [
  "dunce",
  "enable-ansi-support",
  "gix",
+ "httparse",
  "ignore",
  "jsonwebtoken",
  "llama-cpp-2",

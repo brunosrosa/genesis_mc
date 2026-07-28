@@ -3506,7 +3506,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
                     }
                 }
             }
-            println!("DEBUG PREFLIGHT 17: Extra paths concedidos");
+            eprintln!("DEBUG PREFLIGHT 17: Extra paths concedidos");
 
             // ── Passo 5: Loopback Exemption (best-effort) ────────────────────────
             // Permite ao sidecar se conectar via loopback ao Named Pipe do Gateway.

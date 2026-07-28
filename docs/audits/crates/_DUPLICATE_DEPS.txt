@@ -469,7 +469,8 @@ hashbrown v0.12.3
 
 hashbrown v0.14.5
 ├── dashmap v6.2.1
-│   └── gix-tempfile v23.0.2 (*)
+│   ├── gix-tempfile v23.0.2 (*)
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 └── hashlink v0.9.1
     └── rusqlite v0.31.0 (*)
 

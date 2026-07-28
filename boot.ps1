@@ -272,13 +272,39 @@ try {
         Write-BootOk "Build finalizada. Daemon (supervisor do agentgateway + proxy) sera iniciado."
         $daemonProc = Start-Process -FilePath $daemonPath -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru
         Write-Host ("[DAEMON] souls_mc iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
-        # Daemon deve continuar vivo; se cair em <2s, algo esta muito errado.
         Start-Sleep -Seconds 2
         $stillAlive = Get-Process -Id $daemonProc.Id -ErrorAction SilentlyContinue
         if ($null -eq $stillAlive) {
             throw "souls_mc (PID $daemonProc.Id) morreu em menos de 2s apos o start. Verifique logs do daemon."
         } else {
-            Write-Host ("[DAEMON] souls_mc estavel apos 2s (PID: {0}, WorkingSet: {1:N1} MB)" -f $daemonProc.Id, ($stillAlive.WorkingSet64 / 1MB)) -ForegroundColor Green
+            Write-Host ("[DAEMON] souls_mc estavel (PID: {0}, WorkingSet: {1:N1} MB)" -f $daemonProc.Id, ($stillAlive.WorkingSet64 / 1MB)) -ForegroundColor Green
+        }
+
+        # 7. TRAVA DE PRONTIDÃO (Probe TCP na Porta 3000)
+        Write-Host "`n[PROBE] Testando estabilidade do gateway MCP em http://127.0.0.1:3000/..." -ForegroundColor Yellow
+        $ready = $false
+        $attempts = 0
+        while (-not $ready -and $attempts -lt 15) {
+            $attempts++
+            try {
+                $tcp = New-Object System.Net.Sockets.TcpClient
+                $tcp.Connect("127.0.0.1", 3000)
+                if ($tcp.Connected) {
+                    $tcp.Close()
+                    $ready = $true
+                }
+            } catch {
+                Start-Sleep -Milliseconds 500
+            }
+        }
+
+        if ($ready) {
+            Write-Host "`n=======================================================" -ForegroundColor Green
+            Write-Host " 🚀 SOULS MC ONLINE & PRONTO! (Porta 3000 -> OK)" -ForegroundColor Green
+            Write-Host " Pode dar o reload no client MCP da IDE agora!" -ForegroundColor Cyan
+            Write-Host "=======================================================\n" -ForegroundColor Green
+        } else {
+            Write-BootWarn "O daemon iniciou, mas a porta 3000 demorou a responder ao probe."
         }
     }
     finally {

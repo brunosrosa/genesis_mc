@@ -132,6 +132,7 @@ async fn kill_process_tree(pid: u32) {
 }
 
 async fn spawn_child(cfg: &GuardConfig) -> Result<Child, String> {
+    tracing::info!("Tentando executar subprocesso: {}", cfg.cmd);
     let mut cmd = Command::new(&cfg.cmd);
     cmd.args(&cfg.args)
         .stdin(Stdio::piped())
@@ -139,7 +140,7 @@ async fn spawn_child(cfg: &GuardConfig) -> Result<Child, String> {
         .stderr(Stdio::null())
         .kill_on_drop(true);
     cmd.spawn()
-        .map_err(|e| format!("Falha ao spawnar servidor MCP (stdio): {e}"))
+        .map_err(|e| format!("Falha ao spawnar servidor MCP (stdio) em '{}': {e}", cfg.cmd))
 }
 
 async fn write_line<W: AsyncWriteExt + Unpin>(w: &mut W, line: &str) -> Result<(), String> {
@@ -318,7 +319,10 @@ where
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .try_init();
     let cfg = parse_cli_args().map_err(io::Error::other)?;
     let mut stdout = tokio::io::stdout();
     let stdin = tokio::io::stdin();

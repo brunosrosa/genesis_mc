@@ -19,28 +19,74 @@ const SQLITE_MAX_ROWS: usize = 200;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .try_init();
+
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
     let stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
-    let mut reader = BufReader::new(stdin).lines();
+    let mut lines = BufReader::new(stdin).lines();
 
-    while let Ok(Some(line)) = reader.next_line().await {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
+    loop {
+        // ── Lê a próxima linha NDJSON do stdin ───────────────────────────────
+        // EOF limpo (Ok(None)) → encerra o loop naturalmente.
+        // Erro de I/O        → encerra (pipe quebrado pelo gateway).
+        let line = match lines.next_line().await {
+            Ok(Some(l)) => l,
+            Ok(None) => break, // EOF limpo — gateway fechou o pipe corretamente
+            Err(e) => {
+                eprintln!("[soda_mcp_server] ERRO I/O no stdin: {e}");
+                break;
+            }
+        };
+
+        // ── Sanitização O(1) Anti-BOM ────────────────────────────────────────
+        // O Windows injeta BOM UTF-8 (U+FEFF = EF BB BF) no stdin de processos
+        // filhos criados via pipe. str::trim() NÃO remove BOM (não é whitespace
+        // ASCII). Removemos o BOM antes do trim e antes do parse JSON.
+        let payload_str = line.trim_start_matches('\u{FEFF}').trim();
+        if payload_str.is_empty() {
+            continue; // linha em branco entre mensagens — ignorar silenciosamente
         }
-        if let Ok(payload) = serde_json::from_str::<Value>(trimmed) {
-            if let Some(resp) = handle_mcp(payload).await {
-                let resp_str = serde_json::to_string(&resp)?;
-                stdout.write_all(resp_str.as_bytes()).await?;
-                stdout.write_all(b"\n").await?;
-                stdout.flush().await?;
+
+        // ── Desserialização Fail-Soft ────────────────────────────────────────
+        // Entrada inválida (ex: "oie", fragmento HTTP, linha de log) NUNCA mata
+        // o processo. Loga no stderr e continua aguardando a próxima linha.
+        let payload: Value = match serde_json::from_str(payload_str) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!(
+                    "[soda_mcp_server] JSON inválido ignorado (fail-soft): {e} | input={:.120}",
+                    payload_str
+                );
+                continue; // ← NUNCA break aqui — resiliência obrigatória
+            }
+        };
+
+        if let Some(resp) = handle_mcp(payload).await {
+            let resp_str = serde_json::to_string(&resp)?;
+            // ── Emissão NDJSON pura no stdout ────────────────────────────────
+            // Protocolo estrito: <json>\n  — sem Content-Length, sem headers HTTP.
+            if let Err(e) = stdout.write_all(resp_str.as_bytes()).await {
+                eprintln!("[soda_mcp_server] ERRO ao escrever resposta no stdout: {e}");
+                break; // pipe de saída morreu — encerramento legítimo
+            }
+            if let Err(e) = stdout.write_all(b"\n").await {
+                eprintln!("[soda_mcp_server] ERRO ao escrever newline no stdout: {e}");
+                break;
+            }
+            if let Err(e) = stdout.flush().await {
+                eprintln!("[soda_mcp_server] ERRO no flush do stdout: {e}");
+                break;
             }
         }
     }
     Ok(())
 }
+
 
 async fn handle_mcp(payload: Value) -> Option<Value> {
     let request_id = payload.get("id").cloned().unwrap_or(Value::Null);
@@ -64,7 +110,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     }
                 },
                 "serverInfo": {
-                    "name": "souls",
+                    "name": "soda",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }),

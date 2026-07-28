@@ -35,14 +35,6 @@ fn main() {
             };
 
             let project_root = resolve_project_root();
-            let soda_mcp_program = ProgramSpec::path(bin_dir.join("soda_mcp_server.exe"));
-            ensure_program_path_exists(&soda_mcp_program)
-                .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-            let soda_mcp_server = spawn_supervised(
-                soda_mcp_program,
-                vec![],
-                project_root.clone(),
-            );
             let agentgateway = spawn_supervised(
                 ProgramSpec::global("agentgateway.exe"),
                 vec!["-f".to_string(), "gateway-config.yaml".to_string()],
@@ -60,7 +52,7 @@ fn main() {
             );
 
             app.manage(Supervisor {
-                processes: vec![soda_mcp_server, agentgateway, tcp_proxy],
+                processes: vec![agentgateway, tcp_proxy],
             });
 
             if let Some(window) = app.get_webview_window("main") {

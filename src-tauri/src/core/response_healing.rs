@@ -1,3 +1,16 @@
+use std::borrow::Cow;
+
+/// Interface zero-copy/alloc para reparo sintático de JSON malformado.
+/// Retorna `Cow::Borrowed` se nenhuma alteração for necessária, evitando alocações desnecessárias.
+pub fn heal_malformed_json<'a>(input: &'a str) -> Cow<'a, str> {
+    let repaired = repair_json_buffer(input);
+    if repaired == input {
+        Cow::Borrowed(input)
+    } else {
+        Cow::Owned(repaired)
+    }
+}
+
 /// Intercepta buffers de streaming/resposta de LLMs e realiza cura sintática zero-token em < 1ms.
 /// Remove cercas Markdown, limpa trailing commas, fecha delimitadores truncados e normaliza literais.
 pub fn repair_json_buffer(input: &str) -> String {
@@ -126,7 +139,7 @@ mod tests {
         let repaired = repair_json_buffer(malformed_json);
         let elapsed = start.elapsed();
 
-        println!("Tempo de cura sintática: {:?}", elapsed);
+        eprintln!("Tempo de cura sintática: {:?}", elapsed);
         assert!(
             elapsed.as_micros() < 1000,
             "Reparo sintático deve ser concluído em < 1ms (micro-segundos)"
@@ -142,5 +155,17 @@ mod tests {
         let val = parsed.unwrap();
         assert_eq!(val["status"], "success");
         assert_eq!(val["data"], serde_json::json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn test_heal_malformed_json_cow() {
+        let clean = "{\"status\": \"ok\"}";
+        let healed_clean = heal_malformed_json(clean);
+        assert!(matches!(healed_clean, Cow::Borrowed(_)));
+
+        let malformed = "{\"status\": \"ok\", }";
+        let healed_malformed = heal_malformed_json(malformed);
+        assert!(matches!(healed_malformed, Cow::Owned(_)));
+        assert_eq!(healed_malformed.into_owned(), "{\"status\": \"ok\"}");
     }
 }

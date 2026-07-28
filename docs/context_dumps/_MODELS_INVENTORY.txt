@@ -1,5 +1,5 @@
 === SODA LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===
-GERADO EM: 2026-07-26 20:42:17
+GERADO EM: 2026-07-27 21:15:32
 FONTE DE ESTADO SQLITE: Z:\souls_mc\.soda_data\soda_heuristic_vault.db (VIEW NATIVA: vw_finops_routing)
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 TOTAL DE MODELOS ENCONTRADOS: 21
