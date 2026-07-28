@@ -37,7 +37,7 @@ binds:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
                     - name: soda
                       stdio:
-                        cmd: 'Z:/souls_mc/src-tauri/target/debug/soda_mcp_server.exe'
+                        cmd: 'Z:/souls_mc/src-tauri/target/debug/souls_mcp_server.exe'
                         args: []
                         env:
                           PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32;C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin/x64'

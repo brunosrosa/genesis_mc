@@ -200,7 +200,7 @@ impl McpTransport for NdjsonMcpTransport {
     fn decode_envelope(&self, raw: &str) -> Result<JsonRpcRequest, McpError> {
         // NDJSON: cada linha é um envelope JSON independente.
         // Esta implementação aceita uma única linha por vez (compatibilidade
-        // com a leitura síncrona do `soda_mcp_server` original).
+        // com a leitura síncrona do `souls_mcp_server` original).
         let line = raw.trim();
         if line.is_empty() {
             return Err(McpError::MissingField("jsonrpc"));
