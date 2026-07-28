@@ -61,7 +61,7 @@ O Souls MC repudia a execução de interpretadores pesados em *background* (Node
 
 A estruturação é regida pelo **Spec-Driven Development (SDD)** e divisão estrita de responsabilidades.
 
-- **`/src-tauri/`** — O **Coração Rust**. Toda a regra de negócio, IPC Zero-Copy, Harvester (F0–F5), SAST pipeline (semgrep / opengrep), MCP gateway (`soda_mcp_server`, `soda-agent-gateway`), persistência SQLite e gestão de subprocessos vive aqui.
+- **`/src-tauri/`** — O **Coração Rust**. Toda a regra de negócio, IPC Zero-Copy, Harvester (F0–F5), SAST pipeline (semgrep / opengrep), MCP gateway (`souls_mcp_server`, `soda-agent-gateway`), persistência SQLite e gestão de subprocessos vive aqui.
 - **`/src/`** — O **Shell Svelte 5** (em transição do legado). Interface *Cyber-Purple*, Tiling 2D, GenUI Efêmera e ecossistema passivo do Canvas.
 - **`.agents/`** — O **Córtex de Contexto** dos Agentes.
   - `rules/`: Leis de governança imutáveis e sintaxe (`project_rules.md`).

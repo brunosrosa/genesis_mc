@@ -123,7 +123,7 @@ Write-Host "=======================================================" -Foreground
 try {
     # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
     Write-Host "`n[1/5] Expurgando processos supervisionados do ecossistema Souls..." -ForegroundColor Yellow
-    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-server", "sequential-thinking-mcp", "lean-ctx", "leanctx", "biome", "opengrep", "oxlint")
+    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "souls_mcp_server", "sequential-thinking-server", "sequential-thinking-mcp", "lean-ctx", "leanctx", "biome", "opengrep", "oxlint")
     $killed = @()
     foreach ($z in $zombies) {
         $existing = Get-Process -Name $z -ErrorAction SilentlyContinue
@@ -199,7 +199,7 @@ try {
                 "build",
                 "--message-format", "short",
                 "--features", "tauri-app,gateway_ccr,llama_backend",
-                "--bin", "soda_mcp_server",
+                "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
                 "--bin", "scan_local_models_cli",

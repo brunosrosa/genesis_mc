@@ -276,3 +276,50 @@ muda o motor de inferência.
 **Aguardando aprovação explícita do Arquiteto:**
 
 *"Arquiteto, o design da Canibalização Tipo A e o roteamento agnóstico estão aprovados?"*
+
+---
+
+## Fase 4 — Higiene Topológica e o Batismo do Souls MC
+
+**Branch:** `chore/rename-souls-mcp`  
+**Escopo:** renomeação infraestrutural do binário MCP do gateway de `soda_mcp_server` para
+`souls_mcp_server`, preservando a lógica de negócio.
+
+### Arquitetura do rename
+
+```mermaid
+flowchart LR
+    A[src-tauri/src/bin/soda_mcp_server.rs]
+    B[src-tauri/src/bin/souls_mcp_server.rs]
+    C[Cargo.toml]
+    D[gateway-config.yaml]
+    E[boot.ps1]
+    F[src-tauri/soda_ETL_ignition.ps1]
+    G[cargo check --bin souls_mcp_server]
+
+    A -->|rename fisico| B
+    B --> C
+    B --> D
+    B --> E
+    B --> F
+    C --> G
+    D --> G
+    E --> G
+    F --> G
+```
+
+### Orchestrator-Worker
+
+| Worker | Ação | Arquivos |
+|---|---|---|
+| W1 | rastrear referências `soda_mcp_server(.exe)` | `gateway-config.yaml`, `boot.ps1`, `src-tauri/`, `Cargo.toml` |
+| W2 | renomear o arquivo físico do binário | `src-tauri/src/bin/soda_mcp_server.rs` -> `src-tauri/src/bin/souls_mcp_server.rs` |
+| W3 | atualizar chamadores e comentários de identidade | `Cargo.toml`, `gateway-config.yaml`, `.ps1`, `mcp_transport.rs`, logs do binário |
+| W4 | validar compilador | `cargo check --bin souls_mcp_server` |
+
+### Red lines da Fase 4
+
+1. NUNCA alterar lógica de roteamento MCP.
+2. NUNCA tocar no `third_party/lean-ctx/`.
+3. NUNCA deixar referências residuais a `soda_mcp_server.exe` em YAML/PS1.
+4. SEMPRE validar com `cargo check --bin souls_mcp_server`.

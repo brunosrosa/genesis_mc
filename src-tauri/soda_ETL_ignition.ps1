@@ -69,7 +69,7 @@ else {
 
 # 1.5. HIGIENE LEVE DE ZUMBIS + EXPORTAÇÃO DE CAMINHOS DE SIDECARS
 # Nota: este script roda VIA boot.ps1, portanto NAO podemos matar souls_mc,
-# agentgateway, mcp_stdio_guard, soda_mcp_server, sequential-thinking-mcp ou leanctx
+# agentgateway, mcp_stdio_guard, souls_mcp_server, sequential-thinking-mcp ou leanctx
 # (esses sao o coracao supervisionado e devem continuar vivos).
 Write-Host "`n[+] Higiene de sidecars ETL orfaos + resolucao de binarios..." -ForegroundColor DarkGray
 $etlZombies = @("opengrep", "biome", "ruff", "oxlint", "mcp-google")

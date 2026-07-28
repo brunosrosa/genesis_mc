@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(Some(l)) => l,
             Ok(None) => break, // EOF limpo — gateway fechou o pipe corretamente
             Err(e) => {
-                eprintln!("[soda_mcp_server] ERRO I/O no stdin: {e}");
+                eprintln!("[souls_mcp_server] ERRO I/O no stdin: {e}");
                 break;
             }
         };
@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(v) => v,
             Err(e) => {
                 eprintln!(
-                    "[soda_mcp_server] JSON inválido ignorado (fail-soft): {e} | input={:.120}",
+                    "[souls_mcp_server] JSON inválido ignorado (fail-soft): {e} | input={:.120}",
                     payload_str
                 );
                 continue; // ← NUNCA break aqui — resiliência obrigatória
@@ -72,15 +72,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // ── Emissão NDJSON pura no stdout ────────────────────────────────
             // Protocolo estrito: <json>\n  — sem Content-Length, sem headers HTTP.
             if let Err(e) = stdout.write_all(resp_str.as_bytes()).await {
-                eprintln!("[soda_mcp_server] ERRO ao escrever resposta no stdout: {e}");
+                eprintln!("[souls_mcp_server] ERRO ao escrever resposta no stdout: {e}");
                 break; // pipe de saída morreu — encerramento legítimo
             }
             if let Err(e) = stdout.write_all(b"\n").await {
-                eprintln!("[soda_mcp_server] ERRO ao escrever newline no stdout: {e}");
+                eprintln!("[souls_mcp_server] ERRO ao escrever newline no stdout: {e}");
                 break;
             }
             if let Err(e) = stdout.flush().await {
-                eprintln!("[soda_mcp_server] ERRO no flush do stdout: {e}");
+                eprintln!("[souls_mcp_server] ERRO no flush do stdout: {e}");
                 break;
             }
         }

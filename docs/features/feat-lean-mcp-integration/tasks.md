@@ -267,3 +267,33 @@ Trocar `"STUB: ..."` → `"not_implemented_yet: ..."` em cada uma das 15 descri�
 
 **Modo de Execução:** Sequencial (T1 → T2 → T3 → T4).
 **Ralph Loop:** Teto de 3 tentativas por task.
+
+---
+
+## Fase 4 — Rename infraestrutural do binário MCP
+
+### T5 — Atualizar SDD do rename
+
+- [ ] `design.md` documenta o rename `soda_mcp_server` -> `souls_mcp_server`.
+- [ ] `tasks.md` enumera T6/T7.
+
+### T6 — Rename físico + callers
+
+**Arquivos-alvo**
+- `src-tauri/src/bin/soda_mcp_server.rs` -> `src-tauri/src/bin/souls_mcp_server.rs`
+- `src-tauri/Cargo.toml`
+- `gateway-config.yaml`
+- `boot.ps1`
+- `src-tauri/soda_ETL_ignition.ps1`
+- `src-tauri/src/core/mcp_transport.rs`
+
+**DoD**
+- [ ] nenhum arquivo restante com nome físico `soda_mcp_server.rs`
+- [ ] nenhum `cmd:` em YAML apontando para `soda_mcp_server.exe`
+- [ ] nenhum `.ps1` chamando `--bin soda_mcp_server` ou matando processo com esse nome
+
+### T7 — Validação do compilador
+
+**DoD**
+- [ ] `cargo check --bin souls_mcp_server` Exit 0
+- [ ] blast radius listado no feedback final

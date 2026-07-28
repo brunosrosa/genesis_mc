@@ -110,6 +110,10 @@ name = "souls_mc"
 path = "src/main.rs"
 required-features = ["tauri-app"]
 
+[[bin]]
+name = "souls_mcp_server"
+path = "src/bin/souls_mcp_server.rs"
+
 [profile.dev]
 incremental = false
 
