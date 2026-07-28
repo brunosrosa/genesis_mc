@@ -1,3 +1,5 @@
+// SODA-CANIBALIZED: gates adicionados para módulos que dependem de features opcionais.
+// Módulos gated em features NÃO default compilam apenas se a feature for ativada.
 pub mod a2a;
 pub mod adaptive;
 pub mod adaptive_mode_policy;
@@ -22,7 +24,9 @@ pub mod data_dir;
 pub mod deep_queries;
 pub mod deps;
 pub mod editor_registry;
+#[cfg(feature = "embeddings")]
 pub mod embedding_index;
+#[cfg(feature = "embeddings")]
 pub mod embeddings;
 pub mod entropy;
 pub mod error;
@@ -36,6 +40,7 @@ pub mod graph_index;
 pub mod graph_provider;
 pub mod handoff_ledger;
 pub mod heatmap;
+#[cfg(feature = "embeddings")]
 pub mod hybrid_search;
 pub mod import_resolver;
 pub mod index_orchestrator;
@@ -52,6 +57,7 @@ pub mod loop_detection;
 pub mod mcp_manifest;
 pub mod memory_lifecycle;
 pub mod mode_predictor;
+#[cfg(feature = "neural")]
 pub mod neural;
 pub mod pathjail;
 pub mod pathutil;
@@ -61,7 +67,9 @@ pub mod pop_pruning;
 pub mod portable_binary;
 pub mod preservation;
 pub mod project_hash;
-pub mod property_graph;
+// SODA-CANIBALIZED: property_graph removido desta fase (conflito rusqlite 0.39 vs souls_mc 0.31).
+// Será reativado quando souls_mc migrar para rusqlite 0.39 ou criarmos um adapter.
+// pub mod property_graph;
 pub mod prospective_memory;
 pub mod protocol;
 pub mod quality;
@@ -74,7 +82,7 @@ pub mod semantic_chunks;
 pub mod session;
 pub mod setup_report;
 pub mod signatures;
-#[cfg(feature = "tree-sitter")]
+#[cfg(feature = "tree-sitter-rust-only")]
 pub mod signatures_ts;
 pub mod slow_log;
 pub mod stats;
