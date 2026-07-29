@@ -1,4 +1,4 @@
-_IGNITION_SCRIPTS Gerado em: 2026-07-27 21:15:32
+_IGNITION_SCRIPTS Gerado em: 2026-07-28 20:10:40
 
 ### ====================================================================================================
 ARQUIVO: boot.ps1
@@ -129,7 +129,7 @@ Write-Host "=======================================================" -Foreground
 try {
     # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
     Write-Host "`n[1/5] Expurgando processos supervisionados do ecossistema Souls..." -ForegroundColor Yellow
-    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "soda_mcp_server", "sequential-thinking-server", "sequential-thinking-mcp", "lean-ctx", "leanctx", "biome", "opengrep", "oxlint")
+    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "souls_mcp_server", "sequential-thinking-server", "sequential-thinking-mcp", "lean-ctx", "leanctx", "biome", "opengrep", "oxlint")
     $killed = @()
     foreach ($z in $zombies) {
         $existing = Get-Process -Name $z -ErrorAction SilentlyContinue
@@ -205,7 +205,7 @@ try {
                 "build",
                 "--message-format", "short",
                 "--features", "tauri-app,gateway_ccr,llama_backend",
-                "--bin", "soda_mcp_server",
+                "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
                 "--bin", "scan_local_models_cli",
@@ -397,7 +397,7 @@ else {
 
 # 1.5. HIGIENE LEVE DE ZUMBIS + EXPORTAÇÃO DE CAMINHOS DE SIDECARS
 # Nota: este script roda VIA boot.ps1, portanto NAO podemos matar souls_mc,
-# agentgateway, mcp_stdio_guard, soda_mcp_server, sequential-thinking-mcp ou leanctx
+# agentgateway, mcp_stdio_guard, souls_mcp_server, sequential-thinking-mcp ou leanctx
 # (esses sao o coracao supervisionado e devem continuar vivos).
 Write-Host "`n[+] Higiene de sidecars ETL orfaos + resolucao de binarios..." -ForegroundColor DarkGray
 $etlZombies = @("opengrep", "biome", "ruff", "oxlint", "mcp-google")

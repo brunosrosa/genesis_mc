@@ -1,7 +1,17 @@
 === SODA MCPs LIST (ZERO-BRAND CANONICAL) ===
-GERADO EM: 2026-07-27 21:15:32
-TOTAL DE FERRAMENTAS: 48
+GERADO EM: 2026-07-28 20:10:41
+TOTAL DE FERRAMENTAS: 58
 ----------------------------------------------------------------------------------------------------
+• core_analyze_session: Analyze the current thinking session and provide insights
+• core_export_session: Export the current thinking session in various formats
+• core_merge_sessions: Merge multiple thinking sessions into one
+• core_think: Dynamic CoT tool. Break down complex problems, branch, backtrack, and verify hypotheses iteratively.
+• mem_add_observations: Add new observations to existing entities in the knowledge graph.
+• mem_create_entities: Create multiple new entities in the knowledge graph.
+• mem_create_relations: Create multiple new relations between entities in the knowledge graph.
+• mem_graph: Read the entire knowledge graph.
+• mem_open_nodes: Open specific nodes in the knowledge graph by their names.
+• mem_search: Search for nodes and relations in the knowledge graph using full-text search.
 • soda_db_query: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.
 • soda_repo_ast: Extrai o blueprint AST do repositório usando o parser nativo em Rust.
 • soda_repo_meta: Extrai metadados GitHub nativos via octocrab para owner/repo.

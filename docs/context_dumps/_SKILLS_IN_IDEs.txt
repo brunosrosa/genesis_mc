@@ -1,4 +1,4 @@
-_SKILLS_IN_IDEs Gerado em: 2026-07-27 21:15:32
+_SKILLS_IN_IDEs Gerado em: 2026-07-28 20:10:41
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md
@@ -106,51 +106,139 @@ CAMINHO: Z:\souls_mc\.agents\skills\mcp-memory-master\SKILL.md
 ---
 name: mcp-memory-master
 description: O Controlador da Tríade de Memória do SODA. Impõe RAG Temporal e métrica FRQAD. Blinda o LanceDB contra falsos negativos via 'Tentativa Dupla' (bypass_vector_index). Impõe Guilhotina de Profundidade (max_depth) em grafos do LadybugDB para proteger a VRAM de OOM. Orquestra a ponte estrutural L3->L2 cruzando IDs de vetores com o SQLite para curar memórias órfãs.
-triggers: ["mcp-memory-master", "buscar na memória", "pesquisa vetorial", "consultar lancedb", "consultar ladybug", "rag", "resgatar contexto"]
+triggers: ["mcp-memory-master", "buscar na memória", "pesquisa vetorial", "consultar lancedb", "consultar ladybug", "rag", "resgatar contexto", "gravar decisão", "persistir conhecimento", "salvar entidade", "criar entidade", "início de sessão"]
 ---
 
-### skill: MCP Memory Master (Controlador de Tríade e RAG Temporal V7.0)
+### skill: MCP Memory Master (Controlador de Tríade e RAG Temporal V8.0)
+
+#### Proveniência dos Motores
+Este skill governa o servidor `memory-mcp-rs` — implementação Rust do protocolo MCP sobre SQLite com FTS5.
+- **Backend:** SQLite com WAL journaling + FTS5 para busca full-text. ACID-compliant.
+- **DB Path padrão (Windows):** `%LOCALAPPDATA%/mcp-memory/knowledge_graph.db`
+- **Transporte ativo no Gateway L7:** STDIO (intra-processo)
+- **Performance baseline (bare-metal):** Search O(log n) via FTS5, Insert O(log n) via B-tree
+
+#### API Canônica — 9 Ferramentas MCP (Lei de Ferro)
+
+**ESCRITA (persistência de conhecimento):**
+| Ferramenta | Parâmetros Principais | Uso |
+|------------|----------------------|-----|
+| `mem_create_entities` | `entities: [{name, entity_type, observations:[]}]` | Criar entidades novas no grafo |
+| `mem_create_relations` | `relations: [{from, to, relationType}]` | Criar arestas entre entidades |
+| `mem_add_observations` | `observations: [{entityName, contents:[]}]` | Adicionar fatos a entidade existente |
+
+**LEITURA (recuperação de contexto):**
+| Ferramenta | Parâmetros Principais | Uso |
+|------------|----------------------|-----|
+| `mem_search` | `query: String` | FTS5 full-text search no grafo |
+| `mem_open_nodes` | `names: [String]` | Abrir entidades específicas por nome |
+| `mem_graph` | (sem parâmetros) | Ler o grafo inteiro (use com cautela - caro) |
+
+**DELEÇÃO (uso com HITL — Human-in-the-Loop):**
+| Ferramenta | Parâmetros Principais | Uso |
+|------------|----------------------|-----|
+| `mem_delete_entities` | `entityNames: [String]` | Soft-delete (exige autorização do Arquiteto) |
+| `mem_delete_observations` | `deletions: [{entityName, observations:[]}]` | Remove observações específicas |
+| `mem_delete_relations` | `relations: [{from, to, relationType}]` | Remove arestas do grafo |
 
 #### Goal
-Atuar como o navegador cirúrgico das Memórias L3 (Semântica via LanceDB) e L4 (Grafos via LadybugDB). Seu objetivo inegociável é recuperar conhecimento profundo sem asfixiar a VRAM da RTX 2060m (OOM). Você deve erradicar falsos negativos vetoriais, impor a matemática FRQAD em vez do cosseno falho, aplicar Guilhotinas de Profundidade nas buscas de grafos e sempre reconstruir o contexto cruzando as chaves primárias dos vetores encontrados com o banco relacional (SQLite).
+Atuar como o navegador cirúrgico das Memórias L1 (Knowledge Graph via SQLite/FTS5). Seu objetivo inegociável é: (1) resgatar contexto do Arquiteto no início das sessões, (2) persistir decisões arquiteturais sólidas antes de encerrar tarefas, e (3) garantir coerência causal no grafo prevenindo duplicatas e memórias órfãs.
+
+#### OBRIGATORIEDADE DE USO (Lei de Ferro — Revisão v8.0)
+
+**INÍCIO DE SESSÃO (Protocolo de Acordar):**
+- MANDATÓRIO: Ao iniciar qualquer sessão de trabalho, execute `mem_search` com termos relacionados à tarefa atual para resgatar contexto persistido de sessões anteriores.
+- Se a busca retornar resultados relevantes, apresente o contexto resgatado ao Arquiteto ANTES de executar qualquer ação.
+- Se a busca retornar vazia, prossiga normalmente mas anote a ausência de contexto prévio.
+
+**ENCERRAMENTO DE TAREFAS (Protocolo de Gravar):**
+- MANDATÓRIO: Antes de encerrar qualquer tarefa que gerou uma decisão arquitetural, use `mem_create_entities` para persistir a decisão.
+- Qualquer output do `@mcp-sequential-thinking` (DAG aprovado) DEVE gerar uma entidade de memória.
+- Qualquer Red Line identificada na SSOT DEVE gerar uma observação na entidade do componente afetado.
 
 #### Instructions
 Sempre que precisar consultar o histórico, regras de arquitetura antigas ou relações causais de código, engatilhe esta Máquina de Estados:
 
-1. **Firewall Compliance (Bypass L7):**
-   * As ferramentas permitidas são ESTRITAMENTE: `memory_search`, `memory_graph_query` e `sqz_compress`. Ignore qualquer prefixo do multiplexador.
+1. **Protocolo de Início de Sessão (Acordar Obrigatório):**
+   * Ao receber qualquer nova tarefa, execute PRIMEIRO: `mem_search(query: "<termos-chave-da-tarefa>")`
+   * Se encontrar contexto prévio: apresente ao Arquiteto e pergunte se ainda é válido.
+   * Se não encontrar: proceda, mas anote para gravar o novo conhecimento ao final.
 
-2. **A Guilhotina de Grafos (LadybugDB - L4):**
-   * Se a busca for multi-hop causal (ex: dependências de arquivos): Use `memory_graph_query`.
-   * **Lei da Proteção Exponencial:** É PROIBIDO enviar uma busca de grafos sem limite. Você DEVE injetar OBRIGATORIAMENTE os parâmetros `max_depth: 2` (ou no máximo 3) e `limit: 50`. Sem isso, o nó central asfixiará a memória.
+2. **Firewall Compliance (Bypass L7):**
+   * As ferramentas permitidas via lean-ctx são: `mem_create_entities`, `mem_create_relations`, `mem_add_observations`, `mem_search`, `mem_open_nodes`, `mem_graph`.
+   * Ignore qualquer prefixo do multiplexador. Use os nomes canônicos acima.
 
-3. **A Matemática FRQAD e RAG Temporal (LanceDB - L3):**
-   * Se a busca for conceitual: Use `memory_search`.
-   * **Fobia de Cosseno:** Injete FORÇOSAMENTE `metric: "FRQAD"`. Nossos vetores mmap quantizados exigem a Distância Fisher-Rao; o cosseno falhará.
-   * **Filtro Epoch:** Aplique o `pre_filter` SQL com as lógicas de `valid_from` e `valid_to` em Epoch UTC.
+3. **Busca Cirúrgica (Search First, Graph Second):**
+   * Para busca conceptual/semântica: use `mem_search` com query específica.
+   * Para recuperar nós específicos: use `mem_open_nodes` com os nomes exatos.
+   * Evite `mem_graph` (lê o grafo inteiro) salvo necessidade de auditoria completa.
 
-4. **A Tentativa Dupla (Cura do Falso Negativo ANN):**
-   * **MANDATÓRIO:** Se a sua query no LanceDB usando filtro temporal retornar vazia (0 resultados), NÃO assuma que o dado não existe. O índice aproximado (ANN) pode ter colapsado devido à restrição do filtro.
-   * Execute uma **segunda busca imediata** com a mesmíssima query, mas adicione o parâmetro `bypass_vector_index: true`. Isso forçará a engine em Rust a ler todas as linhas habilitadas via força bruta (kNN Exato).
+4. **A Tentativa Dupla (Cura do Falso Negativo FTS5):**
+   * **MANDATÓRIO:** Se `mem_search` retornar 0 resultados, NÃO assuma que o dado não existe.
+   * Execute uma segunda busca com termos alternativos/mais genéricos antes de declarar ausência.
+   * Exemplo: busca por "roteamento IPC zero-copy" vazia → tente "ipc zero copy", "arraybuffer rust" etc.
 
-5. **Reconstrução de Memória Órfã (Ponte L3 -> L2):**
-   * Os dados do LanceDB são vetores puros e fragmentados (`chunk_id`, `text`).
-   * Para descobrir a qual arquivo físico ou PR esse fragmento pertence, pegue o `chunk_id` retornado e delegue ao `@mcp-sqlite-master` a busca dos metadados completos na tabela principal. Nunca alucine contextos ausentes.
+5. **Persistência de Decisão Arquitetural (Protocolo de Gravar):**
+   * Ao finalizar qualquer tarefa com decisão técnica validada, execute:
+     ```
+     mem_create_entities([{
+       name: "<ComponenteOuConceitoDecidido>",
+       entity_type: "ArchitecturalDecision",
+       observations: [
+         "Contexto: <qual problema foi resolvido>",
+         "Decisão: <o que foi escolhido>",
+         "Rationale: <por que foi escolhido>",
+         "Red Lines: <o que está proibido>",
+         "Data: <ISO-8601 da decisão>"
+       ]
+     }])
+     ```
+   * Se a entidade já existir (UNIQUE constraint do SQLite), use `mem_add_observations` para enriquecer.
+
+6. **Criação de Relações Causais:**
+   * Após criar/atualizar entidades relacionadas, conecte-as com `mem_create_relations`:
+     * Tipos de relação canônicos: `"depends_on"`, `"replaces"`, `"violates_red_line_of"`, `"part_of"`, `"implements"`, `"generates"`
+
+7. **Proteção Anti-RAG Poisoning:**
+   * NUNCA grave observações vagas ou duplicadas. Antes de `mem_add_observations`, verifique se a observação já existe via `mem_open_nodes`.
+   * NUNCA delete entidades sem autorização explícita do Arquiteto (Human-in-the-Loop obrigatório para `mem_delete_*`).
 
 #### Constraints
-* **COMPRESSÃO DE SAÍDA:** Se os nós de retorno forem massivos, obrigue a passagem do texto pela ferramenta `sqz_compress` antes de internalizá-lo no seu pensamento.
-* **PROIBIÇÃO DE SQL VETORIAL COMPLEXO:** O LanceDB não faz JOINs. Filtre apenas por `temporal_stability`, `valid_from` e `valid_to`.
+* **COMPRESSÃO DE SAÍDA:** Se os nós de retorno forem massivos, comprima antes de internalizar.
+* **PROIBIÇÃO DE GRAFO SEM LIMITE:** Nunca chame `mem_graph` em loops ou em sessões com >500 entidades estimadas sem aprovação do Arquiteto.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo é a âncora inegociável do roteamento L7.
+* **ACIDEZ GARANTIDA:** O SQLite WAL garante ACID. Mas em caso de erro de escrita, relate e aborte — nunca prossiga com memória inconsistente.
 
 #### Examples
-**Entrada do Usuário:** "SODA, busca na memória qual era a diretriz de UX sobre animações do Svelte 5."
-**Ação do Agente:**
-1. Roteia para L3 (Semântico). Invoca `memory_search(query: "UX Svelte 5", metric: "FRQAD", pre_filter: "temporal_stability = 'STABLE'")`.
-2. A busca retorna 0 resultados devido ao colapso do índice ANN.
-3. Agente ativa a Tentativa Dupla OBRIGATÓRIA: refaz a busca com `bypass_vector_index: true`.
-4. O kNN exato encontra a diretriz de 50ms para "Ambient Status". O agente pega o `chunk_id`.
-5. Busca silenciosa no `@mcp-sqlite-master` revela que a regra veio do documento *Epic 17*.
-6. Devolve no Canvas a resposta rica e exata: *"-> Memória L3 resgatada via kNN exato. Cruzamento L2 confirma: Regra do Epic 17 de UX aplicada."*
+
+**Exemplo 1 — Início de Sessão:**
+1. Arquiteto abre sessão sobre "roteamento IPC".
+2. Agente executa: `mem_search("IPC zero-copy roteamento SODA")`
+3. Retorna entidade `"IPC_ZeroCopy_ArrayBuffer"` com observações da sessão anterior.
+4. Agente apresenta: *"→ Memória resgatada. IPC Zero-Copy via ArrayBuffer foi decidido na sessão anterior. Decisão ainda válida?"*
+
+**Exemplo 2 — Gravar Decisão Pós-Sequential-Thinking:**
+1. `@mcp-sequential-thinking` conclui DAG: "Usar Chyros Daemon para consistência eventual LanceDB↔SQLite."
+2. Arquiteto aprova. Agente executa:
+   ```
+   mem_create_entities([{
+     name: "ChyrosDaemon_ConsistencyPattern",
+     entity_type: "ArchitecturalDecision",
+     observations: [
+       "Contexto: Integração LanceDB↔SQLite sem bloquear Tokio",
+       "Decisão: Daemon background com consistência eventual via MPSC channels",
+       "Rationale: spawn_blocking viola Zero-Copy; daemon isola I/O do event loop",
+       "Red Lines: PROIBIDO chamadas síncronas diretas entre LanceDB e SQLite no thread principal",
+       "Data: 2026-07-28T00:00:00Z"
+     ]
+   }])
+   ```
+3. Cria relação: `mem_create_relations([{from: "ChyrosDaemon_ConsistencyPattern", to: "Tokio_EventLoop", relationType: "protects"}])`
+
+**Exemplo 3 — Busca com Tentativa Dupla:**
+1. `mem_search("UX Svelte 5 animações")` → 0 resultados.
+2. Tentativa Dupla: `mem_search("svelte animation ambient status")` → encontra `"UX_AmbientStatus_Rule"`.
+3. *"→ Memória resgatada via tentativa dupla. Regra de Ambient Status (50ms) encontrada."*
 
 ### ====================================================================================================
 ARQUIVO: mcp-search-master/SKILL.md
@@ -214,13 +302,50 @@ CAMINHO: Z:\souls_mc\.agents\skills\mcp-sequential-thinking\SKILL.md
 ---
 name: mcp-sequential-thinking
 description: O Freio de Mão Cognitivo do Antigravity IDE. Delega raciocínio ao MCP 'sequentialthinking' com Hard-Limit de 5 iterações (FinOps). Impõe a Tríade (Regular, Revision, Branching), Arquitetura Fail-Closed L7, e entrega um DAG de Roteamento Tagueado (local_slm vs cloud) para o ParetoBandit.
-triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "analisar problema", "planejar refatoração", "sequential thinking", "desdobrar lógica", "freio de mão"]
+triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "analisar problema", "planejar refatoração", "sequential thinking", "desdobrar lógica", "freio de mão", "arquitetura complexa", "paradoxo", "roteamento"]
 ---
 
-### skill: MCP Sequential Thinking (O Freio de Mão e Orquestrador DAG V5.0)
+### skill: MCP Sequential Thinking (O Freio de Mão e Orquestrador DAG V6.0)
+
+#### Proveniência dos Motores
+Este skill governa o servidor `ultrafast-mcp-sequential-thinking` — implementação Rust do protocolo MCP 2025-06-18.
+- **Ferramenta MCP canônica:** `core_think` (mapeada pelo lean-ctx como alias para `sequentialthinking`)
+- **Ferramentas auxiliares:** `core_analyze_session`, `core_export_session`, `core_merge_sessions`
+- **Transporte:** STDIO (intra-processo via Gateway L7 do SODA)
+- **Performance baseline (bare-metal):** ~0.1ms/pensamento, ~0.2ms/branch, sessão cria em ~0.5ms
+
+#### API Canônica — ThoughtData (Lei de Ferro)
+```
+{
+  thought: String,           // OBRIGATÓRIO — conteúdo do pensamento
+  thoughtNumber: u32,        // OBRIGATÓRIO — índice 1-based
+  totalThoughts: u32,        // OBRIGATÓRIO — estimativa total (ajustável)
+  nextThoughtNeeded: bool,   // OBRIGATÓRIO — false no último pensamento
+  isRevision: bool?,         // true se este pensamento revisa um anterior
+  revisesThought: u32?,      // índice do pensamento revisado
+  branchFromThought: u32?,   // índice do nó-pai do branch
+  branchId: String?,         // ID único do branch (ex: "branch-A-zero-copy")
+  needsMoreThoughts: bool?,  // true se o orçamento precisar ser expandido
+}
+```
 
 #### Goal
 Atuar como o regulador de cadência cognitiva, filtro de viabilidade e Orquestrador "Cloud Brain" do Antigravity IDE. O objetivo inegociável é erradicar o *Vibe Coding* e a Sicofania. Para proteger a VRAM e o FinOps, você DEVE delegar o raciocínio profundo ao servidor MCP usando os três construtos nativos de pensamento (Regular, Revision, Branching) sob um Hard-Limit de 5 iterações. A saída final NUNCA é código bruto, mas sim um Grafo Acíclico Dirigido (DAG) tagueado para o roteamento do ParetoBandit, blindado por uma política estrita de Fail-Closed em caso de falhas no servidor.
+
+#### OBRIGATORIEDADE DE USO (Lei de Ferro — Revisão v6.0)
+
+**QUANDO USAR (gatilhos mandatórios):**
+- Qualquer problema que envolva múltiplas camadas arquiteturais (IPC, VRAM, concorrência)
+- Qualquer decisão de design com mais de 2 alternativas técnicas
+- Qualquer bug não trivial que envolva estado distribuído ou temporalidade
+- Qualquer tarefa de refatoração que toque em mais de 3 arquivos
+- Qualquer planejamento de feature que exija estimativa de impacto em VRAM ou FinOps
+- Paradoxos de roteamento ou impasses de concorrência
+
+**QUANDO NÃO USAR (economia FinOps):**
+- Correções sintáticas triviais (typos, formatação)
+- Adição de comentários ou documentação simples
+- Leitura de arquivo único para resposta factual
 
 #### Instructions
 Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruído a "planejar/raciocinar", execute esta máquina de estados:
@@ -229,15 +354,17 @@ Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruí
    * Você está expressamente PROIBIDO de gerar código-fonte textual de implementação na sua primeira resposta.
 
 2. **Invocação MCP e Proteção Fail-Closed:**
-   * Acione OBRIGATORIAMENTE a ferramenta de nome exato `sequentialthinking`.
+   * Acione OBRIGATORIAMENTE a ferramenta `core_think` (alias canônico lean-ctx para `sequentialthinking`).
    * **Lei do Fail-Closed L7:** Se o servidor MCP retornar erro, timeout ou indisponibilidade, você está SUMARIAMENTE PROIBIDO de continuar o raciocínio por conta própria. Paralise a propagação, aborte a tarefa e reporte ao usuário: *"Falha no Sequential Thinking. Fail-Closed acionado para evitar alucinações."*
+   * **Nunca confunda `core_think` com raciocínio interno do modelo.** O invoke físico no servidor MCP é mandatório.
 
-3. **A Tríade de Construtos (Max 5 Iterações):**
-   * Emita os pensamentos de forma iterativa, aplicando obrigatoriamente a mecânica de Falsificação Coercitiva (Free-MAD) através destes construtos:
-     * **Regular Thoughts:** Decomposição do problema e proposição da tese.
-     * **Revision Thoughts:** Avaliação retroativa das suas premissas. Aplique as Leis Duras do SODA (Zero-Copy? Menos de 6GB VRAM? Node.js?) para tentar destruir a tese original e corrigir o curso (`isRevision: true`).
-     * **Branching Thoughts:** Se o impasse técnico persistir, gere pensamentos de ramificação para explorar abordagens arquiteturais antagônicas sem corromper a árvore central.
-   * **HARD-LIMIT FINOPS:** Orçamento inegociável de 5 pensamentos (`thoughtNumber: 5`). No 5º pensamento, force o encerramento do laço: `nextThoughtNeeded: false`.
+3. **A Tríade de Construtos (Max 5 Iterações — HARD-LIMIT FINOPS):**
+   * Emita os pensamentos de forma iterativa, aplicando obrigatoriamente a mecânica de Falsificação Coercitiva (Free-MAD):
+     * **Regular Thoughts:** Decomposição do problema e proposição da tese. (`isRevision: false`)
+     * **Revision Thoughts:** Avaliação retroativa das suas premissas. Aplique as Leis Duras do SODA (Zero-Copy? Menos de 6GB VRAM? Node.js proibido em produção?) para tentar destruir a tese original e corrigir o curso. (`isRevision: true`, `revisesThought: N`)
+     * **Branching Thoughts:** Se o impasse técnico persistir, gere pensamentos de ramificação para explorar abordagens arquiteturais antagônicas sem corromper a árvore central. (`branchFromThought: N`, `branchId: "branch-nome-descritivo"`)
+   * **HARD-LIMIT FINOPS:** Orçamento inegociável de **5 pensamentos** (`thoughtNumber: 5`). No 5º pensamento, force o encerramento: `nextThoughtNeeded: false`.
+   * **EXCEÇÃO AUTORIZADA:** Se e somente se o Arquiteto Humano autorizar explicitamente a expansão ("expanda o raciocínio"), use `needsMoreThoughts: true` no pensamento corrente e adicione até +2 pensamentos (máximo absoluto: 7).
 
 4. **Trabalho Invisível:**
    * A "bagunça" do vai-e-vem do JSON-RPC não deve ser renderizada no chat. Fica restrita aos logs em background.
@@ -245,28 +372,30 @@ Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruí
 5. **O Handoff Operacional (Geração do DAG):**
    * Ao finalizar as iterações, devolva no Canvas EXCLUSIVAMENTE a Síntese Arquitetural sob o formato de um **Grafo Acíclico Dirigido (DAG)** de subtarefas.
    * **Roteamento de Alvos:** Cada nó do DAG DEVE conter uma etiqueta de delegação dinâmica:
-     * `target: local_slm` (para tarefas triviais e extração de dados).
-     * `target: cloud_claude_opus` ou `cloud_deepseek` (apenas para subtarefas insolúveis localmente).
+     * `target: local_slm` (para tarefas triviais e extração de dados)
+     * `target: cloud_claude_opus` ou `cloud_deepseek` (apenas para subtarefas insolúveis localmente)
    * Peça autorização humana para acionar o `@soda-sdd` e gravar o plano no `docs/design.md`.
 
+6. **Pós-Sessão — Injeção na Memória Persistente:**
+   * Após a geração do DAG, se a conclusão contiver uma **decisão arquitetural nova ou validada**, você DEVE acionar o `@mcp-memory-master` para gravar a entidade de conhecimento no knowledge graph via `mem_create_entities` antes de encerrar a tarefa.
+
 #### Constraints
-* **PROIBIÇÃO DE OVERTHINKING:** Ultrapassar 5 iterações é violação letal do FinOps.
+* **PROIBIÇÃO DE OVERTHINKING:** Ultrapassar 5 iterações (sem autorização explícita) é violação letal do FinOps.
 * **PROIBIÇÃO DE EXECUÇÃO BRAÇAL:** O Cloud Brain planeja o DAG; ele não codifica e não altera arquivos diretamente.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo é inegociável.
+* **VIBE CODING É CRIME:** Jamais gere implementação antes do DAG ser aprovado pelo Arquiteto.
 
 #### Examples
 **Entrada do Usuário:** "Pensa numa forma de integrar o LanceDB com os metadados do SQLite sem travar o Tokio."
 
 **Ação do Agente:**
-1. (Silenciosamente) Invoca o `sequentialthinking`. (Conexão OK).
-2. *Regular Thought:* Propõe usar chamadas síncronas entre os bancos.
-3. *Revision Thought:* "FALHA. Chamadas síncronas no LanceDB bloquearão o Event Loop do Tokio. Violação de arquitetura." (`isRevision: true`)
-4. *Branching Thought:* Explora ramificação A (Threads Dedicadas) vs Ramificação B (Chyros Daemon / Consistência Eventual em background).
-5. *Revision Thought:* Opta pela Consistência Eventual via Chyros Daemon. (`nextThoughtNeeded: false`).
-6. Devolve no Canvas o DAG formatado:
-   `Subtarefa 1: Configurar Worker (target: local_slm)`
-   `Subtarefa 2: Algoritmo Consistência (target: cloud_deepseek)`. 
-   E pergunta: *"Raciocínio concluído. Autoriza o @soda-sdd para materializarmos o design.md?"*
+1. (Silenciosamente) Invoca `core_think`. (Conexão OK).
+2. *Regular Thought (1/5):* Propõe usar chamadas síncronas entre os bancos.
+3. *Revision Thought (2/5):* "FALHA. Chamadas síncronas no LanceDB bloquearão o Event Loop do Tokio. Violação de arquitetura." (`isRevision: true, revisesThought: 1`)
+4. *Branching Thought (3/5):* Explora Ramificação A (Threads Dedicadas via `spawn_blocking`) vs Ramificação B (Chyros Daemon / Consistência Eventual). (`branchFromThought: 2, branchId: "branch-dedicated-threads"`)
+5. *Branching Thought (4/5):* Ramificação B explorada. (`branchFromThought: 2, branchId: "branch-chyros-daemon"`)
+6. *Revision Final (5/5):* Opta pela Consistência Eventual via Chyros Daemon. Menor latência P99. (`isRevision: true, nextThoughtNeeded: false`).
+7. Devolve no Canvas o DAG formatado. Grava decisão via `mem_create_entities`.
 
 ### ====================================================================================================
 ARQUIVO: mcp-sqlite-master/SKILL.md

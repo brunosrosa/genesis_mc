@@ -123,7 +123,7 @@ Write-Host "=======================================================" -Foreground
 try {
     # 1. EXPURGO DE ZUMBIS (Higiene de RAM)
     Write-Host "`n[1/5] Expurgando processos supervisionados do ecossistema Souls..." -ForegroundColor Yellow
-    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "souls_mcp_server", "sequential-thinking-server", "sequential-thinking-mcp", "lean-ctx", "leanctx", "biome", "opengrep", "oxlint")
+    $zombies = @("agentgateway", "agentgateway_tcp_proxy", "souls_mc", "mcp_stdio_guard", "souls_mcp_server", "sequential-thinking-server", "sequential-thinking-mcp", "biome", "opengrep", "oxlint")
     $killed = @()
     foreach ($z in $zombies) {
         $existing = Get-Process -Name $z -ErrorAction SilentlyContinue
@@ -236,34 +236,8 @@ try {
             Write-BootWarn "Script soda_context_dumps_compiler.py nao encontrado em $dumpsCompilerScript"
         }
 
-        Invoke-TrackedProcess `
-            -FilePath "cargo" `
-            -Arguments @(
-                "build",
-                "--message-format", "short",
-                "--manifest-path", "third_party/lean-ctx/Cargo.toml",
-                "--bin", "lean-ctx",
-                "--target-dir", "target"
-            ) `
-            -Label "cargo-build-lean-ctx" `
-            -WorkingDirectory $srcTauriDir
-
-        # 5. PRE-AQUECIMENTO DE CACHE EM BACKGROUND (AST Graph + BM25 Semantic Index)
-        Write-Host "`n[5/5] Pre-aquecendo o cache do lean-ctx (AST Graph + BM25 Semantico) em background..." -ForegroundColor Yellow
-        $leanCtxPath = Join-Path $srcTauriDir "target\debug\lean-ctx.exe"
-        if (Test-Path $leanCtxPath) {
-            $leanProc = Start-Process -FilePath $leanCtxPath -ArgumentList "graph", "build" -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru -ErrorAction SilentlyContinue
-            if ($leanProc -and $leanProc.Id) {
-                Write-Host ("[BG] lean-ctx iniciado em background (PID: {0})" -f $leanProc.Id) -ForegroundColor DarkCyan
-            } else {
-                Write-BootWarn "lean-ctx nao conseguiu iniciar em background (verifique permissoes ou binario)."
-            }
-        } else {
-            Write-BootWarn "Binario lean-ctx.exe nao encontrado em $leanCtxPath - pre-aquecimento pulado."
-        }
-
-        # 6. IGNIÇÃO DO DAEMON SUPERVISOR COMPILADO (souls_mc)
-        Write-Host "`n[6/6] Iniciando o daemon supervisor compilado (souls_mc)..." -ForegroundColor Yellow
+        # 5. IGNIÇÃO DO DAEMON SUPERVISOR COMPILADO (souls_mc)
+        Write-Host "`n[5/5] Iniciando o daemon supervisor compilado (souls_mc)..." -ForegroundColor Yellow
         $daemonPath = Join-Path $srcTauriDir "target\debug\souls_mc.exe"
         if (-not (Test-Path $daemonPath)) {
             throw "Binario esperado nao encontrado apos a build: $daemonPath"
