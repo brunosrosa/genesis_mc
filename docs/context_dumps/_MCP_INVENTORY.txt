@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-07-27 21:15:32
+_MCP_INVENTORY Gerado em: 2026-07-28 20:10:40
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -8,16 +8,66 @@ CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
 SERVER_NAME: souls
 LEGACY_REPORT_PATH: Z:\souls_mc\.soda_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt
 SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
-TOOL_COUNT: 48
+TOOL_COUNT: 58
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .soda_scratchpad/reports.
 
 === SUMMARY ===
-OK_COUNT: 48
+OK_COUNT: 58
 WARN_COUNT: 0
 FAIL_COUNT: 0
 OVERALL_STATUS: HEALTHY
 
 === TOOLS ===
+NAME: core_analyze_session
+DESCRIPTION: Analyze the current thinking session and provide insights
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_export_session
+DESCRIPTION: Export the current thinking session in various formats
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_merge_sessions
+DESCRIPTION: Merge multiple thinking sessions into one
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_think
+DESCRIPTION: Dynamic CoT tool. Break down complex problems, branch, backtrack, and verify hypotheses iteratively.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_add_observations
+DESCRIPTION: Add new observations to existing entities in the knowledge graph.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_create_entities
+DESCRIPTION: Create multiple new entities in the knowledge graph.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_create_relations
+DESCRIPTION: Create multiple new relations between entities in the knowledge graph.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_graph
+DESCRIPTION: Read the entire knowledge graph.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_open_nodes
+DESCRIPTION: Open specific nodes in the knowledge graph by their names.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_search
+DESCRIPTION: Search for nodes and relations in the knowledge graph using full-text search.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
 NAME: soda_db_query
 DESCRIPTION: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA.
 TEST_STATUS: OK
