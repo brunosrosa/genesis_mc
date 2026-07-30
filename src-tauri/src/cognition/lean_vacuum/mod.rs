@@ -16,7 +16,8 @@ pub mod text_compress;
 
 pub use ansi_filter::{ansi_density, strip_ansi};
 pub use dedup::{
-    clear_session_dedup_cache, deduplicate_blocks, deduplicate_blocks_session, SESSION_DEDUP_CACHE,
+    clear_session_cache, clear_session_dedup_cache, deduplicate_blocks, deduplicate_blocks_session,
+    SESSION_DEDUP_CACHE,
 };
 pub use dot_flatten::dot_flatten;
 pub use myers_diff::myers_diff;

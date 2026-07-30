@@ -411,6 +411,20 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
+                    {
+                        "name": "session",
+                        "description": "Gerencia o ciclo de vida da sessão SODA/MCP e executa a limpeza/vacina de cache de RAM (souls_session).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "action": {
+                                    "type": "string",
+                                    "description": "Ação a ser executada: 'clear' ou 'reset' para descarte de RAM/dedup cache, 'status' para verificar estado."
+                                }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
                     { "name": "metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } }
                 ]
@@ -482,6 +496,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "search" | "souls_search" => run_souls_search(params).await,
         "compress" | "souls_compress" => run_souls_compress(params).await,
         "dedup" | "souls_dedup" => run_souls_dedup(params).await,
+        "session" | "souls_session" => run_souls_session(params).await,
         "multi_read" | "souls_multi_read"
         | "semantic_search" | "souls_semantic_search"
         | "callers" | "souls_callers"
@@ -828,6 +843,53 @@ async fn run_souls_search(
         },
         "isError": false
     }))
+}
+
+/// `souls_session` — Vacina contra Memory Bloat e Evicção de Cache da Sessão (PRD-005).
+async fn run_souls_session(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let arguments = params.get("arguments").and_then(Value::as_object);
+    let action = arguments
+        .and_then(|a| a.get("action"))
+        .or_else(|| params.get("action"))
+        .and_then(Value::as_str)
+        .unwrap_or("status");
+
+    match action {
+        "clear" | "reset" => {
+            lean_vacuum::dedup::clear_session_cache();
+            Ok(json!({
+                "content": [{
+                    "type": "text",
+                    "text": "Cache de deduplicação de sessão (lean_vacuum) limpo com sucesso. RAM desidratada."
+                }],
+                "structuredContent": {
+                    "action": action,
+                    "status": "cleared",
+                    "engine": "lean_vacuum.dedup (PRD-005)"
+                },
+                "isError": false
+            }))
+        }
+        "status" => {
+            let count = lean_vacuum::SESSION_DEDUP_CACHE.len();
+            Ok(json!({
+                "content": [{
+                    "type": "text",
+                    "text": format!("Sessão ativa. Elementos no cache de deduplicação: {count}")
+                }],
+                "structuredContent": {
+                    "action": "status",
+                    "cache_items": count
+                },
+                "isError": false
+            }))
+        }
+        _ => Err(RpcError {
+            code: -32003,
+            message: format!("Ação de sessão '{action}' não suportada ou não implementada."),
+            data: None,
+        }),
+    }
 }
 
 // =============================================================================

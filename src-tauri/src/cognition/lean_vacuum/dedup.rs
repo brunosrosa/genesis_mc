@@ -13,9 +13,14 @@ use std::sync::LazyLock;
 pub static SESSION_DEDUP_CACHE: LazyLock<DashMap<u64, (PathBuf, usize, usize)>> =
     LazyLock::new(DashMap::new);
 
-/// Limpa o cache de deduplicação da sessão.
-pub fn clear_session_dedup_cache() {
+/// Limpa completamente o cache de deduplicação da sessão em RAM.
+/// Invoca o descarte físico dos nós para liberar a memória principal do Host.
+pub fn clear_session_cache() {
     SESSION_DEDUP_CACHE.clear();
+}
+
+pub fn clear_session_dedup_cache() {
+    clear_session_cache();
 }
 
 fn normalize_line(line: &str) -> String {
@@ -117,5 +122,16 @@ mod tests {
             out2.contains("// [dedup: 5 lines hidden. Duplicate of src/module_a.rs lines L1-L5]"),
             "out2 foi: {out2}"
         );
+    }
+
+    #[test]
+    fn test_session_cache_clear_successful() {
+        let path = PathBuf::from("src/main.rs");
+        SESSION_DEDUP_CACHE.insert(12345, (path.clone(), 1, 5));
+        assert!(!SESSION_DEDUP_CACHE.is_empty(), "O cache deveria conter dados simulados.");
+
+        clear_session_cache();
+
+        assert!(SESSION_DEDUP_CACHE.is_empty(), "O cache deveria estar completamente vazio pós-limpeza.");
     }
 }
