@@ -327,8 +327,35 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     // Stubs (15) - contratos canônicos para cobertura semântica.
                     // Implementação real virá em iterações SODA-SDD subsequentes (Fase 4+).
                     { "name": "multi_read", "description": "not_implemented_yet: Leitura em batch com dedup via SharedBlock.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "smart_read", "description": "not_implemented_yet: Leitura com adaptive depth (LRU + auto-shrink).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "search", "description": "not_implemented_yet: Regex search com output LEAN.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    {
+                        "name": "smart_read",
+                        "description": "Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho do arquivo a ser lido (alias: path)." },
+                                "path": { "type": "string", "description": "Caminho do arquivo a ser lido." },
+                                "max_tokens_budget": { "type": "integer", "description": "Limite máximo de tokens (padrão: 8000)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "description": "Busca textual compacta via regex com formatação LEAN agrupada por arquivo. (souls_search)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "Expressão regular ou termo a buscar." },
+                                "pattern": { "type": "string", "description": "Alias para query." },
+                                "path": { "type": "string", "description": "Diretório inicial para busca (padrão: '.')." },
+                                "search_path": { "type": "string", "description": "Alias para path." },
+                                "max_depth": { "type": "integer", "description": "Profundidade máxima de diretórios (padrão: 5)." }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
                     { "name": "semantic_search", "description": "not_implemented_yet: BM25 + cosine fusion (gated embeddings).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "tree",
@@ -451,11 +478,11 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "delta_diff" | "souls_delta_diff" => run_souls_delta_diff(params).await,
         "tree" | "souls_tree" => run_souls_tree(params).await,
         "outline" | "souls_outline" | "symbol" | "souls_symbol" => run_souls_outline(params).await,
+        "smart_read" | "souls_smart_read" => run_souls_smart_read(params).await,
+        "search" | "souls_search" => run_souls_search(params).await,
         "compress" | "souls_compress" => run_souls_compress(params).await,
         "dedup" | "souls_dedup" => run_souls_dedup(params).await,
         "multi_read" | "souls_multi_read"
-        | "smart_read" | "souls_smart_read"
-        | "search" | "souls_search"
         | "semantic_search" | "souls_semantic_search"
         | "callers" | "souls_callers"
         | "callees" | "souls_callees"
@@ -666,7 +693,13 @@ async fn run_souls_dedup(
             data: Some(json!({ "required": "text" })),
         })?;
 
-    let deduplicated = lean_vacuum::deduplicate_blocks(text);
+    let path_opt = arguments
+        .get("path")
+        .or_else(|| arguments.get("file_path"))
+        .and_then(Value::as_str)
+        .map(Path::new);
+
+    let deduplicated = lean_vacuum::deduplicate_blocks_session(text, path_opt);
 
     Ok(json!({
         "content": [{
@@ -675,6 +708,123 @@ async fn run_souls_dedup(
         }],
         "structuredContent": {
             "deduplicated_text": deduplicated
+        },
+        "isError": false
+    }))
+}
+
+/// `souls_smart_read` — Leitura Token-Aware com Auto-Shrink e Fail-Closed.
+async fn run_souls_smart_read(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+
+    let path_str = arguments
+        .get("file_path")
+        .or_else(|| arguments.get("path"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento file_path (ou path) é obrigatório para souls_smart_read".to_string(),
+            data: None,
+        })?;
+
+    let budget = arguments
+        .get("max_tokens_budget")
+        .and_then(Value::as_u64)
+        .unwrap_or(8000) as usize;
+
+    let path: PathBuf = validate_and_canonicalize_path(path_str)?;
+    let content = tokio::fs::read_to_string(path.as_path())
+        .await
+        .map_err(|e| RpcError {
+            code: -32021,
+            message: format!("Falha ao ler arquivo '{path_str}': {e}"),
+            data: None,
+        })?;
+
+    let result_text = lean_vacuum::smart_read_text(&content, budget).map_err(|(code, msg)| RpcError {
+        code,
+        message: msg,
+        data: None,
+    })?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": result_text
+        }],
+        "structuredContent": {
+            "path": path.display().to_string(),
+            "max_tokens_budget": budget,
+            "resulting_tokens": lean_vacuum::count_tokens(&result_text),
+        },
+        "isError": false
+    }))
+}
+
+/// `souls_search` — Busca Textual Compacta no Padrão LEAN.
+async fn run_souls_search(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+
+    let query_str = arguments
+        .get("query")
+        .or_else(|| arguments.get("pattern"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento query (ou pattern) é obrigatório para souls_search".to_string(),
+            data: None,
+        })?;
+
+    let search_path_str = arguments
+        .get("search_path")
+        .or_else(|| arguments.get("path"))
+        .and_then(Value::as_str)
+        .unwrap_or(".");
+
+    let max_depth = arguments
+        .get("max_depth")
+        .and_then(Value::as_u64)
+        .unwrap_or(5) as usize;
+
+    let root_path = validate_and_canonicalize_path(search_path_str)?;
+
+    let search_output = lean_vacuum::search_lean(&root_path, query_str, max_depth).map_err(|e| RpcError {
+        code: -32025,
+        message: e,
+        data: None,
+    })?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": search_output
+        }],
+        "structuredContent": {
+            "query": query_str,
+            "search_path": root_path.display().to_string(),
+            "max_depth": max_depth
         },
         "isError": false
     }))
