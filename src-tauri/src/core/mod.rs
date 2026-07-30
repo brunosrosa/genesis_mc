@@ -12,3 +12,5 @@ pub mod llama_engine;
 #[cfg(feature = "mistral_backend")]
 pub mod mistral_engine;
 
+pub mod bitnet_daemon;
+

@@ -1,0 +1,28 @@
+[package]
+name = "tqdm"
+edition = "2021"
+version = "0.8.0"
+rust-version = "1.60"
+
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+description = "Python tqdm in Rust"
+repository = "https://github.com/mrlazy1708/tqdm"
+documentation = "https://docs.rs/tqdm/latest/tqdm"
+
+authors = ["yihengdu"]
+keywords = ["tqdm", "progress", "iterator"]
+categories = ["accessibility", "command-line-utilities"]
+
+[dependencies]
+anyhow = "1.0"
+crossterm = "0.25"
+
+[dependencies.once_cell]
+version = "1.18"
+default-features = false
+features = ["alloc", "std"]
+
+[dev-dependencies]
+futures = { version = "0.3" }
+tokio = { version = "1", features = ["full"] }

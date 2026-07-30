@@ -767,7 +767,7 @@ async fn run_souls_smart_read(
             data: None,
         })?;
 
-    let result_text = lean_vacuum::smart_read_text(&content, budget).map_err(|(code, msg)| RpcError {
+    let result_text = lean_vacuum::smart_read::smart_read_text_for_lang(&content, budget, Some(path_str)).map_err(|(code, msg)| RpcError {
         code,
         message: msg,
         data: None,
@@ -1109,29 +1109,7 @@ fn map_wasm_trap_to_rpc<E: std::fmt::Display>(err: &E) -> RpcError {
 }
 
 fn extract_rust_outline_signatures(code: &str) -> String {
-    let mut out = Vec::new();
-    for line in code.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("pub struct")
-            || trimmed.starts_with("struct")
-            || trimmed.starts_with("pub enum")
-            || trimmed.starts_with("enum")
-            || trimmed.starts_with("pub trait")
-            || trimmed.starts_with("trait")
-            || trimmed.starts_with("impl")
-            || trimmed.starts_with("pub fn")
-            || trimmed.starts_with("fn")
-            || trimmed.starts_with("pub const")
-            || trimmed.starts_with("pub type")
-        {
-            if let Some(brace_idx) = line.find('{') {
-                out.push(format!("{} {{ /* body omitted */ }}", &line[..brace_idx].trim_end()));
-            } else {
-                out.push(line.to_string());
-            }
-        }
-    }
-    out.join("\n")
+    lean_vacuum::smart_read::extract_outline_signatures(code)
 }
 
 // =============================================================================

@@ -41,3 +41,28 @@ dist-ssr
 src-tauri/third_party/ultrafast-mcp-sequential-thinking/
 docs/audits/blobs/inspect/
 docs/context_dumps/
+
+# ==============================================================================
+# SODA BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO
+# ==============================================================================
+# Ignora caches e diretórios de saída de compilação do Rust e CMake dentro de vendor
+src-tauri/vendor/**/target/
+src-tauri/vendor/**/build/
+src-tauri/vendor/**/bin/
+src-tauri/vendor/**/out/
+
+# Ignora arquivos binários e objetos intermediários do compilador C++ (MSVC/NVCC)
+src-tauri/vendor/**/*.o
+src-tauri/vendor/**/*.obj
+src-tauri/vendor/**/*.a
+src-tauri/vendor/**/*.lib
+src-tauri/vendor/**/*.so
+src-tauri/vendor/**/*.dylib
+src-tauri/vendor/**/*.dll
+src-tauri/vendor/**/*.pdb
+
+# Ignora arquivos de controle de geração do CMake
+src-tauri/vendor/**/CMakeCache.txt
+src-tauri/vendor/**/CMakeFiles/
+src-tauri/vendor/**/cmake_install.cmake
+src-tauri/vendor/**/Makefile

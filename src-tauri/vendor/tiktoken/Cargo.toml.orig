@@ -1,0 +1,33 @@
+[package]
+name = "tiktoken"
+description = "A high-performance pure-Rust implementation of OpenAI's tiktoken BPE tokenizer"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tiktoken"
+version = "3.5.1"
+edition.workspace = true
+authors.workspace = true
+keywords = ["tiktoken", "tokenizer", "bpe", "openai", "gpt"]
+categories = ["text-processing", "algorithms"]
+
+[features]
+default = []
+parallel = ["rayon"]
+
+[dependencies]
+base64 = "^0.22"
+rayon = { version = "^1", optional = true }
+regex = "^1"
+rustc-hash = "^2"
+ruzstd = "^0.8"
+
+[dev-dependencies]
+criterion = { version = "^0.8", features = ["html_reports"] }
+proptest = "^1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bench]]
+name = "tokenize"
+harness = false
