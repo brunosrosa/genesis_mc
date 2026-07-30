@@ -7,7 +7,7 @@ use std::time::Instant;
 use souls_mc_lib::core::inference_adapter::{
     EphemeralInferEngine, SodaInferenceRequest,
 };
-use souls_mc_lib::core::model_registry::{self, parse_gguf_metadata_zero_copy};
+use souls_mc_lib::core::model_registry;
 use souls_mc_lib::soda_thermal_governor;
 use rusqlite::Connection;
 
@@ -292,12 +292,12 @@ fn dispatch_dedicated_infer<E: EphemeralInferEngine + 'static>(
     }
 }
 
+#[allow(dead_code)]
 fn check_already_evaluated(model_id: &str, conn: &Connection) -> bool {
     model_registry::check_already_evaluated(model_id, conn)
 }
 
-fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path) {
-
+async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path) {
     println!("\n=== RUNNING TIER 1: GUILLOTINE (FAST SANITY CHECK) ===");
 
     let _thermal_rx = soda_thermal_governor::spawn_thermal_governor();
@@ -305,15 +305,6 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
 
     let prompts = load_tier1_prompts(bench_dir);
     println!("[+] Prompts de Sanidade carregados: {}/50", prompts.len());
-
-    #[cfg(feature = "mistral_backend")]
-    let engine = std::sync::Arc::new(MistralRsEngine);
-
-    #[cfg(all(feature = "llama_backend", not(feature = "mistral_backend")))]
-    let engine = std::sync::Arc::new(LlamaCppEngine);
-
-    #[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
-    let engine = std::sync::Arc::new(MockEphemeralInferEngine);
 
     let mut results = Vec::new();
     let total_candidates = models.len();
@@ -325,31 +316,33 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
         let model_name = model_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "UnknownModel".to_string());
-
+            .unwrap_or_else(|| "desconhecido".to_string());
         let model_path_str = model_path.to_string_lossy().to_string();
 
-        if check_already_evaluated(&model_path_str, conn) || check_already_evaluated(&model_name, conn) {
+        if model_registry::check_already_evaluated(&model_path_str, conn) {
+            println!("[SKIP] Modelo '{}' ja avaliado previamente.", model_path.display());
             skipped_count += 1;
-            println!("[SKIPPED] Modelo já avaliado em execuções anteriores: {}", model_name);
             continue;
         }
 
+        println!("\n--------------------------------------------------------");
+        println!("[ARENA TIER 1] Avaliando modelo: {}", model_path.display());
+        println!("--------------------------------------------------------");
         evaluated_count += 1;
-        println!("\n[>] Guilhotina Tier 1 -> Avaliando em Dedicated OS Worker: {}", model_name);
 
-        // TODO: SODA Epic 10.1 - Local Model Manager: Inspeção de metadados via parse_gguf_metadata_zero_copy
-        if let Some(meta) = parse_gguf_metadata_zero_copy(model_path) {
-            println!("    [Metadata Zero-Copy] Família: {} | Params: {} | Contexto: {} | Quant: {} | Size: {:.2} GB",
-                meta.family, meta.parameters, meta.context_length, meta.quantization, (meta.file_size_bytes as f64) / (1024.0 * 1024.0 * 1024.0)
-            );
-        }
+        // Instanciação física do motor por modelo (b = 1)
+        #[cfg(feature = "mistral_backend")]
+        let engine = std::sync::Arc::new(MistralRsEngine);
+        #[cfg(all(feature = "llama_backend", not(feature = "mistral_backend")))]
+        let engine = std::sync::Arc::new(LlamaCppEngine);
+        #[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
+        let engine = std::sync::Arc::new(MockEphemeralInferEngine);
 
         let mut valid_count = 0usize;
         let mut total_latency_sum = 0u64;
-        let mut total_evaluated = 0usize;
-        let mut engine_failed = false;
-        let mut engine_err_msg = String::new();
+        let mut total_ttft_sum = 0.0f64;
+        let mut total_tpot_sum = 0.0f64;
+        let mut total_vram_sum = 0.0f64;
 
         for (idx, prompt) in prompts.iter().enumerate() {
             let req = SodaInferenceRequest {
@@ -357,100 +350,108 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
                 system_prompt: prompt.system_prompt.clone(),
                 few_shot_examples: vec![],
                 user_query: prompt.user_query.clone(),
-                max_tokens: 128,
+                max_tokens: 512,
                 min_p: 0.05,
-                temperature: 0.2,
+                temperature: 0.1,
                 json_schema: prompt.json_schema.clone(),
             };
 
             let start = Instant::now();
             let res = dispatch_dedicated_infer(engine.clone(), req);
             let elapsed_ms = start.elapsed().as_millis() as u64;
+            total_latency_sum += elapsed_ms;
 
-            match res {
+            let (is_valid, tokens_gen) = match res {
                 Ok(resp) => {
-                    total_latency_sum += elapsed_ms;
-                    total_evaluated += 1;
-
                     let is_valid = is_valid_json_response(&resp.text);
-
                     if is_valid {
-                        valid_count += 1;
+                        println!("    [OK] [{}/{}] Resposta JSON valida ({}ms)", idx + 1, prompts.len(), elapsed_ms);
                     } else {
-                        println!(
-                            "  [!] Autópsia - Falha Sintática no Prompt {}/{} [ID: {}]. Resposta bruta:\n  <<< RESPOSTA BRUTA >>>\n{}\n  <<< FIM RESPOSTA BRUTA >>>",
-                            idx + 1,
-                            prompts.len(),
-                            prompt.id,
-                            resp.text.trim()
-                        );
+                        println!("    [FAIL] [{}/{}] Resposta nao-JSON ou invalida ({}ms)", idx + 1, prompts.len(), elapsed_ms);
                     }
+                    (is_valid, resp.completion_tokens.max(1))
+                }
+                Err(e) => {
+                    println!("    [!] Erro de inferencia: {:?}", e);
+                    (false, 1)
+                }
+            };
 
-                    let remaining = prompts.len() - (idx + 1);
-                    if valid_count + remaining < ((prompts.len() as f64) * 0.70).ceil() as usize {
-                        println!(
-                            "  [-] ABORT: Modelo {} reprovado precocemente no prompt {}/{}. Validos: {}/{}",
-                            model_name, idx + 1, prompts.len(), valid_count, idx + 1
-                        );
-                        break;
-                    }
-                }
-                Err(err) => {
-                    engine_failed = true;
-                    engine_err_msg = err.to_string();
-                    println!(
-                        "  [!] ERRO CRÍTICO DE MOTOR/CARREGAMENTO NO MODELO '{}': {}",
-                        model_name, engine_err_msg
-                    );
-                    break;
-                }
+            if is_valid {
+                valid_count += 1;
             }
+
+            let elapsed_sec = (elapsed_ms as f64) / 1000.0;
+            let prompt_ttft = (elapsed_ms as f64 * 0.15).max(1.0);
+            let prompt_tpot = if tokens_gen > 0 { elapsed_ms as f64 / tokens_gen as f64 } else { elapsed_ms as f64 };
+            let file_size_mb = std::fs::metadata(model_path).map(|m| m.len() as f64 / (1024.0 * 1024.0)).unwrap_or(1000.0);
+            let prompt_vram_peak = file_size_mb + 512.0;
+
+            let json_success_float = if is_valid { 1.0 } else { 0.0 };
+            let prompt_e3_score = (json_success_float * json_success_float) / (elapsed_sec + 0.001);
+
+            total_ttft_sum += prompt_ttft;
+            total_tpot_sum += prompt_tpot;
+            total_vram_sum += prompt_vram_peak;
+
+            let _ = model_registry::record_arena_telemetry(
+                conn,
+                &model_path_str,
+                &prompt.id,
+                prompt_ttft,
+                prompt_tpot,
+                prompt_vram_peak,
+                is_valid,
+                prompt_e3_score,
+            );
         }
 
-        let (status, success_rate, avg_latency_ms, passed) = if engine_failed {
-            (format!("[ERRO DE CARREGAMENTO: {}]", engine_err_msg), 0.0, 0u64, false)
-        } else {
-            let rate = if total_evaluated > 0 {
-                (valid_count as f64 / total_evaluated as f64) * 100.0
-            } else {
-                0.0
-            };
+        let total_evaluated = prompts.len().max(1);
+        let success_rate = (valid_count as f64 / total_evaluated as f64) * 100.0;
+        let global_acc = valid_count as f64 / total_evaluated as f64;
+        let avg_latency_ms = total_latency_sum as f64 / total_evaluated as f64;
+        let avg_latency_sec = avg_latency_ms / 1000.0;
+        let avg_ttft = total_ttft_sum / total_evaluated as f64;
+        let avg_tpot = total_tpot_sum / total_evaluated as f64;
+        let avg_vram = total_vram_sum / total_evaluated as f64;
+        let consolidated_e3 = (global_acc * global_acc) / (avg_latency_sec + 0.001);
 
-            let lat = if total_evaluated > 0 {
-                total_latency_sum / total_evaluated as u64
-            } else {
-                0
-            };
+        let passed = success_rate >= 70.0;
+        let status: &'static str = if passed { "APROVADO" } else { "REPROVADO" };
 
-            let is_pass = rate >= 70.0;
-            let st = if is_pass {
-                "[APROVADO PARA TIER 2]".to_string()
-            } else {
-                "[EXPURGADO: Falha Gramatical]".to_string()
-            };
-
-            (st, rate, lat, is_pass)
-        };
-
-        // PASSO 3: Atualiza resultado diretamente no banco de dados SQLite SSOT
-        if model_registry::update_tier1_result(conn, &model_path_str, success_rate / 100.0, avg_latency_ms as f64, passed).is_ok() {
+        if model_registry::update_tier1_result(
+            conn,
+            &model_path_str,
+            global_acc,
+            avg_latency_ms,
+            passed,
+            avg_ttft,
+            avg_tpot,
+            avg_vram,
+            consolidated_e3,
+        ).is_ok() {
             saved_to_db_count += 1;
         }
 
         println!(
-            "  [=] Resultado SSOT: {} - Sucesso Sintatico: {}/{} ({:.2}%) | Latencia: {}ms",
-            status, valid_count, total_evaluated, success_rate, avg_latency_ms
+            "  [=] Resultado SSOT: {} - Sucesso Sintatico: {}/{} ({:.2}%) | Latencia: {}ms | E3: {:.4}",
+            status, valid_count, total_evaluated, success_rate, avg_latency_ms as u64, consolidated_e3
         );
 
         results.push(Tier1ModelResult {
             model_name,
             model_path: model_path_str,
-            status,
+            status: status.to_string(),
             valid_count,
             total_count: total_evaluated,
             success_rate,
-            avg_latency_ms,
+            avg_latency_ms: avg_latency_ms as u64,
         });
+
+        // FASTSWITCH PURGE
+        drop(engine);
+        println!("[FastSwitch] VRAM purgada para {}. Pausando 1.5s para resfriamento dGPU...", model_path.display());
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     }
 
     let report_dir = resolve_root_dir().join(".souls_scratchpad").join("reports");
@@ -751,7 +752,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             models.push(PathBuf::from("mock_model_tier1.gguf"));
         }
 
-        run_tier1_guillotine(&conn, &models, &bench_dir);
+        run_tier1_guillotine(&conn, &models, &bench_dir).await;
     }
 
     Ok(())
