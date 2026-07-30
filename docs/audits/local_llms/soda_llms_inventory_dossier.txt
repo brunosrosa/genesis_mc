@@ -1,7 +1,7 @@
 ================================================================================
                 DOSSIÊ DE INVENTÁRIO LLM - SODA SSOT BARE-METAL                 
 ================================================================================
-Banco de Dados SSOT: Z:\souls_mc\.soda_data\soda_heuristic_vault.db
+Banco de Dados SSOT: Z:\souls_mc\.souls_data\souls_heuristic_vault.db
 Total de Arquivos GGUF no SSD: 32
 LLMs Principais de Texto: 21
 Módulos Auxiliares (Visão/MTP/Sidecars): 11

@@ -36,7 +36,7 @@ fn sanitize_repo_id(repo_id: &str) -> String {
 }
 
 fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {
-    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    let reports_dir = root_dir.join(".souls_scratchpad").join("reports");
     std::fs::create_dir_all(&reports_dir)
         .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
 
@@ -230,7 +230,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
-    let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root_dir.join(".souls_data").join("souls_heuristic_vault.db");
     let conn = Connection::open(&db_path).map_err(|e| {
         io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
     })?;

@@ -22,7 +22,7 @@ O pipeline cognitivo do SODA é implementado através de 4 binários principais 
    - **O que faz:** Coordena a síntese final. Orquestra a execução das 5 fases de prompts do LLM, calcula pontuações matemáticas de conformidade e ajusta prioridades (eixo SODA Fit). Salva o resultado consolidado em `repo_heuristics` e despacha para a planilha do Google Sheets via `SsotInjector`.
 
 **Comunicação entre as Fases:**
-As fases comunicam-se de forma assíncrona **exclusivamente via banco de dados local SQLite** (`.soda_data/soda_heuristic_vault.db`). Não existem scripts intermediários em Python ou Node.js controlando o fluxo no produto de produção. Todo o ecossistema é Rust nativo.
+As fases comunicam-se de forma assíncrona **exclusivamente via banco de dados local SQLite** (`.souls_data/souls_heuristic_vault.db`). Não existem scripts intermediários em Python ou Node.js controlando o fluxo no produto de produção. Todo o ecossistema é Rust nativo.
 
 **Qualidade Geral do Código:**
 - O código em Rust apresenta boa maturidade estrutural: uso de tipos fortemente tipados, tratamento de erros explícito com `thiserror`, controle de concorrência com travas transacionais no SQLite (`rusqlite::Transaction`) e retentativas dinâmicas com jitter para erros de concorrência (`DatabaseBusy`/`DatabaseLocked`).

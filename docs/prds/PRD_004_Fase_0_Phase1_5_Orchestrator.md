@@ -2,7 +2,7 @@
 
 ## 1. Objetivo Atômico
 
-Implementar o `Phase1_5Orchestrator` em Rust. O orquestrador receberá um `repo_id`, buscará os blobs brutos no `soda_heuristic_vault.db` (tabela `artefatos_brutos`), acionará o `ParetoBanditRouter` (N3) para cada blob e delegará a destilação para o `LocalDistiller` (N4) ou `CloudCascade` (N6/N7) conforme a Zona (Green, Yellow, Red). Ao final, deve salvar as `_essences_` de forma imutável no banco de dados.
+Implementar o `Phase1_5Orchestrator` em Rust. O orquestrador receberá um `repo_id`, buscará os blobs brutos no `souls_heuristic_vault.db` (tabela `artefatos_brutos`), acionará o `ParetoBanditRouter` (N3) para cada blob e delegará a destilação para o `LocalDistiller` (N4) ou `CloudCascade` (N6/N7) conforme a Zona (Green, Yellow, Red). Ao final, deve salvar as `_essences_` de forma imutável no banco de dados.
 
 Escopo mecânico deste PRD:
 

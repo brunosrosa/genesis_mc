@@ -6,7 +6,7 @@
 - Fontes fisicas lidas:
   - `Z:\genesis_mc\docs\adrs\ADR-026-Nomenclatura-Semantica-Zero-Brand.md`
   - `Z:\genesis_mc\gateway-config.yaml`
-  - `Z:\genesis_mc\.soda_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt`
+  - `Z:\genesis_mc\.souls_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt`
   - `Z:\genesis_mc\src-tauri\src\bin\soda_mcp_server.rs`
   - `Z:\genesis_mc\.agents\skills\**\SKILL.md`
 
@@ -157,7 +157,7 @@ Renomes textuais esperados nas skills:
 
 ### 3. Artefatos Derivados / Cache / Relatorios
 
-- `Z:\genesis_mc\.soda_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt`
+- `Z:\genesis_mc\.souls_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt`
   - Deve ser regenerado apos a refatoracao para refletir:
     - servidor `souls`
     - nomes atomicos novos

@@ -234,7 +234,7 @@ impl SsotInjector {
         let root_dir = std::path::Path::new(manifest_dir)
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."));
-        let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+        let db_path = root_dir.join(".souls_data").join("souls_heuristic_vault.db");
         Connection::open(&db_path).map_err(|e| SsotError::L2Failure(format!("Falha ao conectar no SQLite: {}", e)))
     }
 

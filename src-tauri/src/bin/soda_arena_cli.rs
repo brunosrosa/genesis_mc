@@ -62,7 +62,7 @@ fn resolve_root_dir() -> PathBuf {
 }
 
 fn resolve_benchmark_dir() -> PathBuf {
-    resolve_root_dir().join(".soda_data").join("benchmarks").join("processed")
+    resolve_root_dir().join(".souls_data").join("benchmarks").join("processed")
 }
 
 fn print_backend_info() {
@@ -453,7 +453,7 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
         });
     }
 
-    let report_dir = resolve_root_dir().join(".soda_scratchpad").join("reports");
+    let report_dir = resolve_root_dir().join(".souls_scratchpad").join("reports");
     let _ = fs::create_dir_all(&report_dir);
     let report_path = report_dir.join("arena_tier1_guillotine.txt");
 
@@ -486,7 +486,7 @@ fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path)
 fn run_tier2_colosseum(bench_dir: &Path, approved_models_input: &[PathBuf]) {
     println!("\n=== RUNNING TIER 2: O COLISEU E³ (BENCHMARK MASSIVO O(1)) ===");
 
-    let report_dir = resolve_root_dir().join(".soda_scratchpad").join("reports");
+    let report_dir = resolve_root_dir().join(".souls_scratchpad").join("reports");
     let _ = fs::create_dir_all(&report_dir);
 
     let mut approved_models = approved_models_input.to_vec();
@@ -714,7 +714,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut approved = match model_registry::fetch_approved_tier1_models(&conn) {
             Ok(list) if !list.is_empty() => list,
             _ => {
-                let report_dir = resolve_root_dir().join(".soda_scratchpad").join("reports");
+                let report_dir = resolve_root_dir().join(".souls_scratchpad").join("reports");
                 let tier1_report = report_dir.join("arena_tier1_guillotine.txt");
                 model_registry::load_approved_tier1_models(&tier1_report)
             }

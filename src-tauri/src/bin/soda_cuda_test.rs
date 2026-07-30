@@ -25,7 +25,7 @@ mod test_impl {
         let model_path = std::env::args()
             .nth(1)
             .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(".soda_data/models/Qwen3.5-0.8B-Q4_0.gguf"));
+            .unwrap_or_else(|| PathBuf::from(".souls_data/models/Qwen3.5-0.8B-Q4_0.gguf"));
 
         println!("[2/5] Target model path: {:?}", model_path);
         if !model_path.exists() {

@@ -109,7 +109,8 @@ impl EphemeralInferEngine for LlamaCppEngine {
         }
 
         // 0. Validação O(1) de Arquitetura Suportada (Fail-Closed)
-        if let Some(meta) = parse_gguf_metadata_zero_copy(model_path) {
+        let gguf_meta = parse_gguf_metadata_zero_copy(model_path);
+        if let Some(ref meta) = gguf_meta {
             if !model_registry::is_architecture_supported(&meta.family) {
                 return Err(InferenceError::ExecutionError(format!(
                     "Arquitetura '{}' não suportada pelo motor bare-metal SODA (Fail-Closed)",
@@ -129,14 +130,14 @@ impl EphemeralInferEngine for LlamaCppEngine {
         })?;
 
         // 3. Alocação do contexto com KV Cache Assimétrico & Fallbacks Matemáticos (ADR-027 / PRD-10.1 / Hotfix)
-        let (n_embd_head_v, declared_ctx, family) = if let Some(meta) = parse_gguf_metadata_zero_copy(model_path) {
+        let (n_embd_head_v, declared_ctx, family) = if let Some(ref meta) = gguf_meta {
             let h_kv = meta.architecture.head_count_kv.max(1);
             let head_v = if meta.architecture.embedding_length > 0 {
                 meta.architecture.embedding_length / h_kv
             } else {
                 128
             };
-            (head_v, meta.context_length as u32, meta.family)
+            (head_v, meta.context_length as u32, meta.family.clone())
         } else {
             (256, 4096, String::new())
         };

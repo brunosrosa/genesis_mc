@@ -27,7 +27,7 @@ Cada task tem um DoD (Definition of Done) executável. Tarefas marcadas `[SCAFFO
 **Escopo:** Substituir paths em configs ativas.
 
 - [ ] `src-tauri/semgrep/rules/_manifest.json:3` — `Z:\\genesis_mc` → `Z:\\souls_mc`
-- [ ] `gateway-config.yaml:41` — `Z:/genesis_mc/.soda_data/soda_state.db` → `Z:/souls_mc/.soda_data/soda_state.db`
+- [ ] `gateway-config.yaml:41` — `Z:/genesis_mc/.souls_data/souls_state.db` → `Z:/souls_mc/.souls_data/souls_state.db`
 
 **DoD:**
 - `git grep -E 'genesis[ _-]?mc' -- 'src-tauri/semgrep/rules/_manifest.json' 'gateway-config.yaml'` retorna 0

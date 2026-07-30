@@ -3,7 +3,7 @@
 SODA LLM Inventory Viewer (Visualizador SSOT do SQLite)
 ======================================================
 Este script atua exclusivamente como um extrator/visualizador de leitura (ETL Phase 3)
-do banco `.soda_data/soda_heuristic_vault.db` (tabela `model_registry`).
+do banco `.souls_data/souls_heuristic_vault.db` (tabela `model_registry`).
 
 Objetivo: Gerar um dossiê limpo, visual e cínico para o Arquiteto Humano
 decidir quais modelos manter ou deletar do SSD após a avaliação do Tier 1 / Tier 2,
@@ -16,13 +16,13 @@ import sqlite3
 from pathlib import Path
 
 def resolve_db_path() -> Path:
-    """Localiza o banco de dados SSOT .soda_data/soda_heuristic_vault.db."""
+    """Localiza o banco de dados SSOT .souls_data/souls_heuristic_vault.db."""
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent.parent
-    db_path = repo_root / ".soda_data" / "soda_heuristic_vault.db"
+    db_path = repo_root / ".souls_data" / "souls_heuristic_vault.db"
     
     if not db_path.exists():
-        cwd_db = Path.cwd() / ".soda_data" / "soda_heuristic_vault.db"
+        cwd_db = Path.cwd() / ".souls_data" / "souls_heuristic_vault.db"
         if cwd_db.exists():
             return cwd_db
         print(f"[!] ERRO BARE-METAL: Banco SQLite não encontrado em {db_path}", file=sys.stderr)

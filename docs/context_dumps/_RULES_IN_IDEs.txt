@@ -1,4 +1,4 @@
-_RULES_IN_IDEs Gerado em: 2026-07-28 20:10:41
+_RULES_IN_IDEs Gerado em: 2026-07-30 00:24:10
 
 ### ====================================================================================================
 ARQUIVO: GEMINI.md
@@ -116,7 +116,7 @@ O Gateway nativo em Rust agora serve ferramentas críticas intra-processo. Ao pr
 1. **`soda_get_ast`:** visão raio-X instantânea do esqueleto estrutural de repositórios/diretórios. Use para AST e topologia O(1) sem sidecar AST legado. (Alias legado: `repo_ast` — use apenas se `soda_get_ast` estiver indisponível)
 2. **`soda_fetch_web`:** extração garantida de Markdown limpo a partir de URLs, com tentativa dupla, bypass/fallback e proteção anti-bloqueio. Use para leitura web antes de qualquer rota `webcrawl`. (Alias legado: `web_fetch` — use apenas se `soda_fetch_web` estiver indisponível)
 3. **`soda_github_meta`:** telemetria comunitária GitHub (`stars`, `forks`, `issues` e PRs recentes) sem pontes JavaScript ou subprocessos inseguros. (Alias legado: `github_meta`, `mcp-github` — use apenas se `soda_github_meta` estiver indisponível)
-4. **`soda_sqlite_query`:** leitura segura da memória local (`soda_state.db` e `soda_heuristic_vault.db`) em modo somente leitura, limitada e fail-fast, sem `uvx` nem sidecar Python. (Alias legado: `db_query` — use apenas se `soda_sqlite_query` estiver indisponível)
+4. **`soda_sqlite_query`:** leitura segura da memória local (`souls_state.db` e `souls_heuristic_vault.db`) em modo somente leitura, limitada e fail-fast, sem `uvx` nem sidecar Python. (Alias legado: `db_query` — use apenas se `soda_sqlite_query` estiver indisponível)
 5. **Lei de Priorização Bare-Metal:** se a tarefa couber em uma dessas ferramentas intrínsecas, é PROIBIDO desviar para um MCP legado externo por conveniência.
 
 ###### 1.3. APRENDIZADOS OPERACIONAIS RECENTES DO HARVESTER
@@ -230,7 +230,7 @@ Qualquer futura CLI, sidecar ou ferramenta de análise estática criada pelo age
 *   **`soda_get_ast`:** visão estrutural O(1) de repositórios e diretórios para leitura cirúrgica de código.
 *   **`soda_fetch_web`:** extração garantida de Markdown limpo para URLs e documentações, com fallback embutido.
 *   **`soda_github_meta`:** telemetria comunitária GitHub para `owner/repo`, sem subprocessos.
-*   **`soda_sqlite_query`:** leitura segura e somente leitura dos cofres `soda_state.db` e `soda_heuristic_vault.db`, com limite de 200 linhas.
+*   **`soda_sqlite_query`:** leitura segura e somente leitura dos cofres `souls_state.db` e `souls_heuristic_vault.db`, com limite de 200 linhas.
 
 ###### 4. MICRO-PLANEJAMENTO (ARC + CHECKLISTASK)
 Opere sob o Protocolo ARC (Analyze, Run, Confirm). Cada tarefa exige granularidade:
@@ -288,7 +288,7 @@ Você está TERMINANTEMENTE PROIBIDO de atuar na branch `main` ou criar ramifica
 
 ### LEI DA HIGIENE DE WORKSPACE (FOBIA DE RAIZ):
 É TERMINANTEMENTE PROIBIDO despejar scripts de automação, meta-programação, logs, testes ou arquivos temporários na raiz do repositório.
-- A pasta `.soda_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
+- A pasta `.souls_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
 - A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
 - Lixo não sobrevivente deve ser apagado fisicamente após o uso.
 - Exceção governada (Zona Externa Efêmera): workspaces efêmeros do SO para ProjFS/extração rodam no %TEMP% (NTFS) sob `.souls_workspaces` e DEVEM ser aniquilados fora do repositório host via `spawn_detached_delete_process` (não-bloqueante).
@@ -401,7 +401,7 @@ Antes de usar MCPs legados, sidecars ou runtimes externos, SEMPRE priorize os po
 1. **`soda_get_ast`:** visão raio-X instantânea do esqueleto estrutural de repositórios/diretórios (O(1)). (Alias legado: `repo_ast` — compatibilidade apenas)
 2. **`soda_fetch_web`:** extração garantida de Markdown limpo a partir de URLs com fallback/proteção anti-bloqueio. (Alias legado: `web_fetch` — compatibilidade apenas)
 3. **`soda_github_meta`:** telemetria comunitária GitHub sem pontes JS/subprocessos inseguros. (Alias legado: `github_meta`, `mcp-github` — compatibilidade apenas)
-4. **`soda_sqlite_query`:** leitura segura da memória local (soda_state.db/soda_heuristic_vault.db) em modo somente leitura. (Alias legado: `db_query` — compatibilidade apenas)
+4. **`soda_sqlite_query`:** leitura segura da memória local (souls_state.db/souls_heuristic_vault.db) em modo somente leitura. (Alias legado: `db_query` — compatibilidade apenas)
 
 ###### 1. A REGRA DE OURO DA STACK: FÁBRICA VS. PRODUTO (DUALIDADE SISTÊMICA)
 Você (Antigravity IDE) deve separar estritamente a "esteira de montagem" do código que será entregue ao usuário.
@@ -553,7 +553,7 @@ Em impasses arquiteturais ou falhas de TDD:
 
 ### LEI DA HIGIENE DE WORKSPACE (FOBIA DE RAIZ):
 É TERMINANTEMENTE PROIBIDO despejar scripts de automação, meta-programação, logs, testes ou arquivos temporários na raiz do repositório.
-- A pasta `.soda_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
+- A pasta `.souls_scratchpad/` existe OBRIGATORIAMENTE para ser o seu laboratório. Qualquer script gerador (Python/Bash) ou log efêmero DEVE ser criado nela.
 - A raiz do projeto é terreno sagrado, reservado exclusivamente para configurações fundacionais (Cargo.toml, .env, README).
 - Lixo não sobrevivente deve ser apagado fisicamente após o uso.
 

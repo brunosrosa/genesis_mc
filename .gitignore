@@ -28,11 +28,12 @@ dist-ssr
 */tmp/*
 .agents/scratch/*/
 
+.souls_data/
 .soda_data/
 .archive/
-.soda_cache/
+.souls_cache/
 .soda_sandbox/
-.soda_scratchpad/
+.souls_scratchpad/
 .jcodemunch_index/
 .soda_semgrep/
 .pytest_cache/

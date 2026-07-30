@@ -839,7 +839,7 @@ async fn main() -> io::Result<()> {
 
     let (repo_filter, dry_run, max_rows) = parse_cli_args();
 
-    let vault_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    let vault_path = root_dir.join(".souls_data").join("souls_heuristic_vault.db");
     let mut conn = Connection::open(&vault_path)
         .map_err(|e| io::Error::other(format!("Falha ao abrir vault em {}: {e}", vault_path.display())))?;
     ensure_deep_components_schema(&conn).map_err(io::Error::other)?;

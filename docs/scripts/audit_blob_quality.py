@@ -465,7 +465,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Auditoria qualitativa 0-100 dos 11 blobs do Harvester."
     )
-    parser.add_argument("--db-path", type=Path, default=default_root / ".soda_data" / "soda_heuristic_vault.db")
+    parser.add_argument("--db-path", type=Path, default=default_root / ".souls_data" / "souls_heuristic_vault.db")
     parser.add_argument("--out-dir", type=Path, default=default_root / "docs" / "audits" / "quality")
     parser.add_argument("--top", type=int, default=10, help="Top N piores/melhores casos no relatório")
     parser.add_argument("--min-score", type=float, default=50.0, help="Score mínimo para entrar no 'worst cases'")

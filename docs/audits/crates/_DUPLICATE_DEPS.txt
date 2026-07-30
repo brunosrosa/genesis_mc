@@ -306,6 +306,9 @@ foldhash v0.2.0
 ├── hashbrown v0.16.1
 │   ├── clru v0.6.3
 │   │   └── gix-pack v0.71.0 (*)
+│   ├── hashlink v0.11.1
+│   │   └── rusqlite v0.39.0
+│   │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   ├── oxc_allocator v0.120.0
 │   │   ├── oxc v0.120.0 (*)
 │   │   ├── oxc_ast v0.120.0 (*)
@@ -340,7 +343,7 @@ foldhash v0.2.0
         │   └── reqwest v0.12.28 (*)
         ├── plist v1.9.0
         │   └── tauri-utils v2.9.3 (*)
-        └── serde_json v1.0.150
+        └── serde_json v1.0.149
             ├── cargo_metadata v0.19.2
             │   └── tauri-utils v2.9.3 (*)
             ├── json-patch v3.0.1
@@ -430,9 +433,8 @@ getrandom v0.3.4
 │           └── tauri-winres v0.3.6
 │               └── tauri-build v2.6.3 (*)
 │       [build-dependencies]
-│       ├── libsqlite3-sys v0.28.0
-│       │   └── rusqlite v0.31.0
-│       │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│       ├── libsqlite3-sys v0.37.0
+│       │   └── rusqlite v0.39.0 (*)
 │       ├── psm v0.1.31
 │       │   └── stacker v0.1.24
 │       │       └── recursive v0.1.1
@@ -468,11 +470,9 @@ hashbrown v0.12.3
     └── schemars v0.8.22 (*)
 
 hashbrown v0.14.5
-├── dashmap v6.2.1
-│   ├── gix-tempfile v23.0.2 (*)
-│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-└── hashlink v0.9.1
-    └── rusqlite v0.31.0 (*)
+└── dashmap v6.2.1
+    ├── gix-tempfile v23.0.2 (*)
+    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 hashbrown v0.16.1 (*)
 
@@ -490,9 +490,9 @@ log v0.4.33
 
 log v0.4.33
 ├── globset v0.4.18
-│   └── ignore v0.4.27
+│   └── ignore v0.4.25
 │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-├── ignore v0.4.27 (*)
+├── ignore v0.4.25 (*)
 ├── mockito v1.7.2 (*)
 ├── reqwest v0.12.28 (*)
 ├── sqlparser v0.62.0 (*)
@@ -580,7 +580,7 @@ serde_core v1.0.228
 │   └── tauri-utils v2.9.3 (*)
 ├── serde v1.0.228 (*)
 ├── serde-untagged v0.1.9 (*)
-├── serde_json v1.0.150 (*)
+├── serde_json v1.0.149 (*)
 ├── serde_spanned v1.1.1
 │   ├── toml v0.9.12+spec-1.1.0
 │   │   └── cargo_toml v0.22.3 (*)
@@ -603,16 +603,16 @@ serde_core v1.0.228
 
 serde_core v1.0.228
 ├── serde v1.0.228 (*)
-└── serde_json v1.0.150
+└── serde_json v1.0.149
     ├── assert-json-diff v2.0.2 (*)
     ├── jsonwebtoken v10.4.0 (*)
     ├── mockito v1.7.2 (*)
     ├── reqwest v0.12.28 (*)
     └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
-serde_json v1.0.150 (*)
+serde_json v1.0.149 (*)
 
-serde_json v1.0.150 (*)
+serde_json v1.0.149 (*)
 
 smallvec v1.15.2
 ├── cssparser v0.36.0 (*)
@@ -652,7 +652,7 @@ smallvec v1.15.2
 │       │   └── gix-features v0.48.1 (*)
 │       ├── string_cache v0.9.0
 │       │   └── web_atoms v0.2.5 (*)
-│       ├── tokio v1.52.3
+│       ├── tokio v1.51.1
 │       │   ├── h2 v0.4.15 (*)
 │       │   ├── hyper v1.10.1 (*)
 │       │   ├── hyper-rustls v0.27.9 (*)
@@ -667,7 +667,7 @@ smallvec v1.15.2
 │       │       ├── reqwest v0.12.28 (*)
 │       │       └── tower-http v0.6.11 (*)
 │       └── windows-projfs v0.1.8 (*)
-├── rusqlite v0.31.0 (*)
+├── rusqlite v0.39.0 (*)
 └── tracing-subscriber v0.3.23 (*)
 
 stable_deref_trait v1.2.1
@@ -854,22 +854,22 @@ windows-sys v0.61.2
 │   └── which v6.0.3
 │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── mio v1.2.1
-│   └── tokio v1.52.3 (*)
+│   └── tokio v1.51.1 (*)
 ├── nu-ansi-term v0.50.3
 │   └── tracing-subscriber v0.3.23 (*)
 ├── socket2 v0.6.4
 │   ├── hyper-util v0.1.20 (*)
-│   └── tokio v1.52.3 (*)
+│   └── tokio v1.51.1 (*)
 ├── stacker v0.1.24 (*)
 ├── tempfile v3.27.0 (*)
-├── tokio v1.52.3 (*)
+├── tokio v1.51.1 (*)
 └── winapi-util v0.1.11
-    ├── ignore v0.4.27 (*)
+    ├── ignore v0.4.25 (*)
     ├── same-file v1.0.6
-    │   ├── ignore v0.4.27 (*)
+    │   ├── ignore v0.4.25 (*)
     │   └── walkdir v2.5.0
     │       ├── gix-features v0.48.1 (*)
-    │       ├── ignore v0.4.27 (*)
+    │       ├── ignore v0.4.25 (*)
     │       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     │       ├── tauri-build v2.6.3 (*)
     │       └── tauri-utils v2.9.3 (*)

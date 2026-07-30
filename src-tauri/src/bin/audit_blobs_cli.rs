@@ -41,7 +41,7 @@ fn now_epoch_secs() -> io::Result<u64> {
 
 fn audit_report_path(root: &Path, repo_id: &str) -> PathBuf {
     let safe_repo = repo_id.replace(['/', '\\'], "_");
-    root.join(".soda_scratchpad")
+    root.join(".souls_scratchpad")
         .join("reports")
         .join(format!("_RAW_AUDIT_{safe_repo}.md"))
 }
@@ -133,7 +133,7 @@ fn main() -> io::Result<()> {
         .unwrap_or_else(|| TARGET_REPO_ID.to_string());
 
     let root = workspace_root();
-    let db_path = root.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root.join(".souls_data").join("souls_heuristic_vault.db");
     let report_path = audit_report_path(&root, &repo_id);
     let generated_at = now_epoch_secs()?;
 

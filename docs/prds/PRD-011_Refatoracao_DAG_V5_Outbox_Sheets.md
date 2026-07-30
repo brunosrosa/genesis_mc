@@ -5,7 +5,7 @@ O fluxo de ignição de repositórios do SODA (Fases N0, N1 e N2) atualmente sof
 
 Como o Google Sheets é nossa principal "Janela de Vidro" (Dashboard visual ao vivo) na ausência de um frontend final, precisamos preservar seu papel de espelho de estados (PENDENTE $\rightarrow$ INICIAR_TRIAGEM $\rightarrow$ TRIAGEM_CONCLUIDA).
 
-A solução é implementar o **Outbox Pattern**. As fases N1 (Guardião) e N2 (Batedor) passam a operar como motores de execução local-first, lendo e escrevendo estados primordialmente em tempo $\mathcal{O}(1)$ no SQLite (`soda_heuristic_vault.db`). Um agente/thread injetor assíncrono monitora as mutações de estado locais e as propaga em lotes (batch) ou sequencialmente com Jitter/Sleep obrigatório de 1000ms a 2000ms para o Google Sheets.
+A solução é implementar o **Outbox Pattern**. As fases N1 (Guardião) e N2 (Batedor) passam a operar como motores de execução local-first, lendo e escrevendo estados primordialmente em tempo $\mathcal{O}(1)$ no SQLite (`souls_heuristic_vault.db`). Um agente/thread injetor assíncrono monitora as mutações de estado locais e as propaga em lotes (batch) ou sequencialmente com Jitter/Sleep obrigatório de 1000ms a 2000ms para o Google Sheets.
 
 ---
 
@@ -16,7 +16,7 @@ O diagrama abaixo ilustra o desacoplamento de escrita e leitura síncrona. Toda 
 ```mermaid
 flowchart TD
     subgraph Local_First_Engine [Local-First Engine (SQLite)]
-        DB[(soda_heuristic_vault.db\ntabela: repositorios)]
+        DB[(souls_heuristic_vault.db\ntabela: repositorios)]
         
         N0[N0: Daemon Watcher] -->|1. Descobre link e insere PENDENTE| DB
         N1[N1: Guardião / Fase -1] -->|2. Lê PENDENTE / Atualiza Versão & Status| DB

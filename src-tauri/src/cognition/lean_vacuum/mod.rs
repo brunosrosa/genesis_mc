@@ -19,11 +19,13 @@
 use std::path::Path;
 
 pub mod ansi_filter;
+pub mod dedup;
 pub mod dot_flatten;
 pub mod myers_diff;
 pub mod text_compress;
 
 pub use ansi_filter::{ansi_density, strip_ansi};
+pub use dedup::deduplicate_blocks;
 pub use dot_flatten::dot_flatten;
 pub use myers_diff::myers_diff;
 pub use text_compress::{aggressive_compress, lightweight_cleanup};

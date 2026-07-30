@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let repo_id = parse_repo_id()?;
     let root_dir = workspace_root()?;
-    let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root_dir.join(".souls_data").join("souls_heuristic_vault.db");
     std::fs::create_dir_all(db_path.parent().ok_or("db parent")?)?;
 
     let conn = Connection::open(&db_path)?;

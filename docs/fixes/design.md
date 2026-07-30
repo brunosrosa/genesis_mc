@@ -72,7 +72,7 @@ flowchart TD
 | **L1: Code** | `src-tauri/src/harvester/canon.rs:17` | `SODA / Genesis MC:` | REPLACE → `SODA / Souls MC:` | Header canônico ativo |
 | **L1: Code** | `src-tauri/src/persist/ssot_injector.rs:1337` | `genesis-mc-sheets/1.0` | REPLACE → `souls-mc-sheets/1.0` | User-Agent HTTP ativo |
 | **L2: Config** | `src-tauri/semgrep/rules/_manifest.json:3` | `Z:\\genesis_mc` | REPLACE → `Z:\\souls_mc` | workspace_root ativo |
-| **L2: Config** | `gateway-config.yaml:41` | `Z:/genesis_mc/.soda_data/soda_state.db` | REPLACE → `Z:/souls_mc/.soda_data/soda_state.db` | DB path runtime |
+| **L2: Config** | `gateway-config.yaml:41` | `Z:/genesis_mc/.souls_data/souls_state.db` | REPLACE → `Z:/souls_mc/.souls_data/souls_state.db` | DB path runtime |
 | **L3: Meta** | `.trae/rules/project_rules.md:5` | `Genesis MC Core Context` | REPLACE → `Souls MC Core Context` | Título workspace rules |
 | **L3: Meta** | `README.md:18` | `O Genesis MC repudia` | REPLACE → `O Souls MC repudia` | Filosofia ativa do projeto |
 | **L3: Meta** | `README.md:62` | `rodando no Genesis MC` | REPLACE → `rodando no Souls MC` | Regra de governança ativa |

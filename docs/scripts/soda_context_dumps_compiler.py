@@ -102,7 +102,7 @@ def compile_mcp_inventory(output_dir):
     inventory_lines = []
     inventory_lines.append("=== MCP SERVER INVENTORY + SMOKE TEST ===")
     inventory_lines.append("SERVER_NAME: souls")
-    inventory_lines.append(f"LEGACY_REPORT_PATH: Z:\\souls_mc\\.soda_scratchpad\\reports\\_MCP_INVENTORY_soda-agent-gateway.txt")
+    inventory_lines.append(f"LEGACY_REPORT_PATH: Z:\\souls_mc\\.souls_scratchpad\\reports\\_MCP_INVENTORY_soda-agent-gateway.txt")
     inventory_lines.append(f"SOURCE_DIR: {mcp_dir}")
     
     tools = []
@@ -121,7 +121,7 @@ def compile_mcp_inventory(output_dir):
                 pass
                 
     inventory_lines.append(f"TOOL_COUNT: {len(tools)}")
-    inventory_lines.append("SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .soda_scratchpad/reports.")
+    inventory_lines.append("SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.")
     inventory_lines.append("")
     inventory_lines.append("=== SUMMARY ===")
     inventory_lines.append(f"OK_COUNT: {len(tools)}")
@@ -312,7 +312,7 @@ def cap_priority_score(caps_json):
     return -score
 
 def compile_models_inventory(output_dir):
-    db_path = r"Z:\souls_mc\.soda_data\soda_heuristic_vault.db"
+    db_path = r"Z:\souls_mc\.souls_data\souls_heuristic_vault.db"
     output_path = os.path.join(output_dir, "_MODELS_INVENTORY.txt")
     delete_if_exists(output_path)
     timestamp = get_timestamp()
@@ -358,7 +358,7 @@ def compile_models_inventory(output_dir):
         except Exception as e:
             lines.append(f"ERRO AO ACESSAR BANCO SQLITE: {e}")
     else:
-        lines.append("AVISO: Banco de dados soda_heuristic_vault.db não encontrado.")
+        lines.append("AVISO: Banco de dados souls_heuristic_vault.db não encontrado.")
         
     content = "\n".join(lines)
     with open(output_path, "w", encoding="utf-8") as outfile:

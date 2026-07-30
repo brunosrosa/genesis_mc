@@ -50,7 +50,7 @@ fn sanitize_repo_id(repo_id: &str) -> String {
 }
 
 fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {
-    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    let reports_dir = root_dir.join(".souls_scratchpad").join("reports");
     std::fs::create_dir_all(&reports_dir)
         .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
 
@@ -1536,10 +1536,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_cli_tracing(level);
 
     let root_dir = workspace_root()?;
-    let soda_data_dir = root_dir.join(".soda_data");
+    let soda_data_dir = root_dir.join(".souls_data");
     tokio::fs::create_dir_all(&soda_data_dir).await?;
 
-    let db_path = soda_data_dir.join("soda_heuristic_vault.db");
+    let db_path = soda_data_dir.join("souls_heuristic_vault.db");
     let args = parse_cli_args_from(std::env::args()).map_err(io::Error::other)?;
 
     if args.batch {

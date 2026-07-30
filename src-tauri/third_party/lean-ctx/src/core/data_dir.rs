@@ -11,7 +11,7 @@ pub fn lean_ctx_data_dir() -> Result<PathBuf, String> {
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let soda_data = cwd.join(".soda_data");
+    let soda_data = cwd.join(".souls_data");
     if soda_data.exists() || cwd.join("Cargo.toml").exists() {
         let _ = std::fs::create_dir_all(&soda_data);
         return Ok(soda_data);
@@ -19,7 +19,7 @@ pub fn lean_ctx_data_dir() -> Result<PathBuf, String> {
 
     let fallback = dirs::home_dir()
         .ok_or_else(|| "Cannot determine home directory".to_string())?
-        .join(".soda_data");
+        .join(".souls_data");
     let _ = std::fs::create_dir_all(&fallback);
     Ok(fallback)
 }
@@ -35,7 +35,7 @@ pub fn lean_ctx_cache_dir() -> Result<PathBuf, String> {
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let soda_cache = cwd.join(".soda_cache");
+    let soda_cache = cwd.join(".souls_cache");
     if soda_cache.exists() || cwd.join("Cargo.toml").exists() {
         let _ = std::fs::create_dir_all(&soda_cache);
         return Ok(soda_cache);
@@ -43,7 +43,7 @@ pub fn lean_ctx_cache_dir() -> Result<PathBuf, String> {
 
     let fallback = dirs::home_dir()
         .ok_or_else(|| "Cannot determine home directory".to_string())?
-        .join(".soda_cache");
+        .join(".souls_cache");
     let _ = std::fs::create_dir_all(&fallback);
     Ok(fallback)
 }

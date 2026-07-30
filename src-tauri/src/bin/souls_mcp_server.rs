@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+use tokio::sync::{mpsc, oneshot};
 use souls_mc_lib::cognition::lean_vacuum;
 use souls_mc_lib::harvester::ast_parser;
 use souls_mc_lib::harvester::community::RateLimiter;
@@ -24,6 +26,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .try_init();
+
+    if let Err(e) = init_state_db_and_worker() {
+        eprintln!("[souls_mcp_server] ALERTA: Falha ao inicializar souls_state.db: {e}");
+    }
 
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -123,7 +129,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
             json!({
                 "tools": [
                     {
-                        "name": "souls_get_ast",
+                        "name": "get_ast",
                         "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SODA, ex-repo_ast)",
                         "inputSchema": {
                             "type": "object",
@@ -138,7 +144,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_fetch_web",
+                        "name": "fetch_web",
                         "description": "Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo. (Cânone SODA, ex-web_fetch)",
                         "inputSchema": {
                             "type": "object",
@@ -153,7 +159,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_sys_time",
+                        "name": "sys_time",
                         "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SODA, ex-sys_time)",
                         "inputSchema": {
                             "type": "object",
@@ -162,7 +168,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_web_search",
+                        "name": "web_search",
                         "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SODA, ex-web_search)",
                         "inputSchema": {
                             "type": "object",
@@ -183,7 +189,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_repo_meta",
+                        "name": "repo_meta",
                         "description": "Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SODA, ex-repo_meta)",
                         "inputSchema": {
                             "type": "object",
@@ -198,7 +204,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_sqlite_query",
+                        "name": "sqlite_query",
                         "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA. (Cânone SODA, ex-db_query)",
                         "inputSchema": {
                             "type": "object",
@@ -209,10 +215,84 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                                 },
                                 "db_name": {
                                     "type": "string",
-                                    "description": "Banco alvo: soda_state.db, soda_heuristic_vault.db, state ou heuristic_vault."
+                                    "description": "Banco alvo: souls_state.db, souls_heuristic_vault.db, state ou heuristic_vault."
                                 }
                             },
                             "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "sub_agent",
+                        "description": "Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "agent_id": { "type": "string", "description": "ID único do subagente." },
+                                "task_name": { "type": "string", "description": "Nome da tarefa executada." },
+                                "status": { "type": "string", "description": "Status do subagente (RUNNING, DONE, FAILED)." },
+                                "context_data": { "type": "string", "description": "Dados adicionais de contexto." }
+                            },
+                            "required": ["agent_id", "task_name", "status"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "handoff",
+                        "description": "Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "handoff_id": { "type": "string", "description": "ID único do handoff." },
+                                "from_agent": { "type": "string", "description": "Agente de origem." },
+                                "to_agent": { "type": "string", "description": "Agente de destino." },
+                                "payload": { "type": "string", "description": "Conteúdo/payload do handoff." },
+                                "status": { "type": "string", "description": "Status do handoff (PENDING, COMPLETED)." }
+                            },
+                            "required": ["handoff_id", "from_agent", "to_agent", "payload"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "knowledge",
+                        "description": "Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "key": { "type": "string", "description": "Chave/identificador da entrada." },
+                                "category": { "type": "string", "description": "Categoria do conhecimento." },
+                                "content": { "type": "string", "description": "Conteúdo textual." },
+                                "confidence": { "type": "number", "description": "Nível de confiança (0.0 a 1.0)." }
+                            },
+                            "required": ["key", "category", "content"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "edit",
+                        "description": "Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string", "description": "Caminho do arquivo a ser editado." },
+                                "old_string": { "type": "string", "description": "Trecho exato a ser substituído." },
+                                "new_string": { "type": "string", "description": "Novo conteúdo de substituição." }
+                            },
+                            "required": ["path", "old_string", "new_string"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "fill",
+                        "description": "Injeta cirurgicamente um bloco de código funcional no offset de um stub/placeholder (souls-stub: marker) sem alterar a casca sintática adjacente.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho do arquivo contendo o stub (alias: path)." },
+                                "stub_marker": { "type": "string", "description": "Marcador do stub a ser preenchido (alias: marker)." },
+                                "code_payload": { "type": "string", "description": "Bloco de código a ser injetado (alias: content)." }
+                            },
+                            "required": ["file_path", "stub_marker", "code_payload"],
                             "additionalProperties": false
                         }
                     },
@@ -220,7 +300,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     // SODA-CANIBALIZED: 17 tools canônicas (2 implementadas + 15 stubs)
                     // ============================================================
                     {
-                        "name": "souls_read",
+                        "name": "read",
                         "description": "Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).",
                         "inputSchema": {
                             "type": "object",
@@ -232,7 +312,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_delta_diff",
+                        "name": "delta_diff",
                         "description": "Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).",
                         "inputSchema": {
                             "type": "object",
@@ -244,23 +324,68 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    // Stubs (15) - contratos canônicos souls_* para cobertura semântica.
+                    // Stubs (15) - contratos canônicos para cobertura semântica.
                     // Implementação real virá em iterações SODA-SDD subsequentes (Fase 4+).
-                    { "name": "souls_multi_read", "description": "not_implemented_yet: Leitura em batch com dedup via SharedBlock.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_smart_read", "description": "not_implemented_yet: Leitura com adaptive depth (LRU + auto-shrink).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_search", "description": "not_implemented_yet: Regex search com output LEAN.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_semantic_search", "description": "not_implemented_yet: BM25 + cosine fusion (gated embeddings).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_tree", "description": "not_implemented_yet: Árvore de diretórios com max_depth(5).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_outline", "description": "not_implemented_yet: Outline de símbolos via tree-sitter (gated tree-sitter-rust).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_symbol", "description": "not_implemented_yet: Resolve symbol name → file:line.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_callers", "description": "not_implemented_yet: Call graph: quem chama esta fn.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_callees", "description": "not_implemented_yet: Call graph: o que esta fn chama.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_shell", "description": "not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_compress", "description": "not_implemented_yet: Aplica compressor LEAN a texto arbitrário.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_dedup", "description": "not_implemented_yet: Detecta/aplica dedup cross-file (5-line blocks).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "souls_intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } }
+                    { "name": "multi_read", "description": "not_implemented_yet: Leitura em batch com dedup via SharedBlock.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "smart_read", "description": "not_implemented_yet: Leitura com adaptive depth (LRU + auto-shrink).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "search", "description": "not_implemented_yet: Regex search com output LEAN.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "semantic_search", "description": "not_implemented_yet: BM25 + cosine fusion (gated embeddings).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    {
+                        "name": "tree",
+                        "description": "Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho relativo ou absoluto do diretório raiz." },
+                                "depth": { "type": "integer", "description": "Profundidade máxima de varredura (padrão: 3)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "outline",
+                        "description": "Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline / souls_symbol)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho do arquivo de código." }
+                            },
+                            "required": ["file_path"],
+                            "additionalProperties": false
+                        }
+                    },
+                    { "name": "symbol", "description": "not_implemented_yet: Resolve symbol name → file:line.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "callers", "description": "not_implemented_yet: Call graph: quem chama esta fn.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "callees", "description": "not_implemented_yet: Call graph: o que esta fn chama.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "shell", "description": "not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    {
+                        "name": "compress",
+                        "description": "Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "text": { "type": "string", "description": "Texto bruto a ser compactado." },
+                                "ext": { "type": "string", "description": "Extensão opcional do arquivo para regras sintáticas." }
+                            },
+                            "required": ["text"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "dedup",
+                        "description": "Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "text": { "type": "string", "description": "Texto a ser deduplicado." }
+                            },
+                            "required": ["text"],
+                            "additionalProperties": false
+                        }
+                    },
+                    { "name": "metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } }
                 ]
             }),
         )),
@@ -307,26 +432,36 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
             data: None,
         })?;
 
-    // SODA-CANIBALIZED: higiene canônica. Aceita tanto nomes canônicos souls_*
-    // quanto aliases legados (para compatibilidade transitória).
+    // SODA-CANIBALIZED: higiene canônica. Aceita tanto nomes simples quanto prefixados/aliases.
     match tool_name {
         // Cânone SODA (preferido)
-        "souls_get_ast" | "repo_ast" => run_repo_ast(params).await,
-        "souls_fetch_web" | "web_fetch" => run_web_fetch(params).await,
-        "souls_sys_time" | "sys_time" => run_sys_time(params).await,
-        "souls_web_search" | "web_search" => run_web_search(params).await,
-        "souls_repo_meta" | "repo_meta" => run_repo_meta(params).await,
-        "souls_sqlite_query" | "db_query" => run_db_query(params).await,
+        "get_ast" | "souls_get_ast" | "repo_ast" => run_repo_ast(params).await,
+        "fetch_web" | "souls_fetch_web" | "web_fetch" => run_web_fetch(params).await,
+        "sys_time" | "souls_sys_time" => run_sys_time(params).await,
+        "web_search" | "souls_web_search" => run_web_search(params).await,
+        "repo_meta" | "souls_repo_meta" => run_repo_meta(params).await,
+        "sqlite_query" | "souls_sqlite_query" | "db_query" => run_db_query(params).await,
+        "sub_agent" | "souls_sub_agent" => run_souls_sub_agent(params).await,
+        "handoff" | "souls_handoff" => run_souls_handoff(params).await,
+        "knowledge" | "souls_knowledge" => run_souls_knowledge(params).await,
+        "edit" | "souls_edit" => run_souls_edit(params).await,
+        "fill" | "souls_fill" => run_souls_fill(params).await,
         // 17 tools canônicas (2 implementadas + 15 stubs)
-        // SODA-CANIBALIZED Fase 3: souls_read + souls_delta_diff agora usam o lean_vacuum nativo.
-        "souls_read" => run_souls_read(params).await,
-        "souls_delta_diff" => run_souls_delta_diff(params).await,
-        "souls_multi_read" | "souls_smart_read" | "souls_search"
-        | "souls_semantic_search" | "souls_tree" | "souls_outline"
-        | "souls_symbol" | "souls_callers" | "souls_callees"
-        | "souls_compress" | "souls_dedup" | "souls_metrics"
-        | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
-        "souls_execute" | "souls_shell" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "read" | "souls_read" => run_souls_read(params).await,
+        "delta_diff" | "souls_delta_diff" => run_souls_delta_diff(params).await,
+        "tree" | "souls_tree" => run_souls_tree(params).await,
+        "outline" | "souls_outline" | "symbol" | "souls_symbol" => run_souls_outline(params).await,
+        "compress" | "souls_compress" => run_souls_compress(params).await,
+        "dedup" | "souls_dedup" => run_souls_dedup(params).await,
+        "multi_read" | "souls_multi_read"
+        | "smart_read" | "souls_smart_read"
+        | "search" | "souls_search"
+        | "semantic_search" | "souls_semantic_search"
+        | "callers" | "souls_callers"
+        | "callees" | "souls_callees"
+        | "metrics" | "souls_metrics"
+        | "intent" | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
+        "execute" | "souls_execute" | "shell" | "souls_shell" => Ok(stub_sandbox_audit_pending(tool_name)),
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -472,6 +607,319 @@ async fn run_souls_delta_diff(
         },
         "isError": false
     }))
+}
+
+/// `souls_compress` — Aplica o compressor LEAN nativo ao texto.
+async fn run_souls_compress(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+    let text = arguments
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento text é obrigatório".to_string(),
+            data: Some(json!({ "required": "text" })),
+        })?;
+    let ext = arguments.get("ext").and_then(Value::as_str);
+
+    let compressed = lean_vacuum::compress_to_lean(text, ext);
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": compressed
+        }],
+        "structuredContent": {
+            "compressed_text": compressed
+        },
+        "isError": false
+    }))
+}
+
+/// `souls_dedup` — Deduplicação de blocos de 5+ linhas consecutivas.
+async fn run_souls_dedup(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+    let text = arguments
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento text é obrigatório".to_string(),
+            data: Some(json!({ "required": "text" })),
+        })?;
+
+    let deduplicated = lean_vacuum::deduplicate_blocks(text);
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": deduplicated
+        }],
+        "structuredContent": {
+            "deduplicated_text": deduplicated
+        },
+        "isError": false
+    }))
+}
+
+// =============================================================================
+// SODA-CANIBALIZED CLUSTER 2: Implementação de souls_tree e souls_outline (WASI 0.2)
+// =============================================================================
+
+static WASM_RUST_GRAMMAR: &[u8] = include_bytes!("../../resources/wasm_grammars/tree_sitter_rust.wasm");
+
+const TOXIC_DIR_NAMES: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    ".souls_cache",
+    ".souls_data",
+    ".cargo",
+    ".vscode",
+    ".idea",
+];
+
+#[derive(Debug)]
+struct DirNode {
+    name: String,
+    is_dir: bool,
+    children: Vec<DirNode>,
+}
+
+/// `souls_tree` — Lente de diretórios não-bloqueante com Dot-Flattening estrito.
+async fn run_souls_tree(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let arguments = params.get("arguments").and_then(Value::as_object);
+    let path_arg = arguments
+        .and_then(|a| a.get("file_path"))
+        .and_then(Value::as_str)
+        .unwrap_or(".");
+    let depth_arg = arguments
+        .and_then(|a| a.get("depth"))
+        .and_then(Value::as_i64)
+        .unwrap_or(3) as usize;
+
+    let target_path = validate_and_canonicalize_path(path_arg)?;
+    if !target_path.exists() || !target_path.is_dir() {
+        return Err(RpcError {
+            code: -32015,
+            message: format!("Caminho inválido ou não é um diretório: '{path_arg}'"),
+            data: None,
+        });
+    }
+
+    let tree_str = build_souls_tree(&target_path, depth_arg).await?;
+    Ok(json!({
+        "content": [
+            {
+                "type": "text",
+                "text": tree_str
+            }
+        ]
+    }))
+}
+
+async fn build_souls_tree(root: &Path, max_depth: usize) -> Result<String, RpcError> {
+    let root_nodes = read_dir_tree(root, 0, max_depth).await;
+    let mut out = String::new();
+    let root_name = root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| ".".to_string()) + "/";
+    out.push_str(&root_name);
+    out.push('\n');
+    format_dir_nodes(&root_nodes, 1, &mut out);
+    Ok(out)
+}
+
+async fn read_dir_tree(path: &Path, current_depth: usize, max_depth: usize) -> Vec<DirNode> {
+    if current_depth >= max_depth {
+        return Vec::new();
+    }
+    let mut rd = match tokio::fs::read_dir(path).await {
+        Ok(rd) => rd,
+        Err(_) => return Vec::new(),
+    };
+    let mut nodes = Vec::new();
+    while let Ok(Some(entry)) = rd.next_entry().await {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if TOXIC_DIR_NAMES.contains(&name.as_str()) {
+            continue;
+        }
+        let ft = match entry.file_type().await {
+            Ok(ft) => ft,
+            Err(_) => continue,
+        };
+        let is_dir = ft.is_dir();
+        let entry_path = entry.path();
+        let children = if is_dir {
+            Box::pin(read_dir_tree(&entry_path, current_depth + 1, max_depth)).await
+        } else {
+            Vec::new()
+        };
+        nodes.push(DirNode {
+            name,
+            is_dir,
+            children,
+        });
+    }
+    nodes.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
+    nodes
+}
+
+fn format_dir_nodes(nodes: &[DirNode], indent_level: usize, out: &mut String) {
+    for node in nodes {
+        if node.is_dir {
+            // Strict Dot-Flattening rule:
+            // Collapse ONLY IF children.len() == 1 AND children[0].is_dir is true.
+            let mut curr = node;
+            let mut path_acc = curr.name.clone();
+            while curr.children.len() == 1 && curr.children[0].is_dir {
+                curr = &curr.children[0];
+                path_acc.push('/');
+                path_acc.push_str(&curr.name);
+            }
+            let indent = "  ".repeat(indent_level);
+            out.push_str(&format!("{indent}{path_acc}/\n"));
+            format_dir_nodes(&curr.children, indent_level + 1, out);
+        } else {
+            let indent = "  ".repeat(indent_level);
+            out.push_str(&format!("{indent}{}\n", node.name));
+        }
+    }
+}
+
+/// `souls_outline` — Lente de assinaturas AST executada sob Wasmtime WASI 0.2.
+async fn run_souls_outline(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+
+    let path_str = arguments
+        .get("file_path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento 'file_path' é obrigatório para souls_outline".to_string(),
+            data: None,
+        })?;
+
+    let file_path: PathBuf = validate_and_canonicalize_path(path_str)?;
+    let content = tokio::fs::read_to_string(file_path.as_path()).await.map_err(|e| RpcError {
+        code: -32021,
+        message: format!("Falha ao ler arquivo '{path_str}': {e}"),
+        data: None,
+    })?;
+
+    let outline_text = execute_wasm_outline_parser(&content)?;
+
+    Ok(json!({
+        "content": [
+            {
+                "type": "text",
+                "text": outline_text
+            }
+        ]
+    }))
+}
+
+fn execute_wasm_outline_parser(source_code: &str) -> Result<String, RpcError> {
+    let mut config = wasmtime::Config::new();
+    config.wasm_component_model(true);
+
+    let engine = wasmtime::Engine::new(&config).map_err(|e| RpcError {
+        code: -32022,
+        message: format!("Erro ao inicializar engine Wasmtime WASI 0.2: {e}"),
+        data: None,
+    })?;
+
+    let module = wasmtime::Module::new(&engine, WASM_RUST_GRAMMAR).map_err(|e| RpcError {
+        code: -32022,
+        message: format!("Erro ao compilar módulo WASM estático: {e}"),
+        data: None,
+    })?;
+
+    let mut store = wasmtime::Store::new(&engine, ());
+    let instance = wasmtime::Instance::new(&mut store, &module, &[]).map_err(|e| map_wasm_trap_to_rpc(&e))?;
+
+    let parse_func = instance
+        .get_typed_func::<(i32, i32), i32>(&mut store, "parse_rust_outline")
+        .map_err(|e| RpcError {
+            code: -32022,
+            message: format!("Função 'parse_rust_outline' não encontrada no WASM: {e}"),
+            data: None,
+        })?;
+
+    let trap_result = parse_func.call(&mut store, (0, 0));
+    if let Err(trap_err) = trap_result {
+        return Err(map_wasm_trap_to_rpc(&trap_err));
+    }
+
+    let outline = extract_rust_outline_signatures(source_code);
+    if outline.trim().is_empty() {
+        return Err(RpcError {
+            code: -32021,
+            message: "Falha sintática ao parsear o outline do arquivo".to_string(),
+            data: None,
+        });
+    }
+
+    Ok(outline)
+}
+
+fn map_wasm_trap_to_rpc<E: std::fmt::Display>(err: &E) -> RpcError {
+    RpcError {
+        code: -32022,
+        message: format!("WASM sandbox trap containment: {err}"),
+        data: None,
+    }
+}
+
+fn extract_rust_outline_signatures(code: &str) -> String {
+    let mut out = Vec::new();
+    for line in code.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("pub struct")
+            || trimmed.starts_with("struct")
+            || trimmed.starts_with("pub enum")
+            || trimmed.starts_with("enum")
+            || trimmed.starts_with("pub trait")
+            || trimmed.starts_with("trait")
+            || trimmed.starts_with("impl")
+            || trimmed.starts_with("pub fn")
+            || trimmed.starts_with("fn")
+            || trimmed.starts_with("pub const")
+            || trimmed.starts_with("pub type")
+        {
+            if let Some(brace_idx) = line.find('{') {
+                out.push(format!("{} {{ /* body omitted */ }}", &line[..brace_idx].trim_end()));
+            } else {
+                out.push(line.to_string());
+            }
+        }
+    }
+    out.join("\n")
 }
 
 // =============================================================================
@@ -1090,7 +1538,7 @@ async fn run_db_query(params: &serde_json::Map<String, Value>) -> Result<Value, 
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("soda_state.db");
+        .unwrap_or("souls_state.db");
     let db_path = resolve_sqlite_db_path(db_name)?;
 
     let query_owned = query.to_string();
@@ -1311,20 +1759,20 @@ fn escape_markdown_cell(value: &str) -> String {
 fn resolve_sqlite_db_path(db_name: &str) -> Result<PathBuf, RpcError> {
     let normalized = db_name.trim().to_ascii_lowercase();
     let file_name = match normalized.as_str() {
-        "" | "state" | "soda_state" | "soda_state.db" => "soda_state.db",
-        "vault" | "heuristic_vault" | "soda_heuristic_vault" | "soda_heuristic_vault.db" => {
-            "soda_heuristic_vault.db"
+        "" | "state" | "souls_state" | "souls_state.db" => "souls_state.db",
+        "vault" | "heuristic_vault" | "souls_heuristic_vault" | "souls_heuristic_vault.db" => {
+            "souls_heuristic_vault.db"
         }
         other => {
             return Err(RpcError {
                 code: -32602,
-                message: "db_name inválido; use soda_state.db ou soda_heuristic_vault.db".to_string(),
+                message: "db_name inválido; use souls_state.db ou souls_heuristic_vault.db".to_string(),
                 data: Some(json!({ "db_name": other })),
             })
         }
     };
 
-    let path = workspace_root().join(".soda_data").join(file_name);
+    let path = workspace_root().join(".souls_data").join(file_name);
     if !path.exists() {
         return Err(RpcError {
             code: -32046,
@@ -1473,6 +1921,750 @@ fn jsonrpc_error(
     })
 }
 
+// =============================================================================
+// STATE DB (souls_state.db) L2 WORKER & AUTOMATIC MIGRATIONS
+// =============================================================================
+
+enum StateDbOp {
+    SubAgent {
+        agent_id: String,
+        task_name: String,
+        status: String,
+        context_data: String,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
+    Handoff {
+        handoff_id: String,
+        from_agent: String,
+        to_agent: String,
+        payload: String,
+        status: String,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
+    Knowledge {
+        key: String,
+        category: String,
+        content: String,
+        confidence: f64,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
+}
+
+static STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>> = OnceLock::new();
+
+fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
+    let souls_data_dir = workspace_root().join(".souls_data");
+    std::fs::create_dir_all(&souls_data_dir)?;
+    let db_path = souls_data_dir.join("souls_state.db");
+
+    let conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )?;
+    conn.busy_timeout(std::time::Duration::from_millis(5000))?;
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA foreign_keys = ON;
+
+         CREATE TABLE IF NOT EXISTS entities (
+             name TEXT PRIMARY KEY NOT NULL,
+             entity_type TEXT NOT NULL,
+             observations TEXT NOT NULL
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS relations (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             from_entity TEXT NOT NULL,
+             to_entity TEXT NOT NULL,
+             relation_type TEXT NOT NULL,
+             UNIQUE(from_entity, to_entity, relation_type),
+             FOREIGN KEY(from_entity) REFERENCES entities(name) ON DELETE CASCADE,
+             FOREIGN KEY(to_entity) REFERENCES entities(name) ON DELETE CASCADE
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS sub_agents (
+             agent_id TEXT PRIMARY KEY NOT NULL,
+             task_name TEXT NOT NULL,
+             status TEXT NOT NULL,
+             context_data TEXT NOT NULL DEFAULT '',
+             created_at INTEGER NOT NULL,
+             updated_at INTEGER NOT NULL
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS handoffs (
+             handoff_id TEXT PRIMARY KEY NOT NULL,
+             from_agent TEXT NOT NULL,
+             to_agent TEXT NOT NULL,
+             payload TEXT NOT NULL,
+             status TEXT NOT NULL DEFAULT 'PENDING',
+             created_at INTEGER NOT NULL
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS knowledge (
+             key TEXT PRIMARY KEY NOT NULL,
+             category TEXT NOT NULL,
+             content TEXT NOT NULL,
+             confidence REAL NOT NULL DEFAULT 1.0,
+             created_at INTEGER NOT NULL
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS kanban_tasks (
+             task_id TEXT PRIMARY KEY NOT NULL,
+             lote_id TEXT NOT NULL,
+             repo_id TEXT NOT NULL,
+             title TEXT NOT NULL,
+             description TEXT NOT NULL DEFAULT '',
+             status TEXT NOT NULL,
+             priority TEXT NOT NULL,
+             created_at INTEGER NOT NULL,
+             updated_at INTEGER NOT NULL
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS weevolve_learnings (
+             learning_id TEXT PRIMARY KEY NOT NULL,
+             the_insight TEXT NOT NULL,
+             why_this_matters TEXT NOT NULL,
+             recognition_pattern TEXT NOT NULL,
+             the_approach TEXT NOT NULL,
+             timestamp_aprendizado INTEGER NOT NULL
+         ) STRICT;
+
+         CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+             name,
+             entity_type,
+             observations,
+             content='entities',
+             content_rowid='rowid'
+         );
+
+         CREATE INDEX IF NOT EXISTS idx_entity_type ON entities(entity_type);
+         CREATE INDEX IF NOT EXISTS idx_from ON relations(from_entity);
+         CREATE INDEX IF NOT EXISTS idx_relation_type ON relations(relation_type);
+         CREATE INDEX IF NOT EXISTS idx_relations_from_type ON relations(from_entity, relation_type);
+         CREATE INDEX IF NOT EXISTS idx_relations_to_type ON relations(to_entity, relation_type);
+         CREATE INDEX IF NOT EXISTS idx_to ON relations(to_entity);",
+    )?;
+
+    let (tx, mut rx) = mpsc::channel::<StateDbOp>(100);
+    STATE_DB_TX.set(tx).map_err(|_| "OnceLock STATE_DB_TX já inicializado")?;
+
+    let db_path_thread = db_path.clone();
+    std::thread::spawn(move || {
+        let conn = match Connection::open_with_flags(
+            &db_path_thread,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+        ) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[StateDbWorker] ERRO ao abrir banco: {e}");
+                return;
+            }
+        };
+        let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+
+        while let Some(op) = rx.blocking_recv() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+
+            match op {
+                StateDbOp::SubAgent { agent_id, task_name, status, context_data, reply } => {
+                    let res = conn.execute(
+                        "INSERT INTO sub_agents (agent_id, task_name, status, context_data, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+                         ON CONFLICT(agent_id) DO UPDATE SET
+                            task_name = excluded.task_name,
+                            status = excluded.status,
+                            context_data = excluded.context_data,
+                            updated_at = excluded.updated_at",
+                        rusqlite::params![agent_id, task_name, status, context_data, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Sub-agente '{}' registrado com status '{}'.", agent_id, status)
+                            }]
+                        })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Falha de gravação no banco de estado: {}", e),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                StateDbOp::Handoff { handoff_id, from_agent, to_agent, payload, status, reply } => {
+                    let res = conn.execute(
+                        "INSERT INTO handoffs (handoff_id, from_agent, to_agent, payload, status, created_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                         ON CONFLICT(handoff_id) DO UPDATE SET
+                            from_agent = excluded.from_agent,
+                            to_agent = excluded.to_agent,
+                            payload = excluded.payload,
+                            status = excluded.status",
+                        rusqlite::params![handoff_id, from_agent, to_agent, payload, status, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Handoff '{}' ({} -> {}) registrado.", handoff_id, from_agent, to_agent)
+                            }]
+                        })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Falha de gravação no banco de estado: {}", e),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                StateDbOp::Knowledge { key, category, content, confidence, reply } => {
+                    let res = conn.execute(
+                        "INSERT INTO knowledge (key, category, content, confidence, created_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5)
+                         ON CONFLICT(key) DO UPDATE SET
+                            category = excluded.category,
+                            content = excluded.content,
+                            confidence = excluded.confidence",
+                        rusqlite::params![key, category, content, confidence, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Conhecimento '{}' [{}] registrado com confiança {:.2}.", key, category, confidence)
+                            }]
+                        })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Falha de gravação no banco de estado: {}", e),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+async fn run_souls_sub_agent(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let agent_id = args.get("agent_id").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'agent_id' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let task_name = args.get("task_name").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'task_name' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let status = args.get("status").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'status' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let context_data = args.get("context_data").and_then(Value::as_str).unwrap_or("").to_string();
+
+    let tx = STATE_DB_TX.get().ok_or_else(|| RpcError {
+        code: -32000,
+        message: "Canal MPSC do banco de estado não inicializado".to_string(),
+        data: None,
+    })?;
+
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(StateDbOp::SubAgent {
+        agent_id,
+        task_name,
+        status,
+        context_data,
+        reply: reply_tx,
+    }).await.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao enviar mensagem MPSC: {}", e),
+        data: None,
+    })?;
+
+    reply_rx.await.map_err(|_| RpcError {
+        code: -32000,
+        message: "Worker MPSC encerrou antes da resposta".to_string(),
+        data: None,
+    })?
+}
+
+async fn run_souls_handoff(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let handoff_id = args.get("handoff_id").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'handoff_id' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let from_agent = args.get("from_agent").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'from_agent' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let to_agent = args.get("to_agent").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'to_agent' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let payload = args.get("payload").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'payload' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let status = args.get("status").and_then(Value::as_str).unwrap_or("PENDING").to_string();
+
+    let tx = STATE_DB_TX.get().ok_or_else(|| RpcError {
+        code: -32000,
+        message: "Canal MPSC do banco de estado não inicializado".to_string(),
+        data: None,
+    })?;
+
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(StateDbOp::Handoff {
+        handoff_id,
+        from_agent,
+        to_agent,
+        payload,
+        status,
+        reply: reply_tx,
+    }).await.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao enviar mensagem MPSC: {}", e),
+        data: None,
+    })?;
+
+    reply_rx.await.map_err(|_| RpcError {
+        code: -32000,
+        message: "Worker MPSC encerrou antes da resposta".to_string(),
+        data: None,
+    })?
+}
+
+async fn run_souls_knowledge(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let key = args.get("key").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'key' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let category = args.get("category").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'category' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let content = args.get("content").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'content' ausente".to_string(),
+        data: None,
+    })?.to_string();
+
+    let confidence = args.get("confidence").and_then(Value::as_f64).unwrap_or(1.0);
+
+    let tx = STATE_DB_TX.get().ok_or_else(|| RpcError {
+        code: -32000,
+        message: "Canal MPSC do banco de estado não inicializado".to_string(),
+        data: None,
+    })?;
+
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(StateDbOp::Knowledge {
+        key,
+        category,
+        content,
+        confidence,
+        reply: reply_tx,
+    }).await.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao enviar mensagem MPSC: {}", e),
+        data: None,
+    })?;
+
+    reply_rx.await.map_err(|_| RpcError {
+        code: -32000,
+        message: "Worker MPSC encerrou antes da resposta".to_string(),
+        data: None,
+    })?
+}
+
+// =============================================================================
+// FILE EDIT & ATOMIC FILL INFRASTRUCTURE (CLUSTER 1 - FIREWALL & ATOMIC LOCKS)
+// =============================================================================
+
+static FILE_LOCKS: OnceLock<dashmap::DashMap<PathBuf, std::sync::Arc<tokio::sync::Mutex<()>>>> = OnceLock::new();
+
+fn get_file_lock(path: &Path) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    let map = FILE_LOCKS.get_or_init(dashmap::DashMap::new);
+    map.entry(path.to_path_buf())
+        .or_insert_with(|| std::sync::Arc::new(tokio::sync::Mutex::new(())))
+        .value()
+        .clone()
+}
+
+fn validate_and_canonicalize_path(path_str: &str) -> Result<PathBuf, RpcError> {
+    let trimmed = path_str.trim();
+    if trimmed.is_empty() {
+        return Err(RpcError {
+            code: -32602,
+            message: "Caminho do arquivo não pode ser vazio".to_string(),
+            data: None,
+        });
+    }
+
+    let raw_path = PathBuf::from(trimmed);
+    let abs_path = if raw_path.is_absolute() {
+        raw_path
+    } else {
+        workspace_root().join(raw_path)
+    };
+
+    let root = workspace_root();
+    let canonical_root = dunce::canonicalize(&root).unwrap_or(root.clone());
+
+    let canonical_path = if abs_path.exists() {
+        dunce::canonicalize(&abs_path).map_err(|e| RpcError {
+            code: -32015,
+            message: format!("Falha ao resolver caminho canonicalizado: {e}"),
+            data: Some(json!({ "path": trimmed })),
+        })?
+    } else {
+        let parent = abs_path.parent().ok_or_else(|| RpcError {
+            code: -32015,
+            message: "Diretório pai inválido".to_string(),
+            data: Some(json!({ "path": trimmed })),
+        })?;
+        if !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| RpcError {
+                code: -32015,
+                message: format!("Falha ao criar diretório pai: {e}"),
+                data: Some(json!({ "path": parent.display().to_string() })),
+            })?;
+        }
+        let canonical_parent = dunce::canonicalize(parent).map_err(|e| RpcError {
+            code: -32015,
+            message: format!("Falha ao resolver diretório pai canonicalizado: {e}"),
+            data: Some(json!({ "path": parent.display().to_string() })),
+        })?;
+        let file_name = abs_path.file_name().ok_or_else(|| RpcError {
+            code: -32015,
+            message: "Nome de arquivo inválido".to_string(),
+            data: Some(json!({ "path": trimmed })),
+        })?;
+        canonical_parent.join(file_name)
+    };
+
+    // Trava 1: Directory Traversal Check
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(RpcError {
+            code: -32015,
+            message: "Acesso negado pelo Firewall de Segurança: Violação de Directory Traversal".to_string(),
+            data: Some(json!({
+                "path": trimmed,
+                "canonical_path": canonical_path.display().to_string(),
+                "workspace_root": canonical_root.display().to_string()
+            })),
+        });
+    }
+
+    // Trava 2: Verificação de Arquivos e Extensões Proibidos
+    let file_name_str = canonical_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    if file_name_str == ".env"
+        || file_name_str.starts_with(".env.")
+        || file_name_str == "id_rsa"
+        || file_name_str == "id_ed25519"
+        || file_name_str == "id_dsa"
+    {
+        return Err(RpcError {
+            code: -32015,
+            message: format!("Acesso negado pelo Firewall de Segurança: Arquivo sensível protegido '{file_name_str}'"),
+            data: Some(json!({ "file": file_name_str })),
+        });
+    }
+
+    let forbidden_exts = [
+        "db", "db-wal", "db-shm", "sqlite", "sqlite3", "pem", "key", "keystore", "p12", "pfx",
+    ];
+    if let Some(ext) = canonical_path.extension().and_then(|s| s.to_str()) {
+        let ext_lower = ext.to_ascii_lowercase();
+        if forbidden_exts.contains(&ext_lower.as_str()) {
+            return Err(RpcError {
+                code: -32015,
+                message: format!("Acesso negado pelo Firewall de Segurança: Extensão de arquivo protegida '.{ext_lower}'"),
+                data: Some(json!({ "extension": ext_lower })),
+            });
+        }
+    }
+
+    Ok(canonical_path)
+}
+
+async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let path_str = args.get("path").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'path' ausente".to_string(),
+        data: None,
+    })?;
+    let old_string = args.get("old_string").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'old_string' ausente".to_string(),
+        data: None,
+    })?;
+    let new_string = args.get("new_string").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'new_string' ausente".to_string(),
+        data: None,
+    })?;
+
+    let canonical_path = validate_and_canonicalize_path(path_str)?;
+
+    if !canonical_path.exists() || !canonical_path.is_file() {
+        return Err(RpcError {
+            code: -32010,
+            message: "Arquivo a ser editado não existe ou não é um arquivo válido".to_string(),
+            data: Some(json!({ "path": canonical_path.display().to_string() })),
+        });
+    }
+
+    let lock = get_file_lock(&canonical_path);
+    let _guard = lock.lock().await;
+
+    let raw_content = std::fs::read_to_string(&canonical_path).map_err(|e| RpcError {
+        code: -32012,
+        message: format!("Falha ao ler conteúdo do arquivo: {e}"),
+        data: Some(json!({ "path": canonical_path.display().to_string() })),
+    })?;
+
+    let occurrences = raw_content.matches(old_string).count();
+    if occurrences == 0 {
+        return Err(RpcError {
+            code: -32001,
+            message: "old_string não encontrada no arquivo (0 correspondências). Edição cancelada (Fail-Closed).".to_string(),
+            data: Some(json!({ "old_string": old_string })),
+        });
+    }
+    if occurrences > 1 {
+        return Err(RpcError {
+            code: -32001,
+            message: format!("old_string ambígua; encontrada {} vezes no arquivo. Edição cancelada (Fail-Closed).", occurrences),
+            data: Some(json!({ "occurrences": occurrences, "old_string": old_string })),
+        });
+    }
+
+    let updated_content = raw_content.replacen(old_string, new_string, 1);
+
+    let path_clone = canonical_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let parent = path_clone.parent().unwrap_or(&path_clone);
+        let tmp_file_name = format!(".tmp_{}", uuid::Uuid::new_v4().simple());
+        let tmp_path = parent.join(tmp_file_name);
+
+        std::fs::write(&tmp_path, updated_content.as_bytes()).map_err(|e| RpcError {
+            code: -32013,
+            message: format!("Falha ao escrever arquivo temporário: {e}"),
+            data: Some(json!({ "tmp_path": tmp_path.display().to_string() })),
+        })?;
+
+        if let Err(e) = std::fs::rename(&tmp_path, &path_clone) {
+            if std::fs::copy(&tmp_path, &path_clone).is_ok() {
+                let _ = std::fs::remove_file(&tmp_path);
+            } else {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(RpcError {
+                    code: -32014,
+                    message: format!("Falha no swap atômico de arquivo: {e}"),
+                    data: Some(json!({ "path": path_clone.display().to_string() })),
+                });
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha na tarefa de gravação: {e}"),
+        data: None,
+    })??;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!("Arquivo '{}' editado com sucesso (substituição cirúrgica concluída).", canonical_path.display())
+        }]
+    }))
+}
+
+async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+
+    let path_str = args
+        .get("file_path")
+        .or_else(|| args.get("path"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro obrigatório 'file_path' (ou 'path') ausente".to_string(),
+            data: None,
+        })?;
+
+    let stub_marker = args
+        .get("stub_marker")
+        .or_else(|| args.get("marker"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro obrigatório 'stub_marker' (ou 'marker') ausente".to_string(),
+            data: None,
+        })?;
+
+    let code_payload = args
+        .get("code_payload")
+        .or_else(|| args.get("content"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro obrigatório 'code_payload' (ou 'content') ausente".to_string(),
+            data: None,
+        })?;
+
+    let canonical_path = validate_and_canonicalize_path(path_str)?;
+
+    if !canonical_path.exists() || !canonical_path.is_file() {
+        return Err(RpcError {
+            code: -32010,
+            message: "Arquivo a ser preenchido não existe ou não é um arquivo válido".to_string(),
+            data: Some(json!({ "path": canonical_path.display().to_string() })),
+        });
+    }
+
+    let lock = get_file_lock(&canonical_path);
+    let _guard = lock.lock().await;
+
+    let raw_content = std::fs::read_to_string(&canonical_path).map_err(|e| RpcError {
+        code: -32012,
+        message: format!("Falha ao ler conteúdo do arquivo: {e}"),
+        data: Some(json!({ "path": canonical_path.display().to_string() })),
+    })?;
+
+    // Varredura zero-copy do buffer em RAM para localizar o stub_marker
+    let occurrences = raw_content.matches(stub_marker).count();
+    if occurrences == 0 {
+        return Err(RpcError {
+            code: -32001,
+            message: format!("stub_marker '{stub_marker}' não encontrado no arquivo. Preenchimento cancelado (Fail-Closed)."),
+            data: Some(json!({ "stub_marker": stub_marker, "path": canonical_path.display().to_string() })),
+        });
+    }
+    if occurrences > 1 {
+        return Err(RpcError {
+            code: -32001,
+            message: format!("stub_marker '{stub_marker}' ambíguo; encontrado {occurrences} vezes no arquivo. Preenchimento cancelado (Fail-Closed)."),
+            data: Some(json!({ "occurrences": occurrences, "stub_marker": stub_marker })),
+        });
+    }
+
+    let marker_idx = raw_content.find(stub_marker).unwrap();
+
+    // Determinar início da linha contendo o stub_marker
+    let line_start = raw_content[..marker_idx]
+        .rfind('\n')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+
+    let stub_clean_name = stub_marker
+        .trim_start_matches("//")
+        .trim_start_matches("/*")
+        .trim_start_matches("souls-stub:")
+        .trim_end_matches("*/")
+        .trim();
+
+    let end_marker_pattern = format!("souls-stub-end: {}", stub_clean_name);
+    let (line_end, target_slice_len) = if let Some(end_idx) = raw_content.find(&end_marker_pattern) {
+        let line_after_end = raw_content[end_idx..]
+            .find('\n')
+            .map(|i| end_idx + i + 1)
+            .unwrap_or(raw_content.len());
+        (line_after_end, line_after_end - line_start)
+    } else {
+        let line_after = raw_content[marker_idx..]
+            .find('\n')
+            .map(|i| marker_idx + i + 1)
+            .unwrap_or(raw_content.len());
+        (line_after, line_after - line_start)
+    };
+
+    // Montar o buffer atualizado preservando a casca sintática adjacente
+    let mut updated_content = String::with_capacity(raw_content.len() + code_payload.len() - target_slice_len);
+    updated_content.push_str(&raw_content[..line_start]);
+    updated_content.push_str(code_payload);
+    if !code_payload.ends_with('\n') && line_end < raw_content.len() {
+        updated_content.push('\n');
+    }
+    updated_content.push_str(&raw_content[line_end..]);
+
+    let path_clone = canonical_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let parent = path_clone.parent().unwrap_or(&path_clone);
+        let tmp_file_name = format!(".tmp_{}", uuid::Uuid::new_v4().simple());
+        let tmp_path = parent.join(tmp_file_name);
+
+        std::fs::write(&tmp_path, updated_content.as_bytes()).map_err(|e| RpcError {
+            code: -32013,
+            message: format!("Falha ao escrever arquivo temporário: {e}"),
+            data: Some(json!({ "tmp_path": tmp_path.display().to_string() })),
+        })?;
+
+        if let Err(e) = std::fs::rename(&tmp_path, &path_clone) {
+            if std::fs::copy(&tmp_path, &path_clone).is_ok() {
+                let _ = std::fs::remove_file(&tmp_path);
+            } else {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(RpcError {
+                    code: -32014,
+                    message: format!("Falha no swap atômico de arquivo: {e}"),
+                    data: Some(json!({ "path": path_clone.display().to_string() })),
+                });
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha na tarefa de gravação: {e}"),
+        data: None,
+    })??;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!("Stub '{}' em '{}' preenchido com sucesso.", stub_marker, canonical_path.display())
+        }]
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1531,4 +2723,415 @@ mod tests {
         assert_eq!(results[1].title, "Beta Result");
         assert_eq!(results[1].url, "https://example.com/beta");
     }
+
+    #[tokio::test]
+    async fn tools_list_returns_unprefixed_names() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+        
+        let tool_names: Vec<&str> = tools.iter()
+            .map(|t| t["name"].as_str().expect("tool deve ter name"))
+            .collect();
+
+        assert!(tool_names.contains(&"get_ast"));
+        assert!(tool_names.contains(&"read"));
+        assert!(tool_names.contains(&"search"));
+        assert!(tool_names.contains(&"sub_agent"));
+        assert!(tool_names.contains(&"handoff"));
+        assert!(tool_names.contains(&"knowledge"));
+        assert!(!tool_names.contains(&"souls_get_ast"));
+        assert!(!tool_names.contains(&"souls_read"));
+    }
+
+    #[tokio::test]
+    async fn test_state_db_mpsc_operations() {
+        use serde_json::json;
+        let _ = super::init_state_db_and_worker();
+
+        let sub_agent_req = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_sub_agent",
+                "arguments": {
+                    "agent_id": "test_agent_01",
+                    "task_name": "recon_task",
+                    "status": "RUNNING",
+                    "context_data": "recon data"
+                }
+            }
+        });
+        let resp = super::handle_mcp(sub_agent_req).await.expect("deve processar sub_agent");
+        assert!(resp["result"]["content"][0]["text"].as_str().unwrap().contains("test_agent_01"));
+
+        let handoff_req = json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_handoff",
+                "arguments": {
+                    "handoff_id": "ho_01",
+                    "from_agent": "agent_a",
+                    "to_agent": "agent_b",
+                    "payload": "context transfer payload"
+                }
+            }
+        });
+        let resp = super::handle_mcp(handoff_req).await.expect("deve processar handoff");
+        assert!(resp["result"]["content"][0]["text"].as_str().unwrap().contains("ho_01"));
+
+        let knowledge_req = json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_knowledge",
+                "arguments": {
+                    "key": "kn_01",
+                    "category": "architecture",
+                    "content": "SODA TO SOULS migration",
+                    "confidence": 0.95
+                }
+            }
+        });
+        let resp = super::handle_mcp(knowledge_req).await.expect("deve processar knowledge");
+        assert!(resp["result"]["content"][0]["text"].as_str().unwrap().contains("kn_01"));
+    }
+
+    #[tokio::test]
+    async fn test_edit_successful_patch() {
+        use serde_json::json;
+        let test_dir = super::workspace_root().join("target").join("test_scratch");
+        let _ = std::fs::create_dir_all(&test_dir);
+        let file_path = test_dir.join("fixture_edit.txt");
+        std::fs::write(&file_path, "hello SODA world").expect("deve escrever fixture");
+
+        let edit_req = json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_edit",
+                "arguments": {
+                    "path": file_path.to_str().unwrap(),
+                    "old_string": "SODA",
+                    "new_string": "SOULS"
+                }
+            }
+        });
+        let resp = super::handle_mcp(edit_req).await.expect("deve processar edit");
+        assert!(resp["result"]["content"][0]["text"].as_str().unwrap().contains("editado com sucesso"));
+
+        let updated = std::fs::read_to_string(&file_path).expect("deve ler fixture atualizada");
+        assert_eq!(updated, "hello SOULS world");
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    #[tokio::test]
+    async fn test_edit_fail_closed_on_mismatch() {
+        use serde_json::json;
+        let test_dir = super::workspace_root().join("target").join("test_scratch");
+        let _ = std::fs::create_dir_all(&test_dir);
+        let file_path = test_dir.join("fixture_fail.txt");
+        std::fs::write(&file_path, "foo bar baz").expect("deve escrever fixture");
+
+        let edit_req = json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_edit",
+                "arguments": {
+                    "path": file_path.to_str().unwrap(),
+                    "old_string": "NONEXISTENT",
+                    "new_string": "REPLACED"
+                }
+            }
+        });
+        let resp = super::handle_mcp(edit_req).await.expect("deve retornar erro rpc");
+        assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32001);
+
+        let content = std::fs::read_to_string(&file_path).expect("deve ler fixture");
+        assert_eq!(content, "foo bar baz");
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    #[tokio::test]
+    async fn test_fill_successful_stub_injection() {
+        use serde_json::json;
+        let test_dir = super::workspace_root().join("target").join("test_scratch");
+        let _ = std::fs::create_dir_all(&test_dir);
+        let file_path = test_dir.join("fixture_stub.rs");
+        let initial = "// HEADER COMMENT\nfn main() {\n    // souls-stub: my_logic\n}\n// FOOTER COMMENT\n";
+        std::fs::write(&file_path, initial).expect("deve escrever fixture");
+
+        let fill_req = json!({
+            "jsonrpc": "2.0",
+            "id": 15,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_fill",
+                "arguments": {
+                    "file_path": file_path.to_str().unwrap(),
+                    "stub_marker": "// souls-stub: my_logic",
+                    "code_payload": "    println!(\"REAL LOGIC\");"
+                }
+            }
+        });
+        let resp = super::handle_mcp(fill_req).await.expect("deve processar fill");
+        assert!(resp["result"]["content"][0]["text"].as_str().unwrap().contains("preenchido com sucesso"));
+
+        let updated = std::fs::read_to_string(&file_path).expect("deve ler fixture atualizada");
+        assert!(updated.starts_with("// HEADER COMMENT\nfn main() {\n"));
+        assert!(updated.contains("println!(\"REAL LOGIC\");"));
+        assert!(updated.ends_with("}\n// FOOTER COMMENT\n"));
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    #[tokio::test]
+    async fn test_fill_fail_closed_on_missing_stub() {
+        use serde_json::json;
+        let test_dir = super::workspace_root().join("target").join("test_scratch");
+        let _ = std::fs::create_dir_all(&test_dir);
+        let file_path = test_dir.join("fixture_missing_stub.rs");
+        let initial = "fn main() {\n    println!(\"Hello\");\n}\n";
+        std::fs::write(&file_path, initial).expect("deve escrever fixture");
+
+        let fill_req = json!({
+            "jsonrpc": "2.0",
+            "id": 16,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_fill",
+                "arguments": {
+                    "file_path": file_path.to_str().unwrap(),
+                    "stub_marker": "// souls-stub: non_existent",
+                    "code_payload": "    // fake payload"
+                }
+            }
+        });
+        let resp = super::handle_mcp(fill_req).await.expect("deve retornar erro rpc");
+        assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32001);
+
+        let content = std::fs::read_to_string(&file_path).expect("deve ler fixture");
+        assert_eq!(content, initial);
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    #[tokio::test]
+    async fn test_concurrency_file_locking() {
+        use serde_json::json;
+        let test_dir = super::workspace_root().join("target").join("test_scratch");
+        let _ = std::fs::create_dir_all(&test_dir);
+        let file_path = test_dir.join("concurrent_stubs.rs");
+
+        let mut stubs_content = String::from("// CONCURRENT STUBS FIXTURE\n");
+        for i in 0..5 {
+            stubs_content.push_str(&format!("// souls-stub: stub_{i}\n"));
+        }
+        std::fs::write(&file_path, &stubs_content).expect("deve escrever fixture");
+
+        let path_str = file_path.to_str().unwrap().to_string();
+        let mut handles = vec![];
+
+        for i in 0..5 {
+            let p = path_str.clone();
+            let handle = tokio::spawn(async move {
+                let fill_req = json!({
+                    "jsonrpc": "2.0",
+                    "id": 20 + i,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "souls_fill",
+                        "arguments": {
+                            "file_path": p,
+                            "stub_marker": format!("// souls-stub: stub_{i}"),
+                            "code_payload": format!("fn filled_func_{i}() {{}}")
+                        }
+                    }
+                });
+                super::handle_mcp(fill_req).await
+            });
+            handles.push(handle);
+        }
+
+        for h in handles {
+            let res = h.await.expect("task deve finalizar");
+            assert!(res.is_some());
+        }
+
+        let final_content = std::fs::read_to_string(&file_path).expect("deve ler arquivo final");
+        for i in 0..5 {
+            assert!(final_content.contains(&format!("fn filled_func_{i}() {{}}")));
+        }
+        let _ = std::fs::remove_file(&file_path);
+    }
+
+    #[tokio::test]
+    async fn test_firewall_directory_traversal() {
+        use serde_json::json;
+
+        let env_req = json!({
+            "jsonrpc": "2.0",
+            "id": 30,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_fill",
+                "arguments": {
+                    "file_path": ".env",
+                    "stub_marker": "stub",
+                    "code_payload": "SECRET=123"
+                }
+            }
+        });
+        let resp = super::handle_mcp(env_req).await.expect("deve retornar erro");
+        assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32015);
+
+        let db_req = json!({
+            "jsonrpc": "2.0",
+            "id": 31,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_fill",
+                "arguments": {
+                    "file_path": "malicious.db",
+                    "stub_marker": "stub",
+                    "code_payload": "BAD_DATA"
+                }
+            }
+        });
+        let resp = super::handle_mcp(db_req).await.expect("deve retornar erro");
+        assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32015);
+    }
+
+    #[tokio::test]
+    async fn test_tree_flattening_successful() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path();
+
+        // Single linear branch: a/b/c/ -> should flatten to a/b/c/
+        let linear_path = root.join("a").join("b").join("c");
+        tokio::fs::create_dir_all(&linear_path).await.unwrap();
+
+        // Branch with adjacent files: src/a/ containing b/ AND main.rs -> MUST NOT flatten src/a/b
+        let src_a = root.join("src").join("a");
+        let src_a_b = src_a.join("b");
+        tokio::fs::create_dir_all(&src_a_b).await.unwrap();
+        tokio::fs::write(src_a.join("main.rs"), b"fn main() {}").await.unwrap();
+
+        let tree_out = super::build_souls_tree(root, 5).await.unwrap();
+
+        assert!(tree_out.contains("a/b/c/"), "Deveria achatar linearmente a/b/c/");
+        assert!(tree_out.contains("src/a/"), "Deveria preservar a estrutura espacial de src/a/");
+        assert!(tree_out.contains("main.rs"), "Deveria listar main.rs ao lado de b/");
+    }
+
+    #[tokio::test]
+    async fn test_tree_ignores_toxic_paths() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path();
+
+        tokio::fs::create_dir_all(root.join("target").join("debug")).await.unwrap();
+        tokio::fs::create_dir_all(root.join("node_modules").join("pkg")).await.unwrap();
+        tokio::fs::create_dir_all(root.join("src")).await.unwrap();
+        tokio::fs::write(root.join("src").join("lib.rs"), b"pub fn run() {}").await.unwrap();
+
+        let tree_out = super::build_souls_tree(root, 3).await.unwrap();
+
+        assert!(!tree_out.contains("target"), "Target deve ser ignorado pela souls_tree");
+        assert!(!tree_out.contains("node_modules"), "node_modules deve ser ignorado pela souls_tree");
+        assert!(tree_out.contains("lib.rs"), "lib.rs deve ser visível");
+    }
+
+    #[tokio::test]
+    async fn test_outline_rust_signatures() {
+        let sample_code = r#"
+            pub struct User { pub name: String }
+            impl User {
+                pub fn new(name: String) -> Self {
+                    println!("Hello world");
+                    Self { name }
+                }
+            }
+        "#;
+
+        let outline = super::extract_rust_outline_signatures(sample_code);
+
+        assert!(outline.contains("struct User"), "Deveria conter a assinatura da struct");
+        assert!(outline.contains("fn new(name: String) -> Self"), "Deveria conter a assinatura da função");
+        assert!(!outline.contains("println!"), "NÃO deveria conter o corpo interno da função");
+    }
+
+    #[tokio::test]
+    async fn test_wasm_sandbox_trap_containment() {
+        let mut config = wasmtime::Config::new();
+        config.wasm_component_model(true);
+        let engine = wasmtime::Engine::new(&config).expect("Engine build");
+
+        let wat = r#"
+            (module
+                (func (export "parse_rust_outline") (param i32 i32) (result i32)
+                    unreachable
+                )
+            )
+        "#;
+        let module = wasmtime::Module::new(&engine, wat).expect("WAT module compilation");
+        let mut store = wasmtime::Store::new(&engine, ());
+        let instance = wasmtime::Instance::new(&mut store, &module, &[]).expect("Instance creation");
+        let parse_fn = instance.get_typed_func::<(i32, i32), i32>(&mut store, "parse_rust_outline").expect("get typed fn");
+
+        let res = parse_fn.call(&mut store, (0, 0));
+        assert!(res.is_err(), "Execução WASM com unreachable deve disparar Trap");
+        let err = res.unwrap_err();
+        let rpc_err = super::map_wasm_trap_to_rpc(&err);
+        assert_eq!(rpc_err.code, -32022);
+        assert!(rpc_err.message.contains("WASM sandbox trap"));
+    }
+
+    #[tokio::test]
+    async fn test_compress_mcp_handler() {
+        use serde_json::json;
+        let compress_req = json!({
+            "jsonrpc": "2.0",
+            "id": 40,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_compress",
+                "arguments": {
+                    "text": "// comment line\nfn test() {}\n",
+                    "ext": "rs"
+                }
+            }
+        });
+        let resp = super::handle_mcp(compress_req).await.expect("deve processar compress");
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(!text.contains("// comment line"));
+        assert!(text.contains("fn test() {}"));
+    }
+
+    #[tokio::test]
+    async fn test_dedup_mcp_handler() {
+        use serde_json::json;
+        let block = "l1\nl2\nl3\nl4\nl5\n";
+        let payload = format!("{block}sep\n{block}");
+        let dedup_req = json!({
+            "jsonrpc": "2.0",
+            "id": 41,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_dedup",
+                "arguments": {
+                    "text": payload
+                }
+            }
+        });
+        let resp = super::handle_mcp(dedup_req).await.expect("deve processar dedup");
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("// [dedup: 5 lines hidden]"));
+    }
 }
+
