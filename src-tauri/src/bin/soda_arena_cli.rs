@@ -89,42 +89,49 @@ fn extract_json_candidate(raw_text: &str) -> Option<String> {
         return None;
     }
 
-    if let Some(start_block) = trimmed.find("```") {
-        let after_start = &trimmed[start_block + 3..];
+    // 1. Descascar blocos de código markdown (```json, ```JSON, ou ```)
+    let mut working = trimmed;
+    if let Some(start_block) = working.find("```") {
+        let after_start = &working[start_block + 3..];
         let content_start = if let Some(newline_pos) = after_start.find('\n') {
             start_block + 3 + newline_pos + 1
         } else {
             start_block + 3
         };
-
-        if let Some(end_block) = trimmed[content_start..].rfind("```") {
-            let candidate = trimmed[content_start..content_start + end_block].trim();
-            if !candidate.is_empty() {
-                return Some(candidate.to_string());
+        if content_start < working.len() {
+            if let Some(end_block) = working[content_start..].rfind("```") {
+                working = working[content_start..content_start + end_block].trim();
+            } else {
+                working = working[content_start..].trim();
             }
         }
     }
 
-    let obj_start = trimmed.find('{');
-    let obj_end = trimmed.rfind('}');
-    let arr_start = trimmed.find('[');
-    let arr_end = trimmed.rfind(']');
+    if serde_json::from_str::<serde_json::Value>(working).is_ok() {
+        return Some(working.to_string());
+    }
+
+    // 2. Extração via delimitação por chaves {} ou colchetes []
+    let obj_start = working.find('{');
+    let obj_end = working.rfind('}');
+    let arr_start = working.find('[');
+    let arr_end = working.rfind(']');
 
     match (obj_start, obj_end, arr_start, arr_end) {
         (Some(os), Some(oe), Some(as_), Some(ae)) if os < oe && as_ < ae => {
             if os < as_ && oe > ae {
-                Some(trimmed[os..=oe].trim().to_string())
+                Some(working[os..=oe].trim().to_string())
             } else {
-                Some(trimmed[as_..=ae].trim().to_string())
+                Some(working[as_..=ae].trim().to_string())
             }
         }
-        (Some(os), Some(oe), _, _) if os < oe => Some(trimmed[os..=oe].trim().to_string()),
-        (_, _, Some(as_), Some(ae)) if as_ < ae => Some(trimmed[as_..=ae].trim().to_string()),
-        _ => Some(trimmed.to_string()),
+        (Some(os), Some(oe), _, _) if os < oe => Some(working[os..=oe].trim().to_string()),
+        (_, _, Some(as_), Some(ae)) if as_ < ae => Some(working[as_..=ae].trim().to_string()),
+        _ => Some(working.to_string()),
     }
 }
 
-/// Avaliador sintático resiliente com suporte a preâmbulos, sufixos e arrays JSON.
+/// Avaliador sintático resiliente com suporte a preâmbulos, sufixos, marcações markdown e arrays JSON.
 fn is_valid_json_response(raw_text: &str) -> bool {
     let clean = raw_text.trim();
     if clean.is_empty() {

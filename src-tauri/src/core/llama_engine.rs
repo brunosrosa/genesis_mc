@@ -144,7 +144,16 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         let ctx_params = build_context_params_with_fallback(n_embd_head_v, declared_ctx, &family);
 
-        let mut ctx = model.new_context(&backend, ctx_params).map_err(|_| {
+        let mut ctx = model.new_context(&backend, ctx_params).or_else(|_| {
+            // Fallback gracioso para KV Cache F16/F16 se o KV cache quantizado violar limites do driver
+            let fallback_n_ctx = cap_context_length_for_family(&family, declared_ctx).max(512);
+            let fallback_params = LlamaContextParams::default()
+                .with_n_ctx(std::num::NonZeroU32::new(fallback_n_ctx))
+                .with_n_batch(2048)
+                .with_type_k(KvCacheType::F16)
+                .with_type_v(KvCacheType::F16);
+            model.new_context(&backend, fallback_params)
+        }).map_err(|_| {
             InferenceError::GpuOom
         })?;
 
@@ -172,6 +181,9 @@ impl EphemeralInferEngine for LlamaCppEngine {
                 InferenceError::ExecutionError(format!("Falha ao adicionar token ao batch: {}", e))
             })?;
         }
+        // Ativação explícita da extração de logits no último token (evita ler lixo de memória na FFI C++)
+        let last_token_idx = (batch.n_tokens() as usize).saturating_sub(1);
+        batch.set_logits(last_token_idx, true);
 
         ctx.decode(&mut batch).map_err(|e| {
             InferenceError::ExecutionError(format!("Falha ao decodificar batch inicial: {}", e))
@@ -314,6 +326,8 @@ impl EphemeralInferEngine for LlamaCppEngine {
             batch.add(token, current_pos, &[0], true).map_err(|e| {
                 InferenceError::ExecutionError(format!("Falha no batch de geração: {}", e))
             })?;
+            let gen_last_idx = (batch.n_tokens() as usize).saturating_sub(1);
+            batch.set_logits(gen_last_idx, true);
             current_pos += 1;
 
             if let Err(e) = ctx.decode(&mut batch) {

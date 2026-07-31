@@ -577,8 +577,29 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Falha ao criar tabela model_registry: {e}"))?;
 
-    // Migration idempotente para adicionar a coluna module_type se nao existir
+    // Migration idempotente para adicionar colunas em model_registry se não existirem
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN module_type TEXT NOT NULL DEFAULT 'PRIMARY_LLM'", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN ttft_ms REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN tpot_ms REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN vram_peak_mb REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN e3_score REAL DEFAULT 0.0", []);
+
+    // Criação da tabela de telemetria da arena se não existir
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS arena_telemetry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT NOT NULL,
+            prompt_id TEXT NOT NULL,
+            ttft_ms REAL NOT NULL DEFAULT 0.0,
+            tpot_ms REAL NOT NULL DEFAULT 0.0,
+            vram_peak_mb REAL NOT NULL DEFAULT 0.0,
+            json_success INTEGER NOT NULL DEFAULT 0,
+            e3_score REAL NOT NULL DEFAULT 0.0,
+            created_at TEXT NOT NULL DEFAULT (DATETIME('now'))
+        );",
+        [],
+    )
+    .map_err(|e| format!("Falha ao criar tabela arena_telemetry: {e}"))?;
 
     Ok(conn)
 }

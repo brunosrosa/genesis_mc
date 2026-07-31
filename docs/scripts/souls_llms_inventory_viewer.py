@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-SODA LLM Inventory Viewer (Visualizador SSOT do SQLite & Telemetria da Arena)
+SOULS LLM Inventory Viewer (Visualizador SSOT do SQLite & Telemetria da Arena)
 ================================================================================
 Este script atua como um extrator/visualizador de leitura (ETL Phase 3)
 do banco `.souls_data/souls_heuristic_vault.db`, unindo as tabelas `model_registry`
 e `arena_telemetry`.
 
-Objetivo: Gerar um relatório visual em Markdown ('docs/reports/soda_llms_inventory_summary.md')
+Objetivo: Gerar um relatório visual em Markdown ('docs/reports/souls_llms_inventory_summary.md')
 com tabelas ASCII alinhadas, métricas empíricas de TTFT, TPOT, Acurácia Sintática e E3 Score:
     Score E3 = (Acurácia^2) / (Latência Média em segundos + 0.001)
 """
@@ -213,7 +213,7 @@ def generate_inventory_report():
     summary_md_file = reports_dir / "souls_llms_inventory_summary.md"
     
     lines = []
-    lines.append("# 📊 SODA LLM INVENTORY SUMMARY & TELEMETRY DOSSIER")
+    lines.append("# 📊 SOULS LLM INVENTORY SUMMARY & TELEMETRY DOSSIER")
     lines.append(f"**Data de Geração:** 2026-07-30 | **Banco SSOT:** `{db_path}`")
     lines.append("")
     lines.append("---")
@@ -310,7 +310,7 @@ def generate_inventory_report():
         lines.append("")
 
     lines.append("---")
-    lines.append("*Fim do Dossiê de Inventário SODA v4. Gerado automaticamente via `soda_llms_inventory_viewer.py`.*")
+    lines.append("*Fim do Dossiê de Inventário SODA v4. Gerado automaticamente via `souls_llms_inventory_viewer.py`.*")
     
     report_content = "\n".join(lines)
     with open(summary_md_file, "w", encoding="utf-8") as f:

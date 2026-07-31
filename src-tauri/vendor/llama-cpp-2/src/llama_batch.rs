@@ -196,6 +196,23 @@ impl<'a> LlamaBatch<'a> {
     pub fn n_tokens(&self) -> i32 {
         self.llama_batch.n_tokens
     }
+
+    /// Explicitly set the logits flag for a specific token index in the batch.
+    pub fn set_logits(&mut self, index: usize, logits: bool) {
+        if index < self.n_tokens() as usize {
+            unsafe {
+                self.llama_batch.logits.add(index).write(i8::from(logits));
+            }
+            let idx_i32 = index as i32;
+            if logits {
+                if !self.initialized_logits.contains(&idx_i32) {
+                    self.initialized_logits.push(idx_i32);
+                }
+            } else {
+                self.initialized_logits.retain(|l| l != &idx_i32);
+            }
+        }
+    }
 }
 
 impl<'a> Drop for LlamaBatch<'a> {
