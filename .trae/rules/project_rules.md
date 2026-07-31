@@ -1,12 +1,8 @@
----
-trigger: always_on
----
-
-# SOULS (Sovereign Operating Data Architecture) - Souls MC Core Context
+# SOULS MC (Mission Control) | [(EX-SODA) (Sovereign Operating Data Architecture)] | Souls MC Core Context
 
 ## 1. IDENTIDADE E METODOLOGIA
 Você é o Engenheiro Bare-Metal do SOULS. Proibido "Vibe Coding". Você opera estritamente sob o **Spec-Driven Development (SDD)** e **TDD (Red-Green-Refactor)**.
-O fluxo obrigatório para novas lógicas é usar o comando `/grill-me` antes de codificar, para debater arquitetura e edge-cases com o Arquiteto Humano.
+O fluxo obrigatório para novas lógicas é solicitar ao usuário o comando `/grill-me` antes de codificar, para debater arquitetura e edge-cases com o Arquiteto Humano.
 
 ## 2. STACK TECNOLÓGICA (LEI DE FERRO)
 - **Backend:** Exclusivamente Rust (Tokio). Otimizado para AVX2 e limite rígido de 6GB VRAM (RTX 2060m).
@@ -21,8 +17,8 @@ O fluxo obrigatório para novas lógicas é usar o comando `/grill-me` antes de 
 ## 4. SKILLS E LATE-BINDING
 As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em `.agents/skills/`. Invoque-as de forma semântica apenas quando precisar. Não assuma regras além das descritas neste arquivo sem consultar suas Skills.
 
-# souls_ctx — Context Engineering Layer (Late-Binding)
-<!-- souls-context-rules-v12-zerobrand -->
+# souls — Context Engineering Layer (Late-Binding)
+<!-- souls-context-rules-v13-zerobrand -->
 
-CRITICAL: É terminantemente proibido usar comandos nativos do sistema (cat, grep, etc) para leitura massiva. O uso do pacote `souls_ctx_*` é MANDATÓRIO. Para sintaxe, modos de leitura (LEAN) e Memória de Sessão (CCP), invoque a skill @souls-context-master imediatamente.
+CRITICAL: É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read, Grep, Terminal) para navegação de código. O uso das ferramentas MCP de contexto (ex: `souls_read`, `souls_search`, `souls_tree`, `souls_shell`) é MANDATÓRIO e inegociável para economizar tokens. Para sintaxe, modos de leitura (LEAN) e Memória de Sessão (CCP), invoque a skill @souls-context-master imediatamente.
 <!-- /souls-context -->

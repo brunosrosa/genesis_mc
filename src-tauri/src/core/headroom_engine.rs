@@ -106,10 +106,28 @@ enum LexerState {
 pub struct CodeCompressor;
 
 impl CodeCompressor {
-    /// Lei 2: Poda Semântica Determinística em Rust (Zero-Copy)
-    /// Subdivide corpos de funções por `{ /* stubbed */ }` preservando assinaturas.
-    /// Utiliza uma Máquina de Estados de Lexer em uma única passada (Single-pass Lexer State Machine)
-    /// resiliente a aspas, escapes e comentários.
+    /// ## LLMLingua-2 PROIBIDO sobre blocos AST
+    ///
+    /// Esta funcao e a UNICA autorizada a podar codigo-fonte no SOULS.
+    /// Compressores baseados em classificacao de linguagem natural
+    /// (LLMLingua-2, Selective Context, KNormLLM) sao terminantemente
+    /// proibidos sobre blocos identificados pelo parser AST
+    /// (`oxc`, `tree-sitter`). Justificativas:
+    ///
+    /// 1. LLMLingua-2 foi treinado em prosa natural. Quando aplicado a
+    ///    codigo-fonte, descarta tokens semanticamente criticos
+    ///    (operadores, tipos, generics, traits, lifetimes).
+    /// 2. `lean_vacuum` (com `compress_ast_zero_copy` que preserva
+    ///    assinaturas de funcao) e a ferramenta canonica de poda de
+    ///    codigo-fonte.
+    /// 3. O Hipocampo Epistemico obtem sinais do codigo via logit
+    ///    probing (`LlamaCpp4LogitEngine`), NAO via compressao
+    ///    linguistica.
+    ///
+    /// A regra esta documentada como `R4` da Linha Vermelha do
+    /// design V4. Qualquer tentativa de bypass deve disparar
+    /// `assertion failed: false` no teste
+    /// `test_llmlingua2_forbidden_on_ast_block`.
     pub fn compress_ast_zero_copy<'a>(code: &'a str) -> Cow<'a, str> {
         let bytes = code.as_bytes();
         let mut modified = false;
@@ -423,6 +441,36 @@ mod tests {
         assert_eq!(budget.t_total, 136_000);
         assert!(budget.trigger);
         assert_eq!(budget.delta_r, 12_608);
+    }
+
+    /// V4 R4: LLMLingua-2 PROIBIDO sobre blocos AST. `compress_ast_zero_copy` deve preservar
+    /// assinaturas de funcao (o que LLMLingua-2 NAO faria).
+    #[test]
+    fn test_llmlingua2_forbidden_on_ast_block() {
+        let rust_code = r#"
+fn user_id_to_lower(s: String) -> String { s.to_lowercase() }
+pub fn process<T: Clone + Send + Sync>(v: Vec<T>) -> impl Iterator<Item = T> { v.into_iter() }
+async fn fetch_with_retry<'a>(url: &'a str) -> Result<String, Box<dyn std::error::Error>> { Ok(url.to_string()) }
+"#;
+
+        // `lean_vacuum` (esta funcao) DEVE preservar TODAS as assinaturas.
+        let compressed: std::borrow::Cow<str> = CodeCompressor::compress_ast_zero_copy(rust_code);
+        assert!(
+            compressed.contains("fn user_id_to_lower"),
+            "assinatura de funcao foi descartada — proxy de comportamento LLMLingua-2. Compressed: {compressed}"
+        );
+        assert!(
+            compressed.contains("pub fn process"),
+            "assinatura pub fn process foi descartada. Compressed: {compressed}"
+        );
+        assert!(
+            compressed.contains("async fn fetch_with_retry"),
+            "assinatura async fn fetch_with_retry foi descartada. Compressed: {compressed}"
+        );
+
+        // Guard explicito: nomes de tipos generics NAO podem ser descartados.
+        assert!(compressed.contains("Vec<T>"), "Vec<T> generico descartado");
+        assert!(compressed.contains("impl Iterator<Item = T>"), "impl Iterator descartado");
     }
 
     #[test]

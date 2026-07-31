@@ -17,3 +17,11 @@ pub mod bitnet_daemon;
 pub mod engine_trait;
 pub mod v3_ignition_tests;
 
+// SOULS V4 — Topologia dos 8 motores de inferencia (stubs conformantes sob EphemeralInferEngine).
+pub mod llama_cpp4_logit;
+pub mod mistral_sidecar;
+pub mod bitnet_engine;
+pub mod pulp_lele;
+pub mod burn_agnostic;
+pub mod ort_scorer;
+

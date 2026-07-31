@@ -296,6 +296,18 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
+                    {
+                        "name": "headroom_retrieve",
+                        "description": "Recupera um stub comprimido via `SoulsCcrStore::intercept_loopback`. Retorno SSE-style via Tokio < 1ms. Hash hex (16 bytes / 32 chars) identifica o payload.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "hash": { "type": "string", "description": "Hash hex de 16 bytes (32 chars) emitido por souls_fill ou souls_compress." }
+                            },
+                            "required": ["hash"],
+                            "additionalProperties": false
+                        }
+                    },
                     // ============================================================
                     // SOULS-CANIBALIZED: 17 tools canônicas (2 implementadas + 15 stubs)
                     // ============================================================
@@ -496,6 +508,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "search" | "souls_search" => run_souls_search(params).await,
         "compress" | "souls_compress" => run_souls_compress(params).await,
         "dedup" | "souls_dedup" => run_souls_dedup(params).await,
+        "headroom_retrieve" | "souls_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
         "session" | "souls_session" => run_souls_session(params).await,
         "multi_read" | "souls_multi_read"
         | "semantic_search" | "souls_semantic_search"
@@ -727,6 +740,49 @@ async fn run_souls_dedup(
         },
         "isError": false
     }))
+}
+
+/// `souls_headroom_retrieve` — Recupera um stub comprimido via `SoulsCcrStore::intercept_loopback`.
+/// Stub inicial: enquadra a chamada como `intercept_loopback` espera (com `headroom_retrieve`
+/// no JSON e campo `hash`).
+async fn run_souls_headroom_retrieve(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+
+    let hash = args
+        .get("hash")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro obrigatório 'hash' ausente".to_string(),
+            data: None,
+        })?;
+
+    // Enquadra como `intercept_loopback` espera: JSON cru com "headroom_retrieve" no body.
+    let tool_call_json = format!(r#"{{"headroom_retrieve":true,"hash":"{hash}"}}"#);
+
+    let store = souls_mc_lib::core::headroom_engine::SoulsCcrStore::from_env();
+    let retrieved = store.intercept_loopback(&tool_call_json);
+
+    match retrieved {
+        Some(payload) => Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": payload
+            }],
+            "structuredContent": { "retrieved": true },
+            "isError": false
+        })),
+        None => Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": format!("Hash '{hash}' nao encontrado no CCR store (loopback miss).")
+            }],
+            "structuredContent": { "retrieved": false },
+            "isError": false
+        })),
+    }
 }
 
 /// `souls_smart_read` — Leitura Token-Aware com Auto-Shrink e Fail-Closed.
@@ -3006,6 +3062,23 @@ mod tests {
         assert!(tool_names.contains(&"knowledge"));
         assert!(!tool_names.contains(&"souls_get_ast"));
         assert!(!tool_names.contains(&"souls_read"));
+    }
+
+    /// V4: `headroom_retrieve` DEVE estar exposto no `tools/list` (alinhado com `intercept_loopback`).
+    #[tokio::test]
+    async fn test_tools_list_includes_headroom_retrieve() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 100, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+        let tool_names: Vec<&str> = tools.iter()
+            .map(|t| t["name"].as_str().expect("tool deve ter name"))
+            .collect();
+
+        assert!(
+            tool_names.contains(&"headroom_retrieve"),
+            "headroom_retrieve deve estar em tools/list. Tools atuais: {tool_names:?}"
+        );
     }
 
     #[tokio::test]

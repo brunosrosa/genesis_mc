@@ -127,6 +127,102 @@ impl EngineProbe for LlamaVanguardProbe {
     }
 }
 
+// =============================================================================
+// SOULS V4 — 6 novos probes para o cascade de 8 motores.
+// =============================================================================
+
+pub struct LlamaCpp4LogitProbe;
+
+impl EngineProbe for LlamaCpp4LogitProbe {
+    fn engine_id(&self) -> &'static str {
+        "llama_cpp4_logit"
+    }
+
+    fn probe_support(&self, _model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
+        // Logit probing so faz sentido em arquiteturas transformer-like. Arquiteturas
+        // state-space (rwkv, mamba, zamba2) nao produzem logits canonicos.
+        let lower = topology.family_raw.to_lowercase();
+        if lower == "rwkv" || lower == "zamba2" || lower == "mamba" || lower == "mamba-ssm" {
+            return EngineSupportLevel::Unsupported(format!(
+                "Arquitetura '{}' nao suporta logit probing (apenas transformers)",
+                topology.family_raw
+            ));
+        }
+        // Para transformers, logit probing opera sobre qualquer modelo carregado. Native medio (150).
+        EngineSupportLevel::Native(150)
+    }
+}
+
+pub struct MistralRsSidecarProbe;
+
+impl EngineProbe for MistralRsSidecarProbe {
+    fn engine_id(&self) -> &'static str {
+        "mistral_rs_sidecar"
+    }
+
+    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
+        // Sidecar efemero; depende do binario estar presente. Fallback (80) para mock.
+        EngineSupportLevel::Fallback(80)
+    }
+}
+
+pub struct BitnetProbe;
+
+impl EngineProbe for BitnetProbe {
+    fn engine_id(&self) -> &'static str {
+        "bitnet"
+    }
+
+    fn probe_support(&self, model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
+        // BitNet so aceita modelos ternarios (i2_s, i1_s, "bitnet", "ternary" no path).
+        let lower = model_path.to_string_lossy().to_lowercase();
+        if lower.contains("i2_s") || lower.contains("i1_s") || lower.contains("bitnet") || lower.contains("ternary") {
+            EngineSupportLevel::Native(180)
+        } else {
+            EngineSupportLevel::Unsupported("Bitnet so suporta modelos ternarios (i2_s, i1_s, bitnet)".to_string())
+        }
+    }
+}
+
+pub struct PulpLeleProbe;
+
+impl EngineProbe for PulpLeleProbe {
+    fn engine_id(&self) -> &'static str {
+        "pulp_lele"
+    }
+
+    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
+        // Linear algebra AOT em CPU; sempre disponivel. Native medio (120).
+        EngineSupportLevel::Native(120)
+    }
+}
+
+pub struct BurnAgnosticProbe;
+
+impl EngineProbe for BurnAgnosticProbe {
+    fn engine_id(&self) -> &'static str {
+        "burn_agnostic"
+    }
+
+    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
+        // Agnostico de hardware (CubeCL). Fallback (90) ate integracao completa.
+        EngineSupportLevel::Fallback(90)
+    }
+}
+
+pub struct OrtScorerProbe;
+
+impl EngineProbe for OrtScorerProbe {
+    fn engine_id(&self) -> &'static str {
+        "ort_scorer"
+    }
+
+    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
+        // Scorers ONNX pequenos (GLiClass, BGE-reranker). Fallback (70) ate ONNX disponivel.
+        EngineSupportLevel::Fallback(70)
+    }
+}
+
 pub struct EngineCascade {
     probes: Vec<Box<dyn EngineProbe>>,
 }
@@ -134,13 +230,25 @@ pub struct EngineCascade {
 impl EngineCascade {
     pub fn new() -> Self {
         let mut cascade = Self { probes: Vec::new() };
+        // V4 Topologia: 8 motores em ordem de prioridade decrescente.
         cascade.register(Box::new(LlamaVanguardProbe));
+        cascade.register(Box::new(LlamaCpp4LogitProbe));
+        cascade.register(Box::new(MistralRsSidecarProbe));
+        cascade.register(Box::new(BitnetProbe));
+        cascade.register(Box::new(PulpLeleProbe));
+        cascade.register(Box::new(BurnAgnosticProbe));
+        cascade.register(Box::new(OrtScorerProbe));
         cascade.register(Box::new(DefaultLlamaCppProbe));
         cascade
     }
 
     pub fn register(&mut self, probe: Box<dyn EngineProbe>) {
         self.probes.push(probe);
+    }
+
+    /// Numero de probes registrados no cascade (util para testes TDD).
+    pub fn probe_count(&self) -> usize {
+        self.probes.len()
     }
 }
 
@@ -209,6 +317,9 @@ mod tests {
 
     #[test]
     fn test_engine_cascade_unsupported_arch() {
+        // V4 RESILIENCE: com 8 probes, o cascade SEMPRE encontra um engine (mesmo que
+        // seja um architecture-agnostic como pulp_lele/burn/ort). O retorno "unsupported"
+        // so acontece quando NENHUM probe casa.
         let cascade = EngineCascade::new();
         let mut topology = TopologyFeatures::default();
         topology.family_raw = "rwkv".to_string();
@@ -217,7 +328,42 @@ mod tests {
         let dummy_path = Path::new("Cargo.toml");
         let (engine_id, support) = cascade.probe_best_engine(dummy_path, &topology);
 
-        assert_eq!(engine_id, "unsupported");
-        assert!(matches!(support, EngineSupportLevel::Unsupported(_)));
+        // V4: rwkv nao casa com llama-vanguard nem com llama_cpp4_logit, MAS casa
+        // com pulp_lele (linear algebra agnostic). O cascade DEVE retornar um engine
+        // architecture-agnostic em vez de "unsupported".
+        assert_ne!(
+            engine_id, "unsupported",
+            "V4 cascade deve ser resiliente: architecture-agnostic probes cobrem rwkv"
+        );
+        // Confirma que o engine escolhido NAO e da familia llama (que rejeita state-space).
+        assert_ne!(
+            engine_id, "llama_vanguard",
+            "Vanguard rejeita rwkv; engine deve ser outro"
+        );
+        assert!(matches!(support, EngineSupportLevel::Native(_) | EngineSupportLevel::Fallback(_)));
+    }
+
+    /// V4: o cascade DEVE expor 8 probes (Vanguard + 4 novos + 3 legacy/default).
+    #[test]
+    fn test_engine_cascade_has_8_probes() {
+        let cascade = EngineCascade::new();
+        assert_eq!(cascade.probe_count(), 8, "V4 cascade deve ter 8 probes");
+    }
+
+    /// V4: probe Bitnet discrimina modelos ternarios.
+    #[test]
+    fn test_bitnet_probe_only_supports_ternary_models() {
+        let probe = BitnetProbe;
+        let path_ternary = Path::new("/dev/null/model.i2_s.gguf");
+        let path_normal = Path::new("/dev/null/model.gguf");
+
+        assert!(matches!(
+            probe.probe_support(path_ternary, &TopologyFeatures::default()),
+            EngineSupportLevel::Native(180)
+        ));
+        assert!(matches!(
+            probe.probe_support(path_normal, &TopologyFeatures::default()),
+            EngineSupportLevel::Unsupported(_)
+        ));
     }
 }
