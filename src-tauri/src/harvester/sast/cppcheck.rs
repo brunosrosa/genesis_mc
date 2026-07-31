@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use regex::Regex;
 
 use crate::harvester::router::StaticAnalysisBlade;
-use super::{SidecarError, SastExecutionTarget, SodaHealthIssue, push_issue, sort_and_dedup_issues, extract_xml_payload, is_cpp_supported_file, derive_repo_relative_clean_targets, CPPCHECK_FILE_LIST_CHUNK_SIZE, blade_file_batch_scope};
+use super::{SidecarError, SastExecutionTarget, SoulsHealthIssue, push_issue, sort_and_dedup_issues, extract_xml_payload, is_cpp_supported_file, derive_repo_relative_clean_targets, CPPCHECK_FILE_LIST_CHUNK_SIZE, blade_file_batch_scope};
 
 pub fn cppcheck_args(scan_targets: &[String]) -> Vec<String> {
     cppcheck_args_for_targets(scan_targets)
@@ -60,7 +60,7 @@ pub fn normalize_cppcheck_output(
     repo_path: &Path,
     execution_root: &Path,
     bytes: &[u8],
-) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+) -> Result<Vec<SoulsHealthIssue>, SidecarError> {
     let mut issues = Vec::new();
     let payload = match extract_xml_payload(bytes) {
         Some(payload) => payload,

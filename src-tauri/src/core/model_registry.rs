@@ -577,8 +577,29 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Falha ao criar tabela model_registry: {e}"))?;
 
-    // Migration idempotente para adicionar a coluna module_type se nao existir
+    // Migration idempotente para adicionar colunas em model_registry se não existirem
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN module_type TEXT NOT NULL DEFAULT 'PRIMARY_LLM'", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN ttft_ms REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN tpot_ms REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN vram_peak_mb REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN e3_score REAL DEFAULT 0.0", []);
+
+    // Criação da tabela de telemetria da arena se não existir
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS arena_telemetry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT NOT NULL,
+            prompt_id TEXT NOT NULL,
+            ttft_ms REAL NOT NULL DEFAULT 0.0,
+            tpot_ms REAL NOT NULL DEFAULT 0.0,
+            vram_peak_mb REAL NOT NULL DEFAULT 0.0,
+            json_success INTEGER NOT NULL DEFAULT 0,
+            e3_score REAL NOT NULL DEFAULT 0.0,
+            created_at TEXT NOT NULL DEFAULT (DATETIME('now'))
+        );",
+        [],
+    )
+    .map_err(|e| format!("Falha ao criar tabela arena_telemetry: {e}"))?;
 
     Ok(conn)
 }
@@ -597,7 +618,7 @@ pub fn infer_module_type(filename: &str) -> &'static str {
     }
 }
 
-/// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SODA.
+/// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SOULS.
 pub fn is_architecture_supported(arch: &str) -> bool {
     let lower = arch.trim().to_lowercase();
     if lower.is_empty() {
@@ -716,6 +737,26 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
     Ok(scanned_paths.len())
 }
 
+pub fn record_arena_telemetry(
+    conn: &Connection,
+    file_path: &str,
+    prompt_id: &str,
+    ttft_ms: f64,
+    tpot_ms: f64,
+    vram_peak_mb: f64,
+    json_success: bool,
+    e3_score: f64,
+) -> Result<(), String> {
+    let success_val = if json_success { 1 } else { 0 };
+    conn.execute(
+        "INSERT INTO arena_telemetry (file_path, prompt_id, ttft_ms, tpot_ms, vram_peak_mb, json_success, e3_score)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![file_path, prompt_id, ttft_ms, tpot_ms, vram_peak_mb, success_val, e3_score],
+    )
+    .map_err(|e| format!("Falha ao gravar arena_telemetry: {e}"))?;
+    Ok(())
+}
+
 /// Atualiza o resultado da avaliação Tier 1 diretamente no banco SQLite SSOT.
 pub fn update_tier1_result(
     conn: &Connection,
@@ -723,17 +764,35 @@ pub fn update_tier1_result(
     success_rate: f64,
     avg_latency_ms: f64,
     passed: bool,
+    ttft_ms: f64,
+    tpot_ms: f64,
+    vram_peak_mb: f64,
+    e3_score: f64,
 ) -> Result<(), String> {
     let tier1_passed_val = if passed { 1 } else { 0 };
-
     conn.execute(
         "UPDATE model_registry 
-         SET tier1_passed = ?1, success_rate_ema = ?2, ema_latency_ms = ?3, last_seen = DATETIME('now')
-         WHERE file_path = ?4",
-        params![tier1_passed_val, success_rate, avg_latency_ms, file_path],
+         SET tier1_passed = ?1, 
+             success_rate_ema = ?2, 
+             ema_latency_ms = ?3, 
+             ttft_ms = ?4, 
+             tpot_ms = ?5, 
+             vram_peak_mb = ?6, 
+             e3_score = ?7, 
+             last_seen = DATETIME('now')
+         WHERE file_path = ?8",
+        params![
+            tier1_passed_val,
+            success_rate,
+            avg_latency_ms,
+            ttft_ms,
+            tpot_ms,
+            vram_peak_mb,
+            e3_score,
+            file_path
+        ],
     )
-    .map_err(|e| format!("Falha ao atualizar resultado Tier 1 no SQLite: {e}"))?;
-
+    .map_err(|e| format!("Falha ao atualizar model_registry: {e}"))?;
     Ok(())
 }
 

@@ -501,7 +501,7 @@ fn response_format_for_batedor() -> Value {
     json!({
         "type": "json_schema",
         "json_schema": {
-            "name": "soda_batedor_triage_v1",
+            "name": "souls_batedor_triage_v1",
             "strict": true,
             "schema": schema
         }
@@ -587,7 +587,7 @@ async fn fetch_readme_truncated(repo_url: &str) -> Result<String, String> {
     let (owner, repo) = try_extract_owner_repo_from_repo_url(repo_url)
         .ok_or_else(|| "repo_url não é GitHub (esperado https://github.com/<owner>/<repo>)".to_string())?;
 
-    let api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
+    let api_base = std::env::var("SOULS_GITHUB_API_BASE_URL")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -597,7 +597,7 @@ async fn fetch_readme_truncated(repo_url: &str) -> Result<String, String> {
     let client = Client::new();
     let mut req = client
         .get(&url)
-        .header("User-Agent", "soda-batedor")
+        .header("User-Agent", "souls-batedor")
         .header("Accept", "application/vnd.github.raw")
         .timeout(Duration::from_secs(25));
     if let Ok(token) = std::env::var("GITHUB_PAT") {
@@ -648,7 +648,7 @@ impl<L: TriageLlmClient + 'static, R: BatedorRepoStore + 'static, F: ReadmeFetch
             return Ok(());
         }
 
-        let max_parallel = std::env::var("SODA_BATEDOR_PARALLEL")
+        let max_parallel = std::env::var("SOULS_BATEDOR_PARALLEL")
             .ok()
             .and_then(|v| v.trim().parse::<usize>().ok())
             .unwrap_or(3)
@@ -794,7 +794,7 @@ mod tests {
                 repo_analised_version TEXT,
                 repo_version TEXT,
                 ultima_versao_online TEXT,
-                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                souls_universal_uuid TEXT NOT NULL UNIQUE,
                 status_processamento TEXT NOT NULL,
                 timestamp_fase_1 INTEGER,
                 timestamp_fase_3 INTEGER,
@@ -815,7 +815,7 @@ mod tests {
         conn.execute(
             "INSERT INTO repositorios (
                 project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
-                soda_universal_uuid, status_processamento, retry_count
+                souls_universal_uuid, status_processamento, retry_count
             ) VALUES ('acme/widget', 'L1', 'https://github.com/acme/widget', 'v1.0.0', 'v1.0.0', 'v1.0.0', 'UUID-1', 'PENDENTE_TRIAGEM', 5)",
             [],
         )

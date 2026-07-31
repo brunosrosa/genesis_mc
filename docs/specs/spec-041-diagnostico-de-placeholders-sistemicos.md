@@ -3,7 +3,7 @@ id: "spec-041"
 title: "spec-041-diagnostico-de-placeholders-sistemicos"
 version: 0.2
 status: Draft
-owner: soda-rust-engine
+owner: souls-rust-engine
 adr_refs: ["ADR-031", "ADR-019", "ADR-025"]
 supersedes_thesis: ["spec-037", "spec-038", "spec-039"]
 created: "2026-07-16"

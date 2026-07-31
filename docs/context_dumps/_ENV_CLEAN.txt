@@ -1,16 +1,16 @@
-_ENV_CLEAN Gerado em: 2026-07-30 00:24:09
+_ENV_CLEAN Gerado em: 2026-07-30 13:12:21
 
 ### ====================================================================================================
 ARQUIVO: .env (masked)
 CAMINHO: Z:\souls_mc\.env
 ---
 # =========================================================
-# SODA DEV ENVIRONMENT - SECURE KEYS & MODELS & VARIABLES
+# SOULS DEV ENVIRONMENT - SECURE KEYS & MODELS & VARIABLES
 # =========================================================
 
-# Caminhos essenciais do SODA (UV e Cargo)
-SODA_UV_PATH=C:/Users/rosas/AppData/Roaming/uv/tools
-SODA_CARGO_PATH=C:/Users/rosas/.cargo/bin
+# Caminhos essenciais do SOULS (UV e Cargo)
+SOULS_UV_PATH=C:/Users/rosas/AppData/Roaming/uv/tools
+SOULS_CARGO_PATH=C:/Users/rosas/.cargo/bin
 
 # 1. GITHUB
 GITHUB_PAT="***MASKED***"
@@ -28,7 +28,7 @@ OPENROUTER_FREE_MODEL=openrouter/free
 # FASE 1.5 & FASE 3 (Destilador / Formatter JSON Strict / Base): deepseek/deepseek-v4-flash via baidu/fp8
 OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash:baidu/fp8
 OPENROUTER_FALLBACK_MODEL=moonshotai/kimi-k2.5 
-# FASE 2: Enxame Cognitivo (As 3 Lentes SODA A, B e C): z-ai/glm-5.2 via novita/fp8
+# FASE 2: Enxame Cognitivo (As 3 Lentes SOULS A, B e C): z-ai/glm-5.2 via novita/fp8
 OPENROUTER_HEAVY_DEFAULT_MODEL=z-ai/glm-5.2:novita/fp8
 OPENROUTER_HEAVY_MODEL_LENS_PROD_UX=z-ai/glm-5.2:novita/fp8
 OPENROUTER_HEAVY_MODEL_LENS_ARQ=z-ai/glm-5.2:novita/fp8
@@ -60,7 +60,7 @@ FIRECRAWL_API_KEY="***MASKED***"
 # - Fluxo preferencial atual: GOOGLE_APPLICATION_CREDENTIALS (service account) + GOOGLE_SHEETS_ID
 # - Fluxo opcional futuro: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN
 # - Fallback direto: GOOGLE_ACCESS_TOKEN
-GOOGLE_APPLICATION_CREDENTIALS="C:/Users/rosas/.keys/soda-sheets-service-account.json"
+GOOGLE_APPLICATION_CREDENTIALS="C:/Users/rosas/.keys/souls-sheets-service-account.json"
 GOOGLE_SHEETS_ID="1jPmO29ZR240nq2YW4iwHvjKcd5X299z4Kv7AEI7oUbg"
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""

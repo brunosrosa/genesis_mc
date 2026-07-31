@@ -6,8 +6,8 @@
 - Fontes fisicas lidas:
   - `Z:\genesis_mc\docs\adrs\ADR-026-Nomenclatura-Semantica-Zero-Brand.md`
   - `Z:\genesis_mc\gateway-config.yaml`
-  - `Z:\genesis_mc\.souls_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt`
-  - `Z:\genesis_mc\src-tauri\src\bin\soda_mcp_server.rs`
+  - `Z:\genesis_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt`
+  - `Z:\genesis_mc\src-tauri\src\bin\souls_mcp_server.rs`
   - `Z:\genesis_mc\.agents\skills\**\SKILL.md`
 
 ## Verdade Atual
@@ -15,29 +15,29 @@
 - Inventario efetivamente exposto hoje ao cliente MCP conectado: `52` ferramentas.
 - Composicao real capturada:
   - `46` ferramentas do tronco `lean-ctx`
-  - `6` ferramentas do tronco `soda-native-ast`
-- `gateway-config.yaml` ainda referencia nomes legados do tronco nativo (`soda_*`) e tambem ja contem pistas de migracao (`web_search`, `ctx_.*`).
+  - `6` ferramentas do tronco `souls-native-ast`
+- `gateway-config.yaml` ainda referencia nomes legados do tronco nativo (`souls_*`) e tambem ja contem pistas de migracao (`web_search`, `ctx_.*`).
 - `sequentialthinking` e `memory_*` aparecem na allowlist/backends do `gateway-config.yaml`, mas NAO aparecem no inventario capturado do servidor ligado. Portanto, nao entram na matriz atomica desta rodada sem nova captura de exposicao real.
 
 ## Achados Criticos
 
 1. Ha tres camadas de nomenclatura convivendo ao mesmo tempo:
-   - Servidor ligado na IDE: `soda-agent-gateway`
-   - Backend nativo Rust anunciado em `serverInfo.name`: `soda-native-ast`
-   - Ferramentas atomicas nativas ainda com prefixo de marca/projeto: `soda_*`
+   - Servidor ligado na IDE: `souls-agent-gateway`
+   - Backend nativo Rust anunciado em `serverInfo.name`: `souls-native-ast`
+   - Ferramentas atomicas nativas ainda com prefixo de marca/projeto: `souls_*`
 2. O tronco `lean-ctx` ja esta semanticamente quase conforme na camada atomica (`ctx_*`), mas a exposicao atual ainda sangra redundancia via prefixo de backend: `lean-ctx_ctx_*`.
 3. Existe uma divergencia material na ferramenta de busca web:
-   - Inventario salvo: `soda-native-ast_soda_duckgo_search`
-   - Descritor MCP real: `soda-native-ast_soda_duckduckgo_search`
-   - Rust server: `soda_duckduckgo_search`
-   - Allowlist do gateway: `soda_duckduckgo_search`
+   - Inventario salvo: `souls-native-ast_souls_duckgo_search`
+   - Descritor MCP real: `souls-native-ast_souls_duckduckgo_search`
+   - Rust server: `souls_duckduckgo_search`
+   - Allowlist do gateway: `souls_duckduckgo_search`
    Essa discrepancia precisa ser tratada como risco de cache/artefato derivado antes da refatoracao.
 
 ## Regra ADR-026 Aplicada
 
 - Nome de servidor exportado ao cliente: `souls`
 - Padrao de ferramenta atomica: `<dominio>_<acao>`
-- Sem marca, sem `mcp_`, sem `tool_`, sem `soda_`, sem fornecedor (`duckduckgo`, `github`) no nome.
+- Sem marca, sem `mcp_`, sem `tool_`, sem `souls_`, sem fornecedor (`duckduckgo`, `github`) no nome.
 
 ## Matriz De Renomeacao
 
@@ -89,12 +89,12 @@
 | `lean-ctx_ctx_tree` | `ctx_tree` | `ctx_tree` | `souls_ctx_tree` | `lean-ctx` |
 | `lean-ctx_ctx_workflow` | `ctx_workflow` | `ctx_workflow` | `souls_ctx_workflow` | `lean-ctx` |
 | `lean-ctx_ctx_wrapped` | `ctx_wrapped` | `ctx_wrapped` | `souls_ctx_wrapped` | `lean-ctx` |
-| `soda-native-ast_soda_get_ast` | `soda_get_ast` | `repo_ast` | `souls_repo_ast` | `soda-native-ast` |
-| `soda-native-ast_soda_fetch_web` | `soda_fetch_web` | `web_fetch` | `souls_web_fetch` | `soda-native-ast` |
-| `soda-native-ast_soda_get_time` | `soda_get_time` | `sys_time` | `souls_sys_time` | `soda-native-ast` |
-| `soda-native-ast_soda_duckduckgo_search` | `soda_duckduckgo_search` | `web_search` | `souls_web_search` | `soda-native-ast` |
-| `soda-native-ast_soda_github_meta` | `soda_github_meta` | `repo_meta` | `souls_repo_meta` | `soda-native-ast` |
-| `soda-native-ast_soda_sqlite_query` | `soda_sqlite_query` | `db_query` | `souls_db_query` | `soda-native-ast` |
+| `souls-native-ast_souls_get_ast` | `souls_get_ast` | `repo_ast` | `souls_repo_ast` | `souls-native-ast` |
+| `souls-native-ast_souls_fetch_web` | `souls_fetch_web` | `web_fetch` | `souls_web_fetch` | `souls-native-ast` |
+| `souls-native-ast_souls_get_time` | `souls_get_time` | `sys_time` | `souls_sys_time` | `souls-native-ast` |
+| `souls-native-ast_souls_duckduckgo_search` | `souls_duckduckgo_search` | `web_search` | `souls_web_search` | `souls-native-ast` |
+| `souls-native-ast_souls_github_meta` | `souls_github_meta` | `repo_meta` | `souls_repo_meta` | `souls-native-ast` |
+| `souls-native-ast_souls_sqlite_query` | `souls_sqlite_query` | `db_query` | `souls_db_query` | `souls-native-ast` |
 
 ## Blast Radius
 
@@ -102,33 +102,33 @@
 
 - `Z:\genesis_mc\gateway-config.yaml`
   - Reescrever regex CEL da allowlist:
-    - hoje aceita `soda_get_ast|soda_fetch_web|soda_github_meta|soda_sqlite_query|soda_get_time|soda_duckduckgo_search`
+    - hoje aceita `souls_get_ast|souls_fetch_web|souls_github_meta|souls_sqlite_query|souls_get_time|souls_duckduckgo_search`
     - alvo ADR-026: `repo_ast|web_fetch|repo_meta|db_query|sys_time|web_search`
   - Revisar tambem a convivencia de `web_search` novo com nome legado antigo na mesma regra.
   - Revisar nomes de backends, se eles influenciam o prefixo exportado ao cliente:
     - `lean-ctx`
     - `sequential_thinking`
     - `memory-mcp-rs`
-    - `soda-native-ast`
+    - `souls-native-ast`
 
-- `Z:\genesis_mc\src-tauri\src\bin\soda_mcp_server.rs`
-  - `serverInfo.name`: `soda-native-ast` -> `souls` ou outro alias atomico decidido para a camada exportada.
+- `Z:\genesis_mc\src-tauri\src\bin\souls_mcp_server.rs`
+  - `serverInfo.name`: `souls-native-ast` -> `souls` ou outro alias atomico decidido para a camada exportada.
   - Tabela `tools/list`:
-    - `soda_get_ast` -> `repo_ast`
-    - `soda_fetch_web` -> `web_fetch`
-    - `soda_get_time` -> `sys_time`
-    - `soda_duckduckgo_search` -> `web_search`
-    - `soda_github_meta` -> `repo_meta`
-    - `soda_sqlite_query` -> `db_query`
+    - `souls_get_ast` -> `repo_ast`
+    - `souls_fetch_web` -> `web_fetch`
+    - `souls_get_time` -> `sys_time`
+    - `souls_duckduckgo_search` -> `web_search`
+    - `souls_github_meta` -> `repo_meta`
+    - `souls_sqlite_query` -> `db_query`
   - Dispatch `match tool_name`:
     - trocar as chaves string legadas pelos nomes novos.
   - Simbolos Rust candidatos a rename interno:
-    - `run_soda_get_ast` -> `run_repo_ast`
-    - `run_soda_fetch_web` -> `run_web_fetch`
-    - `run_soda_get_time` -> `run_sys_time`
-    - `run_soda_duckduckgo_search` -> `run_web_search`
-    - `run_soda_github_meta` -> `run_repo_meta`
-    - `run_soda_sqlite_query` -> `run_db_query`
+    - `run_souls_get_ast` -> `run_repo_ast`
+    - `run_souls_fetch_web` -> `run_web_fetch`
+    - `run_souls_get_time` -> `run_sys_time`
+    - `run_souls_duckduckgo_search` -> `run_web_search`
+    - `run_souls_github_meta` -> `run_repo_meta`
+    - `run_souls_sqlite_query` -> `run_db_query`
 
 ### 2. Skills / Roteamento Semantico
 
@@ -139,31 +139,31 @@ Arquivos com referencias textuais a nomes legados e/ou nomes que precisarao ser 
 - `Z:\genesis_mc\.agents\skills\mcp-time-master\SKILL.md`
 - `Z:\genesis_mc\.agents\skills\mcp-jcodemunch-master\SKILL.md`
 - `Z:\genesis_mc\.agents\skills\mcp-sqlite-master\SKILL.md`
-- `Z:\genesis_mc\.agents\skills\soda-docs-hydrator\SKILL.md`
-- `Z:\genesis_mc\.agents\skills\soda-github-orchestrator\SKILL.md`
-- `Z:\genesis_mc\.agents\skills\soda-ralph-loop\SKILL.md`
-- `Z:\genesis_mc\.agents\skills\soda-repo-analysis\SKILL.md`
+- `Z:\genesis_mc\.agents\skills\souls-docs-hydrator\SKILL.md`
+- `Z:\genesis_mc\.agents\skills\souls-github-orchestrator\SKILL.md`
+- `Z:\genesis_mc\.agents\skills\souls-ralph-loop\SKILL.md`
+- `Z:\genesis_mc\.agents\skills\souls-repo-analysis\SKILL.md`
 - `Z:\genesis_mc\.agents\skills\skill-creator\SKILL.md`
 
 Renomes textuais esperados nas skills:
 
-- `soda_get_ast` -> `repo_ast`
-- `soda_fetch_web` -> `web_fetch`
-- `soda_get_time` -> `sys_time`
-- `soda_duckduckgo_search` -> `web_search`
-- `soda_github_meta` -> `repo_meta`
-- `soda_sqlite_query` -> `db_query`
+- `souls_get_ast` -> `repo_ast`
+- `souls_fetch_web` -> `web_fetch`
+- `souls_get_time` -> `sys_time`
+- `souls_duckduckgo_search` -> `web_search`
+- `souls_github_meta` -> `repo_meta`
+- `souls_sqlite_query` -> `db_query`
 - `lean-ctx_ctx_*` NAO deve aparecer como contrato final de uso; a linguagem da skill deve apontar para os atomos `ctx_*`.
 
 ### 3. Artefatos Derivados / Cache / Relatorios
 
-- `Z:\genesis_mc\.souls_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt`
+- `Z:\genesis_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt`
   - Deve ser regenerado apos a refatoracao para refletir:
     - servidor `souls`
     - nomes atomicos novos
-  - Contem uma divergencia atual em `soda-native-ast_soda_duckgo_search`.
+  - Contem uma divergencia atual em `souls-native-ast_souls_duckgo_search`.
 
-- `C:\Users\rosas\.trae\mcps\s_genesis_mc-39a22d09\dev_agent\mcp_soda-agent-gateway\tools\*.json`
+- `C:\Users\rosas\.trae\mcps\s_genesis_mc-39a22d09\dev_agent\mcp_souls-agent-gateway\tools\*.json`
   - Artefatos derivados de runtime/IDE.
   - Precisarao ser invalidados/regenarados apos o rename para evitar cache podre.
   - Nao sao SSOT de repositorio, mas entram no blast radius operacional.

@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED Fase 3: LEAN Dot-Flattening encoder.
+// SOULS-CANIBALIZED Fase 3: LEAN Dot-Flattening encoder.
 //
 // Formato canônico LEAN para serialização compacta de `serde_json::Value`:
 //

@@ -10,15 +10,15 @@ description: "Erradica GraphRAGs pesados. Adota B-Trees no LanceDB, tags STABLE/
 ### ADR-005: RAG Temporal, Filtros Escalares e Combate à Cegueira Temporal
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional (A Cegueira Temporal)
 A busca vetorial ingênua em RAG (Retrieval-Augmented Generation) convencional sofre de "Cegueira Temporal" e "Recency Bias" (Viés de Recência). Em um RAG puramente baseado em similaridade de cosseno, um documento obsoleto de três anos atrás pode obter uma pontuação semântica maior do que uma regra atualizada ontem, envenenando fatalmente a resposta do agente [2]. 
 
-A literatura acadêmica tenta mitigar isso introduzindo redes neurais monstruosas como *Temporal Graph RAG* (TG-RAG) ou *TimeRAG*, que delegam ao LLM a tarefa de organizar cronologias [1, 2]. Executar enxames de agentes para montar grafos temporais apenas para calcular fusos horários é um *overengineering* patético que asfixia os 6GB de VRAM da RTX 2060m e bloqueia o *Event Loop* do Tokio [1]. O SODA necessita de precisão cronológica cirúrgica, em milissegundos, sem estressar a dGPU.
+A literatura acadêmica tenta mitigar isso introduzindo redes neurais monstruosas como *Temporal Graph RAG* (TG-RAG) ou *TimeRAG*, que delegam ao LLM a tarefa de organizar cronologias [1, 2]. Executar enxames de agentes para montar grafos temporais apenas para calcular fusos horários é um *overengineering* patético que asfixia os 6GB de VRAM da RTX 2060m e bloqueia o *Event Loop* do Tokio [1]. O SOULS necessita de precisão cronológica cirúrgica, em milissegundos, sem estressar a dGPU.
 
 #### Decisão Arquitetural (A Matriz Temporal O(1))
-Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação primária de tempo. O SODA transforma o tempo em uma propriedade física filtrável, adotando as seguintes camadas pragmáticas:
+Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação primária de tempo. O SOULS transforma o tempo em uma propriedade física filtrável, adotando as seguintes camadas pragmáticas:
 
 **Módulo 1: Extração Temporal Nativa na CPU**
 *   Toda inferência de datas a partir de linguagem natural (ex: "semana passada", "ontem") será resolvida estritamente na CPU (Intel i9) utilizando código Rust de altíssima performance.

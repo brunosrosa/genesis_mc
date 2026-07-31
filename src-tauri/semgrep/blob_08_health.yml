@@ -1,5 +1,5 @@
 rules:
-  - id: soda.rust.panic.unwrap.expect
+  - id: souls.rust.panic.unwrap.expect
     languages: [rust]
     severity: WARNING
     message: "panic/unwrap/expect aumentam fragilidade operacional"
@@ -8,7 +8,7 @@ rules:
       - pattern: $VALUE.unwrap()
       - pattern: $VALUE.expect(...)
 
-  - id: soda.rust.temp-dir
+  - id: souls.rust.temp-dir
     languages: [rust]
     severity: WARNING
     message: "Uso de diretorio temporario requer auditoria de seguranca e higiene de cleanup"
@@ -18,7 +18,7 @@ rules:
       - pattern: tempfile::tempdir()
       - pattern: tempfile::Builder::new()
 
-  - id: soda.python.temp-dir
+  - id: souls.python.temp-dir
     languages: [python]
     severity: WARNING
     message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
@@ -28,7 +28,7 @@ rules:
       - pattern: tempfile.mkstemp(...)
       - pattern: tempfile.mkdtemp(...)
 
-  - id: soda.go.temp-dir
+  - id: souls.go.temp-dir
     languages: [go]
     severity: WARNING
     message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
@@ -38,7 +38,7 @@ rules:
       - pattern: ioutil.TempDir(...)
       - pattern: ioutil.TempFile(...)
 
-  - id: soda.elixir.temp-dir
+  - id: souls.elixir.temp-dir
     languages: [elixir]
     severity: WARNING
     message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"

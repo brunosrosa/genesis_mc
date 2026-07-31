@@ -6,9 +6,9 @@ Este documento especifica a implementação da "vacina" de gerenciamento de cicl
 
 ## 1. DECLARAÇÃO DO PROBLEMA E REQUISITOS OPERACIONAIS
 
-A nova implementação do `souls_dedup` introduziu o `SESSION_DEDUP_CACHE` em RAM (via `DashMap` concorrente global). Como o daemon do SODA opera de forma persistente em segundo plano no Host, a varredura contínua de múltiplos arquivos e sessões de chat acumula hashes de 64 bits de forma monotônica. 
+A nova implementação do `souls_dedup` introduziu o `SESSION_DEDUP_CACHE` em RAM (via `DashMap` concorrente global). Como o daemon do SOULS opera de forma persistente em segundo plano no Host, a varredura contínua de múltiplos arquivos e sessões de chat acumula hashes de 64 bits de forma monotônica. 
 
-Sem uma rotina explícita de limpeza e evicção, o consumo de RAM do Host crescerá linearmente ao longo do tempo, violando os limites termodinâmicos estipulados na Matriz Fundacional do SODA V4.
+Sem uma rotina explícita de limpeza e evicção, o consumo de RAM do Host crescerá linearmente ao longo do tempo, violando os limites termodinâmicos estipulados na Matriz Fundacional do SOULS V4.
 
 ### Requisitos Inegociáveis:
 1. **Evicção Determinística:** O sistema deve expor uma interface pública segura em Rust para limpar o cache em tempo constante $\mathcal{O}(1)$.

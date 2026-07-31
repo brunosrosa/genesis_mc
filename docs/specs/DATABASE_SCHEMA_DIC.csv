@@ -22,7 +22,7 @@ etl_errors,timestamp_erro,INTEGER,NOT NULL,-,A hora exata do crash daquele repos
 repositorios,project_name,TEXT,NOT NULL,PRIMARY KEY,"Formato ""Owner/Repo"". Garante a unicidade do projeto na máquina de estados."
 repositorios,lote_id,TEXT,NOT NULL,-,Identificador do batch de ingestão (ex: LOTE_015_Infra). Evita JOINs desnecessários no SQLite.
 repositorios,repo_url,TEXT,NOT NULL,UNIQUE,URL original do repositório no GitHub/GitLab.
-repositorios,soda_universal_uuid,TEXT,NOT NULL,UNIQUE,UUIDv7 (contém sort temporal). É o Elo de Integridade absoluto que conecta os metadados do SQLite aos embeddings vetoriais no LanceDB e aos nós do grafo no LadybugDB.
+repositorios,souls_universal_uuid,TEXT,NOT NULL,UNIQUE,UUIDv7 (contém sort temporal). É o Elo de Integridade absoluto que conecta os metadados do SQLite aos embeddings vetoriais no LanceDB e aos nós do grafo no LadybugDB.
 repositorios,status_processamento,TEXT,NOT NULL,-,"ENUM ESTRITO de máquina de estados. Ex: 'PENDENTE', 'FASE_1_OK', 'FASE_2_OK', 'CONCLUIDO', 'SHORT-CIRCUIT', 'ERRO_FASE_X'."
 repositorios,timestamp_fase_1,INTEGER,-,-,Hora exata em que o Harvester terminou de extrair os dados físicos.
 repositorios,timestamp_fase_3,INTEGER,-,-,Hora exata (ISO-8601) da conclusão bem-sucedida do Funil Pydantic (Decodificação Restrita) gerado pelo Local Worker. Vital para medir a latência total E³.
@@ -34,14 +34,14 @@ repo_heuristics,project_name,TEXT,NOT NULL,"PRIMARY KEY, FOREIGN KEY (repositori
 repo_heuristics,repo_url,TEXT,NOT NULL,UNIQUE,"URL canônica de origem. Trava UNIQUE garante que o script faça UPSERT (atualização) se a URL já existir, evitando duplicatas."
 repo_heuristics,repo_version,TEXT,NOT NULL,-,Hash curto do commit ou Tag de release (ex: v2.4.1). Ancara a imutabilidade temporal da análise.
 repo_heuristics,ultima_versao_online,TEXT,-,-,Tag ou hash curto do último commit disponível na nuvem (Fase -1). Usado para o cálculo mecânico de Drift de atualização.
-repo_heuristics,indicacao_otimista_canibalizacao,TEXT,NOT NULL,-,"Lista otimista (3–5 bullets) do que o SODA pode canibalizar hoje ou no futuro; gerada tardiamente na Fase 3 (Bloco 2)."
+repo_heuristics,indicacao_otimista_canibalizacao,TEXT,NOT NULL,-,"Lista otimista (3–5 bullets) do que o SOULS pode canibalizar hoje ou no futuro; gerada tardiamente na Fase 3 (Bloco 2)."
 repo_heuristics,lote_id,TEXT,NOT NULL,-,Identificador do batch de ingestão (ex: LOTE_015_Infra).
 repo_heuristics,data_ultima_analise,INTEGER,NOT NULL,-,Timestamp em formato estrito ISO-8601 (YYYY-MM-DDTHH:MM:SSZ).
-repo_heuristics,analise_origem,TEXT,NOT NULL,-,"Assinatura do motor responsável pela inserção (ex: ""SODA ETL V3 Auto"")."
+repo_heuristics,analise_origem,TEXT,NOT NULL,-,"Assinatura do motor responsável pela inserção (ex: ""SOULS ETL V3 Auto"")."
 repo_heuristics,declared_description,TEXT,NOT NULL,-,"Descrição declarada do repositório. Heurística SSOT: prioridade 1 = seção ABOUT no topo da página GitHub; prioridade 2 = README; prioridade 3 = título/headline da página do repositório. Limite elástico: ~2000 caracteres."
 repo_heuristics,proposta_original_resumo,TEXT,NOT NULL,-,"Síntese técnica desidratada e neutra do que a ferramenta realmente faz (gerada pelo formatador na Fase 3). Limite elástico: ~3000 caracteres."
 repo_heuristics,stack_base,TEXT,NOT NULL,-,Array serializado em string com linguagens/frameworks originais. Vital para o Arquiteto auditar lixo tóxico (Node/Electron).
-repo_heuristics,licenca,TEXT,-,-,"Código SPDX (ex: MIT, AGPL-3.0) fornecido pela API. Fundamental para a blindagem legal do SODA contra copyleft."
+repo_heuristics,licenca,TEXT,-,-,"Código SPDX (ex: MIT, AGPL-3.0) fornecido pela API. Fundamental para a blindagem legal do SOULS contra copyleft."
 repo_heuristics,lente_a_sentido_prod_ux,TEXT,-,-,Salva a redação final da Visão de Produto/UX gerada na Fase 2. Pode ser NULL em caso de falha isolada desta API (Resiliência do Enxame).
 repo_heuristics,lente_b_estrutura_arq,TEXT,-,-,Salva a redação final da Visão de Arquitetura/Bare-Metal. Pode ser NULL em caso de falha isolada desta API.
 repo_heuristics,lente_c_realidade_ops,TEXT,-,-,Salva a redação final da Visão de Operação/FinOps. Pode ser NULL em caso de falha isolada desta API.
@@ -50,11 +50,11 @@ repo_heuristics,justificativa_decisao,TEXT,NOT NULL,-,"Defesa lógico-matemátic
 repo_heuristics,executive_verdict,TEXT,NOT NULL,-,"Veredito final do Arquiteto (Tese -> Antítese -> Síntese). Validado via JSON Schema estrito. Limite elástico: ~3000 caracteres."
 repo_heuristics,classificacao_terminal,TEXT,NOT NULL,-,"Enum estrito do veredito final de adoção. Valores canônicos: STACK_CORE_PLANO_A1 | STACK_CORE_PLANO_A2 | STACK_CORE_PLANO_B | INTEGRATE_AS_COMPONENT | ABSORB_PARTIALLY | ABSORB_CONCEPT | USE_AS_INSPIRATION_ONLY | REJECT | SHORT-CIRCUIT."
 repo_heuristics,acao_de_canibalizacao,TEXT,NOT NULL,-,"Enum estrito da ação de canibalização. Valores canônicos: Data Model / Schema | Prompt / Heuristic Seed | Protocol / Standard | Concept | UX Pattern | Canvas Refinement | New Canvas | Cognitive Layer | Infra Capability | Technical Runtime | Sandbox | Plugin | External Contract | No Absorption."
-repo_heuristics,categoria_arquitetural,TEXT,NOT NULL,-,"Enum estrito mapeando o grande domínio Épico do SODA (ex: 'Memória', 'Orquestração')."
+repo_heuristics,categoria_arquitetural,TEXT,NOT NULL,-,"Enum estrito mapeando o grande domínio Épico do SOULS (ex: 'Memória', 'Orquestração')."
 repo_heuristics,horizonte_extracao,TEXT,NOT NULL,-,"Enum estrito do timing de extração. Valores canônicos: IMEDIATO | CURTO_PRAZO | CURTO_MEDIO_PRAZO | MEDIO_PRAZO | LONGO_PRAZO | REFERENCIAL_TEORICO | NUNCA."
 repo_heuristics,tipo_integracao,TEXT,NOT NULL,-,"Enum estrito validado pelo Pydantic (ex: 'Sidecar Efêmero', 'Crate Nativa'). Define a topologia de injeção física no SO."
 repo_heuristics,categoria_nuance_tecnica,TEXT,NOT NULL,-,"A especialidade hiper-técnica da solução (ex: 'Motor de busca híbrido BM25', 'Parser AST O(1)')."
-repo_heuristics,integracao_papel_exato,TEXT,NOT NULL,-,A missão tática e cirúrgica do componente após ser absorvido pelo SODA.
+repo_heuristics,integracao_papel_exato,TEXT,NOT NULL,-,A missão tática e cirúrgica do componente após ser absorvido pelo SOULS.
 repo_heuristics,ouro_a_extrair,TEXT,NOT NULL,-,"A sacada genial de produto/UX, heurística intangível que justifica a canibalização. Limite elástico: ~3000 caracteres."
 repo_heuristics,deep_pattern,TEXT,NOT NULL,-,"Padrão lógico estrutural subjacente abstrato (ex: 'Regulação contínua de recursos'). Limite elástico: ~3000 caracteres."
 repo_heuristics,transplantable_core,TEXT,NOT NULL,-,"O 'órgão mecânico' exato a ser amputado e levado para casa (ex: 'Máquina de estados FSM'). Limite elástico: ~3000 caracteres."
@@ -77,7 +77,7 @@ repo_heuristics,risco_principal,TEXT,NOT NULL,-,"Idealmente 1 frase cortante exp
 repo_heuristics,risco_linha_vermelha,TEXT,NOT NULL,-,"Restrição imperativa iniciando com ""NUNCA FAZER..."". A barreira arquitetural dogmática que não podemos cruzar ao absorver este código. Limite elástico: ~3000 caracteres."
 repo_heuristics,observacoes,TEXT,NOT NULL,-,"Notas/ressalvas de anomalias descobertas (ex: chaves hardcoded, variáveis ocultas) durante a varredura AST do Harvester. Limite elástico: ~3000 caracteres."
 repo_heuristics,score_final,REAL,NOT NULL,-,Nota Média Flutuante (ex: 8.5). Calculada mecanicamente pelo Rust (arredondada para 1 casa decimal) baseada nas notas inteiras.
-repo_heuristics,score_fit_geral_soda,REAL,NOT NULL,-,"Nota Flutuante Ponderada (ex: 7.2). Calculada no Rust aplicando a nova fórmula V3: prioriza Lógica (30%) e Extraibilidade (15%), balanceadas com Soberania, Bare-Metal, Operabilidade, e penalidades de Creep/Risco Intrínseco."
+repo_heuristics,score_fit_geral_souls,REAL,NOT NULL,-,"Nota Flutuante Ponderada (ex: 7.2). Calculada no Rust aplicando a nova fórmula V3: prioriza Lógica (30%) e Extraibilidade (15%), balanceadas com Soberania, Bare-Metal, Operabilidade, e penalidades de Creep/Risco Intrínseco."
 repo_heuristics,score_philosophical_fit,INTEGER,NOT NULL,-,Nota pura em Integer (0-10). 10 = Local-First / Zero-Trust absoluto.
 repo_heuristics,score_bare_metal_fit,INTEGER,NOT NULL,-,"Nota pura em Integer (0-10). Avalia se a lógica matemática é agnóstica e pode ser recompilada dinamicamente para extrair o máximo de qualquer hardware (Metal, Vulkan, NPU). Pune letalmente monólitos acoplados permanentemente a interpretadores pesados (Node/JVM)."
 repo_heuristics,score_architectural_extractability,INTEGER,NOT NULL,-,Nota pura em Integer (0-10). 10 = Núcleo de lógica em O(1) isolado perfeitamente sem acoplamento.
@@ -122,7 +122,7 @@ artefatos_brutos,artifact_type,TEXT,NOT NULL,-,"Enum Estrito: 'blob_01_promessa_
 ,,,,,
 debates_enxame,debate_id,INTEGER,NOT NULL,PRIMARY KEY (AUTOINCREMENT),Identificador sequencial único do debate.
 debates_enxame,repo_id,TEXT,NOT NULL,FOREIGN KEY (repositorios.project_name),Elo conectando este debate à solução de origem.
-debates_enxame,contexto_oraculo_soda,TEXT,NOT NULL,-,"Salva o texto devolvido pelo NotebookLM (Aterramento Semântico) para garantir que a IA não opinou ""cega""."
+debates_enxame,contexto_oraculo_souls,TEXT,NOT NULL,-,"Salva o texto devolvido pelo NotebookLM (Aterramento Semântico) para garantir que a IA não opinou ""cega""."
 debates_enxame,lente_a_output_bruto,TEXT,NOT NULL,-,Salva a redação narrativa crua devolvida pelo LLM atuando como Visão Produto/UX.
 debates_enxame,lente_a_produto_ux,TEXT,NOT NULL,-,Parecer textual longo gerado pelo Claude Opus 4.7 (Foco em Neuro-inclusão e Produto).
 debates_enxame,lente_b_output_bruto,TEXT,NOT NULL,-,Salva a redação narrativa crua devolvida pelo LLM atuando como Visão Arquitetura/Bare-Metal.
@@ -130,7 +130,7 @@ debates_enxame,lente_b_arquitetura,TEXT,NOT NULL,-,Parecer textual longo gerado 
 debates_enxame,lente_c_output_bruto,TEXT,NOT NULL,-,Salva a redação narrativa crua devolvida pelo LLM atuando como Visão Operação/FinOps.
 debates_enxame,lente_c_operacao,TEXT,NOT NULL,-,"Parecer textual longo gerado pelo GLM-5.1 (Foco em FinOps, Lixo Tóxico e Sustentação)."
 debates_enxame,timestamp_inicio_debate,INTEGER,NOT NULL,-,Hora exata (ISO-8601) em que o Enxame iniciou a avaliação assíncrona.
-debates_enxame,timestamp_fim_fase_2,INTEGER,NOT NULL,-,Hora exata em que as 3 Lentes SODA terminaram de raciocinar.
+debates_enxame,timestamp_fim_fase_2,INTEGER,NOT NULL,-,Hora exata em que as 3 Lentes SOULS terminaram de raciocinar.
 ,,,,,
 deep_components,component_id,TEXT,NOT NULL,PRIMARY KEY,Identificador único do componente extraído (ex: COMP_0001).
 deep_components,solution_id,TEXT,NOT NULL,FOREIGN KEY (repositorios.project_name),FK vinculando este sub-componente ao Monólito pai. A amarração explícita no project_name evita falhas de JOIN.
@@ -146,7 +146,7 @@ deep_components,absorption_reasoning,TEXT,NOT NULL,-,Defesa lógica do porquê e
 deep_components,requires_reimplementation,TEXT,NOT NULL,-,"Enum (Yes, Partial, No). Se precisaremos reescrever em Rust do zero."
 deep_components,do_not_cross_line,TEXT,NOT NULL,-,"A Linha Vermelha dogmática (""NUNCA FAZER..."") para este componente."
 deep_components,component_extractability,TEXT,NOT NULL,-,Nível de facilidade para amputar o componente do monólito em O(1).
-deep_components,component_bare_metal_fit,TEXT,NOT NULL,-,Nota 0-10 ou Enum de aderência direta ao ecossistema bare-metal do SODA.
+deep_components,component_bare_metal_fit,TEXT,NOT NULL,-,Nota 0-10 ou Enum de aderência direta ao ecossistema bare-metal do SOULS.
 deep_components,component_runtime_sovereignty,TEXT,NOT NULL,-,(V3) Independência de execução do componente sem cloud/APIs.
 deep_components,component_operability,TEXT,NOT NULL,-,"(V3) Avaliação de ""fire-and-forget"" e resiliência."
 deep_components,component_creep_risk,TEXT,NOT NULL,-,Enum avaliando se o componente gera inflação de escopo e entropia.
@@ -155,7 +155,7 @@ deep_components,component_summary_sentence,TEXT,NOT NULL,-,1 Frase-síntese enca
 deep_components,component_verdict,TEXT,NOT NULL,-,O veredito condensado final focado exclusivamente neste componente.
 deep_components,score_component_value,INTEGER,NOT NULL,-,Nota 1-5. O valor estrutural bruto do componente (Lógica/Matemática).
 deep_components,score_component_reusability,INTEGER,NOT NULL,-,Nota 1-5. O quão fácil é extrair e reutilizar em Rust sem acoplamento.
-deep_components,score_component_fit,INTEGER,NOT NULL,-,Nota 1-5. Aderência absoluta ao ecossistema bare-metal do SODA.
+deep_components,score_component_fit,INTEGER,NOT NULL,-,Nota 1-5. Aderência absoluta ao ecossistema bare-metal do SOULS.
 deep_components,score_component_risk,INTEGER,NOT NULL,-,Nota 1-5. Risco termodinâmico ou de lock-in específico desta subparte.
 deep_components,score_component_priority,INTEGER,NOT NULL,-,Nota 1-5. Grau de urgência para canibalizarmos este componente no roadmap.
 deep_components,score_component_extractability,INTEGER,NOT NULL,-,Nota 1-5. O quão viável é a extração em O(1) sem dependências acopladas.
@@ -190,9 +190,9 @@ model_registry,success_rate_ema,REAL,NOT NULL,-,Float 0.0 a 1.0. Representa o EM
 ,,,,,
 VIEW: action_matrix,(Campos herdados),VIEW,N/A,Lógica SQL Interna,"O Rust cria um CREATE VIEW filtrando projetos onde classificacao_terminal seja 'STACK_CORE_PLANO_A' etc. Traz as colunas project_name, acao_de_canibalizacao, transplantable_core, score_architectural_priority e score_absorption_readiness. É aqui que você lê o que extrair amanhã baseado nos novos scores da V3."
 VIEW: quarantine_radar,(Campos herdados),VIEW,N/A,Lógica SQL Interna,"A Quarentena: Filtra impiedosamente repositórios onde design_misuse_risk, entropy_risk ou intrinsic_ethics_risk sejam 'HIGH' ou 'CRITICAL'. Isola visualmente os projetos que precisam do seu Veto Humano (Human-in-the-Loop) antes de serem absorvidos."
-VIEW: soda_graph_topology,(Campos herdados),VIEW,N/A,Lógica SQL Interna,"O Mapa do Ecossistema: Uma View agregadora que agrupa os projetos por stack_base, architectural_topology e capability_nature_primary. Permite que você estude como as tecnologias base convergem."
+VIEW: souls_graph_topology,(Campos herdados),VIEW,N/A,Lógica SQL Interna,"O Mapa do Ecossistema: Uma View agregadora que agrupa os projetos por stack_base, architectural_topology e capability_nature_primary. Permite que você estude como as tecnologias base convergem."
 ,,,,,
-kanban_tasks,task_id,TEXT,NOT NULL,PRIMARY KEY,Identificador único da tarefa no SODA (ex: TASK_091_IPC).
+kanban_tasks,task_id,TEXT,NOT NULL,PRIMARY KEY,Identificador único da tarefa no SOULS (ex: TASK_091_IPC).
 kanban_tasks,target_repo_id,TEXT,NOT NULL,FOREIGN KEY (repositorios.project_name),"Elo arquitetural (GitOps). Permite vincular fisicamente uma tarefa do Kanban ao repositório exato ou solução que será canibalizada, unificando a esteira de ETL com o desenvolvimento."
 kanban_tasks,issue_ref,TEXT,-,-,O link ou ID da Issue original no GitHub (Elo GitOps).
 kanban_tasks,task_title,TEXT,NOT NULL,-,Título da tarefa visível no Kanban Swarm Canvas.
@@ -204,5 +204,5 @@ weevolve_learnings,learning_id,TEXT,NOT NULL,PRIMARY KEY,Hash SHA-256 do padrão
 weevolve_learnings,the_insight,TEXT,NOT NULL,-,O princípio computacional ou limitação de hardware descoberta (ex: bloqueio de thread no Tokio).
 weevolve_learnings,why_this_matters,TEXT,NOT NULL,-,"A relevância e o sintoma catastrófico evitado (ex: Out-Of-Memory, Layout Shift)."
 weevolve_learnings,recognition_pattern,TEXT,NOT NULL,-,Gatilhos sintáticos ou AST que indicam o risco desse erro voltar a acontecer no código.
-weevolve_learnings,the_approach,TEXT,NOT NULL,-,A regra inegociável de contorno ou a sintaxe exata para a solução aprovada no SODA.
+weevolve_learnings,the_approach,TEXT,NOT NULL,-,A regra inegociável de contorno ou a sintaxe exata para a solução aprovada no SOULS.
 weevolve_learnings,timestamp_aprendizado,INTEGER,NOT NULL,-,UNIX Epoch Int64. Momento em que o agente internalizou a regra.

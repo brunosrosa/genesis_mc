@@ -11,7 +11,7 @@ description: "Proíbe amostragem paralela (Best-of-N) na GPU e impõe o Ralph Lo
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Gargalo da KV Cache Paralela
 
@@ -26,7 +26,7 @@ Em hardware restrito como a dGPU NVIDIA RTX 2060m ($6.0 \text{ GB}$ VRAM):
 
 Como aplicar *Test-Time Compute* e ciclos de reflexão de auto-correção para resgatar erros lógicos complexos em SLMs de 3B a 4B parâmetros sem estourar o limite de 6GB de VRAM, sem induzir paginação PCIe e sem desacelerar a inferência com re-prefills integrais?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROMPT INICIAL ]
@@ -58,11 +58,11 @@ Como aplicar *Test-Time Compute* e ciclos de reflexão de auto-correção para r
 
 Fica terminantemente **PROIBIDO** o uso de estratégias de amostragem paralela (*Best-of-N*, *Self-Consistency*, *Beam Search* paralelo) que aloquem múltiplas sequências de KV Cache simultâneas na VRAM da GPU.
 
-- O motor de inferência SODA V5 operará sob amostragem estritamente sequencial.
+- O motor de inferência SOULS V5 operará sob amostragem estritamente sequencial.
 
 ### 2. O Padrão "VRAM Assimétrica e Ralph Loop Sequencial"
 
-O SODA V5 padroniza a execução do **Ralph Loop Sequencial**, governado por uma arquitetura de VRAM assimétrica:
+O SOULS V5 padroniza a execução do **Ralph Loop Sequencial**, governado por uma arquitetura de VRAM assimétrica:
 
 - **Modelo Primário (3B-4B):** Alocado exclusivamente na VRAM da GPU (~2.5GB a 3.2GB), encarregado da geração rápida de hipóteses e raciocínio.
 - **Modelo Verificador (*Critic Desacoplado*):** Fica estritamente **proibido** alocar o modelo *Critic* na VRAM. O verificador (seja um validador heurístico determinístico em Rust ou um SLM ultraleve como `GLiClass` / `Phi-4-mini` de 0.5B-1.5B em GGUF) DEVE rodar exclusivamente na memória RAM do Host, processado via CPU através de instruções vetoriais AVX2 / AVX-512.

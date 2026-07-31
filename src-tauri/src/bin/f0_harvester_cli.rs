@@ -74,7 +74,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
             repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
-            soda_universal_uuid TEXT NOT NULL UNIQUE,
+            souls_universal_uuid TEXT NOT NULL UNIQUE,
             status_processamento TEXT NOT NULL,
             timestamp_fase_1 INTEGER,
             timestamp_fase_3 INTEGER,
@@ -120,13 +120,13 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
 
     conn.execute(
         "INSERT OR IGNORE INTO repositorios
-         (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
+         (project_name, lote_id, repo_url, souls_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             CANON_GLOBAL_REPO_ID,
             "CANON_CACHE",
-            "file://local/docs/SODA_CANON_MANIFEST.md",
-            "UUID-SODA-CANON-GLOBAL",
+            "file://local/docs/SOULS_CANON_MANIFEST.md",
+            "UUID-SOULS-CANON-GLOBAL",
             "CACHE_GLOBAL",
             0_i64,
             0_i64
@@ -420,7 +420,7 @@ async fn resolve_release_seed_for_repo_url(repo_url: &Url) -> io::Result<String>
     let owner = segments
         .pop()
         .ok_or_else(|| io::Error::other("repo_url sem owner para resolver versão"))?;
-    let github_api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
+    let github_api_base = std::env::var("SOULS_GITHUB_API_BASE_URL")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -826,7 +826,7 @@ async fn process_one_repo_f0(
     };
 
     if let Err(e) = conn.execute(
-        "INSERT INTO repositorios (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
+        "INSERT INTO repositorios (project_name, lote_id, repo_url, souls_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(project_name) DO UPDATE SET
             repo_url = excluded.repo_url,
@@ -834,7 +834,7 @@ async fn process_one_repo_f0(
             timestamp_fase_1 = excluded.timestamp_fase_1",
         params![
             repo_id,
-            std::env::var("SODA_LOTE_ID_OVERRIDE")
+            std::env::var("SOULS_LOTE_ID_OVERRIDE")
                 .ok()
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty())
@@ -1168,7 +1168,7 @@ async fn process_one_repo_f0_direct(
     };
 
     if let Err(e) = conn.execute(
-        "INSERT INTO repositorios (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
+        "INSERT INTO repositorios (project_name, lote_id, repo_url, souls_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(project_name) DO UPDATE SET
             repo_url = excluded.repo_url,
@@ -1176,7 +1176,7 @@ async fn process_one_repo_f0_direct(
             timestamp_fase_1 = excluded.timestamp_fase_1",
         params![
             repo_id,
-            std::env::var("SODA_LOTE_ID_OVERRIDE")
+            std::env::var("SOULS_LOTE_ID_OVERRIDE")
                 .ok()
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty())
@@ -1536,10 +1536,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_cli_tracing(level);
 
     let root_dir = workspace_root()?;
-    let soda_data_dir = root_dir.join(".souls_data");
-    tokio::fs::create_dir_all(&soda_data_dir).await?;
+    let souls_data_dir = root_dir.join(".souls_data");
+    tokio::fs::create_dir_all(&souls_data_dir).await?;
 
-    let db_path = soda_data_dir.join("souls_heuristic_vault.db");
+    let db_path = souls_data_dir.join("souls_heuristic_vault.db");
     let args = parse_cli_args_from(std::env::args()).map_err(io::Error::other)?;
 
     if args.batch {
@@ -1547,7 +1547,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
         info!(
             gate = STATUS_GATE_HARVESTER,
-            "SODA F0 (Harvester/Zero-IA): modo batch sequencial"
+            "SOULS F0 (Harvester/Zero-IA): modo batch sequencial"
         );
         let batch_started = Instant::now();
         let (candidates, cols) =
@@ -1651,7 +1651,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "aaif-goose/goose".to_string());
     if args.direct {
-        info!("SODA F0 (Harvester/Zero-IA): execução direta (sem Sheets)");
+        info!("SOULS F0 (Harvester/Zero-IA): execução direta (sem Sheets)");
         let summary = process_one_repo_f0_direct(&root_dir, &db_path, &repo_id, args.only_blobs.as_ref()).await;
         if summary.outcome == RepoOutcome::Error {
             let detail = summary
@@ -1664,7 +1664,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    info!("SODA F0 (Harvester/Zero-IA): execução isolada (1 repo)");
+    info!("SOULS F0 (Harvester/Zero-IA): execução isolada (1 repo)");
     let (row_number, cols, _min_idx) =
         gate_harvester_by_sheet(&spreadsheet_id, &repo_id).await.map_err(io::Error::other)?;
     let summary = process_one_repo_f0(

@@ -22,7 +22,7 @@ Evidence:
 - Toolchain local:
   - `rustc 1.94.1 (e408947bf 2026-03-25)`
   - `cargo 1.94.1`
-- O repositório está em `Z:` e o volume é `ReFS` (`FileSystem = ReFS`, label `SODA_Forge`).
+- O repositório está em `Z:` e o volume é `ReFS` (`FileSystem = ReFS`, label `SOULS_Forge`).
 - Reproduzido em `Z:\genesis_mc\src-tauri` com target padrão:
   - `cargo test --features tauri-app --bin n0_daemon_watcher` -> `0` com warning
   - warning: `error finalizing incremental compilation session directory ... Access is denied. (os error 5)`

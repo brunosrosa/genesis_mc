@@ -513,7 +513,7 @@ impl GitHubRestClient {
             .default_headers(headers)
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30))
-            .user_agent("SODA-Harvester/1.0 (reqwest bare-metal)")
+            .user_agent("SOULS-Harvester/1.0 (reqwest bare-metal)")
             .build()
             .map_err(|e| GithubTrackerError::ClientConfig(e.to_string()))?;
 
@@ -638,7 +638,7 @@ fn read_local_env_var(key: &str) -> Option<String> {
 }
 
 fn github_owner_repo(repo_url: &Url) -> Result<(String, String), GithubTrackerError> {
-    let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+    let allow_host_override = std::env::var("SOULS_GITHUB_API_BASE_URL").is_ok();
     if repo_url.host_str() != Some("github.com") && !allow_host_override {
         return Err(GithubTrackerError::InvalidGithubUrl(repo_url.to_string()));
     }

@@ -1,7 +1,7 @@
-# SODA Harvester — Blueprint Oficial (Fases 3 e 4)
+# SOULS Harvester — Blueprint Oficial (Fases 3 e 4)
 
 > **Versão:** 0.1.0  
-> **Território:** PRODUTO (Daemon SODA — Rust/Tokio, arquitetura apenas)  
+> **Território:** PRODUTO (Daemon SOULS — Rust/Tokio, arquitetura apenas)  
 > **Escopo:** Fase 3 (Síntese SGR) + Fase 4 (Carga Atômica 82 colunas)  
 > **Status:** Blueprint em redação final. Nenhum código Rust nasce nesta etapa.  
 
@@ -151,7 +151,7 @@ Regras de forma:
 
 ### 4.4. Bloco 3 — Taxonomia e ENUMs (Fase 3C) — 30 colunas
 
-Mandato: seleção rápida e estrita, mapeada do SODA Canon (sem valores fora do conjunto permitido).
+Mandato: seleção rápida e estrita, mapeada do SOULS Canon (sem valores fora do conjunto permitido).
 
 Colunas (30):
 
@@ -221,7 +221,7 @@ Colunas (10):
 **A) Floats finais (7):**
 
 1. `score_final`
-2. `score_fit_geral_soda`
+2. `score_fit_geral_souls`
 3. `score_architectural_priority`
 4. `score_human_product_priority`
 5. `score_absorption_readiness`
@@ -350,7 +350,7 @@ Para evitar deriva de mapeamento, a ordem da carga é fixa:
 `score_philosophical_fit`, `score_bare_metal_fit`, `score_architectural_extractability`, `score_operability`, `score_creep_risk`, `score_runtime_sovereignty`, `score_model_logic_value`, `score_ethics_safety`, `score_intrinsic_risk`
 
 **Bloco 5 (10):**  
-`score_final`, `score_fit_geral_soda`, `score_architectural_priority`, `score_human_product_priority`, `score_absorption_readiness`, `score_operational_priority`, `score_sustainability_adjusted_fit`, `valid_from`, `valid_to`, `embargo_status`
+`score_final`, `score_fit_geral_souls`, `score_architectural_priority`, `score_human_product_priority`, `score_absorption_readiness`, `score_operational_priority`, `score_sustainability_adjusted_fit`, `valid_from`, `valid_to`, `embargo_status`
 
 ---
 

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 use crate::harvester::router::StaticAnalysisBlade;
-use super::{SandboxExecutor, SidecarError, SidecarExitPolicy, SastExecutionTarget, SodaHealthIssue, execute_sidecar_in_dir, parse_json_payload, push_issue, sort_and_dedup_issues, sanitize_host_paths_in_text, DiscoveredManifest, ManifestKind};
+use super::{SandboxExecutor, SidecarError, SidecarExitPolicy, SastExecutionTarget, SoulsHealthIssue, execute_sidecar_in_dir, parse_json_payload, push_issue, sort_and_dedup_issues, sanitize_host_paths_in_text, DiscoveredManifest, ManifestKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustClippyPlan {
@@ -208,7 +208,7 @@ pub fn audit_transitive_rust_manifests(
     let mut manifests = payload
         .packages
         .into_iter()
-        .map(|package| crate::harvester::path_sanitizer::soda_strip_unc_prefix(&package.manifest_path))
+        .map(|package| crate::harvester::path_sanitizer::souls_strip_unc_prefix(&package.manifest_path))
         .collect::<Vec<_>>();
     manifests.sort();
     manifests.dedup();
@@ -523,7 +523,7 @@ pub fn normalize_clippy_output(
     repo_path: &Path,
     execution_root: &Path,
     bytes: &[u8],
-) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+) -> Result<Vec<SoulsHealthIssue>, SidecarError> {
     let text = String::from_utf8_lossy(bytes);
     let mut issues = Vec::new();
     for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
@@ -608,7 +608,7 @@ members = ["crates/*"]
     }
 
     #[test]
-    fn test_normalize_clippy_messages_to_soda_health_issue() {
+    fn test_normalize_clippy_messages_to_souls_health_issue() {
         let repo_path = Path::new(r"C:\host\projfs\owner\repo");
         let payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"manual memcpy can be replaced with copy_from_slice","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}
 {"reason":"compiler-message","message":{"level":"error","message":"called `Result::unwrap()` on an `Err` value","spans":[{"file_name":"src\\main.rs","is_primary":true}]}}"#;

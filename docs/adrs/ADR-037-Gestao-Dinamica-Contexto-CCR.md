@@ -11,26 +11,26 @@ description: "Mitigação de Context Rot e OOM no Gateway Rust via Gestão Dinâ
 
 ## Status
 
-Proposed (Proposto para Validação no Cânone SODA V5)
+Proposed (Proposto para Validação no Cânone SOULS V5)
 
 ## Contexto Técnico e Gargalo de Context Rot / OOM
 
-Durante a execução de fluxos de alta intensidade cognitiva — como *RAG Temporal*, *Deep Research* e *Enxames Agênticos* —, o Gateway Rust do ecossistema SODA lida com payloads massivos no histórico de conversa ($T_{\text{hist}}$). O acúmulo desordenado de logs, saídas JSON de ferramentas, diffs de código e prospecções textuais longas induz a dois vetores críticos de falha no sistema:
+Durante a execução de fluxos de alta intensidade cognitiva — como *RAG Temporal*, *Deep Research* e *Enxames Agênticos* —, o Gateway Rust do ecossistema SOULS lida com payloads massivos no histórico de conversa ($T_{\text{hist}}$). O acúmulo desordenado de logs, saídas JSON de ferramentas, diffs de código e prospecções textuais longas induz a dois vetores críticos de falha no sistema:
 
 1. **Context Rot (Degradação Semântica):** A diluição da atenção do modelo de linguagem primário em janelas extensas (> 32k-128k tokens), degradando a capacidade de raciocínio e aderência às instruções do *System Prompt*.
 2. **Exaustão de VRAM e Latência (OOM Risk):** Na infraestrutura bare-metal delimitada à dGPU NVIDIA RTX 2060m ($6.0 \text{ GB}$ VRAM), contextos excessivamente longos causam explosão no tamanho das matrizes da *KV Cache*, arriscando acionamentos de OOM (*Out of Memory*) ou forçando paginação PCIe para a RAM com perda drástica de *throughput* (tokens/segundo).
 
 O projeto open-source `headroomlabs-ai/headroom` demonstrou uma abordagem promissora para mitigação dinâmica desse problema. No entanto, a implementação original baseia-se em rackeries Python 3.10+, inferência de redes neurais via PyTorch/ModernBERT (`Kompress-v2-base`), bindings PyO3 e persistência SQLite/HNSW. Essa stack introduz **disputa de VRAM** (de 500 MB a 2.5 GB alocados pelo PyTorch/CUDA pool na dGPU), overhead de Garbage Collection (GC/GIL) e latências não determinísticas ($15 \text{ ms}$ a $316 \text{ ms}$ por pedido).
 
-Para garantir os princípios da **Lei de Ferro SODA Bare-Metal** (**Zero VRAM extra**, **Zero-Runtime Python/Node em produção** e latência sub-milissegundo), a heurística de orçamentação e triagem do Headroom deve ser transmutada para algoritmos determinísticos $O(N)$ nativos em Rust executados estritamente na RAM do Host.
+Para garantir os princípios da **Lei de Ferro SOULS Bare-Metal** (**Zero VRAM extra**, **Zero-Runtime Python/Node em produção** e latência sub-milissegundo), a heurística de orçamentação e triagem do Headroom deve ser transmutada para algoritmos determinísticos $O(N)$ nativos em Rust executados estritamente na RAM do Host.
 
 ## Declaração do Problema
 
-Como realizar a gestão dinâmica e contínua da janela de contexto no Gateway Tokio do SODA — comprimindo e podando histórico redundante de ferramentas, logs e código sem perda irreversível de informação — mantendo **Zero consumo de VRAM adicional na GPU**, latência de triagem $< 1.0 \text{ ms}$ e operando com interceção *loopback* local ultrarrápida?
+Como realizar a gestão dinâmica e contínua da janela de contexto no Gateway Tokio do SOULS — comprimindo e podando histórico redundante de ferramentas, logs e código sem perda irreversível de informação — mantendo **Zero consumo de VRAM adicional na GPU**, latência de triagem $< 1.0 \text{ ms}$ e operando com interceção *loopback* local ultrarrápida?
 
 ## Decisão Arquitetural
 
-Fica estabelecido o padrão **Gestão Dinâmica de Contexto e Compressão Reversível (CCR)**, incorporado nativamente ao Gateway Tokio Rust do SODA. O motor opera sob **4 Leis Inegociáveis**:
+Fica estabelecido o padrão **Gestão Dinâmica de Contexto e Compressão Reversível (CCR)**, incorporado nativamente ao Gateway Tokio Rust do SOULS. O motor opera sob **4 Leis Inegociáveis**:
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -50,7 +50,7 @@ Fica estabelecido o padrão **Gestão Dinâmica de Contexto e Compressão Revers
 |  v                 v                                                              |
 |  +------------------------------+     +----------------------------------------+  |
 |  | LEI 2: Poda Semântica        |     | Bypass Direct (Zero Overhead)          |  |
-|  | Determinística (soda-router) |     +----------------------------------------+  |
+|  | Determinística (souls-router) |     +----------------------------------------+  |
 |  | - SmartCrusher (serded/simd) |                         |                       |
 |  | - CodeCompressor (tree-sitter|                         |                       |
 |  | - LogCompressor (heuristics) |                         |                       |
@@ -118,7 +118,7 @@ $$\Delta R = T_{\text{total}} - H_{\text{in}}$$
 
 A compressão de $T_{\text{hist}}$ é realizada por motores determinísticos $O(N)$ em memória RAM Host:
 
-1. **Roteamento de Conteúdo por SWAR/AVX2 (`soda-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
+1. **Roteamento de Conteúdo por SWAR/AVX2 (`souls-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
    - JSON (`[` ou `{`) $\rightarrow$ Rota `SmartCrusher`.
    - Logs/ANSI (`[ERROR]`, `WARN`, `stacktrace`) $\rightarrow$ Rota `LogCompressor`.
    - Código Fonte (`fn`, `pub struct`, `def`, `class`, `import`) $\rightarrow$ Rota `CodeCompressor` (AST).
@@ -143,7 +143,7 @@ Para erradicar o risco de perda irreversível de contexto técnico, a poda aplic
 3. **Política de Despejo LRU:** A cache opera sob limite configurável de RAM (ex: 256 MB) com política de despejo LRU (*Least Recently Used*). Sem banco de dados em disco (Zero-SQLite overhead no caminho crítico).
 4. **Injeção de Marcadores Semânticos:** O texto comprimido inserido no prompt do LLM contém o marcador de resgate:
    
-   `[SODA CCR: 150 linhas comprimidas. Para recuperar os dados integrais brutos, invoque a ferramenta headroom_retrieve(hash="a1b2c3d4e5f6")]`
+   `[SOULS CCR: 150 linhas comprimidas. Para recuperar os dados integrais brutos, invoque a ferramenta headroom_retrieve(hash="a1b2c3d4e5f6")]`
 
 ---
 
@@ -154,7 +154,7 @@ O Gateway Tokio injeta de forma transparente no payload da requisição a ferram
 ```json
 {
   "name": "headroom_retrieve",
-  "description": "Recupera o bloco original de código, logs ou JSON comprimido pelo Gateway SODA CCR.",
+  "description": "Recupera o bloco original de código, logs ou JSON comprimido pelo Gateway SOULS CCR.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -191,9 +191,9 @@ O Gateway Tokio injeta de forma transparente no payload da requisição a ferram
 
 ---
 
-## Compliance com a Lei de Ferro SODA
+## Compliance com a Lei de Ferro SOULS
 
-| Diretiva SODA | Estado do ADR-037 | Garantia de Implementação |
+| Diretiva SOULS | Estado do ADR-037 | Garantia de Implementação |
 | :--- | :--- | :--- |
 | **Zero VRAM Extra** | **CONFORME** | 100% alocado na RAM Host via `DashMap` concorrente. |
 | **No Python/Node Runtime** | **CONFORME** | Transmutado inteiramente para Rust nativo (`tree-sitter`, `simd-json`, `bumpalo`). |

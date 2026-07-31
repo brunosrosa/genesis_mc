@@ -8,7 +8,7 @@ Para consolidar as garras físicas ("Mãos") dos agentes na IDE, o **Cluster 1**
 1. **`souls_edit`**: Substituição precisa e segura de blocos de código baseada em blocos `SEARCH`/`REPLACE` [307].
 2. **`souls_fill`**: Preenchimento cirúrgico de lacunas de código (*skeletons/stubs*) diretamente sob os offsets corretos da Árvore de Sintaxe Abstrata (AST) [307].
 
-Este documento estabelece as especificações de requisitos, o modelo de concorrência por arquivo, as barreiras de segurança física e a suíte de testes (TDD) para a implementação deste cluster sob a **Arquitetura SODA V5** [300].
+Este documento estabelece as especificações de requisitos, o modelo de concorrência por arquivo, as barreiras de segurança física e a suíte de testes (TDD) para a implementação deste cluster sob a **Arquitetura SOULS V5** [300].
 
 ---
 

@@ -16,7 +16,7 @@ Aceito (Ativo e Inegociável)
 O viés de automação (*Automation Bias*) induz o usuário a confiar cegamente e passivamente em decisões estocásticas unilaterais de IAs. Em tarefas arquiteturais densas, agentes convencionais que aceitam premissas ingênuas sem questionar geram códigos errôneos ("slop"), provocando bugs ocultos severos que degradam o compilador. Além disso, a fadiga de aprovação humana ao ter que revisar dezenas de pequenas correções repetitivas de IA reduz a produtividade e a saúde neurocognitiva do usuário.
 
 ## Decisão
-Implementar a arquitetura de **Enxame Cognitivo Baseado em Reputação ELO** no SODA:
+Implementar a arquitetura de **Enxame Cognitivo Baseado em Reputação ELO** no SOULS:
 1. **Debate Multi-Agente Invisível (Free-MAD):** Antes de propor qualquer plano de mutação física de arquivos, o core instancia um debate interno invisível na CPU. Duas personas intelectuais opostas (ex: IA Otimista Construtora vs. IA Auditora Bare-Metal Implacável) debatem as premissas e tentam provar ativamente como a proposta falhará nos limites físicos locais.
 2. **Map-Reduce Socrático:** O fluxo causal de raciocínio decompõe a tarefa complexa em ramos isolados de análise (Map), submete cada bloco ao escrutínio cruzado de falsificação física (Cross-Critique) e consolida a conclusão refinada de forma sintética (Reduce) na CPU.
 3. **Torneios ELO baseados em Co-Scientist:** A competência e o histórico de sucesso dos agentes e templates de prompts são rastreados de forma contínua por algoritmos estatísticos. A taxa de aprovação de código gera uma Média Móvel Exponencial (EMA/ELO) de confiança:

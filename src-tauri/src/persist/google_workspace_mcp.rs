@@ -209,7 +209,7 @@ fn mcp_google_workspace_command() -> String {
         }
     });
 
-    if let Ok(cargo_path) = env::var("SODA_CARGO_PATH") {
+    if let Ok(cargo_path) = env::var("SOULS_CARGO_PATH") {
         let cargo_path = cargo_path.trim();
         if !cargo_path.is_empty() {
             let candidate = std::path::Path::new(cargo_path)

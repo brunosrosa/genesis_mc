@@ -1,9 +1,9 @@
 use std::time::Instant;
 use tokio::sync::watch;
-use crate::soda_thermal_governor::SystemState;
+use crate::souls_thermal_governor::SystemState;
 
 use crate::core::inference_adapter::{
-    EphemeralInferEngine, InferenceError, SodaInferenceRequest, SodaInferenceResponse,
+    EphemeralInferEngine, InferenceError, SoulsInferenceRequest, SoulsInferenceResponse,
 };
 
 #[cfg(feature = "mistral_backend")]
@@ -17,9 +17,9 @@ pub struct MistralRsEngine;
 impl EphemeralInferEngine for MistralRsEngine {
     fn run_inference(
         &self,
-        req: SodaInferenceRequest,
+        req: SoulsInferenceRequest,
         thermal_rx: Option<watch::Receiver<SystemState>>,
-    ) -> Result<SodaInferenceResponse, InferenceError> {
+    ) -> Result<SoulsInferenceResponse, InferenceError> {
         if let Some(ref rx) = thermal_rx {
             while *rx.borrow() == SystemState::Paused {
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -73,7 +73,7 @@ impl EphemeralInferEngine for MistralRsEngine {
             let completion_tokens = response.usage.completion_tokens as u32;
             let total_latency_ms = start_time.elapsed().as_millis() as u64;
 
-            Ok(SodaInferenceResponse {
+            Ok(SoulsInferenceResponse {
                 status: "success".to_string(),
                 text: generated_text,
                 prompt_tokens,
@@ -88,9 +88,9 @@ impl EphemeralInferEngine for MistralRsEngine {
 impl EphemeralInferEngine for MistralRsEngine {
     fn run_inference(
         &self,
-        req: SodaInferenceRequest,
+        req: SoulsInferenceRequest,
         thermal_rx: Option<watch::Receiver<SystemState>>,
-    ) -> Result<SodaInferenceResponse, InferenceError> {
+    ) -> Result<SoulsInferenceResponse, InferenceError> {
         if let Some(ref rx) = thermal_rx {
             while *rx.borrow() == SystemState::Paused {
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -116,7 +116,7 @@ impl EphemeralInferEngine for MistralRsEngine {
 
         let total_latency_ms = start_time.elapsed().as_millis() as u64 + 14;
 
-        Ok(SodaInferenceResponse {
+        Ok(SoulsInferenceResponse {
             status: "success".to_string(),
             text: mock_text,
             prompt_tokens,

@@ -10,7 +10,7 @@ description: "Governa o roteamento via ParetoBandit (Tiers), Model Registry din�
 ### ADR-008: Roteamento FinOps, Abstração de Tiers e Trator Numérico AOT
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional (Inference Bill Shock e Overhead Matemático)
 O uso indiscriminado de modelos de fronteira em nuvem provoca custos financeiros proibitivos (Inference Bill Shock). Para mitigar isso, o sistema requer um roteador (*ParetoBandit*) que calcule rotas com base na métrica E3 (Efficiency-Aware Effectiveness Evaluation). Contudo, se as micro-rotinas de cálculo vetorial para esse roteamento utilizarem *runtimes* de Machine Learning tradicionais (como `tch-rs` ou LibTorch), o binário inflará em gigabytes e as compilações *Just-In-Time* (JIT) gerarão latência letal que ultrapassará o orçamento de <22 microssegundos.
@@ -19,7 +19,7 @@ O uso indiscriminado de modelos de fronteira em nuvem provoca custos financeiros
 Fica decretado o uso da malha de roteamento dinâmico "Zero-Trust Sandwich" operando sob as seguintes abstrações inegociáveis:
 
 **Módulo 1: O Model Registry Dinâmico (O Orçamentista Noturno)**
-*   O SODA implementa um **Model Registry** local em SQLite.
+*   O SOULS implementa um **Model Registry** local em SQLite.
 *   O *Daemon Chyros* acorda durante a madrugada e realiza um *pull* assíncrono nas APIs para atualizar os preços exatos em microdólares, limites de contexto e latência (Time-To-First-Token - TTFT). O roteamento calcula as rotas em tempo $\mathcal{O}(1)$ consultando apenas o banco local.
 
 **Módulo 2: Taxonomia Abstrata de Roteamento (Tiers de Inteligência)**

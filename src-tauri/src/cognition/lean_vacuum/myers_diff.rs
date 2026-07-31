@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED Fase 3: Myers Diff (Myers 1986) via crate `similar` 2.7.0.
+// SOULS-CANIBALIZED Fase 3: Myers Diff (Myers 1986) via crate `similar` 2.7.0.
 //
 // Transcrição nativa de `lean-ctx/src/core/compressor.rs::diff_content` (linhas 178-214).
 // Usa a crate `similar` (já homologada — adicionada como dep direta em T1.6).

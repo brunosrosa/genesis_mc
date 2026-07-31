@@ -1,5 +1,5 @@
 # ==============================================================================
-# SODA ETL IGNITION MATRIX V5 - ORQUESTRADOR BARE-METAL (JANELA DE VIDRO)
+# SOULS ETL IGNITION MATRIX V5 - ORQUESTRADOR BARE-METAL (JANELA DE VIDRO)
 # ==============================================================================
 
 param(
@@ -11,7 +11,7 @@ param(
 # ETL eh one-shot, queremos ver TUDO: debug do core, silencia apenas o ruido
 # cosmico do `ignore`/`globset`/`walkdir` (~600 linhas de "built glob set").
 # Pos-B: crate agora chama souls_mc_lib (renomeada em B).
-$env:RUST_LOG = "souls_mc_lib=debug,soda_sast=debug,soda_harvester=debug,ignore=warn,globset=warn,walkdir=warn"
+$env:RUST_LOG = "souls_mc_lib=debug,souls_sast=debug,souls_harvester=debug,ignore=warn,globset=warn,walkdir=warn"
 try {
     [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 }
@@ -22,7 +22,7 @@ if ($null -ne $PSStyle) {
 try { Clear-Host } catch {}
 
 Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host " 🦅 SOULS MC (SODA Stack) - PAINEL DE IGNIÇÃO ETL V5 (JANELA DE VIDRO)" -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host " 🦅 SOULS MC (SOULS Stack) - PAINEL DE IGNIÇÃO ETL V5 (JANELA DE VIDRO)" -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host "======================================================================" -ForegroundColor Cyan
 
 # 1. BLINDAGEM DE AMBIENTE: CARREGA O .ENV PARA A RAM
@@ -83,10 +83,10 @@ foreach ($z in $etlZombies) {
 # Resolve os caminhos absolutos dos sidecars para o fallback host-side (PRD-035).
 $binDir = Join-Path $PSScriptRoot "bin"
 $sidecarExports = @{
-    "SODA_OPENGREP_BIN" = "opengrep*.exe"
-    "SODA_BIOME_BIN"    = "biome*.exe"
-    "SODA_RUFF_BIN"     = "ruff*.exe"
-    "SODA_OXLINT_BIN"   = "oxlint*.exe"
+    "SOULS_OPENGREP_BIN" = "opengrep*.exe"
+    "SOULS_BIOME_BIN"    = "biome*.exe"
+    "SOULS_RUFF_BIN"     = "ruff*.exe"
+    "SOULS_OXLINT_BIN"   = "oxlint*.exe"
 }
 foreach ($kv in $sidecarExports.GetEnumerator()) {
     $varName = $kv.Key
@@ -115,7 +115,7 @@ if ($PSBoundParameters.ContainsKey('DryRun')) {
     $isDryRun = $true
 }
 else {
-    $envDry = $env:SODA_DRY_RUN
+    $envDry = $env:SOULS_DRY_RUN
     if ($envDry -and ($envDry -match '^(1|true|yes|y|sim|s)$')) {
         $isDryRun = $true
     }
@@ -279,8 +279,8 @@ try {
         Write-Host "`n🚀 DISPARANDO O MOTOR EM RUST: $phaseName (TOKIO EVENT LOOP)...`n" -ForegroundColor Red
 
         # ==== WRAPPER DE TRACKING (espelho do Invoke-TrackedProcess do boot.ps1) ====
-        $etlLog = Join-Path $env:TEMP "soda_etl_cargo.out.log"
-        $etlErr = Join-Path $env:TEMP "soda_etl_cargo.err.log"
+        $etlLog = Join-Path $env:TEMP "souls_etl_cargo.out.log"
+        $etlErr = Join-Path $env:TEMP "souls_etl_cargo.err.log"
         Remove-Item -LiteralPath $etlLog, $etlErr -Force -ErrorAction SilentlyContinue
 
         $cargoArgs = @("run", "--manifest-path", $cargoManifest, "--bin", $bin)

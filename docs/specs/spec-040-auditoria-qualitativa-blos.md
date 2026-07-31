@@ -3,7 +3,7 @@ id: "spec-040"
 title: "spec-040-auditoria-qualitativa-blos"
 version: 0.2
 status: Draft
-owner: soda-rust-engine
+owner: souls-rust-engine
 adr_refs: ["ADR-031", "ADR-019", "ADR-024", "ADR-025"]
 gates: ["spec-037", "spec-038", "spec-039"]
 created: "2026-07-16"

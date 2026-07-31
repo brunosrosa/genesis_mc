@@ -117,7 +117,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     }
                 },
                 "serverInfo": {
-                    "name": "soda",
+                    "name": "souls",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }),
@@ -130,7 +130,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                 "tools": [
                     {
                         "name": "get_ast",
-                        "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SODA, ex-repo_ast)",
+                        "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -145,7 +145,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "fetch_web",
-                        "description": "Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo. (Cânone SODA, ex-web_fetch)",
+                        "description": "Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -160,7 +160,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "sys_time",
-                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SODA, ex-sys_time)",
+                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SOULS, ex-sys_time)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {},
@@ -169,7 +169,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "web_search",
-                        "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SODA, ex-web_search)",
+                        "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SOULS, ex-web_search)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -190,7 +190,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "repo_meta",
-                        "description": "Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SODA, ex-repo_meta)",
+                        "description": "Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SOULS, ex-repo_meta)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -205,7 +205,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "sqlite_query",
-                        "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA. (Cânone SODA, ex-db_query)",
+                        "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SOULS. (Cânone SOULS, ex-db_query)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -297,7 +297,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     // ============================================================
-                    // SODA-CANIBALIZED: 17 tools canônicas (2 implementadas + 15 stubs)
+                    // SOULS-CANIBALIZED: 17 tools canônicas (2 implementadas + 15 stubs)
                     // ============================================================
                     {
                         "name": "read",
@@ -325,7 +325,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     // Stubs (15) - contratos canônicos para cobertura semântica.
-                    // Implementação real virá em iterações SODA-SDD subsequentes (Fase 4+).
+                    // Implementação real virá em iterações SOULS-SDD subsequentes (Fase 4+).
                     { "name": "multi_read", "description": "not_implemented_yet: Leitura em batch com dedup via SharedBlock.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "smart_read",
@@ -413,7 +413,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "session",
-                        "description": "Gerencia o ciclo de vida da sessão SODA/MCP e executa a limpeza/vacina de cache de RAM (souls_session).",
+                        "description": "Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -473,9 +473,9 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
             data: None,
         })?;
 
-    // SODA-CANIBALIZED: higiene canônica. Aceita tanto nomes simples quanto prefixados/aliases.
+    // SOULS-CANIBALIZED: higiene canônica. Aceita tanto nomes simples quanto prefixados/aliases.
     match tool_name {
-        // Cânone SODA (preferido)
+        // Cânone SOULS (preferido)
         "get_ast" | "souls_get_ast" | "repo_ast" => run_repo_ast(params).await,
         "fetch_web" | "souls_fetch_web" | "web_fetch" => run_web_fetch(params).await,
         "sys_time" | "souls_sys_time" => run_sys_time(params).await,
@@ -513,7 +513,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
 }
 
 // =============================================================================
-// SODA-CANIBALIZED Fase 3: Implementação real das 2 ferramentas vitais.
+// SOULS-CANIBALIZED Fase 3: Implementação real das 2 ferramentas vitais.
 // O transplante usa o módulo nativo `lean_vacuum` (cognition/lean_vacuum/).
 // As outras 15 ferramentas permanecem como `not_implemented_yet` stubs.
 // =============================================================================
@@ -767,7 +767,7 @@ async fn run_souls_smart_read(
             data: None,
         })?;
 
-    let result_text = lean_vacuum::smart_read_text(&content, budget).map_err(|(code, msg)| RpcError {
+    let result_text = lean_vacuum::smart_read::smart_read_text_for_lang(&content, budget, Some(path_str)).map_err(|(code, msg)| RpcError {
         code,
         message: msg,
         data: None,
@@ -893,7 +893,7 @@ async fn run_souls_session(params: &serde_json::Map<String, Value>) -> Result<Va
 }
 
 // =============================================================================
-// SODA-CANIBALIZED CLUSTER 2: Implementação de souls_tree e souls_outline (WASI 0.2)
+// SOULS-CANIBALIZED CLUSTER 2: Implementação de souls_tree e souls_outline (WASI 0.2)
 // =============================================================================
 
 static WASM_RUST_GRAMMAR: &[u8] = include_bytes!("../../resources/wasm_grammars/tree_sitter_rust.wasm");
@@ -1109,33 +1109,11 @@ fn map_wasm_trap_to_rpc<E: std::fmt::Display>(err: &E) -> RpcError {
 }
 
 fn extract_rust_outline_signatures(code: &str) -> String {
-    let mut out = Vec::new();
-    for line in code.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("pub struct")
-            || trimmed.starts_with("struct")
-            || trimmed.starts_with("pub enum")
-            || trimmed.starts_with("enum")
-            || trimmed.starts_with("pub trait")
-            || trimmed.starts_with("trait")
-            || trimmed.starts_with("impl")
-            || trimmed.starts_with("pub fn")
-            || trimmed.starts_with("fn")
-            || trimmed.starts_with("pub const")
-            || trimmed.starts_with("pub type")
-        {
-            if let Some(brace_idx) = line.find('{') {
-                out.push(format!("{} {{ /* body omitted */ }}", &line[..brace_idx].trim_end()));
-            } else {
-                out.push(line.to_string());
-            }
-        }
-    }
-    out.join("\n")
+    lean_vacuum::smart_read::extract_outline_signatures(code)
 }
 
 // =============================================================================
-// SODA-CANIBALIZED: Stub helpers para tools canônicas (Fase 3).
+// SOULS-CANIBALIZED: Stub helpers para tools canônicas (Fase 3).
 // As 2 vitais (souls_read + souls_delta_diff) já estão transmutadas em
 // `run_souls_read` / `run_souls_delta_diff` (ver bloco anterior). As 15
 // ferramentas restantes usam `stub_not_implemented_yet` abaixo.
@@ -1146,7 +1124,7 @@ fn stub_not_implemented_yet(tool_name: &str) -> Value {
         "content": [{
             "type": "text",
             "text": format!(
-                "not_implemented_yet: tool '{}' reconhecida no cânone SODA. \
+                "not_implemented_yet: tool '{}' reconhecida no cânone SOULS. \
                  Aguardando Fase 4+ para transplante da lógica adicional \
                  (Canibalização Tipo A Fase 3 cobriu apenas souls_read + souls_delta_diff).",
                 tool_name
@@ -1300,7 +1278,7 @@ async fn run_web_fetch(params: &serde_json::Map<String, Value>) -> Result<Value,
 }
 
 #[derive(Debug, Serialize)]
-struct SodaTimePayload {
+struct SoulsTimePayload {
     local_rfc3339: String,
     utc_rfc3339: String,
     timezone_name: String,
@@ -1313,7 +1291,7 @@ async fn run_sys_time(_params: &serde_json::Map<String, Value>) -> Result<Value,
     let secs = souls_mc_lib::telemetry::now_epoch_secs();
     let utc_rfc3339 = souls_mc_lib::telemetry::format_utc_rfc3339(secs);
     let local_rfc3339 = souls_mc_lib::telemetry::format_brt_rfc3339(secs);
-    let payload = SodaTimePayload {
+    let payload = SoulsTimePayload {
         local_rfc3339,
         utc_rfc3339,
         timezone_name: "BRT".to_string(),
@@ -1395,7 +1373,7 @@ async fn fetch_duckduckgo_search_results(
     max_results: usize,
 ) -> Result<Vec<DuckDuckGoSearchResult>, RpcError> {
     let client = reqwest::Client::builder()
-        .user_agent("SODA Native MCP Search/0.1")
+        .user_agent("SOULS Native MCP Search/0.1")
         .build()
         .map_err(|e| RpcError {
             code: -32021,
@@ -1551,7 +1529,7 @@ fn normalize_duckduckgo_result_url(raw_href: &str) -> String {
 }
 
 
-fn format_time_markdown(payload: &SodaTimePayload) -> String {
+fn format_time_markdown(payload: &SoulsTimePayload) -> String {
     let mut out = String::new();
     out.push_str("# Time Snapshot\n\n");
     out.push_str(&format!("- Local: `{}`\n", payload.local_rfc3339));
@@ -1633,7 +1611,7 @@ async fn run_repo_meta(params: &serde_json::Map<String, Value>) -> Result<Value,
     let meta = github_tracker::fetch_community_meta_for_owner_repo(
         &normalized_owner_repo,
         &limiter,
-        std::env::var("SODA_GITHUB_API_BASE_URL").ok().as_deref(),
+        std::env::var("SOULS_GITHUB_API_BASE_URL").ok().as_deref(),
     )
     .await
     .map_err(|e| {
@@ -3005,7 +2983,7 @@ mod tests {
                 "arguments": {
                     "key": "kn_01",
                     "category": "architecture",
-                    "content": "SODA TO SOULS migration",
+                    "content": "SOULS TO SOULS migration",
                     "confidence": 0.95
                 }
             }
@@ -3020,7 +2998,7 @@ mod tests {
         let test_dir = super::workspace_root().join("target").join("test_scratch");
         let _ = std::fs::create_dir_all(&test_dir);
         let file_path = test_dir.join("fixture_edit.txt");
-        std::fs::write(&file_path, "hello SODA world").expect("deve escrever fixture");
+        std::fs::write(&file_path, "hello SOULS world").expect("deve escrever fixture");
 
         let edit_req = json!({
             "jsonrpc": "2.0",
@@ -3030,7 +3008,7 @@ mod tests {
                 "name": "souls_edit",
                 "arguments": {
                     "path": file_path.to_str().unwrap(),
-                    "old_string": "SODA",
+                    "old_string": "SOULS",
                     "new_string": "SOULS"
                 }
             }

@@ -3,13 +3,13 @@ spec: rebrand-souls-mc
 version: 1.0
 status: Draft_Aguardando_Aprovacao
 branch: feat/rebrand-souls-mc
-author: soda-rust-expert
+author: souls-rust-expert
 date: 2026-07-16
 red_line: NAO destruir historico. NAO fazer Find-Replace cego em .md arquivados. NAO entregar com Exit Code != 0.
 acao_de_canibalizacao: Substituicao cirurgica `genesis_mc` -> `souls_mc` (e variantes) em camadas ativas, com preservacao de logs/dumps/audits date-frozen.
 ---
 
-# SODA Rebrand Surgery — Genesis MC → Souls MC
+# SOULS Rebrand Surgery — Genesis MC → Souls MC
 
 ## 1. Contexto
 
@@ -41,7 +41,7 @@ Garantia de Agnosticismo: o padrão `genesis_mc` → `souls_mc` é puramente lex
 
 ```mermaid
 flowchart TD
-    O[Orchestrator: soda-sdd<br/>rebrand-souls-mc] --> W1[Worker A: Rust/Code<br/>3 files .rs]
+    O[Orchestrator: souls-sdd<br/>rebrand-souls-mc] --> W1[Worker A: Rust/Code<br/>3 files .rs]
     O --> W2[Worker B: Config<br/>semgrep manifest, gateway-config.yaml]
     O --> W3[Worker C: Workspace Meta<br/>project_rules, README, skill]
     O --> W4[Worker D: Docs Ativos<br/>spec-037..041, PRD-REFAC-01]
@@ -68,20 +68,20 @@ flowchart TD
 
 | Camada | Arquivo | Padrão | Ação | Justificativa |
 |--------|---------|--------|------|---------------|
-| **L1: Code** | `src-tauri/src/bin/f1_distiller_cli.rs:380` | `SODA (Genesis MC)` | REPLACE → `SODA (Souls MC)` | Prompt string em produção |
-| **L1: Code** | `src-tauri/src/harvester/canon.rs:17` | `SODA / Genesis MC:` | REPLACE → `SODA / Souls MC:` | Header canônico ativo |
+| **L1: Code** | `src-tauri/src/bin/f1_distiller_cli.rs:380` | `SOULS (Genesis MC)` | REPLACE → `SOULS (Souls MC)` | Prompt string em produção |
+| **L1: Code** | `src-tauri/src/harvester/canon.rs:17` | `SOULS / Genesis MC:` | REPLACE → `SOULS / Souls MC:` | Header canônico ativo |
 | **L1: Code** | `src-tauri/src/persist/ssot_injector.rs:1337` | `genesis-mc-sheets/1.0` | REPLACE → `souls-mc-sheets/1.0` | User-Agent HTTP ativo |
 | **L2: Config** | `src-tauri/semgrep/rules/_manifest.json:3` | `Z:\\genesis_mc` | REPLACE → `Z:\\souls_mc` | workspace_root ativo |
 | **L2: Config** | `gateway-config.yaml:41` | `Z:/genesis_mc/.souls_data/souls_state.db` | REPLACE → `Z:/souls_mc/.souls_data/souls_state.db` | DB path runtime |
 | **L3: Meta** | `.trae/rules/project_rules.md:5` | `Genesis MC Core Context` | REPLACE → `Souls MC Core Context` | Título workspace rules |
 | **L3: Meta** | `README.md:18` | `O Genesis MC repudia` | REPLACE → `O Souls MC repudia` | Filosofia ativa do projeto |
 | **L3: Meta** | `README.md:62` | `rodando no Genesis MC` | REPLACE → `rodando no Souls MC` | Regra de governança ativa |
-| **L3: Meta** | `.agents/skills/soda-frontend-expert/SKILL.md` | `SODA (Genesis MC)` | REPLACE → `SODA (Souls MC)` | Role definition ativa |
+| **L3: Meta** | `.agents/skills/souls-frontend-expert/SKILL.md` | `SOULS (Genesis MC)` | REPLACE → `SOULS (Souls MC)` | Role definition ativa |
 | **L4: Docs Ativos** | `docs/specs/spec-037..041` (30 hits) | `file:///Z:/genesis_mc/...` | REPLACE → `file:///Z:/souls_mc/...` | Links para código ativo |
 | **L4: Docs Ativos** | `docs/prds/PRD_REFAC_01_StateMachine.md` (3 hits) | `file:///c:/Users/.../genesis_mc/...` | REPLACE apenas o segmento `genesis_mc` → `souls_mc` | Links para DAGs ativas |
 | **L5: ETL Python** | `docs/scripts/extract_audit_blobs.py:33` | `parents[2]=genesis_mc` | REPLACE → `parents[2]=souls_mc` | Path raiz de input |
-| **L5: ETL Python** | `docs/scripts/soda_adr_compiler.py:6,7` | `Z:\genesis_mc\...` | REPLACE → `Z:\souls_mc\...` | Paths de input/output |
-| **L5: ETL Python** | `docs/scripts/soda_context_dumps_compiler.py` (15 hits) | `Z:\genesis_mc\...` | REPLACE → `Z:\souls_mc\...` | Paths de input/output |
+| **L5: ETL Python** | `docs/scripts/souls_adr_compiler.py:6,7` | `Z:\genesis_mc\...` | REPLACE → `Z:\souls_mc\...` | Paths de input/output |
+| **L5: ETL Python** | `docs/scripts/souls_context_dumps_compiler.py` (15 hits) | `Z:\genesis_mc\...` | REPLACE → `Z:\souls_mc\...` | Paths de input/output |
 | **P1: PRESERVE** | `docs/audits/**` | `genesis_mc` (múltiplos) | **PRESERVAR** | R1 — log date-frozen |
 | **P2: PRESERVE** | `docs/context_dumps/**` | `genesis_mc` (múltiplos) | **PRESERVAR** | R2 — snapshot compilado |
 | **P3: PRESERVE** | `docs/state/DB_STATE_REPORT.md` | `c:\Users\rosas\Dev_Projects\genesis_mc\...` | **PRESERVAR** | R3 — relatório dated |

@@ -62,7 +62,7 @@ impl LensKind {
 
     fn system_prompt(self) -> &'static str {
         match self {
-            Self::ProductUx => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON PURO, SEM MARGINALIZAÇÃO OU BLOCOS DE CÓDIGO (COMO ```json). Atue como LensA_ProductUX. Analise a inovacao e o valor real de produto. Qual e o 'UAU moment', o 'refreshness' da UX ou o fluxo de trabalho genial que amplia as capacidades do usuario? Avalie estrategicamente como essa solucao se encaixa ou cria novos Canvas no SODA. Valide se essa entrega respeita nossas leis de neuro-inclusao (mitigacao de Flow-Debt, Zero Layout Shift). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, trate como curadoria de conhecimento: avalie clareza, utilidade operacional, reusabilidade como skill e se ha exemplos determinísticos (formatos de saída bem definidos) para virar ferramenta no SODA. Responda estritamente em JSON com as chaves: lens_id, repo_id, model_used, bullets. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos factuais dentro do array 'bullets'.\n\nExemplo de formato de saída esperado:\n{\n  \"lens_id\": \"LensA_ProductUX\",\n  \"repo_id\": \"owner/repo\",\n  \"model_used\": \"nome-do-modelo\",\n  \"bullets\": [\n    \"A interface reduz a carga cognitiva ao unificar as ações em um único hub.\",\n    \"Presença de um fluxo de feedback tátil e sonoro inovador para ações críticas.\",\n    \"Otimizado para evitar Layout Shift durante o carregamento assíncrono de dados.\"\n  ]\n}",
+            Self::ProductUx => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON PURO, SEM MARGINALIZAÇÃO OU BLOCOS DE CÓDIGO (COMO ```json). Atue como LensA_ProductUX. Analise a inovacao e o valor real de produto. Qual e o 'UAU moment', o 'refreshness' da UX ou o fluxo de trabalho genial que amplia as capacidades do usuario? Avalie estrategicamente como essa solucao se encaixa ou cria novos Canvas no SOULS. Valide se essa entrega respeita nossas leis de neuro-inclusao (mitigacao de Flow-Debt, Zero Layout Shift). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, trate como curadoria de conhecimento: avalie clareza, utilidade operacional, reusabilidade como skill e se ha exemplos determinísticos (formatos de saída bem definidos) para virar ferramenta no SOULS. Responda estritamente em JSON com as chaves: lens_id, repo_id, model_used, bullets. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos factuais dentro do array 'bullets'.\n\nExemplo de formato de saída esperado:\n{\n  \"lens_id\": \"LensA_ProductUX\",\n  \"repo_id\": \"owner/repo\",\n  \"model_used\": \"nome-do-modelo\",\n  \"bullets\": [\n    \"A interface reduz a carga cognitiva ao unificar as ações em um único hub.\",\n    \"Presença de um fluxo de feedback tátil e sonoro inovador para ações críticas.\",\n    \"Otimizado para evitar Layout Shift durante o carregamento assíncrono de dados.\"\n  ]\n}",
             Self::Architecture => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON PURO, SEM MARGINALIZAÇÃO OU BLOCOS DE CÓDIGO (COMO ```json). Atue como LensB_Architecture. Isole a 'alma matematica' e o nucleo transplantavel. A logica e transmutavel e agnostica (recompilavel dinamicamente via CubeCL/Burn)? Avalie a viabilidade do codigo sobreviver ao nosso 'Treino de Gravidade' (limite da RTX 2060m) sem depender de interpretadores presos a arquitetura (Node.js/JVM). Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie extraibilidade como biblioteca de habilidades: taxonomia, consistencia de formato, existencia de contratos de I/O (inputs/outputs), facilidade de normalizar para JSON/gramatica e o custo de manutencao do catalogo. Responda estritamente em JSON com as chaves: lens_id, repo_id, model_used, bullets. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos factuais dentro do array 'bullets'.\n\nExemplo de formato de saída esperado:\n{\n  \"lens_id\": \"LensB_Architecture\",\n  \"repo_id\": \"owner/repo\",\n  \"model_used\": \"nome-do-modelo\",\n  \"bullets\": [\n    \"Código estruturado puramente em Rust com tokio, facilitando compilação zero-dependency.\",\n    \"Gargalo de I/O isolado em threads dedicadas fora do event loop assíncrono.\",\n    \"Ausência de interpretadores pesados, consumindo apenas 50MB de VRAM estática.\"\n  ]\n}",
             Self::Operations => "RESPONDA OBRIGATORIAMENTE EM PORTUGUES (PT-BR) NO FORMATO JSON PURO, SEM MARGINALIZAÇÃO OU BLOCOS DE CÓDIGO (COMO ```json). Atue como o Auditor Pessimista (FinOps e HardwareOps). Qual a real taxa de entropia? O sistema gera custos em nuvem ou Rate Limits perigosos? Liste o lixo toxico da stack original. O sistema 'fala' quando tem dor (observabilidade) e falha graciosamente? Se o payload contiver repo_kind=SkillLibrary ou repo_kind=ContentRepo, avalie riscos de prompt-injection, licenca, drift temporal (links mortos), custo de curadoria, e se o conteudo incentiva stack proibida. Responda estritamente em JSON com as chaves: lens_id, repo_id, model_used, bullets. E TERMINANTEMENTE PROIBIDO deixar o array 'bullets' vazio. Divida o seu raciocinio em 3 a 5 pontos factuais dentro do array 'bullets'.\n\nExemplo de formato de saída esperado:\n{\n  \"lens_id\": \"LensC_Operations\",\n  \"repo_id\": \"owner/repo\",\n  \"model_used\": \"nome-do-modelo\",\n  \"bullets\": [\n    \"Uso ineficiente de chamadas consecutivas à API sem mecanismos de caching.\",\n    \"A dependência de bibliotecas de terceiros sem auditoria de segurança ativa.\",\n    \"Falta de telemetria estruturada de erros e alertas de rate limit.\"\n  ]\n}",
         }
@@ -906,7 +906,7 @@ fn describe_table(conn: &Connection, table_name: &str) -> Result<Vec<TableColumn
 
 fn default_value_for_column(column: &TableColumn) -> Value {
     match column.name.as_str() {
-        "contexto_oraculo_soda" => Value::Text("blob_10_soda_canon_context".to_string()),
+        "contexto_oraculo_souls" => Value::Text("blob_10_souls_canon_context".to_string()),
         "lens_a_json" | "lens_b_json" | "lens_c_json" | "phase_status" | "model_used" => {
             Value::Text(String::new())
         }
@@ -1301,9 +1301,9 @@ mod tests {
 
     fn sample_payloads() -> Phase2Payloads {
         Phase2Payloads {
-            package_a: "PACKAGE_A_ONLY\nblob_10_soda_canon_context".to_string(),
-            package_b: "PACKAGE_B_ONLY\nblob_10_soda_canon_context".to_string(),
-            package_c: "PACKAGE_C_ONLY\nblob_10_soda_canon_context".to_string(),
+            package_a: "PACKAGE_A_ONLY\nblob_10_souls_canon_context".to_string(),
+            package_b: "PACKAGE_B_ONLY\nblob_10_souls_canon_context".to_string(),
+            package_c: "PACKAGE_C_ONLY\nblob_10_souls_canon_context".to_string(),
         }
     }
 
@@ -1345,19 +1345,19 @@ mod tests {
         conn.execute(
             "INSERT INTO pacotes_destilados (repo_id, package_name, payload_package, timestamp_empacotamento)
              VALUES (?1, ?2, ?3, 1)",
-            params!["repo/test", "A", "PACKAGE_A_ONLY\nblob_10_soda_canon_context"],
+            params!["repo/test", "A", "PACKAGE_A_ONLY\nblob_10_souls_canon_context"],
         )
         .expect("insert package A");
         conn.execute(
             "INSERT INTO pacotes_destilados (repo_id, package_name, payload_package, timestamp_empacotamento)
              VALUES (?1, ?2, ?3, 1)",
-            params!["repo/test", "B", "PACKAGE_B_ONLY\nblob_10_soda_canon_context"],
+            params!["repo/test", "B", "PACKAGE_B_ONLY\nblob_10_souls_canon_context"],
         )
         .expect("insert package B");
         conn.execute(
             "INSERT INTO pacotes_destilados (repo_id, package_name, payload_package, timestamp_empacotamento)
              VALUES (?1, ?2, ?3, 1)",
-            params!["repo/test", "C", "PACKAGE_C_ONLY\nblob_10_soda_canon_context"],
+            params!["repo/test", "C", "PACKAGE_C_ONLY\nblob_10_souls_canon_context"],
         )
         .expect("insert package C");
         Arc::new(Mutex::new(conn))

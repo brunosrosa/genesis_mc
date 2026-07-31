@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED: Deduplicação de blocos de 5 linhas consecutivas (Session Cross-File Cache).
+// SOULS-CANIBALIZED: Deduplicação de blocos de 5 linhas consecutivas (Session Cross-File Cache).
 // Identifica sequências repetidas de 5 linhas consecutivas entre arquivos da mesma sessão
 // e substitui ocorrências por marcadores de deduplicação com apontamento de localização.
 
@@ -90,9 +90,13 @@ pub fn deduplicate_blocks(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_deduplicate_blocks_5_lines() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         clear_session_dedup_cache();
         let block = "line1\nline2\nline3\nline4\nline5\n";
         let file1 = Path::new("file1.rs");
@@ -107,6 +111,7 @@ mod tests {
 
     #[test]
     fn test_cross_file_deduplication_successful() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         clear_session_dedup_cache();
         let block = "fn calculate_hash() {\n    let val = 42;\n    let result = val * 2;\n    println!(\"{}\", result);\n}\n";
         let file1_path = Path::new("src/module_a.rs");
@@ -126,6 +131,7 @@ mod tests {
 
     #[test]
     fn test_session_cache_clear_successful() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         let path = PathBuf::from("src/main.rs");
         SESSION_DEDUP_CACHE.insert(12345, (path.clone(), 1, 5));
         assert!(!SESSION_DEDUP_CACHE.is_empty(), "O cache deveria conter dados simulados.");

@@ -1,6 +1,6 @@
 ---
 name: mcp-memory-master
-description: O Controlador da Tríade de Memória do SODA. Impõe RAG Temporal e métrica FRQAD. Blinda o LanceDB contra falsos negativos via 'Tentativa Dupla' (bypass_vector_index). Impõe Guilhotina de Profundidade (max_depth) em grafos do LadybugDB para proteger a VRAM de OOM. Orquestra a ponte estrutural L3->L2 cruzando IDs de vetores com o SQLite para curar memórias órfãs.
+description: O Controlador da Tríade de Memória do SOULS. Impõe RAG Temporal e métrica FRQAD. Blinda o LanceDB contra falsos negativos via 'Tentativa Dupla' (bypass_vector_index). Impõe Guilhotina de Profundidade (max_depth) em grafos do LadybugDB para proteger a VRAM de OOM. Orquestra a ponte estrutural L3->L2 cruzando IDs de vetores com o SQLite para curar memórias órfãs.
 triggers: ["mcp-memory-master", "buscar na memória", "pesquisa vetorial", "consultar lancedb", "consultar ladybug", "rag", "resgatar contexto", "gravar decisão", "persistir conhecimento", "salvar entidade", "criar entidade", "início de sessão"]
 ---
 
@@ -108,7 +108,7 @@ Sempre que precisar consultar o histórico, regras de arquitetura antigas ou rel
 
 **Exemplo 1 — Início de Sessão:**
 1. Arquiteto abre sessão sobre "roteamento IPC".
-2. Agente executa: `mem_search("IPC zero-copy roteamento SODA")`
+2. Agente executa: `mem_search("IPC zero-copy roteamento SOULS")`
 3. Retorna entidade `"IPC_ZeroCopy_ArrayBuffer"` com observações da sessão anterior.
 4. Agente apresenta: *"→ Memória resgatada. IPC Zero-Copy via ArrayBuffer foi decidido na sessão anterior. Decisão ainda válida?"*
 

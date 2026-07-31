@@ -16,7 +16,7 @@ Aceito (Ativo e Inegociável)
 Permitir que agentes autônomos de IA mutem arquivos diretamente no disco principal de desenvolvimento ou realizem commits automáticos sem supervisão na branch principal (`main`) gera corrupção silenciosa de dados (SDC) e desorientação espacial do usuário. Além disso, mutações agressivas e inesperadas no código forçam reflows térmicos e confusão cognitiva imediata no usuário final, que perde o senso de controle de sua própria máquina.
 
 ## Decisão
-Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer alteração de código ou de dados na base principal do SODA:
+Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer alteração de código ou de dados na base principal do SOULS:
 1. **B - Branch (Isolamento Físico):** Qualquer mutação é iniciada isolando a tarefa em um **Shadow Workspace** atômico criado em tempo constante $\mathcal{O}(1)$ utilizando links físicos rígidos (*snapsafe*), consumindo zero bytes adicionais do disco hospedeiro.
 2. **M - Mutate (Escrita Atômica Protegida):** O código é alterado por meio de escritas atômicas baseadas em Mutex concorrentes em Rust. As alterações passam pela alfândega de compilação obtendo obrigatoriamente Exit Code 0.
 3. **A - Approve (A Agent Inbox):** O agente consolida o **Blast Radius** (arquivos tocados e impactos previsíveis) e o envia como sugestão passiva para a **Agent Inbox** na interface Svelte 5. O sistema aguarda a aprovação explícita do usuário em modo **Human-In-The-Loop (HITL)**. A aprovação dispara a transição estética **Glow Revelation Transition** (brilho térmico suave nas bordas da janela sem reflow).

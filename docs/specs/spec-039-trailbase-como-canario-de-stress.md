@@ -3,7 +3,7 @@ id: "spec-039"
 title: "spec-039-trailbase-como-canario-de-stress"
 version: 0.3
 status: Draft
-owner: soda-rust-engine
+owner: souls-rust-engine
 adr_refs: ["ADR-031", "ADR-019", "ADR-025", "ADR-024"]
 depends_on: ["spec-040"]
 gates: []

@@ -56,7 +56,7 @@ pub fn lazy_tool_defs() -> Vec<Tool> {
 
     core.push(tool_def(
         "discover_tools",
-        "Search available SODA context tools by keyword. Returns matching tool names + descriptions for on-demand loading.",
+        "Search available SOULS context tools by keyword. Returns matching tool names + descriptions for on-demand loading.",
         json!({
             "type": "object",
             "properties": {

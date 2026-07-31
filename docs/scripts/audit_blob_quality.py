@@ -49,7 +49,7 @@ BLOB_TYPES: list[str] = [
     "blob_07_ops_blueprint",
     "blob_08_health_report",
     "blob_09_community_meta",
-    "blob_10_soda_canon_context",
+    "blob_10_souls_canon_context",
     "blob_11_ux_contracts",
 ]
 
@@ -68,7 +68,7 @@ SIZE_HEURISTICS: dict[str, dict[str, int]] = {
     "blob_07_ops_blueprint":        {"placeholder": 200,  "min": 1_000,     "max": 100_000},
     "blob_08_health_report":        {"placeholder": 200,  "min": 1_000,     "max": 2_000_000},
     "blob_09_community_meta":       {"placeholder": 200,  "min": 1_000,     "max": 50_000},
-    "blob_10_soda_canon_context":   {"placeholder": 1_000,"min": 4_000,     "max": 50_000},  # canon é uniforme cross-repo
+    "blob_10_souls_canon_context":   {"placeholder": 1_000,"min": 4_000,     "max": 50_000},  # canon é uniforme cross-repo
     "blob_11_ux_contracts":         {"placeholder": 0,    "min": 1_000,     "max": 200_000},  # 0 se repo sem UI
 }
 
@@ -83,7 +83,7 @@ STRUCTURE_MARKERS: dict[str, list[str]] = {
     "blob_07_ops_blueprint":       [r"(?i)(?:FROM|RUN|COPY|WORKDIR|ENTRYPOINT|CMD|name:|on:|jobs:|steps:)", r"Dockerfile|Makefile|workflow"],
     "blob_08_health_report":       [r"\[DOMAIN:\s*[^\]]+\]", r"::\s*L?\d+", r"(?i)(?:WARNING|ERROR|INFO|complexity|cyclomatic|dead)"],
     "blob_09_community_meta":      [r'"(?:stargazers_count|forks_count|open_issues_count|pushed_at|updated_at|html_url|stars|forks|watchers)"\s*:\s*'],
-    "blob_10_soda_canon_context":  [r"^#\s+\S", r"^##\s+", r"SODA|Souls"],
+    "blob_10_souls_canon_context":  [r"^#\s+\S", r"^##\s+", r"SOULS|Souls"],
     "blob_11_ux_contracts":        [r"(?i)(?:Props|Events|Dispatch|emits|defineProps|defineEmits|interface\s+\w+Props|component\s+|export\s+(?:function|const)|use\w+|\$props)"],
 }
 

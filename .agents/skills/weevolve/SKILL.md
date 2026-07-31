@@ -23,7 +23,7 @@ Sempre que solucionar um problema complexo, contornar uma falha de compilador Ru
      * **why_this_matters:** O sintoma fatal (ex: OOM, *Layout Shift*, *Spillover* PCIe).
      * **recognition_pattern:** O gatilho sintático na AST que prevê esse risco no futuro.
      * **the_approach:** A sintaxe de contorno exata e aprovada.
-     * **temporal_stability:** Defina como `STABLE` (leis imutáveis do Rust/SODA) ou `EVOLVING` (soluções provisórias de bibliotecas instáveis).
+     * **temporal_stability:** Defina como `STABLE` (leis imutáveis do Rust/SOULS) ou `EVOLVING` (soluções provisórias de bibliotecas instáveis).
      * **timestamp:** UNIX Epoch Int64 UTC.
 
 3. **Triagem de Conflito (O Portão do Hipocampo):**

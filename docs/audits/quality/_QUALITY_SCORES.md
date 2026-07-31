@@ -9,7 +9,7 @@
 
 ## 1. Score por (repo, blob)
 
-| repo_id | 01_promessa_readme | 02_dependency_manifest | 03_test_intent | 04_repo_outline | 05_architecture_map | 06_unsafe_hotspots | 07_ops_blueprint | 08_health_report | 09_community_meta | 10_soda_canon_context | 11_ux_contracts | avg |
+| repo_id | 01_promessa_readme | 02_dependency_manifest | 03_test_intent | 04_repo_outline | 05_architecture_map | 06_unsafe_hotspots | 07_ops_blueprint | 08_health_report | 09_community_meta | 10_souls_canon_context | 11_ux_contracts | avg |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `0xErwin1/dbflux` | 88 | 71 | 78 | 56 | 68 | 71 | 86 | 96 | 90 | — | 76 | **78.1** |
 | `0xGF/Boneyard` | 78 | 63 | 73 | 56 | 88 | 71 | 50 | 96 | 90 | — | 75 | **74.1** |
@@ -204,7 +204,7 @@
 | `ZenNotes/zennotes` | 79 | 74 | 73 | 56 | 88 | 75 | 86 | 75 | 90 | — | 95 | **79.1** |
 | `ZeroZ-lab/cc-design` | 69 | 55 | 50 | 56 | 58 | 64 | 58 | 54 | 90 | — | 76 | **63.1** |
 | `ZhuLinsen/daily_stock_analysis` | 79 | 61 | 73 | 56 | 68 | 71 | 86 | 96 | 90 | — | 76 | **75.7** |
-| `__SODA_CANON_GLOBAL__` | — | — | — | — | — | — | — | — | — | 88 | — | **88.0** |
+| `__SOULS_CANON_GLOBAL__` | — | — | — | — | — | — | — | — | — | 88 | — | **88.0** |
 | `aaif-goose/goose` | 86 | 71 | 83 | 56 | 88 | 75 | 78 | 73 | 90 | — | 76 | **77.5** |
 | `aarambh-darshan/spanda` | 86 | 55 | 73 | 56 | 68 | 71 | 89 | 96 | 90 | — | 76 | **76.1** |
 | `aattaran/deepclaude` | 88 | 50 | 50 | 56 | 50 | 64 | 58 | 54 | 90 | — | 76 | **63.7** |
@@ -747,7 +747,7 @@
 | blob_07_ops_blueprint | **74.1** | 16.1 | 50 | 93 | 721 |
 | blob_08_health_report | **87.2** | 15.8 | 46 | 98 | 721 |
 | blob_09_community_meta | **88.4** | 4.2 | 61 | 90 | 721 |
-| blob_10_soda_canon_context | **87.5** | 1.4 | 83 | 88 | 11 |
+| blob_10_souls_canon_context | **87.5** | 1.4 | 83 | 88 | 11 |
 | blob_11_ux_contracts | **78.8** | 7.4 | 58 | 95 | 721 |
 
 ## 3. Top 10 piores casos (score < 50)

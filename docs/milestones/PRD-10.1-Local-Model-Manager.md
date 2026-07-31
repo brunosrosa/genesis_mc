@@ -1,7 +1,7 @@
 # PRD-10.1: Specification for Local Model Manager & Cognitive Repair Daemon
 
 **Status:** Especificação Proposta (Aguardando Aprovação HITL)  
-**Módulo:** Daemon de Gerenciamento de IA Local (`soda-model-manager`)  
+**Módulo:** Daemon de Gerenciamento de IA Local (`souls-model-manager`)  
 **Target Hardware:** NVIDIA RTX 2060 Mobile (Teto Rígido de 6.0 GB VRAM, GDDR6) + Intel i9 (32GB RAM Host)  
 **Arquitetura:** Rust (Tokio Async Runtime, Zero-Copy IPC)  
 **Rastreabilidade ADR:** ADR-027, ADR-029, ADR-032, ADR-033, ADR-034, ADR-035, ADR-036  
@@ -10,9 +10,9 @@
 
 ## 1. Objetivo Atômico
 
-O **PRD-10.1** especifica os requisitos de engenharia para o desenvolvimento do daemon **`soda-model-manager`** em Rust (Tokio). O objetivo principal é orquestrar autonomamente o ciclo de vida dos modelos locais em formato GGUF, gerenciar o hot-swapping de Small Language Models (SLMs de 1.5B a 4B) e garantir a estabilidade termodinâmica da VRAM na GPU NVIDIA RTX 2060m, respeitando o limite físico inflexível de **6.0 GB de VRAM**.
+O **PRD-10.1** especifica os requisitos de engenharia para o desenvolvimento do daemon **`souls-model-manager`** em Rust (Tokio). O objetivo principal é orquestrar autonomamente o ciclo de vida dos modelos locais em formato GGUF, gerenciar o hot-swapping de Small Language Models (SLMs de 1.5B a 4B) e garantir a estabilidade termodinâmica da VRAM na GPU NVIDIA RTX 2060m, respeitando o limite físico inflexível de **6.0 GB de VRAM**.
 
-O daemon atua como o Guardião da VRAM e Roteador de Inferência do SODA V5, impedindo que requisições ou modelos extrapolem o orçamento de memória e provoquem o estresse no barramento PCIe Gen3 por paginação no Host (*spillover*).
+O daemon atua como o Guardião da VRAM e Roteador de Inferência do SOULS V5, impedindo que requisições ou modelos extrapolem o orçamento de memória e provoquem o estresse no barramento PCIe Gen3 por paginação no Host (*spillover*).
 
 ---
 
@@ -33,7 +33,7 @@ Para manter o ecossistema agêntico atualizado com os melhores SLMs sem desperdi
        - Tamanho Estimado de Pesos (VRAM_Estática)
                        │
                        ▼
-     [ Equação de Projeção de VRAM SODA V5 ]
+     [ Equação de Projeção de VRAM SOULS V5 ]
     VRAM_Proj = VRAM_Estática + VRAM_KV_Cache(Ctx_Max) + VRAM_Buffer_CUDA
                        │
          ┌─────────────┴─────────────┐
@@ -51,7 +51,7 @@ Para manter o ecossistema agêntico atualizado com os melhores SLMs sem desperdi
 * É terminantemente **PROIBIDO** realizar o download de arquivos `.gguf` massivos (gigabytes) para fins de teste ou avaliação. O daemon fará requisições HTTP de intervalo parcial (*Range Requests*) para ler apenas os bytes do **cabeçalho de metadados GGUF** (primeiros kilobytes do arquivo).
 
 ### 2.2 Algoritmo de Auto-Profiling $\mathcal{O}(1)$
-Ao extrair a estrutura de tensores, contagem de camadas, dimensões de atenção e precisão de quantização do cabeçalho remoto, o daemon calculará a estimativa de consumo de VRAM usando a equação de projeção SODA:
+Ao extrair a estrutura de tensores, contagem de camadas, dimensões de atenção e precisão de quantização do cabeçalho remoto, o daemon calculará a estimativa de consumo de VRAM usando a equação de projeção SOULS:
 
 $$\text{VRAM}_{\text{Projetada}} = \text{VRAM}_{\text{Estática (Pesos)}} + \text{VRAM}_{\text{KV\_Cache}}(\text{Ctx}_{\text{Alvo}}) + \text{VRAM}_{\text{Buffer\_CUDA}} \text{ (MB)}$$
 
@@ -65,7 +65,7 @@ $$\text{VRAM}_{\text{Projetada}} = \text{VRAM}_{\text{Estática (Pesos)}} + \tex
 
 ## 3. Reparo Cognitivo & Incorporação de ADRs (V5 Canon)
 
-O daemon `soda-model-manager` embarcará nativamente no pipeline de inferência as Leis Duras de Reparo Cognitivo formalizadas nos ADRs recentes:
+O daemon `souls-model-manager` embarcará nativamente no pipeline de inferência as Leis Duras de Reparo Cognitivo formalizadas nos ADRs recentes:
 
 ### 3.1 ADR-034: Modulação de Ativação via Vetores RepE (`cb_eval`)
 * O motor de inferência em Rust (`llama-cpp-2` / `mistral.rs`) registrará interceptadores na função de callback de avaliação de tensores (`cb_eval`).
@@ -117,6 +117,6 @@ Para que a futura fase de implementação via TDD (Red-Green-Refactor) seja conc
 
 ## 5. Conclusão & Alinhamento HITL
 
-Este artefato de especificação consolida a arquitetura técnica do gerenciador de IA local do SODA V5. Nenhuma mutação de código-fonte foi realizada nesta etapa.
+Este artefato de especificação consolida a arquitetura técnica do gerenciador de IA local do SOULS V5. Nenhuma mutação de código-fonte foi realizada nesta etapa.
 
 **As correções do Cache KV Assimétrico foram injetadas. Aguardo o sinal verde final para iniciarmos a fase de TDD (Red-Green-Refactor) em Rust.**

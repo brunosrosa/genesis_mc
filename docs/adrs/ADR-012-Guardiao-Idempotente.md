@@ -22,7 +22,7 @@ Implementar a arquitetura do **Guardião Idempotente** como um módulo nativo de
 3. **Disjuntor de Drift Concorrente:** Se o Guardião detectar qualquer modificação física arbitrária realizada à margem do protocolo de governança BMAD (um drift estrutural), a esteira de montagem de IA é imediatamente paralisada (*Fail-Closed*). O sistema congela a Agent Inbox e barra qualquer consolidação de Rebase Semântico até que a integridade física do repositório seja reestabelecida ou aprovada manualmente pelo usuário.
 
 ## Consequências
-- **Segurança de Código Absoluta:** Garantia termodinâmica e mecânica de que nenhuma alteração acidental ou scripts externos maliciosos corrompam silenciosamente as fundações Bare-Metal do SODA.
+- **Segurança de Código Absoluta:** Garantia termodinâmica e mecânica de que nenhuma alteração acidental ou scripts externos maliciosos corrompam silenciosamente as fundações Bare-Metal do SOULS.
 - **Custo Computacional Irrisório:** Auditorias de integridade rodam em tempo sub-milissegundo consumindo frações de ciclo da CPU i9, com custo financeiro US$ 0,00 e VRAM intocada.
 - **Previsibilidade Operacional:** Conflitos e desalinhamentos entre instâncias do repositório são detectados e tratados antes que ocorram erros de compilação confusos.
 

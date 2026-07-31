@@ -340,7 +340,7 @@ mod tests {
         let distiller = MockDistiller::new(vec![Ok("essence".to_string())]);
         let cloud = MockCloudCascade::new(vec![Ok("essence".to_string())]);
         let reader = MockDbReader::new(vec![BlobRecord {
-            artifact_type: "blob_10_soda_canon_context".to_string(),
+            artifact_type: "blob_10_souls_canon_context".to_string(),
             payload_blob: "content".to_string(),
         }]);
 
@@ -351,7 +351,7 @@ mod tests {
 
         assert!(result.is_ok());
         let essences = writer.get_essences();
-        assert!(essences.iter().any(|(_, name, _, _)| name == "_essence_10_soda_canon_context"));
+        assert!(essences.iter().any(|(_, name, _, _)| name == "_essence_10_souls_canon_context"));
     }
 
     #[test]

@@ -3,7 +3,7 @@ id: "spec-038"
 title: "spec-038-opengrep-rule-diversificacao"
 version: 0.3
 status: Draft_Aguardando_Audit
-owner: soda-rust-engine
+owner: souls-rust-engine
 adr_refs: ["ADR-031", "ADR-024", "ADR-025"]
 depends_on: ["spec-040"]
 gates: []
@@ -34,7 +34,7 @@ Esta spec **NÃO deve ser implementada antes de `spec-040` (Auditoria Qualitativ
 ## Contexto
 A auditoria de validação do Spec-036 (rebrand) sobre o `blob_08_health_report` do trailbase (429.781 bytes, 1.184 findings) revelou **monocultura severa de regras SAST**:
 
-- **1.183 de 1.184 findings** (99,92%) são da mesma regra: `soda.rust.panic.unwrap.expect`.
+- **1.183 de 1.184 findings** (99,92%) são da mesma regra: `souls.rust.panic.unwrap.expect`.
 - **1 finding** (0,08%) é `govulncheck` info, sem vulnerabilidades.
 - Distribuição por arquivo: `src/records/read_record.rs` (111), `src/tests.rs` (85), `src/records/list_records.rs` (76).
 
@@ -73,12 +73,12 @@ Cross-ref com o [ADR-031 §4 Blob 6 e Blob 8](file:///Z:/souls_mc/docs/adrs/ADR-
   - `test_classe_sql_injection_detecta()` — `format!()` com `SELECT` é flagado.
 
 ### Implementação (TDD Green)
-- [ ] Módulo `soda_semgrep_rules/` adicionado ao `harvester/sidecar.rs` com ≥3 classes:
-  1. **Complexidade Ciclomática** (`soda.rust.complexity.cyclomatic`): conta pontos de decisão (if/else/match/for/while/&&/||/?) por função; flag se > 10.
-  2. **Comprimento de Função** (`soda.rust.function.length`): conta linhas de uma função; flag se > 80.
-  3. **Hardcoded Secrets** (`soda.security.hardcoded.secret`): regex sobre strings com alta entropia + prefixos comuns (`sk-`, `ghp_`, `AKIA`, `-----BEGIN`).
-  4. **SQL Injection** (`soda.security.sql.injection`): `format!()` ou `concat!()` contendo `SELECT|INSERT|UPDATE|DELETE` em argumento de `execute()`.
-  5. **Dead Code (heurístico)** (`soda.rust.dead.unused`): itens `pub` sem `pub use` nem chamadas detectadas no AST outline (Blob 04).
+- [ ] Módulo `souls_semgrep_rules/` adicionado ao `harvester/sidecar.rs` com ≥3 classes:
+  1. **Complexidade Ciclomática** (`souls.rust.complexity.cyclomatic`): conta pontos de decisão (if/else/match/for/while/&&/||/?) por função; flag se > 10.
+  2. **Comprimento de Função** (`souls.rust.function.length`): conta linhas de uma função; flag se > 80.
+  3. **Hardcoded Secrets** (`souls.security.hardcoded.secret`): regex sobre strings com alta entropia + prefixos comuns (`sk-`, `ghp_`, `AKIA`, `-----BEGIN`).
+  4. **SQL Injection** (`souls.security.sql.injection`): `format!()` ou `concat!()` contendo `SELECT|INSERT|UPDATE|DELETE` em argumento de `execute()`.
+  5. **Dead Code (heurístico)** (`souls.rust.dead.unused`): itens `pub` sem `pub use` nem chamadas detectadas no AST outline (Blob 04).
 - [ ] Integração no `harvester/sidecar.rs`: as 5 regras são concatenadas ao ruleset base do OpenGrep antes da invocação.
 - [ ] Adaptação do ADR-024: atualizar referência para mencionar "5 classes de regras" em vez de "1 classe dominante".
 
@@ -100,7 +100,7 @@ Cross-ref com o [ADR-031 §4 Blob 6 e Blob 8](file:///Z:/souls_mc/docs/adrs/ADR-
 ## Fora de Escopo
 - Adicionar análise de taint/type-check (depende de compilação, fora do escopo do OpenGrep).
 - Adicionar regras para linguagens além de Rust/TS/JS/Python/Go.
-- Reescrever as regras SODA existentes (`soda.rust.panic.unwrap.expect` permanece, mas perde dominância).
+- Reescrever as regras SOULS existentes (`souls.rust.panic.unwrap.expect` permanece, mas perde dominância).
 - Auto-tuning de thresholds (ex: 80 linhas é limite fixo por enquanto).
 
 ## Riscos & Mitigações
@@ -114,7 +114,7 @@ Cross-ref com o [ADR-031 §4 Blob 6 e Blob 8](file:///Z:/souls_mc/docs/adrs/ADR-
 
 ## Rollback
 Se as novas regras gerarem poluição ou FPR alto em produção:
-1. Flag de feature `SODA_SAST_DIVERSIFY=off` (env var) desabilita as 5 classes novas.
+1. Flag de feature `SOULS_SAST_DIVERSIFY=off` (env var) desabilita as 5 classes novas.
 2. Manter o código das regras no repositório (não deletar) para retry.
 3. Atualizar `project_memory.md` (L2) com métricas de rollback.
 4. Abrir spec de correção com base nos logs de FPR coletados.

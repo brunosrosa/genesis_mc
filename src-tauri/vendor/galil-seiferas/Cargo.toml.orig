@@ -1,0 +1,48 @@
+[package]
+
+version = "0.1.5"
+
+name = "galil-seiferas"
+license = "MIT/Apache-2.0"
+authors = ["bluss"]
+
+repository = "https://github.com/bluss/galil-seiferas"
+documentation = "https://docs.rs/galil-seiferas/"
+readme = "README-crates.io.md"
+
+description = "General string search in constant space, linear time, for nonorderable alphabets."
+
+keywords = ["string", "substring", "search", "pattern", "no_std"]
+categories = ["algorithms", "no-std"]
+
+[dependencies]
+defmac = "0.1"
+unchecked-index = { version = "0.2.2" }
+
+[dev-dependencies]
+quickcheck = { version = "0.4", default-features = false }
+odds = "0.3"
+macro-attr = "0.2"
+newtype_derive = "0.1"
+matches = "0.1"
+
+[features]
+
+# All of these for testing only
+benchmarks = []
+trace = []
+test-functions = []
+
+[profile.dev]
+opt-level = 1
+[profile.test]
+opt-level = 1
+[profile.release]
+debug = true
+[profile.bench]
+debug = true
+
+[package.metadata.docs.rs]
+
+[package.metadata.release]
+no-dev-version = true

@@ -41,8 +41,8 @@ license = "Apache-2.0"
 repository = "https://github.com/yvgude/lean-ctx"
 
 [features]
-# SODA-CANIBALIZED: default = [] remove tree-sitter (18 linguagens), embeddings (rten)
-# e http-server (axum). O SODA injeta apenas a alma matemática pura.
+# SOULS-CANIBALIZED: default = [] remove tree-sitter (18 linguagens), embeddings (rten)
+# e http-server (axum). O SOULS injeta apenas a alma matemática pura.
 # Features opcionais para canibalização futura:
 #   tree-sitter-rust-only -> apenas tree-sitter-rust (1 linguagem C-FFI)
 #   tree-sitter-multilang -> as 18 linguagens restantes
@@ -62,7 +62,7 @@ neural = [
     "dep:rten",
     "dep:rten-tensor",
 ]
-# SODA-CANIBALIZED: feature que reativa rusqlite (property_graph)
+# SOULS-CANIBALIZED: feature que reativa rusqlite (property_graph)
 # NÃO ATIVAR sem antes alinhar rusqlite com souls_mc.
 rusqlite-storage = [
     "dep:rusqlite",
@@ -124,7 +124,7 @@ features = ["serde"]
 
 [dependencies.crossterm]
 version = "=0.28.1"
-optional = true  # SODA-CANIBALIZED: tui congelada
+optional = true  # SOULS-CANIBALIZED: tui congelada
 
 [dependencies.deadpool-postgres]
 version = "=0.14.1"
@@ -175,7 +175,7 @@ optional = true
 
 [dependencies.ratatui]
 version = "=0.30.0"
-optional = true  # SODA-CANIBALIZED: tui congelada
+optional = true  # SOULS-CANIBALIZED: tui congelada
 
 [dependencies.regex]
 version = "=1.12.3"
@@ -197,7 +197,7 @@ features = [
     "transport-io",
     "transport-streamable-http-server",
 ]
-optional = true  # SODA-CANIBALIZED: gating via feature http-server
+optional = true  # SOULS-CANIBALIZED: gating via feature http-server
 
 [dependencies.rpassword]
 version = "=7.4.0"
@@ -213,7 +213,7 @@ optional = true
 [dependencies.rusqlite]
 version = "=0.39.0"
 features = ["bundled"]
-optional = true  # SODA-CANIBALIZED: só compila se feature rusqlite-storage for ativada
+optional = true  # SOULS-CANIBALIZED: só compila se feature rusqlite-storage for ativada
 
 [dependencies.serde]
 version = "=1.0.228"

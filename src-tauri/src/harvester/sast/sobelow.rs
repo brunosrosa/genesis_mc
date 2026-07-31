@@ -3,7 +3,7 @@ use regex::Regex;
 use tracing::info;
 
 use crate::harvester::router::StaticAnalysisBlade;
-use super::{SastExecutionTarget, SodaHealthIssue, DiscoveredManifest, ManifestKind, descendant_roots_for_manifest, derive_repo_relative_clean_targets, push_issue, sort_and_dedup_issues};
+use super::{SastExecutionTarget, SoulsHealthIssue, DiscoveredManifest, ManifestKind, descendant_roots_for_manifest, derive_repo_relative_clean_targets, push_issue, sort_and_dedup_issues};
 
 pub fn is_elixir_supported_file(path: &Path) -> bool {
     path.extension()
@@ -64,7 +64,7 @@ pub fn normalize_sobelow_text_issues(
     repo_path: &Path,
     execution_root: &Path,
     text: &str,
-) -> Vec<SodaHealthIssue> {
+) -> Vec<SoulsHealthIssue> {
     let Ok(finding_re) = Regex::new(
         r#"%\{file: "(?P<file>[^"]+)", line: (?P<line>\d+), type: "(?P<kind>[^"]+)"(?:, variable: (?P<variable>"[^"]+"|:[^,}]+|[A-Za-z_][A-Za-z0-9_]*))?\}"#,
     ) else {

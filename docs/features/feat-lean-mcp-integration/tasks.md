@@ -1,7 +1,7 @@
 # Tasks — Canibalização Tipo A: Saco a Vácuo Nativo (Fase 3)
 
 **Lei do Scaffold:** Cada task tem DoD rigoroso, com teste Red antes da lógica Green.
-**Ralph Loop:** Teto de 3 tentativas por task. Ao bater o teto, acionar `soda-ralph-loop`.
+**Ralph Loop:** Teto de 3 tentativas por task. Ao bater o teto, acionar `souls-ralph-loop`.
 
 ---
 
@@ -180,7 +180,7 @@ fn lightweight_cleanup_collapses_brace_runs() {
 **Arquivo:** `src-tauri/Cargo.toml`
 
 ```toml
-similar = "=2.7.0"  # SODA-CANIBALIZED Fase 3: Myers diff nativo (já estava em lean-ctx como dep transitiva)
+similar = "=2.7.0"  # SOULS-CANIBALIZED Fase 3: Myers diff nativo (já estava em lean-ctx como dep transitiva)
 ```
 
 **DoD:**
@@ -191,7 +191,7 @@ similar = "=2.7.0"  # SODA-CANIBALIZED Fase 3: Myers diff nativo (já estava em 
 
 ## T2 — Transplante das 2 Ferramentas Vitais (W3)
 
-**Arquivo:** `src-tauri/src/bin/soda_mcp_server.rs`
+**Arquivo:** `src-tauri/src/bin/souls_mcp_server.rs`
 
 ### T2.1 — `souls_read` real
 
@@ -202,8 +202,8 @@ similar = "=2.7.0"  # SODA-CANIBALIZED Fase 3: Myers diff nativo (já estava em 
 4. Retornar `content[0].text = markdown` + `structuredContent` com métricas.
 
 **DoD:**
-- [ ] `cargo check --bin soda_mcp_server` Exit 0.
-- [ ] `cargo test --bin soda_mcp_server` (se houver teste) Exit 0.
+- [ ] `cargo check --bin souls_mcp_server` Exit 0.
+- [ ] `cargo test --bin souls_mcp_server` (se houver teste) Exit 0.
 
 ### T2.2 — `souls_delta_diff` real
 
@@ -213,13 +213,13 @@ similar = "=2.7.0"  # SODA-CANIBALIZED Fase 3: Myers diff nativo (já estava em 
 3. Retornar `content[0].text` + `structuredContent` com counts.
 
 **DoD:**
-- [ ] `cargo check --bin soda_mcp_server` Exit 0.
+- [ ] `cargo check --bin souls_mcp_server` Exit 0.
 
 ---
 
 ## T3 — Renomear 15 Stubs para `not_implemented_yet` (W4)
 
-**Arquivo:** `src-tauri/src/bin/soda_mcp_server.rs`
+**Arquivo:** `src-tauri/src/bin/souls_mcp_server.rs`
 
 ### T3.1 — Renomear função
 
@@ -229,7 +229,7 @@ fn stub_not_implemented_yet(tool_name: &str) -> Value {
         "content": [{
             "type": "text",
             "text": format!(
-                "not_implemented_yet: tool '{}' reconhecida no cânone SODA. \
+                "not_implemented_yet: tool '{}' reconhecida no cânone SOULS. \
                  Aguardando Fase 4+ para transplante da lógica adicional.",
                 tool_name
             )
@@ -248,15 +248,15 @@ Trocar `Ok(stub_not_implemented(tool_name))` → `Ok(stub_not_implemented_yet(to
 Trocar `"STUB: ..."` → `"not_implemented_yet: ..."` em cada uma das 15 descrições.
 
 **DoD:**
-- [ ] `grep -c "STUB:" src/bin/soda_mcp_server.rs` retorna `0`.
-- [ ] `grep -c "not_implemented_yet" src/bin/soda_mcp_server.rs` retorna `15` (descrições) + 1 (fn) = 16.
+- [ ] `grep -c "STUB:" src/bin/souls_mcp_server.rs` retorna `0`.
+- [ ] `grep -c "not_implemented_yet" src/bin/souls_mcp_server.rs` retorna `15` (descrições) + 1 (fn) = 16.
 
 ---
 
 ## T4 — Validação Final (Fase 5)
 
 - [ ] `cargo check --lib` Exit 0.
-- [ ] `cargo check --bin soda_mcp_server` Exit 0.
+- [ ] `cargo check --bin souls_mcp_server` Exit 0.
 - [ ] `cargo test --lib cognition::lean_vacuum` Exit 0 (≥ 6 testes).
 - [ ] `git diff Cargo.toml | grep "lean-ctx"` retorna vazio.
 - [ ] `git diff --stat` mostra ≤ 6 arquivos modificados e ≤ 6 arquivos criados.
@@ -274,23 +274,23 @@ Trocar `"STUB: ..."` → `"not_implemented_yet: ..."` em cada uma das 15 descri�
 
 ### T5 — Atualizar SDD do rename
 
-- [ ] `design.md` documenta o rename `soda_mcp_server` -> `souls_mcp_server`.
+- [ ] `design.md` documenta o rename `souls_mcp_server` -> `souls_mcp_server`.
 - [ ] `tasks.md` enumera T6/T7.
 
 ### T6 — Rename físico + callers
 
 **Arquivos-alvo**
-- `src-tauri/src/bin/soda_mcp_server.rs` -> `src-tauri/src/bin/souls_mcp_server.rs`
+- `src-tauri/src/bin/souls_mcp_server.rs` -> `src-tauri/src/bin/souls_mcp_server.rs`
 - `src-tauri/Cargo.toml`
 - `gateway-config.yaml`
 - `boot.ps1`
-- `src-tauri/soda_ETL_ignition.ps1`
+- `src-tauri/souls_ETL_ignition.ps1`
 - `src-tauri/src/core/mcp_transport.rs`
 
 **DoD**
-- [ ] nenhum arquivo restante com nome físico `soda_mcp_server.rs`
-- [ ] nenhum `cmd:` em YAML apontando para `soda_mcp_server.exe`
-- [ ] nenhum `.ps1` chamando `--bin soda_mcp_server` ou matando processo com esse nome
+- [ ] nenhum arquivo restante com nome físico `souls_mcp_server.rs`
+- [ ] nenhum `cmd:` em YAML apontando para `souls_mcp_server.exe`
+- [ ] nenhum `.ps1` chamando `--bin souls_mcp_server` ou matando processo com esse nome
 
 ### T7 — Validação do compilador
 

@@ -1,7 +1,7 @@
-# SODA Harvester — Design Arquitetural (Fase 1.5)
+# SOULS Harvester — Design Arquitetural (Fase 1.5)
 
 > **Versão:** 0.1.0
-> **Território:** PRODUTO (Daemon SODA — Rust/Tokio, arquitetura apenas)
+> **Território:** PRODUTO (Daemon SOULS — Rust/Tokio, arquitetura apenas)
 > **Escopo:** Fase 0 + Fase A
 > **Status:** SDD inicial. Nenhum código Rust deve nascer antes da aprovação humana.
 
@@ -38,7 +38,7 @@ significado de cada família e emitindo **3 dossiês serializáveis** para a Fas
 | Memória controlada | O pipeline consome referências e processa um blob por vez |
 | Sufixo estável | `blob_01` gera `essence_01`, `blob_03` gera `essence_03` e assim por diante |
 | Categoria preservada | Produto, Arquitetura e Ops/Auditoria nunca são fundidos |
-| Canon fixo | `blob_10_soda_canon_context` não é destilado; ele é anexado a todos os pacotes |
+| Canon fixo | `blob_10_souls_canon_context` não é destilado; ele é anexado a todos os pacotes |
 
 ---
 
@@ -123,7 +123,7 @@ graph TD
 |---|---|---|
 | `_blob_XX` | `_essence_XX` | Mantém o mesmo índice numérico |
 | Texto denso | Resumo factual de ~3.000 tokens | Sem opinião, sem fusão entre categorias |
-| `blob_10_soda_canon_context` | `blob_10_soda_canon_context` | Nunca é destilado; é anexado intacto |
+| `blob_10_souls_canon_context` | `blob_10_souls_canon_context` | Nunca é destilado; é anexado intacto |
 
 ---
 
@@ -133,16 +133,16 @@ graph TD
 
 | Pacote | Conteúdo principal | Anexo obrigatório |
 |---|---|---|
-| Pacote A — Produto | `_essence_01`, `_essence_03`, `_essence_11` | `blob_10_soda_canon_context` |
-| Pacote B — Arquiteto | `_essence_04`, `_essence_05` | `blob_10_soda_canon_context` |
-| Pacote C — Ops/Auditor | `_essence_02`, `_essence_06`, `_essence_07`, `_essence_08`, `_essence_09` | `blob_10_soda_canon_context` |
+| Pacote A — Produto | `_essence_01`, `_essence_03`, `_essence_11` | `blob_10_souls_canon_context` |
+| Pacote B — Arquiteto | `_essence_04`, `_essence_05` | `blob_10_souls_canon_context` |
+| Pacote C — Ops/Auditor | `_essence_02`, `_essence_06`, `_essence_07`, `_essence_08`, `_essence_09` | `blob_10_souls_canon_context` |
 
 ### 4.2. Invariantes de Empacotamento
 
 | Regra | Efeito |
 |---|---|
 | Pacotes são independentes | A Fase 2 pode ler um dossiê por vez |
-| `blob_10` sempre acompanha os três | O canon do SODA ancora todo raciocínio posterior |
+| `blob_10` sempre acompanha os três | O canon do SOULS ancora todo raciocínio posterior |
 | Não existe super-dossiê único | Evita contexto gordo e vazamento de categorias |
 
 ---
@@ -165,5 +165,5 @@ graph TD
 1. Não enviar blobs inteiros `>64k tokens` diretamente para API paga.
 2. Não carregar os 11 blobs simultaneamente na RAM.
 3. Não fundir `_essence_` de categorias distintas.
-4. Não destilar `blob_10_soda_canon_context`.
+4. Não destilar `blob_10_souls_canon_context`.
 5. Não iniciar implementação antes da aprovação arquitetural humana.

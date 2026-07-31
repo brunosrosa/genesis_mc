@@ -2173,7 +2173,7 @@ public class Greeter {
 
     #[test]
     fn test_classify_layer_cli_segments() {
-        assert_eq!(classify_layer("bin/soda.rs"), "cli");
+        assert_eq!(classify_layer("bin/souls.rs"), "cli");
         assert_eq!(classify_layer("cmd/root.go"), "cli");
         assert_eq!(classify_layer("src/cli/main.ts"), "cli");
     }

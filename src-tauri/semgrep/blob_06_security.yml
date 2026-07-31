@@ -1,17 +1,17 @@
 rules:
-  - id: soda.rust.unsafe.block
+  - id: souls.rust.unsafe.block
     languages: [rust]
     severity: WARNING
     message: "Rust unsafe block requer auditoria manual"
     pattern: unsafe { ... }
 
-  - id: soda.rust.transmute
+  - id: souls.rust.transmute
     languages: [rust]
     severity: ERROR
     message: "std::mem::transmute amplia risco de memory-unsafety"
     pattern: std::mem::transmute(...)
 
-  - id: soda.rust.from-raw-parts
+  - id: souls.rust.from-raw-parts
     languages: [rust]
     severity: ERROR
     message: "Construcao a partir de raw pointer requer auditoria de memoria"
@@ -20,19 +20,19 @@ rules:
       - pattern: std::slice::from_raw_parts_mut(...)
       - pattern: std::str::from_utf8_unchecked(...)
 
-  - id: soda.javascript.dynamic-eval
+  - id: souls.javascript.dynamic-eval
     languages: [javascript, typescript]
     severity: ERROR
     message: "Execucao dinamica via eval aumenta risco de injecao"
     pattern: eval(...)
 
-  - id: soda.javascript.function-constructor
+  - id: souls.javascript.function-constructor
     languages: [javascript, typescript]
     severity: ERROR
     message: "Function constructor amplia superficie de code injection"
     pattern: new Function(...)
 
-  - id: soda.javascript.command-injection
+  - id: souls.javascript.command-injection
     languages: [javascript, typescript]
     severity: ERROR
     message: "child_process com shell/exec amplia risco de command injection"
@@ -42,31 +42,31 @@ rules:
       - pattern: require("child_process").spawn(..., { ..., shell: true, ... })
       - pattern: require("child_process").spawnSync(..., { ..., shell: true, ... })
 
-  - id: soda.javascript.xss-innerhtml
+  - id: souls.javascript.xss-innerhtml
     languages: [javascript, typescript]
     severity: ERROR
     message: "innerHTML com dados dinamicos amplia risco de XSS"
     pattern: $TARGET.innerHTML = $VALUE
 
-  - id: soda.python.dynamic-eval
+  - id: souls.python.dynamic-eval
     languages: [python]
     severity: ERROR
     message: "Execucao dinamica via eval aumenta risco de injecao"
     pattern: eval(...)
 
-  - id: soda.python.dynamic-exec
+  - id: souls.python.dynamic-exec
     languages: [python]
     severity: ERROR
     message: "Execucao dinamica via exec aumenta risco de injecao"
     pattern: exec(...)
 
-  - id: soda.python.subprocess-shell
+  - id: souls.python.subprocess-shell
     languages: [python]
     severity: ERROR
     message: "subprocess com shell=True aumenta superficie de command injection"
     pattern: subprocess.$FUNC(..., shell=True, ...)
 
-  - id: soda.python.pickle-loads
+  - id: souls.python.pickle-loads
     languages: [python]
     severity: ERROR
     message: "pickle em dados nao confiaveis amplia risco de code execution"
@@ -74,13 +74,13 @@ rules:
       - pattern: pickle.load(...)
       - pattern: pickle.loads(...)
 
-  - id: soda.python.yaml-load
+  - id: souls.python.yaml-load
     languages: [python]
     severity: ERROR
     message: "yaml.load sem safe loader amplia risco de deserialization insegura"
     pattern: yaml.load(...)
 
-  - id: soda.go.exec-command
+  - id: souls.go.exec-command
     languages: [go]
     severity: ERROR
     message: "exec.Command requer auditoria contra command injection"
@@ -88,7 +88,7 @@ rules:
       - pattern: exec.Command(...)
       - pattern: exec.CommandContext(...)
 
-  - id: soda.go.sql-string-format
+  - id: souls.go.sql-string-format
     languages: [go]
     severity: ERROR
     message: "Formatacao dinamica de SQL amplia risco de SQL injection"
@@ -98,7 +98,7 @@ rules:
       - pattern: fmt.Sprintf("UPDATE ..." , ...)
       - pattern: fmt.Sprintf("DELETE ..." , ...)
 
-  - id: soda.ruby.dynamic-eval
+  - id: souls.ruby.dynamic-eval
     languages: [ruby]
     severity: ERROR
     message: "Kernel.eval amplia risco de code injection"
@@ -106,7 +106,7 @@ rules:
       - pattern: eval(...)
       - pattern: Kernel.eval(...)
 
-  - id: soda.ruby.command-injection
+  - id: souls.ruby.command-injection
     languages: [ruby]
     severity: ERROR
     message: "exec/system/Open3 ampliam risco de command injection"
@@ -117,7 +117,7 @@ rules:
       - pattern: Open3.capture2e(...)
       - pattern: Open3.capture3(...)
 
-  - id: soda.elixir.dynamic-eval
+  - id: souls.elixir.dynamic-eval
     languages: [elixir]
     severity: ERROR
     message: "Code.eval_* amplia risco de execucao dinamica"
@@ -125,7 +125,7 @@ rules:
       - pattern: Code.eval_string(...)
       - pattern: Code.eval_quoted(...)
 
-  - id: soda.generic.hardcoded-secret
+  - id: souls.generic.hardcoded-secret
     languages: [generic]
     severity: ERROR
     message: "Possivel segredo hardcoded"

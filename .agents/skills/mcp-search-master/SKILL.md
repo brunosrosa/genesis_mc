@@ -1,13 +1,13 @@
 ---
 name: mcp-search-master
-description: Motor de Deep Research Híbrido do SODA. Orquestra a busca Local-First via `web_search` + `web_fetch` governada pelo `sequentialthinking`. Aplica a Tríade de Proteção (Jitter/Delay) contra banimento de IP e finaliza com Síntese em Prompt Único do IterResearch.
+description: Motor de Deep Research Híbrido do SOULS. Orquestra a busca Local-First via `web_search` + `web_fetch` governada pelo `sequentialthinking`. Aplica a Tríade de Proteção (Jitter/Delay) contra banimento de IP e finaliza com Síntese em Prompt Único do IterResearch.
 triggers: ["mcp-search-master", "buscar na web", "pesquisar erro", "ler documentação web", "procurar tutorial", "pesquisar na internet", "deep research", "web_fetch", "web_search"]
 ---
 
 ### skill: MCP Search Master (Motor IterResearch e Resiliência de Rede V7.0)
 
 #### Goal
-Atuar como a esteira autônoma de pesquisa profunda (Deep Research) do SODA para erradicar o "Knowledge Cutoff". Você orquestra um Processo de Decisão de Markov (IterResearch) usando o `sequentialthinking` como maestro. O objetivo inegociável é realizar a busca Local-First via `web_search` e a extração via `web_fetch`, protegendo o FinOps e a VRAM (descartando HTML bruto). A navegação deve ser blindada contra banimentos de IP através de atrasos sintéticos (Jitter) e operar sob a regra *Fail-Open* do Gateway: se a web bloquear o acesso, o agente contorna o problema, não desiste.
+Atuar como a esteira autônoma de pesquisa profunda (Deep Research) do SOULS para erradicar o "Knowledge Cutoff". Você orquestra um Processo de Decisão de Markov (IterResearch) usando o `sequentialthinking` como maestro. O objetivo inegociável é realizar a busca Local-First via `web_search` e a extração via `web_fetch`, protegendo o FinOps e a VRAM (descartando HTML bruto). A navegação deve ser blindada contra banimentos de IP através de atrasos sintéticos (Jitter) e operar sob a regra *Fail-Open* do Gateway: se a web bloquear o acesso, o agente contorna o problema, não desiste.
 
 #### Instructions
 Sempre que uma pesquisa web, leitura de documentação ou "Deep Research" for solicitada, engate OBRIGATORIAMENTE a seguinte máquina de estados:
@@ -20,7 +20,7 @@ Sempre que uma pesquisa web, leitura de documentação ou "Deep Research" for so
    * Use `web_search` para descobrir URLs candidatas e `web_fetch` para ler a página localmente via biblioteca nativa do Gateway Rust.
 
 3. **Arquitetura Fail-Open e Reflexão (Resiliência Web):**
-   * O mundo web é instável. Se a ferramenta retornar *Error 403/503/Timeout* (bloqueio Cloudflare, etc.), NÃO aborte a rotina do SODA. 
+   * O mundo web é instável. Se a ferramenta retornar *Error 403/503/Timeout* (bloqueio Cloudflare, etc.), NÃO aborte a rotina do SOULS. 
    * A política do Gateway é **Fail-Open**. Codifique a indisponibilidade do site como uma observação normal no seu raciocínio. Ative imediatamente um *Branching Thought* (Pensamento de Ramificação) no MCP para testar uma URL secundária ou cache alternativo.
 
 4. **Extração O(1) e o Laço IterResearch:**
@@ -35,11 +35,11 @@ Sempre que uma pesquisa web, leitura de documentação ou "Deep Research" for so
 
 #### Constraints
 * **COMPLIANCE DE GATEWAY:** As ferramentas prioritárias e obrigatórias são `web_search` e `web_fetch`. Wrappers legados como `duckduckgo_search`, `webcrawl_*` ou sidecars interpretados estão repudiados no caminho crítico do MCP.
-* **SOBREVIVÊNCIA DE REDE:** Se o limite de *rate limit* for atingido, recue e faça ramificação. O SODA nunca paralisa por causa de uma recusa de servidor web.
-* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação imutável do roteamento SODA.
+* **SOBREVIVÊNCIA DE REDE:** Se o limite de *rate limit* for atingido, recue e faça ramificação. O SOULS nunca paralisa por causa de uma recusa de servidor web.
+* **FRONTMATTER ABSOLUTO:** O bloco YAML `---` no topo desta skill é a fundação imutável do roteamento SOULS.
 
 #### Examples
-**Entrada do Usuário:** "SODA, faça um Deep Research sobre como implementar o PagedAttention no vLLM e me traga só as restrições da arquitetura."
+**Entrada do Usuário:** "SOULS, faça um Deep Research sobre como implementar o PagedAttention no vLLM e me traga só as restrições da arquitetura."
 
 **Ação do Agente:**
 1. **Maestro:** Emite chamada para `sequentialthinking` com a tarefa de mapear a documentação.

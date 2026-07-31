@@ -79,3 +79,41 @@ static WASM_OUTLINE_PARSER: &[u8] = include_bytes!("../resources/wasm_grammars/o
    Valida extração de assinaturas reais sem corpo de função via parser WASM.
 4. `test_wasm_sandbox_trap_containment`:
    Compila via WAT/WASM um componente com instrução `unreachable` e valida a captura do Trap retornando erro RPC `-32022`.
+
+---
+
+## 5. DESIGN TÉCNICO: SOULS V4 — UPGRADE DE MOTORES DE INFERÊNCIA E BITNET DAEMON (SPIKE)
+
+### 5.1. Visão Geral e Arquitetura Orchestrator-Worker
+O backend em Rust (Tokio) atua como o **Orchestrator**, delegando workloads para dois motores de inferência **Workers**:
+1. `LlamaCppEngine` (dGPU CUDA Worker): Carregado intra-processo via bindings CFFI (`llama-cpp-2` v0.1.153) para geração contínua $O(1)$ com KV Cache Assimétrico (`Key: F16`, `Value: Q4_K` / `Q8_0`).
+2. `BitNetDaemon` (CPU Sidecar Worker): Subprocesso efêmero executando o binário `bitnet_daemon.exe` via Tokio `Command`, protegido por um Drop Guard com cancelamento atômico (`SIGKILL` / `child.kill()`).
+
+### 5.2. Diagrama Arquitetural (Mermaid)
+```mermaid
+graph TD
+    Client[Tauri IPC / MCP Client] -->|Inference Request| Orchestrator[Souls Model Manager - Tokio Runtime]
+    
+    subgraph Host Process - Rust Tokio Runtime
+        Orchestrator -->|GPU Inference Request| LlamaEngine[LlamaCppEngine - llama-cpp-2 v0.1.153]
+        Orchestrator -->|CPU 1-Bit Request| BitNetManager[BitNetDaemon Struct]
+        
+        LlamaEngine -->|Asymmetric KV Cache| KVCache[Key: F16 / Value: Q4_K]
+        BitNetManager -->|Subprocess Control| TokioChild[Tokio Async Child Process]
+        BitNetManager -->|Drop Handler| DropGuard[Atomic SIGKILL / child.kill()]
+    end
+
+    subgraph GPU Execution Context (CUDA v13.3 / MSVC 14.51)
+        LlamaEngine -->|Zero-Copy / mmap| CudaKernels[NVIDIA dGPU - RTX 2060m]
+    end
+
+    subgraph CPU Isolated Process Context
+        TokioChild -->|IPC StdIn/StdOut| BitNetExe[bitnet_daemon.exe Subprocess]
+        DropGuard -.->|SIGKILL on Drop| BitNetExe
+    end
+```
+
+### 5.3. Agnosticismo de Hardware e Termodinâmica
+- **Piso de Validação:** NVIDIA RTX 2060 Mobile (6GB VRAM) rodando CUDA 13.3 + MSVC 14.51.
+- **Transmutabilidade:** O KV Cache assimétrico esmaga a alocação de VRAM $< 1.0 \text{ GB}$, permitindo que modelos GGUF coexistam com sidecars de CPU sem causar OOM.
+- **Isolamento de CPU:** O `bitnet_daemon.exe` roda isolado na CPU e sofre destruição imediata e atômica quando desalocado.

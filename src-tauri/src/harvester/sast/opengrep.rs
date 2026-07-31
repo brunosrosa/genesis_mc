@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{SandboxExecutor, SidecarError, SidecarExitPolicy, ScopedTextBlock, sanitize_repo_relative_path, execute_sidecar, parse_json_payload, render_scoped_text_blocks, SemgrepArtifacts};
 
-pub const SEMGREP_SECURITY_RULE_FILE: &str = ".soda_semgrep_blob_06_security.yml";
-pub const SEMGREP_HEALTH_RULE_FILE: &str = ".soda_semgrep_blob_08_health.yml";
+pub const SEMGREP_SECURITY_RULE_FILE: &str = ".souls_semgrep_blob_06_security.yml";
+pub const SEMGREP_HEALTH_RULE_FILE: &str = ".souls_semgrep_blob_08_health.yml";
 const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../../semgrep/blob_06_security.yml");
 const SEMGREP_HEALTH_RULE_SOURCE: &str = include_str!("../../../semgrep/blob_08_health.yml");
 
@@ -86,7 +86,7 @@ impl SemgrepSidecar {
         // via env var setada pelo orquestrador, com fallback honesto "unknown").
         // Optamos por env var em vez de chamada extra para preservar a janela de
         // timeout e o principio do zero-overhead para monorepos grandes.
-        let opengrep_version = std::env::var("SODA_OPENGREP_VERSION")
+        let opengrep_version = std::env::var("SOULS_OPENGREP_VERSION")
             .ok()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
@@ -120,7 +120,7 @@ pub(crate) fn semgrep_support_dir(repo_path: &Path) -> Result<PathBuf, SidecarEr
         repo_path
             .parent()
             .unwrap_or(repo_path)
-            .join(".soda_semgrep")
+            .join(".souls_semgrep")
             .join(repo_name),
     )
 }
@@ -519,7 +519,7 @@ pub fn normalize_semgrep_payload(
         let check_id = result
             .get("check_id")
             .and_then(|v| v.as_str())
-            .unwrap_or("soda.sast.unknown");
+            .unwrap_or("souls.sast.unknown");
         let line = result
             .get("start")
             .and_then(|v| v.get("line"))
@@ -666,7 +666,7 @@ mod tests {
         let security_json = r#"{
             "results": [
                 {
-                    "check_id": "soda.rust.unsafe.block",
+                    "check_id": "souls.rust.unsafe.block",
                     "path": "src/main.rs",
                     "start": { "line": 12 },
                     "extra": {
@@ -681,7 +681,7 @@ mod tests {
         let health_json = r#"{
             "results": [
                 {
-                    "check_id": "soda.tech-debt.todo-fixme",
+                    "check_id": "souls.tech-debt.todo-fixme",
                     "path": "src/lib.rs",
                     "start": { "line": 48 },
                     "extra": {
@@ -713,7 +713,7 @@ mod tests {
         assert!(unsafe_blob.contains("memory-unsafety"));
         assert!(health_blob.contains("# Health Report"));
         assert!(health_blob.contains("[src/lib.rs]"));
-        assert!(health_blob.contains("soda.tech-debt.todo-fixme"));
+        assert!(health_blob.contains("souls.tech-debt.todo-fixme"));
     }
 
     #[tokio::test]
@@ -721,7 +721,7 @@ mod tests {
         let security_json = r#"{
             "results": [
                 {
-                    "check_id": "soda.rust.unsafe.block",
+                    "check_id": "souls.rust.unsafe.block",
                     "path": "src/main.rs",
                     "start": { "line": 7 },
                     "extra": {
@@ -820,7 +820,7 @@ mod tests {
         let payload = SemgrepNormalizedPayload {
             blocks: vec![ScopedTextBlock {
                 file_path: "src/lib.rs".to_string(),
-                items: vec!["L1: [soda.rust.unsafe.block] (WARNING / memory-unsafety) -> unsafe {}".to_string()],
+                items: vec!["L1: [souls.rust.unsafe.block] (WARNING / memory-unsafety) -> unsafe {}".to_string()],
                 omitted_count: 0,
             }],
             files_analyzed: 12,
@@ -840,7 +840,7 @@ mod tests {
         assert!(rendered.contains("[SEVERITY_BREAKDOWN]: ERROR=2, WARNING=5"));
         // Conteudo real preservado
         assert!(rendered.contains("[src/lib.rs]"));
-        assert!(rendered.contains("soda.rust.unsafe.block"));
+        assert!(rendered.contains("souls.rust.unsafe.block"));
     }
 
     #[test]
@@ -911,7 +911,7 @@ mod tests {
             r#"{{
                 "results": [
                     {{
-                        "check_id": "soda.rust.unsafe.block",
+                        "check_id": "souls.rust.unsafe.block",
                         "path": "{repo}\\src\\main.rs",
                         "start": {{ "line": 12 }},
                         "extra": {{
@@ -920,8 +920,8 @@ mod tests {
                         }}
                     }},
                     {{
-                        "check_id": "soda.support.noise",
-                        "path": "C:\\host\\projfs\\owner\\.soda_semgrep\\repo\\sandbox\\.semgrep\\settings.yml",
+                        "check_id": "souls.support.noise",
+                        "path": "C:\\host\\projfs\\owner\\.souls_semgrep\\repo\\sandbox\\.semgrep\\settings.yml",
                         "start": {{ "line": 1 }},
                         "extra": {{
                             "message": "noise",
@@ -989,9 +989,9 @@ mod tests {
         assert!(left.is_absolute());
         assert!(left.join(SEMGREP_HEALTH_RULE_FILE).exists());
 
-        let workspace_rule = workspace_semgrep_rules_dir().join("soda-golden-patterns.yaml");
+        let workspace_rule = workspace_semgrep_rules_dir().join("souls-golden-patterns.yaml");
         if workspace_rule.exists() {
-            assert!(!left.join("soda-golden-patterns.yaml").exists());
+            assert!(!left.join("souls-golden-patterns.yaml").exists());
         }
     }
 
@@ -1001,7 +1001,7 @@ mod tests {
         let payload = r#"{
             "results": [
                 {
-                    "check_id": "soda.javascript.dynamic-eval",
+                    "check_id": "souls.javascript.dynamic-eval",
                     "path": "src/main.ts",
                     "start": { "line": 4 },
                     "extra": {
@@ -1010,7 +1010,7 @@ mod tests {
                     }
                 },
                 {
-                    "check_id": "soda.javascript.nested-ternary",
+                    "check_id": "souls.javascript.nested-ternary",
                     "path": "src/ui.ts",
                     "start": { "line": 9 },
                     "extra": {
@@ -1046,7 +1046,7 @@ mod tests {
     async fn test_polyglot_sast_sidecar_routes_rust_and_cpp_and_breaks_blob06_from_blob08() {
         let clippy_payload = r#"{"reason":"compiler-message","message":{"level":"warning","message":"manual memcpy can be replaced with copy_from_slice","spans":[{"file_name":"src\\lib.rs","is_primary":true}]}}"#;
         let cppcheck_payload = r#"<results><errors><error id="memleak" severity="warning" msg="Memory leak: ptr"><location file="native/bridge.cpp" line="42"/></error></errors></results>"#;
-        let opengrep_payload = r#"{"results":[{"check_id":"soda.tech-debt.todo-fixme","path":"README.md","extra":{"message":"Marcador de divida tecnica encontrado","severity":"INFO"}}]}"#;
+        let opengrep_payload = r#"{"results":[{"check_id":"souls.tech-debt.todo-fixme","path":"README.md","extra":{"message":"Marcador de divida tecnica encontrado","severity":"INFO"}}]}"#;
 
         let executor = Arc::new(MockExecutor::new(vec![]));
         executor.write_repo_file("Cargo.toml", "[package]\nname='repo'\nversion='0.1.0'\n");
@@ -1174,7 +1174,7 @@ mod tests {
 
         *executor.responses.lock().unwrap() = std::collections::VecDeque::from(vec![
             Ok(br#"{"results":[]}"#.to_vec()), // consumed by opengrep security
-            Ok(br#"{"results":[], "soda.tech-debt.todo-fixme": true}"#.to_vec()), // consumed by opengrep health
+            Ok(br#"{"results":[], "souls.tech-debt.todo-fixme": true}"#.to_vec()), // consumed by opengrep health
             Ok(Vec::new()), // consumed by cargo fetch in preflight
             Ok(metadata_payload.as_bytes().to_vec()), // consumed by cargo metadata in preflight
             Ok(clippy_payload.as_bytes().to_vec()), // consumed by cargo clippy (simula warnings coletados com sucesso)

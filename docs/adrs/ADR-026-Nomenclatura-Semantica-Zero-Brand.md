@@ -13,19 +13,19 @@ description: "Padroniza a nomenclatura das ferramentas MCP adotando o padrão se
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-A integração de ferramentas via Model Context Protocol (MCP) com AI-IDEs (Cursor, Trae, Antigravity) revelou uma falha severa de obesidade semântica e "Tool Bloat". Clientes MCP possuem limites rígidos de caracteres para a exibição de ferramentas (frequentemente < 60 caracteres) e concatenam automaticamente o nome do servidor com o nome da ferramenta (ex: `soda-native-ast_soda_duckgo_search`). 
+A integração de ferramentas via Model Context Protocol (MCP) com AI-IDEs (Cursor, Trae, Antigravity) revelou uma falha severa de obesidade semântica e "Tool Bloat". Clientes MCP possuem limites rígidos de caracteres para a exibição de ferramentas (frequentemente < 60 caracteres) e concatenam automaticamente o nome do servidor com o nome da ferramenta (ex: `souls-native-ast_souls_duckgo_search`). 
 
 Esse lixo nominal causa três problemas letais:
 1. **Quebra de Protocolo (Fail-Closed Indesejado):** Nomes longos estouram o limite de exibição e parsing do cliente.
-2. **Hemorragia FinOps (Token Bloat):** Cada caractere inútil como `tool-`, `mcp-` ou `soda-` consome tokens preciosos a cada iteração de Raciocínio (Chain of Thought) do LLM.
+2. **Hemorragia FinOps (Token Bloat):** Cada caractere inútil como `tool-`, `mcp-` ou `souls-` consome tokens preciosos a cada iteração de Raciocínio (Chain of Thought) do LLM.
 3. **Context Drift (Acoplamento de Marca):** Nomear ferramentas com bases em fornecedores temporários (ex: `duckduckgo` ou `jcodemunch`) acopla a mente do Agente à ferramenta. Se o backend for trocado para `brave_search` ou `tree_sitter` nativo, a assinatura quebra e as *Skills* do agente sofrem de amnésia.
 
 ## Decisão
-Fica decretada a **Lei da Nomenclatura Semântica e Zero-Brand** para todo o ecossistema SODA/Souls MC:
+Fica decretada a **Lei da Nomenclatura Semântica e Zero-Brand** para todo o ecossistema SOULS/Souls MC:
 
-1. **Servidor Atômico (Zero Redundância):** O nome do Agent Gateway exportado para os clientes MCP será estritamente **`souls`**. O prefixo `soda-agent-gateway` está obsoleto.
+1. **Servidor Atômico (Zero Redundância):** O nome do Agent Gateway exportado para os clientes MCP será estritamente **`souls`**. O prefixo `souls-agent-gateway` está obsoleto.
 2. **Agnosticismo de Marca (Zero-Brand):** É expressamente proibido nomear ferramentas com marcas, bibliotecas de terceiros ou o próprio nome do projeto. A ferramenta deve refletir a *Ação Matemática*, não o executor.
-   * *Incorreto:* `soda_duckgo_search`, `soda_get_ast`.
+   * *Incorreto:* `souls_duckgo_search`, `souls_get_ast`.
    * *Correto:* `web_search`, `repo_ast`.
 3. **Topologia de Nomenclatura (`<dominio>_<acao>`):** Nomes de ferramentas devem ter no máximo duas ou três palavras, sempre no formato `dominio_acao`.
    * **Contexto/Memória:** `ctx_read`, `ctx_tree`, `ctx_workflow`.

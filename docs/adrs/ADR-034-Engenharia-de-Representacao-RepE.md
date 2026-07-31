@@ -11,7 +11,7 @@ description: "Impõe o uso de Engenharia de Representação (RepE) via intercept
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Restrições de Quantização
 
@@ -25,7 +25,7 @@ A execução de Small Language Models (SLMs de 3B a 4B parâmetros, como Qwen 3.
 
 Como recuperar a acurácia comportamental, suprimir alucinações e alinhar a execução de um SLM 4B quantizado aos níveis de um modelo de 7B/8B sem aumentar o footprint de VRAM, sem re-treinar os pesos base e com impacto insignificante no throughput de inferência?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROMPT ENTRADA ]
@@ -49,7 +49,7 @@ Como recuperar a acurácia comportamental, suprimir alucinações e alinhar a ex
 
 ### 1. Interceptação em Runtime via Callbacks (`cb_eval`)
 
-O SODA V5 impõe o uso de **Engenharia de Representação** (*Representation Engineering* - RepE) para modulação de ativação em tempo de execução.
+O SOULS V5 impõe o uso de **Engenharia de Representação** (*Representation Engineering* - RepE) para modulação de ativação em tempo de execução.
 
 - O backend de inferência em Rust (`llama-cpp-2` / `mistral.rs` bindings) DEVE registrar um manipulador na função de callback de avaliação de tensores (`cb_eval`).
 - A cada passagem direta (*forward pass*), o manipulador intercepta os tensores de ativação ocultos das camadas intermediárias ($h_l$) e injeta um vetor de deslocamento comportamental ($v_l$) derivado de um arquivo de vetor de controle em formato GGUF:

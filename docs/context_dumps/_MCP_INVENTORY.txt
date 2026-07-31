@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-07-30 00:24:09
+_MCP_INVENTORY Gerado em: 2026-07-30 13:12:21
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -6,13 +6,13 @@ CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
 ---
 === MCP SERVER INVENTORY + SMOKE TEST ===
 SERVER_NAME: souls
-LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_soda-agent-gateway.txt
+LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt
 SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
-TOOL_COUNT: 36
+TOOL_COUNT: 41
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.
 
 === SUMMARY ===
-OK_COUNT: 36
+OK_COUNT: 41
 WARN_COUNT: 0
 FAIL_COUNT: 0
 OVERALL_STATUS: HEALTHY
@@ -108,23 +108,43 @@ DESCRIPTION: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crat
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
+NAME: souls_edit
+DESCRIPTION: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
 NAME: souls_execute
 DESCRIPTION: not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_fetch_web
-DESCRIPTION: Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo. (Cânone SODA, ex-web_fetch)
+DESCRIPTION: Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_fill
+DESCRIPTION: Injeta cirurgicamente um bloco de código funcional no offset de um stub/placeholder (souls-stub: marker) sem alterar a casca sintática adjacente.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_get_ast
-DESCRIPTION: Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SODA, ex-repo_ast)
+DESCRIPTION: Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_handoff
+DESCRIPTION: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_intent
 DESCRIPTION: not_implemented_yet: Detecta intent do tool call (read/edit/search).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_knowledge
+DESCRIPTION: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -149,7 +169,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_repo_meta
-DESCRIPTION: Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SODA, ex-repo_meta)
+DESCRIPTION: Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SOULS, ex-repo_meta)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -174,7 +194,12 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_sqlite_query
-DESCRIPTION: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA. (Cânone SODA, ex-db_query)
+DESCRIPTION: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SOULS. (Cânone SOULS, ex-db_query)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_sub_agent
+DESCRIPTION: Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -184,7 +209,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_sys_time
-DESCRIPTION: Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SODA, ex-sys_time)
+DESCRIPTION: Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SOULS, ex-sys_time)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -194,7 +219,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_web_search
-DESCRIPTION: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SODA, ex-web_search)
+DESCRIPTION: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SOULS, ex-web_search)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

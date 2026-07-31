@@ -11,7 +11,7 @@ description: "Impõe a interceptação do buffer IPC de saída do LLM por um mot
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Desperdício de Tokens
 
@@ -24,7 +24,7 @@ Mesmo quando a amostragem de tokens é governada por decodificação restrita (`
 
 Como sanar 99% das falhas sintáticas em respostas de SLMs (JSONs truncados, falta de aspas, vírgulas no último elemento, blocos Markdown) com latência sub-milissegundo e **custo zero de tokens e VRAM**, eliminando re-prefills desnecessários na GPU?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                        [ BUFFER IPC STREAMING (GPU/LLM) ]

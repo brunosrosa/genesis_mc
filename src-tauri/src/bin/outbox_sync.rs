@@ -154,7 +154,7 @@ pub const CANONICAL_HEADERS: &[&str] = &[
     "regulatory_risk",
     "score_final",
     "score_philosophical_fit",
-    "score_fit_geral_soda",
+    "score_fit_geral_souls",
     "score_architectural_priority",
     "score_architectural_extractability",
     "score_human_product_priority",
@@ -639,7 +639,7 @@ mod tests {
                 repo_analised_version TEXT,
                 repo_version TEXT,
                 ultima_versao_online TEXT,
-                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                souls_universal_uuid TEXT NOT NULL UNIQUE,
                 status_processamento TEXT NOT NULL,
                 timestamp_fase_1 INTEGER,
                 timestamp_fase_3 INTEGER,
@@ -661,7 +661,7 @@ mod tests {
         conn.execute(
             "INSERT INTO repositorios (
                 project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
-                soda_universal_uuid, status_processamento, retry_count, proposta_original_resumo, categoria_arquitetural, sheets_synced
+                souls_universal_uuid, status_processamento, retry_count, proposta_original_resumo, categoria_arquitetural, sheets_synced
             ) VALUES (
                 'acme/widget', 'L1', 'https://github.com/acme/widget', 'v1.0.0', 'v1.0.0', 'v1.0.0',
                 'UUID-1', 'PENDENTE_HARVESTER', 0, 'Resumo técnico da ferramenta.', 'Tooling_Dev - CLI_Utilities', 0
@@ -727,7 +727,7 @@ mod tests {
         conn.execute(
             "INSERT INTO repositorios (
                 project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
-                soda_universal_uuid, status_processamento, retry_count, proposta_original_resumo, categoria_arquitetural, sheets_synced
+                souls_universal_uuid, status_processamento, retry_count, proposta_original_resumo, categoria_arquitetural, sheets_synced
             ) VALUES (
                 'acme/widget', 'L1', 'https://github.com/acme/widget', 'v1.0.0', 'v1.0.0', 'v1.0.0',
                 'UUID-1', 'FASE_-1_OK', 0, '', '', 1

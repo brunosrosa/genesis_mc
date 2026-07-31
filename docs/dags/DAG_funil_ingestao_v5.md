@@ -1,4 +1,4 @@
-# SODA — Funil de Ingestão Contínua (DAG v5)
+# SOULS — Funil de Ingestão Contínua (DAG v5)
 
 > **Versão:** 5.0  
 > **Território:** CÂNONE (arquitetura e contratos; nenhum código nasce aqui)  
@@ -119,7 +119,7 @@ flowchart TD
 
 | Input (Gatilho) | Ação (Mecânica/IA) | Output (Novo Status) |
 |---|---|---|
-| `status_atualizacao = INICIAR_TRIAGEM` | IA barata: README truncado (3k) + `blob_10_soda_canon_context` → DeepSeek V4 (JSON Mode) para extrair apenas `proposta_original_resumo` + `categoria_arquitetural` | `status_atualizacao = TRIAGEM_CONCLUIDA` e `status_fase = FASE_-0.5_BATEDOR_OK` |
+| `status_atualizacao = INICIAR_TRIAGEM` | IA barata: README truncado (3k) + `blob_10_souls_canon_context` → DeepSeek V4 (JSON Mode) para extrair apenas `proposta_original_resumo` + `categoria_arquitetural` | `status_atualizacao = TRIAGEM_CONCLUIDA` e `status_fase = FASE_-0.5_BATEDOR_OK` |
 
 ### 4.4. N3 — Fase 0 Harvester
 

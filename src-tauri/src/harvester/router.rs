@@ -13,7 +13,7 @@ pub const PHASE0_BLOB_TYPES: [&str; 11] = [
     "blob_07_ops_blueprint",
     "blob_08_health_report",
     "blob_09_community_meta",
-    "blob_10_soda_canon_context",
+    "blob_10_souls_canon_context",
     "blob_11_ux_contracts",
 ];
 
@@ -142,7 +142,7 @@ fn resolve_blob_spec(spec: &str) -> Option<&'static str> {
         "07" | "7" | "blob_07_ops_blueprint" => Some("blob_07_ops_blueprint"),
         "08" | "8" | "blob_08_health_report" => Some("blob_08_health_report"),
         "09" | "9" | "blob_09_community_meta" => Some("blob_09_community_meta"),
-        "10" | "blob_10_soda_canon_context" => Some("blob_10_soda_canon_context"),
+        "10" | "blob_10_souls_canon_context" => Some("blob_10_souls_canon_context"),
         "11" | "blob_11_ux_contracts" => Some("blob_11_ux_contracts"),
         _ => None,
     }

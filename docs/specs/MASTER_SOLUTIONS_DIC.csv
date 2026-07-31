@@ -3,7 +3,7 @@ A,project_name,TEXT,NOT NULL,"Owner / Repo (formatado com espaços)."
 B,repo_url,TEXT,NOT NULL,URL do repositório (canônica).
 C,repo_version,TEXT,NOT NULL,Tag de release ou SHA curto usado na análise.
 D,ultima_versao_online,TEXT,NOT NULL,Última versão observável na nuvem (tag/sha).
-E,indicacao_otimista_canibalizacao,TEXT,NOT NULL,"Emita estritamente entre 3 e 5 bullet points otimistas e diretos. Sintetize tudo o que o SODA pode roubar deste projeto hoje ou no futuro, incluindo lógicas, inspirações de UX, conhecimentos teóricos ou códigos físicos."
+E,indicacao_otimista_canibalizacao,TEXT,NOT NULL,"Emita estritamente entre 3 e 5 bullet points otimistas e diretos. Sintetize tudo o que o SOULS pode roubar deste projeto hoje ou no futuro, incluindo lógicas, inspirações de UX, conhecimentos teóricos ou códigos físicos."
 F,lote_id,TEXT,NOT NULL,Identificador do lote/bateria de execução.
 G,data_ultima_analise,TEXT,NOT NULL,"Data/hora UTC formatada (YYYY-MM-DDTHH:MM:SSZ)."
 H,analise_origem,TEXT,NOT NULL,Assinatura do motor/fluxo que gerou a linha.
@@ -73,7 +73,7 @@ BS,score_model_logic_value,TEXT,NOT NULL,Score inteiro 0–10 (serializado como 
 BT,score_ethics_safety,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
 BU,score_intrinsic_risk,TEXT,NOT NULL,Score inteiro 0–10 (serializado como texto).
 BV,score_final,TEXT,NOT NULL,"Score final float, 1 casa decimal (texto)."
-BW,score_fit_geral_soda,TEXT,NOT NULL,"Score fit geral float, 1 casa decimal (texto)."
+BW,score_fit_geral_souls,TEXT,NOT NULL,"Score fit geral float, 1 casa decimal (texto)."
 BX,score_architectural_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
 BY,score_human_product_priority,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."
 BZ,score_absorption_readiness,TEXT,NOT NULL,"Score derivado float, 1 casa decimal (texto)."

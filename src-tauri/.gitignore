@@ -7,3 +7,15 @@
 /gen/schemas
 
 /bin/
+
+# Vendor build artifacts
+vendor/**/target/
+vendor/**/build/
+vendor/**/CMakeFiles/
+vendor/**/*.obj
+vendor/**/*.lib
+vendor/**/*.o
+vendor/**/*.a
+vendor/**/*.dll
+vendor/**/*.exe
+vendor/**/CMakeCache.txt

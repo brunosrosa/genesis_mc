@@ -1,9 +1,9 @@
-# PRD: Higiene Física de I/O, Controle de WalkDir e Transmutação do `souls_dedup` (SODA V4)
+# PRD: Higiene Física de I/O, Controle de WalkDir e Transmutação do `souls_dedup` (SOULS V4)
 
 ---
 
 ## 1. OBJETIVO DO DOCUMENTO
-Este documento estabelece as especificações de requisitos físicos e de engenharia para sanear o motor local de inferência do **Souls MC (SODA V4)** na branch `feature/souls-rebranding-and-state-db` (ou correlata). 
+Este documento estabelece as especificações de requisitos físicos e de engenharia para sanear o motor local de inferência do **Souls MC (SOULS V4)** na branch `feature/souls-rebranding-and-state-db` (ou correlata). 
 
 O foco é eliminar o desperdício de I/O de disco (dupla leitura GGUF), blindar o Event Loop contra congelamento por varreduras recursivas profundas e restaurar a sintonização do nosso "Saco a Vácuo" (`lean_vacuum`) ativando os stubs de compressão e deduplicação de tokens.
 

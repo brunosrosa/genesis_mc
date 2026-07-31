@@ -8,7 +8,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing;
 
 use souls_mc_lib::core::headroom_engine::{
-    calculate_headroom_budget, calculate_headroom_budget_for_model, CodeCompressor, SodaCcrStore, hex_encode,
+    calculate_headroom_budget, calculate_headroom_budget_for_model, CodeCompressor, SoulsCcrStore, hex_encode,
 };
 
 fn parse_cli_args() -> (SocketAddr, SocketAddr) {
@@ -67,7 +67,7 @@ pub fn phantom_headroom_tool() -> Value {
 /// Mutação in-place (lazy) do payload JSON da requisição HTTP
 pub fn mutate_json_payload(
     body_bytes: &[u8],
-    ccr_store: &SodaCcrStore,
+    ccr_store: &SoulsCcrStore,
 ) -> Result<Vec<u8>, String> {
     let mut json_val: Value = serde_json::from_slice(body_bytes)
         .map_err(|e| format!("Erro ao parsear JSON: {e}"))?;
@@ -154,7 +154,7 @@ pub async fn spawn_mcp_subprocess(command_path: &str, args: &[&str]) -> io::Resu
 async fn handle_upstream_response(
     mut downstream: TcpStream,
     mut upstream: TcpStream,
-    ccr_store: Arc<SodaCcrStore>,
+    ccr_store: Arc<SoulsCcrStore>,
 ) -> io::Result<()> {
     let mut resp_buf = vec![0u8; 8192];
     loop {
@@ -189,7 +189,7 @@ async fn handle_upstream_response(
 async fn handle_l7_proxy(
     mut downstream: TcpStream,
     mut upstream: TcpStream,
-    ccr_store: Arc<SodaCcrStore>,
+    ccr_store: Arc<SoulsCcrStore>,
 ) -> io::Result<()> {
     set_nodelay(&downstream);
     set_nodelay(&upstream);
@@ -287,7 +287,7 @@ async fn main() -> io::Result<()> {
         .try_init();
 
     let (listen, upstream) = parse_cli_args();
-    let ccr_store = Arc::new(SodaCcrStore::from_env());
+    let ccr_store = Arc::new(SoulsCcrStore::from_env());
     let listener = TcpListener::bind(listen).await?;
 
     tracing::info!("Proxy L7 Zero-Copy escutando em {} -> upstream {}", listen, upstream);
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_phantom_headroom_tool_injection() {
-        let store = SodaCcrStore::new(16 * 1024 * 1024);
+        let store = SoulsCcrStore::new(16 * 1024 * 1024);
         let input_json = r#"{
             "model": "gemma4",
             "messages": [{"role": "user", "content": "Olá!"}]
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_headroom_ast_compression_on_user_code() {
-        let store = SodaCcrStore::new(16 * 1024 * 1024);
+        let store = SoulsCcrStore::new(16 * 1024 * 1024);
         let long_code = r#"
 fn process_heavy_data(input: &str) -> String {
     let x = input.to_lowercase();

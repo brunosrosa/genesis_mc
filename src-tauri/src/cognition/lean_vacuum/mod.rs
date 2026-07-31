@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED Fase 3: Saco a Vácuo Nativo.
+// SOULS-CANIBALIZED Fase 3: Saco a Vácuo Nativo.
 //
 // Transmutação pura da "Alma Matemática" do `third_party/lean-ctx/` (cadáver READ-ONLY).
 // Este módulo é 100% nativo: zero dependência de `rmcp`, `axum`, `ratatui`, `crossterm`,
@@ -50,7 +50,7 @@ pub fn read_to_lean(path: &Path) -> std::io::Result<String> {
             std::io::ErrorKind::InvalidData,
             format!(
                 "Arquivo excede o limite rígido de {} bytes ({} bytes reais). \
-                 O Saco a Vácuo nativo do SODA recusa payloads >5MB para proteger a VRAM.",
+                 O Saco a Vácuo nativo do SOULS recusa payloads >5MB para proteger a VRAM.",
                 MAX_READ_BYTES,
                 metadata.len()
             ),

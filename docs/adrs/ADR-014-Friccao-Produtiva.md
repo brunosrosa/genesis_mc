@@ -16,8 +16,8 @@ Aceito (Ativo e Inegociável)
 O Viés de Automação (*Automation Bias*) induz seres humanos a aceitar de forma rápida e irrefletida propostas complexas geradas por sistemas de inteligência artificial. Em ambientes de desenvolvimento agêntico rápidos, se o agente de IA propõe e injeta modificações extensas de código em milissegundos na tela, o usuário tende a clicar impulsivamente em "aprovar" para economizar esforço mental imediato. Esse hábito impulsivo sabota a integridade do código ("slop") e anula o rigor analítico do Spec-Driven Development, gerando bugs graves.
 
 ## Decisão
-Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estruturada)** nas vias de interação visual e agêntica do SODA:
-1. **Divergência de Resposta:** O tempo de reação da interface gráfica do SODA divide-se intencionalmente baseando-se na origem da ação:
+Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estruturada)** nas vias de interação visual e agêntica do SOULS:
+1. **Divergência de Resposta:** O tempo de reação da interface gráfica do SOULS divide-se intencionalmente baseando-se na origem da ação:
    - *Ação Mecânica Direta (Humano):* Deve responder de forma tátil e instantânea em menos de **50ms a 150ms**.
    - *Ação Agêntica Autônoma (IA):* Tarefas complexas de alto Blast Radius geradas de forma autônoma pela IA (ex: planos de refatoração, mutações atômicas de arquivos ou rebases semânticos) exigem a inserção compulsória de um **Atraso Sintético de 800ms a 1500ms**.
 2. **Exibição de Telemetria de Progresso:** Durante o decurso do atraso sintético, a interface gráfica bloqueia interações rápidas impulsivas do usuário e exibe logs monoespaçados estáticos monoespaçados na Bottom Bar de telemetria (ex: `-> Computando Blast Radius -> Validando compilador -> Pronto`).
@@ -30,4 +30,4 @@ Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estrutur
 
 ## Restrições Bare-Metal
 - **Atraso Sintético Rígido:** Atraso artificial parametrizado obrigatoriamente entre **800ms e 1500ms** para ações cognitivas de agentes de IA na interface.
-- **Latência Humana:** Interações que partam de comandos puramente manuais do usuário do SODA ignoram o atraso, respondendo em menos de **150ms** para manter o feedback físico de controle de máquina.
+- **Latência Humana:** Interações que partam de comandos puramente manuais do usuário do SOULS ignoram o atraso, respondendo em menos de **150ms** para manter o feedback físico de controle de máquina.

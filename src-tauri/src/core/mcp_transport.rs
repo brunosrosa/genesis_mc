@@ -1,4 +1,4 @@
-//! SODA-CANIBALIZED: Trait `McpTransport` + `LeanVacuum`.
+//! SOULS-CANIBALIZED: Trait `McpTransport` + `LeanVacuum`.
 //!
 //! **Princípio arquitetural:** O envelope da comunicação MCP é JSON-RPC 2.0
 //! (para compatibilidade com a IDE Trae). O formato LEAN (Dot-Flattening,

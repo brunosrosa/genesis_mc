@@ -146,7 +146,7 @@ async fn mark_new_link_ok_sheet<S: SheetsClient>(
 }
 
 fn default_lote_id() -> String {
-    std::env::var("SODA_LOTE_ID_OVERRIDE")
+    std::env::var("SOULS_LOTE_ID_OVERRIDE")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -162,7 +162,7 @@ fn ensure_repositorios_schema(conn: &Connection) -> Result<(), String> {
             repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
-            soda_universal_uuid TEXT NOT NULL UNIQUE,
+            souls_universal_uuid TEXT NOT NULL UNIQUE,
             status_processamento TEXT NOT NULL,
             timestamp_fase_1 INTEGER,
             timestamp_fase_3 INTEGER,
@@ -390,7 +390,7 @@ impl SqliteBootstrapDispatcher {
         ensure_repositorios_schema(&conn)?;
         conn.execute(
             "INSERT INTO repositorios (
-                project_name, lote_id, repo_url, soda_universal_uuid, status_processamento,
+                project_name, lote_id, repo_url, souls_universal_uuid, status_processamento,
                 timestamp_fase_1, timestamp_fase_3, retry_count
              ) VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, 0)
              ON CONFLICT(project_name) DO UPDATE SET

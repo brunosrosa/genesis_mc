@@ -10,7 +10,7 @@ use url::Url;
 
 const ETHICAL_BROWSER_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
-     (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 SODA-Harvester/1.0";
+     (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 SOULS-Harvester/1.0";
 const MIN_USEFUL_MARKDOWN_CHARS: usize = 200;
 const DOMAIN_JITTER_WINDOW: Duration = Duration::from_secs(12);
 const FIRECRAWL_TIMEOUT_MS: u64 = 30_000;

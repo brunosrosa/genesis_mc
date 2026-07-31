@@ -1,4 +1,4 @@
-# PRD E SPEC DE ENGENHARIA: REBRANDING TOPOLÓGICO SODA ➔ SOULS E CONSOLIDAÇÃO DE PERSISTÊNCIA L2
+# PRD E SPEC DE ENGENHARIA: REBRANDING TOPOLÓGICO SOULS ➔ SOULS E CONSOLIDAÇÃO DE PERSISTÊNCIA L2
 **Versão:** 1.0.0  
 **Status:** Aprovado para Execução (HITL)  
 **Autor:** Principal Bare-Metal Systems Architect & Co-Piloto Cognitivo  
@@ -13,30 +13,30 @@ Não há espaço para remendos temporários (*vibe coding*) ou compilações com
 
 ---
 
-## 2. EIXO 1: A TRANSMUTAÇÃO TOPOLÓGICA (SODA ➔ SOULS)
+## 2. EIXO 1: A TRANSMUTAÇÃO TOPOLÓGICA (SOULS ➔ SOULS)
 Mudar o nome das artérias semânticas no disco e no código garante a paridade lógica entre o produto final (**Souls MC**) e as pastas que suportam seu estado. O *Blast Radius* físico desta mutação está delimitado a exatos **38 arquivos únicos**, englobando as pastas de estado, cache, scratchpads e conexões internas do servidor MCP Rust e o proxy L7 [ gateway-config.yaml ] [User's previous prompt].
 
 ### 2.1. Renomeação de Pastas Físicas (Mapeamento do Disco)
 A IDE deve preparar comandos atômicos do Windows PowerShell para renomear e organizar os caminhos físicos na raiz de desenvolvimento:
-*   `Z:\souls_mc\.soda_data\` $\rightarrow$ `Z:\souls_mc\.souls_data\`
-*   `Z:\souls_mc\.soda_cache\` $\rightarrow$ `Z:\souls_mc\.souls_cache\`
-*   `Z:\souls_mc\.soda_scratchpad\` $\rightarrow$ `Z:\souls_mc\.souls_scratchpad\`
+*   `Z:\souls_mc\.souls_data\` $\rightarrow$ `Z:\souls_mc\.souls_data\`
+*   `Z:\souls_mc\.souls_cache\` $\rightarrow$ `Z:\souls_mc\.souls_cache\`
+*   `Z:\souls_mc\.souls_scratchpad\` $\rightarrow$ `Z:\souls_mc\.souls_scratchpad\`
 
 ### 2.2. Renomeação de Arquivos de Banco de Dados
 No interior do novo diretório `.souls_data/`, os dois mundos (a Fábrica e o Produto) ganham nomenclatura canônica unificada:
-*   `soda_heuristic_vault.db` $\rightarrow$ `souls_heuristic_vault.db` (Bancário Analítico de ETL) [13, 1002]
-*   `soda_state.db` $\rightarrow$ `souls_state.db` (Banco Transacional e Cognitivo de Runtime) [13, 1012]
+*   `souls_heuristic_vault.db` $\rightarrow$ `souls_heuristic_vault.db` (Bancário Analítico de ETL) [13, 1002]
+*   `souls_state.db` $\rightarrow$ `souls_state.db` (Banco Transacional e Cognitivo de Runtime) [13, 1012]
 
 ### 2.3. Search-and-Replace Estrito (Tabela de Paridade Lógica)
 A IDE deve aplicar a substituição exata das strings nas seguintes frentes, sob o princípio do isolamento de *third-party* (sem tocar no código bruto do cadáver `lean-ctx` a não ser em seu conector de caminhos):
 
 | String Antiga (Origem) | String Nova (Destino) | Arquivos Alvos Críticos |
 | :--- | :--- | :--- |
-| `.soda_data` | `.souls_data` | `src-tauri/src/persist/ssot_injector.rs`, `src-tauri/src/finops/finops_router.rs`, `src-tauri/src/bin/souls_mcp_server.rs`, todos os scripts de ETL (`f0_harvester_cli.rs` a `f5`), `gateway-config.yaml`, `test_gw.yaml` |
-| `.soda_cache` | `.souls_cache` | `src-tauri/third_party/lean-ctx/src/core/data_dir.rs`, `test_gw.yaml`, `_WORKSPACE_MAP.md` |
-| `.soda_scratchpad` | `.souls_scratchpad` | `src-tauri/src/harvester/github_tracker.rs`, scripts Python de compilação de contexto, `_WORKSPACE_MAP.md` |
-| `soda_state.db` | `souls_state.db` | `src-tauri/src/bin/souls_mcp_server.rs` (linhas de conexão), `gateway-config.yaml`, `test_target.json` |
-| `soda_heuristic_vault.db` | `souls_heuristic_vault.db` | `src-tauri/src/bin/souls_mcp_server.rs`, `src-tauri/src/persist/ssot_injector.rs`, `src-tauri/src/core/model_registry.rs`, `src-tauri/src/bin/soda_arena_cli.rs` |
+| `.souls_data` | `.souls_data` | `src-tauri/src/persist/ssot_injector.rs`, `src-tauri/src/finops/finops_router.rs`, `src-tauri/src/bin/souls_mcp_server.rs`, todos os scripts de ETL (`f0_harvester_cli.rs` a `f5`), `gateway-config.yaml`, `test_gw.yaml` |
+| `.souls_cache` | `.souls_cache` | `src-tauri/third_party/lean-ctx/src/core/data_dir.rs`, `test_gw.yaml`, `_WORKSPACE_MAP.md` |
+| `.souls_scratchpad` | `.souls_scratchpad` | `src-tauri/src/harvester/github_tracker.rs`, scripts Python de compilação de contexto, `_WORKSPACE_MAP.md` |
+| `souls_state.db` | `souls_state.db` | `src-tauri/src/bin/souls_mcp_server.rs` (linhas de conexão), `gateway-config.yaml`, `test_target.json` |
+| `souls_heuristic_vault.db` | `souls_heuristic_vault.db` | `src-tauri/src/bin/souls_mcp_server.rs`, `src-tauri/src/persist/ssot_injector.rs`, `src-tauri/src/core/model_registry.rs`, `src-tauri/src/bin/souls_arena_cli.rs` |
 
 ---
 

@@ -1,9 +1,9 @@
 ---
 version: 5.1
-description: SODA Workspace Map & Territorial Governance (Canon v5.1 - Revisado)
+description: SOULS Workspace Map & Territorial Governance (Canon v5.1 - Revisado)
 ---
 
-# SODA WORKSPACE MAP & TERRITORIAL GOVERNANCE
+# SOULS WORKSPACE MAP & TERRITORIAL GOVERNANCE
 
 > [!IMPORTANT]
 > **REGRA MATRIZ (FAIL-CLOSED):**
@@ -25,24 +25,24 @@ description: SODA Workspace Map & Territorial Governance (Canon v5.1 - Revisado)
 ### [ZONA 2: ESTADO DA MÁQUINA E CACHE] *(Ignorados no Git Principal)*
 - `.souls_data/` -> [L2/L3 Memory] SQLite transacional (`souls_state.db` / `souls_heuristic_vault.db`) e LanceDB vetorial.
 - `.souls_cache/` -> Chunks temporários, hashes de arquivos e tokens.
-- `.soda_sandbox/` -> Sandboxing para execução segura de módulos externos.
+- `.souls_sandbox/` -> Sandboxing para execução segura de módulos externos.
 - `.souls_scratchpad/reports/` -> **OBRIGATÓRIO:** Destino exclusivo de outputs textuais da IA (Ex: os relatórios de execução `_PHASE_REPORT_...txt`).
 
 ### [ZONA 3: O CÂNONE E MEMÓRIA DE PRODUTO] *(Repositório Rígido de Documentação)*
 - `.archive/` -> Arquivo Frio / Histórico Forense do workspace. Destino legítimo para relatórios congelados, scripts órfãos desativados, dumps de contexto e artefatos históricos fora do caminho crítico do Produto.
-- `docs/` -> Diretório principal de documentação técnica do SODA.
+- `docs/` -> Diretório principal de documentação técnica do SOULS.
 - `docs/adrs/` -> Architecture Decision Records (O Por Quê - decisões estruturais).
 - `docs/architecture/` -> Manuais macro e visões de engenharia (Inference, Memory, Gateway).
 - `docs/audits/` -> Relatórios de segurança, vulnerabilidades, crates e auditoria semgrep.
 - `docs/context_dumps/` -> Snapshots e compilações unificadas do estado atual gerados por scripts.
 - `docs/dags/` -> Grafos Acíclicos Dirigidos das Fases de Design e Ingestão.
 - `docs/prds/` -> Product Requirement Documents (especificações de produto e refatorações).
-- `docs/scripts/` -> Scripts utilitários e compiladores do ecossistema de documentação (ex: `soda_adr_compiler.py`, `soda_context_dumps_compiler.py`).
+- `docs/scripts/` -> Scripts utilitários e compiladores do ecossistema de documentação (ex: `souls_adr_compiler.py`, `souls_context_dumps_compiler.py`).
 - `docs/specs/` -> Dicionários e especificações tabulares fixas (ex: `DATABASE_SCHEMA_DIC.csv`).
 - `docs/state/` -> Monitoramento do estado de crates, dependências e relatórios de reflexão arquitetural.
 
 ### [ZONA 4: O PRODUTO - BACKEND BARE-METAL RUST]
-- `src-tauri/Cargo.toml` -> Manifesto principal do backend Tauri/SODA.
+- `src-tauri/Cargo.toml` -> Manifesto principal do backend Tauri/SOULS.
 - `src-tauri/src/` -> Código-fonte do core Rust.
 - `src-tauri/src/bin/` -> CLIs utilitários executáveis das fases (harvester_cli, etc.).
 - `src-tauri/src/cognition/` -> Orquestração de SLMs locais e gerenciamento de contexto.

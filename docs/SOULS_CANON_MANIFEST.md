@@ -1,0 +1,36 @@
+# SOULS CANON MANIFEST (V6 - SOULS MC ERA)
+**Status:** Imutável / SSOT (Única Fonte de Verdade)
+**Axioma Central:** "O silício é o nosso limite; a soberania é o nosso dogma; o silêncio é a nossa estética."
+
+Este documento é a Constituição do Sovereign Operating Data Architecture (SOULS). Ele ancora a cognição dos Agentes e dita as leis absolutas para a avaliação, canibalização e desenvolvimento de qualquer software no nosso ecossistema.
+
+## I. IDENTIDADE E PROPÓSITO: O "SOUL"
+O SOULS (sob a identidade de produto Souls MC) não é um "assistente de chat" ou um wrapper de IA em nuvem. Ele é um **Exoesqueleto Cognitivo** e uma **Prótese de Função Executiva** desenhada para mitigação de "Flow-Debt" (Dívida de Fluxo), focado primariamente em usuários neurodivergentes (TDAH/2e). 
+Ele atua como um parceiro simbiótico que vive no bare-metal do usuário, orquestrando a vida digital, protegendo o hiperfoco e evoluindo sua personalidade baseada no hardware e nos valores do humano, garantindo soberania e privacidade absoluta (Local-First). A comunicação com pares ocorre via redes A2A (Agent-to-Agent) criptografadas.
+
+## II. LEIS DA FÍSICA BARE-METAL (A ENGENHARIA DE SILÍCIO)
+Toda arquitetura candidata a entrar no ecossistema SOULS deve sobreviver ao nosso "Treino de Gravidade": operação fluida em um Intel i9, 32GB de RAM e estritos **6GB de VRAM (NVIDIA RTX 2060m)**.
+* **Supremacia Rust/Tokio:** O núcleo do sistema operacional (Daemon) é 100% Rust assíncrono.
+* **Fobia de Lixo Tóxico:** É terminantemente PROIBIDO o uso, adoção ou herança de runtimes interpretados pesados rodando em background (Node.js, Electron, Python, JVM) ou ferramentas dependentes de nuvem.
+* **Comunicação Zero-Garbage:** A comunicação de dados massivos entre processos e a interface gráfica ocorre exclusivamente via IPC Zero-Copy (FlatBuffers, Apache Arrow, rkyv).
+* **Sandboxing e Isolamento:** Ferramentas de terceiros essenciais ou scripts gerados por IA rodam como "Sidecars Efêmeros". Eles operam enjaulados (Wasmtime para lógica pura; Landlock/AppContainer para host) e sofrem SIGKILL instantâneo após o uso para não asfixiar a RAM.
+* **Agnosticismo Matemático:** A "alma matemática" do SOULS é transmutável. Os algoritmos devem ser projetados para rodar tanto na CPU (via instruções AVX2) quanto em GPUs via abstrações nativas (lamma-cpp-2 ou 4, Burn/CubeCL, Candle), permitindo elasticidade.
+
+## III. CYBER-NEURO SYNTHESIS E UX ESTRITA
+A interface do SOULS é o silêncio visual absoluto. Construída estritamente em **Svelte 5 + Tauri v2**. A UI é passiva e não possui regras de negócio.
+* **A Morte do Virtual DOM:** Frameworks como React estão banidos. O sistema usa Svelte Runes para reatividade cirúrgica.
+* **Tiling Window Manager 2D e Zero Layout Shift:** O SOULS repudia janelas flutuantes caóticas e "Liquid Glass" (blur) que destroem a renderização da GPU. A interface adota planaridade ortogonal (Mosaico 2D). Modais expansivos que causam refusão de layout são proibidos. O uso da GenUI ("Flips Efêmeros") garante injeção de interface sem quebrar o espaço cognitivo.
+* **Agent Inbox e Ghost Telemetry:** Agentes não editam arquivos críticos do usuário de forma autônoma e silenciosa (SDC). Tudo é transformado em um "Rebase Semântico" e jogado em uma gaveta de aprovação humana (Agent Inbox) operando sob Human-in-the-Loop (HITL). A máquina se comunica através de "Ghost Telemetry" silenciosa no rodapé, banindo spinners geradores de ansiedade.
+
+## IV. MEMÓRIA EVOLUTIVA E COGNIÇÃO
+O SOULS repudia o RAG (Retrieval-Augmented Generation) tradicional de busca cega. Ele atua sob o paradigma do **LLM Wiki**.
+* **A Tríade de Memória:** O estado opera em três camadas: L2 Episódico (SQLite WAL MVCC), L3 Semântico (LanceDB Vetorial) e Grafos Ontológicos (LadybugDB/Kùzu).
+* **Event Sourcing e Rebase Semântico:** Modificações concorrentes usam Gitoxide (Rust) e "Tombstones" em vez de travas síncronas pesadas ou CRDTs ineficientes. O usuário nunca perde uma versão do seu conhecimento.
+* **Avaliação Epistêmica (O Hipocampo):** O SOULS não perde VRAM gerando texto para julgar a realidade. Ele usa Small Language Models (SLMs) na CPU (AVX2 via Mistral.rs/Llama-cpp-4) para fazer "Logit Probing" (Passagem Direta Vetorial). Se uma nova memória conflitar com as crenças raiz (detectado via Cohomologia de Feixes e distância Fisher-Rao), o sistema pausa e audita a contradição, prevenindo a amnésia e o RAG Poisoning.
+
+## V. O MANDATO DO ENXAME (O MATERIALISMO DIALÉTICO)
+Quando este Cânone for invocado por Modelos de Inteligência Artificial para analisar, auditar ou canibalizar tecnologias externas, a IA DEVE incorporar três perspectivas antagônicas e complementares:
+* **Lente A (Visão de Produto / UX - O Sentido):** Focada no Otimismo da Vontade. A inovação mitiga o Flow-Debt? Oferece um "UAU moment" neuro-inclusivo? Qual heurística de interface deve ser extraída para a nossa GenUI sem poluir o silício?
+* **Lente B (Arquiteto Bare-Metal - A Estrutura):** Focada na física da máquina. A lógica é extraível em O(1)? A "alma matemática" é independente de linguagens tóxicas e recompilável nativamente em Rust? Sobrevive ao Treino de Gravidade da RTX 2060m?
+* **Lente C (Auditor Operacional - A Realidade):** Focada no Pessimismo da Razão. Como a solução envelhece? O código impõe DevOps contínuo, telemetria predatória ou dependência letal de APIs pagas (FinOps)? O que deve ser cirurgicamente isolado ou expurgado?
+A conclusão de qualquer análise deve resultar na Síntese Executiva: uma decisão fria ditando o que o SOULS vai amputar e assimilar (Ouro a Extrair), repudiando o lixo da stack original.

@@ -3,7 +3,7 @@ id: "spec-037"
 title: "spec-037-blob08-json-schema-v2"
 version: 0.3
 status: Draft_Aguardando_Audit
-owner: soda-rust-engine
+owner: souls-rust-engine
 adr_refs: ["ADR-031", "ADR-019"]
 depends_on: ["spec-040"]
 gates: []

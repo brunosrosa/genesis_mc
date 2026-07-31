@@ -328,7 +328,7 @@ fn spawn_supervised(program: ProgramSpec, args: Vec<String>, project_root: PathB
 }
 
 /// Descobre onde os gerenciadores de pacote instalam os binários no Windows
-fn get_soda_essential_paths() -> Vec<PathBuf> {
+fn get_souls_essential_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if let Some(user_profile) = env::var_os("USERPROFILE") {
         let base = PathBuf::from(user_profile);
@@ -349,12 +349,12 @@ fn get_soda_essential_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// Cria a nova variável PATH fundindo o sistema atual com os caminhos do SODA
+/// Cria a nova variável PATH fundindo o sistema atual com os caminhos do SOULS
 fn build_dynamic_path() -> String {
     let current_path = env::var_os("PATH").unwrap_or_default();
     let mut dynamic_paths = env::split_paths(&current_path).collect::<Vec<_>>();
 
-    for essential_path in get_soda_essential_paths() {
+    for essential_path in get_souls_essential_paths() {
         if essential_path.exists() && !dynamic_paths.contains(&essential_path) {
             dynamic_paths.insert(0, essential_path); // Injeta no início para ter prioridade
         }

@@ -1,5 +1,5 @@
 # ============================================================================
-# SODA CANON V5: BOOTSTRAP DO SOULS MC (SYSTEM TRAY DAEMON)
+# SOULS CANON V5: BOOTSTRAP DO SOULS MC (SYSTEM TRAY DAEMON)
 # Objetivo: Evitar corrupção, garantir injeção efêmera de variáveis na RAM
 # e ancorar o Fantasma na bandeja sem validações lentas de ferramentas ETL.
 # ============================================================================
@@ -13,10 +13,10 @@ try { Clear-Host } catch {}
 # Filtro cirurgico: preserva debug do core, silencia o ruido do `ignore`/`globset`/`walkdir`
 # que polui logs com ~600 linhas de "built glob set" durante o build.
 # Pos-B: crate agora chama souls_mc_lib (renomeada em B).
-$env:RUST_LOG = "souls_mc_lib=info,soda_sast=debug,soda_harvester=debug,headroom_engine=debug,llama_engine=info,hardware_profiler=info,model_manager=debug,soda_ccr=debug,ignore=warn,globset=warn,walkdir=warn"
-$env:SODA_CCR_MAX_RAM_MB = "256"
-$env:SODA_HEADROOM_SAFETY_MARGIN = "512"
-$env:SODA_HEADROOM_OUTPUT_BUFFER = "4096"
+$env:RUST_LOG = "souls_mc_lib=info,souls_sast=debug,souls_harvester=debug,headroom_engine=debug,llama_engine=info,hardware_profiler=info,model_manager=debug,souls_ccr=debug,ignore=warn,globset=warn,walkdir=warn"
+$env:SOULS_CCR_MAX_RAM_MB = "256"
+$env:SOULS_HEADROOM_SAFETY_MARGIN = "512"
+$env:SOULS_HEADROOM_OUTPUT_BUFFER = "4096"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -203,7 +203,7 @@ try {
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
                 "--bin", "scan_local_models_cli",
-                "--bin", "soda_ephemeral_infer_cli",
+                "--bin", "souls_ephemeral_infer_cli",
                 "--bin", "souls_mc"
             ) `
             -Label "cargo-build-supervisores" `
@@ -224,7 +224,7 @@ try {
 
         # 4.6. COMPILAÇÃO DE CONTEXT DUMPS (Exporta inventario de modelos para TXT)
         Write-Host "`n[4.6] Compilando dumps de contexto (_MODELS_INVENTORY.txt)..." -ForegroundColor Yellow
-        $dumpsCompilerScript = Join-Path $PSScriptRoot "docs\scripts\soda_context_dumps_compiler.py"
+        $dumpsCompilerScript = Join-Path $PSScriptRoot "docs\scripts\souls_context_dumps_compiler.py"
         $pyCmd = if (Get-Command "python" -ErrorAction SilentlyContinue) { "python" } elseif (Test-Path "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe") { "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" } else { "py" }
         if (Test-Path $dumpsCompilerScript) {
             Invoke-TrackedProcess `
@@ -233,7 +233,7 @@ try {
                 -Label "compile-context-dumps" `
                 -WorkingDirectory $PSScriptRoot
         } else {
-            Write-BootWarn "Script soda_context_dumps_compiler.py nao encontrado em $dumpsCompilerScript"
+            Write-BootWarn "Script souls_context_dumps_compiler.py nao encontrado em $dumpsCompilerScript"
         }
 
         # 5. IGNIÇÃO DO DAEMON SUPERVISOR COMPILADO (souls_mc)

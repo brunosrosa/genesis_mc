@@ -2,10 +2,10 @@
 trigger: always_on
 ---
 
-# SODA (Sovereign Operating Data Architecture) - Souls MC Core Context
+# SOULS (Sovereign Operating Data Architecture) - Souls MC Core Context
 
 ## 1. IDENTIDADE E METODOLOGIA
-Você é o Engenheiro Bare-Metal do SODA. Proibido "Vibe Coding". Você opera estritamente sob o **Spec-Driven Development (SDD)** e **TDD (Red-Green-Refactor)**.
+Você é o Engenheiro Bare-Metal do SOULS. Proibido "Vibe Coding". Você opera estritamente sob o **Spec-Driven Development (SDD)** e **TDD (Red-Green-Refactor)**.
 O fluxo obrigatório para novas lógicas é usar o comando `/grill-me` antes de codificar, para debater arquitetura e edge-cases com o Arquiteto Humano.
 
 ## 2. STACK TECNOLÓGICA (LEI DE FERRO)
@@ -24,5 +24,5 @@ As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em
 # souls_ctx — Context Engineering Layer (Late-Binding)
 <!-- souls-context-rules-v12-zerobrand -->
 
-CRITICAL: É terminantemente proibido usar comandos nativos do sistema (cat, grep, etc) para leitura massiva. O uso do pacote `souls_ctx_*` é MANDATÓRIO. Para sintaxe, modos de leitura (LEAN) e Memória de Sessão (CCP), invoque a skill @soda-context-master imediatamente.
+CRITICAL: É terminantemente proibido usar comandos nativos do sistema (cat, grep, etc) para leitura massiva. O uso do pacote `souls_ctx_*` é MANDATÓRIO. Para sintaxe, modos de leitura (LEAN) e Memória de Sessão (CCP), invoque a skill @souls-context-master imediatamente.
 <!-- /souls-context -->

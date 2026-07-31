@@ -1,4 +1,4 @@
-//! SODA Headroom Engine & CCR (Compress-Cache-Retrieve) Gateway Core
+//! SOULS Headroom Engine & CCR (Compress-Cache-Retrieve) Gateway Core
 //! ADR-037 / PRD-10.3 Bare-Metal Implementation
 
 use std::borrow::Cow;
@@ -12,7 +12,7 @@ use crate::core::model_registry;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum HeadroomError {
-    #[error("Arquitetura de modelo não suportada pelo Gateway SODA: {0}")]
+    #[error("Arquitetura de modelo não suportada pelo Gateway SOULS: {0}")]
     UnsupportedArchitecture(String),
 }
 
@@ -168,14 +168,14 @@ impl CodeCompressor {
 }
 
 /// Lei 3 & 4: CCR Store (Compress-Cache-Retrieve) alocado 100% em Host RAM (Zero-VRAM)
-pub struct SodaCcrStore {
+pub struct SoulsCcrStore {
     cache: Arc<DashMap<[u8; 16], Vec<u8>>>,
     max_ram_bytes: usize,
     current_ram_bytes: AtomicUsize,
     vram_bytes_allocated: AtomicUsize,
 }
 
-impl SodaCcrStore {
+impl SoulsCcrStore {
     pub fn new(max_ram_bytes: usize) -> Self {
         Self {
             cache: Arc::new(DashMap::new()),
@@ -186,7 +186,7 @@ impl SodaCcrStore {
     }
 
     pub fn from_env() -> Self {
-        let max_mb = std::env::var("SODA_CCR_MAX_RAM_MB")
+        let max_mb = std::env::var("SOULS_CCR_MAX_RAM_MB")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(256);
@@ -360,7 +360,7 @@ pub fn calculate_total(a: i32, b: i32) -> i32 {
 
     #[test]
     fn test_ccr_dashmap_allocation_host_ram() {
-        let store = SodaCcrStore::new(256 * 1024 * 1024);
+        let store = SoulsCcrStore::new(256 * 1024 * 1024);
         let payload = b"fn critical_business_logic() { println!(\"Zero VRAM CCR Test\"); }";
         let hash = store.store(payload);
 

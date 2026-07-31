@@ -275,12 +275,12 @@ impl ReqwestGithubClient {
     }
 
     fn new_with_policy(policy: RetryPolicy) -> Result<Self, String> {
-        let api_base = std::env::var("SODA_GITHUB_API_BASE_URL")
+        let api_base = std::env::var("SOULS_GITHUB_API_BASE_URL")
             .ok()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| "https://api.github.com".to_string());
-        let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+        let allow_host_override = std::env::var("SOULS_GITHUB_API_BASE_URL").is_ok();
         let github_pat = std::env::var("GITHUB_PAT")
             .ok()
             .map(|v| v.trim().to_string())
@@ -516,7 +516,7 @@ impl<G: GithubClient + 'static, R: RepoStore + 'static> Guardian<G, R> {
             return Ok(());
         }
 
-        let max_parallel = std::env::var("SODA_GUARDIAN_GITHUB_PARALLEL")
+        let max_parallel = std::env::var("SOULS_GUARDIAN_GITHUB_PARALLEL")
             .ok()
             .and_then(|v| v.trim().parse::<usize>().ok())
             .unwrap_or(2)
@@ -695,7 +695,7 @@ mod tests {
                 repo_analised_version TEXT,
                 repo_version TEXT,
                 ultima_versao_online TEXT,
-                soda_universal_uuid TEXT NOT NULL UNIQUE,
+                souls_universal_uuid TEXT NOT NULL UNIQUE,
                 status_processamento TEXT NOT NULL,
                 timestamp_fase_1 INTEGER,
                 timestamp_fase_3 INTEGER,
@@ -715,7 +715,7 @@ mod tests {
         conn.execute(
             "INSERT INTO repositorios (
                 project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
-                soda_universal_uuid, status_processamento, retry_count
+                souls_universal_uuid, status_processamento, retry_count
             ) VALUES ('acme/widget', 'L1', 'https://github.com/acme/widget', '', '', '', 'UUID-1', 'PENDENTE', 3)",
             [],
         )
@@ -760,7 +760,7 @@ mod tests {
         conn.execute(
             "INSERT INTO repositorios (
                 project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
-                soda_universal_uuid, status_processamento, retry_count, etag
+                souls_universal_uuid, status_processamento, retry_count, etag
             ) VALUES ('acme/widget', 'L1', 'https://github.com/acme/widget', 'v1.0.0', 'v1.0.0', 'v1.0.0', 'UUID-1', 'PENDENTE', 2, 'etag-old')",
             [],
         )
@@ -805,7 +805,7 @@ mod tests {
         conn.execute(
             "INSERT INTO repositorios (
                 project_name, lote_id, repo_url, repo_analised_version, repo_version, ultima_versao_online,
-                soda_universal_uuid, status_processamento, retry_count, etag
+                souls_universal_uuid, status_processamento, retry_count, etag
             ) VALUES ('acme/widget', 'L1', 'https://github.com/acme/widget', 'v1.0.0', 'v1.0.0', 'v1.0.0', 'UUID-1', 'PENDENTE', 1, 'etag-ok')",
             [],
         )

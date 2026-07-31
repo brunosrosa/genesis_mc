@@ -1,22 +1,22 @@
 ---
-title: "SODA Canon V5: Governança Topológica e Execução Bare-Metal Unificada"
+title: "SOULS Canon V5: Governança Topológica e Execução Bare-Metal Unificada"
 version: "5.0.0"
 status: "Ativo / Imutável"
 scope: "Global (Antigravity IDE, Trae PRO+, Agentes Autônomos)"
-author: "SODA Architectural Core"
+author: "SOULS Architectural Core"
 tags: [governança, topologia, gitops, bmad, rust, svelte5, sdd, anti-slop]
-description: "Lei máxima do ecossistema SODA. Funde a topologia física aprovada, protocolos de execução TDD/BMAD e restrições absolutas de hardware/UI."
+description: "Lei máxima do ecossistema SOULS. Funde a topologia física aprovada, protocolos de execução TDD/BMAD e restrições absolutas de hardware/UI."
 ---
 
-# SODA Canon V5: Governança de Território e Protocolos de Execução
+# SOULS Canon V5: Governança de Território e Protocolos de Execução
 
-Este artefato é a Constituição do ecossistema SODA (Sistema Operacional Agêntico Soberano). Ele foi forjado para combater a entropia natural de IAs autônomas ("slop"). Todo LLM ou Agente operando neste *workspace* está hierárquica e fisicamente subordinado às cláusulas aqui dispostas.
+Este artefato é a Constituição do ecossistema SOULS (Sistema Operacional Agêntico Soberano). Ele foi forjado para combater a entropia natural de IAs autônomas ("slop"). Todo LLM ou Agente operando neste *workspace* está hierárquica e fisicamente subordinado às cláusulas aqui dispostas.
 
 ---
 
 ## 1. O Paradigma Temporal (Fábrica vs. Produto)
 
-A linha do tempo do SODA repudia o "Context Rot" dividindo a construção da ferramenta e a construção do produto final.
+A linha do tempo do SOULS repudia o "Context Rot" dividindo a construção da ferramenta e a construção do produto final.
 
 * **Fase 0 (A Fábrica / ETL Cognitivo):** O motor de ingestão $\mathcal{O}(1)$ (via MCPs e parser AST nativo) que mastiga repositórios e extrai o "ouro matemático" para a matriz de dados. Ambiente pragmático onde scripts temporários (Python/Bash) habitam o `.souls_scratchpad`.
 * **Fases A, B, C... (O Produto / Souls MC):** O código de produção final. Intolerância absoluta a runtimes interpretados. Backend 100% Rust assíncrono (Tokio). Frontend 100% Svelte 5 (Runes).
@@ -31,13 +31,13 @@ A estrutura de pastas é uma barreira de proteção. O Agente é **proibido** de
 * `.souls_data/`: **O Disco de Estado.** Bancos SQLite, LanceDB (`lancedb_store`) e Grafos (`ladybug_graph`). Intocável por engenheiros de UI.
 * `.souls_cache/`: **O Hipocampo L1.** Respostas de APIs e ASTs brutas transientes.
 * `.souls_scratchpad/`: **O Chão de Fábrica.** OBRIGATÓRIO salvar relatórios analíticos (`/reports/`) e logs de erro (`.log`) aqui. *Proibido ejetar logs na raiz.*
-* `.soda_sandbox/`: **Isolamento.** Ambientes para execução não confiável de código de terceiros.
+* `.souls_sandbox/`: **Isolamento.** Ambientes para execução não confiável de código de terceiros.
 
 ### 2.2. A Fortaleza Documental (`docs/`)
 * `docs/adrs/`: **O Por Quê.** Architecture Decision Records.
 * `docs/dags/`: **O Como.** Grafos Acíclicos Dirigidos determinando fluxos de dados (ex: `DAG_fase_0_design_phase1.md`).
 * `docs/prds/`: **A Execução.** Tarefas atômicas de TDD. Arquivos em andamento ficam na raiz, finalizados (Exit Code 0) migram para `docs/prds/archive/`.
-* `docs/state/`: **O Agora.** A "Foto do Momento" (`SODA_CURRENT_STATE.md`) para o Agente sincronizar o contexto sem ler arquivos defasados.
+* `docs/state/`: **O Agora.** A "Foto do Momento" (`SOULS_CURRENT_STATE.md`) para o Agente sincronizar o contexto sem ler arquivos defasados.
 
 ### 2.3. A Fundação Bare-Metal (Código de Produção)
 * `src-tauri/src/core/` & `src-tauri/src/harvester/`: Motores de negócio em Rust puro.
@@ -48,7 +48,7 @@ A estrutura de pastas é uma barreira de proteção. O Agente é **proibido** de
 
 ## 3. Restrições Arquiteturais (A Lei do Bare-Metal)
 
-O SODA foi desenhado para operar livre de nuvem, respeitando os limites físicos de uma máquina com 32GB de RAM e GPUs de classe consumidor (RTX 2060m).
+O SOULS foi desenhado para operar livre de nuvem, respeitando os limites físicos de uma máquina com 32GB de RAM e GPUs de classe consumidor (RTX 2060m).
 * **Fronteira UI (Anti-VRAM Burn):** É formalmente **banida** a utilização da estética "Liquid Glass" (filtros de desfoque, `backdrop-filter` agressivo). O processamento de GPU é vitalício da inferência local comandada pelo **Candle** em Rust puro; `llama-cpp-4` não ocupa esse papel e permanece isolado no Hipocampo Epistêmico para *Logit Probing*. A UI Svelte 5 deve ser utilitária, planar e renderizada com baixo custo energético.
 * **Comunicação Zero-Copy:** O uso massivo de serialização JSON entre Rust e Svelte é repudiado. Utiliza-se ponteiros de transferência e memória alocada estritamente para evitar estrangulamento do *Garbage Collector* do navegador (V8).
 

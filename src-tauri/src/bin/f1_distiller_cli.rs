@@ -117,7 +117,7 @@ fn fetch_required_blobs(conn: &Connection, repo_id: &str) -> io::Result<Vec<RawB
         "blob_07_ops_blueprint",
         "blob_08_health_report",
         "blob_09_community_meta",
-        "blob_10_soda_canon_context",
+        "blob_10_souls_canon_context",
         "blob_11_ux_contracts",
     ];
 
@@ -401,7 +401,7 @@ fn get_system_prompt_for_artifact(artifact_type: &str) -> &'static str {
             "Você é o Destilador de Contratos UX. Preserve estritamente as Props (entradas) e Eventos (saídas) dos componentes visuais. IGNORE marcações CSS, Tailwind e HTML decorativo. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
         }
         _ => {
-            "Você é o Destilador Factual da Fase 1.5 do SODA. Sua missão é extrair a ESSÊNCIA FACTUAL COMPACTA do artefato fornecido. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
+            "Você é o Destilador Factual da Fase 1.5 do SOULS. Sua missão é extrair a ESSÊNCIA FACTUAL COMPACTA do artefato fornecido. PROIBIDO inventar fatos ou soluções. DIRETRIZ ABSOLUTA: Entregue EXCLUSIVAMENTE o Markdown denso, neutro e técnico. Zero introduções, zero saudações, zero 'Aqui está o resumo'."
         }
     }
 }
@@ -452,7 +452,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             yellow_cloud += 1;
         }
 
-        if blob.artifact_type == "blob_10_soda_canon_context" {
+        if blob.artifact_type == "blob_10_souls_canon_context" {
             info!(repo_id = %repo_id, "blob_10 mantido no Prompt Caching / Canon sem destilacao iterativa");
             continue;
         }

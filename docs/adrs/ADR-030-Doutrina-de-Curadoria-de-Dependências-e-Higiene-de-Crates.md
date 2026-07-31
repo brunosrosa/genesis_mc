@@ -10,15 +10,15 @@ description: "Doutrina implacável de higiene bare-metal: institui o Version Pin
 ### ADR-030: Doutrina de Curadoria de Dependências e Higiene de Crates (Rust)
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 #### Contexto Técnico e Restrições Físicas de Infraestrutura
-A geometria do ecossistema SODA V4 opera em uma "arquitetura de sobrevivência" atrelada aos limites físicos do hardware host (Intel i9, 32GB RAM, dGPU RTX 2060m com 6GB VRAM). 
+A geometria do ecossistema SOULS V4 opera em uma "arquitetura de sobrevivência" atrelada aos limites físicos do hardware host (Intel i9, 32GB RAM, dGPU RTX 2060m com 6GB VRAM). 
 Se o gerenciamento de dependências (`Cargo.toml`) for delegado sem restrições a agentes de IA ou processos automatizados, o sistema sofrerá de "Câncer de Dependências": a introdução silenciosa de *frameworks* obesos, C-FFI (Foreign Function Interfaces pesadas), sub-dependências duplicadas (esquizofrenia de RAM) e metadados de macros que causam *Cache Thrashing* no Cache L3 do processador. O tempo de compilação incremental degrada e o *Event Loop* do Tokio entra em colapso termodinâmico.
 
 #### Decisão Arquitetural (As Quatro Leis de Higiene Sistêmica)
 
-Fica decretada a adoção de quatro módulos inegociáveis de curadoria de *crates* para todo o *workspace* Rust do SODA:
+Fica decretada a adoção de quatro módulos inegociáveis de curadoria de *crates* para todo o *workspace* Rust do SOULS:
 
 **Módulo 1: O Fim do Bloat de Rede, HTTP e I/O**
 *   **Proibição Terminal de Frameworks Obesos:** Ficam sumariamente banidas *crates* como `axum` e `octocrab`. A comunicação de APIs e o roteamento devem ser minimalistas.

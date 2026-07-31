@@ -1,6 +1,6 @@
 # PRD-002: CLUSTER 2 — EXPLORAÇÃO E TOPOLOGIA AST (OS OLHOS DO AGENTE)
 **Status:** PROPOSED (Sob Revisão do Arquiteto-Chefe)  
-**Versão:** 1.0 (Alinhada à Arquitetura SODA V4 / Cânone V5)  
+**Versão:** 1.0 (Alinhada à Arquitetura SOULS V4 / Cânone V5)  
 **Épico Relacionado:** Épico 18 (Criação de Lentes de Exploração e Prevenção de Segment Faults de C-FFI)  
 
 ---
@@ -8,11 +8,11 @@
 ## 1. INTRODUÇÃO E PROPÓSITO COGNITIVO
 O **Cluster 2 (Os Olhos do Agente)** introduz a infraestrutura de telemetria visual e topológica estrutural do **Souls MC**. Se o Cluster 1 dotou a máquina de "Mãos" cirúrgicas (`souls_edit`, `souls_fill`), o Cluster 2 estabelece as "Lentes" de exploração de altíssima fidelidade. 
 
-O objetivo termodinâmico deste cluster é **eliminar a leitura sequencial desnecessária de arquivos (I/O sínclono redundante)** e a **asfixia do contexto de tokens** de LLM. Em vez de ler arquivos inteiros para mapear símbolos, o SODA passará a enxergar a topologia do workspace de forma matemática, em tempo constante $O(1)$ e com compressão ativa na RAM.
+O objetivo termodinâmico deste cluster é **eliminar a leitura sequencial desnecessária de arquivos (I/O sínclono redundante)** e a **asfixia do contexto de tokens** de LLM. Em vez de ler arquivos inteiros para mapear símbolos, o SOULS passará a enxergar a topologia do workspace de forma matemática, em tempo constante $O(1)$ e com compressão ativa na RAM.
 
 ---
 
-## 2. A DUPLA LEITURA DE REQUISITOS (SODA DUALITY)
+## 2. A DUPLA LEITURA DE REQUISITOS (SOULS DUALITY)
 
 ### 2.1. Visão Declarada (O que a IA "vende")
 O sistema possui ferramentas rápidas para mapear a árvore de arquivos do projeto e extrair assinaturas lógicas (outlines) de códigos sem requerer que o usuário abra manualmente os arquivos na IDE.

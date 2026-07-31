@@ -7,7 +7,7 @@
 
 ## 1. INTRODUÇÃO E ENTENDIMENTO DO GARGALO (O FIM DO SLOP)
 
-Sob as leis estritas do **SODA V4** (operando sob as diretrizes do SODA Canon V5), o principal papel do subsistema de contexto (**`lean_vacuum`**) é garantir a desidratação e a imunização da janela de contexto da nossa GPU (RTX 2060m com limite estrito de 6GB de VRAM).
+Sob as leis estritas do **SOULS V4** (operando sob as diretrizes do SOULS Canon V5), o principal papel do subsistema de contexto (**`lean_vacuum`**) é garantir a desidratação e a imunização da janela de contexto da nossa GPU (RTX 2060m com limite estrito de 6GB de VRAM).
 
 A auditoria forense do último ciclo revelou que a IDE, guiada pelo otimismo estocástico (vibe coding), implementou a ferramenta `souls_dedup` de forma preguiçosa: um mero deduplicador intra-arquivo que limpa linhas adjacentes em um único buffer. **...** Os agentes de desenvolvimento multiplicam redundâncias lógicas gigantescas ao abrirem múltiplos arquivos do projeto na mesma sessão (ex: duplicando structs, imports, helpers e definições).
 
@@ -30,7 +30,7 @@ A ferramenta deve gerenciar e expurgar a redundância entre múltiplos arquivos 
     3.  Cada bloco de 5 linhas é normalizado: remoção de todos os espaços em branco, tabulações, quebras de linha e comentários descartáveis.
     4.  O hash de 64 bits do bloco normalizado é calculado utilizando a crate de altíssima performance e sem alocação de Heap **`rustc-hash` (FxHash)**.
     5.  O sistema interroga o `SESSION_DEDUP_CACHE`:
-        *   **SE HIT (Colisão de Hash de arquivo DIFERENTE):** O trecho correspondente de 5 linhas é sumariamente deletado do buffer final de saída de RAM do SODA, sendo substituído por uma única linha compacta de marcador semântico:
+        *   **SE HIT (Colisão de Hash de arquivo DIFERENTE):** O trecho correspondente de 5 linhas é sumariamente deletado do buffer final de saída de RAM do SOULS, sendo substituído por uma única linha compacta de marcador semântico:
             `// [dedup: 5 lines hidden. Duplicate of "src/core/model_registry.rs" lines L142-L146]`
         *   **SE MISS:** O hash é registrado com o caminho do arquivo atual e o índice de linhas físicas correspondentes no cache global.
 *   **Impacto de VRAM:** Reduz em até **40%** a redundância acumulada nos chats de desenvolvimento de múltiplos turnos.
@@ -83,7 +83,7 @@ A esteira de testes automatizada do `souls_mcp_server` e da biblioteca `souls_mc
 
 ---
 
-## 4. PROIBIÇÕES TÓXICAS GERAIS (HARD LAWS SODA)
+## 4. PROIBIÇÕES TÓXICAS GERAIS (HARD LAWS SOULS)
 
 *   **PROIBIDA** qualquer alocação de memória de vídeo (VRAM) para realizar deduplicação, contagem de tokens ou compactação LEAN. Todo o Hot-Path roda estritamente na CPU (RAM do Host).
 *   **PROIBIDO** o uso de clones desnecessários de strings grandes no Heap central. O processamento deslizante de linhas em `souls_dedup` e `souls_search` deve operar estritamente sobre fatias de memória estável e lifetimes de Rust (`&'a str`), minimizando a latência.

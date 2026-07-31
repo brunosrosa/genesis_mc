@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_cli_tracing(level);
 
     println!("====================================================");
-    println!("   🦅 SODA GAIOLA DE SILÍCIO: TESTADOR DO BIOME 🦅   ");
+    println!("   🦅 SOULS GAIOLA DE SILÍCIO: TESTADOR DO BIOME 🦅   ");
     println!("====================================================");
 
     // 2. Define o caminho do repositório/workspace

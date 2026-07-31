@@ -843,7 +843,7 @@ pub struct MasterSolutionsRow {
     #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_final: f64,
     #[serde(default, deserialize_with = "deserialize_lossy_f64")]
-    pub score_fit_geral_soda: f64,
+    pub score_fit_geral_souls: f64,
     #[serde(default, deserialize_with = "deserialize_lossy_f64")]
     pub score_architectural_priority: f64,
     #[serde(default, deserialize_with = "deserialize_lossy_f64")]
@@ -939,7 +939,7 @@ impl Default for MasterSolutionsRow {
             score_ethics_safety: 0,
             score_intrinsic_risk: 0,
             score_final: 0.0,
-            score_fit_geral_soda: 0.0,
+            score_fit_geral_souls: 0.0,
             score_architectural_priority: 0.0,
             score_human_product_priority: 0.0,
             score_absorption_readiness: 0.0,
@@ -1103,7 +1103,7 @@ impl MasterSolutionsRow {
             self.score_ethics_safety.to_string(),
             self.score_intrinsic_risk.to_string(),
             format_float_1(self.score_final),
-            format_float_1(self.score_fit_geral_soda),
+            format_float_1(self.score_fit_geral_souls),
             format_float_1(self.score_architectural_priority),
             format_float_1(self.score_human_product_priority),
             format_float_1(self.score_absorption_readiness),
@@ -1668,7 +1668,7 @@ const BLOCK4_FIELDS_COLUMNS: &[&str] = &[
 #[cfg(test)]
 const PHASE4_DERIVED_COLUMNS: &[&str] = &[
     "score_final",
-    "score_fit_geral_soda",
+    "score_fit_geral_souls",
     "score_architectural_priority",
     "score_human_product_priority",
     "score_absorption_readiness",
@@ -2067,13 +2067,13 @@ fn build_prompt(block: u8, block0: &Block0Context, prior: &MasterSolutionsRow, l
             prompt.push_str("IDIOMA_BLOCK1: todos os textos descritivos devem estar em Português (PT-BR).\n");
             prompt.push_str("STYLE_BLOCK1_BASE: proposta_original_resumo e declared_description_ptbr podem ser objetivos, mas sem amputar fatos relevantes.\n");
             prompt.push_str("STYLE_BLOCK1_DIALETICO: visao_do_enxame, executive_verdict, risco_principal e risco_linha_vermelha DEVEM ter profundidade analitica, causalidade explicita, tensao entre ganhos e riscos e rigor dialetico. Nao use limite artificial de linhas.\n");
-            prompt.push_str("STYLE_BLOCK1_ARGUMENTACAO: justificativa_decisao e observacoes DEVEM conectar as 3 lentes do enxame, explicando trade-offs, pre-condicoes e por que a decisao faz sentido no SODA.\n");
+            prompt.push_str("STYLE_BLOCK1_ARGUMENTACAO: justificativa_decisao e observacoes DEVEM conectar as 3 lentes do enxame, explicando trade-offs, pre-condicoes e por que a decisao faz sentido no SOULS.\n");
             prompt.push_str("TRANSLATE_BLOCK1: gere declared_description_ptbr como tradução fiel para PT-BR de project.declared_description. Comece com letra maiúscula. Não adicione comentários sobre tradução.\n");
         }
         BLOCK_2A => {
             prompt.push_str("IDIOMA_BLOCK2A: todos os textos descritivos devem estar em Português (PT-BR).\n");
             prompt.push_str("STYLE_BLOCK2A: evite generalidades. Use termos concretos, testáveis e com densidade técnica.\n");
-            prompt.push_str("INDICACAO_OTIMISTA_BLOCK2A: gere indicacao_otimista_canibalizacao como Arquiteto-Chefe SODA. Use as 3 lentes para propor estrategicamente o que canibalizar (valor de produto, núcleo arquitetural transplantável, riscos/limites). Não concatene colunas; sintetize uma proposta inteligente.\n");
+            prompt.push_str("INDICACAO_OTIMISTA_BLOCK2A: gere indicacao_otimista_canibalizacao como Arquiteto-Chefe SOULS. Use as 3 lentes para propor estrategicamente o que canibalizar (valor de produto, núcleo arquitetural transplantável, riscos/limites). Não concatene colunas; sintetize uma proposta inteligente.\n");
         }
         BLOCK_2B => {
             prompt.push_str("IDIOMA_BLOCK2B: todos os itens devem estar em Português (PT-BR).\n");
@@ -3413,7 +3413,7 @@ pub const MASTER_SOLUTIONS_CANONICAL_COLUMNS: [&str; 82] = [
     "score_creep_risk",
     "score_intrinsic_risk",
     "score_final",
-    "score_fit_geral_soda",
+    "score_fit_geral_souls",
     "score_architectural_priority",
     "score_human_product_priority",
     "score_absorption_readiness",
@@ -3479,7 +3479,7 @@ pub fn apply_phase4_block5(now_epoch: i64, row: &mut MasterSolutionsRow) {
     let sustainability_adjusted_fit = fit_raw - 0.2 * ((row.score_creep_risk + row.score_intrinsic_risk) as f64) / 2.0;
 
     row.score_final = round_1(clamp_0_10(score_final));
-    row.score_fit_geral_soda = round_1(clamp_0_10(fit_raw));
+    row.score_fit_geral_souls = round_1(clamp_0_10(fit_raw));
     row.score_architectural_priority = round_1(clamp_0_10(architectural_priority));
     row.score_human_product_priority = round_1(clamp_0_10(human_product_priority));
     row.score_absorption_readiness = round_1(clamp_0_10(absorption_readiness));
@@ -3562,7 +3562,7 @@ mod tests {
             ultima_versao_online: "v1.0.1".to_string(),
             lote_id: "LOTE_01".to_string(),
             data_ultima_analise: 1_715_000_000,
-            analise_origem: "SODA_ETL".to_string(),
+            analise_origem: "SOULS_ETL".to_string(),
             licenca: "MIT".to_string(),
             stack_base: "Rust".to_string(),
             declared_description: "Desc".to_string(),
@@ -3999,12 +3999,12 @@ mod tests {
         assert_eq!(row.valid_from, 1_000);
         assert_eq!(row.valid_to, Some(1_000 + 180 * 24 * 60 * 60));
         assert!(row.score_final > 0.0);
-        assert!(row.score_fit_geral_soda > 0.0);
+        assert!(row.score_fit_geral_souls > 0.0);
     }
 
     #[test]
     fn lens_json_is_reduced_to_bullets_only() {
-        let raw = r#"{"lens_id":"SODA_LENS_A","bullets":["um","dois"]}"#;
+        let raw = r#"{"lens_id":"SOULS_LENS_A","bullets":["um","dois"]}"#;
         let out = normalize_lens_bullets(raw);
         assert_eq!(out, "- um\n- dois");
     }
@@ -4023,7 +4023,7 @@ mod tests {
             status_fase: "F4".to_string(),
             project_name: "owner/repo".to_string(),
             score_final: 1.2,
-            score_fit_geral_soda: 2.3,
+            score_fit_geral_souls: 2.3,
             score_architectural_priority: 3.4,
             score_human_product_priority: 4.5,
             score_absorption_readiness: 5.6,
@@ -4043,7 +4043,7 @@ mod tests {
         };
         assert_eq!(arr.len(), 82);
         assert_eq!(arr[idx("score_final")], "1.2");
-        assert_eq!(arr[idx("score_fit_geral_soda")], "2.3");
+        assert_eq!(arr[idx("score_fit_geral_souls")], "2.3");
         assert_eq!(arr[idx("score_architectural_priority")], "3.4");
         assert_eq!(arr[idx("score_human_product_priority")], "4.5");
         assert_eq!(arr[idx("score_absorption_readiness")], "5.6");
@@ -4064,7 +4064,7 @@ mod tests {
         obj.insert("abandonment_risk".to_string(), serde_json::json!("CRÍTICO"));
         obj.insert("discipline_dependency".to_string(), serde_json::json!("MEDIUM"));
         obj.insert("score_final".to_string(), serde_json::json!("8,5"));
-        obj.insert("score_fit_geral_soda".to_string(), serde_json::json!("8.7"));
+        obj.insert("score_fit_geral_souls".to_string(), serde_json::json!("8.7"));
         obj.insert("score_architectural_priority".to_string(), serde_json::json!(9));
         obj.insert("score_human_product_priority".to_string(), serde_json::json!(null));
         obj.insert("score_absorption_readiness".to_string(), serde_json::json!("7,1"));
@@ -4081,7 +4081,7 @@ mod tests {
         assert_eq!(row.abandonment_risk, RiskLevel4::Critical);
         assert_eq!(row.discipline_dependency, DisciplineDependency::Media);
         assert_eq!(row.score_final, 8.5);
-        assert_eq!(row.score_fit_geral_soda, 8.7);
+        assert_eq!(row.score_fit_geral_souls, 8.7);
         assert_eq!(row.score_architectural_priority, 9.0);
         assert_eq!(row.score_human_product_priority, 0.0);
         assert_eq!(row.score_absorption_readiness, 7.1);

@@ -38,7 +38,7 @@ Os testes atuais de `test_discovery` usam `tempfile::TempDir` com profundidade r
 
 ## 2. A Cura — Os 3 Disjuntores
 
-A correção é feita em `scan_repo_radar` — **fonte única** que serve 5 callers (`test_discovery`, `extract`, `orchestrator`, `soda_mcp_server`, `test_blob08_polyglot_cli`). Erradicar no foco protege toda a topologia.
+A correção é feita em `scan_repo_radar` — **fonte única** que serve 5 callers (`test_discovery`, `extract`, `orchestrator`, `souls_mcp_server`, `test_blob08_polyglot_cli`). Erradicar no foco protege toda a topologia.
 
 ### A) `max_depth(4)`
 ```rust
