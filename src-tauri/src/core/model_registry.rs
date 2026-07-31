@@ -691,6 +691,14 @@ pub fn build_topology_features_from_meta(meta: &ModelMetadata) -> TopologyFeatur
 
 /// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SOULS via EngineCascade.
 pub fn is_architecture_supported(arch: &str) -> bool {
+    let lower = arch.trim().to_lowercase();
+
+    // Gate estrutural: engines agnósticos do V4 (ex: PulpLele/Burn/Ort) não podem
+    // reclassificar arquiteturas state-space como "suportadas" para o chassi llama/headroom.
+    if matches!(lower.as_str(), "rwkv" | "zamba2" | "mamba" | "mamba-ssm") {
+        return false;
+    }
+
     let cascade = EngineCascade::new();
     let tf = TopologyFeatures {
         family_raw: arch.to_string(),

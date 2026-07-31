@@ -759,8 +759,12 @@ async fn run_souls_headroom_retrieve(
             data: None,
         })?;
 
-    // Enquadra como `intercept_loopback` espera: JSON cru com "headroom_retrieve" no body.
-    let tool_call_json = format!(r#"{{"headroom_retrieve":true,"hash":"{hash}"}}"#);
+    // Enquadra como `intercept_loopback` espera sem interpolação manual insegura.
+    let tool_call_json = json!({
+        "headroom_retrieve": true,
+        "hash": hash,
+    })
+    .to_string();
 
     let store = souls_mc_lib::core::headroom_engine::SoulsCcrStore::from_env();
     let retrieved = store.intercept_loopback(&tool_call_json);
