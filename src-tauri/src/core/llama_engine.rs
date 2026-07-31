@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::sync::Arc;
 
@@ -58,7 +58,7 @@ fn build_chat_prompt(system: &str, few_shot: &[(String, String)], user_query: &s
 }
 
 pub fn calculate_kv_cache_v_type(n_embd_head_v: u32) -> KvCacheType {
-    if n_embd_head_v > 0 && n_embd_head_v % 256 == 0 {
+    if n_embd_head_v > 0 && n_embd_head_v.is_multiple_of(256) {
         KvCacheType::Q4_K
     } else {
         // Fallback matemático silencioso para Q8_0 (tamanho de bloco 32) prevenindo pânico na C-FFI
@@ -157,7 +157,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
         // 2. Parâmetros do modelo
         let model_params = LlamaModelParams::default().with_n_gpu_layers(99);
 
-        let model = LlamaModel::load_from_file(&backend, model_path, &model_params).map_err(|e| {
+        let model = LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
         })?;
 
@@ -176,7 +176,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         let ctx_params = build_context_params_with_fallback(n_embd_head_v, declared_ctx, &family, rope_attn_factor);
 
-        let mut ctx = model.new_context(&backend, ctx_params).or_else(|_| {
+        let mut ctx = model.new_context(backend, ctx_params).or_else(|_| {
             // Fallback gracioso para KV Cache F16/F16 se o KV cache quantizado violar limites do driver
             let fallback_n_ctx = cap_context_length_for_family(&family, declared_ctx).max(512);
             let fallback_params = LlamaContextParams::default()
@@ -184,7 +184,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
                 .with_n_batch(2048)
                 .with_type_k(KvCacheType::F16)
                 .with_type_v(KvCacheType::F16);
-            model.new_context(&backend, fallback_params)
+            model.new_context(backend, fallback_params)
         }).map_err(|_| {
             InferenceError::GpuOom
         })?;
@@ -285,12 +285,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
         let sampler_min_p = LlamaSampler::min_p(req.min_p, 1);
         let sampler_dist = LlamaSampler::dist(0);
 
-        let mut samplers = Vec::new();
-        samplers.push(sampler_dry);
-        samplers.push(sampler_temp);
-        samplers.push(sampler_min_p);
-        samplers.push(sampler_dist);
-
+        let samplers = vec![sampler_dry, sampler_temp, sampler_min_p, sampler_dist];
         let mut sampler = LlamaSampler::chain_simple(samplers);
 
         // 8. Loop de Geração Autoregressiva Efêmera com Interceptação de Logits llguidance
@@ -392,6 +387,113 @@ impl EphemeralInferEngine for LlamaCppEngine {
             completion_tokens: completion_tokens_count,
             total_latency_ms,
         })
+    }
+}
+
+pub struct LlamaVanguardEngine;
+
+impl EphemeralInferEngine for LlamaVanguardEngine {
+    fn run_inference(
+        &self,
+        req: SoulsInferenceRequest,
+        thermal_rx: Option<watch::Receiver<SystemState>>,
+    ) -> Result<SoulsInferenceResponse, InferenceError> {
+        let current_exe = std::env::current_exe().unwrap_or_default();
+        let exe_dir = current_exe.parent().unwrap_or_else(|| Path::new("."));
+        let worker_bin_name = if cfg!(windows) { "souls_vanguard_worker.exe" } else { "souls_vanguard_worker" };
+
+        let candidate_paths: [PathBuf; 5] = [
+            exe_dir.join(worker_bin_name),
+            exe_dir.join("deps").join(worker_bin_name),
+            PathBuf::from("target").join("release").join(worker_bin_name),
+            PathBuf::from("target").join("debug").join(worker_bin_name),
+            PathBuf::from(worker_bin_name),
+        ];
+
+        let worker_path = candidate_paths.iter().find(|p| p.exists());
+
+        if let Some(worker_path) = worker_path {
+            let req_json = serde_json::to_string(&req).map_err(|e| {
+                InferenceError::ExecutionError(format!("Falha ao serializar requisição para worker Vanguard: {e}"))
+            })?;
+
+            let mut child = match std::process::Command::new(worker_path)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::inherit())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("Falha ao spawnar souls_vanguard_worker ({e}). Fallback in-process PROIBIDO por segurança.");
+                    disable_model_in_sqlite(&req.model_path);
+                    return Err(InferenceError::ExecutionError(format!("Falha ao spawnar worker: {e}")));
+                }
+            };
+
+            if let Some(mut stdin) = child.stdin.take() {
+                use std::io::Write;
+                let _ = writeln!(stdin, "{}", req_json);
+                let _ = stdin.flush();
+            }
+
+            let output = match child.wait_with_output() {
+                Ok(out) => out,
+                Err(e) => {
+                    tracing::error!("Erro ao aguardar souls_vanguard_worker ({e}). Fallback in-process PROIBIDO por segurança.");
+                    disable_model_in_sqlite(&req.model_path);
+                    return Err(InferenceError::ExecutionError(format!("Erro I/O no worker: {e}")));
+                }
+            };
+
+            if !output.status.success() {
+                let code = output.status.code().unwrap_or(-1);
+                tracing::error!(
+                    "souls_vanguard_worker encerrou com crash/exit status {code} (ex: invalid vector subscript C++). Fallback in-process PROIBIDO por segurança."
+                );
+                disable_model_in_sqlite(&req.model_path);
+                return Err(InferenceError::ExecutionError(format!(
+                    "souls_vanguard_worker crash com exit status {code} (FFI C++ / GGUF tensor crash)"
+                )));
+            }
+
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            for line in stdout_str.lines() {
+                let line_trim = line.trim();
+                if line_trim.is_empty() {
+                    continue;
+                }
+                if let Ok(resp) = serde_json::from_str::<SoulsInferenceResponse>(line_trim) {
+                    return Ok(resp);
+                }
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(line_trim) {
+                    if val.get("status").and_then(|s| s.as_str()) == Some("error") {
+                        let err_msg = val.get("error").and_then(|s| s.as_str()).unwrap_or("Erro no worker vanguard");
+                        tracing::error!("souls_vanguard_worker retornou erro de inferência ({err_msg}). Desativando modelo no SQLite.");
+                        disable_model_in_sqlite(&req.model_path);
+                        return Err(InferenceError::ExecutionError(format!("Worker error: {err_msg}")));
+                    }
+                }
+            }
+
+            tracing::error!("souls_vanguard_worker não retornou resposta JSON válida. Desativando modelo no SQLite.");
+            disable_model_in_sqlite(&req.model_path);
+            Err(InferenceError::ExecutionError("Worker não retornou JSON válido".to_string()))
+        } else {
+            LlamaCppEngine.run_inference(req, thermal_rx)
+        }
+    }
+}
+
+pub fn disable_model_in_sqlite(model_path: &str) {
+    let db_path = crate::core::model_registry::resolve_db_path();
+    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+        let _ = conn.execute_batch("PRAGMA journal_mode=WAL;");
+        let _ = conn.execute(
+            "UPDATE model_registry SET is_active = 0 WHERE file_path = ?1 OR model_id = ?1",
+            [model_path],
+        );
     }
 }
 

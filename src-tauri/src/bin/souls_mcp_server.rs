@@ -503,7 +503,8 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         | "callees" | "souls_callees"
         | "metrics" | "souls_metrics"
         | "intent" | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
-        "execute" | "souls_execute" | "shell" | "souls_shell" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "execute" | "souls_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "shell" | "souls_shell" => run_souls_shell(params).await,
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -2498,14 +2499,20 @@ async fn run_souls_knowledge(params: &serde_json::Map<String, Value>) -> Result<
 // FILE EDIT & ATOMIC FILL INFRASTRUCTURE (CLUSTER 1 - FIREWALL & ATOMIC LOCKS)
 // =============================================================================
 
-static FILE_LOCKS: OnceLock<dashmap::DashMap<PathBuf, std::sync::Arc<tokio::sync::Mutex<()>>>> = OnceLock::new();
 
-fn get_file_lock(path: &Path) -> std::sync::Arc<tokio::sync::Mutex<()>> {
-    let map = FILE_LOCKS.get_or_init(dashmap::DashMap::new);
-    map.entry(path.to_path_buf())
-        .or_insert_with(|| std::sync::Arc::new(tokio::sync::Mutex::new(())))
-        .value()
-        .clone()
+
+fn get_active_model_context_limit() -> Option<usize> {
+    let db_path = souls_mc_lib::core::model_registry::resolve_db_path();
+    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+        let _ = conn.execute_batch("PRAGMA journal_mode=WAL;");
+        if let Ok(mut stmt) = conn.prepare("SELECT max_context_length FROM model_registry WHERE is_active = 1 LIMIT 1") {
+            if let Ok(limit) = stmt.query_row([], |row| row.get::<_, i64>(0)) {
+                return Some(limit as usize);
+            }
+        }
+    }
+    None
 }
 
 fn validate_and_canonicalize_path(path_str: &str) -> Result<PathBuf, RpcError> {
@@ -2638,10 +2645,10 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
         });
     }
 
-    let lock = get_file_lock(&canonical_path);
+    let lock = souls_mc_lib::core::file_locker::acquire_file_lock(&canonical_path);
     let _guard = lock.lock().await;
 
-    let raw_content = std::fs::read_to_string(&canonical_path).map_err(|e| RpcError {
+    let raw_content = tokio::fs::read_to_string(&canonical_path).await.map_err(|e| RpcError {
         code: -32012,
         message: format!("Falha ao ler conteúdo do arquivo: {e}"),
         data: Some(json!({ "path": canonical_path.display().to_string() })),
@@ -2665,38 +2672,13 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
 
     let updated_content = raw_content.replacen(old_string, new_string, 1);
 
-    let path_clone = canonical_path.clone();
-    tokio::task::spawn_blocking(move || {
-        let parent = path_clone.parent().unwrap_or(&path_clone);
-        let tmp_file_name = format!(".tmp_{}", uuid::Uuid::new_v4().simple());
-        let tmp_path = parent.join(tmp_file_name);
-
-        std::fs::write(&tmp_path, updated_content.as_bytes()).map_err(|e| RpcError {
-            code: -32013,
-            message: format!("Falha ao escrever arquivo temporário: {e}"),
-            data: Some(json!({ "tmp_path": tmp_path.display().to_string() })),
+    souls_mc_lib::core::file_locker::atomic_write_file(&canonical_path, &updated_content)
+        .await
+        .map_err(|e| RpcError {
+            code: -32014,
+            message: format!("Falha no swap atômico de arquivo: {e}"),
+            data: Some(json!({ "path": canonical_path.display().to_string() })),
         })?;
-
-        if let Err(e) = std::fs::rename(&tmp_path, &path_clone) {
-            if std::fs::copy(&tmp_path, &path_clone).is_ok() {
-                let _ = std::fs::remove_file(&tmp_path);
-            } else {
-                let _ = std::fs::remove_file(&tmp_path);
-                return Err(RpcError {
-                    code: -32014,
-                    message: format!("Falha no swap atômico de arquivo: {e}"),
-                    data: Some(json!({ "path": path_clone.display().to_string() })),
-                });
-            }
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|e| RpcError {
-        code: -32000,
-        message: format!("Falha na tarefa de gravação: {e}"),
-        data: None,
-    })??;
 
     Ok(json!({
         "content": [{
@@ -2729,7 +2711,7 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
             data: None,
         })?;
 
-    let code_payload = args
+    let mut code_payload = args
         .get("code_payload")
         .or_else(|| args.get("content"))
         .and_then(Value::as_str)
@@ -2737,7 +2719,8 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
             code: -32602,
             message: "Parâmetro obrigatório 'code_payload' (ou 'content') ausente".to_string(),
             data: None,
-        })?;
+        })?
+        .to_string();
 
     let canonical_path = validate_and_canonicalize_path(path_str)?;
 
@@ -2749,10 +2732,23 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
         });
     }
 
-    let lock = get_file_lock(&canonical_path);
+    // Consulta limite do modelo ativo no SQLite model_registry com busy_timeout(5s)
+    let max_context_tokens = get_active_model_context_limit().unwrap_or(8192);
+    let payload_tokens = lean_vacuum::count_tokens(&code_payload);
+
+    // Se > 80% do teto máximo de tokens (Zona Vermelha FinOps), aciona CodeCompressor/lean_vacuum
+    if payload_tokens > (max_context_tokens * 8 / 10) {
+        let ext = canonical_path.extension().and_then(|s| s.to_str());
+        code_payload = souls_mc_lib::core::headroom_engine::CodeCompressor::compress_ast_zero_copy(&code_payload).into_owned();
+        if lean_vacuum::count_tokens(&code_payload) > (max_context_tokens * 8 / 10) {
+            code_payload = lean_vacuum::compress_to_lean(&code_payload, ext);
+        }
+    }
+
+    let lock = souls_mc_lib::core::file_locker::acquire_file_lock(&canonical_path);
     let _guard = lock.lock().await;
 
-    let raw_content = std::fs::read_to_string(&canonical_path).map_err(|e| RpcError {
+    let raw_content = tokio::fs::read_to_string(&canonical_path).await.map_err(|e| RpcError {
         code: -32012,
         message: format!("Falha ao ler conteúdo do arquivo: {e}"),
         data: Some(json!({ "path": canonical_path.display().to_string() })),
@@ -2808,50 +2804,127 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
     // Montar o buffer atualizado preservando a casca sintática adjacente
     let mut updated_content = String::with_capacity(raw_content.len() + code_payload.len() - target_slice_len);
     updated_content.push_str(&raw_content[..line_start]);
-    updated_content.push_str(code_payload);
+    updated_content.push_str(&code_payload);
     if !code_payload.ends_with('\n') && line_end < raw_content.len() {
         updated_content.push('\n');
     }
     updated_content.push_str(&raw_content[line_end..]);
 
-    let path_clone = canonical_path.clone();
-    tokio::task::spawn_blocking(move || {
-        let parent = path_clone.parent().unwrap_or(&path_clone);
-        let tmp_file_name = format!(".tmp_{}", uuid::Uuid::new_v4().simple());
-        let tmp_path = parent.join(tmp_file_name);
-
-        std::fs::write(&tmp_path, updated_content.as_bytes()).map_err(|e| RpcError {
-            code: -32013,
-            message: format!("Falha ao escrever arquivo temporário: {e}"),
-            data: Some(json!({ "tmp_path": tmp_path.display().to_string() })),
+    souls_mc_lib::core::file_locker::atomic_write_file(&canonical_path, &updated_content)
+        .await
+        .map_err(|e| RpcError {
+            code: -32014,
+            message: format!("Falha no swap atômico de arquivo: {e}"),
+            data: Some(json!({ "path": canonical_path.display().to_string() })),
         })?;
-
-        if let Err(e) = std::fs::rename(&tmp_path, &path_clone) {
-            if std::fs::copy(&tmp_path, &path_clone).is_ok() {
-                let _ = std::fs::remove_file(&tmp_path);
-            } else {
-                let _ = std::fs::remove_file(&tmp_path);
-                return Err(RpcError {
-                    code: -32014,
-                    message: format!("Falha no swap atômico de arquivo: {e}"),
-                    data: Some(json!({ "path": path_clone.display().to_string() })),
-                });
-            }
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|e| RpcError {
-        code: -32000,
-        message: format!("Falha na tarefa de gravação: {e}"),
-        data: None,
-    })??;
 
     Ok(json!({
         "content": [{
             "type": "text",
             "text": format!("Stub '{}' em '{}' preenchido com sucesso.", stub_marker, canonical_path.display())
         }]
+    }))
+}
+
+pub fn compress_cmd_logs(raw: &str) -> String {
+    let mut compressed_lines = Vec::new();
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut in_error_block = false;
+
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.contains("error:")
+            || trimmed.contains("error[E")
+            || trimmed.contains("FAILED")
+            || trimmed.contains("panicked at")
+            || trimmed.contains("stack backtrace:")
+            || trimmed.starts_with("--> ")
+            || (trimmed.contains(".rs:") && (trimmed.contains(':') || trimmed.contains("line")))
+        {
+            in_error_block = true;
+            compressed_lines.push(line);
+        } else if in_error_block {
+            if trimmed.is_empty() || trimmed.starts_with("warning:") || trimmed.starts_with("Compiling ") || trimmed.starts_with("Finished ") {
+                in_error_block = false;
+            } else {
+                compressed_lines.push(line);
+            }
+        } else if trimmed.contains("summary") || trimmed.contains("test result:") {
+            compressed_lines.push(line);
+        }
+    }
+
+    if compressed_lines.is_empty() {
+        raw.lines().rev().take(20).collect::<Vec<&str>>().into_iter().rev().collect::<Vec<&str>>().join("\n")
+    } else {
+        compressed_lines.join("\n")
+    }
+}
+
+async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let command_str = args
+        .get("command")
+        .or_else(|| args.get("cmd"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro 'command' é obrigatório para souls_shell".to_string(),
+            data: None,
+        })?;
+
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = Command::new("cmd");
+        c.args(["/C", command_str]);
+        c
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
+        let mut c = Command::new("sh");
+        c.args(["-c", command_str]);
+        c
+    };
+
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.current_dir(workspace_root());
+
+    let child = cmd.spawn().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao disparar comando assíncrono: {e}"),
+        data: None,
+    })?;
+
+    let output = child.wait_with_output().await.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha na execução do processo filho: {e}"),
+        data: None,
+    })?;
+
+    let stdout_raw = String::from_utf8_lossy(&output.stdout);
+    let stderr_raw = String::from_utf8_lossy(&output.stderr);
+    let combined_raw = format!("{stdout_raw}\n{stderr_raw}");
+
+    let compressed = compress_cmd_logs(&combined_raw);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!("Comando executado com Exit Code {exit_code}.\nOutput Comprimido:\n{compressed}")
+        }],
+        "structuredContent": {
+            "exit_code": exit_code,
+            "raw_bytes_len": combined_raw.len(),
+            "compressed_bytes_len": compressed.len(),
+            "command": command_str
+        },
+        "isError": !output.status.success()
     }))
 }
 
@@ -3306,22 +3379,38 @@ mod tests {
     #[tokio::test]
     async fn test_dedup_mcp_handler() {
         use serde_json::json;
+        souls_mc_lib::cognition::lean_vacuum::clear_session_cache();
         let block = "l1\nl2\nl3\nl4\nl5\n";
-        let payload = format!("{block}sep\n{block}");
-        let dedup_req = json!({
+
+        let dedup_req1 = json!({
             "jsonrpc": "2.0",
             "id": 41,
             "method": "tools/call",
             "params": {
                 "name": "souls_dedup",
                 "arguments": {
-                    "text": payload
+                    "text": block,
+                    "file_path": "file1.rs"
                 }
             }
         });
-        let resp = super::handle_mcp(dedup_req).await.expect("deve processar dedup");
-        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("// [dedup: 5 lines hidden]"));
+        let _ = super::handle_mcp(dedup_req1).await.expect("deve processar dedup 1");
+
+        let dedup_req2 = json!({
+            "jsonrpc": "2.0",
+            "id": 42,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_dedup",
+                "arguments": {
+                    "text": block,
+                    "file_path": "file2.rs"
+                }
+            }
+        });
+        let resp2 = super::handle_mcp(dedup_req2).await.expect("deve processar dedup 2");
+        let text2 = resp2["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text2.contains("// [dedup: 5 lines hidden"));
     }
 }
 

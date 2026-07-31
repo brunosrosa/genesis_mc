@@ -5,7 +5,6 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
-use tracing;
 
 const HARD_LIMIT_TIMEOUT_MS: u64 = 600_000;
 

@@ -118,6 +118,11 @@ required-features = ["tauri-app"]
 name = "souls_mcp_server"
 path = "src/bin/souls_mcp_server.rs"
 
+[[bin]]
+name = "souls_vanguard_worker"
+path = "src/bin/souls_vanguard_worker.rs"
+required-features = ["llama_backend"]
+
 [profile.dev]
 incremental = false
 

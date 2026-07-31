@@ -41,17 +41,17 @@ pub fn souls_strip_unc_prefix(path: &Path) -> PathBuf {
     let mut cleaned = raw.as_ref();
 
     // 1. Tratativa de caminhos UNC de Rede estendidos (com host/share)
-    if cleaned.starts_with(r"\\?\UNC\") {
-        return PathBuf::from(format!(r"\\{}", &cleaned[r"\\?\UNC\".len()..]));
+    if let Some(stripped) = cleaned.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{}", stripped));
     }
-    if cleaned.starts_with(r"\?\UNC\") {
-        return PathBuf::from(format!(r"\\{}", &cleaned[r"\?\UNC\".len()..]));
+    if let Some(stripped) = cleaned.strip_prefix(r"\?\UNC\") {
+        return PathBuf::from(format!(r"\\{}", stripped));
     }
-    if cleaned.starts_with("//?/UNC/") {
-        return PathBuf::from(format!("//{}", &cleaned["//?/UNC/".len()..]));
+    if let Some(stripped) = cleaned.strip_prefix("//?/UNC/") {
+        return PathBuf::from(format!("//{}", stripped));
     }
-    if cleaned.starts_with("/?/UNC/") {
-        return PathBuf::from(format!("//{}", &cleaned["/?/UNC/".len()..]));
+    if let Some(stripped) = cleaned.strip_prefix("/?/UNC/") {
+        return PathBuf::from(format!("//{}", stripped));
     }
 
     // 2. Tratativa de caminhos locais estendidos (como drives \\?\C:\ ou \?\C:\)

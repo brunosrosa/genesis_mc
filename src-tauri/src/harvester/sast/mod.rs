@@ -581,10 +581,7 @@ fn consume_path(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
 /// Verifica se os proximos chars (apos o ':' ja consumido) sao digitos
 /// (numero de linha opcional, seguido de ':' + digitos para coluna).
 fn starts_line_col_number(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
-    match chars.peek() {
-        Some(c) if c.is_ascii_digit() => true,
-        _ => false,
-    }
+    matches!(chars.peek(), Some(c) if c.is_ascii_digit())
 }
 
 fn consume_digits(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
@@ -757,7 +754,6 @@ impl PolyglotSastSidecar {
                 let executor = Arc::clone(&input.executor);
                 let global_semaphore = Arc::clone(&global_semaphore);
                 let blade_parallelism = blade_parallelism_limit(target.blade);
-                let has_global_opengrep_coverage = has_global_opengrep_coverage;
                 let timeout_secs = input.timeout_secs;
                 join_set.spawn(async move {
                     let SastExecutionTarget {
@@ -926,7 +922,6 @@ impl PolyglotSastSidecar {
                 let global_semaphore = Arc::clone(&global_semaphore);
                 let cargo_semaphore = Arc::clone(&cargo_semaphore);
                 let blade_parallelism = blade_parallelism_limit(target.blade);
-                let has_global_opengrep_coverage = has_global_opengrep_coverage;
                 let timeout_secs = input.timeout_secs;
                 join_set.spawn(async move {
                     let SastExecutionTarget {
@@ -2580,6 +2575,7 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
 ///   1) env var `SOULS_<NAME>_BIN` (ex.: `SOULS_OPENGREP_BIN`)
 ///   2) `<cwd>/bin/<name><EXE_SUFFIX>` (ex.: `src-tauri/bin/opengrep.exe`)
 ///   3) `<cwd>/bin/<name>-<target_triple><EXE_SUFFIX>` (ex.: `opengrep-x86_64-pc-windows-msvc.exe`)
+///
 /// O passo 3 eh necessario porque o build do SOULS compila os sidecars com o target triple
 /// no nome do artefato (padrao Cargo `--bin`).
 fn resolve_sidecar_bin(name: &str) -> Option<PathBuf> {

@@ -1,17 +1,17 @@
 ---
 id: "ADR-037"
 title: "ADR-037-Gestao-Dinamica-Contexto-CCR"
-version: 1.0
-status: Proposed
+version: 1.1
+status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Mitigação de Context Rot e OOM no Gateway Rust via Gestão Dinâmica de Orçamento de Contexto, Poda Semântica Determinística em Rust (tree-sitter/AST) e Compressão Reversível CCR (DashMap Zero-VRAM)."
+description: "Mitigação de Context Rot e OOM no Gateway Rust via Gestão Dinâmica de Orçamento de Contexto, Poda Semântica Determinística em Rust (tree-sitter/AST), Desidratação Semântica Ativa (souls_compress_memory, souls_dedup, souls_fill) e Compressão Reversível CCR (DashMap Zero-VRAM)."
 ---
 
 # ADR-037: Gestão Dinâmica de Contexto e Compressão Reversível (CCR)
 
 ## Status
 
-Proposed (Proposto para Validação no Cânone SOULS V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 ## Contexto Técnico e Gargalo de Context Rot / OOM
 
@@ -112,24 +112,27 @@ $$\Delta R = T_{\text{total}} - H_{\text{in}}$$
 
 ---
 
-### Lei 2: Poda Semântica Determinística em Rust (Zero-Copy via `tree-sitter` e `simd-json`)
+### Lei 2: Poda Semântica Determinística em Rust e Garras de Desidratação Ativa
 
-É terminantemente **PROIBIDO** o uso de modelos baseados em redes neurais (PyTorch, ONNX, ModernBERT, HuggingFace) ou chamadas de runtime Python para classificação e poda de texto no Gateway. 
+É terminantemente **PROIBIDO** o uso de modelos baseados em redes neurais (PyTorch, ONNX, ModernBERT, HuggingFace) ou chamadas de runtime Python para classificação e poda de texto no Gateway.
 
-A compressão de $T_{\text{hist}}$ é realizada por motores determinísticos $O(N)$ em memória RAM Host:
+A compressão de $T_{\text{hist}}$ é realizada por motores determinísticos $O(N)$ em memória RAM Host, reforçada pelas **Garras de Desidratação Semântica Ativa**:
 
-1. **Roteamento de Conteúdo por SWAR/AVX2 (`souls-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
+1. **'souls_compress_memory':** Algoritmo de poda semântica que desidrata manuais e arquivos de regras (`.cursorrules` / `CLAUDE.md`) reduzindo a prosa a linguagem telegráfica, preservando intactos caminhos de arquivo, tipos e blocos de código.
+2. **'souls_dedup':** Motor de varredura que analisa referências cruzadas e deduplica trechos compartilhados entre múltiplos arquivos antes de enviá-los ao contexto do LLM, economizando até 40% de massa textual.
+3. **'souls_fill':** Mecanismo de preenchimento dinâmico de contexto que ajusta cirurgicamente a taxa de compressão de cada arquivo de forma individual com base nas restrições físicas de VRAM e no orçamento de tokens de API.
+4. **Roteamento de Conteúdo por SWAR/AVX2 (`souls-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
    - JSON (`[` ou `{`) $\rightarrow$ Rota `SmartCrusher`.
    - Logs/ANSI (`[ERROR]`, `WARN`, `stacktrace`) $\rightarrow$ Rota `LogCompressor`.
    - Código Fonte (`fn`, `pub struct`, `def`, `class`, `import`) $\rightarrow$ Rota `CodeCompressor` (AST).
    - Prosa/Texto Livre $\rightarrow$ Rota `Pruning` Determinístico por Frases/Parágrafos.
-2. **Poda Sintática de Código (`CodeCompressor` via `tree-sitter`):**
+5. **Poda Sintática de Código (`CodeCompressor` via `tree-sitter`):**
    - Utilização nativa do crate Rust `tree-sitter`.
    - Nó da AST correspondentes a declarações (`FunctionDeclarations`, `ImportDeclarations`, `StructDefinitions`) são preservados.
    - Blocos de implementação interna (`body`, `block`) têm os limites de bytes substituídos em tempo de varredura por stubs estáticos (`/* ... corpo omitido via CCR ... */`).
-3. **Poda Estrutural JSON (`SmartCrusher` via `simd-json` / `serde_json`):**
+6. **Poda Estrutural JSON (`SmartCrusher` via `simd-json` / `serde_json`):**
    - Estratégia de divisão em 3 zonas ($K$-Split): preserva o cabeçalho ($K_{\text{head}}$), o rodapé ($K_{\text{tail}}$) e condensa elementos intermediários de baixa variância em um nó estatístico explicativo.
-4. **Alocação Arena e Zero-Copy (`bumpalo` + `Cow<'a, str>`):**
+7. **Alocação Arena e Zero-Copy (`bumpalo` + `Cow<'a, str>`):**
    - Estruturas de mensagem reutilizam ponteiros da camada de transporte (`&'a str`). Fatias modificadas utilizam alocação em Arena de vida curta (`bumpalo`), garantindo desalocação em tempo constante $O(1)$ ao término do despacho.
 
 ---

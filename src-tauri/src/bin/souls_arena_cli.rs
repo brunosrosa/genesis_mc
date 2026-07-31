@@ -352,7 +352,7 @@ fn check_already_evaluated(model_id: &str, conn: &Connection) -> bool {
     model_registry::check_already_evaluated(model_id, conn)
 }
 
-async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path) {
+async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path, force_eval: bool) {
     println!("\n=== RUNNING TIER 1: GUILLOTINE (FAST SANITY CHECK) ===");
 
     let _thermal_rx = souls_thermal_governor::spawn_thermal_governor();
@@ -374,7 +374,7 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
             .unwrap_or_else(|| "desconhecido".to_string());
         let model_path_str = model_path.to_string_lossy().to_string();
 
-        if model_registry::check_already_evaluated(&model_path_str, conn) {
+        if !force_eval && model_registry::check_already_evaluated(&model_path_str, conn) {
             println!("[SKIP] Modelo '{}' ja avaliado previamente.", model_path.display());
             skipped_count += 1;
             continue;
@@ -583,7 +583,7 @@ fn run_tier2_colosseum(bench_dir: &Path, approved_models_input: &[PathBuf]) {
     if let Ok(entries) = fs::read_dir(bench_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |e| e.to_string_lossy().to_lowercase() == "jsonl") {
+            if path.extension().is_some_and(|e| e.to_string_lossy().to_lowercase() == "jsonl") {
                 bench_files.push(path);
             }
         }
@@ -825,7 +825,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             models.push(PathBuf::from("mock_model_tier1.gguf"));
         }
 
-        run_tier1_guillotine(&conn, &models, &bench_dir).await;
+        let force_eval = target_model_filter.is_some();
+        run_tier1_guillotine(&conn, &models, &bench_dir, force_eval).await;
     }
 
     Ok(())

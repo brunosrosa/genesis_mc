@@ -5,6 +5,7 @@ use memmap2::MmapOptions;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
+use crate::core::engine_trait::{EngineCascade, EngineSupportLevel, TopologyFeatures, FileFormat, AttentionType, RopeScalingType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ModelArchitectureParams {
@@ -14,6 +15,7 @@ pub struct ModelArchitectureParams {
     pub head_count_kv: u32,       // n_head_kv
     pub feed_forward_length: u32, // n_ff
     pub rope_scaling_attn_factor: Option<f32>,
+    pub chat_template: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -70,6 +72,7 @@ pub struct ModelMetadata {
 }
 
 /// Calcula a estimativa termodinâmica de consumo de VRAM (pesos + KV cache assimétrico + scratch O(N)/O(N^2) + LoRA) em O(1), desmembrada de forma agnóstica para qualquer limite dinâmico de VRAM.
+#[allow(clippy::too_many_arguments)]
 pub fn estimate_vram_thermodynamics(
     meta: &ModelMetadata,
     target_context_len: u64,
@@ -133,6 +136,7 @@ pub fn estimate_vram_thermodynamics(
 }
 
 /// Conecta a topologia de hardware detectada dinamicamente ao calculador termodinâmico de VRAM.
+#[allow(clippy::too_many_arguments)]
 pub fn estimate_vram_for_topology(
     meta: &ModelMetadata,
     target_context_len: u64,
@@ -168,7 +172,7 @@ impl<'a> ByteCursor<'a> {
     }
 
     fn has_remaining(&self, count: usize) -> bool {
-        self.pos.checked_add(count).map_or(false, |end| end <= self.data.len())
+        self.pos.checked_add(count).is_some_and(|end| end <= self.data.len())
     }
 
     fn read_u32(&mut self) -> Option<u32> {
@@ -220,8 +224,8 @@ impl<'a> ByteCursor<'a> {
         match val_type {
             0 | 1 | 7 => self.read_slice(1).is_some(),
             2 | 3 => self.read_slice(2).is_some(),
-            4 | 5 | 6 => self.read_slice(4).is_some(),
-            10 | 11 | 12 => self.read_slice(8).is_some(),
+            4..=6 => self.read_slice(4).is_some(),
+            10..=12 => self.read_slice(8).is_some(),
             8 => self.read_string().is_some(),
             9 => {
                 let elem_type = match self.read_u32() {
@@ -410,6 +414,7 @@ pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> 
         .unwrap_or_else(|| "GGUF".to_string());
 
     let capabilities = infer_capabilities(&family, &model_name, &filename, &chat_template);
+    arch_params.chat_template = chat_template;
 
     Some(ModelMetadata {
         file_path: file_path.to_string_lossy().to_string(),
@@ -597,6 +602,8 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     // Migration idempotente para adicionar colunas em model_registry se não existirem
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN module_type TEXT NOT NULL DEFAULT 'PRIMARY_LLM'", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN visual_projector_path TEXT DEFAULT NULL", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN engine_type TEXT NOT NULL DEFAULT 'llama_cpp'", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN topology_json TEXT NOT NULL DEFAULT '{}'", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN ttft_ms REAL DEFAULT 0.0", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN tpot_ms REAL DEFAULT 0.0", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN vram_peak_mb REAL DEFAULT 0.0", []);
@@ -637,43 +644,70 @@ pub fn infer_module_type(filename: &str, family: &str) -> &'static str {
     }
 }
 
-/// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SOULS.
-pub fn is_architecture_supported(arch: &str) -> bool {
-    let lower = arch.trim().to_lowercase();
-    if lower.is_empty() {
-        return true; // Tenta compatibilidade se não informado
+pub fn build_topology_features_from_meta(meta: &ModelMetadata) -> TopologyFeatures {
+    let lower_family = meta.family.to_lowercase();
+    let attention_type = if lower_family.contains("moe")
+        || (meta.architecture.head_count_kv > 0 && meta.architecture.head_count > meta.architecture.head_count_kv * 4)
+    {
+        AttentionType::MixtureOfExperts
+    } else if meta.architecture.head_count_kv > 0 && meta.architecture.head_count != meta.architecture.head_count_kv {
+        AttentionType::GroupedQuery
+    } else if lower_family.contains("mamba") || lower_family.contains("rwkv") {
+        AttentionType::StateSpaceModel
+    } else {
+        AttentionType::MultiHead
+    };
+
+    let rope_scaling = if meta.architecture.rope_scaling_attn_factor.is_some() {
+        RopeScalingType::Linear
+    } else {
+        RopeScalingType::None
+    };
+
+    TopologyFeatures {
+        family_raw: meta.family.clone(),
+        file_format: if meta.file_path.to_lowercase().ends_with(".gguf") {
+            FileFormat::Gguf
+        } else if meta.file_path.to_lowercase().ends_with(".safetensors") {
+            FileFormat::Safetensors
+        } else {
+            FileFormat::Unknown(meta.file_path.clone())
+        },
+        attention_type,
+        rope_scaling,
+        block_count: meta.architecture.block_count,
+        head_count: meta.architecture.head_count,
+        head_count_kv: meta.architecture.head_count_kv,
+        embedding_length: meta.architecture.embedding_length,
+        context_length: meta.context_length,
+        chat_template: if !meta.architecture.chat_template.is_empty() {
+            Some(meta.architecture.chat_template.clone())
+        } else {
+            None
+        },
+        ..Default::default()
     }
-    matches!(
-        lower.as_str(),
-        "llama"
-            | "qwen"
-            | "qwen2"
-            | "qwen3"
-            | "phi"
-            | "phi2"
-            | "phi3"
-            | "phi4"
-            | "gemma"
-            | "gemma2"
-            | "gemma3"
-            | "gemma4"
-            | "mistral"
-            | "mixtral"
-            | "deepseek"
-            | "deepseek2"
-            | "starcoder"
-            | "starcoder2"
-            | "command-r"
-            | "stablelm"
-            | "bert"
-            | "bloom"
-    )
+}
+
+/// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SOULS via EngineCascade.
+pub fn is_architecture_supported(arch: &str) -> bool {
+    let cascade = EngineCascade::new();
+    let tf = TopologyFeatures {
+        family_raw: arch.to_string(),
+        file_format: FileFormat::Gguf,
+        ..Default::default()
+    };
+
+    let dummy_path = Path::new("Cargo.toml");
+    let (engine_id, level) = cascade.probe_best_engine(dummy_path, &tf);
+    engine_id != "unsupported" && !matches!(level, EngineSupportLevel::Unsupported(_))
 }
 
 /// Sincroniza os modelos locais para a tabela `model_registry`.
 /// Regra de Ouro (Garbage Collection): Modelos que sumiram do disco sofrem SOFT DELETION (`is_active = 0`). DELETE físico é proibido!
 pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Result<usize, String> {
     let mut scanned_paths = Vec::new();
+    let cascade = EngineCascade::new();
 
     for entry in WalkDir::new(models_dir).max_depth(5).into_iter().flatten() {
         let path = entry.path();
@@ -706,11 +740,14 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
 
                         scanned_paths.push(m.file_path.clone());
                         let caps_json = serde_json::to_string(&m.capabilities).unwrap_or_else(|_| "[]".to_string());
-                        let is_active_val = if is_architecture_supported(&m.family) { 1 } else { 0 };
+                        let tf = build_topology_features_from_meta(&m);
+                        let (engine_id, support_level) = cascade.probe_best_engine(path, &tf);
+                        let is_active_val = if engine_id != "unsupported" && !matches!(support_level, EngineSupportLevel::Unsupported(_)) { 1 } else { 0 };
+                        let topology_json = serde_json::to_string(&tf).unwrap_or_else(|_| "{}".to_string());
 
                         let res = conn.execute(
-                            "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, last_seen)
-                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, DATETIME('now'))
+                            "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, engine_type, topology_json, last_seen)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, DATETIME('now'))
                              ON CONFLICT(file_path) DO UPDATE SET
                                 model_name=excluded.model_name,
                                 family=excluded.family,
@@ -721,6 +758,8 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                                 file_size_bytes=excluded.file_size_bytes,
                                 is_active=excluded.is_active,
                                 module_type=excluded.module_type,
+                                engine_type=excluded.engine_type,
+                                topology_json=excluded.topology_json,
                                 last_seen=DATETIME('now');",
                             params![
                                 m.file_path,
@@ -733,6 +772,8 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                                 m.file_size_bytes as i64,
                                 is_active_val,
                                 actual_mod_type,
+                                engine_id,
+                                topology_json,
                             ],
                         );
 
@@ -744,6 +785,7 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
             }
         }
     }
+
 
     // SOFT DELETION: Marca modelos ausentes do disco como is_active = 0 sem DELETE físico
     let mut stmt = conn
@@ -772,6 +814,7 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
     Ok(scanned_paths.len())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn record_arena_telemetry(
     conn: &Connection,
     file_path: &str,
@@ -793,6 +836,7 @@ pub fn record_arena_telemetry(
 }
 
 /// Atualiza o resultado da avaliação Tier 1 diretamente no banco SQLite SSOT.
+#[allow(clippy::too_many_arguments)]
 pub fn update_tier1_result(
     conn: &Connection,
     file_path: &str,
@@ -1023,7 +1067,7 @@ pub fn format_model_canonical_name(filename_or_path: &str, parent_dir: Option<&s
         cleaned_stem = re_token.replace_all(&cleaned_stem, "-").to_string();
     }
 
-    cleaned_stem = cleaned_stem.replace('_', " ").replace('.', " ");
+    cleaned_stem = cleaned_stem.replace(['_', '.'], " ");
 
     let parts: Vec<&str> = cleaned_stem
         .split('-')
@@ -1136,6 +1180,7 @@ mod tests {
                 head_count_kv: 4, // GQA 4:1
                 feed_forward_length: 9216,
                 rope_scaling_attn_factor: None,
+                chat_template: String::new(),
             },
         }
     }

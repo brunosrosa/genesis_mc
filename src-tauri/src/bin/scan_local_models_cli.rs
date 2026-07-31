@@ -152,7 +152,7 @@ fn main() {
 
     for file_path in &files {
         if let Some(m) = parse_gguf_metadata_zero_copy(file_path) {
-            let size_mb = (m.file_size_bytes / (1024 * 1024)) as u64;
+            let size_mb = m.file_size_bytes / (1024 * 1024);
             let is_ssm = m.family.to_lowercase().contains("mamba") || m.family.to_lowercase().contains("zamba");
             let profile = souls_mc_lib::core::model_manager::profile_gguf_vram(
                 &m.model_name,
@@ -177,6 +177,10 @@ fn main() {
     let db_path = resolve_db_path();
     let mut conn = init_sqlite_vault(&db_path);
     sync_state_to_vault(&mut conn, &scanned_models);
+
+    if let Err(e) = souls_mc_lib::core::model_registry::sync_local_models_to_registry(&conn, target) {
+        eprintln!("[WARN] Falha ao sincronizar model_registry: {}", e);
+    }
 
     println!(
         "SUCCESS: Scanner finalizado com sucesso. Modelos escaneados e sincronizados: {}",

@@ -572,7 +572,7 @@ impl TriageLlmClient for WaterfallRoutingClient {
             match self.try_openrouter(self.openrouter_fast_key.as_deref(), &self.openrouter_fast_model, prompt).await {
                 Ok(out) => {
                     info!("Waterfall Routing: Rota 3 (OpenRouter Fast Fallback) OK");
-                    return Ok(out);
+                    Ok(out)
                 }
                 Err(e) => {
                     warn!(error = %e, "Circuit Breaker: Rota 3 (OpenRouter Fast Fallback) falhou");

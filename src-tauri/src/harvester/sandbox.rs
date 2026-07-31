@@ -13,6 +13,7 @@ use super::git::RepoPath;
 
 static APPCONTAINER_SETUP_SEMAPHORE: OnceLock<Semaphore> = OnceLock::new();
 static APPCONTAINER_SETUP_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[allow(clippy::type_complexity)]
 static APPCONTAINER_ACL_CACHE: OnceLock<Mutex<FxHashSet<(PathBuf, String, u32, u32)>>> = OnceLock::new();
 
 #[cfg(target_os = "windows")]
@@ -414,7 +415,7 @@ fn grant_ntfs_acl(
             std::ptr::null_mut(),
             &mut existing_dacl,
             std::ptr::null_mut(),
-            &mut sd_ptr as *mut _ as *mut *mut _,
+            &mut sd_ptr,
         )
     };
 
@@ -438,7 +439,7 @@ fn grant_ntfs_acl(
 
     // 2. Monta a nova entrada de acesso para o AppContainer SID.
     // TRUSTEE_W.ptstrName é uma union com pSid — cast seguro conforme Win32 doc.
-    let mut ea = EXPLICIT_ACCESS_W {
+    let ea = EXPLICIT_ACCESS_W {
         grfAccessPermissions: resolved_access_mask,
         grfAccessMode: GRANT_ACCESS,
         grfInheritance: resolved_inheritance,
@@ -458,7 +459,7 @@ fn grant_ntfs_acl(
     let merge_result = unsafe {
         SetEntriesInAclW(
             1,
-            &mut ea,
+            &ea,
             // Passa o existing_dacl para MESCLAR (não substituir).
             if existing_dacl.is_null() { std::ptr::null_mut() } else { existing_dacl as *mut _ },
             &mut new_dacl,
@@ -572,7 +573,7 @@ fn grant_access_to_winstation_and_desktop(_sid: PSID) -> Result<(), SandboxError
                 continue;
             }
 
-            let mut ea = EXPLICIT_ACCESS_W {
+            let ea = EXPLICIT_ACCESS_W {
                 grfAccessPermissions: GENERIC_ALL | 0x000F037F, // GENERIC_ALL + WINSTA_ALL_ACCESS/DESKTOP_ALL_ACCESS masks
                 grfAccessMode: GRANT_ACCESS,
                 grfInheritance: SUB_CONTAINERS_AND_OBJECTS_INHERIT,
@@ -588,7 +589,7 @@ fn grant_access_to_winstation_and_desktop(_sid: PSID) -> Result<(), SandboxError
             let mut new_dacl: *mut ACL = std::ptr::null_mut();
             let merge_result = SetEntriesInAclW(
                 1,
-                &mut ea,
+                &ea,
                 existing_dacl,
                 &mut new_dacl,
             );
@@ -936,7 +937,7 @@ fn spawn_in_appcontainer_blocking(
     // Garante que o caminho do executável esteja SEMPRE entre aspas duplas para CreateProcessW
     let cmd_str = format!("\"{}\" {}", program.display(), args_string);
     let mut cmd_wide: Vec<u16> = str_to_wide(&cmd_str);
-    let clean_cwd = dunce::canonicalize(&cwd).unwrap_or(cwd.to_path_buf());
+    let clean_cwd = dunce::canonicalize(cwd).unwrap_or(cwd.to_path_buf());
     let final_cwd_string = clean_cwd.to_string_lossy().replace(r"\\?\", "").replace(r"\?\", "");
     let clean_cwd_path = std::path::PathBuf::from(final_cwd_string);
     let cwd_wide = path_to_wide(&clean_cwd_path);
@@ -1005,7 +1006,7 @@ fn spawn_in_appcontainer_blocking(
             }
             env_str.push_str(&format!("{k}={v}\0"));
         }
-        env_str.push_str("\0"); // Duplo-nulo finalizador
+        env_str.push('\0'); // Duplo-nulo finalizador
 
         env_str.encode_utf16().collect()
     };
@@ -1027,7 +1028,7 @@ fn spawn_in_appcontainer_blocking(
         ConvertStringSecurityDescriptorToSecurityDescriptorW(
             sddl.as_ptr(),
             1, // SDDL_REVISION_1
-            &mut sd as *mut _ as *mut *mut std::ffi::c_void,
+            &mut sd as *mut _,
             &mut sd_size,
         )
     };
@@ -1613,10 +1614,10 @@ fn trace_trampoline_target(cmd_path: &std::path::Path) -> Option<PathBuf> {
     
     for line in content.lines() {
         let trimmed_line = line.trim();
-        if trimmed_line.starts_with('@') || trimmed_line.to_ascii_lowercase().starts_with("rem") {
-            if trimmed_line.to_ascii_lowercase().starts_with("@echo") || trimmed_line.to_ascii_lowercase().starts_with("rem") {
-                continue;
-            }
+        if (trimmed_line.starts_with('@') || trimmed_line.to_ascii_lowercase().starts_with("rem"))
+            && (trimmed_line.to_ascii_lowercase().starts_with("@echo") || trimmed_line.to_ascii_lowercase().starts_with("rem"))
+        {
+            continue;
         }
         
         let mut candidates = Vec::new();

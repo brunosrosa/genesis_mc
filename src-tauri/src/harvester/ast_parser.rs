@@ -197,7 +197,7 @@ pub fn extract_repository_outline_native_from_clean_files(
             .signatures
             .len()
             .cmp(&left.signatures.len())
-            .then_with(|| left.relative_path.cmp(&right.relative_path))
+            .then_with(|| left.relative_path.cmp(right.relative_path))
     });
 
     let repo_outline = build_repo_outline(&repo_root, &outline_files, &parsed_files);
@@ -843,13 +843,13 @@ struct NodeKindBitSet {
 impl NodeKindBitSet {
     fn new(language: &Language, kinds: &[&str]) -> Self {
         let count = language.node_kind_count();
-        let size = (count + 63) / 64;
+        let size = count.div_ceil(64);
         let mut bits = vec![0u64; size];
         for kind in kinds {
             for id in 0..count {
                 if let Some(name) = language.node_kind_for_id(id as u16) {
                     if name == *kind {
-                        let idx = (id / 64) as usize;
+                        let idx = id / 64;
                         let bit = id % 64;
                         bits[idx] |= 1u64 << bit;
                     }
@@ -966,9 +966,9 @@ impl WasmtimeTreeSitterEngine {
     }
 }
 
-fn extract_with_oxc<'arena, 'a>(
+fn extract_with_oxc<'arena>(
     arena: &'arena bumpalo::Bump,
-    source: &'a str,
+    source: &str,
     language: &str,
     relative_path: &str,
 ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
@@ -1101,9 +1101,9 @@ fn collect_oxc_decl_signatures(decl: &Declaration, out: &mut Vec<String>, is_exp
     }
 }
 
-fn extract_structural_signatures<'arena, 'a>(
+fn extract_structural_signatures<'arena>(
     arena: &'arena bumpalo::Bump,
-    source: &'a str,
+    source: &str,
     language: &str,
     relative_path: &str,
 ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
@@ -1146,9 +1146,9 @@ fn extract_structural_signatures<'arena, 'a>(
     Ok((signatures, import_edges))
 }
 
-fn extract_with_official_tree_sitter<'arena, 'a>(
+fn extract_with_official_tree_sitter<'arena>(
     arena: &'arena bumpalo::Bump,
-    source: &'a str,
+    source: &str,
     language: &str,
     relative_path: &str,
 ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
@@ -1290,7 +1290,7 @@ fn compact_node_text<'arena>(
     let mut char_count = 0;
     for ch in raw.chars() {
         if ch.is_whitespace() {
-            if !last_was_space && cleaned.len() > 0 {
+            if !last_was_space && !cleaned.is_empty() {
                 cleaned.push(' ');
                 last_was_space = true;
                 char_count += 1;
@@ -1307,9 +1307,9 @@ fn compact_node_text<'arena>(
     arena.alloc_str(cleaned.trim())
 }
 
-fn extract_with_regex_fallback<'arena, 'a>(
+fn extract_with_regex_fallback<'arena>(
     arena: &'arena bumpalo::Bump,
-    source: &'a str,
+    source: &str,
     language: &str,
     relative_path: &str,
 ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
@@ -1354,10 +1354,10 @@ fn extract_with_regex_fallback<'arena, 'a>(
     Ok((signatures, estimate_import_edges(language, source)))
 }
 
-fn sanitize_outline_signatures_in<'arena, 'a>(
+fn sanitize_outline_signatures_in<'arena>(
     arena: &'arena bumpalo::Bump,
     signatures: Vec<&'arena str>,
-    source: &'a str,
+    source: &str,
     language: &str,
 ) -> Vec<&'arena str> {
     let mut sanitized = signatures
@@ -1447,7 +1447,7 @@ fn compact_signature_whitespace_in<'arena>(
     let mut last_was_space = false;
     for ch in signature.chars() {
         if ch.is_whitespace() {
-            if !last_was_space && compact.len() > 0 {
+            if !last_was_space && !compact.is_empty() {
                 compact.push(' ');
                 last_was_space = true;
             }
@@ -1459,9 +1459,9 @@ fn compact_signature_whitespace_in<'arena>(
     arena.alloc_str(compact.trim())
 }
 
-fn extract_import_signatures_in<'arena, 'a>(
+fn extract_import_signatures_in<'arena>(
     arena: &'arena bumpalo::Bump,
-    source: &'a str,
+    source: &str,
     language: &str,
 ) -> Vec<&'arena str> {
     let patterns: &[&str] = match language {
@@ -1769,7 +1769,7 @@ fn build_repo_outline(
         .unwrap_or("repo");
     let mut by_domain = BTreeMap::<OutlineDomainTag, Vec<&ParsedFile<'_>>>::new();
     for file in parsed_files {
-        let domain = classify_outline_domain(&file.relative_path, &file.language);
+        let domain = classify_outline_domain(file.relative_path, file.language);
         by_domain.entry(domain).or_default().push(file);
     }
     let mut out = String::new();

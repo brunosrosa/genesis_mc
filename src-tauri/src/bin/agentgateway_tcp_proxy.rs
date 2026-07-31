@@ -5,7 +5,6 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, copy_bidirectional};
 use tokio::net::{TcpListener, TcpStream};
-use tracing;
 
 use souls_mc_lib::core::headroom_engine::{
     calculate_headroom_budget, calculate_headroom_budget_for_model, CodeCompressor, SoulsCcrStore, hex_encode,
@@ -72,8 +71,8 @@ pub fn mutate_json_payload(
     // Fast-path Zero-Copy para payloads massivos (> 1MB) sem código de usuário a compactar
     if body_bytes.len() > 1_048_576 {
         let text_slice = std::str::from_utf8(body_bytes).ok();
-        let has_code = text_slice.map_or(true, |s| s.contains("fn ") || s.contains("function ") || s.contains("def "));
-        let has_headroom_tool = text_slice.map_or(false, |s| s.contains("headroom_retrieve"));
+        let has_code = text_slice.is_none_or(|s| s.contains("fn ") || s.contains("function ") || s.contains("def "));
+        let has_headroom_tool = text_slice.is_some_and(|s| s.contains("headroom_retrieve"));
 
         if !has_code && has_headroom_tool {
             return Ok(body_bytes.to_vec());
@@ -181,6 +180,7 @@ fn find_sse_frame_delimiter(buf: &[u8]) -> Option<(usize, usize)> {
 }
 
 /// Acumulador de Bytes Brutos para reconstrução de quadros SSE contra fragmentação TCP
+#[derive(Default)]
 pub struct SseFrameAccumulator {
     acc_buf: Vec<u8>,
 }

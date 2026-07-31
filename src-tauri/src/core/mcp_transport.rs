@@ -157,16 +157,9 @@ impl LeanVacuum {
 
 /// Implementação NDJSON pura do transporte MCP.
 /// Mantida como a implementação canônica. Trocar de transporte = criar outra `impl McpTransport`.
+#[derive(Default)]
 pub struct NdjsonMcpTransport {
     pub vacuum: LeanVacuum,
-}
-
-impl Default for NdjsonMcpTransport {
-    fn default() -> Self {
-        Self {
-            vacuum: LeanVacuum::default(),
-        }
-    }
 }
 
 impl McpTransport for NdjsonMcpTransport {
