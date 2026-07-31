@@ -898,6 +898,16 @@ fn main() {
         if cfg!(feature = "cuda-no-vmm") {
             config.define("GGML_CUDA_NO_VMM", "ON");
         }
+
+        // SOULS Fix: On Windows MSVC, high parallelism (e.g. 16 threads) during CUDA NVCC
+        // compilation causes MSVC c1xx frontend file handle lock/contention errors (C1083).
+        // Cap parallelism to 4 if CMAKE_BUILD_PARALLEL_LEVEL is not set by the user.
+        if matches!(target_os, TargetOs::Windows(WindowsVariant::Msvc))
+            && env::var("CMAKE_BUILD_PARALLEL_LEVEL").is_err()
+        {
+            env::set_var("CMAKE_BUILD_PARALLEL_LEVEL", "4");
+            config.define("CMAKE_BUILD_PARALLEL_LEVEL", "4");
+        }
     }
 
     if cfg!(feature = "rocm") {

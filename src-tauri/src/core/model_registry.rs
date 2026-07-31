@@ -6,13 +6,14 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ModelArchitectureParams {
     pub block_count: u32,         // n_layer
     pub embedding_length: u32,    // n_embd
     pub head_count: u32,          // n_head
     pub head_count_kv: u32,       // n_head_kv
     pub feed_forward_length: u32, // n_ff
+    pub rope_scaling_attn_factor: Option<f32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -190,6 +191,16 @@ impl<'a> ByteCursor<'a> {
         Some(u64::from_le_bytes(arr))
     }
 
+    fn read_f32(&mut self) -> Option<f32> {
+        if !self.has_remaining(4) {
+            return None;
+        }
+        let bytes = &self.data[self.pos..self.pos + 4];
+        self.pos += 4;
+        let arr: [u8; 4] = bytes.try_into().ok()?;
+        Some(f32::from_le_bytes(arr))
+    }
+
     fn read_slice(&mut self, len: usize) -> Option<&'a [u8]> {
         if !self.has_remaining(len) {
             return None;
@@ -352,6 +363,12 @@ pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> 
                 if let Some(val) = cursor.read_u64() {
                     arch_params.feed_forward_length = val as u32;
                 }
+            } else {
+                cursor.skip_value(val_type);
+            }
+        } else if key.ends_with(".rope.scaling.attn_factor") {
+            if val_type == 6 || val_type == 5 || val_type == 4 {
+                arch_params.rope_scaling_attn_factor = cursor.read_f32();
             } else {
                 cursor.skip_value(val_type);
             }
@@ -579,6 +596,7 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
 
     // Migration idempotente para adicionar colunas em model_registry se não existirem
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN module_type TEXT NOT NULL DEFAULT 'PRIMARY_LLM'", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN visual_projector_path TEXT DEFAULT NULL", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN ttft_ms REAL DEFAULT 0.0", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN tpot_ms REAL DEFAULT 0.0", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN vram_peak_mb REAL DEFAULT 0.0", []);
@@ -605,13 +623,14 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
 }
 
 /// Helper para categorizar a função do arquivo GGUF
-pub fn infer_module_type(filename: &str) -> &'static str {
-    let lower = filename.to_lowercase();
-    if lower.contains("mmproj") {
+pub fn infer_module_type(filename: &str, family: &str) -> &'static str {
+    let lower_fn = filename.to_lowercase();
+    let lower_fam = family.trim().to_lowercase();
+    if lower_fn.contains("mmproj") || lower_fam == "clip" {
         "VISION_PROJECTOR"
-    } else if lower.contains("mtp") {
+    } else if lower_fn.contains("mtp") {
         "MTP_ADAPTER"
-    } else if lower.contains("bitnet") {
+    } else if lower_fn.contains("bitnet") || lower_fn.contains("i2_s") || lower_fn.contains("i1_s") {
         "SPECIALIZED_QUANT"
     } else {
         "PRIMARY_LLM"
@@ -666,9 +685,27 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                         .map(|n| n.to_string_lossy().to_lowercase())
                         .unwrap_or_default();
 
-                    let mod_type = infer_module_type(&filename);
+                    let mod_type = infer_module_type(&filename, "");
 
                     if let Some(m) = parse_gguf_metadata_zero_copy(path) {
+                        let actual_mod_type = infer_module_type(&filename, &m.family);
+
+                        if actual_mod_type == "VISION_PROJECTOR" || m.family.trim().to_lowercase() == "clip" {
+                            let proj_path_str = path.to_string_lossy().to_string();
+                            let _ = conn.execute(
+                                "UPDATE model_registry SET is_active = 0, module_type = 'VISION_PROJECTOR' WHERE file_path = ?1",
+                                params![proj_path_str],
+                            );
+                            if let Some(parent_dir) = path.parent() {
+                                let parent_str = parent_dir.to_string_lossy().to_string();
+                                let _ = conn.execute(
+                                    "UPDATE model_registry SET visual_projector_path = ?1 WHERE file_path LIKE ?2 || '%' AND module_type = 'PRIMARY_LLM'",
+                                    params![proj_path_str, parent_str],
+                                );
+                            }
+                            continue;
+                        }
+
                         scanned_paths.push(m.file_path.clone());
                         let caps_json = serde_json::to_string(&m.capabilities).unwrap_or_else(|_| "[]".to_string());
                         let is_active_val = if is_architecture_supported(&m.family) { 1 } else { 0 };
@@ -697,7 +734,7 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                                 caps_json,
                                 m.file_size_bytes as i64,
                                 is_active_val,
-                                mod_type,
+                                actual_mod_type,
                             ],
                         );
 
@@ -853,7 +890,17 @@ pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
                         .file_name()
                         .map(|n| n.to_string_lossy().to_lowercase())
                         .unwrap_or_default();
-                    if infer_module_type(&filename) == "PRIMARY_LLM" {
+                    if filename.contains("mmproj") {
+                        continue;
+                    }
+                    if let Some(meta) = parse_gguf_metadata_zero_copy(path) {
+                        if meta.family.trim().to_lowercase() == "clip" {
+                            continue;
+                        }
+                        if infer_module_type(&filename, &meta.family) == "PRIMARY_LLM" {
+                            files.push(path.to_path_buf());
+                        }
+                    } else if infer_module_type(&filename, "") == "PRIMARY_LLM" {
                         files.push(path.to_path_buf());
                     }
                 }

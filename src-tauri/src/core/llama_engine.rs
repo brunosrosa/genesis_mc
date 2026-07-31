@@ -80,19 +80,35 @@ pub fn build_context_params_with_fallback(
     n_embd_head_v: u32,
     declared_n_ctx: u32,
     family: &str,
+    rope_attn_factor: Option<f32>,
 ) -> LlamaContextParams {
     let type_v = calculate_kv_cache_v_type(n_embd_head_v);
     let n_ctx = cap_context_length_for_family(family, declared_n_ctx);
 
-    LlamaContextParams::default()
+    let mut params = LlamaContextParams::default()
         .with_n_ctx(std::num::NonZeroU32::new(n_ctx.max(512)))
         .with_n_batch(4096)
         .with_type_k(KvCacheType::F16)
-        .with_type_v(type_v)
+        .with_type_v(type_v);
+
+    let lower_fam = family.to_lowercase();
+    if let Some(factor) = rope_attn_factor {
+        params = params
+            .with_rope_freq_scale(factor)
+            .with_yarn_attn_factor(factor)
+            .with_rope_scaling_type(llama_cpp_2::context::params::RopeScalingType::Linear);
+    } else if lower_fam.contains("phi") || lower_fam.contains("phi3") || lower_fam.contains("phi4") {
+        params = params
+            .with_rope_freq_scale(1.190238)
+            .with_yarn_attn_factor(1.190238)
+            .with_rope_scaling_type(llama_cpp_2::context::params::RopeScalingType::Linear);
+    }
+
+    params
 }
 
 pub fn build_default_context_params() -> LlamaContextParams {
-    build_context_params_with_fallback(256, 4096, "")
+    build_context_params_with_fallback(256, 4096, "", None)
 }
 
 impl EphemeralInferEngine for LlamaCppEngine {
@@ -108,8 +124,24 @@ impl EphemeralInferEngine for LlamaCppEngine {
             return Err(InferenceError::ModelNotFound(req.model_path.clone()));
         }
 
-        // 0. Validação O(1) de Arquitetura Suportada (Fail-Closed)
         let gguf_meta = parse_gguf_metadata_zero_copy(model_path);
+
+        // 0. Interceptação Fail-Soft de Arquiteturas Ternárias (BitNet i2_s/i1_s) ou Recorrentes (Mamba/Zamba/RWKV)
+        let path_lower = req.model_path.to_lowercase();
+        let is_ternary = path_lower.contains("i2_s") || path_lower.contains("i1_s") || path_lower.contains("bitnet");
+        let is_recurrent = if let Some(ref meta) = gguf_meta {
+            let fam = meta.family.to_lowercase();
+            fam.contains("mamba") || fam.contains("zamba") || fam.contains("rwkv")
+        } else {
+            path_lower.contains("mamba") || path_lower.contains("zamba") || path_lower.contains("rwkv")
+        };
+
+        if is_ternary || is_recurrent {
+            return Err(InferenceError::ExecutionError(
+                "PENDING_ENGINE: Este modelo requer engine especializada (bitnet.cpp/mamba-ssm) ainda não integrada no runtime".to_string()
+            ));
+        }
+
         if let Some(ref meta) = gguf_meta {
             if !model_registry::is_architecture_supported(&meta.family) {
                 return Err(InferenceError::ExecutionError(format!(
@@ -119,30 +151,30 @@ impl EphemeralInferEngine for LlamaCppEngine {
             }
         }
 
-        // 1. Inicializa backend bare-metal do llama.cpp (Singleton em OnceLock para prevenir BackendAlreadyInitialized)
+        // 1. Inicializa backend bare-metal do llama.cpp
         let backend = get_global_llama_backend()?;
 
-        // 2. Parâmetros do modelo - ADR-027: use_mmap = true por padrão no LlamaModelParams, n_gpu_layers = 99 para GPU offload
+        // 2. Parâmetros do modelo
         let model_params = LlamaModelParams::default().with_n_gpu_layers(99);
 
         let model = LlamaModel::load_from_file(&backend, model_path, &model_params).map_err(|e| {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
         })?;
 
-        // 3. Alocação do contexto com KV Cache Assimétrico & Fallbacks Matemáticos (ADR-027 / PRD-10.1 / Hotfix)
-        let (n_embd_head_v, declared_ctx, family) = if let Some(ref meta) = gguf_meta {
+        // 3. Alocação do contexto com KV Cache Assimétrico & RoPE Scaling Params
+        let (n_embd_head_v, declared_ctx, family, rope_attn_factor) = if let Some(ref meta) = gguf_meta {
             let h_kv = meta.architecture.head_count_kv.max(1);
             let head_v = if meta.architecture.embedding_length > 0 {
                 meta.architecture.embedding_length / h_kv
             } else {
                 128
             };
-            (head_v, meta.context_length as u32, meta.family.clone())
+            (head_v, meta.context_length as u32, meta.family.clone(), meta.architecture.rope_scaling_attn_factor)
         } else {
-            (256, 4096, String::new())
+            (256, 4096, String::new(), None)
         };
 
-        let ctx_params = build_context_params_with_fallback(n_embd_head_v, declared_ctx, &family);
+        let ctx_params = build_context_params_with_fallback(n_embd_head_v, declared_ctx, &family, rope_attn_factor);
 
         let mut ctx = model.new_context(&backend, ctx_params).or_else(|_| {
             // Fallback gracioso para KV Cache F16/F16 se o KV cache quantizado violar limites do driver
@@ -280,13 +312,21 @@ impl EphemeralInferEngine for LlamaCppEngine {
                 }
             }
 
+            // Posição no batch para amostragem: na 1a iteração (pós-prefill), é o último token do prefill batch (batch.n_tokens() - 1).
+            // Nas iterações seguintes, o batch contém exatamente 1 token recém decodificado, posicionado no índice 0!
+            let sample_batch_idx = if completion_tokens_count == 0 {
+                (batch.n_tokens() as i32) - 1
+            } else {
+                0
+            };
+
             let token = if let Some(ref mut constraint) = ll_constraint {
                 match constraint.compute_mask() {
                     Ok(step_res) => {
                         if step_res.is_stop() {
                             break;
                         }
-                        let mut candidates = ctx.token_data_array_ith(batch.n_tokens() - 1);
+                        let mut candidates = ctx.token_data_array_ith(sample_batch_idx);
                         if let Some(ref mask) = step_res.sample_mask {
                             for item in &mut candidates.data {
                                 let tok_id = item.id().0 as u32;
@@ -297,18 +337,18 @@ impl EphemeralInferEngine for LlamaCppEngine {
                         }
                         candidates.apply_sampler(&sampler);
                         let sampled = candidates.selected_token().unwrap_or_else(|| {
-                            sampler.sample(&ctx, batch.n_tokens() - 1)
+                            sampler.sample(&ctx, sample_batch_idx)
                         });
                         let _ = constraint.commit_token(Some(sampled.0 as u32));
                         sampled
                     }
                     Err(e) => {
                         tracing::warn!("llguidance compute_mask error: {}", e);
-                        sampler.sample(&ctx, batch.n_tokens() - 1)
+                        sampler.sample(&ctx, sample_batch_idx)
                     }
                 }
             } else {
-                sampler.sample(&ctx, batch.n_tokens() - 1)
+                sampler.sample(&ctx, sample_batch_idx)
             };
 
             if model.is_eog_token(token) {
@@ -326,8 +366,8 @@ impl EphemeralInferEngine for LlamaCppEngine {
             batch.add(token, current_pos, &[0], true).map_err(|e| {
                 InferenceError::ExecutionError(format!("Falha no batch de geração: {}", e))
             })?;
-            let gen_last_idx = (batch.n_tokens() as usize).saturating_sub(1);
-            batch.set_logits(gen_last_idx, true);
+            // GARANTE a habilitação de logits na posição 0 do batch de 1 token antes de decode!
+            batch.set_logits(0, true);
             current_pos += 1;
 
             if let Err(e) = ctx.decode(&mut batch) {
@@ -336,6 +376,11 @@ impl EphemeralInferEngine for LlamaCppEngine {
         }
 
         let total_latency_ms = start_time.elapsed().as_millis() as u64;
+
+        // Log de depuração temporário para auditoria visual dos primeiros 50 caracteres brutos gerados
+        let raw_preview: String = generated_text.chars().take(50).collect();
+        tracing::info!("[Raw Generation Audit] Modelo '{}' -> Primeiros 50 chars: {:?}", req.model_path, raw_preview);
+        println!("[Raw Generation Audit] Modelo '{}' -> Primeiros 50 chars: {:?}", req.model_path, raw_preview);
 
         // ADR-035: Reparação Sintática Zero-Token de JSON truncado antes de devolver a resposta
         let healed_text = crate::core::response_healing::heal_malformed_json(&generated_text).into_owned();
