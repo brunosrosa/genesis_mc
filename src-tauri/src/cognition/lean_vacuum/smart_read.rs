@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED: Leitor Inteligente Poliglota (Token-Aware Auto-Shrink)
+// SOULS-CANIBALIZED: Leitor Inteligente Poliglota (Token-Aware Auto-Shrink)
 // Medição de tokens via tiktoken (cl100k_base) com desidratação poliglota (Rust, Python, Elixir, etc.) e Fail-Closed.
 
 use super::ansi_filter::strip_ansi;

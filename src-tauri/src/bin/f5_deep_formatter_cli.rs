@@ -379,7 +379,7 @@ fn response_format_for_phase5() -> Value {
     json!({
         "type": "json_schema",
         "json_schema": {
-            "name": "soda_f5_deep_components",
+            "name": "souls_f5_deep_components",
             "strict": true,
             "schema": schema
         }
@@ -620,7 +620,7 @@ fn compute_first_empty_row_1based(col_a_values: &[Vec<String>]) -> u32 {
 
 fn build_prompt(parent: &ParentRow, seed: &str) -> String {
     format!(
-        "SODA_PHASE=5\nrepo_url={}\nrepo_analised_version={}\nlote_id={}\n\nContexto_SGR_Minimo:\n{}\n\nTarefa: gere componentes COMP_0001..COMP_9999. Saída deve ser JSON estrito no shape do schema.\n",
+        "SOULS_PHASE=5\nrepo_url={}\nrepo_analised_version={}\nlote_id={}\n\nContexto_SGR_Minimo:\n{}\n\nTarefa: gere componentes COMP_0001..COMP_9999. Saída deve ser JSON estrito no shape do schema.\n",
         parent.repo_url,
         parent.repo_analised_version,
         parent.lote_id,

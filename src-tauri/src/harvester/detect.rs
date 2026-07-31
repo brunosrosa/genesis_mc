@@ -230,7 +230,7 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let count = DIR_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let unique_dir = format!("soda_detect_test_{}_{}", now, count);
+        let unique_dir = format!("souls_detect_test_{}_{}", now, count);
         temp.push(unique_dir);
         tokio::fs::create_dir_all(&temp).await.unwrap();
         temp

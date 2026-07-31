@@ -19,7 +19,7 @@ use super::extract::{
 };
 use super::guard::PurgeGuard;
 use super::sast::{NativeAstInput, NativeAstParser, PolyglotSastInput, PolyglotSastSidecar};
-use super::canon::SodaCanonExtractor;
+use super::canon::SoulsCanonExtractor;
 
 #[derive(Error, Debug)]
 pub enum OrchestratorError {
@@ -39,7 +39,7 @@ pub enum OrchestratorError {
 pub struct HarvesterOrchestrator;
 
 impl HarvesterOrchestrator {
-    /// Maestro do pipeline SODA ETL (F0: Harvester/Zero-IA).
+    /// Maestro do pipeline SOULS ETL (F0: Harvester/Zero-IA).
     /// Coordena o fluxo determinístico [N1] -> [N13].
     pub async fn run(
         repo_id: &str,
@@ -48,7 +48,7 @@ impl HarvesterOrchestrator {
         requested_blobs: Option<BlobSelection>,
     ) -> Result<(), OrchestratorError> {
         info!("============================================================================");
-        info!("🚀 [SODA ETL] INICIANDO COLHEITA DO REPOSITÓRIO: {}", repo_id);
+        info!("🚀 [SOULS ETL] INICIANDO COLHEITA DO REPOSITÓRIO: {}", repo_id);
         info!("============================================================================");
 
         info!(url = %repo_url, repo_id = %repo_id, "Iniciando HarvesterOrchestrator (N14)");
@@ -111,12 +111,12 @@ impl HarvesterOrchestrator {
             .map_err(|e| OrchestratorError::CloneError(e.to_string()))?;
         info!(repo_id = %repo_id, repo_path = %repo_path.display(), "N2: Clone blobless concluido");
 
-        let repo_analised_version = tokio::fs::read_to_string(repo_path.join(".soda_repo_version"))
+        let repo_analised_version = tokio::fs::read_to_string(repo_path.join(".souls_repo_version"))
             .await
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
-        let ultima_versao_online = tokio::fs::read_to_string(repo_path.join(".soda_ultima_versao_online"))
+        let ultima_versao_online = tokio::fs::read_to_string(repo_path.join(".souls_ultima_versao_online"))
             .await
             .ok()
             .map(|s| s.trim().to_string())
@@ -450,17 +450,17 @@ impl HarvesterOrchestrator {
             push_blob(repo_id, &mut blobs, community_blob);
         }
 
-        if selection.is_none_or(|selection| selection.contains_artifact("blob_10_soda_canon_context")) {
-            info!(repo_id = %repo_id, "N11: Extraindo blob_10_soda_canon_context");
-            match SodaCanonExtractor::extract(repo_id, Arc::clone(&conn)).await {
+        if selection.is_none_or(|selection| selection.contains_artifact("blob_10_souls_canon_context")) {
+            info!(repo_id = %repo_id, "N11: Extraindo blob_10_souls_canon_context");
+            match SoulsCanonExtractor::extract(repo_id, Arc::clone(&conn)).await {
                 Ok(canon_blob) => push_blob(repo_id, &mut blobs, canon_blob),
                 Err(e) => {
                     warn!(
                         repo_id = %repo_id,
                         error = %e,
-                        "Falha ao extrair blob_10_soda_canon_context; persistindo zero-byte e seguindo"
+                        "Falha ao extrair blob_10_souls_canon_context; persistindo zero-byte e seguindo"
                     );
-                    push_empty_blob(repo_id, &mut blobs, "blob_10_soda_canon_context", &e.to_string());
+                    push_empty_blob(repo_id, &mut blobs, "blob_10_souls_canon_context", &e.to_string());
                 }
             }
         }

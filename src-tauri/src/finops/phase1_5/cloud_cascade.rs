@@ -100,7 +100,7 @@ impl CloudCascade {
             )
         })?;
 
-        let canon_context = Arc::new(load_soda_canon_manifest());
+        let canon_context = Arc::new(load_souls_canon_manifest());
 
         Ok(CloudCascade {
             api_key,
@@ -121,7 +121,7 @@ impl CloudCascade {
             client: reqwest::Client::new(),
             base_url: format!("{}/api/v1/chat/completions", base_url.trim_end_matches('/')),
             semaphore: Arc::new(Semaphore::new(2)),
-            canon_context: Arc::new(load_soda_canon_manifest()),
+            canon_context: Arc::new(load_souls_canon_manifest()),
         }
     }
 
@@ -165,7 +165,7 @@ impl CloudCascade {
                 role: "system".to_string(),
                 content: MessageContent::Parts(vec![ContentPart {
                     kind: "text".to_string(),
-                    text: format!("=== SODA CANON CONTEXT ===\n{}", self.canon_context),
+                    text: format!("=== SOULS CANON CONTEXT ===\n{}", self.canon_context),
                     cache_control: Some(CacheControl {
                         kind: "ephemeral".to_string(),
                         ttl: None,
@@ -242,11 +242,11 @@ impl CloudCascade {
     }
 }
 
-fn load_soda_canon_manifest() -> String {
+fn load_souls_canon_manifest() -> String {
     let paths = [
-        "Z:\\souls_mc\\docs\\SODA_CANON_MANIFEST.md",
-        "docs/SODA_CANON_MANIFEST.md",
-        "../docs/SODA_CANON_MANIFEST.md",
+        "Z:\\souls_mc\\docs\\SOULS_CANON_MANIFEST.md",
+        "docs/SOULS_CANON_MANIFEST.md",
+        "../docs/SOULS_CANON_MANIFEST.md",
     ];
 
     for path in paths {
@@ -257,7 +257,7 @@ fn load_soda_canon_manifest() -> String {
         }
     }
 
-    "SODA Canon Manifest unavailable in filesystem.".to_string()
+    "SOULS Canon Manifest unavailable in filesystem.".to_string()
 }
 
 fn openrouter_chat_completions_url() -> String {

@@ -13,8 +13,8 @@ Cada task tem um DoD (Definition of Done) executável. Tarefas marcadas `[SCAFFO
 
 **Escopo:** Substituir `genesis_mc` por `souls_mc` em código Rust ativo.
 
-- [ ] `src-tauri/src/bin/f1_distiller_cli.rs:380` — `SODA (Genesis MC)` → `SODA (Souls MC)`
-- [ ] `src-tauri/src/harvester/canon.rs:17` — `SODA / Genesis MC:` → `SODA / Souls MC:`
+- [ ] `src-tauri/src/bin/f1_distiller_cli.rs:380` — `SOULS (Genesis MC)` → `SOULS (Souls MC)`
+- [ ] `src-tauri/src/harvester/canon.rs:17` — `SOULS / Genesis MC:` → `SOULS / Souls MC:`
 - [ ] `src-tauri/src/persist/ssot_injector.rs:1337` — `genesis-mc-sheets/1.0` → `souls-mc-sheets/1.0`
 
 **DoD:**
@@ -40,7 +40,7 @@ Cada task tem um DoD (Definition of Done) executável. Tarefas marcadas `[SCAFFO
 - [ ] `.trae/rules/project_rules.md:5` — `Genesis MC Core Context` → `Souls MC Core Context`
 - [ ] `README.md:18` — `O Genesis MC repudia` → `O Souls MC repudia`
 - [ ] `README.md:62` — `rodando no Genesis MC` → `rodando no Souls MC`
-- [ ] `.agents/skills/soda-frontend-expert/SKILL.md` — `SODA (Genesis MC)` → `SODA (Souls MC)`
+- [ ] `.agents/skills/souls-frontend-expert/SKILL.md` — `SOULS (Genesis MC)` → `SOULS (Souls MC)`
 
 **DoD:**
 - `git grep -E 'genesis[ _-]?mc' -- '.trae/' 'README.md' '.agents/skills/'` retorna 0
@@ -78,11 +78,11 @@ Cada task tem um DoD (Definition of Done) executável. Tarefas marcadas `[SCAFFO
 **Escopo:** Atualizar paths em scripts Python de ETL (dev-only) para que o próximo run produza dumps alinhados com o novo nome.
 
 - [ ] `docs/scripts/extract_audit_blobs.py:33` — `parents[2]=genesis_mc` → `parents[2]=souls_mc`
-- [ ] `docs/scripts/soda_adr_compiler.py:6,7` — `Z:\genesis_mc\...` → `Z:\souls_mc\...` (2 hits)
-- [ ] `docs/scripts/soda_context_dumps_compiler.py` — 15 hits `Z:\genesis_mc\...` → `Z:\souls_mc\...`
+- [ ] `docs/scripts/souls_adr_compiler.py:6,7` — `Z:\genesis_mc\...` → `Z:\souls_mc\...` (2 hits)
+- [ ] `docs/scripts/souls_context_dumps_compiler.py` — 15 hits `Z:\genesis_mc\...` → `Z:\souls_mc\...`
 
 **DoD:**
-- `git grep -E 'genesis[ _-]?mc' -- 'docs/scripts/extract_audit_blobs.py' 'docs/scripts/soda_adr_compiler.py' 'docs/scripts/soda_context_dumps_compiler.py'` retorna 0
+- `git grep -E 'genesis[ _-]?mc' -- 'docs/scripts/extract_audit_blobs.py' 'docs/scripts/souls_adr_compiler.py' 'docs/scripts/souls_context_dumps_compiler.py'` retorna 0
 - A lista `REBRAND_FORBIDDEN` em `docs/scripts/audit_blob_quality.py:106-110` permanece INTACTA (assinatura do auditor)
 
 ## TASK-07 — PRESERVE: Históricos (16+ files)
@@ -102,7 +102,7 @@ Cada task tem um DoD (Definition of Done) executável. Tarefas marcadas `[SCAFFO
 - [ ] `docs/context_dumps/_RULES_IN_IDEs.txt`
 - [ ] `docs/context_dumps/_SKILLS_IN_IDEs.txt`
 - [ ] `docs/context_dumps/_WOKSPACE_MAP.txt`
-- [ ] `docs/context_dumps/_YAML_AgentGateway_e_soda_mcp_server.rs.txt`
+- [ ] `docs/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt`
 - [ ] `docs/state/DB_STATE_REPORT.md`
 - [ ] `docs/state/_CURRENT_REALITY_AUDIT_2026-07-05.md`
 - [ ] `docs/state/debugs/debug-rust-incremental-noise.md`
@@ -127,7 +127,7 @@ Cada task tem um DoD (Definition of Done) executável. Tarefas marcadas `[SCAFFO
 - [ ] `cd src-tauri && cargo check --all-targets` → Exit Code 0, 0 warnings
 - [ ] `cd src-tauri && cargo test --no-run` → Exit Code 0
 - [ ] Se `cargo check` falhar com "crate `souls_mc_lib` not found": rastrear import residual e corrigir (não deve acontecer, mas contingência)
-- [ ] Se falhar por qualquer outro motivo: invocar `soda-ralph-loop` (3-tentativas ceiling, Fail-Closed)
+- [ ] Se falhar por qualquer outro motivo: invocar `souls-ralph-loop` (3-tentativas ceiling, Fail-Closed)
 
 **DoD:**
 - `cargo check` retorna `Exit Code 0` com zero warnings

@@ -11,11 +11,11 @@ description: "Governa a termodinâmica da VRAM de 6GB, limitando o spillover de 
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 ## Contexto Técnico e Restrições de Silício
 
-A Arquitetura SODA V4 opera sob limitações físicas severas e fixas no hardware host do usuário final:
+A Arquitetura SOULS V4 opera sob limitações físicas severas e fixas no hardware host do usuário final:
 
 - **Unidade de Processamento Gráfico (dGPU):** NVIDIA RTX 2060m contendo exatamente $6.0 \text{ GB}$ ($6144 \text{ MB}$) de VRAM física dedicada.
 - **Largura de Banda do Barramento:** Conexão móvel limitada via barramento PCIe Gen3 x8. Qualquer transferência dinâmica de pesos (offloading) ou troca de tensores entre a RAM do sistema e a VRAM durante a fase autorregressiva (decodificação) degrada a performance de geração, reduzindo a taxa de processamento para menos de $2 \text{ a } 8 \text{ tokens/s}$.
@@ -47,13 +47,13 @@ $$V_{\text{total}} = 3.78 \text{ GB} + 3.93 \text{ GB} + 0.20 \text{ GB} = 7.91 
 
 Como $7.91 \text{ GB} > 6.0 \text{ GB}$, o sistema sofre transbordo imediato para o barramento PCIe, forçando o driver a realizar paginação no disco/RAM, congelando a interface e derrubando o sistema por esgotamento de recurso de hardware.
 
-## Decisões Arquiteturais da SODA V4
+## Decisões Arquiteturais da SOULS V4
 
-Para romper as limitações de hardware sem comprometer a soberania local e o desempenho térmico da máquina host, a Arquitetura SODA V4 adota as seguintes regras de implementação de baixo nível:
+Para romper as limitações de hardware sem comprometer a soberania local e o desempenho térmico da máquina host, a Arquitetura SOULS V4 adota as seguintes regras de implementação de baixo nível:
 
 ```
 +-------------------------------------------------------------------------+
-|                         SODA V4 - DUAL ENGINE LAYOUT                    |
+|                         SOULS V4 - DUAL ENGINE LAYOUT                    |
 +-------------------------------------------------------------------------+
 |                                                                         |
 |  [Fase 1.5 - Destilação]                                                |
@@ -76,22 +76,22 @@ Para romper as limitações de hardware sem comprometer a soberania local e o de
 
 ### 1. A Dualidade de Motores com Descarte Atômico
 
-Bane-se o uso de daemons de inferência persistentes e instáveis na GPU. SODA V4 adota um pipeline híbrido composto por dois motores distintos operando em tempos de vida mutuamente exclusivos:
+Bane-se o uso de daemons de inferência persistentes e instáveis na GPU. SOULS V4 adota um pipeline híbrido composto por dois motores distintos operando em tempos de vida mutuamente exclusivos:
 
-- **O Trator de Ingestão de Alta Voltagem (`mistral.rs`):** Instanciado em tempo de execução de forma estritamente efêmera e isolada. O orquestrador em Rust (`soda-etl-worker`) dispara o binário `mistral.rs` como um subprocesso filho focado exclusivamente em digerir e gerar as essências da Fase 1.5. Beneficia-se da velocidade de kernels CUDA e Flash Attention 2 nativo para processar prompts colossais de código em menos de $40$ segundos.
+- **O Trator de Ingestão de Alta Voltagem (`mistral.rs`):** Instanciado em tempo de execução de forma estritamente efêmera e isolada. O orquestrador em Rust (`souls-etl-worker`) dispara o binário `mistral.rs` como um subprocesso filho focado exclusivamente em digerir e gerar as essências da Fase 1.5. Beneficia-se da velocidade de kernels CUDA e Flash Attention 2 nativo para processar prompts colossais de código em menos de $40$ segundos.
 - **A Guilhotina Atômica do Sistema:** Imediatamente após a conclusão da extração sintática e entrega do JSON estruturado ao SQLite pela Fase 1.5, o orquestrador despacha um sinal síncrono do sistema (`SIGKILL`) ao processo do `mistral.rs`. A memória física da placa de vídeo dedicada é descarregada à força e retorna para $0 \text{ MB}$, expurgando vazamentos residuais e limpando os registradores para a próxima etapa.
 - **O Cérebro Contínuo Baseado em C++ (`llama-cpp-2`):** Responsável por guiar a interface, executar a decodificação de logit-probing e as ações geradoras de feedback em tempo real. O `llama-cpp-2` carrega modelos utilizando memória virtual mapeada (`mmap`), garantindo previsibilidade determinística e alocação estática e contígua em tempo $O(1)$.
 
 ### 2. Imposição Matemática de Limites de KV Cache (Quantização Casada)
 
-Para assegurar o regime de estabilidade operacional contínua na dGPU RTX 2060m, o SODA V4 fixa a seguinte equação regulatória inegociável:
+Para assegurar o regime de estabilidade operacional contínua na dGPU RTX 2060m, o SOULS V4 fixa a seguinte equação regulatória inegociável:
 
 $$\text{VRAM}_{\text{pesos}} + \text{VRAM}_{\text{kv\_cache\_quant}} \le 4.8 \text{ GB}$$
 
 Esta meta orçamentária é cumprida síncronamente pela aplicação de duas técnicas de compactação de tensores de precisão na inicialização dos buffers:
 
 1. **Quantização dos Pesos em IQ3_M com Matriz de Importância (imatrix):** Todos os modelos de escala $8\text{B}$ de parâmetros devem ser convertidos e carregados estritamente no formato IQ3_M calibrado com dados representativos de código fonte. O tamanho total do modelo em memória virtual fica limitado a exatamente $3.78 \text{ GB}$ ($3870 \text{ MB}$).
-2. **Quantização Mandatória do KV Cache a 4-Bits (`Q4_K`):** O cache de contexto longo do SODA é processado com quantização de 4 bits em vez de flutuação em 16-bits.
+2. **Quantização Mandatória do KV Cache a 4-Bits (`Q4_K`):** O cache de contexto longo do SOULS é processado com quantização de 4 bits em vez de flutuação em 16-bits.
 
 #### Cálculo de VRAM do KV Cache quantizado em Q4_K:
 
@@ -99,7 +99,7 @@ $$V_{\text{kv\_q4}} = 2 \times N_{\text{layers}} \times N_{\text{kv\_heads}} \ti
 
 Sob esta topologia de compressão casada, o consumo consolidado em VRAM do modelo $8\text{B}$ com contexto de $30\text{k}$ tokens é reduzido para:
 
-$$V_{\text{total\_soda}} = 3.78 \text{ GB} + 0.91 \text{ GB} + 0.20 \text{ GB} = 4.89 \text{ GB}$$
+$$V_{\text{total\_souls}} = 3.78 \text{ GB} + 0.91 \text{ GB} + 0.20 \text{ GB} = 4.89 \text{ GB}$$
 
 A compressão garante um headroom de segurança física de $1.11 \text{ GB}$ **(**$1136 \text{ MB}$**)** livre na GPU RTX 2060m para gerenciar picos de inicialização de tensores e manipulação gráfica da interface do host (Tauri v2 e sistema operacional local).
 
@@ -107,10 +107,10 @@ A compressão garante um headroom de segurança física de $1.11 \text{ GB}$ **(
 
 Fica terminantemente proibido inicializar qualquer modelo local de inteligência artificial de forma cega ou baseada em heurísticas opinativas de configuração do usuário.
 
-- O SODA implementará o utilitário nativo de baixo nível `inspector_gguf` escrito em Rust.
+- O SOULS implementará o utilitário nativo de baixo nível `inspector_gguf` escrito em Rust.
 - Antes de acoplar qualquer arquivo `.gguf` à dGPU, o orquestrador invoca o `inspector_gguf` para parsear o cabeçalho binário do modelo em tempo $O(1)$, extraindo metadados críticos: o formato de quantização exato do modelo (`general.architecture`), contagem de camadas, número de cabeças de atenção e tensores.
 - O sistema executa em tempo real o cálculo matemático da equação de VRAM descrita neste ADR, confrontando a pegada teórica calculada contra o headroom físico real disponível no hardware no milissegundo do boot (buscando dados via chamadas nativas de NVML no Rust).
-- **Comportamento Fail-Closed:** Se a soma projetada exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SODA aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
+- **Comportamento Fail-Closed:** Se a soma projetada exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SOULS aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
 
 ## Consequências e Trade-offs
 

@@ -1,7 +1,7 @@
 // ============================================================================
-// SODA-CANIBALIZED: Comentários físicos via "Pessimismo da Razão".
+// SOULS-CANIBALIZED: Comentários físicos via "Pessimismo da Razão".
 // Tudo abaixo foi CONGELADO e NÃO compila. O código permanece na pasta
-// para canibalização futura caso a SSOT do SODA autorize.
+// para canibalização futura caso a SSOT do SOULS autorize.
 //
 // Desplugados nesta fase (F2/Alvo3, branch feat/lean-mcp-integration):
 //   - proxy*, http_server, server     -> Conflitam com nosso gateway/TCP
@@ -20,12 +20,12 @@ pub mod compound_lexer;
 pub mod config_io;
 pub mod core;
 pub mod heatmap;
-// pub mod hook_handlers; // SODA-CANIBALIZED Fase 2.5: depende de setup (congelado)
-// pub mod hooks; // SODA-CANIBALIZED Fase 2.5: depende de setup (congelado)
+// pub mod hook_handlers; // SOULS-CANIBALIZED Fase 2.5: depende de setup (congelado)
+// pub mod hooks; // SOULS-CANIBALIZED Fase 2.5: depende de setup (congelado)
 pub mod instructions;
 pub mod marked_block;
 pub mod mcp_stdio;
 pub mod rewrite_registry;
 pub mod rules_inject;
-// pub mod tool_defs; // SODA-CANIBALIZED Fase 2.5: congelado (depende de rmcp::model::Tool)
+// pub mod tool_defs; // SOULS-CANIBALIZED Fase 2.5: congelado (depende de rmcp::model::Tool)
 pub mod tools;

@@ -1,13 +1,13 @@
 ---
 name: mcp-time-master
-description: O Relógio Absoluto do SODA. Resolve o Paradoxo do Multiplexador (Firewall L7). Impõe a Bifurcação Temporal (ISO-8601 para ETL/Sheets, Epoch Int64 para LanceDB/SQLite B-Tree). Aplica a Estratégia de Recuo (NULL) para prevenir colapso vetorial e força Decodificação Restrita (llguidance) em SLM fallbacks.
+description: O Relógio Absoluto do SOULS. Resolve o Paradoxo do Multiplexador (Firewall L7). Impõe a Bifurcação Temporal (ISO-8601 para ETL/Sheets, Epoch Int64 para LanceDB/SQLite B-Tree). Aplica a Estratégia de Recuo (NULL) para prevenir colapso vetorial e força Decodificação Restrita (llguidance) em SLM fallbacks.
 triggers: ["mcp-time-master", "ver hora", "que dia é hoje", "data atual", "ancoragem temporal", "agendar", "timestamp", "fuso horário"]
 ---
 
 ### skill: MCP Time Master (A Âncora Cronológica e RAG Temporal V7.0)
 
 #### Goal
-Atuar como a âncora matemática de realidade temporal do SODA. O objetivo inegociável é erradicar alucinações de fuso horário, garantir ordenação causal e blindar os bancos de dados. A fonte soberana de tempo no Gateway é a ferramenta nativa `sys_time` do `soda_mcp_server`; wrappers legados em Python foram extirpados. Na modelagem de dados, você DEVE dominar a Bifurcação de Formatos (ISO-8601 vs Int64) e aplicar a "Estratégia de Recuo para NULL" para não asfixiar os pré-filtros do LanceDB com datas alucinadas.
+Atuar como a âncora matemática de realidade temporal do SOULS. O objetivo inegociável é erradicar alucinações de fuso horário, garantir ordenação causal e blindar os bancos de dados. A fonte soberana de tempo no Gateway é a ferramenta nativa `sys_time` do `souls_mcp_server`; wrappers legados em Python foram extirpados. Na modelagem de dados, você DEVE dominar a Bifurcação de Formatos (ISO-8601 vs Int64) e aplicar a "Estratégia de Recuo para NULL" para não asfixiar os pré-filtros do LanceDB com datas alucinadas.
 
 #### Instructions
 Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções em banco ou ETL para o Google Sheets, utilize este MCP sob a seguinte máquina de estados:
@@ -33,12 +33,12 @@ Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções 
    * Ao criar fragmentos persistentes em Markdown, injete fisicamente no topo do texto: `Carimbo Temporal: [Data ISO-8601]` para fortalecer a Busca Híbrida BM25.
 
 #### Constraints
-* **PROIBIÇÃO DE SHELL SCRIPTS:** É letal usar comandos bash como `date +%s`. O SODA opera bare-metal em Windows/Linux e requer portabilidade absoluta via servidor MCP.
+* **PROIBIÇÃO DE SHELL SCRIPTS:** É letal usar comandos bash como `date +%s`. O SOULS opera bare-metal em Windows/Linux e requer portabilidade absoluta via servidor MCP.
 * **SILÊNCIO OPERACIONAL:** O relógio trabalha nos bastidores. Não perca tokens explicando o horário no Canvas.
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação do roteamento O(1).
 
 #### Examples
-**Entrada do Usuário:** "SODA, grava no Blueprint a análise de hoje, e injeta isso como memória volátil pro mês."
+**Entrada do Usuário:** "SOULS, grava no Blueprint a análise de hoje, e injeta isso como memória volátil pro mês."
 **Ação do Agente:**
 1. Invoca estritamente `sys_time`.
 2. Bifurcação: Para a planilha (ETL), gera a string `2026-05-07T03:10:00Z`. Para o LanceDB, gera a chave Epoch de base `1715051400`.

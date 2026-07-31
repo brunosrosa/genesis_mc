@@ -10,7 +10,7 @@ description: "Institui a Tríade de Memória isolada (SQLite, LanceDB, LadybugDB
 ### ADR-004: Tríade de Memória, Event Sourcing e Compressão Bare-Metal
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional (O Gargalo Físico)
 Sistemas agênticos convencionais tentam combater a "Amnésia Sistêmica" (Context Rot) utilizando bancos de dados únicos e monolíticos para armazenar metadados, grafos e vetores massivos de embeddings. Quando operando no host do usuário, o disparo contínuo de milhares de micro-transações geradas por agentes (logs, reflexões, RAG) resulta em esquizofrenia de I/O.

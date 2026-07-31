@@ -618,7 +618,7 @@ pub fn infer_module_type(filename: &str) -> &'static str {
     }
 }
 
-/// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SODA.
+/// Valida se a arquitetura lida do metadado GGUF é suportada pelo motor bare-metal do SOULS.
 pub fn is_architecture_supported(arch: &str) -> bool {
     let lower = arch.trim().to_lowercase();
     if lower.is_empty() {

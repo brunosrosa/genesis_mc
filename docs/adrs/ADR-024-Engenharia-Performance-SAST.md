@@ -13,10 +13,10 @@ description: "Implementa travas de performance no pipeline de análise estática
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-O Harvester da Fase 0 passou a operar sobre monorepos, sidecars heterogêneos e regras SAST locais em modo air-gapped. Essa expansão elevou o risco físico de asfixia térmica, timeouts cegos, parsing infinito em arquivos densos e perda de rastreabilidade de Supply Chain quando filtros agressivos escondem manifestos e lockfiles. O ecossistema SODA precisa congelar essas decisões no Cânone antes de qualquer mutação futura no Rust ou criação de novas lâminas de análise.
+O Harvester da Fase 0 passou a operar sobre monorepos, sidecars heterogêneos e regras SAST locais em modo air-gapped. Essa expansão elevou o risco físico de asfixia térmica, timeouts cegos, parsing infinito em arquivos densos e perda de rastreabilidade de Supply Chain quando filtros agressivos escondem manifestos e lockfiles. O ecossistema SOULS precisa congelar essas decisões no Cânone antes de qualquer mutação futura no Rust ou criação de novas lâminas de análise.
 
 ## Decisão
-Ficam decretadas, para toda extração SAST e para qualquer futura ferramenta CLI de análise do SODA, as seguintes 4 Leis Duras de Extração:
+Ficam decretadas, para toda extração SAST e para qualquer futura ferramenta CLI de análise do SOULS, as seguintes 4 Leis Duras de Extração:
 
 1. **A. O Fim do Timeout Cego (O Bisturi Adaptativo):**
    Ferramentas orientadas por regras, como OpenGrep, devem escalar o tempo dinamicamente por arquivo e por regra. O uso da flag `--allow-rule-timeout-control` torna-se obrigatório sempre que disponível, delegando o limite ao tamanho matemático do arquivo, da regra e do custo real do match. Timeout fixo e cego é proibido como estratégia primária.

@@ -74,7 +74,7 @@ fn ensure_phase2_cli_schema(conn: &Connection) -> io::Result<()> {
             repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
-            soda_universal_uuid TEXT,
+            souls_universal_uuid TEXT,
             status_processamento TEXT NOT NULL,
             timestamp_fase_1 INTEGER,
             timestamp_fase_3 INTEGER,
@@ -117,7 +117,7 @@ fn mark_repo_running_if_present(conn: &Connection, repo_id: &str) -> io::Result<
     if exists == 0 {
         conn.execute(
             "INSERT INTO repositorios
-                (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, retry_count)
+                (project_name, lote_id, repo_url, souls_universal_uuid, status_processamento, retry_count)
              VALUES (?1, ?2, ?3, ?4, ?5, 0)",
             params![
                 repo_id,

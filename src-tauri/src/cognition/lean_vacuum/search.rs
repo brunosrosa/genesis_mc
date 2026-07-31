@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED: Busca Textual Compacta no Padrão LEAN (souls_search)
+// SOULS-CANIBALIZED: Busca Textual Compacta no Padrão LEAN (souls_search)
 // Executa varredura por regex com notação compacta agrupada por arquivo e aglomeração de linhas.
 
 use regex::Regex;

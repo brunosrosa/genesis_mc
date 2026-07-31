@@ -1,4 +1,4 @@
-=== SODA LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===
+=== SOULS LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===
 GERADO EM: 2026-07-30 13:12:22
 FONTE DE ESTADO SQLITE: Z:\souls_mc\.souls_data\souls_heuristic_vault.db (VIEW NATIVA: vw_finops_routing)
 ------------------------------------------------------------------------------------------------------------------------------------------------------

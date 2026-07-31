@@ -1,10 +1,10 @@
-# 👻 Souls MC (Mission Control) (_SODA_)
+# 👻 Souls MC (Mission Control) (_SOULS_)
 
 > **Axioma:** *"O silício é o nosso limite; a soberania é o nosso dogma; o silêncio é a nossa estética."*
 
-**Sovereign Operating Data Architecture (SODA)** não é um "wrapper" de IA ou um chatbot glorificado. É um **Sistema Operacional Agêntico Local** — um **Exoesqueleto Cognitivo** e **Prótese de Função Executiva** — construído do zero no *Metal Nu* (Bare-Metal). Ele orquestra inteligência autônoma diretamente no hardware do usuário, garantindo simbiose humana, privacidade criptográfica, eficiência termodinâmica e mitigação de *Flow-Debt* (Dívida de Fluxo) em mentes neurodivergentes (2e/TDAH).
+**Sovereign Operating Data Architecture (SOULS)** não é um "wrapper" de IA ou um chatbot glorificado. É um **Sistema Operacional Agêntico Local** — um **Exoesqueleto Cognitivo** e **Prótese de Função Executiva** — construído do zero no *Metal Nu* (Bare-Metal). Ele orquestra inteligência autônoma diretamente no hardware do usuário, garantindo simbiose humana, privacidade criptográfica, eficiência termodinâmica e mitigação de *Flow-Debt* (Dívida de Fluxo) em mentes neurodivergentes (2e/TDAH).
 
-**Status Atual:** **ERA V6 — Souls MC.** Backend Rust/Tokio maduro (Harvester F0–F5, SAST pipeline, MCP gateway `soda-agent-gateway`, sandboxing Windows AppContainer + Wasmtime). Frontend Svelte 5 em transição. Constituição ativa: [`docs/SODA_CANON_MANIFEST.md`](docs/SODA_CANON_MANIFEST.md).
+**Status Atual:** **ERA V6 — Souls MC.** Backend Rust/Tokio maduro (Harvester F0–F5, SAST pipeline, MCP gateway `souls-agent-gateway`, sandboxing Windows AppContainer + Wasmtime). Frontend Svelte 5 em transição. Constituição ativa: [`docs/SOULS_CANON_MANIFEST.md`](docs/SOULS_CANON_MANIFEST.md).
 
 ---
 
@@ -61,13 +61,13 @@ O Souls MC repudia a execução de interpretadores pesados em *background* (Node
 
 A estruturação é regida pelo **Spec-Driven Development (SDD)** e divisão estrita de responsabilidades.
 
-- **`/src-tauri/`** — O **Coração Rust**. Toda a regra de negócio, IPC Zero-Copy, Harvester (F0–F5), SAST pipeline (semgrep / opengrep), MCP gateway (`souls_mcp_server`, `soda-agent-gateway`), persistência SQLite e gestão de subprocessos vive aqui.
+- **`/src-tauri/`** — O **Coração Rust**. Toda a regra de negócio, IPC Zero-Copy, Harvester (F0–F5), SAST pipeline (semgrep / opengrep), MCP gateway (`souls_mcp_server`, `souls-agent-gateway`), persistência SQLite e gestão de subprocessos vive aqui.
 - **`/src/`** — O **Shell Svelte 5** (em transição do legado). Interface *Cyber-Purple*, Tiling 2D, GenUI Efêmera e ecossistema passivo do Canvas.
 - **`.agents/`** — O **Córtex de Contexto** dos Agentes.
   - `rules/`: Leis de governança imutáveis e sintaxe (`project_rules.md`).
   - `skills/`: Ecossistema de habilidades em Markdown (`SKILL.md`) sob o princípio de **Divulgação Progressiva** (Progressive Disclosure).
 - **`/docs/`** — Memória Semântica de longo prazo.
-  - `SODA_CANON_MANIFEST.md` — **A Constituição**. Toda decisão arquitetural deve referenciá-la.
+  - `SOULS_CANON_MANIFEST.md` — **A Constituição**. Toda decisão arquitetural deve referenciá-la.
   - `adrs/` — *Architecture Decision Records* (ADRs).
   - `specs/` — Especificações SDD.
   - `prds/` — Product Requirements Documents.
@@ -106,7 +106,7 @@ Este projeto opera sob **Spec-Driven Development** e **TDD atômico (Red-Green-R
 4. Passa pelo **Ralph Loop** (teto de 3 tentativas, *Fail-Closed*) se o compilador quebrar.
 5. Aguarda aprovação HITL antes de qualquer rebase semântico em direção à `main`.
 
-A Constituição completa vive em [`docs/SODA_CANON_MANIFEST.md`](docs/SODA_CANON_MANIFEST.md). Em caso de divergência entre este README e o Canôn, **o Canôn prevalece**.
+A Constituição completa vive em [`docs/SOULS_CANON_MANIFEST.md`](docs/SOULS_CANON_MANIFEST.md). Em caso de divergência entre este README e o Canôn, **o Canôn prevalece**.
 
 ---
 

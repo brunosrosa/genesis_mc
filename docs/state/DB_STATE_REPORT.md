@@ -82,7 +82,7 @@ CREATE TABLE artefatos_destilados (
 CREATE TABLE debates_enxame (
     debate_id INTEGER PRIMARY KEY AUTOINCREMENT,
     repo_id TEXT NOT NULL REFERENCES repositorios(project_name),
-    contexto_oraculo_soda TEXT NOT NULL,
+    contexto_oraculo_souls TEXT NOT NULL,
     lente_a_output_bruto TEXT NOT NULL,
     lente_a_produto_ux TEXT NOT NULL,
     lente_b_output_bruto TEXT NOT NULL,
@@ -99,7 +99,7 @@ CREATE TABLE debates_enxame (
 |---:|---|---|---:|---|---:|
 | 0 | debate_id | INTEGER | 0 |  | 1 |
 | 1 | repo_id | TEXT | 1 |  | 0 |
-| 2 | contexto_oraculo_soda | TEXT | 1 |  | 0 |
+| 2 | contexto_oraculo_souls | TEXT | 1 |  | 0 |
 | 3 | lente_a_output_bruto | TEXT | 1 |  | 0 |
 | 4 | lente_a_produto_ux | TEXT | 1 |  | 0 |
 | 5 | lente_b_output_bruto | TEXT | 1 |  | 0 |
@@ -444,7 +444,7 @@ CREATE TABLE repo_heuristics (
     risco_linha_vermelha TEXT NOT NULL,
     observacoes TEXT NOT NULL,
     score_final REAL NOT NULL,
-    score_fit_geral_soda REAL NOT NULL,
+    score_fit_geral_souls REAL NOT NULL,
     score_philosophical_fit INTEGER NOT NULL,
     score_bare_metal_fit INTEGER NOT NULL,
     score_architectural_extractability INTEGER NOT NULL,
@@ -532,7 +532,7 @@ CREATE TABLE repo_heuristics (
 | 43 | risco_linha_vermelha | TEXT | 1 |  | 0 |
 | 44 | observacoes | TEXT | 1 |  | 0 |
 | 45 | score_final | REAL | 1 |  | 0 |
-| 46 | score_fit_geral_soda | REAL | 1 |  | 0 |
+| 46 | score_fit_geral_souls | REAL | 1 |  | 0 |
 | 47 | score_philosophical_fit | INTEGER | 1 |  | 0 |
 | 48 | score_bare_metal_fit | INTEGER | 1 |  | 0 |
 | 49 | score_architectural_extractability | INTEGER | 1 |  | 0 |
@@ -614,7 +614,7 @@ CREATE TABLE repositorios (
     project_name TEXT NOT NULL PRIMARY KEY,
     lote_id TEXT NOT NULL,
     repo_url TEXT NOT NULL UNIQUE,
-    soda_universal_uuid TEXT NOT NULL UNIQUE,
+    souls_universal_uuid TEXT NOT NULL UNIQUE,
     status_processamento TEXT NOT NULL,
     timestamp_fase_1 INTEGER,
     timestamp_fase_3 INTEGER,
@@ -628,7 +628,7 @@ CREATE TABLE repositorios (
 | 0 | project_name | TEXT | 1 |  | 1 |
 | 1 | lote_id | TEXT | 1 |  | 0 |
 | 2 | repo_url | TEXT | 1 |  | 0 |
-| 3 | soda_universal_uuid | TEXT | 1 |  | 0 |
+| 3 | souls_universal_uuid | TEXT | 1 |  | 0 |
 | 4 | status_processamento | TEXT | 1 |  | 0 |
 | 5 | timestamp_fase_1 | INTEGER | 0 |  | 0 |
 | 6 | timestamp_fase_3 | INTEGER | 0 |  | 0 |
@@ -639,7 +639,7 @@ CREATE TABLE repositorios (
 **Indexes**
 | name | unique | origin | partial | columns |
 |---|---:|---|---:|---|
-| sqlite_autoindex_repositorios_3 | 1 | u | 0 | soda_universal_uuid |
+| sqlite_autoindex_repositorios_3 | 1 | u | 0 | souls_universal_uuid |
 | sqlite_autoindex_repositorios_2 | 1 | u | 0 | repo_url |
 | sqlite_autoindex_repositorios_1 | 1 | pk | 0 | project_name |
 
@@ -693,10 +693,10 @@ CREATE VIEW quarantine_radar AS
        OR intrinsic_ethics_risk IN ('HIGH', 'CRITICAL')
 ```
 
-### soda_graph_topology
+### souls_graph_topology
 
 ```sql
-CREATE VIEW soda_graph_topology AS
+CREATE VIEW souls_graph_topology AS
     SELECT project_name, stack_base, architectural_topology, capability_nature_primary
     FROM repo_heuristics
 ```

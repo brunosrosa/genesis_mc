@@ -19,10 +19,10 @@ description: "Restringe a stack tecnológica do produto final ao Rust (Tokio) e 
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-O ecossistema **Genesis Mission Control (SODA)** opera sob restrições físicas de hardware rígidas no ambiente do usuário (RTX 2060m com 6GB VRAM, Intel i9 CPU e 32GB RAM). Runtimes tradicionais de desktop como Electron e frameworks baseados em Node.js geram grande sobrecarga computacional ("Daemon Bloat"), disputando barramento PCIe, CPU e memória física direta com motores de IA locais. Adicionalmente, interpretadores com Garbage Collection (GC) provocam latências estocásticas imprevisíveis e Event Loop Starvation, o que é inaceitável para uma Prótese de Função Executiva projetada para mentes neurodivergentes (2e/TDAH) que exige feedback mecânico e instantâneo.
+O ecossistema **Genesis Mission Control (SOULS)** opera sob restrições físicas de hardware rígidas no ambiente do usuário (RTX 2060m com 6GB VRAM, Intel i9 CPU e 32GB RAM). Runtimes tradicionais de desktop como Electron e frameworks baseados em Node.js geram grande sobrecarga computacional ("Daemon Bloat"), disputando barramento PCIe, CPU e memória física direta com motores de IA locais. Adicionalmente, interpretadores com Garbage Collection (GC) provocam latências estocásticas imprevisíveis e Event Loop Starvation, o que é inaceitável para uma Prótese de Função Executiva projetada para mentes neurodivergentes (2e/TDAH) que exige feedback mecânico e instantâneo.
 
 ## Decisão
-Fica formalmente decidido que a arquitetura de produção do SODA é estritamente Bare-Metal e restrita às seguintes tecnologias:
+Fica formalmente decidido que a arquitetura de produção do SOULS é estritamente Bare-Metal e restrita às seguintes tecnologias:
 1. **Backend & Core:** Desenvolvidos inteiramente em **Rust assíncrono (Tokio)**. Nenhuma lógica persistente em Node.js ou Python habitará a produção.
 2. **Frontend & Interface:** Svelte 5 (Runes) + TypeScript empacotados via **Tauri v2**.
 3. **Repúdio Absoluto:** Fica proibida a injeção ou persistência de daemons baseados em Electron, microsserviços Node.js locais ou interpretadores JS/Python pesados no pacote do produto. Qualquer lógica de terceiros que necessite de outras linguagens deve rodar como sidecar efêmero isolado em sandbox nativa e ser encerrada compulsoriamente via sinal atômico `SIGKILL` após o término da tarefa.
@@ -52,15 +52,15 @@ description: "Institui a matriz de contenção bare-metal: Wasmtime para lógica
 ### ADR-002: Sandboxing Híbrido e Matriz de Contenção Bare-Metal
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional
-O ecossistema SODA permite que agentes de IA autônomos planejem, gerem e executem códigos, *scripts* e ferramentas (MCPs) interagindo diretamente com o sistema operacional hospedeiro [1]. Deixar essa execução livre representa o risco máximo de *Remote Code Execution* (RCE), deleção arbitrária de arquivos do host, corrupção silenciosa de dados e vazamento de chaves de API [1]. 
+O ecossistema SOULS permite que agentes de IA autônomos planejem, gerem e executem códigos, *scripts* e ferramentas (MCPs) interagindo diretamente com o sistema operacional hospedeiro [1]. Deixar essa execução livre representa o risco máximo de *Remote Code Execution* (RCE), deleção arbitrária de arquivos do host, corrupção silenciosa de dados e vazamento de chaves de API [1]. 
 
-Em contrapartida, utilizar Hypervisors pesados, conteinerização de mercado baseada em *daemons* (como Docker completo) ou Máquinas Virtuais tradicionais (ex: QEMU, Firecracker) para estabelecer esse isolamento "sufocaria" irremediavelmente o hardware do usuário (Intel i9 / 32GB RAM) [1]. Isso introduziria concorrência desleal pelo barramento PCIe e disputaria recursos de CPU com a dGPU (RTX 2060m) durante a inferência [1]. O sistema de segurança do SODA não pode introduzir *Flow-Debt* (micro-congelamentos na UX) provocado pela inicialização de contêineres obesos e ineficientes [1, 2]. 
+Em contrapartida, utilizar Hypervisors pesados, conteinerização de mercado baseada em *daemons* (como Docker completo) ou Máquinas Virtuais tradicionais (ex: QEMU, Firecracker) para estabelecer esse isolamento "sufocaria" irremediavelmente o hardware do usuário (Intel i9 / 32GB RAM) [1]. Isso introduziria concorrência desleal pelo barramento PCIe e disputaria recursos de CPU com a dGPU (RTX 2060m) durante a inferência [1]. O sistema de segurança do SOULS não pode introduzir *Flow-Debt* (micro-congelamentos na UX) provocado pela inicialização de contêineres obesos e ineficientes [1, 2]. 
 
 #### Decisão Arquitetural (A Matriz de Contenção Híbrida)
-Fica decretado o abandono sumário de estratégias genéricas de isolamento. O SODA institui uma barreira de quatro camadas executada estritamente no nível do *kernel* do sistema operacional e no tempo de compilação, pautada exclusivamente no "Pessimismo da Razão" [2, 3]:
+Fica decretado o abandono sumário de estratégias genéricas de isolamento. O SOULS institui uma barreira de quatro camadas executada estritamente no nível do *kernel* do sistema operacional e no tempo de compilação, pautada exclusivamente no "Pessimismo da Razão" [2, 3]:
 
 **Módulo 1: O Enjaulamento de Lógica Pura (Wasmtime e WASI 0.3)**
 *   Todo processamento lógico determinístico, *parsers* propensos a riscos e falhas de memória (ex: gramáticas C/C++ carregadas pelo `tree-sitter`) e execução de *plugins* de terceiros ou gerados dinamicamente pela IA devem ser estritamente enjaulados em WebAssembly [2, 4].
@@ -68,19 +68,19 @@ Fica decretado o abandono sumário de estratégias genéricas de isolamento. O S
 *   A inicialização destas sandboxes Wasm ocorre em menos de `5ms`, isolando falhas de segmentação (*segfaults*) e pânicos lógicos que, de outra forma, derrubariam o *Event Loop* do Tokio no núcleo do Rust [2, 5]. O ambiente opera sob a política *Zero-Trust*, com negação de acesso à rede e ao disco por padrão, exigindo injeção explícita de *Capabilities* [4, 5].
 
 **Módulo 2: Isolamento de Sidecars Nativos (AppContainer/LPAC e Landlock)**
-*   Processos binários nativos ou interpretadores inevitáveis (como Python local) que precisem ser instanciados pelo SODA atuarão como *Sidecars Efêmeros*, governados pela regra do Menor Privilégio Imposto pelo Kernel [5, 6].
+*   Processos binários nativos ou interpretadores inevitáveis (como Python local) que precisem ser instanciados pelo SOULS atuarão como *Sidecars Efêmeros*, governados pela regra do Menor Privilégio Imposto pelo Kernel [5, 6].
 *   **No Windows (Host Primário):** É OBRIGATÓRIA a adoção de `AppContainer` com restrição cirúrgica de tokens SID através de **LPAC** (*Less Privileged AppContainer*) e **MXC** (*Microsoft Execution Containers*) [2, 3]. Essas invocações são feitas de forma nativa via API Win32 [3]. Qualquer acesso à rede externa ou a discos globais é bloqueado fisicamente pelo kernel do Windows [2].
 *   **No Linux:** Adoção de auto-enjaulamento nativo via `Landlock` (Linux Security Module). As restrições de caminhos de arquivos são aplicadas monotonicamente logo no boot do processo, garantindo tempo atômico de resposta [2, 5]. 
 
 **Módulo 3: Workspaces Efêmeros e Preservação SSD (ProjFS e RAMDisk)**
 *   Agentes de IA estão terminantemente proibidos de realizar mutações de E/S diretamente nos repositórios produtivos reais do usuário sem passar pelo funil de aprovação na *Agent Inbox* (*Human-In-The-Loop*) [7, 8].
-*   Para o desenvolvimento autônomo, o SODA instanciará *Shadow Workspaces* virtuais e transientes utilizando o **ProjFS** (*Projected File System* - Windows/NTFS) [9, 10]. 
+*   Para o desenvolvimento autônomo, o SOULS instanciará *Shadow Workspaces* virtuais e transientes utilizando o **ProjFS** (*Projected File System* - Windows/NTFS) [9, 10]. 
 *   Para proteger o tempo de vida útil do hardware e evitar o desgaste de células físicas de SSD (economia de *Terabytes Written* - TBW), os clones e edições efêmeras dos repositórios ocorrerão em um disco virtual montado na RAM (**RAMDisk / ImDisk**) dinamicamente alocado pelo Daemon Rust [10]. 
 *   O estado mutável utiliza arquitetura *Copy-on-Write* (CoW); se o agente falhar ou sofrer a guilhotina do `SIGKILL`, o RAMDisk é desmontado e a sessão "vira fumaça" sem corromper a matriz original do usuário [9, 11].
 
 **Módulo 4: Quarentena Dinâmica de Código Hostil (Windows Sandbox - WSB)**
 *   Para a auditoria de *linters* pesados não confiáveis ou na execução compulsória de código *vibecoded* de extrema hostilidade por parte dos agentes, a execução *bare-metal* será vetada na raiz [2, 12].
-*   O SODA orquestrará a geração dinâmica de arquivos XML `.wsb` via código Rust para invocar instantaneamente o **Windows Sandbox (Hyper-V)** [2, 12].
+*   O SOULS orquestrará a geração dinâmica de arquivos XML `.wsb` via código Rust para invocar instantaneamente o **Windows Sandbox (Hyper-V)** [2, 12].
 *   Esta micro-VM descartável embute os diretórios do repositório de análise mapeados estritamente no modo *Read-Only* (Somente-Leitura). O tempo de *boot* gira em torno de ~2 segundos [12].
 *   Ao encerrar o escopo da tarefa, o Rust destrói a instância do Sandbox; o sistema aniquila completamente os resquícios em nível de hipervisor, garantindo a esterilização terminal de eventuais persistências malignas [6, 12].
 
@@ -93,7 +93,7 @@ A implementação da "Gaiola de Silício" via AppContainer/LPAC isola perfeitame
 **A) Vulnerabilidade a Timing Attacks em Blocos `unsafe`**
 A injeção de permissões de Kernel e manipulação de SIDs exigiu o uso extensivo de blocos `unsafe` e ponteiros brutos (C-FFI via `windows-sys`). Qualquer futura lógica de validação de chaves, tokens ou credenciais confidenciais dentro ou nas fronteiras deste escopo DEVE obrigatoriamente utilizar verificação de tempo constante (ex: crate `constant_time_eq`). Validações condicionais ingênuas podem vazar os limites de isolamento via análise de ciclos de CPU (*side-channel timing attacks*).
 **B) Proibição de Acesso Concorrente à GPU**
-A jaula LPAC não resolve a virtualização de hardware de vídeo. Os processos *sidecars* enjaulados nascem absolutamente cegos para a placa de vídeo. É expressamente proibido tentar mapear drivers de GPU diretamente para múltiplos *sidecars* efêmeros em paralelo. O processo pai SODA atuará unicamente como um "Mediator Broker" restrito. Pedidos de inferência pesada devem ser serializados no *pipeline*, e apenas o processo mestre em Rust tocará na VRAM, prevenindo a asfixia da dGPU.
+A jaula LPAC não resolve a virtualização de hardware de vídeo. Os processos *sidecars* enjaulados nascem absolutamente cegos para a placa de vídeo. É expressamente proibido tentar mapear drivers de GPU diretamente para múltiplos *sidecars* efêmeros em paralelo. O processo pai SOULS atuará unicamente como um "Mediator Broker" restrito. Pedidos de inferência pesada devem ser serializados no *pipeline*, e apenas o processo mestre em Rust tocará na VRAM, prevenindo a asfixia da dGPU.
 **C) O Limite do Zero-Copy Purista em WebViews**
 Apesar da ponte de IPC via *Named Pipes* estar liberada com a DACL `ALL APPLICATION PACKAGES` para comunicação com o host, é arquiteturalmente proibido tentar mapear a memória compartilhada da jaula diretamente para a interface visual (Svelte 5) na tentativa de burlar o IPC do Tauri. WebViews modernas (como WebView2) exigem isolamento rigoroso de origem cruzada (COOP/COEP) e punem mapeamentos de memória não-policiados. Tentativas de "Zero-Copy purista" direto na UI resultarão em *seg-faults* violentos no processo de renderização. O fluxo de dados deve trafegar obrigatoriamente pelos dutos binários pré-estabelecidos (`rkyv` / `Apache Arrow`).
 
@@ -113,12 +113,12 @@ description: "Impõe a adoção do iceoryx2 (Lock-Free O(1)) para o Data Plane e
 ### ADR-003: Comunicação Zero-Copy IPC e Arquitetura de Data/Control Plane
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e o Gargalo de Serialização
-Durante o fluxo de inferência local e telemetria profunda, o núcleo Rust do SODA despeja fluxos contínuos e massivos de dados (estados de grafos, logs estruturados e blocos de AST/texto de modelos SLM). Serializar essa montanha de dados em cadeias de texto JSON para transportá-los até a interface gráfica (Svelte 5 / Tauri) ou entre agentes gera gargalos drásticos de I/O [2]. 
+Durante o fluxo de inferência local e telemetria profunda, o núcleo Rust do SOULS despeja fluxos contínuos e massivos de dados (estados de grafos, logs estruturados e blocos de AST/texto de modelos SLM). Serializar essa montanha de dados em cadeias de texto JSON para transportá-los até a interface gráfica (Svelte 5 / Tauri) ou entre agentes gera gargalos drásticos de I/O [2]. 
 
-A constante alocação e desalocação de objetos JSON no motor JavaScript aciona ciclos agressivos do *Garbage Collector* (GC) do V8. Na dGPU RTX 2060m e CPU i9 sob estresse máximo, esse overhead de memória não-nativa se converte em "Flow-Debt" (micro-congelamentos de tela e engasgos operacionais), o que é intolerável para a interface reativa e neuro-inclusiva do SODA [2, 6].
+A constante alocação e desalocação de objetos JSON no motor JavaScript aciona ciclos agressivos do *Garbage Collector* (GC) do V8. Na dGPU RTX 2060m e CPU i9 sob estresse máximo, esse overhead de memória não-nativa se converte em "Flow-Debt" (micro-congelamentos de tela e engasgos operacionais), o que é intolerável para a interface reativa e neuro-inclusiva do SOULS [2, 6].
 
 #### Decisão Arquitetural (A Separação Data Plane / Control Plane)
 Fica decretada a extinção da serialização JSON nas rotinas centrais de alta performance do *runtime*, adotando um modelo estrito e bipartido de comunicação *Inter-Process Communication* (IPC):
@@ -131,9 +131,9 @@ Fica decretada a extinção da serialização JSON nas rotinas centrais de alta 
 **Módulo 2: O Control Plane Restrito (UDS / stdio)**
 *   Para evitar a fragmentação excessiva da memória física e do *kernel* com múltiplas tabelas de páginas (*mmap*), o `iceoryx2` fica PROIBIDO para a passagem de mensagens simples e sinais de controle [5].
 *   A sinalização de estado de agentes (acordar, dormir, telemetria leve) utilizará **Unix Domain Sockets (UDS) não bloqueantes** suportados por primitivas de evento do SO (*epoll/eventfd* no Linux, Named Pipes no Windows) [3].
-*   **A Alfândega MCP:** Para a integração com ferramentas e servidores do ecossistema *Model Context Protocol* (MCP), o SODA operará os fluxos de controle através de **`stdio`** e JSON-RPC 2.0 [5, 7]. A fronteira do JSON fica restrita exclusivamente à "alfândega externa" do sistema, isolada do barramento de dados principal.
+*   **A Alfândega MCP:** Para a integração com ferramentas e servidores do ecossistema *Model Context Protocol* (MCP), o SOULS operará os fluxos de controle através de **`stdio`** e JSON-RPC 2.0 [5, 7]. A fronteira do JSON fica restrita exclusivamente à "alfândega externa" do sistema, isolada do barramento de dados principal.
 *   **Emenda Constitucional: A Lei do Isolamento do Stdio (Sanidade do MCP):**
-    *   Nos binários e sidecars do ecossistema SODA que operam como servidores ou proxies MCP via `stdio` (ex: `soda_mcp_server`, `mcp_stdio_guard`, `lean-ctx`, `agentgateway`), **o fluxo de saída padrão (`stdout`) é considerado um recurso sagrado e exclusivo do barramento JSON-RPC / LSP**.
+    *   Nos binários e sidecars do ecossistema SOULS que operam como servidores ou proxies MCP via `stdio` (ex: `souls_mcp_server`, `mcp_stdio_guard`, `lean-ctx`, `agentgateway`), **o fluxo de saída padrão (`stdout`) é considerado um recurso sagrado e exclusivo do barramento JSON-RPC / LSP**.
     *   **Proibição Absoluta:** É terminantemente PROIBIDO instanciar bibliotecas de logging ou telemetria (como `tracing-subscriber`, `env_logger`, `log`) ou rotinas manuais de escrita (`println!`, `print!`) que despejem registros no `stdout`. Qualquer byte de log emitido no `stdout` corrompe o enquadramento de payload JSON-RPC (`Content-Length`), provocando falha catastrófica de desserialização e encerramento imediato do canal MCP no cliente (`upstream closed on receive`).
     *   **Ancoragem Mandatória no `stderr`:** Todo e qualquer evento de observabilidade, telemetria e diagnóstico (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`) DEVE ser obrigatoriamente ancorado no fluxo de erro padrão (`stderr`). A inicialização de formatadores e subscritores de log deve impor a trava explícita de escrita para `stderr` (ex: `.with_writer(std::io::stderr)` ou `eprintln!`).
 
@@ -160,7 +160,7 @@ description: "Institui a Tríade de Memória isolada (SQLite, LanceDB, LadybugDB
 ### ADR-004: Tríade de Memória, Event Sourcing e Compressão Bare-Metal
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional (O Gargalo Físico)
 Sistemas agênticos convencionais tentam combater a "Amnésia Sistêmica" (Context Rot) utilizando bancos de dados únicos e monolíticos para armazenar metadados, grafos e vetores massivos de embeddings. Quando operando no host do usuário, o disparo contínuo de milhares de micro-transações geradas por agentes (logs, reflexões, RAG) resulta em esquizofrenia de I/O.
@@ -203,15 +203,15 @@ description: "Erradica GraphRAGs pesados. Adota B-Trees no LanceDB, tags STABLE/
 ### ADR-005: RAG Temporal, Filtros Escalares e Combate à Cegueira Temporal
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional (A Cegueira Temporal)
 A busca vetorial ingênua em RAG (Retrieval-Augmented Generation) convencional sofre de "Cegueira Temporal" e "Recency Bias" (Viés de Recência). Em um RAG puramente baseado em similaridade de cosseno, um documento obsoleto de três anos atrás pode obter uma pontuação semântica maior do que uma regra atualizada ontem, envenenando fatalmente a resposta do agente [2]. 
 
-A literatura acadêmica tenta mitigar isso introduzindo redes neurais monstruosas como *Temporal Graph RAG* (TG-RAG) ou *TimeRAG*, que delegam ao LLM a tarefa de organizar cronologias [1, 2]. Executar enxames de agentes para montar grafos temporais apenas para calcular fusos horários é um *overengineering* patético que asfixia os 6GB de VRAM da RTX 2060m e bloqueia o *Event Loop* do Tokio [1]. O SODA necessita de precisão cronológica cirúrgica, em milissegundos, sem estressar a dGPU.
+A literatura acadêmica tenta mitigar isso introduzindo redes neurais monstruosas como *Temporal Graph RAG* (TG-RAG) ou *TimeRAG*, que delegam ao LLM a tarefa de organizar cronologias [1, 2]. Executar enxames de agentes para montar grafos temporais apenas para calcular fusos horários é um *overengineering* patético que asfixia os 6GB de VRAM da RTX 2060m e bloqueia o *Event Loop* do Tokio [1]. O SOULS necessita de precisão cronológica cirúrgica, em milissegundos, sem estressar a dGPU.
 
 #### Decisão Arquitetural (A Matriz Temporal O(1))
-Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação primária de tempo. O SODA transforma o tempo em uma propriedade física filtrável, adotando as seguintes camadas pragmáticas:
+Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação primária de tempo. O SOULS transforma o tempo em uma propriedade física filtrável, adotando as seguintes camadas pragmáticas:
 
 **Módulo 1: Extração Temporal Nativa na CPU**
 *   Toda inferência de datas a partir de linguagem natural (ex: "semana passada", "ontem") será resolvida estritamente na CPU (Intel i9) utilizando código Rust de altíssima performance.
@@ -255,7 +255,7 @@ Aceito (Ativo e Inegociável)
 O acompanhamento do pipeline de canibalização, os logs analíticos de refatorações de código e a auditoria de viabilidade de engenharia geram massas de dados altamente estruturadas. Armazenar esses dados unicamente em arquivos JSON locais fragmentados ou de forma proprietária em bancos de dados em disco impede que o Arquiteto Humano possua uma visão holística e imediata do throughput sistêmico. Também dificulta auditorias de conformidade de código e acompanhamento ágil para mentes neurodivergentes que necessitam de forte ancoragem visual externa.
 
 ## Decisão
-Fica formalmente decidido estabelecer uma planilha do **Google Sheets** estruturada como a **Única Fonte de Verdade (SSOT) analítica** para a esteira de canibalização e governança do SODA:
+Fica formalmente decidido estabelecer uma planilha do **Google Sheets** estruturada como a **Única Fonte de Verdade (SSOT) analítica** para a esteira de canibalização e governança do SOULS:
 1. **O Barramento Universal:** A planilha mestre opera de forma bidirecional integrada ao core Rust através de um servidor MCP customizado (`webcrawl-mcp` / `sheets-mcp`).
 2. **Esquema de Alta Densidade (82 Colunas):** A tabela mestre de ingestão e análise adota rigorosamente uma especificação fixa e imutável de **82 colunas de metadados e telemetria** cruzadas, mapeando:
    - Identificadores atômicos (hashes, URIs e IDs de arquivos).
@@ -290,7 +290,7 @@ description: "Formaliza o Hipocampo Epistêmico via Logit Probing em Forward Pas
 ### ADR-007: Avaliador Epistêmico, Logit Probing e o Hipocampo na CPU
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e o Gargalo do Raciocínio Reflexivo
 Em sistemas agênticos, antes de delegar uma execução (ex: mutação de código, leitura pesada) ao modelo principal, a máquina precisa avaliar o "Risco Relacional", a "Ambiguidade" e a probabilidade da ação ser destrutiva [5].
@@ -299,7 +299,7 @@ Realizar essa triagem invocando o LLM primário na placa de vídeo gera um garga
 2. Concorre diretamente pela VRAM crítica (6GB) da dGPU RTX 2060m e asfixia o barramento PCIe, criando um severo "Flow-Debt" termodinâmico [1].
 
 #### Decisão Arquitetural (O Hipocampo Híbrido O(1))
-Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "Avaliação Rápida" (CPU). O SODA institui a figura do "Hipocampo Epistêmico", operando sob as seguintes leis imutáveis:
+Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "Avaliação Rápida" (CPU). O SOULS institui a figura do "Hipocampo Epistêmico", operando sob as seguintes leis imutáveis:
 
 **Módulo 1: O Fim da Geração Autorregressiva para Triagem**
 *   É sumariamente proibido usar ciclos de decodificação para classificar se um comando inicial é seguro, ambíguo ou necessita de intervenção [4].
@@ -308,12 +308,12 @@ Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "A
 **Módulo 2: Extração Numérica via Logit Probing (Forward Pass)**
 *   O sistema implementará o paradigma *ProbeLogits* [4].
 *   No final do *Forward Pass* único, o núcleo Rust lerá diretamente a matriz de distribuição de *logits* residindo na memória RAM [4].
-*   Medindo o delta da probabilidade estrita de *tokens* âncora (ex: calculando a diferença angular/matemática de ativação entre os *logits* mapeados para risco vs. segurança), o SODA extrai a certeza da IA de forma determinística, sem nunca decodificar uma string.
+*   Medindo o delta da probabilidade estrita de *tokens* âncora (ex: calculando a diferença angular/matemática de ativação entre os *logits* mapeados para risco vs. segurança), o SOULS extrai a certeza da IA de forma determinística, sem nunca decodificar uma string.
 
 **Módulo 3: Isolamento Físico na CPU (AVX2)**
 *   Este motor validador será suportado por SLMs ultra-quantizados (ex: Phi-4-mini ou famílias hiper-leves). Eles estão terminantemente proibidos de tocar na placa de vídeo [6].
 *   A execução dessas matrizes matemáticas ocorrerá unicamente na CPU (Intel i9) utilizando o poder intrínseco das instruções vetoriais **AVX2** [2, 3].
-*   Para prover acesso direto aos ponteiros da memória de *logits*, o SODA fará o uso cirurgicamente algemado de bibliotecas focadas em *prefill* (ex: via injeção C-FFI de `llama-cpp-4` contida ou suporte especializado), assegurando extrações atômicas [2, 6, 7].
+*   Para prover acesso direto aos ponteiros da memória de *logits*, o SOULS fará o uso cirurgicamente algemado de bibliotecas focadas em *prefill* (ex: via injeção C-FFI de `llama-cpp-4` contida ou suporte especializado), assegurando extrações atômicas [2, 6, 7].
 *   O limite máximo de latência orçamentado para esse "reflexo epistêmico" é estritamente **< 150ms** [2, 6].
 
 #### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
@@ -336,7 +336,7 @@ description: "Governa o roteamento via ParetoBandit (Tiers), Model Registry din�
 ### ADR-008: Roteamento FinOps, Abstração de Tiers e Trator Numérico AOT
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional (Inference Bill Shock e Overhead Matemático)
 O uso indiscriminado de modelos de fronteira em nuvem provoca custos financeiros proibitivos (Inference Bill Shock). Para mitigar isso, o sistema requer um roteador (*ParetoBandit*) que calcule rotas com base na métrica E3 (Efficiency-Aware Effectiveness Evaluation). Contudo, se as micro-rotinas de cálculo vetorial para esse roteamento utilizarem *runtimes* de Machine Learning tradicionais (como `tch-rs` ou LibTorch), o binário inflará em gigabytes e as compilações *Just-In-Time* (JIT) gerarão latência letal que ultrapassará o orçamento de <22 microssegundos.
@@ -345,7 +345,7 @@ O uso indiscriminado de modelos de fronteira em nuvem provoca custos financeiros
 Fica decretado o uso da malha de roteamento dinâmico "Zero-Trust Sandwich" operando sob as seguintes abstrações inegociáveis:
 
 **Módulo 1: O Model Registry Dinâmico (O Orçamentista Noturno)**
-*   O SODA implementa um **Model Registry** local em SQLite.
+*   O SOULS implementa um **Model Registry** local em SQLite.
 *   O *Daemon Chyros* acorda durante a madrugada e realiza um *pull* assíncrono nas APIs para atualizar os preços exatos em microdólares, limites de contexto e latência (Time-To-First-Token - TTFT). O roteamento calcula as rotas em tempo $\mathcal{O}(1)$ consultando apenas o banco local.
 
 **Módulo 2: Taxonomia Abstrata de Roteamento (Tiers de Inteligência)**
@@ -380,7 +380,7 @@ description: "Documento obsoleto. A decodificação restrita e o uso do llguidan
 
 **ESTA LEI FOI REVOGADA E SUBSTITUÍDA.**
 
-Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SODA. 
+Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SOULS. 
 
 Para ler as regras atuais em vigor sobre o Cercadinho do Determinismo, amostragem Min-P, In-Context Learning (Few-Shot) e a imposição matemática de JSON via `llguidance` operando em AVX2 na CPU, consulte exclusivamente o **ADR-028**.
 
@@ -406,7 +406,7 @@ Aceito (Ativo e Inegociável)
 A prática irresponsável de engenharia estocástica de IA baseada em intuição rápida ("Vibe Coding") introduz códigos poluídos, dependências incoerentes e regressões catastróficas em repositórios complexos. IAs tendem a tentar corrigir erros gerando mais códigos falhos ("slop"), provocando loops de compilação infinitos e exaustão de contexto do modelo. No desenvolvimento de software Bare-Metal (Rust), a validação estrita do compilador e de testes de estresse deve preceder a escrita de qualquer lógica de negócios.
 
 ## Decisão
-Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinada a **TDD Forçado** em todo o ciclo de vida de mutação de código do SODA:
+Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinada a **TDD Forçado** em todo o ciclo de vida de mutação de código do SOULS:
 1. **O Plano Precede o Código:** Fica expressamente proibida a mutação direta de código-fonte sem a prévia especificação do design arquitetural (`docs/design.md`) em disco contendo diagramas Mermaid e definição do padrão Orchestrator-Worker. O Arquiteto Humano deve validar o design antes de prosseguir.
 2. **Definição de Done e Scaffold (Tasks):** As tarefas são desfragmentadas de forma atômica no checklist `tasks.md`. Cada tarefa exige uma Definition of Done (DoD) com scaffold executável (testes unitários que falham primeiro - Red) antes de escrever a lógica funcional em Rust/TypeScript.
 3. **Ciclo de TDD Atômico:** O desenvolvimento segue o fluxo clássico:
@@ -449,7 +449,7 @@ Aceito (Ativo e Inegociável)
 Permitir que agentes autônomos de IA mutem arquivos diretamente no disco principal de desenvolvimento ou realizem commits automáticos sem supervisão na branch principal (`main`) gera corrupção silenciosa de dados (SDC) e desorientação espacial do usuário. Além disso, mutações agressivas e inesperadas no código forçam reflows térmicos e confusão cognitiva imediata no usuário final, que perde o senso de controle de sua própria máquina.
 
 ## Decisão
-Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer alteração de código ou de dados na base principal do SODA:
+Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer alteração de código ou de dados na base principal do SOULS:
 1. **B - Branch (Isolamento Físico):** Qualquer mutação é iniciada isolando a tarefa em um **Shadow Workspace** atômico criado em tempo constante $\mathcal{O}(1)$ utilizando links físicos rígidos (*snapsafe*), consumindo zero bytes adicionais do disco hospedeiro.
 2. **M - Mutate (Escrita Atômica Protegida):** O código é alterado por meio de escritas atômicas baseadas em Mutex concorrentes em Rust. As alterações passam pela alfândega de compilação obtendo obrigatoriamente Exit Code 0.
 3. **A - Approve (A Agent Inbox):** O agente consolida o **Blast Radius** (arquivos tocados e impactos previsíveis) e o envia como sugestão passiva para a **Agent Inbox** na interface Svelte 5. O sistema aguarda a aprovação explícita do usuário em modo **Human-In-The-Loop (HITL)**. A aprovação dispara a transição estética **Glow Revelation Transition** (brilho térmico suave nas bordas da janela sem reflow).
@@ -494,7 +494,7 @@ Implementar a arquitetura do **Guardião Idempotente** como um módulo nativo de
 3. **Disjuntor de Drift Concorrente:** Se o Guardião detectar qualquer modificação física arbitrária realizada à margem do protocolo de governança BMAD (um drift estrutural), a esteira de montagem de IA é imediatamente paralisada (*Fail-Closed*). O sistema congela a Agent Inbox e barra qualquer consolidação de Rebase Semântico até que a integridade física do repositório seja reestabelecida ou aprovada manualmente pelo usuário.
 
 ## Consequências
-- **Segurança de Código Absoluta:** Garantia termodinâmica e mecânica de que nenhuma alteração acidental ou scripts externos maliciosos corrompam silenciosamente as fundações Bare-Metal do SODA.
+- **Segurança de Código Absoluta:** Garantia termodinâmica e mecânica de que nenhuma alteração acidental ou scripts externos maliciosos corrompam silenciosamente as fundações Bare-Metal do SOULS.
 - **Custo Computacional Irrisório:** Auditorias de integridade rodam em tempo sub-milissegundo consumindo frações de ciclo da CPU i9, com custo financeiro US$ 0,00 e VRAM intocada.
 - **Previsibilidade Operacional:** Conflitos e desalinhamentos entre instâncias do repositório são detectados e tratados antes que ocorram erros de compilação confusos.
 
@@ -578,8 +578,8 @@ Aceito (Ativo e Inegociável)
 O Viés de Automação (*Automation Bias*) induz seres humanos a aceitar de forma rápida e irrefletida propostas complexas geradas por sistemas de inteligência artificial. Em ambientes de desenvolvimento agêntico rápidos, se o agente de IA propõe e injeta modificações extensas de código em milissegundos na tela, o usuário tende a clicar impulsivamente em "aprovar" para economizar esforço mental imediato. Esse hábito impulsivo sabota a integridade do código ("slop") e anula o rigor analítico do Spec-Driven Development, gerando bugs graves.
 
 ## Decisão
-Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estruturada)** nas vias de interação visual e agêntica do SODA:
-1. **Divergência de Resposta:** O tempo de reação da interface gráfica do SODA divide-se intencionalmente baseando-se na origem da ação:
+Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estruturada)** nas vias de interação visual e agêntica do SOULS:
+1. **Divergência de Resposta:** O tempo de reação da interface gráfica do SOULS divide-se intencionalmente baseando-se na origem da ação:
    - *Ação Mecânica Direta (Humano):* Deve responder de forma tátil e instantânea em menos de **50ms a 150ms**.
    - *Ação Agêntica Autônoma (IA):* Tarefas complexas de alto Blast Radius geradas de forma autônoma pela IA (ex: planos de refatoração, mutações atômicas de arquivos ou rebases semânticos) exigem a inserção compulsória de um **Atraso Sintético de 800ms a 1500ms**.
 2. **Exibição de Telemetria de Progresso:** Durante o decurso do atraso sintético, a interface gráfica bloqueia interações rápidas impulsivas do usuário e exibe logs monoespaçados estáticos monoespaçados na Bottom Bar de telemetria (ex: `-> Computando Blast Radius -> Validando compilador -> Pronto`).
@@ -592,7 +592,7 @@ Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estrutur
 
 ## Restrições Bare-Metal
 - **Atraso Sintético Rígido:** Atraso artificial parametrizado obrigatoriamente entre **800ms e 1500ms** para ações cognitivas de agentes de IA na interface.
-- **Latência Humana:** Interações que partam de comandos puramente manuais do usuário do SODA ignoram o atraso, respondendo em menos de **150ms** para manter o feedback físico de controle de máquina.
+- **Latência Humana:** Interações que partam de comandos puramente manuais do usuário do SOULS ignoram o atraso, respondendo em menos de **150ms** para manter o feedback físico de controle de máquina.
 
 ### ====================================================================================================
 ARQUIVO: ADR-015-Motor-Generativo-Local.md
@@ -611,7 +611,7 @@ description: "Documento obsoleto. A arquitetura de motor único restrito ao Cand
 
 **ESTA LEI FOI REVOGADA E SUBSTITUÍDA.**
 
-Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SODA. 
+Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SOULS. 
 
 Para ler as leis físicas e térmicas em vigor sobre a dualidade de motores (a adoção do `llama-cpp-2` como cérebro contínuo O(1) e o `mistral.rs` como sidecar efêmero de destilação) operando dentro dos 6GB de VRAM, consulte exclusivamente o **ADR-027**.
 
@@ -625,7 +625,7 @@ title: "ADR-016-Zero-Config-Install"
 version: 1.0
 status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Garante a distribuição auto-suficiente do SODA empacotado pelo Tauri com zero dependências externas no host."
+description: "Garante a distribuição auto-suficiente do SOULS empacotado pelo Tauri com zero dependências externas no host."
 ---
 
 # ADR-016-Zero-Config-Install
@@ -634,7 +634,7 @@ description: "Garante a distribuição auto-suficiente do SODA empacotado pelo T
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-O SODA foi arquitetado para ser uma solução soberana "Local-First". Contudo, sistemas operacionais de usuários divergem massivamente em termos de hardware físico (CPUs Intel/AMD, quantidade de RAM e presença/capacidade de dGPUs dedicadas). Exigir que usuários finais realizem configurações manuais complexas de drivers, alocação de threads e seleção de formatos de quantização de tensores inviabiliza a facilidade de uso, provocando falhas graves de Out-of-Memory (OOM) na GPU e sobredimensionamento letal de threads.
+O SOULS foi arquitetado para ser uma solução soberana "Local-First". Contudo, sistemas operacionais de usuários divergem massivamente em termos de hardware físico (CPUs Intel/AMD, quantidade de RAM e presença/capacidade de dGPUs dedicadas). Exigir que usuários finais realizem configurações manuais complexas de drivers, alocação de threads e seleção de formatos de quantização de tensores inviabiliza a facilidade de uso, provocando falhas graves de Out-of-Memory (OOM) na GPU e sobredimensionamento letal de threads.
 
 ## Decisão
 Implementar um motor nativo de **Auto-Profiling de Hardware** em Rust, executado compulsoriamente na inicialização do sistema (Boot) e em transições de energia:
@@ -651,7 +651,7 @@ Implementar um motor nativo de **Auto-Profiling de Hardware** em Rust, executado
 3. **Instalação Sem Estado:** Toda a configuração de hardware é puramente efêmera e recalculada no boot, prevenindo que alterações físicas na máquina do usuário (ex: adição de RAM ou dGPU) quebrem o software.
 
 ## Consequências
-- **Instalação Instantânea:** Experiência "Zero-Config" verdadeira. O usuário apenas executa o binário do Tauri e o SODA otimiza-se sozinho ao ambiente hospedeiro.
+- **Instalação Instantânea:** Experiência "Zero-Config" verdadeira. O usuário apenas executa o binário do Tauri e o SOULS otimiza-se sozinho ao ambiente hospedeiro.
 - **Robustez Térmica:** O software calibra sua pegada energética com base no estado térmico e na capacidade de resfriamento físico do host, prevenindo *thermal throttling*.
 - **Manutenibilidade:** Eliminação total de arquivos de configuração estática de hardware difíceis de depurar.
 
@@ -683,15 +683,15 @@ Aceito (Ativo e Inegociável)
 Armazenar e sincronizar os históricos epistêmicos de raciocínio, notas pessoais da Tríade de Memória e decisões arquiteturais em servidores de nuvem centralizados de terceiros introduz riscos inaceitáveis de segurança, espionagem industrial e vazamento de privacidade. Mentes neurodivergentes e profissionais soberanos necessitam de garantias matemáticas absolutas de que seus dados cognitivos locais nunca sejam expostos. Soluções convencionais de sincronização baseadas em nuvem comercial impõem conexões pesadas, latências imprevisíveis e dependência de APIs fechadas proprietárias.
 
 ## Decisão
-Fica estabelecido que toda sincronização de dados e consistência de estado entre máquinas licenciadas do usuário no ecossistema SODA deve operar via **Sovereign Sync P2P Criptografado**:
+Fica estabelecido que toda sincronização de dados e consistência de estado entre máquinas licenciadas do usuário no ecossistema SOULS deve operar via **Sovereign Sync P2P Criptografado**:
 1. **Rede Descentralizada (libp2p):** A comunicação e busca de peers na rede local ou rede aberta opera estritamente sem servidores intermediários centralizados, utilizando a biblioteca **libp2p** implementada nativamente no core Rust (Tokio).
 2. **Versionamento Cabinet via Gitoxide:** O histórico imutável de snapshots de memória estruturada e eventos locais é versionado de forma assíncrona utilizando a engine **gitoxide** (100% Rust), eliminando dependências de CLIs de Git legadas lentas ou bibliotecas C inseguras (Libgit2).
 3. **Criptografia Zero-Knowledge e Assinatura Digital:** Toda transmissão de dados trafega de ponta a ponta criptografada por chaves assimétricas **Ed25519** geradas localmente no host do usuário. Nenhum dado de memória semântica é transmitido ou salvo sem validação de assinatura e encriptação forte, blindando o conteúdo contra qualquer interceptação na rede.
-4. **Governança B2B (OpenMLS + Silent Admin):** Para contas Enterprise, o Sovereign Sync incorpora o protocolo **OpenMLS**. Um **Silent Admin (Escrow)** é criado, permitindo que apenas o Gestor de TI local da empresa retenha a chave para decriptar a base dos funcionários, mantendo a nuvem do SODA 100% cega.
+4. **Governança B2B (OpenMLS + Silent Admin):** Para contas Enterprise, o Sovereign Sync incorpora o protocolo **OpenMLS**. Um **Silent Admin (Escrow)** é criado, permitindo que apenas o Gestor de TI local da empresa retenha a chave para decriptar a base dos funcionários, mantendo a nuvem do SOULS 100% cega.
 
 ## Consequências
 - **Soberania Total:** Os dados pertencem exclusivamente ao usuário e estão fisicamente sob sua posse direta nos seus dispositivos Bare-Metal.
-- **Resiliência Offline:** O SODA mantém funcionalidade operacional completa offline, efetuando o sincronismo atômico assim que um peer confiável for descoberto na mesma rede local.
+- **Resiliência Offline:** O SOULS mantém funcionalidade operacional completa offline, efetuando o sincronismo atômico assim que um peer confiável for descoberto na mesma rede local.
 - **Robustez de Snapshot:** snapshots Gitoxide fornecem compactação de dados excepcional e capacidade de rollback seguro e reversão temporal da máquina de estados do cérebro.
 
 ## Restrições Bare-Metal
@@ -700,7 +700,7 @@ Fica estabelecido que toda sincronização de dados e consistência de estado en
 - **Processamento Assíncrono:** As tarefas de versionamento do gitoxide e empacotamento P2P rodam isoladas em threads de background, consumindo zero recursos da thread principal de interação visual (Svelte 5).
 - **I/O e Criptografia fora do Event Loop:** Operações do **gitoxide** (snapshots de backup, verificação de drift, rebases) e cálculos criptográficos pesados (**SHA-256**) são proibidos na thread principal do Tokio; devem ser descarregados para `tokio::task::spawn_blocking` ou *background workers* dedicados comunicando-se via **MPSC**, prevenindo starvation do Event Loop.
 - **Enterprise OpenMLS:** Em contas Enterprise, o protocolo **OpenMLS** é obrigatório para governança B2B sem quebrar o Zero-Knowledge.
-- **Silent Admin (Escrow Local):** A chave de decriptação corporativa deve ser retida exclusivamente pelo Gestor de TI local; a nuvem do SODA permanece 100% cega ao conteúdo.
+- **Silent Admin (Escrow Local):** A chave de decriptação corporativa deve ser retida exclusivamente pelo Gestor de TI local; a nuvem do SOULS permanece 100% cega ao conteúdo.
 
 ### ====================================================================================================
 ARQUIVO: ADR-018-Paradigma-NextPlaid.md
@@ -718,7 +718,7 @@ description: "Impõe o fatiamento de código O(1) via AST (ast-grep) e o enjaula
 ### ADR-018: Paradigma NextPlaid, Parsing AST e Enjaulamento em WebAssembly
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
 
 #### Contexto Técnico e Ameaça Operacional (O Risco do C-FFI)
 Historicamente, o fatiamento (*chunking*) de código-fonte baseado em delimitadores cegos (caracteres ou quebras de linha) destrói as assinaturas de funções e corrompe o entendimento do Modelo de Linguagem Grande (LLM) durante tarefas de Retrieval-Augmented Generation (RAG) [2]. A adoção da Árvore de Sintaxe Abstrata (AST) via ecossistema `tree-sitter` curou esse problema, permitindo extrações semânticas precisas.
@@ -730,20 +730,20 @@ Fica decretado o fim do fatiamento cego e a blindagem cirúrgica do *parsing* AS
 
 **Módulo 1: O Fim do Fatiamento Estocástico**
 *   Fica terminantemente proibido o uso de *chunking* cego ou por limites arbitrários de caracteres para ingestão de bases de código.
-*   Todo o código-fonte deve ser interpretado estruturalmente, garantindo que as assinaturas das funções, suas implementações e *docstrings* correspondentes permaneçam atômicas e inseparáveis na base vetorial. O SODA utilizará o `ast-grep` (nativo em Rust) para consultas semânticas no repositório [1].
+*   Todo o código-fonte deve ser interpretado estruturalmente, garantindo que as assinaturas das funções, suas implementações e *docstrings* correspondentes permaneçam atômicas e inseparáveis na base vetorial. O SOULS utilizará o `ast-grep` (nativo em Rust) para consultas semânticas no repositório [1].
 
 **Módulo 2: A Jaula de Silício (Enjaulamento Wasmtime)**
 *   Para fornecer suporte poliglota com segurança, é **ESTRITAMENTE PROIBIDO** carregar as gramáticas em C do `tree-sitter` como bibliotecas dinâmicas ou estáticas nativas vinculadas diretamente ao processo do Rust.
-*   O SODA exigirá que todas as gramáticas sintáticas sejam previamente compiladas para o formato **WebAssembly (WASM)** [1].
-*   A execução do `tree-sitter` no SODA operará obrigatoriamente algemada dentro do *runtime* `wasmtime`. Toda extração e leitura de AST de terceiros acontecerá dentro de *sandboxes* Wasm isoladas do ambiente hospedeiro.
+*   O SOULS exigirá que todas as gramáticas sintáticas sejam previamente compiladas para o formato **WebAssembly (WASM)** [1].
+*   A execução do `tree-sitter` no SOULS operará obrigatoriamente algemada dentro do *runtime* `wasmtime`. Toda extração e leitura de AST de terceiros acontecerá dentro de *sandboxes* Wasm isoladas do ambiente hospedeiro.
 
 **Módulo 3: Interceptação de Pânicos e Sobrevivência do Tokio**
 *   Através deste enjaulamento, instaura-se o mecanismo de "Fail-Safe". Se a análise de um arquivo *slop* ou corrompido desencadear um *segfault* no código C do *parser*, o erro resultará apenas no colapso da *sandbox* WebAssembly.
 *   A máquina virtual Wasm "morre silenciosamente", permitindo que o Rust capture o evento como um erro de execução padrão (`Trap`), salte a etapa daquele arquivo defeituoso e mantenha a esteira do *Event Loop* do Tokio girando impenetrável e ininterrupta [1].
 
 #### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
-*   **Impacto Positivo:** Blindagem termodinâmica absoluta contra quedas do servidor causadas por código corrompido que o Agente ou o usuário decidam raspar. A estabilidade do SODA V4 se aproxima dos 100%, garantindo o *uptime* necessário para operações 24/7 de um Sistema Operacional Agêntico [1].
-*   **Impacto Negativo (Dívida de Toolchain):** Exigirá um esforço tático de compilação. Em vez de simplesmente baixar bibliotecas do mercado, o SODA obriga a manutenção de *pipelines* que compilem as gramáticas C do `tree-sitter` em pacotes `.wasm`. Além disso, a troca de contexto entre o Rust e a *sandbox* Wasm introduz um *overhead* mínimo (em microssegundos), perfeitamente aceitável perante o ganho colossal de resiliência.
+*   **Impacto Positivo:** Blindagem termodinâmica absoluta contra quedas do servidor causadas por código corrompido que o Agente ou o usuário decidam raspar. A estabilidade do SOULS V4 se aproxima dos 100%, garantindo o *uptime* necessário para operações 24/7 de um Sistema Operacional Agêntico [1].
+*   **Impacto Negativo (Dívida de Toolchain):** Exigirá um esforço tático de compilação. Em vez de simplesmente baixar bibliotecas do mercado, o SOULS obriga a manutenção de *pipelines* que compilem as gramáticas C do `tree-sitter` em pacotes `.wasm`. Além disso, a troca de contexto entre o Rust e a *sandbox* Wasm introduz um *overhead* mínimo (em microssegundos), perfeitamente aceitável perante o ganho colossal de resiliência.
 
 ### ====================================================================================================
 ARQUIVO: ADR-019-Maquina-de-Estados-ETL.md
@@ -761,7 +761,7 @@ description: "Formaliza a máquina de estados (Enums) do SQLite e o fluxo das 4 
 ### ADR-019: Máquina de Estados do ETL Cognitivo e Governança de Enums
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para a Fábrica SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para a Fábrica SOULS V4)
 
 #### Contexto Técnico
 A extração de dados e a análise profunda de repositórios operam sob condições hostis (falhas de rede, limites de taxa de APIs, restrições de memória). Para garantir a integridade da "Matriz Mestre" (SSOT) de 85 colunas (incluindo campos de governança como `status_atualizacao`, `status_fase` e `embargo_status`), o sistema exige checkpoints precisos. A documentação anterior estava defasada em relação aos Enums físicos gravados no banco de dados SQLite (`souls_heuristic_vault.db`). A arquitetura exige que a "Lei" (documentação) reflita estritamente o "Metal" (o código Rust implementado).
@@ -814,7 +814,7 @@ Aceito (Ativo e Inegociável)
 O viés de automação (*Automation Bias*) induz o usuário a confiar cegamente e passivamente em decisões estocásticas unilaterais de IAs. Em tarefas arquiteturais densas, agentes convencionais que aceitam premissas ingênuas sem questionar geram códigos errôneos ("slop"), provocando bugs ocultos severos que degradam o compilador. Além disso, a fadiga de aprovação humana ao ter que revisar dezenas de pequenas correções repetitivas de IA reduz a produtividade e a saúde neurocognitiva do usuário.
 
 ## Decisão
-Implementar a arquitetura de **Enxame Cognitivo Baseado em Reputação ELO** no SODA:
+Implementar a arquitetura de **Enxame Cognitivo Baseado em Reputação ELO** no SOULS:
 1. **Debate Multi-Agente Invisível (Free-MAD):** Antes de propor qualquer plano de mutação física de arquivos, o core instancia um debate interno invisível na CPU. Duas personas intelectuais opostas (ex: IA Otimista Construtora vs. IA Auditora Bare-Metal Implacável) debatem as premissas e tentam provar ativamente como a proposta falhará nos limites físicos locais.
 2. **Map-Reduce Socrático:** O fluxo causal de raciocínio decompõe a tarefa complexa em ramos isolados de análise (Map), submete cada bloco ao escrutínio cruzado de falsificação física (Cross-Critique) e consolida a conclusão refinada de forma sintética (Reduce) na CPU.
 3. **Torneios ELO baseados em Co-Scientist:** A competência e o histórico de sucesso dos agentes e templates de prompts são rastreados de forma contínua por algoritmos estatísticos. A taxa de aprovação de código gera uma Média Móvel Exponencial (EMA/ELO) de confiança:
@@ -854,16 +854,16 @@ description: "Define o daemon em Rust encarregado de higienizar memória e audit
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-Sessões intensas de ideação criativa e desenvolvimento causadas por picos de hiperfoco (comuns em usuários neurodivergentes 2e/TDAH) despejam massas de dados caóticas no SODA: logs de erros transitórios do Ralph Loop, links duplicados, arquivos temporários de rascunho de análises estruturais (IterResearch) e históricos extensos de processos MDP. Manter esses dados voláteis indefinidamente em sua forma crua inunda as bases transacionais e vetoriais, asfixiando a capacidade de busca semântica em LanceDB e consumindo preciosa memória RAM no host.
+Sessões intensas de ideação criativa e desenvolvimento causadas por picos de hiperfoco (comuns em usuários neurodivergentes 2e/TDAH) despejam massas de dados caóticas no SOULS: logs de erros transitórios do Ralph Loop, links duplicados, arquivos temporários de rascunho de análises estruturais (IterResearch) e históricos extensos de processos MDP. Manter esses dados voláteis indefinidamente em sua forma crua inunda as bases transacionais e vetoriais, asfixiando a capacidade de busca semântica em LanceDB e consumindo preciosa memória RAM no host.
 
 ## Decisão
-Estabelecer o **Chyros Daemon** como o **Meta-Reviewer e Consolidador de Memória** oficial do ecossistema SODA, operando em background assíncrono na CPU i9:
+Estabelecer o **Chyros Daemon** como o **Meta-Reviewer e Consolidador de Memória** oficial do ecossistema SOULS, operando em background assíncrono na CPU i9:
 1. **O Despertar na Inatividade:** O Chyros Daemon atua de forma totalmente autônoma em períodos de inatividade do Windows ou durante a madrugada, disparado por watchdogs nativos de energia do sistema operacional.
 2. **Consolidação Ontológica e Poda Sináptica:** O daemon varre a Tríade de Memória (SQLite FTS5, LanceDB e LadybugDB) executando as seguintes ações de higiene:
    - Deduplica entidades semânticas redundantes e consolida conexões de grafos.
    - Poda links mortos e logs obsoletos de depurações frustradas do compilador.
    - Transpila massas de texto de rascunhos de IterResearch/MDP em resumos densos estruturados, arquivando os originais em compressão delta (*gitoxide*) e expurgando as duplicatas da L3 ativa.
-3. **Preservação de Outliers e SSOT:** A rotina do Chyros Daemon é estritamente impedida de tocar ou resumir arquivos catalogados com a tag `STABLE` (regras e decisões canônicas imutáveis), resguardando a integridade das fundações do SODA.
+3. **Preservação de Outliers e SSOT:** A rotina do Chyros Daemon é estritamente impedida de tocar ou resumir arquivos catalogados com a tag `STABLE` (regras e decisões canônicas imutáveis), resguardando a integridade das fundações do SOULS.
 
 ## Consequências
 - **Aceleração da Busca Semântica:** A L3 vetorial e o grafo LadybugDB permanecem enxutos, precisos e com alta velocidade de resposta sub-milissegundo.
@@ -886,7 +886,7 @@ title: "ADR-022-Identidade-Verbal-Voz-Vidro"
 version: 1.0
 status: Ativo_Inegociavel
 epic: "Cognição"
-description: "Padroniza a persona verbal do SODA (voz e estilo) baseando-se em concisão e pessimismo pragmático."
+description: "Padroniza a persona verbal do SOULS (voz e estilo) baseando-se em concisão e pessimismo pragmático."
 ---
 
 # ADR-022-Identidade-Verbal-Voz-Vidro
@@ -898,11 +898,11 @@ Aceito (Ativo e Inegociável)
 Assistentes de IA tradicionais frequentemente adotam uma identidade verbal bajuladora, excessivamente cortês e prolixa, utilizando parágrafos monolíticos e clichês vazios para mascarar falhas sistêmicas de raciocínio. Esse ruído de diálogo ("chatter") consome tempo de leitura do usuário, gera fadiga de atenção severa e obstrui o hiperfoco criativo e a função executiva de mentes neurodivergentes (2e/TDAH).
 
 ## Decisão
-Implementar rigidamente a identidade verbal **Voz de Vidro** em todas as interfaces do ecossistema SODA:
-1. **O Espelho Negro Incondicional (Socratic Tone):** A persona do SODA atua como uma lente passiva e reflexiva de verdade factual. Seu tom é puramente sóbrio, pragmático, objetivo e técnico. O assistente reflete a crua realidade física do silício e do compilador sem distorções otimistas infundadas ("Pessimismo da Razão").
+Implementar rigidamente a identidade verbal **Voz de Vidro** em todas as interfaces do ecossistema SOULS:
+1. **O Espelho Negro Incondicional (Socratic Tone):** A persona do SOULS atua como uma lente passiva e reflexiva de verdade factual. Seu tom é puramente sóbrio, pragmático, objetivo e técnico. O assistente reflete a crua realidade física do silício e do compilador sem distorções otimistas infundadas ("Pessimismo da Razão").
 2. **Proibição de Bajulação e Clichês (A Lista Negra):** Fica terminantemente proibido o uso de cortesias corporativas supérfluas, rodeios textuais ou palavras-chave vazias de marketing. A lista negra inegociável de termos banidos inclui: *"delve"*, *"fostering"*, *"intricate"*, *"tapestry"*, *"pivotal"*, *"boasts"*, *"seamless"*, *"dive into"*, *"Espero que isso ajude"*, *"Como uma IA..."* e saudações similares de encerramento.
-3. **Regra de Não-Apologia:** O SODA repudia desculpas redundantes por erros lógicos. Falhas mecânicas ou de compilação são tratadas diretamente e de forma silenciosa por meio do Ralph Loop ou resultam em interrupções Fail-Closed explícitas em disco, sem introduzir ruídos de diálogos emocionais supérfluos.
-4. **O Protocolo IntentWeave (GenUI):** Para evitar a leitura exaustiva de instruções textuais longas pelo usuário, o SODA ativa o **Protocolo IntentWeave**. O core em Svelte 5 renderiza interfaces dinâmicas e Canvas Espaciais reativos baseados nos offsets lógicos da tarefa (GenUI), permitindo que o usuário gerencie e resolva seus fluxos intelectuais de forma dinâmica e tátil na tela, dispensando explicações descritivas.
+3. **Regra de Não-Apologia:** O SOULS repudia desculpas redundantes por erros lógicos. Falhas mecânicas ou de compilação são tratadas diretamente e de forma silenciosa por meio do Ralph Loop ou resultam em interrupções Fail-Closed explícitas em disco, sem introduzir ruídos de diálogos emocionais supérfluos.
+4. **O Protocolo IntentWeave (GenUI):** Para evitar a leitura exaustiva de instruções textuais longas pelo usuário, o SOULS ativa o **Protocolo IntentWeave**. O core em Svelte 5 renderiza interfaces dinâmicas e Canvas Espaciais reativos baseados nos offsets lógicos da tarefa (GenUI), permitindo que o usuário gerencie e resolva seus fluxos intelectuais de forma dinâmica e tátil na tela, dispensando explicações descritivas.
 
 ## Consequências
 - **Comunicação de Alta Fidelidade:** Diálogos e relatórios são concisos, assertivos e focados unicamente na resolução da tarefa técnica.
@@ -910,7 +910,7 @@ Implementar rigidamente a identidade verbal **Voz de Vidro** em todas as interfa
 - **Neuro-Inclusão Real:** Erradicação de "flow-debt" de leitura, poupando a capacidade executiva da mente do usuário para o hiperfoco real.
 
 ## Restrições Bare-Metal
-- **Encerrar Abruptamente:** O SODA deve encerrar suas respostas abruptamente logo após o fornecimento da informação estruturada técnica final, sem adicionar saudações de polidez ou considerações finais corporativas vazias.
+- **Encerrar Abruptamente:** O SOULS deve encerrar suas respostas abruptamente logo após o fornecimento da informação estruturada técnica final, sem adicionar saudações de polidez ou considerações finais corporativas vazias.
 - **Renderização GenUI IntentWeave:** Interfaces geradas pelo protocolo IntentWeave na tela devem ser renderizadas com tempo de inicialização menor que **100ms** na iGPU integrada.
 
 ### ====================================================================================================
@@ -935,7 +935,7 @@ Aceito (Ativo e Inegociável)
 Durante investigações em repositórios complexos e acompanhamento de tarefas causais multifacetadas, agentes autônomos de IA frequentemente cometem erros de desorientação conceitual (alucinação lógica). Ao buscar referências no RAG, o LLM falha ao conectar dependências estruturais distantes no código ou pula para arquivos homônimos sem qualquer associação causal real no sistema. Isso ocorre pela falta de uma representação de grafo rigorosa que amarre a proximidade semântica, conceitual e sintática das lógicas locais do projeto.
 
 ## Decisão
-Estabelecer o **LadybugDB** como a camada nativa de grafos local do SODA, atuando ativamente como o **Proximity Agent (Agente de Proximidade)** governado pelo ecossistema Rust:
+Estabelecer o **LadybugDB** como a camada nativa de grafos local do SOULS, atuando ativamente como o **Proximity Agent (Agente de Proximidade)** governado pelo ecossistema Rust:
 1. **Ativação por Proximidade Relacional:** As buscas de contexto não dependem puramente de busca vetorial densa. O LadybugDB calcula caminhos geodésicos no grafo de conhecimento local para ativar nós que possuem dependências causais diretas com o assunto abordado, montando uma árvore relacional inquebrável.
 2. **Especialização CROW (Code Reasoning Ontological Weaver):** Focado na costura ontológica profunda do código-fonte. Mapeia a hierarquia de herança, cadeias de chamadas de métodos e imports da AST gerados pelo parser AST nativo, blindando o raciocínio sintático profundo.
 3. **Especialização FALCON (Fast Access Logical Context Network):** Rede de indexação ultrarrápida na CPU focada no mapeamento de intenções de conversação do usuário, links locais e tarefas em andamento. Executa varreduras sub-milissegundo cruzando dados com o SQLite L2 para sanar dúvidas instantâneas e bloquear desvios focais.
@@ -970,10 +970,10 @@ description: "Implementa travas de performance no pipeline de análise estática
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-O Harvester da Fase 0 passou a operar sobre monorepos, sidecars heterogêneos e regras SAST locais em modo air-gapped. Essa expansão elevou o risco físico de asfixia térmica, timeouts cegos, parsing infinito em arquivos densos e perda de rastreabilidade de Supply Chain quando filtros agressivos escondem manifestos e lockfiles. O ecossistema SODA precisa congelar essas decisões no Cânone antes de qualquer mutação futura no Rust ou criação de novas lâminas de análise.
+O Harvester da Fase 0 passou a operar sobre monorepos, sidecars heterogêneos e regras SAST locais em modo air-gapped. Essa expansão elevou o risco físico de asfixia térmica, timeouts cegos, parsing infinito em arquivos densos e perda de rastreabilidade de Supply Chain quando filtros agressivos escondem manifestos e lockfiles. O ecossistema SOULS precisa congelar essas decisões no Cânone antes de qualquer mutação futura no Rust ou criação de novas lâminas de análise.
 
 ## Decisão
-Ficam decretadas, para toda extração SAST e para qualquer futura ferramenta CLI de análise do SODA, as seguintes 4 Leis Duras de Extração:
+Ficam decretadas, para toda extração SAST e para qualquer futura ferramenta CLI de análise do SOULS, as seguintes 4 Leis Duras de Extração:
 
 1. **A. O Fim do Timeout Cego (O Bisturi Adaptativo):**
    Ferramentas orientadas por regras, como OpenGrep, devem escalar o tempo dinamicamente por arquivo e por regra. O uso da flag `--allow-rule-timeout-control` torna-se obrigatório sempre que disponível, delegando o limite ao tamanho matemático do arquivo, da regra e do custo real do match. Timeout fixo e cego é proibido como estratégia primária.
@@ -1022,7 +1022,7 @@ Aceito (Ativo e Inegociável)
 Durante a execução do Harvester Nativo (Fase 0 - V6.0), a auditoria revelou que o orquestrador tolerava falhas silenciosas ("Fail-Soft") em linters SAST pesados, como `govulncheck` (Go) e `sobelow` (Elixir). A execução ingênua dos comandos na raiz bruta do repositório falhava catastroficamente em topologias de **Monorepo**, onde os manifestos de dependência (`go.mod`, `mix.exs`) residem em subdiretórios aninhados. Em vez de investigar a topologia real, o extrator falhava, devolvia 0 bytes e mascarava a ineficiência com um falso "sucesso" na pipeline, enviando payloads corrompidos ou incompletos para as Lentes B e C.
 
 ## Decisão
-Fica decretada a lei de **Qualidade 100/100** e a **Consciência Obrigatória de Monorepos** para o Motor de Extração SODA:
+Fica decretada a lei de **Qualidade 100/100** e a **Consciência Obrigatória de Monorepos** para o Motor de Extração SOULS:
 
 1. **A Morte do Fail-Soft Mascarado:** Tolerância ZERO a truncamento cego ou falhas silenciosas de extração por "ignorância topológica". Se o linter não conseguir executar por não achar a raiz lógica do ecossistema, o erro DEVE ser tratado e o alvo correto deve ser localizado. O payload gravado deve ser a extração tática 10/10.
 2. **Consciência de Monorepo (Topology-Aware Routing):** Os *sidecars* de linters (SAST) são estritamente proibidos de disparar comandos às cegas na raiz do projeto clonado. O extrator em Rust deve realizar um "Pre-flight Check", buscando a localização física exata dos manifestos raiz (ex: localização do `go.mod` principal ou `mix.exs`) e atuar com base nesse diretório (`cwd`).
@@ -1052,19 +1052,19 @@ description: "Padroniza a nomenclatura das ferramentas MCP adotando o padrão se
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-A integração de ferramentas via Model Context Protocol (MCP) com AI-IDEs (Cursor, Trae, Antigravity) revelou uma falha severa de obesidade semântica e "Tool Bloat". Clientes MCP possuem limites rígidos de caracteres para a exibição de ferramentas (frequentemente < 60 caracteres) e concatenam automaticamente o nome do servidor com o nome da ferramenta (ex: `soda-native-ast_soda_duckgo_search`). 
+A integração de ferramentas via Model Context Protocol (MCP) com AI-IDEs (Cursor, Trae, Antigravity) revelou uma falha severa de obesidade semântica e "Tool Bloat". Clientes MCP possuem limites rígidos de caracteres para a exibição de ferramentas (frequentemente < 60 caracteres) e concatenam automaticamente o nome do servidor com o nome da ferramenta (ex: `souls-native-ast_souls_duckgo_search`). 
 
 Esse lixo nominal causa três problemas letais:
 1. **Quebra de Protocolo (Fail-Closed Indesejado):** Nomes longos estouram o limite de exibição e parsing do cliente.
-2. **Hemorragia FinOps (Token Bloat):** Cada caractere inútil como `tool-`, `mcp-` ou `soda-` consome tokens preciosos a cada iteração de Raciocínio (Chain of Thought) do LLM.
+2. **Hemorragia FinOps (Token Bloat):** Cada caractere inútil como `tool-`, `mcp-` ou `souls-` consome tokens preciosos a cada iteração de Raciocínio (Chain of Thought) do LLM.
 3. **Context Drift (Acoplamento de Marca):** Nomear ferramentas com bases em fornecedores temporários (ex: `duckduckgo` ou `jcodemunch`) acopla a mente do Agente à ferramenta. Se o backend for trocado para `brave_search` ou `tree_sitter` nativo, a assinatura quebra e as *Skills* do agente sofrem de amnésia.
 
 ## Decisão
-Fica decretada a **Lei da Nomenclatura Semântica e Zero-Brand** para todo o ecossistema SODA/Souls MC:
+Fica decretada a **Lei da Nomenclatura Semântica e Zero-Brand** para todo o ecossistema SOULS/Souls MC:
 
-1. **Servidor Atômico (Zero Redundância):** O nome do Agent Gateway exportado para os clientes MCP será estritamente **`souls`**. O prefixo `soda-agent-gateway` está obsoleto.
+1. **Servidor Atômico (Zero Redundância):** O nome do Agent Gateway exportado para os clientes MCP será estritamente **`souls`**. O prefixo `souls-agent-gateway` está obsoleto.
 2. **Agnosticismo de Marca (Zero-Brand):** É expressamente proibido nomear ferramentas com marcas, bibliotecas de terceiros ou o próprio nome do projeto. A ferramenta deve refletir a *Ação Matemática*, não o executor.
-   * *Incorreto:* `soda_duckgo_search`, `soda_get_ast`.
+   * *Incorreto:* `souls_duckgo_search`, `souls_get_ast`.
    * *Correto:* `web_search`, `repo_ast`.
 3. **Topologia de Nomenclatura (`<dominio>_<acao>`):** Nomes de ferramentas devem ter no máximo duas ou três palavras, sempre no formato `dominio_acao`.
    * **Contexto/Memória:** `ctx_read`, `ctx_tree`, `ctx_workflow`.
@@ -1099,11 +1099,11 @@ description: "Governa a termodinâmica da VRAM de 6GB, limitando o spillover de 
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 ## Contexto Técnico e Restrições de Silício
 
-A Arquitetura SODA V4 opera sob limitações físicas severas e fixas no hardware host do usuário final:
+A Arquitetura SOULS V4 opera sob limitações físicas severas e fixas no hardware host do usuário final:
 
 - **Unidade de Processamento Gráfico (dGPU):** NVIDIA RTX 2060m contendo exatamente $6.0 \text{ GB}$ ($6144 \text{ MB}$) de VRAM física dedicada.
 - **Largura de Banda do Barramento:** Conexão móvel limitada via barramento PCIe Gen3 x8. Qualquer transferência dinâmica de pesos (offloading) ou troca de tensores entre a RAM do sistema e a VRAM durante a fase autorregressiva (decodificação) degrada a performance de geração, reduzindo a taxa de processamento para menos de $2 \text{ a } 8 \text{ tokens/s}$.
@@ -1135,13 +1135,13 @@ $$V_{\text{total}} = 3.78 \text{ GB} + 3.93 \text{ GB} + 0.20 \text{ GB} = 7.91 
 
 Como $7.91 \text{ GB} > 6.0 \text{ GB}$, o sistema sofre transbordo imediato para o barramento PCIe, forçando o driver a realizar paginação no disco/RAM, congelando a interface e derrubando o sistema por esgotamento de recurso de hardware.
 
-## Decisões Arquiteturais da SODA V4
+## Decisões Arquiteturais da SOULS V4
 
-Para romper as limitações de hardware sem comprometer a soberania local e o desempenho térmico da máquina host, a Arquitetura SODA V4 adota as seguintes regras de implementação de baixo nível:
+Para romper as limitações de hardware sem comprometer a soberania local e o desempenho térmico da máquina host, a Arquitetura SOULS V4 adota as seguintes regras de implementação de baixo nível:
 
 ```
 +-------------------------------------------------------------------------+
-|                         SODA V4 - DUAL ENGINE LAYOUT                    |
+|                         SOULS V4 - DUAL ENGINE LAYOUT                    |
 +-------------------------------------------------------------------------+
 |                                                                         |
 |  [Fase 1.5 - Destilação]                                                |
@@ -1164,22 +1164,22 @@ Para romper as limitações de hardware sem comprometer a soberania local e o de
 
 ### 1. A Dualidade de Motores com Descarte Atômico
 
-Bane-se o uso de daemons de inferência persistentes e instáveis na GPU. SODA V4 adota um pipeline híbrido composto por dois motores distintos operando em tempos de vida mutuamente exclusivos:
+Bane-se o uso de daemons de inferência persistentes e instáveis na GPU. SOULS V4 adota um pipeline híbrido composto por dois motores distintos operando em tempos de vida mutuamente exclusivos:
 
-- **O Trator de Ingestão de Alta Voltagem (`mistral.rs`):** Instanciado em tempo de execução de forma estritamente efêmera e isolada. O orquestrador em Rust (`soda-etl-worker`) dispara o binário `mistral.rs` como um subprocesso filho focado exclusivamente em digerir e gerar as essências da Fase 1.5. Beneficia-se da velocidade de kernels CUDA e Flash Attention 2 nativo para processar prompts colossais de código em menos de $40$ segundos.
+- **O Trator de Ingestão de Alta Voltagem (`mistral.rs`):** Instanciado em tempo de execução de forma estritamente efêmera e isolada. O orquestrador em Rust (`souls-etl-worker`) dispara o binário `mistral.rs` como um subprocesso filho focado exclusivamente em digerir e gerar as essências da Fase 1.5. Beneficia-se da velocidade de kernels CUDA e Flash Attention 2 nativo para processar prompts colossais de código em menos de $40$ segundos.
 - **A Guilhotina Atômica do Sistema:** Imediatamente após a conclusão da extração sintática e entrega do JSON estruturado ao SQLite pela Fase 1.5, o orquestrador despacha um sinal síncrono do sistema (`SIGKILL`) ao processo do `mistral.rs`. A memória física da placa de vídeo dedicada é descarregada à força e retorna para $0 \text{ MB}$, expurgando vazamentos residuais e limpando os registradores para a próxima etapa.
 - **O Cérebro Contínuo Baseado em C++ (`llama-cpp-2`):** Responsável por guiar a interface, executar a decodificação de logit-probing e as ações geradoras de feedback em tempo real. O `llama-cpp-2` carrega modelos utilizando memória virtual mapeada (`mmap`), garantindo previsibilidade determinística e alocação estática e contígua em tempo $O(1)$.
 
 ### 2. Imposição Matemática de Limites de KV Cache (Quantização Casada)
 
-Para assegurar o regime de estabilidade operacional contínua na dGPU RTX 2060m, o SODA V4 fixa a seguinte equação regulatória inegociável:
+Para assegurar o regime de estabilidade operacional contínua na dGPU RTX 2060m, o SOULS V4 fixa a seguinte equação regulatória inegociável:
 
 $$\text{VRAM}_{\text{pesos}} + \text{VRAM}_{\text{kv\_cache\_quant}} \le 4.8 \text{ GB}$$
 
 Esta meta orçamentária é cumprida síncronamente pela aplicação de duas técnicas de compactação de tensores de precisão na inicialização dos buffers:
 
 1. **Quantização dos Pesos em IQ3_M com Matriz de Importância (imatrix):** Todos os modelos de escala $8\text{B}$ de parâmetros devem ser convertidos e carregados estritamente no formato IQ3_M calibrado com dados representativos de código fonte. O tamanho total do modelo em memória virtual fica limitado a exatamente $3.78 \text{ GB}$ ($3870 \text{ MB}$).
-2. **Quantização Mandatória do KV Cache a 4-Bits (`Q4_K`):** O cache de contexto longo do SODA é processado com quantização de 4 bits em vez de flutuação em 16-bits.
+2. **Quantização Mandatória do KV Cache a 4-Bits (`Q4_K`):** O cache de contexto longo do SOULS é processado com quantização de 4 bits em vez de flutuação em 16-bits.
 
 #### Cálculo de VRAM do KV Cache quantizado em Q4_K:
 
@@ -1187,7 +1187,7 @@ $$V_{\text{kv\_q4}} = 2 \times N_{\text{layers}} \times N_{\text{kv\_heads}} \ti
 
 Sob esta topologia de compressão casada, o consumo consolidado em VRAM do modelo $8\text{B}$ com contexto de $30\text{k}$ tokens é reduzido para:
 
-$$V_{\text{total\_soda}} = 3.78 \text{ GB} + 0.91 \text{ GB} + 0.20 \text{ GB} = 4.89 \text{ GB}$$
+$$V_{\text{total\_souls}} = 3.78 \text{ GB} + 0.91 \text{ GB} + 0.20 \text{ GB} = 4.89 \text{ GB}$$
 
 A compressão garante um headroom de segurança física de $1.11 \text{ GB}$ **(**$1136 \text{ MB}$**)** livre na GPU RTX 2060m para gerenciar picos de inicialização de tensores e manipulação gráfica da interface do host (Tauri v2 e sistema operacional local).
 
@@ -1195,10 +1195,10 @@ A compressão garante um headroom de segurança física de $1.11 \text{ GB}$ **(
 
 Fica terminantemente proibido inicializar qualquer modelo local de inteligência artificial de forma cega ou baseada em heurísticas opinativas de configuração do usuário.
 
-- O SODA implementará o utilitário nativo de baixo nível `inspector_gguf` escrito em Rust.
+- O SOULS implementará o utilitário nativo de baixo nível `inspector_gguf` escrito em Rust.
 - Antes de acoplar qualquer arquivo `.gguf` à dGPU, o orquestrador invoca o `inspector_gguf` para parsear o cabeçalho binário do modelo em tempo $O(1)$, extraindo metadados críticos: o formato de quantização exato do modelo (`general.architecture`), contagem de camadas, número de cabeças de atenção e tensores.
 - O sistema executa em tempo real o cálculo matemático da equação de VRAM descrita neste ADR, confrontando a pegada teórica calculada contra o headroom físico real disponível no hardware no milissegundo do boot (buscando dados via chamadas nativas de NVML no Rust).
-- **Comportamento Fail-Closed:** Se a soma projetada exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SODA aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
+- **Comportamento Fail-Closed:** Se a soma projetada exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SOULS aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
 
 ## Consequências e Trade-offs
 
@@ -1230,23 +1230,23 @@ description: "Garante decodificação estruturada determinística com llguidance
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 ## Contexto Técnico e Impacto da Quantização
 
-Sob as restrições térmicas e de memória de vídeo fixadas no [ADR-027](https://gemini.google.com/app/ADR-027-Motor-Hibrido-VRAM.md "null") (NVIDIA RTX 2060m de $6.0 \text{ GB}$ de VRAM), o SODA V4 adota o regime de quantização extrema `IQ3_M` via matrizes de importância (`imatrix`) para modelos de linguagem de escala $8\text{B}$ de parâmetros.
+Sob as restrições térmicas e de memória de vídeo fixadas no [ADR-027](https://gemini.google.com/app/ADR-027-Motor-Hibrido-VRAM.md "null") (NVIDIA RTX 2060m de $6.0 \text{ GB}$ de VRAM), o SOULS V4 adota o regime de quantização extrema `IQ3_M` via matrizes de importância (`imatrix`) para modelos de linguagem de escala $8\text{B}$ de parâmetros.
 
 A compressão dos pesos para o patamar de $\approx 3.66 \text{ bpw}$ (bits por peso) acarreta uma degradação severa na coerência lógica fina do modelo:
 
 - **Colapso de Schema JSON:** O modelo perde a capacidade natural de seguir sintaxes rígidas em regime nativo livre (_Zero-Shot_), falhando no fechamento de delimitadores estruturais (chaves `{}` e colchetes `[]`), escapando caracteres de controle ou gerando chaves inexistentes no esquema de dados de 82 colunas da tabela `MASTER_SOLUTIONS`.
-- **Estresse de Desserialização no Rust Backend:** Interfaces de acoplamento direto baseadas na crate `serde_json` falham catastroficamente (`panic` ou interrupção do thread de controle do Tokio) ao receber strings JSON malformadas [DEPENDENCIES] Otimização de Inferência Rust Bare-Metal SLMs e Decodificação Restrita (Fase de Destilação).md, uploaded:SODA Theme_16].
+- **Estresse de Desserialização no Rust Backend:** Interfaces de acoplamento direto baseadas na crate `serde_json` falham catastroficamente (`panic` ou interrupção do thread de controle do Tokio) ao receber strings JSON malformadas [DEPENDENCIES] Otimização de Inferência Rust Bare-Metal SLMs e Decodificação Restrita (Fase de Destilação).md, uploaded:SOULS Theme_16].
 - **Sobrecarga de Recuperação Lógica (Anti-Patterns Banned):** Rejeita-se categoricamente a re-execução de prompts síncronos na dGPU para "correção de JSON" ou laços de validação sintática complexos que sobrecarreguem o barramento PCIe ou gerem novos picos de latência.
 
 ## Declaração do Problema
 
-Como garantir $100\%$ de conformidade sintática à especificação de saída JSON para um modelo $8\text{B}$ quantizado em `IQ3_M`, processando contextos de até $30.000$ tokens, sem introduzir overhead térmico na dGPU e sem expor a esteira de I/O em Rust a exceções de tempo de execução [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md, uploaded:SODA Fase 0: Harvester Nativo e Fluxo Canônico V6.0]?
+Como garantir $100\%$ de conformidade sintática à especificação de saída JSON para um modelo $8\text{B}$ quantizado em `IQ3_M`, processando contextos de até $30.000$ tokens, sem introduzir overhead térmico na dGPU e sem expor a esteira de I/O em Rust a exceções de tempo de execução [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md, uploaded:SOULS Fase 0: Harvester Nativo e Fluxo Canônico V6.0]?
 
-## Decisões Arquiteturais da SODA V4
+## Decisões Arquiteturais da SOULS V4
 
 ```
                                   VETOR DE LOGITS BRUTOS
@@ -1282,7 +1282,7 @@ Como garantir $100\%$ de conformidade sintática à especificação de saída JS
 
 Bane-se qualquer processamento de máscaras de Gramática Livre de Contexto (CFG - _Context-Free Grammar_) ou inferência lógica de ordenação estrutural na dGPU NVIDIA RTX 2060m.
 
-- O SODA V4 utiliza a crate Rust `llguidance` integrada diretamente ao loop de geração sínclono do `llama-cpp-2`.
+- O SOULS V4 utiliza a crate Rust `llguidance` integrada diretamente ao loop de geração sínclono do `llama-cpp-2`.
 - A validação de tokens e o avanço dos autômatos determinísticos de gramática são descarregados integralmente para os núcleos de alta frequência da CPU (Intel Core i9).
 - A CPU intercepta o vetor de logits brutos retornado pela dGPU antes da seleção de amostragem. Emprega-se paralelismo SIMD nativo através de instruções vetoriais AVX2 de 256 bits (`is_x86_feature_detected!("avx2")`) para escanear e invalidar de forma concorrente a tabela de probabilidade do vocabulário do tokenizer.
 
@@ -1300,7 +1300,7 @@ Fica terminantemente proibido o uso isolado ou prioritário de amostradores base
 
 A compressão severa de pesos em `IQ3_M` achata artificialmente as curvas de probabilidade calculadas pela camada Softmax, elevando scores estatísticos de tokens espúrios (lixo gramatical) à vizinhança imediata dos tokens corretos [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 
-- O SODA V4 impõe o amostrador **Min-P** como o disjuntor estatístico primário do motor gerador [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
+- O SOULS V4 impõe o amostrador **Min-P** como o disjuntor estatístico primário do motor gerador [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - O Min-P atua podando de forma adaptativa e proporcional todos os tokens cuja probabilidade seja inferior a um limite dinâmico calculado a partir do token de maior probabilidade ($p_{\text{max}}$) [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 
 #### Equação do Limiar de Poda Estocástica:
@@ -1316,7 +1316,7 @@ $$p_{\text{threshold}} = p_{\text{max}} \times m_{\text{min\_p}}$$
 
 O modelo hiper-quantizado operando em contexts longos ($30\text{k}$ tokens) sofre de degradação rápida no vetor de atenção espacial [DEPENDENCIES] Otimização de Inferência Rust Bare-Metal SLMs e Decodificação Restrita (Fase de Destilação).md]. Forçar o modelo a deduzir a semântica da resposta em regime _Zero-Shot_ consome recursos cognitivos residuais escassos dos pesos comprimidos [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 
-- O SODA V4 institui a obrigatoriedade da **Ancoragem Dupla de Prompt com ICL (In-Context Learning)** [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
+- O SOULS V4 institui a obrigatoriedade da **Ancoragem Dupla de Prompt com ICL (In-Context Learning)** [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - Toda requisição enviada ao motor de inferência pela Fase 1.5 e Fase 3 de processamento deve conter, de forma imutável no topo de seu harness de prompt, exatamente **2 exemplos perfeitos de Entrada/Saída JSON** [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - O modelo é induzido a atuar puramente por mimetismo geométrico e ativação espacial de padrões preexistentes na janela de contexto [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - Essa simplificação cognitiva economiza a capacidade de representação do modelo quantizado, focando $100\%$ de seu poder de atenção exclusivamente na _extração semântica_ das propriedades do código local analisado, enquanto o plano de controle de Rust cuida da rigidez estrutural externa.
@@ -1351,11 +1351,11 @@ description: "Prioriza os comandos de leitura O(1) do gateway Rust sobre sidecar
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 ## Contexto Técnico e Restrições de Entrada/Saída (I/O)
 
-A execução de agentes agênticos na nova **Arquitetura SODA V4** é governada estritamente pelo "Pessimismo da Razão" sob as restrições físicas inalteráveis da dGPU NVIDIA RTX 2060m (com exatos $6.0 \text{ GB}$ de VRAM) e do processador central Intel i9 suportado por $32 \text{ GB}$ de RAM física.
+A execução de agentes agênticos na nova **Arquitetura SOULS V4** é governada estritamente pelo "Pessimismo da Razão" sob as restrições físicas inalteráveis da dGPU NVIDIA RTX 2060m (com exatos $6.0 \text{ GB}$ de VRAM) e do processador central Intel i9 suportado por $32 \text{ GB}$ de RAM física.
 
 Como estabelecido no [ADR-027](https://gemini.google.com/app/ADR-027-Motor-Hibrido-VRAM.md "null"), a integridade térmica e lógica do sistema operacional agêntico exige que a VRAM seja blindada contra o transbordo (_spillover_) pelo barramento PCIe Gen3 x8, dedicando-a exclusivamente aos pesos comprimidos do modelo em `IQ3_M` e ao KV Cache sínclono em `Q4_K`.
 
@@ -1366,9 +1366,9 @@ Sistemas agênticos industriais de mercado falham catastróficamente neste limit
 
 ## Declaração do Problema
 
-Como estruturar os mecanismos de navegação Web autônoma e parsing de documentos de larga escala no SODA V4 de forma que operem em tempo estrito de barramento $O(1)$, sem instanciar runtimes JavaScript interpretados, sem carregar um único pixel na memória de vídeo (VRAM) e mantendo a pegada de memória RAM central imutável perante arquivos densos [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md, uploaded:SODA Theme_01]?
+Como estruturar os mecanismos de navegação Web autônoma e parsing de documentos de larga escala no SOULS V4 de forma que operem em tempo estrito de barramento $O(1)$, sem instanciar runtimes JavaScript interpretados, sem carregar um único pixel na memória de vídeo (VRAM) e mantendo a pegada de memória RAM central imutável perante arquivos densos [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md, uploaded:SOULS Theme_01]?
 
-## Decisões Arquiteturais da SODA V4
+## Decisões Arquiteturais da SOULS V4
 
 ```
                                 [ WEB PAGE / CDP STREAM ]
@@ -1403,22 +1403,22 @@ Fica terminantemente banido o uso de Playwright, Selenium, Node.js, Python ou qu
 
 ### 2. Visão Cognitiva O(1) e o Formato LEAN (LLM-Efficient Adaptive Notation)
 
-Nossos agentes locais rejeitam a análise baseada em pixels ou imagens matriciais. Visando poupar $100\%$ do poder de processamento térmico da RTX 2060m, a visão dos agentes SODA é puramente estrutural e matemática [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md].
+Nossos agentes locais rejeitam a análise baseada em pixels ou imagens matriciais. Visando poupar $100\%$ do poder de processamento térmico da RTX 2060m, a visão dos agentes SOULS é puramente estrutural e matemática [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md].
 
-- **Extração de AXTree:** O SODA V4 extrai síncronamente do CDP a Árvore de Acessibilidade (`Accessibility.getFullAXTree`), contendo apenas as primitivas semânticas e os elementos focáveis/interativos do layout, ignorando completamente CSS decorativo, tags de estilo vazias, mídias e scripts [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md].
-- **Compactação LEAN:** A AXTree bruta é processada em memória por um parser zero-copy nativo (baseado em lifetimes Rust `&'a str` e na crate `nom`) que converte a estrutura redundante da página para a especificação **LEAN** [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md, uploaded:SODA V3: Arquitetura de Inferência Híbrida].
+- **Extração de AXTree:** O SOULS V4 extrai síncronamente do CDP a Árvore de Acessibilidade (`Accessibility.getFullAXTree`), contendo apenas as primitivas semânticas e os elementos focáveis/interativos do layout, ignorando completamente CSS decorativo, tags de estilo vazias, mídias e scripts [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md].
+- **Compactação LEAN:** A AXTree bruta é processada em memória por um parser zero-copy nativo (baseado em lifetimes Rust `&'a str` e na crate `nom`) que converte a estrutura redundante da página para a especificação **LEAN** [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md, uploaded:SOULS V3: Arquitetura de Inferência Híbrida].
     - _Dot-Flattening:_ O aninhamento profundo de nós DOM é aplanado em caminhos lineares diretos usando notação por pontos (ex: `root.main.form.input_user`).
     - _Booleanos Literais:_ Atributos de estado são traduzidos para caracteres únicos: `T` (verdadeiro/ativo), `F` (falso/desabilitado) e `_` (nulo ou irrelevante).
 
 #### Equação de Deflação de Tokens de Entrada:
 
-Seja $T_{\text{HTML}}$ o volume de tokens gerado pela representação clássica do DOM e $T_{\text{LEAN}}$ a codificação aplanada sob SODA V4. O motor impõe a seguinte restrição estatística de compressão:
+Seja $T_{\text{HTML}}$ o volume de tokens gerado pela representação clássica do DOM e $T_{\text{LEAN}}$ a codificação aplanada sob SOULS V4. O motor impõe a seguinte restrição estatística de compressão:
 
 $$T_{\text{LEAN}} \le 0.29 \times T_{\text{HTML}}$$
 
 Isso representa uma deflação síncrona mínima de $71\%$ **no consumo de tokens**.
 
-- **Mapeamento Geométrico Espacial:** Para interagir com a interface (cliques, digitação), o agente SODA V4 consulta síncronamente o modelo de caixas do elemento focado (`DOM.getBoxModel`). O ponto físico de impacto para clique é calculado geometricamente por média linear dos vértices sem rendering de tela:
+- **Mapeamento Geométrico Espacial:** Para interagir com a interface (cliques, digitação), o agente SOULS V4 consulta síncronamente o modelo de caixas do elemento focado (`DOM.getBoxModel`). O ponto físico de impacto para clique é calculado geometricamente por média linear dos vértices sem rendering de tela:
 
 $$x_{\text{clique}} = \frac{x_0 + x_2}{2}$$$$y_{\text{clique}} = \frac{y_0 + y_2}{2}$$
 
@@ -1435,7 +1435,7 @@ $$\eta_{\text{vis}} = \frac{\text{Score}_{\text{Dataset}} (\%)}{\text{VRAM}_{\te
 
 ### 2.2 Ciclo de Vida Reativo e Desalocação Atômica do Módulo VLM (`.mmproj`)
 
-A integração de capacidades visuais no SODA V5 respeita estritamente o **Ciclo de Vida Reativo**:
+A integração de capacidades visuais no SOULS V5 respeita estritamente o **Ciclo de Vida Reativo**:
 
 1. **Gatilho de Fallback:** O projetor `.mmproj` permanece descarregado por padrão (VRAM footprint $= 0\text{ MB}$). Ele só pode ser alocado na VRAM sob demanda extrema, quando o agente falhar no parsing de estruturas de texto (DOM/AST) e se deparar com documentos não estruturados (ex: comprovantes fiscais físicos, faturas digitalizadas com ruído).
 2. **Expurgo Atômico Síncrono:** Tão logo a inferência visual finalize e o JSON estruturado seja emitido para o pipeline agêntico, o Gateway Rust DEVE invocar a desalocação atômica imediata do arquivo `.mmproj` e a purga dos tokens visuais alocados na cache Key-Value da GPU.
@@ -1445,7 +1445,7 @@ A integração de capacidades visuais no SODA V5 respeita estritamente o **Ciclo
 
 Para impedir picos letais de memória RAM central ($> 2.5\text{ GB}$) que causem o pânico do Tokio Event Loop e ativem o Linux OOM Killer no hospedeiro, o processamento de arquivos pesados (PDFs, planilhas massivas) é redimensionado para operar em fluxo sínclono linearizado.
 
-- **Streaming via `Kreuzberg`:** O SODA V4 veta chamadas de leitura de arquivos que exijam buffering integral na RAM do host. O motor `Kreuzberg` (embarcado via static-linking com PDFium) deve ser instanciado estritamente através do mecanismo de streaming por fatias iterativas (`PdfParser::for_each_page`). Cada página é digerida, vetorizada e salva individualmente no SQLite (Fase 1.5), limpando os buffers da página anterior antes de alocar a seguinte. A pegada de memória do processo permanece estática e em complexidade constante:
+- **Streaming via `Kreuzberg`:** O SOULS V4 veta chamadas de leitura de arquivos que exijam buffering integral na RAM do host. O motor `Kreuzberg` (embarcado via static-linking com PDFium) deve ser instanciado estritamente através do mecanismo de streaming por fatias iterativas (`PdfParser::for_each_page`). Cada página é digerida, vetorizada e salva individualmente no SQLite (Fase 1.5), limpando os buffers da página anterior antes de alocar a seguinte. A pegada de memória do processo permanece estática e em complexidade constante:
 
 $$\mathcal{O}(1)$$
 
@@ -1455,18 +1455,18 @@ $$\mathcal{O}(1)$$
 
 ### Impactos Positivos:
 
-- **Headroom de RAM e VRAM Preservado:** A dGPU RTX 2060m opera livre de tarefas gráficas de navegação ($0\text{ MB}$ de impacto), e o uso de RAM central fica abaixo do cgroup estrito do SODA.
+- **Headroom de RAM e VRAM Preservado:** A dGPU RTX 2060m opera livre de tarefas gráficas de navegação ($0\text{ MB}$ de impacto), e o uso de RAM central fica abaixo do cgroup estrito do SOULS.
 - **Estabilidade do Tokio Event Loop:** Eliminação de latências estocásticas induzidas pelo bloqueio de threads assíncronas por parsers síncronos de arquivos gigantescos.
 - **Imunidade a WAFs e Bots:** Acesso resiliente a fontes web locais-first sem depender de proxificações de nuvem lentas [DEPENDENCIES] Arquitetura Agente Rust Bare-Metal (Navegação e Parsing O(1)).md].
 
 ### Impactos Negativos:
 
-- **Cegueira Decorativa do Agente:** O SODA é blindado contra imagens decorativas, Canvas gráficos analógicos, e folha de estilos (CSS) não estruturadas. Se uma página requer inferência baseada estritamente na renderização artística visual de imagens para ser compreendida, a tarefa falha de forma limpa.
-- **Custo de CPU Local:** A CPU i9 assume a responsabilidade síncrona de rodar o parser zero-copy das árvores do Chromiumoxide, operando em pico de registradores AVX2. O impacto é absorvido pela separação lógica de núcleos (_CPU Core Affinity_) do SODA Daemon.
+- **Cegueira Decorativa do Agente:** O SOULS é blindado contra imagens decorativas, Canvas gráficos analógicos, e folha de estilos (CSS) não estruturadas. Se uma página requer inferência baseada estritamente na renderização artística visual de imagens para ser compreendida, a tarefa falha de forma limpa.
+- **Custo de CPU Local:** A CPU i9 assume a responsabilidade síncrona de rodar o parser zero-copy das árvores do Chromiumoxide, operando em pico de registradores AVX2. O impacto é absorvido pela separação lógica de núcleos (_CPU Core Affinity_) do SOULS Daemon.
 
 ### Comportamento Fail-Closed
 
-Caso o buffer de dados estruturados gerado na descompressão de uma página web ou arquivo ultrapasse o teto físico imposto pelas restrições do cgroup do processo worker, o SODA executa um descarte atômico sínclono (`SIGKILL`), cancelando a extração local e gravando um log seco na tabela `SYSTEM_TELEMETRY` antes de abortar de forma segura.
+Caso o buffer de dados estruturados gerado na descompressão de uma página web ou arquivo ultrapasse o teto físico imposto pelas restrições do cgroup do processo worker, o SOULS executa um descarte atômico sínclono (`SIGKILL`), cancelando a extração local e gravando um log seco na tabela `SYSTEM_TELEMETRY` antes de abortar de forma segura.
 
 ### ====================================================================================================
 ARQUIVO: ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates.md
@@ -1484,15 +1484,15 @@ description: "Doutrina implacável de higiene bare-metal: institui o Version Pin
 ### ADR-030: Doutrina de Curadoria de Dependências e Higiene de Crates (Rust)
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 #### Contexto Técnico e Restrições Físicas de Infraestrutura
-A geometria do ecossistema SODA V4 opera em uma "arquitetura de sobrevivência" atrelada aos limites físicos do hardware host (Intel i9, 32GB RAM, dGPU RTX 2060m com 6GB VRAM). 
+A geometria do ecossistema SOULS V4 opera em uma "arquitetura de sobrevivência" atrelada aos limites físicos do hardware host (Intel i9, 32GB RAM, dGPU RTX 2060m com 6GB VRAM). 
 Se o gerenciamento de dependências (`Cargo.toml`) for delegado sem restrições a agentes de IA ou processos automatizados, o sistema sofrerá de "Câncer de Dependências": a introdução silenciosa de *frameworks* obesos, C-FFI (Foreign Function Interfaces pesadas), sub-dependências duplicadas (esquizofrenia de RAM) e metadados de macros que causam *Cache Thrashing* no Cache L3 do processador. O tempo de compilação incremental degrada e o *Event Loop* do Tokio entra em colapso termodinâmico.
 
 #### Decisão Arquitetural (As Quatro Leis de Higiene Sistêmica)
 
-Fica decretada a adoção de quatro módulos inegociáveis de curadoria de *crates* para todo o *workspace* Rust do SODA:
+Fica decretada a adoção de quatro módulos inegociáveis de curadoria de *crates* para todo o *workspace* Rust do SOULS:
 
 **Módulo 1: O Fim do Bloat de Rede, HTTP e I/O**
 *   **Proibição Terminal de Frameworks Obesos:** Ficam sumariamente banidas *crates* como `axum` e `octocrab`. A comunicação de APIs e o roteamento devem ser minimalistas.
@@ -1531,7 +1531,7 @@ description: "Formaliza o Harvester da Fase 0 como Trator Mecânico Zero-AI de F
 # ADR-031: Harvester — Anatomia dos 11 Blobs e as 4 Leis Inegociáveis da Execução
 
 ## Status
-Aceito (Ativo, Inegociável e Fundacional para a Fábrica SODA V6)
+Aceito (Ativo, Inegociável e Fundacional para a Fábrica SOULS V6)
 
 ## Contexto
 O Harvester da Fase 0 (V6) é o primeiro componente puramente nativo em Rust a tocar o repositório alvo após o clone. Sua meta é **Fotografia Completa (Zero Truncamento)**: a união dos 11 artefatos extraídos deve permitir que a IA das Fases 2 e 3 reconstrua o software original **mentalmente**, expurgando o lixo. Sem esse contrato, qualquer Lente Cognitiva opera sobre uma fotografia furada e alucina para preencher lacunas.
@@ -1594,7 +1594,7 @@ Cada blob é uma **lâmina tática isolada** com missão própria. O arsenal é 
 | 7 | `blob_07_ops_blueprint` | A Fricção de DevOps | Capturador de CI/CD | `Dockerfile*`, `.github/workflows/*`, `Makefile`, `docker-compose*.yml`, `Jenkinsfile`, `.gitlab-ci.yml`. Captura **integral** (não resumida). Revela se o projeto exige infra pesada ou compila limpo | Texto |
 | 8 | `blob_08_health_report` | A Podridão Estrutural | Mesmo motor SAST do Blob 06, com flag `--skip-formatter` | Ignora estética (espaços, indentação). Relata **pura complexidade ciclomática**, código morto, code smells, entropia em runtime. É o Blob 06 sem o filtro de beleza | Texto-relatório tático |
 | 9 | `blob_09_community_meta` | A Vitalidade Real | `reqwest` para GitHub REST API | Lead time de fechamento de Issues, PRs ativos, estrelas, data do último commit, taxa de release. Diferencia projetos maduros de abandonware. **Único blob com dependência de rede autorizada** | JSON |
-| 10 | `blob_10_soda_canon_context` | As Leis Duras | Leitura local air-gapped | Carrega o `soda_canon_grounding.md` (ou equivalente canon snapshot). É a **Constituição SODA** anexada a cada dossiê para ancorar a IA das Fases 2-3 e impedir alucinações de hardware | Texto |
+| 10 | `blob_10_souls_canon_context` | As Leis Duras | Leitura local air-gapped | Carrega o `souls_canon_grounding.md` (ou equivalente canon snapshot). É a **Constituição SOULS** anexada a cada dossiê para ancorar a IA das Fases 2-3 e impedir alucinações de hardware | Texto |
 | 11 | `blob_11_ux_contracts` | A Mecânica Visual | Oxc parser (Svelte/React/TS) | Extração cirúrgica de UI: extirpa **100% do HTML e CSS** (lixo estético) e devolve **estritamente a Mecânica de Estados** — Props (entradas) e Events/Dispatchers (saídas) que governam a previsibilidade do componente | Outline O(1) |
 
 **Princípio de não-vazamento:** os 11 blobs são ortogonais. O Blob 04 (outline) **nunca** inclui lógica de teste (vai para Blob 03). O Blob 06 (security) **nunca** inclui complexidade (vai para Blob 08). O Blob 09 (community) **nunca** inclui código (vai para Blobs 04, 06, 08). Cada lâmina cumpre sua missão e **delega o resto ao vizinho correto**.
@@ -1640,7 +1640,7 @@ description: "Proíbe modelos de rascunho neurais (MTP/EAGLE-3) na VRAM e impõe
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Restrições de Hardware
 
@@ -1654,7 +1654,7 @@ A especulação de tokens e a predição multi-token (MTP) foram concebidas para
 
 Como obter aceleração na taxa de geração de tokens ($S > 1.0$) em estruturas altamente padronizadas (JSONs estruturados, chamadas de função, sintaxe de código) dentro do limite físico inflexível de $6.0 \text{ GB}$ de VRAM, sem consumir memória de vídeo adicional e sem induzir paginação para a memória RAM do sistema através do barramento PCIe?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROMPT ENTRADA ]
@@ -1676,14 +1676,14 @@ Como obter aceleração na taxa de geração de tokens ($S > 1.0$) em estruturas
 
 ### 1. A Guilhotina da Especulação Neural (`.mtp` / `draft-simple`)
 
-Fica terminantemente **PROIBIDO** o carregamento de arquivos de rascunho neurais (`.gguf` secundários), cabeças MTP ou adaptadores EAGLE-3 (`.mtp`) na VRAM em qualquer componente da Arquitetura SODA V5.
+Fica terminantemente **PROIBIDO** o carregamento de arquivos de rascunho neurais (`.gguf` secundários), cabeças MTP ou adaptadores EAGLE-3 (`.mtp`) na VRAM em qualquer componente da Arquitetura SOULS V5.
 
 - Qualquer tentativa de inicializar o motor de inferência com a flag `--spec-type draft-simple` ou `-md <draft_model>` em dGPUs de 6GB é barrada no carregamento pelo Gateway Rust.
 - O carregamento de rascunhos neurais introduz risco iminente de OOM e degradação térmica por desacoplamento de cache KV.
 
 ### 2. Adoção Compulsória da Especulação N-Gram (`ngram-mod`)
 
-O SODA V5 adota **exclusivamente** a especulação baseada em n-gramas (`ngram-mod`) para aceleração de geração autorregressiva.
+O SOULS V5 adota **exclusivamente** a especulação baseada em n-gramas (`ngram-mod`) para aceleração de geração autorregressiva.
 
 - **Mecanismo:** O algoritmo `ngram-mod` analisa em tempo real as janelas de contexto geradas, construindo tabelas de hash dinâmicas baseadas na frequência de n-gramas (tamanho de correspondência min/max configurável).
 - **Zero VRAM Footprint:** As tabelas de n-gramas residem estritamente na memória RAM central do sistema (pegada estática insignificante de $\sim 16 \text{ MB}$), sem alocar um único byte na VRAM da RTX 2060m.
@@ -1740,11 +1740,11 @@ description: "Impõe a execução de micro-sidecars (Embeddings e TTS/STT) estri
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Restrições de Concorrência
 
-A operação de um Sistema Operacional Agêntico Local (SODA V5) exige a execução concorrente de múltiplos serviços utilitários além do modelo de linguagem principal. Estes incluem:
+A operação de um Sistema Operacional Agêntico Local (SOULS V5) exige a execução concorrente de múltiplos serviços utilitários além do modelo de linguagem principal. Estes incluem:
 
 - **Encoders de Embeddings Locais:** Responsáveis pela vetorização semântica de curto prazo e busca RAG em memória (ex: `bge-small-en-v1.5`, `all-MiniLM-L6-v2`).
 - **Módulos de Áudio (STT / TTS):** Motores de transcrição de fala (`Moonshine`, `Whisper-Tiny`) e síntese de voz (`Kokoro-82M`).
@@ -1759,7 +1759,7 @@ Quando esses micro-sidecars são incorretamente alocados na VRAM da dGPU NVIDIA 
 
 Como garantir a execução contínua de micro-sidecars utilitários (Embeddings e Áudio) com alta throughput e baixa latência sem alocar um único megabyte de VRAM, sem induzir *stuttering* na inferência do LLM e sem degradar a estabilidade do Event Loop Tokio?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROCESSADOR INTEL / AMD ]
@@ -1779,7 +1779,7 @@ Como garantir a execução contínua de micro-sidecars utilitários (Embeddings 
 
 Fica terminantemente **PROIBIDO** o carregamento e a execução de encoders de embeddings locais e motores de síntese/transcrição de áudio na VRAM da GPU.
 
-- **Embeddings:** O SODA V5 padroniza a vetorização local no modelo **`bge-small-en-v1.5`** (ou `BGE-micro-v2`), executado estritamente via runtime CPU (`ONNX Runtime` CPU EP ou `sentence-transformers` via C++ bindings).
+- **Embeddings:** O SOULS V5 padroniza a vetorização local no modelo **`bge-small-en-v1.5`** (ou `BGE-micro-v2`), executado estritamente via runtime CPU (`ONNX Runtime` CPU EP ou `sentence-transformers` via C++ bindings).
   - *Desempenho Comprovado:* Atinge $>93\%$ da acurácia do `text-embedding-3-small` da OpenAI no benchmark MTEB com pegada de apenas $\sim 130 \text{ MB}$ na RAM do host.
 - **Síntese de Voz (TTS):** O motor **`Kokoro-82M`** deve ser instanciado em modo `ONNX CPU`, consumindo $\sim 200 \text{ MB}$ de RAM e mantendo um *Real-Time Factor* $\text{RTF} \le 0,25$.
 
@@ -1820,7 +1820,7 @@ A integridade dos micro-sidecars operando em CPU DEVE ser validada sob os seguin
 
 ### Comportamento Fail-Closed
 
-Se o daemon do SODA detectar que um micro-sidecar foi instanciado sem a máscara de afinidade de núcleo válida ou se o worker tentar alocar contexto no dispositivo CUDA, o processo worker sofre `SIGKILL` imediato, gerando alerta crítico na tabela `SYSTEM_AUDIT`.
+Se o daemon do SOULS detectar que um micro-sidecar foi instanciado sem a máscara de afinidade de núcleo válida ou se o worker tentar alocar contexto no dispositivo CUDA, o processo worker sofre `SIGKILL` imediato, gerando alerta crítico na tabela `SYSTEM_AUDIT`.
 
 ### ====================================================================================================
 ARQUIVO: ADR-034-Engenharia-de-Representacao-RepE.md
@@ -1839,7 +1839,7 @@ description: "Impõe o uso de Engenharia de Representação (RepE) via intercept
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Restrições de Quantização
 
@@ -1853,7 +1853,7 @@ A execução de Small Language Models (SLMs de 3B a 4B parâmetros, como Qwen 3.
 
 Como recuperar a acurácia comportamental, suprimir alucinações e alinhar a execução de um SLM 4B quantizado aos níveis de um modelo de 7B/8B sem aumentar o footprint de VRAM, sem re-treinar os pesos base e com impacto insignificante no throughput de inferência?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROMPT ENTRADA ]
@@ -1877,7 +1877,7 @@ Como recuperar a acurácia comportamental, suprimir alucinações e alinhar a ex
 
 ### 1. Interceptação em Runtime via Callbacks (`cb_eval`)
 
-O SODA V5 impõe o uso de **Engenharia de Representação** (*Representation Engineering* - RepE) para modulação de ativação em tempo de execução.
+O SOULS V5 impõe o uso de **Engenharia de Representação** (*Representation Engineering* - RepE) para modulação de ativação em tempo de execução.
 
 - O backend de inferência em Rust (`llama-cpp-2` / `mistral.rs` bindings) DEVE registrar um manipulador na função de callback de avaliação de tensores (`cb_eval`).
 - A cada passagem direta (*forward pass*), o manipulador intercepta os tensores de ativação ocultos das camadas intermediárias ($h_l$) e injeta um vetor de deslocamento comportamental ($v_l$) derivado de um arquivo de vetor de controle em formato GGUF:
@@ -1929,7 +1929,7 @@ description: "Impõe a interceptação do buffer IPC de saída do LLM por um mot
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Desperdício de Tokens
 
@@ -1942,7 +1942,7 @@ Mesmo quando a amostragem de tokens é governada por decodificação restrita (`
 
 Como sanar 99% das falhas sintáticas em respostas de SLMs (JSONs truncados, falta de aspas, vírgulas no último elemento, blocos Markdown) com latência sub-milissegundo e **custo zero de tokens e VRAM**, eliminando re-prefills desnecessários na GPU?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                        [ BUFFER IPC STREAMING (GPU/LLM) ]
@@ -2022,7 +2022,7 @@ description: "Proíbe amostragem paralela (Best-of-N) na GPU e impõe o Ralph Lo
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Gargalo da KV Cache Paralela
 
@@ -2037,7 +2037,7 @@ Em hardware restrito como a dGPU NVIDIA RTX 2060m ($6.0 \text{ GB}$ VRAM):
 
 Como aplicar *Test-Time Compute* e ciclos de reflexão de auto-correção para resgatar erros lógicos complexos em SLMs de 3B a 4B parâmetros sem estourar o limite de 6GB de VRAM, sem induzir paginação PCIe e sem desacelerar a inferência com re-prefills integrais?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROMPT INICIAL ]
@@ -2069,11 +2069,11 @@ Como aplicar *Test-Time Compute* e ciclos de reflexão de auto-correção para r
 
 Fica terminantemente **PROIBIDO** o uso de estratégias de amostragem paralela (*Best-of-N*, *Self-Consistency*, *Beam Search* paralelo) que aloquem múltiplas sequências de KV Cache simultâneas na VRAM da GPU.
 
-- O motor de inferência SODA V5 operará sob amostragem estritamente sequencial.
+- O motor de inferência SOULS V5 operará sob amostragem estritamente sequencial.
 
 ### 2. O Padrão "VRAM Assimétrica e Ralph Loop Sequencial"
 
-O SODA V5 padroniza a execução do **Ralph Loop Sequencial**, governado por uma arquitetura de VRAM assimétrica:
+O SOULS V5 padroniza a execução do **Ralph Loop Sequencial**, governado por uma arquitetura de VRAM assimétrica:
 
 - **Modelo Primário (3B-4B):** Alocado exclusivamente na VRAM da GPU (~2.5GB a 3.2GB), encarregado da geração rápida de hipóteses e raciocínio.
 - **Modelo Verificador (*Critic Desacoplado*):** Fica estritamente **proibido** alocar o modelo *Critic* na VRAM. O verificador (seja um validador heurístico determinístico em Rust ou um SLM ultraleve como `GLiClass` / `Phi-4-mini` de 0.5B-1.5B em GGUF) DEVE rodar exclusivamente na memória RAM do Host, processado via CPU através de instruções vetoriais AVX2 / AVX-512.
@@ -2119,26 +2119,26 @@ description: "Mitigação de Context Rot e OOM no Gateway Rust via Gestão Dinâ
 
 ## Status
 
-Proposed (Proposto para Validação no Cânone SODA V5)
+Proposed (Proposto para Validação no Cânone SOULS V5)
 
 ## Contexto Técnico e Gargalo de Context Rot / OOM
 
-Durante a execução de fluxos de alta intensidade cognitiva — como *RAG Temporal*, *Deep Research* e *Enxames Agênticos* —, o Gateway Rust do ecossistema SODA lida com payloads massivos no histórico de conversa ($T_{\text{hist}}$). O acúmulo desordenado de logs, saídas JSON de ferramentas, diffs de código e prospecções textuais longas induz a dois vetores críticos de falha no sistema:
+Durante a execução de fluxos de alta intensidade cognitiva — como *RAG Temporal*, *Deep Research* e *Enxames Agênticos* —, o Gateway Rust do ecossistema SOULS lida com payloads massivos no histórico de conversa ($T_{\text{hist}}$). O acúmulo desordenado de logs, saídas JSON de ferramentas, diffs de código e prospecções textuais longas induz a dois vetores críticos de falha no sistema:
 
 1. **Context Rot (Degradação Semântica):** A diluição da atenção do modelo de linguagem primário em janelas extensas (> 32k-128k tokens), degradando a capacidade de raciocínio e aderência às instruções do *System Prompt*.
 2. **Exaustão de VRAM e Latência (OOM Risk):** Na infraestrutura bare-metal delimitada à dGPU NVIDIA RTX 2060m ($6.0 \text{ GB}$ VRAM), contextos excessivamente longos causam explosão no tamanho das matrizes da *KV Cache*, arriscando acionamentos de OOM (*Out of Memory*) ou forçando paginação PCIe para a RAM com perda drástica de *throughput* (tokens/segundo).
 
 O projeto open-source `headroomlabs-ai/headroom` demonstrou uma abordagem promissora para mitigação dinâmica desse problema. No entanto, a implementação original baseia-se em rackeries Python 3.10+, inferência de redes neurais via PyTorch/ModernBERT (`Kompress-v2-base`), bindings PyO3 e persistência SQLite/HNSW. Essa stack introduz **disputa de VRAM** (de 500 MB a 2.5 GB alocados pelo PyTorch/CUDA pool na dGPU), overhead de Garbage Collection (GC/GIL) e latências não determinísticas ($15 \text{ ms}$ a $316 \text{ ms}$ por pedido).
 
-Para garantir os princípios da **Lei de Ferro SODA Bare-Metal** (**Zero VRAM extra**, **Zero-Runtime Python/Node em produção** e latência sub-milissegundo), a heurística de orçamentação e triagem do Headroom deve ser transmutada para algoritmos determinísticos $O(N)$ nativos em Rust executados estritamente na RAM do Host.
+Para garantir os princípios da **Lei de Ferro SOULS Bare-Metal** (**Zero VRAM extra**, **Zero-Runtime Python/Node em produção** e latência sub-milissegundo), a heurística de orçamentação e triagem do Headroom deve ser transmutada para algoritmos determinísticos $O(N)$ nativos em Rust executados estritamente na RAM do Host.
 
 ## Declaração do Problema
 
-Como realizar a gestão dinâmica e contínua da janela de contexto no Gateway Tokio do SODA — comprimindo e podando histórico redundante de ferramentas, logs e código sem perda irreversível de informação — mantendo **Zero consumo de VRAM adicional na GPU**, latência de triagem $< 1.0 \text{ ms}$ e operando com interceção *loopback* local ultrarrápida?
+Como realizar a gestão dinâmica e contínua da janela de contexto no Gateway Tokio do SOULS — comprimindo e podando histórico redundante de ferramentas, logs e código sem perda irreversível de informação — mantendo **Zero consumo de VRAM adicional na GPU**, latência de triagem $< 1.0 \text{ ms}$ e operando com interceção *loopback* local ultrarrápida?
 
 ## Decisão Arquitetural
 
-Fica estabelecido o padrão **Gestão Dinâmica de Contexto e Compressão Reversível (CCR)**, incorporado nativamente ao Gateway Tokio Rust do SODA. O motor opera sob **4 Leis Inegociáveis**:
+Fica estabelecido o padrão **Gestão Dinâmica de Contexto e Compressão Reversível (CCR)**, incorporado nativamente ao Gateway Tokio Rust do SOULS. O motor opera sob **4 Leis Inegociáveis**:
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -2158,7 +2158,7 @@ Fica estabelecido o padrão **Gestão Dinâmica de Contexto e Compressão Revers
 |  v                 v                                                              |
 |  +------------------------------+     +----------------------------------------+  |
 |  | LEI 2: Poda Semântica        |     | Bypass Direct (Zero Overhead)          |  |
-|  | Determinística (soda-router) |     +----------------------------------------+  |
+|  | Determinística (souls-router) |     +----------------------------------------+  |
 |  | - SmartCrusher (serded/simd) |                         |                       |
 |  | - CodeCompressor (tree-sitter|                         |                       |
 |  | - LogCompressor (heuristics) |                         |                       |
@@ -2226,7 +2226,7 @@ $$\Delta R = T_{\text{total}} - H_{\text{in}}$$
 
 A compressão de $T_{\text{hist}}$ é realizada por motores determinísticos $O(N)$ em memória RAM Host:
 
-1. **Roteamento de Conteúdo por SWAR/AVX2 (`soda-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
+1. **Roteamento de Conteúdo por SWAR/AVX2 (`souls-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
    - JSON (`[` ou `{`) $\rightarrow$ Rota `SmartCrusher`.
    - Logs/ANSI (`[ERROR]`, `WARN`, `stacktrace`) $\rightarrow$ Rota `LogCompressor`.
    - Código Fonte (`fn`, `pub struct`, `def`, `class`, `import`) $\rightarrow$ Rota `CodeCompressor` (AST).
@@ -2251,7 +2251,7 @@ Para erradicar o risco de perda irreversível de contexto técnico, a poda aplic
 3. **Política de Despejo LRU:** A cache opera sob limite configurável de RAM (ex: 256 MB) com política de despejo LRU (*Least Recently Used*). Sem banco de dados em disco (Zero-SQLite overhead no caminho crítico).
 4. **Injeção de Marcadores Semânticos:** O texto comprimido inserido no prompt do LLM contém o marcador de resgate:
    
-   `[SODA CCR: 150 linhas comprimidas. Para recuperar os dados integrais brutos, invoque a ferramenta headroom_retrieve(hash="a1b2c3d4e5f6")]`
+   `[SOULS CCR: 150 linhas comprimidas. Para recuperar os dados integrais brutos, invoque a ferramenta headroom_retrieve(hash="a1b2c3d4e5f6")]`
 
 ---
 
@@ -2262,7 +2262,7 @@ O Gateway Tokio injeta de forma transparente no payload da requisição a ferram
 ```json
 {
   "name": "headroom_retrieve",
-  "description": "Recupera o bloco original de código, logs ou JSON comprimido pelo Gateway SODA CCR.",
+  "description": "Recupera o bloco original de código, logs ou JSON comprimido pelo Gateway SOULS CCR.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -2299,9 +2299,9 @@ O Gateway Tokio injeta de forma transparente no payload da requisição a ferram
 
 ---
 
-## Compliance com a Lei de Ferro SODA
+## Compliance com a Lei de Ferro SOULS
 
-| Diretiva SODA | Estado do ADR-037 | Garantia de Implementação |
+| Diretiva SOULS | Estado do ADR-037 | Garantia de Implementação |
 | :--- | :--- | :--- |
 | **Zero VRAM Extra** | **CONFORME** | 100% alocado na RAM Host via `DashMap` concorrente. |
 | **No Python/Node Runtime** | **CONFORME** | Transmutado inteiramente para Rust nativo (`tree-sitter`, `simd-json`, `bumpalo`). |

@@ -1,7 +1,7 @@
-# SODA Harvester — Design Arquitetural (Fase 1)
+# SOULS Harvester — Design Arquitetural (Fase 1)
 
 > **Versão:** 1.1.0
-> **Território:** PRODUTO (Daemon SODA — Rust/Tokio)
+> **Território:** PRODUTO (Daemon SOULS — Rust/Tokio)
 > **Regente:** Anti-SLOP Framework V3 + SDD Phase B
 > **Aprovação Humana:** 2026-05-19 — ProjFS reconciliado, Sandbox nativo documentado
 
@@ -10,7 +10,7 @@
 ## 1. Manifesto
 
 O Harvester é a engrenagem mecânica, **100% determinística e Zero-AI**, que precede
-e viabiliza toda a inteligência analítica do SODA ETL Cognitivo.
+e viabiliza toda a inteligência analítica do SOULS ETL Cognitivo.
 
 Ele transforma gigabytes de código-fonte caótico em kilobytes de metadados puros —
 extraindo o "Sinal" e incinerando o "Ruído" — sem invocar nenhum LLM, sem
@@ -81,7 +81,7 @@ de processos órfãos via RAII.
 |---|---|---|
 | Cerca de paths | `enforce_host_path_policy()` recusa qualquer caminho absoluto fora do repositório ou das roots permitidas | Sidecars não escapam para o host |
 | Spawn assíncrono | `tokio::process::Command` com `kill_on_drop(true)` | Nenhum sidecar bloqueia o Tokio |
-| Escrita mínima | `build_host_write_roots()` libera somente `.native_ast_cache`, `.soda_sandbox` e suporte do semgrep | Escrita host é restrita e auditável |
+| Escrita mínima | `build_host_write_roots()` libera somente `.native_ast_cache`, `.souls_sandbox` e suporte do semgrep | Escrita host é restrita e auditável |
 | Extermínio Windows | `CreateJobObjectW` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Toda árvore do processo morre ao fechar o handle |
 | Extermínio em timeout | `child.kill()` + `kill_process_tree_by_pid()` + limpeza de órfãos | Timeout vira guilhotina, não zombie |
 
@@ -190,7 +190,7 @@ canônico no SQLite removendo `blob_*` obsoletos do mesmo `repo_id`.
 | N8 | `extract::ManifestExtractor` | `ManifestInput` | `ArtifactBlob` (`blob_02`) | PT-2 |
 | N9 | `extract::OpsBlueprintExtractor` | `OpsInput` | `ArtifactBlob` (`blob_07`) | PT-2 |
 | N10 | `community::CommunityMetaFetcher` | `repo_url: &Url`, `&RateLimiter` | `Vec<u8>` truncado (`blob_09`) | PT-3 |
-| N11 | `extract::{TestIntentExtractor, UxContractsExtractor}` + `sidecar::SemgrepSidecar` + `canon::SodaCanonExtractor` | `RepoPath`, `SandboxHandle`, `StackProfile`, `SQLite` | `ArtifactBlob`s (`blob_03`, `blob_06`, `blob_08`, `blob_10`, `blob_11`) | PT-2, PT-3 |
+| N11 | `extract::{TestIntentExtractor, UxContractsExtractor}` + `sidecar::SemgrepSidecar` + `canon::SoulsCanonExtractor` | `RepoPath`, `SandboxHandle`, `StackProfile`, `SQLite` | `ArtifactBlob`s (`blob_03`, `blob_06`, `blob_08`, `blob_10`, `blob_11`) | PT-2, PT-3 |
 | N12 | `sidecar::{sanitize_host_paths_in_text, sanitize_repo_relative_path}` + `persist::BlobNormalizer` | `Vec<ArtifactBlob>`, `repo_id: String`, `Arc<Mutex<Connection>>` | `Result<(), HarvesterError>` | PT-2, PT-3 |
 | N13 | `guard::PurgeGuard` | `SandboxHandle`, `RamdiskHandle` | `Result<(), String>` | PT-1, PT-3 |
 
@@ -207,7 +207,7 @@ canônico no SQLite removendo `blob_*` obsoletos do mesmo `repo_id`.
 | 7 | `blob_07_ops_blueprint` | `OpsBlueprintExtractor` | Blueprint operacional: CI/CD, Dockerfiles e pegadas de operação |
 | 8 | `blob_08_health_report` | `SemgrepSidecar` | Saúde estática e dívida técnica resumida |
 | 9 | `blob_09_community_meta` | `CommunityMetaFetcher` | Metadados comunitários truncados da API do GitHub |
-| 10 | `blob_10_soda_canon_context` | `SodaCanonExtractor` | Contexto canônico global do SODA, com cache em SQLite |
+| 10 | `blob_10_souls_canon_context` | `SoulsCanonExtractor` | Contexto canônico global do SOULS, com cache em SQLite |
 | 11 | `blob_11_ux_contracts` | `UxContractsExtractor` | Contratos de UX do frontend. Fica formalmente separado da intenção de testes |
 
 **Invariante:** a Fase 1 persistida contém **EXATAMENTE 11 blobs** por `repo_id`.

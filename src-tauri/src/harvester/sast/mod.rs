@@ -237,7 +237,7 @@ fn classify_domain_from_path(value: &str) -> DomainTag {
     }
 }
 
-fn classify_issue_domain(issue: &SodaHealthIssue) -> DomainTag {
+fn classify_issue_domain(issue: &SoulsHealthIssue) -> DomainTag {
     let from_file = classify_domain_from_path(&issue.file);
     if from_file != DomainTag::Other {
         return from_file;
@@ -269,7 +269,7 @@ fn productive_domains_from_clean_files(clean_files: &[PathBuf]) -> Vec<DomainTag
 
 fn merge_domain_inventory(
     clean_files: &[PathBuf],
-    grouped: &BTreeMap<DomainTag, Vec<&SodaHealthIssue>>,
+    grouped: &BTreeMap<DomainTag, Vec<&SoulsHealthIssue>>,
 ) -> Vec<DomainTag> {
     let mut domains = productive_domains_from_clean_files(clean_files)
         .into_iter()
@@ -373,7 +373,7 @@ pub enum SastIssueChannel {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-pub struct SodaHealthIssue {
+pub struct SoulsHealthIssue {
     pub level: String,
     pub file: String,
     pub message: String,
@@ -699,7 +699,7 @@ impl PolyglotSastSidecar {
             "SAST monorepo: manifestos detectados"
         );
 
-        let mut all_issues = Vec::<SodaHealthIssue>::new();
+        let mut all_issues = Vec::<SoulsHealthIssue>::new();
         let mut had_successful_payload = false;
         let mut had_failed_payload = false;
         let global_semaphore = Arc::new(Semaphore::new(MONOREPO_SAST_MAX_PARALLEL));
@@ -873,7 +873,7 @@ impl PolyglotSastSidecar {
                             }
                             if issues.is_empty() {
                                 let blade_label = blade_name(outcome.effective_blade);
-                                issues.push(SodaHealthIssue {
+                                issues.push(SoulsHealthIssue {
                                     level: "info".to_string(),
                                     file: String::new(),
                                     message: format!("[INFO] Nenhuma vulnerabilidade ou pendência encontrada pela lâmina '{}' no escopo '{}'.", blade_label, outcome.scope),
@@ -888,7 +888,7 @@ impl PolyglotSastSidecar {
                             had_failed_payload = true;
                             let blade_label = blade_name(outcome.effective_blade);
                             let error_msg = format!("Lâmina '{}' falhou na normalização dos resultados no escopo '{}': {}", blade_label, outcome.scope, err);
-                            all_issues.push(SodaHealthIssue {
+                            all_issues.push(SoulsHealthIssue {
                                 level: "warning".to_string(),
                                 file: String::new(),
                                 message: format!("[FALHA_NORMALIZACAO] {}", error_msg),
@@ -1069,7 +1069,7 @@ impl PolyglotSastSidecar {
                         }
                         if issues.is_empty() {
                             let blade_label = blade_name(outcome.effective_blade);
-                            issues.push(SodaHealthIssue {
+                            issues.push(SoulsHealthIssue {
                                 level: "info".to_string(),
                                 file: String::new(),
                                 message: format!("[INFO] Nenhuma vulnerabilidade ou pendência encontrada pela lâmina '{}' no escopo '{}'.", blade_label, outcome.scope),
@@ -1084,7 +1084,7 @@ impl PolyglotSastSidecar {
                         had_failed_payload = true;
                         let blade_label = blade_name(outcome.effective_blade);
                         let error_msg = format!("Lâmina '{}' falhou na normalização dos resultados no escopo '{}': {}", blade_label, outcome.scope, err);
-                        all_issues.push(SodaHealthIssue {
+                        all_issues.push(SoulsHealthIssue {
                             level: "warning".to_string(),
                             file: String::new(),
                             message: format!("[FALHA_NORMALIZACAO] {}", error_msg),
@@ -1143,7 +1143,7 @@ impl PolyglotSastSidecar {
             .cloned()
             .collect::<Vec<_>>();
 
-        let health_report_body = render_soda_health_report(&health_issues);
+        let health_report_body = render_souls_health_report(&health_issues);
 
         // PRD-033: prepend dos diagnósticos forenses ao TOPO do Blob 08.
         // Aplicamos deduplicacao antes do join para colapsar erros identicos
@@ -1635,10 +1635,10 @@ fn sanitize_issue_message(repo_path: &Path, value: &str) -> String {
 fn classify_sast_issue(blade: StaticAnalysisBlade, level: &str, message: &str) -> SastIssueChannel {
     let normalized = message.to_ascii_lowercase();
     let is_health_debt = [
-        "soda.tech-debt",
-        "soda.flow-debt",
-        "soda.golden-pattern",
-        "soda.fragility",
+        "souls.tech-debt",
+        "souls.flow-debt",
+        "souls.golden-pattern",
+        "souls.fragility",
         "nested-ternary",
         "ternario aninhado",
         "complexidade",
@@ -1780,7 +1780,7 @@ fn classify_sast_issue(blade: StaticAnalysisBlade, level: &str, message: &str) -
 }
 
 pub(crate) fn push_issue(
-    issues: &mut Vec<SodaHealthIssue>,
+    issues: &mut Vec<SoulsHealthIssue>,
     repo_path: &Path,
     execution_root: &Path,
     blade: StaticAnalysisBlade,
@@ -1796,7 +1796,7 @@ pub(crate) fn push_issue(
         return;
     }
     let channel = classify_sast_issue(blade, level, &message);
-    issues.push(SodaHealthIssue {
+    issues.push(SoulsHealthIssue {
         level: sanitize_issue_level(level),
         file: sanitize_issue_file(repo_path, execution_root, file),
         message,
@@ -1915,7 +1915,7 @@ fn matches_blob06_allowlist(message: &str) -> bool {
     .any(|needle| normalized.contains(needle))
 }
 
-pub(crate) fn should_keep_blob06_issue(issue: &SodaHealthIssue) -> bool {
+pub(crate) fn should_keep_blob06_issue(issue: &SoulsHealthIssue) -> bool {
     if issue.channel != SastIssueChannel::UnsafeHotspot {
         return true;
     }
@@ -1948,7 +1948,7 @@ fn matches_blob08_allowlist(message: &str) -> bool {
     .any(|needle| normalized.contains(needle))
 }
 
-pub(crate) fn should_keep_blob08_issue(issue: &SodaHealthIssue) -> bool {
+pub(crate) fn should_keep_blob08_issue(issue: &SoulsHealthIssue) -> bool {
     if issue.channel != SastIssueChannel::Health {
         return true;
     }
@@ -1963,7 +1963,7 @@ pub(crate) fn should_keep_blob08_issue(issue: &SodaHealthIssue) -> bool {
     matches_blob08_allowlist(&issue.message)
 }
 
-pub(crate) fn sort_and_dedup_issues(issues: &mut Vec<SodaHealthIssue>) {
+pub(crate) fn sort_and_dedup_issues(issues: &mut Vec<SoulsHealthIssue>) {
     issues.sort_by(|left, right| {
         left.file
             .cmp(&right.file)
@@ -2005,7 +2005,7 @@ pub(crate) fn sanitize_host_paths_in_text(repo_path: &Path, text: &str) -> Strin
         sanitized = replace_host_prefix_variants(
             sanitized,
             &semgrep_root.to_string_lossy(),
-            ".soda_semgrep/",
+            ".souls_semgrep/",
         );
     }
 
@@ -2073,7 +2073,7 @@ pub(crate) fn sanitize_repo_relative_path(repo_path: &Path, value: &str) -> Opti
 
     let lower = normalized.to_ascii_lowercase();
     let host_drive = lower.as_bytes().get(1) == Some(&b':');
-    let internal = lower.starts_with(".soda_semgrep/")
+    let internal = lower.starts_with(".souls_semgrep/")
         || lower.starts_with(".native_ast_cache/")
         || lower.starts_with(".souls_scratchpad/")
         || lower.starts_with("sandbox/")
@@ -2090,15 +2090,15 @@ pub(crate) fn sanitize_sidecar_output(repo_path: &Path, bytes: &[u8]) -> Vec<u8>
     sanitize_host_paths_in_text(repo_path, &String::from_utf8_lossy(bytes)).into_bytes()
 }
 
-pub(crate) fn is_unsafe_hotspot(issue: &SodaHealthIssue) -> bool {
+pub(crate) fn is_unsafe_hotspot(issue: &SoulsHealthIssue) -> bool {
     issue.channel == SastIssueChannel::UnsafeHotspot
 }
 
-pub(crate) fn render_unsafe_hotspots_report(issues: &[SodaHealthIssue], clean_files: &[PathBuf]) -> Vec<u8> {
+pub(crate) fn render_unsafe_hotspots_report(issues: &[SoulsHealthIssue], clean_files: &[PathBuf]) -> Vec<u8> {
     let mut text = String::from("# Unsafe Hotspots\n");
     text.push_str(&format!("\nsummary: findings={}", issues.len()));
 
-    let mut grouped = BTreeMap::<DomainTag, Vec<&SodaHealthIssue>>::new();
+    let mut grouped = BTreeMap::<DomainTag, Vec<&SoulsHealthIssue>>::new();
     for issue in issues {
         let domain = classify_issue_domain(issue);
         grouped.entry(domain).or_default().push(issue);
@@ -2134,7 +2134,7 @@ pub(crate) fn render_unsafe_hotspots_report(issues: &[SodaHealthIssue], clean_fi
     text.into_bytes()
 }
 
-pub(crate) fn render_soda_health_report(issues: &[SodaHealthIssue]) -> Vec<u8> {
+pub(crate) fn render_souls_health_report(issues: &[SoulsHealthIssue]) -> Vec<u8> {
     let mut text = String::from("# Health Report\n");
     text.push_str(&format!("\nsummary: findings={}", issues.len()));
 
@@ -2143,7 +2143,7 @@ pub(crate) fn render_soda_health_report(issues: &[SodaHealthIssue]) -> Vec<u8> {
         return text.into_bytes();
     }
 
-    let mut grouped = BTreeMap::<DomainTag, Vec<&SodaHealthIssue>>::new();
+    let mut grouped = BTreeMap::<DomainTag, Vec<&SoulsHealthIssue>>::new();
     for issue in issues {
         let domain = classify_issue_domain(issue);
         grouped.entry(domain).or_default().push(issue);
@@ -2577,14 +2577,14 @@ async fn run_opengrep_scan<E: SandboxExecutor>(
 }
 
 /// Resolve o caminho de um sidecar a partir de:
-///   1) env var `SODA_<NAME>_BIN` (ex.: `SODA_OPENGREP_BIN`)
+///   1) env var `SOULS_<NAME>_BIN` (ex.: `SOULS_OPENGREP_BIN`)
 ///   2) `<cwd>/bin/<name><EXE_SUFFIX>` (ex.: `src-tauri/bin/opengrep.exe`)
 ///   3) `<cwd>/bin/<name>-<target_triple><EXE_SUFFIX>` (ex.: `opengrep-x86_64-pc-windows-msvc.exe`)
-/// O passo 3 eh necessario porque o build do SODA compila os sidecars com o target triple
+/// O passo 3 eh necessario porque o build do SOULS compila os sidecars com o target triple
 /// no nome do artefato (padrao Cargo `--bin`).
 fn resolve_sidecar_bin(name: &str) -> Option<PathBuf> {
     use std::env::consts::EXE_SUFFIX;
-    let env_var = format!("SODA_{}_BIN", name.to_ascii_uppercase().replace('-', "_"));
+    let env_var = format!("SOULS_{}_BIN", name.to_ascii_uppercase().replace('-', "_"));
     if let Some(p) = std::env::var_os(&env_var).map(PathBuf::from) {
         if p.is_file() { return Some(p); }
     }
@@ -2629,11 +2629,11 @@ async fn run_opengrep_host_fallback<E: SandboxExecutor>(
     use tokio::time::timeout as tokio_timeout;
 
     // Resolve o caminho do binário OpenGrep (mesmo path usado pela Gaiola).
-    // Os sidecars SODA sao compilados com target triple no nome, ex.:
+    // Os sidecars SOULS sao compilados com target triple no nome, ex.:
     //   "opengrep-x86_64-pc-windows-msvc.exe"
     // Aceitamos tanto o nome simples ("opengrep.exe") quanto o sufixado.
     let opengrep_bin = resolve_sidecar_bin("opengrep").ok_or_else(|| SidecarError::ExecutionFailed {
-        reason: "OpenGrep fallback: binário não encontrado (defina SODA_OPENGREP_BIN ou rode de src-tauri/)".to_string(),
+        reason: "OpenGrep fallback: binário não encontrado (defina SOULS_OPENGREP_BIN ou rode de src-tauri/)".to_string(),
     })?;
 
     info!(
@@ -2959,7 +2959,7 @@ fn normalize_sast_output(
     execution_root: &Path,
     blade: StaticAnalysisBlade,
     bytes: &[u8],
-) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+) -> Result<Vec<SoulsHealthIssue>, SidecarError> {
     match blade {
         StaticAnalysisBlade::RustClippy => clippy::normalize_clippy_output(repo_path, execution_root, bytes),
         StaticAnalysisBlade::Cppcheck => cppcheck::normalize_cppcheck_output(repo_path, execution_root, bytes),
@@ -2967,7 +2967,7 @@ fn normalize_sast_output(
             p.blocks.into_iter().flat_map(|b| {
                 b.items.into_iter().map(move |item| {
                     let channel = classify_sast_issue(StaticAnalysisBlade::Opengrep, "warning", &item);
-                    SodaHealthIssue {
+                    SoulsHealthIssue {
                         level: "warning".to_string(),
                         file: b.file_path.clone(),
                         message: item,
@@ -2994,7 +2994,7 @@ fn normalize_json_object_issues(
     execution_root: &Path,
     blade: StaticAnalysisBlade,
     bytes: &[u8],
-) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+) -> Result<Vec<SoulsHealthIssue>, SidecarError> {
     if blade == StaticAnalysisBlade::Sobelow && stdout_is_blank(bytes) {
         return Ok(Vec::new());
     }
@@ -3092,7 +3092,7 @@ fn normalize_json_array_issues(
     blade: StaticAnalysisBlade,
     items: &[serde_json::Value],
     field_map: JsonIssueFieldMap<'_>,
-) -> Vec<SodaHealthIssue> {
+) -> Vec<SoulsHealthIssue> {
     let mut issues = Vec::new();
     for item in items {
         let file = field_map
@@ -3202,7 +3202,7 @@ mod tests {
     #[test]
     fn test_sanitize_repo_relative_path_drops_semgrep_support_paths() {
         let repo_path = Path::new(r"C:\host\projfs\owner\repo");
-        let support_path = r"C:\host\projfs\owner\.soda_semgrep\repo\sandbox\.semgrep\settings.yml";
+        let support_path = r"C:\host\projfs\owner\.souls_semgrep\repo\sandbox\.semgrep\settings.yml";
         assert_eq!(sanitize_repo_relative_path(repo_path, support_path), None);
     }
 
@@ -3283,32 +3283,32 @@ mod tests {
 
     #[test]
     fn test_blob06_allowlist_only_keeps_biome_and_cppcheck_when_message_has_security_signal() {
-        let biome_slop = SodaHealthIssue {
+        let biome_slop = SoulsHealthIssue {
             level: "error".to_string(),
             file: "src/app.tsx".to_string(),
             message: "An empty interface is equivalent to {}.".to_string(),
             source_blade: "biome".to_string(),
             channel: SastIssueChannel::UnsafeHotspot,
         };
-        let biome_security = SodaHealthIssue {
+        let biome_security = SoulsHealthIssue {
             message: "dangerouslySetInnerHTML may enable injection".to_string(),
             ..biome_slop.clone()
         };
-        let cppcheck_overflow = SodaHealthIssue {
+        let cppcheck_overflow = SoulsHealthIssue {
             level: "error".to_string(),
             file: "src/main.c".to_string(),
             message: "Potential buffer overflow in parser".to_string(),
             source_blade: "cppcheck".to_string(),
             channel: SastIssueChannel::UnsafeHotspot,
         };
-        let bandit_signal = SodaHealthIssue {
+        let bandit_signal = SoulsHealthIssue {
             level: "warning".to_string(),
             file: "service.py".to_string(),
             message: "Possible shell injection via subprocess".to_string(),
             source_blade: "bandit".to_string(),
             channel: SastIssueChannel::UnsafeHotspot,
         };
-        let health_biome = SodaHealthIssue {
+        let health_biome = SoulsHealthIssue {
             message: "Function is too complex".to_string(),
             channel: SastIssueChannel::Health,
             ..biome_slop.clone()
@@ -3337,28 +3337,28 @@ mod tests {
 
     #[test]
     fn test_blob08_allowlist_only_keeps_health_findings_with_technical_debt_signal() {
-        let biome_slop = SodaHealthIssue {
+        let biome_slop = SoulsHealthIssue {
             level: "warning".to_string(),
             file: "src/app.ts".to_string(),
             message: "An empty interface is equivalent to {}.".to_string(),
             source_blade: "biome".to_string(),
             channel: SastIssueChannel::Health,
         };
-        let biome_complexity = SodaHealthIssue {
+        let biome_complexity = SoulsHealthIssue {
             message: "complexity threshold exceeded in request mapper".to_string(),
             ..biome_slop.clone()
         };
-        let opengrep_unwrap = SodaHealthIssue {
+        let opengrep_unwrap = SoulsHealthIssue {
             message: "unwrap encontrado em caminho critico".to_string(),
             source_blade: "opengrep".to_string(),
             ..biome_slop.clone()
         };
-        let clippy_signal = SodaHealthIssue {
+        let clippy_signal = SoulsHealthIssue {
             message: "use of deprecated item".to_string(),
             source_blade: "clippy".to_string(),
             ..biome_slop.clone()
         };
-        let unsafe_issue = SodaHealthIssue {
+        let unsafe_issue = SoulsHealthIssue {
             message: "unsafe merece auditoria manual".to_string(),
             channel: SastIssueChannel::UnsafeHotspot,
             ..biome_slop.clone()
@@ -3380,23 +3380,23 @@ mod tests {
     }
 
     #[test]
-    fn test_render_soda_health_report_groups_findings_by_domain() {
+    fn test_render_souls_health_report_groups_findings_by_domain() {
         let issues = vec![
-            SodaHealthIssue {
+            SoulsHealthIssue {
                 level: "warning".to_string(),
                 file: "src/lib.rs".to_string(),
                 message: "unwrap precisa de contexto".to_string(),
                 source_blade: "rust-clippy".to_string(),
                 channel: SastIssueChannel::Health,
             },
-            SodaHealthIssue {
+            SoulsHealthIssue {
                 level: "warning".to_string(),
                 file: "candle-kernels/sgemm.cu".to_string(),
                 message: "kernel sem bounds check".to_string(),
                 source_blade: "cppcheck".to_string(),
                 channel: SastIssueChannel::Health,
             },
-            SodaHealthIssue {
+            SoulsHealthIssue {
                 level: "warning".to_string(),
                 file: "candle-metal-kernels/reduce.metal".to_string(),
                 message: "metal path requer auditoria".to_string(),
@@ -3405,7 +3405,7 @@ mod tests {
             },
         ];
 
-        let rendered = String::from_utf8(render_soda_health_report(&issues)).unwrap();
+        let rendered = String::from_utf8(render_souls_health_report(&issues)).unwrap();
 
         assert!(rendered.contains("[DOMAIN: RUST]"));
         assert!(rendered.contains("[DOMAIN: C++ / CUDA]"));
@@ -3416,8 +3416,8 @@ mod tests {
     }
 
     #[test]
-    fn test_render_soda_health_report_keeps_cppcheck_clean_info_under_cpp_domain() {
-        let issues = vec![SodaHealthIssue {
+    fn test_render_souls_health_report_keeps_cppcheck_clean_info_under_cpp_domain() {
+        let issues = vec![SoulsHealthIssue {
             level: "info".to_string(),
             file: String::new(),
             message: "[INFO] Nenhuma vulnerabilidade encontrada pelo Cppcheck.".to_string(),
@@ -3425,7 +3425,7 @@ mod tests {
             channel: SastIssueChannel::Health,
         }];
 
-        let rendered = String::from_utf8(render_soda_health_report(&issues)).unwrap();
+        let rendered = String::from_utf8(render_souls_health_report(&issues)).unwrap();
 
         assert!(rendered.contains("[DOMAIN: C++ / CUDA]"));
         assert!(rendered.contains("[cppcheck]"));

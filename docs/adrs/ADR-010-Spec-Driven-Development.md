@@ -16,7 +16,7 @@ Aceito (Ativo e Inegociável)
 A prática irresponsável de engenharia estocástica de IA baseada em intuição rápida ("Vibe Coding") introduz códigos poluídos, dependências incoerentes e regressões catastróficas em repositórios complexos. IAs tendem a tentar corrigir erros gerando mais códigos falhos ("slop"), provocando loops de compilação infinitos e exaustão de contexto do modelo. No desenvolvimento de software Bare-Metal (Rust), a validação estrita do compilador e de testes de estresse deve preceder a escrita de qualquer lógica de negócios.
 
 ## Decisão
-Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinada a **TDD Forçado** em todo o ciclo de vida de mutação de código do SODA:
+Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinada a **TDD Forçado** em todo o ciclo de vida de mutação de código do SOULS:
 1. **O Plano Precede o Código:** Fica expressamente proibida a mutação direta de código-fonte sem a prévia especificação do design arquitetural (`docs/design.md`) em disco contendo diagramas Mermaid e definição do padrão Orchestrator-Worker. O Arquiteto Humano deve validar o design antes de prosseguir.
 2. **Definição de Done e Scaffold (Tasks):** As tarefas são desfragmentadas de forma atômica no checklist `tasks.md`. Cada tarefa exige uma Definition of Done (DoD) com scaffold executável (testes unitários que falham primeiro - Red) antes de escrever a lógica funcional em Rust/TypeScript.
 3. **Ciclo de TDD Atômico:** O desenvolvimento segue o fluxo clássico:

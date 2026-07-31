@@ -11,11 +11,11 @@ description: "Impõe a execução de micro-sidecars (Embeddings e TTS/STT) estri
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Restrições de Concorrência
 
-A operação de um Sistema Operacional Agêntico Local (SODA V5) exige a execução concorrente de múltiplos serviços utilitários além do modelo de linguagem principal. Estes incluem:
+A operação de um Sistema Operacional Agêntico Local (SOULS V5) exige a execução concorrente de múltiplos serviços utilitários além do modelo de linguagem principal. Estes incluem:
 
 - **Encoders de Embeddings Locais:** Responsáveis pela vetorização semântica de curto prazo e busca RAG em memória (ex: `bge-small-en-v1.5`, `all-MiniLM-L6-v2`).
 - **Módulos de Áudio (STT / TTS):** Motores de transcrição de fala (`Moonshine`, `Whisper-Tiny`) e síntese de voz (`Kokoro-82M`).
@@ -30,7 +30,7 @@ Quando esses micro-sidecars são incorretamente alocados na VRAM da dGPU NVIDIA 
 
 Como garantir a execução contínua de micro-sidecars utilitários (Embeddings e Áudio) com alta throughput e baixa latência sem alocar um único megabyte de VRAM, sem induzir *stuttering* na inferência do LLM e sem degradar a estabilidade do Event Loop Tokio?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROCESSADOR INTEL / AMD ]
@@ -50,7 +50,7 @@ Como garantir a execução contínua de micro-sidecars utilitários (Embeddings 
 
 Fica terminantemente **PROIBIDO** o carregamento e a execução de encoders de embeddings locais e motores de síntese/transcrição de áudio na VRAM da GPU.
 
-- **Embeddings:** O SODA V5 padroniza a vetorização local no modelo **`bge-small-en-v1.5`** (ou `BGE-micro-v2`), executado estritamente via runtime CPU (`ONNX Runtime` CPU EP ou `sentence-transformers` via C++ bindings).
+- **Embeddings:** O SOULS V5 padroniza a vetorização local no modelo **`bge-small-en-v1.5`** (ou `BGE-micro-v2`), executado estritamente via runtime CPU (`ONNX Runtime` CPU EP ou `sentence-transformers` via C++ bindings).
   - *Desempenho Comprovado:* Atinge $>93\%$ da acurácia do `text-embedding-3-small` da OpenAI no benchmark MTEB com pegada de apenas $\sim 130 \text{ MB}$ na RAM do host.
 - **Síntese de Voz (TTS):** O motor **`Kokoro-82M`** deve ser instanciado em modo `ONNX CPU`, consumindo $\sim 200 \text{ MB}$ de RAM e mantendo um *Real-Time Factor* $\text{RTF} \le 0,25$.
 
@@ -91,4 +91,4 @@ A integridade dos micro-sidecars operando em CPU DEVE ser validada sob os seguin
 
 ### Comportamento Fail-Closed
 
-Se o daemon do SODA detectar que um micro-sidecar foi instanciado sem a máscara de afinidade de núcleo válida ou se o worker tentar alocar contexto no dispositivo CUDA, o processo worker sofre `SIGKILL` imediato, gerando alerta crítico na tabela `SYSTEM_AUDIT`.
+Se o daemon do SOULS detectar que um micro-sidecar foi instanciado sem a máscara de afinidade de núcleo válida ou se o worker tentar alocar contexto no dispositivo CUDA, o processo worker sofre `SIGKILL` imediato, gerando alerta crítico na tabela `SYSTEM_AUDIT`.

@@ -1,7 +1,7 @@
 # PRD-10.2: Specification for Inference Performance & Thermal CPU Affinity Isolation
 
 **Status:** Especificação Proposta (Aguardando Aprovação HITL)  
-**Módulo:** Motor de Inferência & Governor Térmico (`llama_engine.rs` / `soda_thermal_governor.rs`)  
+**Módulo:** Motor de Inferência & Governor Térmico (`llama_engine.rs` / `souls_thermal_governor.rs`)  
 **Target Hardware:** NVIDIA RTX 2060 Mobile (6.0 GB VRAM) + Intel i9 (Threads/Cores Físicos Dedicados)  
 **Arquitetura:** Rust (Tokio Async Runtime, `core_affinity`, Especulação `ngram-mod`)  
 **Rastreabilidade ADR:** ADR-027, ADR-032, ADR-033, ADR-036  
@@ -53,4 +53,4 @@ Para que a futura fase de implementação TDD (Red-Green-Refactor) do PRD-10.2 s
 
 ## 4. Conclusão & Alinhamento HITL
 
-Este artefato de especificação consolida a arquitetura de aceleração N-Gram e isolamento de CPU do SODA V5. Nenhum código de execução do PRD-10.2 foi escrito nesta etapa.
+Este artefato de especificação consolida a arquitetura de aceleração N-Gram e isolamento de CPU do SOULS V5. Nenhum código de execução do PRD-10.2 foi escrito nesta etapa.

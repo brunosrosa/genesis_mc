@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::{params, Connection};
 
-use souls_mc_lib::harvester::canon::{SodaCanonExtractor, CANON_GLOBAL_REPO_ID};
+use souls_mc_lib::harvester::canon::{SoulsCanonExtractor, CANON_GLOBAL_REPO_ID};
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -23,7 +23,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
             repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
-            soda_universal_uuid TEXT NOT NULL UNIQUE,
+            souls_universal_uuid TEXT NOT NULL UNIQUE,
             status_processamento TEXT NOT NULL,
             timestamp_fase_1 INTEGER,
             timestamp_fase_3 INTEGER,
@@ -58,13 +58,13 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
 
     conn.execute(
         "INSERT OR IGNORE INTO repositorios
-         (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
+         (project_name, lote_id, repo_url, souls_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             CANON_GLOBAL_REPO_ID,
             "CANON_CACHE",
-            "file://local/docs/SODA_CANON_MANIFEST.md",
-            "UUID-SODA-CANON-GLOBAL",
+            "file://local/docs/SOULS_CANON_MANIFEST.md",
+            "UUID-SOULS-CANON-GLOBAL",
             "CACHE_GLOBAL",
             0_i64,
             0_i64
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let repo_id = "LOCAL_CANON_REFRESH";
     conn.execute(
         "INSERT OR IGNORE INTO repositorios
-         (project_name, lote_id, repo_url, soda_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
+         (project_name, lote_id, repo_url, souls_universal_uuid, status_processamento, timestamp_fase_1, retry_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             repo_id,
@@ -102,20 +102,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     conn.execute(
         "DELETE FROM artefatos_brutos
-         WHERE artifact_type = 'blob_10_soda_canon_context'
+         WHERE artifact_type = 'blob_10_souls_canon_context'
            AND repo_id IN (?1, ?2)",
         params![repo_id, CANON_GLOBAL_REPO_ID],
     )?;
 
     let conn = Arc::new(Mutex::new(conn));
-    SodaCanonExtractor::extract(repo_id, Arc::clone(&conn)).await?;
+    SoulsCanonExtractor::extract(repo_id, Arc::clone(&conn)).await?;
 
     let payload: String = {
         let conn_guard = conn.lock().map_err(|_| "VaultDb lock poisoned")?;
         conn_guard.query_row(
             "SELECT CAST(payload_blob AS TEXT)
              FROM artefatos_brutos
-             WHERE repo_id = ?1 AND artifact_type = 'blob_10_soda_canon_context'
+             WHERE repo_id = ?1 AND artifact_type = 'blob_10_souls_canon_context'
              LIMIT 1",
             params![repo_id],
             |row| row.get(0),

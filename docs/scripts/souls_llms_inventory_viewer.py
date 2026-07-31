@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 def resolve_db_path() -> Path:
-    """Localiza dinamicamente o banco de dados SSOT souls_heuristic_vault.db na ordem estrita de prioridade SODA."""
+    """Localiza dinamicamente o banco de dados SSOT souls_heuristic_vault.db na ordem estrita de prioridade SOULS."""
     candidate_paths = [
         Path("Z:/souls_mc/.souls_data/souls_heuristic_vault.db"),
-        Path("Z:/souls_mc/.soda_data/soda_heuristic_vault.db"),
+        Path("Z:/souls_mc/.souls_data/souls_heuristic_vault.db"),
         Path("./.souls_data/souls_heuristic_vault.db"),
         Path.cwd() / ".souls_data" / "souls_heuristic_vault.db",
-        Path.cwd() / ".soda_data" / "soda_heuristic_vault.db",
+        Path.cwd() / ".souls_data" / "souls_heuristic_vault.db",
         Path(__file__).resolve().parent.parent.parent / ".souls_data" / "souls_heuristic_vault.db",
         Path(__file__).resolve().parent.parent / ".souls_data" / "souls_heuristic_vault.db",
     ]
@@ -306,23 +306,23 @@ def generate_inventory_report():
             verdict = "PURGA RECOMENDADA DO SSD: Reprovado por falhas sintáticas ou latência incompatível com o hardware."
         else:
             verdict = "AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência."
-        lines.append(f"- **Veredito SODA:** {verdict}")
+        lines.append(f"- **Veredito SOULS:** {verdict}")
         lines.append("")
 
     lines.append("---")
-    lines.append("*Fim do Dossiê de Inventário SODA v4. Gerado automaticamente via `souls_llms_inventory_viewer.py`.*")
+    lines.append("*Fim do Dossiê de Inventário SOULS v4. Gerado automaticamente via `souls_llms_inventory_viewer.py`.*")
     
     report_content = "\n".join(lines)
     with open(summary_md_file, "w", encoding="utf-8") as f:
         f.write(report_content)
         
-    soda_summary_md_file = reports_dir / "soda_llms_inventory_summary.md"
-    with open(soda_summary_md_file, "w", encoding="utf-8") as f:
+    souls_summary_md_file = reports_dir / "souls_llms_inventory_summary.md"
+    with open(souls_summary_md_file, "w", encoding="utf-8") as f:
         f.write(report_content)
         
     print(f"[+] Relatório Markdown de Inventário e Telemetria gerado com sucesso em:")
     print(f"    {summary_md_file}")
-    print(f"    {soda_summary_md_file}")
+    print(f"    {souls_summary_md_file}")
     
     conn.close()
 

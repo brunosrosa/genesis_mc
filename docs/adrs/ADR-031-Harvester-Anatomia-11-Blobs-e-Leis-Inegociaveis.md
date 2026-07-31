@@ -10,7 +10,7 @@ description: "Formaliza o Harvester da Fase 0 como Trator Mecânico Zero-AI de F
 # ADR-031: Harvester — Anatomia dos 11 Blobs e as 4 Leis Inegociáveis da Execução
 
 ## Status
-Aceito (Ativo, Inegociável e Fundacional para a Fábrica SODA V6)
+Aceito (Ativo, Inegociável e Fundacional para a Fábrica SOULS V6)
 
 ## Contexto
 O Harvester da Fase 0 (V6) é o primeiro componente puramente nativo em Rust a tocar o repositório alvo após o clone. Sua meta é **Fotografia Completa (Zero Truncamento)**: a união dos 11 artefatos extraídos deve permitir que a IA das Fases 2 e 3 reconstrua o software original **mentalmente**, expurgando o lixo. Sem esse contrato, qualquer Lente Cognitiva opera sobre uma fotografia furada e alucina para preencher lacunas.
@@ -73,7 +73,7 @@ Cada blob é uma **lâmina tática isolada** com missão própria. O arsenal é 
 | 7 | `blob_07_ops_blueprint` | A Fricção de DevOps | Capturador de CI/CD | `Dockerfile*`, `.github/workflows/*`, `Makefile`, `docker-compose*.yml`, `Jenkinsfile`, `.gitlab-ci.yml`. Captura **integral** (não resumida). Revela se o projeto exige infra pesada ou compila limpo | Texto |
 | 8 | `blob_08_health_report` | A Podridão Estrutural | Mesmo motor SAST do Blob 06, com flag `--skip-formatter` | Ignora estética (espaços, indentação). Relata **pura complexidade ciclomática**, código morto, code smells, entropia em runtime. É o Blob 06 sem o filtro de beleza | Texto-relatório tático |
 | 9 | `blob_09_community_meta` | A Vitalidade Real | `reqwest` para GitHub REST API | Lead time de fechamento de Issues, PRs ativos, estrelas, data do último commit, taxa de release. Diferencia projetos maduros de abandonware. **Único blob com dependência de rede autorizada** | JSON |
-| 10 | `blob_10_soda_canon_context` | As Leis Duras | Leitura local air-gapped | Carrega o `soda_canon_grounding.md` (ou equivalente canon snapshot). É a **Constituição SODA** anexada a cada dossiê para ancorar a IA das Fases 2-3 e impedir alucinações de hardware | Texto |
+| 10 | `blob_10_souls_canon_context` | As Leis Duras | Leitura local air-gapped | Carrega o `souls_canon_grounding.md` (ou equivalente canon snapshot). É a **Constituição SOULS** anexada a cada dossiê para ancorar a IA das Fases 2-3 e impedir alucinações de hardware | Texto |
 | 11 | `blob_11_ux_contracts` | A Mecânica Visual | Oxc parser (Svelte/React/TS) | Extração cirúrgica de UI: extirpa **100% do HTML e CSS** (lixo estético) e devolve **estritamente a Mecânica de Estados** — Props (entradas) e Events/Dispatchers (saídas) que governam a previsibilidade do componente | Outline O(1) |
 
 **Princípio de não-vazamento:** os 11 blobs são ortogonais. O Blob 04 (outline) **nunca** inclui lógica de teste (vai para Blob 03). O Blob 06 (security) **nunca** inclui complexidade (vai para Blob 08). O Blob 09 (community) **nunca** inclui código (vai para Blobs 04, 06, 08). Cada lâmina cumpre sua missão e **delega o resto ao vizinho correto**.

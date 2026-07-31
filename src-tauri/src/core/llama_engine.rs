@@ -14,10 +14,10 @@ use llguidance::{Constraint, ParserFactory, api::{TopLevelGrammar, GrammarWithLe
 use llguidance::toktrie::{TokTrie, TokRxInfo, ApproximateTokEnv, TokEnv};
 
 use crate::core::inference_adapter::{
-    EphemeralInferEngine, InferenceError, SodaInferenceRequest, SodaInferenceResponse,
+    EphemeralInferEngine, InferenceError, SoulsInferenceRequest, SoulsInferenceResponse,
 };
 use crate::core::model_registry::{self, parse_gguf_metadata_zero_copy};
-use crate::soda_thermal_governor::SystemState;
+use crate::souls_thermal_governor::SystemState;
 use tokio::sync::watch;
 
 use std::sync::OnceLock;
@@ -98,9 +98,9 @@ pub fn build_default_context_params() -> LlamaContextParams {
 impl EphemeralInferEngine for LlamaCppEngine {
     fn run_inference(
         &self,
-        req: SodaInferenceRequest,
+        req: SoulsInferenceRequest,
         thermal_rx: Option<watch::Receiver<SystemState>>,
-    ) -> Result<SodaInferenceResponse, InferenceError> {
+    ) -> Result<SoulsInferenceResponse, InferenceError> {
         let start_time = Instant::now();
 
         let model_path = Path::new(&req.model_path);
@@ -113,7 +113,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
         if let Some(ref meta) = gguf_meta {
             if !model_registry::is_architecture_supported(&meta.family) {
                 return Err(InferenceError::ExecutionError(format!(
-                    "Arquitetura '{}' não suportada pelo motor bare-metal SODA (Fail-Closed)",
+                    "Arquitetura '{}' não suportada pelo motor bare-metal SOULS (Fail-Closed)",
                     meta.family
                 )));
             }
@@ -340,7 +340,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
         // ADR-035: Reparação Sintática Zero-Token de JSON truncado antes de devolver a resposta
         let healed_text = crate::core::response_healing::heal_malformed_json(&generated_text).into_owned();
 
-        Ok(SodaInferenceResponse {
+        Ok(SoulsInferenceResponse {
             status: "success".to_string(),
             text: healed_text,
             prompt_tokens: prompt_tokens_count,

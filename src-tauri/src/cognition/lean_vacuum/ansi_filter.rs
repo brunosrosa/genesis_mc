@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED Fase 3: Smart Filtering ANSI.
+// SOULS-CANIBALIZED Fase 3: Smart Filtering ANSI.
 //
 // Transcrição nativa de `lean-ctx/src/core/compressor.rs::strip_ansi` (linhas 3-23)
 // e `ansi_density` (linhas 25-31). Sem dependência de `regex` ou qualquer crate

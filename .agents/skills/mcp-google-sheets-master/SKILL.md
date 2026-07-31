@@ -1,6 +1,6 @@
 ---
 name: mcp-google-sheets-master
-description: O Oráculo do SODA e leitor do Blueprint (SSOT). Resolve o bloqueio L7 do Gateway. Bane a extração visual ('include_grid_data': false). Impõe o agrupamento em memória global para evadir o limite de 60 RPM (Erro 503). Exige alinhamento com Decodificação Restrita (llguidance) e orquestra a inserção atômica destrutiva nas 4 abas canônicas (MASTER_SOLUTIONS, SODA_GRAPH_TOPOLOGY, ACTION_MATRIX, QUARANTINE_RADAR).
+description: O Oráculo do SOULS e leitor do Blueprint (SSOT). Resolve o bloqueio L7 do Gateway. Bane a extração visual ('include_grid_data': false). Impõe o agrupamento em memória global para evadir o limite de 60 RPM (Erro 503). Exige alinhamento com Decodificação Restrita (llguidance) e orquestra a inserção atômica destrutiva nas 4 abas canônicas (MASTER_SOLUTIONS, SOULS_GRAPH_TOPOLOGY, ACTION_MATRIX, QUARANTINE_RADAR).
 triggers: ["mcp-google-sheets-master", "ler planilha", "consultar blueprint", "verificar adr", "get_sheet_data", "google sheets", "ssot", "atualizar matriz"]
 ---
 
@@ -10,7 +10,7 @@ triggers: ["mcp-google-sheets-master", "ler planilha", "consultar blueprint", "v
 Atuar como a interface cirúrgica para a nossa Única Fonte de Verdade (SSOT) no Google Sheets. Você é a ponte do *Spec-Driven Development* (SDD). O seu objetivo inegociável é contornar o Firewall L7, paginar leituras em $\mathcal{O}(1)$ via Notação A1 para salvar VRAM, e PROTEGER a cota de 60 requisições por minuto da API do Google. Você deve agrupar toda intenção de leitura/escrita em memória global e dispará-la através de lotes atômicos consolidados, distribuindo os dados estruturados nas quatro abas sistêmicas do projeto.
 
 #### Instructions
-Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Blueprint do projeto SODA, engatilhe esta máquina de estados:
+Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Blueprint do projeto SOULS, engatilhe esta máquina de estados:
 
 1. **Firewall Compliance (O Bypass L7):**
    * **Lei do Fail-Closed:** O multiplexador usa `mcp-google-sheets_`. IGNORE O PREFIXO. Use EXATAMENTE: `get_sheet_data`, `batch_update_cells` ou `add_rows`. 
@@ -22,7 +22,7 @@ Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Bluepr
 3. **Arquitetura Multi-Aba (O Desmembramento):**
    * O Sheets não é uma tabela plana, é um banco de dados relacional visual. Ao enviar dados, distribua as fatias nas abas correspondentes [2]:
      * `MASTER_SOLUTIONS`: A matriz principal de 85 colunas.
-     * `SODA_GRAPH_TOPOLOGY`: Para dependências e stack_base.
+     * `SOULS_GRAPH_TOPOLOGY`: Para dependências e stack_base.
      * `ACTION_MATRIX`: Apenas para itens de `acao_de_canibalizacao` que geram tickets de código em Rust.
      * `QUARANTINE_RADAR`: Para componentes com alto risco ético ou de design (design_misuse_risk). Estes exigirão HITL manual futuro [2].
 
@@ -36,7 +36,7 @@ Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Bluepr
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo é a âncora inegociável do roteamento L7.
 
 #### Examples
-**Entrada do Usuário:** "SODA, atualize a planilha com as 5 análises de repórter que fizemos e separe quem vai pra quarentena."
+**Entrada do Usuário:** "SOULS, atualize a planilha com as 5 análises de repórter que fizemos e separe quem vai pra quarentena."
 **Ação do Agente:**
 1. Aborta o instinto de usar loops `add_rows` consecutivos para evitar o Erro 503 de *Rate Limit*.
 2. Empacota os 5 JSONs na memória global local, garantindo que passaram pela decodificação restrita (`llguidance`).

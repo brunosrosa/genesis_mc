@@ -11,10 +11,10 @@ pub fn lean_ctx_data_dir() -> Result<PathBuf, String> {
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let soda_data = cwd.join(".souls_data");
-    if soda_data.exists() || cwd.join("Cargo.toml").exists() {
-        let _ = std::fs::create_dir_all(&soda_data);
-        return Ok(soda_data);
+    let souls_data = cwd.join(".souls_data");
+    if souls_data.exists() || cwd.join("Cargo.toml").exists() {
+        let _ = std::fs::create_dir_all(&souls_data);
+        return Ok(souls_data);
     }
 
     let fallback = dirs::home_dir()
@@ -35,10 +35,10 @@ pub fn lean_ctx_cache_dir() -> Result<PathBuf, String> {
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let soda_cache = cwd.join(".souls_cache");
-    if soda_cache.exists() || cwd.join("Cargo.toml").exists() {
-        let _ = std::fs::create_dir_all(&soda_cache);
-        return Ok(soda_cache);
+    let souls_cache = cwd.join(".souls_cache");
+    if souls_cache.exists() || cwd.join("Cargo.toml").exists() {
+        let _ = std::fs::create_dir_all(&souls_cache);
+        return Ok(souls_cache);
     }
 
     let fallback = dirs::home_dir()

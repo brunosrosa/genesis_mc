@@ -1,13 +1,13 @@
-# Auditoria Cega do Estado Atual (Reality Check) — SODA / Souls MC
+# Auditoria Cega do Estado Atual (Reality Check) — SOULS / Souls MC
 **Data da Auditoria:** 2026-07-05
-**Auditor:** Antigravity (SODA Bare-Metal Engine)
+**Auditor:** Antigravity (SOULS Bare-Metal Engine)
 
 ---
 
 ## 1. O Estado Real do ETL Cognitivo e Dados
 
 ### Conjunto de Scripts e Arquitetura Física
-O pipeline cognitivo do SODA é implementado através de 4 binários principais (fases) programados inteiramente em Rust (dentro de `src-tauri/src/bin/`):
+O pipeline cognitivo do SOULS é implementado através de 4 binários principais (fases) programados inteiramente em Rust (dentro de `src-tauri/src/bin/`):
 1. **`f0_harvester_cli.rs` (Fase 0 - Harvester):**
    - **O que faz:** Realiza a varredura e colheita do repositório físico. Clona/atualiza via Git, executa ferramentas de análise estática e linters (`oxlint`, `cppcheck`, `opengrep`, `govulncheck`, `biome`), salvando as saídas brutas compactadas como blobs na tabela `artefatos_brutos`.
 2. **`f1_distiller_cli.rs` (Fase 1 - Distiller):**
@@ -19,7 +19,7 @@ O pipeline cognitivo do SODA é implementado através de 4 binários principais 
      - **Lens C (Operations):** Auditoria FinOps, rate limits, observabilidade e toxicidade de dependências.
      - Salva os resultados JSON na tabela `debates_enxame`.
 4. **`f3_synthesizer_cli.rs` (Fase 3 - Synthesizer):**
-   - **O que faz:** Coordena a síntese final. Orquestra a execução das 5 fases de prompts do LLM, calcula pontuações matemáticas de conformidade e ajusta prioridades (eixo SODA Fit). Salva o resultado consolidado em `repo_heuristics` e despacha para a planilha do Google Sheets via `SsotInjector`.
+   - **O que faz:** Coordena a síntese final. Orquestra a execução das 5 fases de prompts do LLM, calcula pontuações matemáticas de conformidade e ajusta prioridades (eixo SOULS Fit). Salva o resultado consolidado em `repo_heuristics` e despacha para a planilha do Google Sheets via `SsotInjector`.
 
 **Comunicação entre as Fases:**
 As fases comunicam-se de forma assíncrona **exclusivamente via banco de dados local SQLite** (`.souls_data/souls_heuristic_vault.db`). Não existem scripts intermediários em Python ou Node.js controlando o fluxo no produto de produção. Todo o ecossistema é Rust nativo.
@@ -76,7 +76,7 @@ A governança dos estados de processamento é mantida por enums lógicos convert
   ```svelte
   <main class="min-h-dvh bg-[oklch(0.12_0_0)] text-[oklch(0.985_0_0)]">
     <div class="mx-auto max-w-[92ch] px-6 py-10">
-      <h1 class="text-2xl font-semibold tracking-tight">SODA</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">SOULS</h1>
       <p class="mt-3 font-mono text-sm opacity-70">UI em hibernação intencional. Prioridade: ETL (Fase 1.5).</p>
     </div>
   </main>
@@ -105,4 +105,4 @@ A governança dos estados de processamento é mantida por enums lógicos convert
 - **Isolamento de Kernel (Landlock, AppContainer, LPAC):** **NÃO IMPLEMENTADO NO CÓDIGO.** Não existem chamadas a APIs nativas de sandbox do kernel (Linux/Windows).
 - **O que existe fisicamente em `src-tauri/src/harvester/sandbox.rs`:**
   1. **Controle de Processos Órfãos (Windows Job Objects):** Associa cada processo de ferramenta externa colhida (sidecar) a um Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. Isso garante a destruição física (SIGKILL) de subprocessos órfãos quando a aplicação principal Tauri morre.
-  2. **Cercas Lógicas de Diretório (Path Validation):** O sandbox atua como um inspetor de I/O de arquivos. Ele intercepta os argumentos do comando e variáveis de ambiente e valida se apontam para diretórios fora dos escopos de trabalho permitidos (ex: verifica se o arquivo alvo está contido dentro do diretório do repositório ou de caches temporários autorizados como `.soda_sandbox` ou `.soda_semgrep`). Se violar, spawna um erro lógico (`SandboxError::PolicyViolation` / `SandboxError::PrivilegeError`).
+  2. **Cercas Lógicas de Diretório (Path Validation):** O sandbox atua como um inspetor de I/O de arquivos. Ele intercepta os argumentos do comando e variáveis de ambiente e valida se apontam para diretórios fora dos escopos de trabalho permitidos (ex: verifica se o arquivo alvo está contido dentro do diretório do repositório ou de caches temporários autorizados como `.souls_sandbox` ou `.souls_semgrep`). Se violar, spawna um erro lógico (`SandboxError::PolicyViolation` / `SandboxError::PrivilegeError`).

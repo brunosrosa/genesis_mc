@@ -1,4 +1,4 @@
-=== SODA MCPs LIST (ZERO-BRAND CANONICAL) ===
+=== SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
 GERADO EM: 2026-07-30 13:12:22
 TOTAL DE FERRAMENTAS: 41
 ----------------------------------------------------------------------------------------------------
@@ -22,9 +22,9 @@ TOTAL DE FERRAMENTAS: 41
 • souls_delta_diff: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).
 • souls_edit: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
 • souls_execute: not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.
-• souls_fetch_web: Busca uma URL com Tentativa Dupla nativa do SODA e retorna markdown limpo. (Cânone SODA, ex-web_fetch)
+• souls_fetch_web: Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)
 • souls_fill: Injeta cirurgicamente um bloco de código funcional no offset de um stub/placeholder (souls-stub: marker) sem alterar a casca sintática adjacente.
-• souls_get_ast: Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SODA, ex-repo_ast)
+• souls_get_ast: Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)
 • souls_handoff: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
 • souls_intent: not_implemented_yet: Detecta intent do tool call (read/edit/search).
 • souls_knowledge: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
@@ -32,15 +32,15 @@ TOTAL DE FERRAMENTAS: 41
 • souls_multi_read: not_implemented_yet: Leitura em batch com dedup via SharedBlock.
 • souls_outline: not_implemented_yet: Outline de símbolos via tree-sitter (gated tree-sitter-rust).
 • souls_read: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
-• souls_repo_meta: Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SODA, ex-repo_meta)
+• souls_repo_meta: Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SOULS, ex-repo_meta)
 • souls_search: not_implemented_yet: Regex search com output LEAN.
 • souls_semantic_search: not_implemented_yet: BM25 + cosine fusion (gated embeddings).
 • souls_shell: not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.
 • souls_smart_read: not_implemented_yet: Leitura com adaptive depth (LRU + auto-shrink).
-• souls_sqlite_query: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SODA. (Cânone SODA, ex-db_query)
+• souls_sqlite_query: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SOULS. (Cânone SOULS, ex-db_query)
 • souls_sub_agent: Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).
 • souls_symbol: not_implemented_yet: Resolve symbol name → file:line.
-• souls_sys_time: Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SODA, ex-sys_time)
+• souls_sys_time: Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SOULS, ex-sys_time)
 • souls_tree: not_implemented_yet: Árvore de diretórios com max_depth(5).
-• souls_web_search: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SODA, ex-web_search)
+• souls_web_search: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SOULS, ex-web_search)
 ----------------------------------------------------------------------------------------------------

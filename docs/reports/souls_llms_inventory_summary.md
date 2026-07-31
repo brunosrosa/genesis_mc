@@ -1,4 +1,4 @@
-# 📊 SODA LLM INVENTORY SUMMARY & TELEMETRY DOSSIER
+# 📊 SOULS LLM INVENTORY SUMMARY & TELEMETRY DOSSIER
 **Data de Geração:** 2026-07-30 | **Banco SSOT:** `Z:\souls_mc\.souls_data\souls_heuristic_vault.db`
 
 ---
@@ -48,56 +48,56 @@
 - **Metadados:** Família `qwen3` | Parâmetros `4B` | Contexto Máximo `40960` | Quant `Q4_K_M`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ### 2. `Local - Smollm2 360M 8k Lc100K Mix1 Ep2 (GGUF)`
 - **Caminho Físico:** `C:\Users\rosas\.lmstudio\models\HuggingFaceTB\SmolLM2-360M-Instruct-GGUF\smollm2-360m-instruct-q8_0.gguf`
 - **Metadados:** Família `llama` | Parâmetros `Unknown` | Contexto Máximo `8192` | Quant `Q8_0`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ### 3. `Qwen - Qwen2 (GGUF)`
 - **Caminho Físico:** `C:\Users\rosas\.lmstudio\models\katanemo\Arch-Function-Chat-3B.gguf\Arch-Function-Chat-3B-Q5_K_M.gguf`
 - **Metadados:** Família `qwen2` | Parâmetros `3B` | Contexto Máximo `32768` | Quant `Q5_K_M`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ### 4. `Local - Gemma 4 E2B It Ultra Uncensored Heretic (GGUF)`
 - **Caminho Físico:** `C:\Users\rosas\.lmstudio\models\llmfan46\gemma-4-E2B-it-ultra-uncensored-heretic-GGUF\gemma-4-E2B-it-ultra-uncensored-heretic-Q4_K_M.gguf`
 - **Metadados:** Família `gemma4` | Parâmetros `Unknown` | Contexto Máximo `131072` | Quant `Q4_K_M`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ### 5. `Qwen - Deepseek R1 Distill 1 (GGUF)`
 - **Caminho Físico:** `C:\Users\rosas\.lmstudio\models\lmstudio-community\DeepSeek-R1-Distill-Qwen-1.5B-GGUF\DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf`
 - **Metadados:** Família `qwen2` | Parâmetros `1.5B` | Contexto Máximo `131072` | Quant `Q8_0`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ### 6. `Local - Gemma 4 E2B (GGUF)`
 - **Caminho Físico:** `C:\Users\rosas\.lmstudio\models\lmstudio-community\gemma-4-E2B-it-GGUF\gemma-4-E2B-it-Q4_K_M.gguf`
 - **Metadados:** Família `gemma4` | Parâmetros `Unknown` | Contexto Máximo `131072` | Quant `Q4_K_M`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ### 7. `Local - Phi-4 Mini Instruct (GGUF)`
 - **Caminho Físico:** `C:\Users\rosas\.lmstudio\models\lmstudio-community\Phi-4-mini-instruct-GGUF\Phi-4-mini-instruct-Q4_K_M.gguf`
 - **Metadados:** Família `phi3` | Parâmetros `Unknown` | Contexto Máximo `131072` | Quant `Q4_K_M`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ### 8. `Local - Phi-4 Mini Instruct (GGUF)`
 - **Caminho Físico:** `C:\Users\rosas\.lmstudio\models\unsloth\Phi-4-mini-instruct-GGUF\Phi-4-mini-instruct-Q5_K_M.gguf`
 - **Metadados:** Família `phi3` | Parâmetros `Unknown` | Contexto Máximo `131072` | Quant `Q5_K_M`
 - **Telemetria:** TTFT `0.0 ms` | TPOT `0.0 ms` | Latência Média `0.00 ms` | Acurácia `0.0%` | **Score E3 `0.0`**
 - **Módulos Anexados:** Nenhum
-- **Veredito SODA:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
+- **Veredito SOULS:** AGUARDANDO AVALIAÇÃO DA ARENA: Modelo aguardando execução de testes de inferência.
 
 ---
-*Fim do Dossiê de Inventário SODA v4. Gerado automaticamente via `soda_llms_inventory_viewer.py`.*
+*Fim do Dossiê de Inventário SOULS v4. Gerado automaticamente via `souls_llms_inventory_viewer.py`.*

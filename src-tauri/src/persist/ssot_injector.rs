@@ -267,7 +267,7 @@ impl SsotInjector {
                     score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability,
                     score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value,
                     score_ethics_safety, score_intrinsic_risk,
-                    score_final, score_fit_geral_soda,
+                    score_final, score_fit_geral_souls,
                     score_architectural_priority, score_human_product_priority, score_absorption_readiness,
                     score_operational_priority, score_sustainability_adjusted_fit,
                     valid_from, valid_to, embargo_status
@@ -576,7 +576,7 @@ impl SsotInjector {
                 serde_json::json!(row.get::<_, f64>(75)?),
             );
             obj.insert(
-                "score_fit_geral_soda".to_string(),
+                "score_fit_geral_souls".to_string(),
                 serde_json::json!(row.get::<_, f64>(76)?),
             );
             obj.insert(
@@ -1066,7 +1066,7 @@ impl SsotInjector {
             let _ = conn.execute(
                 "UPDATE repo_heuristics
                  SET score_final = ?2,
-                     score_fit_geral_soda = ?3,
+                     score_fit_geral_souls = ?3,
                      score_architectural_priority = ?4,
                      score_human_product_priority = ?5,
                      score_absorption_readiness = ?6,
@@ -1079,7 +1079,7 @@ impl SsotInjector {
                 rusqlite::params![
                     repo_id,
                     row.score_final,
-                    row.score_fit_geral_soda,
+                    row.score_fit_geral_souls,
                     row.score_architectural_priority,
                     row.score_human_product_priority,
                     row.score_absorption_readiness,
@@ -1225,7 +1225,7 @@ impl SsotInjector {
 
     fn try_extract_repo_id_from_repo_url(repo_url: &str) -> Option<String> {
         let url = Url::parse(repo_url).ok()?;
-        let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+        let allow_host_override = std::env::var("SOULS_GITHUB_API_BASE_URL").is_ok();
         if url.host_str() != Some("github.com") && !allow_host_override {
             return None;
         }
@@ -1325,7 +1325,7 @@ impl SsotInjector {
     }
 
     fn google_sheets_api_base_url() -> String {
-        env::var("SODA_GOOGLE_SHEETS_API_BASE_URL")
+        env::var("SOULS_GOOGLE_SHEETS_API_BASE_URL")
             .ok()
             .map(|s| s.trim().trim_end_matches('/').to_string())
             .filter(|s| !s.is_empty())
@@ -1700,7 +1700,7 @@ impl SsotInjector {
         // I/O L2 Real: Mapeando SgrPayload para as colunas reais da tabela
         conn.execute(
             "INSERT OR REPLACE INTO repo_heuristics (
-                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, repo_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_soda, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status, indicacao_otimista_canibalizacao
+                project_name, status_atualizacao, status_fase, repo_url, repo_analised_version, repo_version, ultima_versao_online, lote_id, data_ultima_analise, analise_origem, declared_description, proposta_original_resumo, stack_base, licenca, lente_a_sentido_prod_ux, lente_b_estrutura_arq, lente_c_realidade_ops, visao_do_enxame, justificativa_decisao, executive_verdict, classificacao_terminal, acao_de_canibalizacao, categoria_arquitetural, horizonte_extracao, tipo_integracao, categoria_nuance_tecnica, integracao_papel_exato, ouro_a_extrair, deep_pattern, transplantable_core, logic_math_heuristic, real_structural_problem, must_components_prod_ux, must_components_arq, must_components_ops, detected_toxic_deps, do_not_absorb, where_ai_should_not_enter, bare_metal_fit, extractability_level, operability_level, entropy_risk, design_misuse_risk, intrinsic_ethics_risk, discipline_dependency, risco_principal, risco_linha_vermelha, observacoes, score_final, score_fit_geral_souls, score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability, score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value, score_ethics_safety, score_intrinsic_risk, capability_nature_primary, architectural_topology, runtime_sovereignty_fit, local_first_fit, temporal_stability, adoptability_level, longitudinal_sustainability, abandonment_risk, maintenance_burden, onboarding_friction, observability_operational, recoverability_level, degradation_behavior, curation_burden, time_to_first_clear_value, imperfection_tolerance, evolution_cost, regulatory_risk, score_architectural_priority, score_human_product_priority, score_absorption_readiness, score_operational_priority, score_sustainability_adjusted_fit, valid_from, valid_to, embargo_status, indicacao_otimista_canibalizacao
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67, ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80, ?81, ?82, ?83, ?84, ?85, ?86
             )",
@@ -1754,7 +1754,7 @@ impl SsotInjector {
                 &payload.risco_linha_vermelha,
                 &payload.observacoes,
                 payload.score_final,
-                payload.score_fit_geral_soda,
+                payload.score_fit_geral_souls,
                 payload.score_philosophical_fit,
                 payload.score_bare_metal_fit,
                 payload.score_architectural_extractability,
@@ -1896,7 +1896,7 @@ impl SsotInjector {
                 risco_linha_vermelha TEXT NOT NULL,
                 observacoes TEXT NOT NULL,
                 score_final REAL NOT NULL,
-                score_fit_geral_soda REAL NOT NULL,
+                score_fit_geral_souls REAL NOT NULL,
                 score_philosophical_fit INTEGER NOT NULL,
                 score_bare_metal_fit INTEGER NOT NULL,
                 score_architectural_extractability INTEGER NOT NULL,

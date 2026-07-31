@@ -1130,8 +1130,8 @@ tldraw/
 |-- .oxlintrc.json
 |-- .prettierignore
 |-- .prettierrc
-|-- .soda_repo_version
-|-- .soda_ultima_versao_online
+|-- .souls_repo_version
+|-- .souls_ultima_versao_online
 |-- .yarnrc.yml
 |-- AGENTS.md
 |-- CLA.md
@@ -6071,8 +6071,8 @@ wasmtime/
 |-- .gitattributes
 |-- .gitignore
 |-- .gitmodules
-|-- .soda_repo_version
-|-- .soda_ultima_versao_online
+|-- .souls_repo_version
+|-- .souls_ultima_versao_online
 |-- ADOPTERS.md
 |-- AGENTS.md
 |-- CODEOWNERS
@@ -20863,8 +20863,8 @@ firecrawl/
 |-- .gitattributes
 |-- .gitignore
 |-- .gitmodules
-|-- .soda_repo_version
-|-- .soda_ultima_versao_online
+|-- .souls_repo_version
+|-- .souls_ultima_versao_online
 |-- AGENTS.md
 |-- CLAUDE.md
 |-- CONTRIBUTING.md

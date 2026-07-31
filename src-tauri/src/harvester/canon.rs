@@ -8,13 +8,13 @@ use tracing::info;
 
 use super::persist::ArtifactBlob;
 
-const BLOB_10_TYPE: &str = "blob_10_soda_canon_context";
-pub const CANON_GLOBAL_REPO_ID: &str = "__SODA_CANON_GLOBAL__";
+const BLOB_10_TYPE: &str = "blob_10_souls_canon_context";
+pub const CANON_GLOBAL_REPO_ID: &str = "__SOULS_CANON_GLOBAL__";
 const CANON_CACHE_MAX_AGE_SECS: i64 = 7 * 24 * 60 * 60;
-const CANON_SCHEMA_TAG: &str = "SODA_CANON_V5_ADRS_ALL";
-const CANON_MANIFEST_RELATIVE_PATH: &str = "docs/SODA_CANON_MANIFEST.md";
-const CANON_LOCAL_CONTEXT: &str = "SODA_CANON_V5_ADRS_ALL
-Raio-X Macro do SODA / Souls MC:
+const CANON_SCHEMA_TAG: &str = "SOULS_CANON_V5_ADRS_ALL";
+const CANON_MANIFEST_RELATIVE_PATH: &str = "docs/SOULS_CANON_MANIFEST.md";
+const CANON_LOCAL_CONTEXT: &str = "SOULS_CANON_V5_ADRS_ALL
+Raio-X Macro do SOULS / Souls MC:
 
 O nucleo do sistema e soberania bare-metal. A regra estrutural e backend em Rust com Tokio, ownership explicito, fail-closed e zero panic em producao. O frontend existe como casca passiva em Svelte 5, renderizando estado sem tomar para si logica de negocio, orquestracao, memoria ou inferencia. Python, Node.js e sidecars externos nao definem o produto; quando aparecem, existem apenas como ferramentas efemeras de fabrica, confinadas e descartadas ao fim da tarefa.
 
@@ -28,7 +28,7 @@ A memoria cognitiva e uma triade local e soberana. SQLite ancora o estado transa
 
 A experiencia do operador precisa ser neuro-inclusiva e anti-Flow-Debt. A interface privilegia navegacao espacial em Tiling 2D, telemetria ambiental e estabilidade de foco. O sistema rejeita caos de janelas, spinners ansiosos, reflow agressivo e qualquer ritual visual que sacrifique orientacao espacial em troca de ornamento. UX aqui e mecanismo cognitivo, nao decoracao.
 
-A avaliacao de qualquer ecossistema externo obedece a doutrina da Canibalizacao Cirurgica e do Pessimismo da Razao. Nenhuma arquitetura alienigena e absorvida integralmente se carregar lixo toxico (dependencias massivas, Node.js, Electron). O objetivo do SODA e amputar e extrair puramente a alma matematica, a heuristica invisivel e o padrao de UX, transmutando-os para o nosso motor em Rust/Svelte 5 ou confinando-os em sidecars efemeros. A estocasticidade da IA nunca deve ultrapassar o Cercadinho do Determinismo: qualquer alteracao estrutural ou exclusao deve ser retida na Agent Inbox para aprovacao humana (Human-in-the-Loop), garantindo protecao contra a Corrupcao Silenciosa de Dados.";
+A avaliacao de qualquer ecossistema externo obedece a doutrina da Canibalizacao Cirurgica e do Pessimismo da Razao. Nenhuma arquitetura alienigena e absorvida integralmente se carregar lixo toxico (dependencias massivas, Node.js, Electron). O objetivo do SOULS e amputar e extrair puramente a alma matematica, a heuristica invisivel e o padrao de UX, transmutando-os para o nosso motor em Rust/Svelte 5 ou confinando-os em sidecars efemeros. A estocasticidade da IA nunca deve ultrapassar o Cercadinho do Determinismo: qualquer alteracao estrutural ou exclusao deve ser retida na Agent Inbox para aprovacao humana (Human-in-the-Loop), garantindo protecao contra a Corrupcao Silenciosa de Dados.";
 
 #[derive(Error, Debug)]
 pub enum CanonError {
@@ -45,9 +45,9 @@ struct CanonCacheEntry {
     timestamp_extracao: i64,
 }
 
-pub struct SodaCanonExtractor;
+pub struct SoulsCanonExtractor;
 
-impl SodaCanonExtractor {
+impl SoulsCanonExtractor {
     pub async fn extract(
         repo_id: &str,
         conn: Arc<Mutex<Connection>>,
@@ -57,7 +57,7 @@ impl SodaCanonExtractor {
                 if entry.repo_id == CANON_GLOBAL_REPO_ID {
                     Self::persist_blob(repo_id, entry.payload_blob.clone(), Arc::clone(&conn)).await?;
                 }
-                info!(repo_id = %repo_id, "blob_10_soda_canon_context servido do cache SQLite");
+                info!(repo_id = %repo_id, "blob_10_souls_canon_context servido do cache SQLite");
                 return Ok(ArtifactBlob {
                     artifact_type: BLOB_10_TYPE.to_string(),
                     payload_blob: entry.payload_blob,

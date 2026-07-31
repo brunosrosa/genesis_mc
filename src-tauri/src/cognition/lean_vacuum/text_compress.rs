@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED Fase 3: Compressão textual estrutural.
+// SOULS-CANIBALIZED Fase 3: Compressão textual estrutural.
 //
 // Transcrição nativa de:
 //   - `aggressive_compress`  ← lean-ctx/src/core/compressor.rs::aggressive_compress (linhas 33-101)

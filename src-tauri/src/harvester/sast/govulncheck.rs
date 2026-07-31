@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use tracing::info;
 
 use crate::harvester::router::StaticAnalysisBlade;
-use super::{SidecarError, SastExecutionTarget, SodaHealthIssue, DiscoveredManifest, ManifestKind, descendant_roots_for_manifest, derive_repo_relative_clean_targets, is_go_supported_file, push_issue, sort_and_dedup_issues};
+use super::{SidecarError, SastExecutionTarget, SoulsHealthIssue, DiscoveredManifest, ManifestKind, descendant_roots_for_manifest, derive_repo_relative_clean_targets, is_go_supported_file, push_issue, sort_and_dedup_issues};
 
 pub fn govulncheck_args_for_module() -> Vec<String> {
     vec![
@@ -53,7 +53,7 @@ pub fn normalize_govulncheck_output(
     repo_path: &Path,
     execution_root: &Path,
     bytes: &[u8],
-) -> Result<Vec<SodaHealthIssue>, SidecarError> {
+) -> Result<Vec<SoulsHealthIssue>, SidecarError> {
     let text = String::from_utf8_lossy(bytes);
     let mut issues = Vec::new();
     for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {

@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED: Deduplicação de blocos de 5 linhas consecutivas (Session Cross-File Cache).
+// SOULS-CANIBALIZED: Deduplicação de blocos de 5 linhas consecutivas (Session Cross-File Cache).
 // Identifica sequências repetidas de 5 linhas consecutivas entre arquivos da mesma sessão
 // e substitui ocorrências por marcadores de deduplicação com apontamento de localização.
 

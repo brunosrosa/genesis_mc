@@ -11,7 +11,7 @@ description: "Proíbe modelos de rascunho neurais (MTP/EAGLE-3) na VRAM e impõe
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V5)
 
 ## Contexto Técnico e Restrições de Hardware
 
@@ -25,7 +25,7 @@ A especulação de tokens e a predição multi-token (MTP) foram concebidas para
 
 Como obter aceleração na taxa de geração de tokens ($S > 1.0$) em estruturas altamente padronizadas (JSONs estruturados, chamadas de função, sintaxe de código) dentro do limite físico inflexível de $6.0 \text{ GB}$ de VRAM, sem consumir memória de vídeo adicional e sem induzir paginação para a memória RAM do sistema através do barramento PCIe?
 
-## Decisões Arquiteturais da SODA V5
+## Decisões Arquiteturais da SOULS V5
 
 ```
                                 [ PROMPT ENTRADA ]
@@ -47,14 +47,14 @@ Como obter aceleração na taxa de geração de tokens ($S > 1.0$) em estruturas
 
 ### 1. A Guilhotina da Especulação Neural (`.mtp` / `draft-simple`)
 
-Fica terminantemente **PROIBIDO** o carregamento de arquivos de rascunho neurais (`.gguf` secundários), cabeças MTP ou adaptadores EAGLE-3 (`.mtp`) na VRAM em qualquer componente da Arquitetura SODA V5.
+Fica terminantemente **PROIBIDO** o carregamento de arquivos de rascunho neurais (`.gguf` secundários), cabeças MTP ou adaptadores EAGLE-3 (`.mtp`) na VRAM em qualquer componente da Arquitetura SOULS V5.
 
 - Qualquer tentativa de inicializar o motor de inferência com a flag `--spec-type draft-simple` ou `-md <draft_model>` em dGPUs de 6GB é barrada no carregamento pelo Gateway Rust.
 - O carregamento de rascunhos neurais introduz risco iminente de OOM e degradação térmica por desacoplamento de cache KV.
 
 ### 2. Adoção Compulsória da Especulação N-Gram (`ngram-mod`)
 
-O SODA V5 adota **exclusivamente** a especulação baseada em n-gramas (`ngram-mod`) para aceleração de geração autorregressiva.
+O SOULS V5 adota **exclusivamente** a especulação baseada em n-gramas (`ngram-mod`) para aceleração de geração autorregressiva.
 
 - **Mecanismo:** O algoritmo `ngram-mod` analisa em tempo real as janelas de contexto geradas, construindo tabelas de hash dinâmicas baseadas na frequência de n-gramas (tamanho de correspondência min/max configurável).
 - **Zero VRAM Footprint:** As tabelas de n-gramas residem estritamente na memória RAM central do sistema (pegada estática insignificante de $\sim 16 \text{ MB}$), sem alocar um único byte na VRAM da RTX 2060m.

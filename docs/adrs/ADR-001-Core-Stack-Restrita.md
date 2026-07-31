@@ -13,10 +13,10 @@ description: "Restringe a stack tecnológica do produto final ao Rust (Tokio) e 
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-O ecossistema **Genesis Mission Control (SODA)** opera sob restrições físicas de hardware rígidas no ambiente do usuário (RTX 2060m com 6GB VRAM, Intel i9 CPU e 32GB RAM). Runtimes tradicionais de desktop como Electron e frameworks baseados em Node.js geram grande sobrecarga computacional ("Daemon Bloat"), disputando barramento PCIe, CPU e memória física direta com motores de IA locais. Adicionalmente, interpretadores com Garbage Collection (GC) provocam latências estocásticas imprevisíveis e Event Loop Starvation, o que é inaceitável para uma Prótese de Função Executiva projetada para mentes neurodivergentes (2e/TDAH) que exige feedback mecânico e instantâneo.
+O ecossistema **Genesis Mission Control (SOULS)** opera sob restrições físicas de hardware rígidas no ambiente do usuário (RTX 2060m com 6GB VRAM, Intel i9 CPU e 32GB RAM). Runtimes tradicionais de desktop como Electron e frameworks baseados em Node.js geram grande sobrecarga computacional ("Daemon Bloat"), disputando barramento PCIe, CPU e memória física direta com motores de IA locais. Adicionalmente, interpretadores com Garbage Collection (GC) provocam latências estocásticas imprevisíveis e Event Loop Starvation, o que é inaceitável para uma Prótese de Função Executiva projetada para mentes neurodivergentes (2e/TDAH) que exige feedback mecânico e instantâneo.
 
 ## Decisão
-Fica formalmente decidido que a arquitetura de produção do SODA é estritamente Bare-Metal e restrita às seguintes tecnologias:
+Fica formalmente decidido que a arquitetura de produção do SOULS é estritamente Bare-Metal e restrita às seguintes tecnologias:
 1. **Backend & Core:** Desenvolvidos inteiramente em **Rust assíncrono (Tokio)**. Nenhuma lógica persistente em Node.js ou Python habitará a produção.
 2. **Frontend & Interface:** Svelte 5 (Runes) + TypeScript empacotados via **Tauri v2**.
 3. **Repúdio Absoluto:** Fica proibida a injeção ou persistência de daemons baseados em Electron, microsserviços Node.js locais ou interpretadores JS/Python pesados no pacote do produto. Qualquer lógica de terceiros que necessite de outras linguagens deve rodar como sidecar efêmero isolado em sandbox nativa e ser encerrada compulsoriamente via sinal atômico `SIGKILL` após o término da tarefa.

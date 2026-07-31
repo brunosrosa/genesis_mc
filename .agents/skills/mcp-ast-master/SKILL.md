@@ -1,6 +1,6 @@
 ---
 name: mcp-ast-master
-description: Manual de compatibilidade para leitura cirúrgica de código (AST) no SODA. Reencaminha a disciplina de fatiamento O(1) para o poder intrínseco `core_repo_ast`, blindando a VRAM de 6GB contra Context Rot sem depender de sidecar legado.
+description: Manual de compatibilidade para leitura cirúrgica de código (AST) no SOULS. Reencaminha a disciplina de fatiamento O(1) para o poder intrínseco `core_repo_ast`, blindando a VRAM de 6GB contra Context Rot sem depender de sidecar legado.
 triggers: ["mcp-ast-master", "ler código", "buscar função", "analisar classe", "explorar código", "AST", "extrair lógica", "core_repo_ast"]
 ---
 
@@ -35,7 +35,7 @@ Sempre que precisar ler código local, investigar a origem de um bug ou extrair 
 * **FRONTMATTER ABSOLUTO:** O bloco YAML `---` contido no topo desta skill é a fundação inegociável do roteamento.
 
 #### Examples
-**Entrada do Usuário:** "SODA, dá uma olhada na função de roteamento do ParetoBandit no arquivo `router.rs` e extrai a lógica para eu ver."
+**Entrada do Usuário:** "SOULS, dá uma olhada na função de roteamento do ParetoBandit no arquivo `router.rs` e extrai a lógica para eu ver."
 **Ação do Agente:**
 1. Invoca `core_repo_ast` no diretório do repositório.
 2. O servidor Rust retorna a visão estrutural do arquivo de 2.000 linhas sem despejar o conteúdo bruto. O agente identifica a função de roteamento a partir do outline.

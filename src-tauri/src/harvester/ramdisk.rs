@@ -297,14 +297,14 @@ fn mark_tree_temporary(root: &Path) -> Result<(), RamdiskError> {
 
 async fn wait_until_writable(path: &Path) -> Result<(), RamdiskError> {
     let probe_file = path.join(format!(
-        ".soda_ramdisk_probe_{}_tmp",
+        ".souls_ramdisk_probe_{}_tmp",
         std::process::id()
     ));
     let mut last_error = String::from("ramdisk ainda nao respondeu ao health check");
 
     for _ in 0..RAMDISK_READY_RETRIES {
         if tokio::fs::metadata(path).await.is_ok() {
-            match tokio::fs::write(&probe_file, b"SODA_READY").await {
+            match tokio::fs::write(&probe_file, b"SOULS_READY").await {
                 Ok(()) => {
                     if let Err(e) = tokio::fs::remove_file(&probe_file).await {
                         warn!(path = %probe_file.display(), error = %e, "Falha ao remover probe file do health check do ramdisk");
@@ -452,7 +452,7 @@ impl RamdiskAllocator {
     #[cfg(not(target_os = "windows"))]
     fn allocate_temp_workspace() -> Result<RamdiskHandle, RamdiskError> {
         let temp_dir = Builder::new()
-            .prefix("soda_shadow_workspace_")
+            .prefix("souls_shadow_workspace_")
             .tempdir()
             .map_err(|e| RamdiskError::AllocationFailed {
                 reason: format!("Falha ao criar workspace temporario via tempfile: {}", e),
@@ -504,8 +504,8 @@ mod tests {
         assert!(path.exists(), "Ponto de montagem deve existir");
 
         let test_file = path.join("test.txt");
-        std::fs::write(&test_file, "SODA").unwrap();
-        assert_eq!(std::fs::read_to_string(&test_file).unwrap(), "SODA");
+        std::fs::write(&test_file, "SOULS").unwrap();
+        assert_eq!(std::fs::read_to_string(&test_file).unwrap(), "SOULS");
     }
 
     #[tokio::test]

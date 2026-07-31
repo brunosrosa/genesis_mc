@@ -4,7 +4,7 @@ title: "ADR-016-Zero-Config-Install"
 version: 1.0
 status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Garante a distribuição auto-suficiente do SODA empacotado pelo Tauri com zero dependências externas no host."
+description: "Garante a distribuição auto-suficiente do SOULS empacotado pelo Tauri com zero dependências externas no host."
 ---
 
 # ADR-016-Zero-Config-Install
@@ -13,7 +13,7 @@ description: "Garante a distribuição auto-suficiente do SODA empacotado pelo T
 Aceito (Ativo e Inegociável)
 
 ## Contexto
-O SODA foi arquitetado para ser uma solução soberana "Local-First". Contudo, sistemas operacionais de usuários divergem massivamente em termos de hardware físico (CPUs Intel/AMD, quantidade de RAM e presença/capacidade de dGPUs dedicadas). Exigir que usuários finais realizem configurações manuais complexas de drivers, alocação de threads e seleção de formatos de quantização de tensores inviabiliza a facilidade de uso, provocando falhas graves de Out-of-Memory (OOM) na GPU e sobredimensionamento letal de threads.
+O SOULS foi arquitetado para ser uma solução soberana "Local-First". Contudo, sistemas operacionais de usuários divergem massivamente em termos de hardware físico (CPUs Intel/AMD, quantidade de RAM e presença/capacidade de dGPUs dedicadas). Exigir que usuários finais realizem configurações manuais complexas de drivers, alocação de threads e seleção de formatos de quantização de tensores inviabiliza a facilidade de uso, provocando falhas graves de Out-of-Memory (OOM) na GPU e sobredimensionamento letal de threads.
 
 ## Decisão
 Implementar um motor nativo de **Auto-Profiling de Hardware** em Rust, executado compulsoriamente na inicialização do sistema (Boot) e em transições de energia:
@@ -30,7 +30,7 @@ Implementar um motor nativo de **Auto-Profiling de Hardware** em Rust, executado
 3. **Instalação Sem Estado:** Toda a configuração de hardware é puramente efêmera e recalculada no boot, prevenindo que alterações físicas na máquina do usuário (ex: adição de RAM ou dGPU) quebrem o software.
 
 ## Consequências
-- **Instalação Instantânea:** Experiência "Zero-Config" verdadeira. O usuário apenas executa o binário do Tauri e o SODA otimiza-se sozinho ao ambiente hospedeiro.
+- **Instalação Instantânea:** Experiência "Zero-Config" verdadeira. O usuário apenas executa o binário do Tauri e o SOULS otimiza-se sozinho ao ambiente hospedeiro.
 - **Robustez Térmica:** O software calibra sua pegada energética com base no estado térmico e na capacidade de resfriamento físico do host, prevenindo *thermal throttling*.
 - **Manutenibilidade:** Eliminação total de arquivos de configuração estática de hardware difíceis de depurar.
 

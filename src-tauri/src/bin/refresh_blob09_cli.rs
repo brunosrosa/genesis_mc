@@ -26,7 +26,7 @@ fn ensure_phase1_schema(conn: &Connection) -> io::Result<()> {
             repo_analised_version TEXT,
             repo_version TEXT,
             ultima_versao_online TEXT,
-            soda_universal_uuid TEXT NOT NULL UNIQUE,
+            souls_universal_uuid TEXT NOT NULL UNIQUE,
             status_processamento TEXT NOT NULL,
             timestamp_fase_1 INTEGER,
             timestamp_fase_3 INTEGER,

@@ -82,7 +82,7 @@ static WASM_OUTLINE_PARSER: &[u8] = include_bytes!("../resources/wasm_grammars/o
 
 ---
 
-## 5. DESIGN TÉCNICO: SODA V4 — UPGRADE DE MOTORES DE INFERÊNCIA E BITNET DAEMON (SPIKE)
+## 5. DESIGN TÉCNICO: SOULS V4 — UPGRADE DE MOTORES DE INFERÊNCIA E BITNET DAEMON (SPIKE)
 
 ### 5.1. Visão Geral e Arquitetura Orchestrator-Worker
 O backend em Rust (Tokio) atua como o **Orchestrator**, delegando workloads para dois motores de inferência **Workers**:
@@ -92,7 +92,7 @@ O backend em Rust (Tokio) atua como o **Orchestrator**, delegando workloads para
 ### 5.2. Diagrama Arquitetural (Mermaid)
 ```mermaid
 graph TD
-    Client[Tauri IPC / MCP Client] -->|Inference Request| Orchestrator[Soda Model Manager - Tokio Runtime]
+    Client[Tauri IPC / MCP Client] -->|Inference Request| Orchestrator[Souls Model Manager - Tokio Runtime]
     
     subgraph Host Process - Rust Tokio Runtime
         Orchestrator -->|GPU Inference Request| LlamaEngine[LlamaCppEngine - llama-cpp-2 v0.1.153]

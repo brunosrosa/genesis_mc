@@ -16,7 +16,7 @@ Aceito (Ativo e Inegociável)
 Durante a execução do Harvester Nativo (Fase 0 - V6.0), a auditoria revelou que o orquestrador tolerava falhas silenciosas ("Fail-Soft") em linters SAST pesados, como `govulncheck` (Go) e `sobelow` (Elixir). A execução ingênua dos comandos na raiz bruta do repositório falhava catastroficamente em topologias de **Monorepo**, onde os manifestos de dependência (`go.mod`, `mix.exs`) residem em subdiretórios aninhados. Em vez de investigar a topologia real, o extrator falhava, devolvia 0 bytes e mascarava a ineficiência com um falso "sucesso" na pipeline, enviando payloads corrompidos ou incompletos para as Lentes B e C.
 
 ## Decisão
-Fica decretada a lei de **Qualidade 100/100** e a **Consciência Obrigatória de Monorepos** para o Motor de Extração SODA:
+Fica decretada a lei de **Qualidade 100/100** e a **Consciência Obrigatória de Monorepos** para o Motor de Extração SOULS:
 
 1. **A Morte do Fail-Soft Mascarado:** Tolerância ZERO a truncamento cego ou falhas silenciosas de extração por "ignorância topológica". Se o linter não conseguir executar por não achar a raiz lógica do ecossistema, o erro DEVE ser tratado e o alvo correto deve ser localizado. O payload gravado deve ser a extração tática 10/10.
 2. **Consciência de Monorepo (Topology-Aware Routing):** Os *sidecars* de linters (SAST) são estritamente proibidos de disparar comandos às cegas na raiz do projeto clonado. O extrator em Rust deve realizar um "Pre-flight Check", buscando a localização física exata dos manifestos raiz (ex: localização do `go.mod` principal ou `mix.exs`) e atuar com base nesse diretório (`cwd`).

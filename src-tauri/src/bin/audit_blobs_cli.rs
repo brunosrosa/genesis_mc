@@ -15,7 +15,7 @@ const EXPECTED_BLOBS: [&str; 11] = [
     "blob_07_ops_blueprint",
     "blob_08_health_report",
     "blob_09_community_meta",
-    "blob_10_soda_canon_context",
+    "blob_10_souls_canon_context",
     "blob_11_ux_contracts",
 ];
 

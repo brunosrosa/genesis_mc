@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED: gates adicionados para módulos que dependem de features opcionais.
+// SOULS-CANIBALIZED: gates adicionados para módulos que dependem de features opcionais.
 // Módulos gated em features NÃO default compilam apenas se a feature for ativada.
 pub mod a2a;
 pub mod adaptive;
@@ -67,7 +67,7 @@ pub mod pop_pruning;
 pub mod portable_binary;
 pub mod preservation;
 pub mod project_hash;
-// SODA-CANIBALIZED: property_graph removido desta fase (conflito rusqlite 0.39 vs souls_mc 0.31).
+// SOULS-CANIBALIZED: property_graph removido desta fase (conflito rusqlite 0.39 vs souls_mc 0.31).
 // Será reativado quando souls_mc migrar para rusqlite 0.39 ou criarmos um adapter.
 // pub mod property_graph;
 pub mod prospective_memory;

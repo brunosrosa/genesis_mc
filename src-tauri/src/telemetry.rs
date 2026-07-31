@@ -34,7 +34,7 @@ pub fn init_cli_tracing(_level: Level) {
     enable_virtual_terminal();
     let ansi =
         (io::stderr().is_terminal() || io::stdout().is_terminal()) && std::env::var_os("NO_COLOR").is_none();
-    let formatter = SodaEventFormatter::new(ansi, supports_truecolor());
+    let formatter = SoulsEventFormatter::new(ansi, supports_truecolor());
 
     use tracing_subscriber::EnvFilter;
 
@@ -88,18 +88,18 @@ pub fn strip_ansi_codes(input: &str) -> String {
 }
 
 #[derive(Clone, Copy)]
-struct SodaEventFormatter {
+struct SoulsEventFormatter {
     ansi: bool,
     truecolor: bool,
 }
 
-impl SodaEventFormatter {
+impl SoulsEventFormatter {
     fn new(ansi: bool, truecolor: bool) -> Self {
         Self { ansi, truecolor }
     }
 }
 
-impl<S, N> FormatEvent<S, N> for SodaEventFormatter
+impl<S, N> FormatEvent<S, N> for SoulsEventFormatter
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
     N: for<'writer> FormatFields<'writer> + 'static,
@@ -111,7 +111,7 @@ where
         event: &Event<'_>,
     ) -> fmt::Result {
         let metadata = event.metadata();
-        let mut visitor = SodaFieldVisitor::default();
+        let mut visitor = SoulsFieldVisitor::default();
         event.record(&mut visitor);
         let kind = classify_event(metadata.level(), visitor.message.as_deref(), &visitor.fields);
         let base = phase_base_color_for_target(metadata.target());
@@ -168,12 +168,12 @@ where
 }
 
 #[derive(Debug, Clone, Default)]
-struct SodaFieldVisitor {
+struct SoulsFieldVisitor {
     message: Option<String>,
     fields: Vec<(String, String)>,
 }
 
-impl SodaFieldVisitor {
+impl SoulsFieldVisitor {
     fn push(&mut self, key: &str, value: String) {
         let clean = value.trim_matches('"').to_string();
         if key == "message" {
@@ -184,7 +184,7 @@ impl SodaFieldVisitor {
     }
 }
 
-impl Visit for SodaFieldVisitor {
+impl Visit for SoulsFieldVisitor {
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
         self.push(field.name(), format!("{value:?}"));
     }
@@ -528,7 +528,7 @@ pub fn dynamic_wyrand() -> tinyrand::Wyrand {
     tinyrand::Wyrand::seed(nanos ^ stack_addr.rotate_left(13))
 }
 
-// --- Bare-Metal O(1) Time Utilities (SODA Group 9 - Zero-Chrono) ---
+// --- Bare-Metal O(1) Time Utilities (SOULS Group 9 - Zero-Chrono) ---
 
 #[inline]
 pub fn now_epoch_secs() -> i64 {

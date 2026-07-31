@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::watch;
-use crate::soda_thermal_governor::SystemState;
+use crate::souls_thermal_governor::SystemState;
 
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
 pub enum InferenceError {
@@ -19,7 +19,7 @@ pub enum InferenceError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SodaInferenceRequest {
+pub struct SoulsInferenceRequest {
     pub model_path: String,
     pub system_prompt: String,
     pub few_shot_examples: Vec<(String, String)>,
@@ -31,7 +31,7 @@ pub struct SodaInferenceRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SodaInferenceResponse {
+pub struct SoulsInferenceResponse {
     pub status: String,
     pub text: String,
     pub prompt_tokens: u32,
@@ -42,9 +42,9 @@ pub struct SodaInferenceResponse {
 pub trait EphemeralInferEngine: Send + Sync {
     fn run_inference(
         &self,
-        req: SodaInferenceRequest,
+        req: SoulsInferenceRequest,
         thermal_rx: Option<watch::Receiver<SystemState>>,
-    ) -> Result<SodaInferenceResponse, InferenceError>;
+    ) -> Result<SoulsInferenceResponse, InferenceError>;
 }
 
 /// Implementação Mock do Motor de Inferência Efêmero (Fase 4.3 - Estrutura Few-Shot e Telemetria E³)
@@ -53,9 +53,9 @@ pub struct MockEphemeralInferEngine;
 impl EphemeralInferEngine for MockEphemeralInferEngine {
     fn run_inference(
         &self,
-        req: SodaInferenceRequest,
+        req: SoulsInferenceRequest,
         thermal_rx: Option<watch::Receiver<SystemState>>,
-    ) -> Result<SodaInferenceResponse, InferenceError> {
+    ) -> Result<SoulsInferenceResponse, InferenceError> {
         if let Some(ref rx) = thermal_rx {
             while *rx.borrow() == SystemState::Paused {
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -74,7 +74,7 @@ impl EphemeralInferEngine for MockEphemeralInferEngine {
         let prompt_tokens = (total_prompt_len as u32 / 4).max(1);
         let completion_tokens = (mock_text.len() as u32 / 4).max(1);
 
-        Ok(SodaInferenceResponse {
+        Ok(SoulsInferenceResponse {
             status: "success".to_string(),
             text: mock_text,
             prompt_tokens,

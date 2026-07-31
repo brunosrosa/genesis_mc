@@ -16,7 +16,7 @@ Aceito (Ativo e Inegociável)
 O acompanhamento do pipeline de canibalização, os logs analíticos de refatorações de código e a auditoria de viabilidade de engenharia geram massas de dados altamente estruturadas. Armazenar esses dados unicamente em arquivos JSON locais fragmentados ou de forma proprietária em bancos de dados em disco impede que o Arquiteto Humano possua uma visão holística e imediata do throughput sistêmico. Também dificulta auditorias de conformidade de código e acompanhamento ágil para mentes neurodivergentes que necessitam de forte ancoragem visual externa.
 
 ## Decisão
-Fica formalmente decidido estabelecer uma planilha do **Google Sheets** estruturada como a **Única Fonte de Verdade (SSOT) analítica** para a esteira de canibalização e governança do SODA:
+Fica formalmente decidido estabelecer uma planilha do **Google Sheets** estruturada como a **Única Fonte de Verdade (SSOT) analítica** para a esteira de canibalização e governança do SOULS:
 1. **O Barramento Universal:** A planilha mestre opera de forma bidirecional integrada ao core Rust através de um servidor MCP customizado (`webcrawl-mcp` / `sheets-mcp`).
 2. **Esquema de Alta Densidade (82 Colunas):** A tabela mestre de ingestão e análise adota rigorosamente uma especificação fixa e imutável de **82 colunas de metadados e telemetria** cruzadas, mapeando:
    - Identificadores atômicos (hashes, URIs e IDs de arquivos).

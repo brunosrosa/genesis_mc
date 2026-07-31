@@ -11,23 +11,23 @@ description: "Garante decodificação estruturada determinística com llguidance
 
 ## Status
 
-Aceito (Ativo, Inegociável e Fundacional para SODA V4)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 ## Contexto Técnico e Impacto da Quantização
 
-Sob as restrições térmicas e de memória de vídeo fixadas no [ADR-027](https://gemini.google.com/app/ADR-027-Motor-Hibrido-VRAM.md "null") (NVIDIA RTX 2060m de $6.0 \text{ GB}$ de VRAM), o SODA V4 adota o regime de quantização extrema `IQ3_M` via matrizes de importância (`imatrix`) para modelos de linguagem de escala $8\text{B}$ de parâmetros.
+Sob as restrições térmicas e de memória de vídeo fixadas no [ADR-027](https://gemini.google.com/app/ADR-027-Motor-Hibrido-VRAM.md "null") (NVIDIA RTX 2060m de $6.0 \text{ GB}$ de VRAM), o SOULS V4 adota o regime de quantização extrema `IQ3_M` via matrizes de importância (`imatrix`) para modelos de linguagem de escala $8\text{B}$ de parâmetros.
 
 A compressão dos pesos para o patamar de $\approx 3.66 \text{ bpw}$ (bits por peso) acarreta uma degradação severa na coerência lógica fina do modelo:
 
 - **Colapso de Schema JSON:** O modelo perde a capacidade natural de seguir sintaxes rígidas em regime nativo livre (_Zero-Shot_), falhando no fechamento de delimitadores estruturais (chaves `{}` e colchetes `[]`), escapando caracteres de controle ou gerando chaves inexistentes no esquema de dados de 82 colunas da tabela `MASTER_SOLUTIONS`.
-- **Estresse de Desserialização no Rust Backend:** Interfaces de acoplamento direto baseadas na crate `serde_json` falham catastroficamente (`panic` ou interrupção do thread de controle do Tokio) ao receber strings JSON malformadas [DEPENDENCIES] Otimização de Inferência Rust Bare-Metal SLMs e Decodificação Restrita (Fase de Destilação).md, uploaded:SODA Theme_16].
+- **Estresse de Desserialização no Rust Backend:** Interfaces de acoplamento direto baseadas na crate `serde_json` falham catastroficamente (`panic` ou interrupção do thread de controle do Tokio) ao receber strings JSON malformadas [DEPENDENCIES] Otimização de Inferência Rust Bare-Metal SLMs e Decodificação Restrita (Fase de Destilação).md, uploaded:SOULS Theme_16].
 - **Sobrecarga de Recuperação Lógica (Anti-Patterns Banned):** Rejeita-se categoricamente a re-execução de prompts síncronos na dGPU para "correção de JSON" ou laços de validação sintática complexos que sobrecarreguem o barramento PCIe ou gerem novos picos de latência.
 
 ## Declaração do Problema
 
-Como garantir $100\%$ de conformidade sintática à especificação de saída JSON para um modelo $8\text{B}$ quantizado em `IQ3_M`, processando contextos de até $30.000$ tokens, sem introduzir overhead térmico na dGPU e sem expor a esteira de I/O em Rust a exceções de tempo de execução [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md, uploaded:SODA Fase 0: Harvester Nativo e Fluxo Canônico V6.0]?
+Como garantir $100\%$ de conformidade sintática à especificação de saída JSON para um modelo $8\text{B}$ quantizado em `IQ3_M`, processando contextos de até $30.000$ tokens, sem introduzir overhead térmico na dGPU e sem expor a esteira de I/O em Rust a exceções de tempo de execução [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md, uploaded:SOULS Fase 0: Harvester Nativo e Fluxo Canônico V6.0]?
 
-## Decisões Arquiteturais da SODA V4
+## Decisões Arquiteturais da SOULS V4
 
 ```
                                   VETOR DE LOGITS BRUTOS
@@ -63,7 +63,7 @@ Como garantir $100\%$ de conformidade sintática à especificação de saída JS
 
 Bane-se qualquer processamento de máscaras de Gramática Livre de Contexto (CFG - _Context-Free Grammar_) ou inferência lógica de ordenação estrutural na dGPU NVIDIA RTX 2060m.
 
-- O SODA V4 utiliza a crate Rust `llguidance` integrada diretamente ao loop de geração sínclono do `llama-cpp-2`.
+- O SOULS V4 utiliza a crate Rust `llguidance` integrada diretamente ao loop de geração sínclono do `llama-cpp-2`.
 - A validação de tokens e o avanço dos autômatos determinísticos de gramática são descarregados integralmente para os núcleos de alta frequência da CPU (Intel Core i9).
 - A CPU intercepta o vetor de logits brutos retornado pela dGPU antes da seleção de amostragem. Emprega-se paralelismo SIMD nativo através de instruções vetoriais AVX2 de 256 bits (`is_x86_feature_detected!("avx2")`) para escanear e invalidar de forma concorrente a tabela de probabilidade do vocabulário do tokenizer.
 
@@ -81,7 +81,7 @@ Fica terminantemente proibido o uso isolado ou prioritário de amostradores base
 
 A compressão severa de pesos em `IQ3_M` achata artificialmente as curvas de probabilidade calculadas pela camada Softmax, elevando scores estatísticos de tokens espúrios (lixo gramatical) à vizinhança imediata dos tokens corretos [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 
-- O SODA V4 impõe o amostrador **Min-P** como o disjuntor estatístico primário do motor gerador [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
+- O SOULS V4 impõe o amostrador **Min-P** como o disjuntor estatístico primário do motor gerador [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - O Min-P atua podando de forma adaptativa e proporcional todos os tokens cuja probabilidade seja inferior a um limite dinâmico calculado a partir do token de maior probabilidade ($p_{\text{max}}$) [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 
 #### Equação do Limiar de Poda Estocástica:
@@ -97,7 +97,7 @@ $$p_{\text{threshold}} = p_{\text{max}} \times m_{\text{min\_p}}$$
 
 O modelo hiper-quantizado operando em contexts longos ($30\text{k}$ tokens) sofre de degradação rápida no vetor de atenção espacial [DEPENDENCIES] Otimização de Inferência Rust Bare-Metal SLMs e Decodificação Restrita (Fase de Destilação).md]. Forçar o modelo a deduzir a semântica da resposta em regime _Zero-Shot_ consome recursos cognitivos residuais escassos dos pesos comprimidos [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 
-- O SODA V4 institui a obrigatoriedade da **Ancoragem Dupla de Prompt com ICL (In-Context Learning)** [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
+- O SOULS V4 institui a obrigatoriedade da **Ancoragem Dupla de Prompt com ICL (In-Context Learning)** [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - Toda requisição enviada ao motor de inferência pela Fase 1.5 e Fase 3 de processamento deve conter, de forma imutável no topo de seu harness de prompt, exatamente **2 exemplos perfeitos de Entrada/Saída JSON** [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - O modelo é induzido a atuar puramente por mimetismo geométrico e ativação espacial de padrões preexistentes na janela de contexto [DEPENDENCIES] Otimização Inferência Rust Bare-Metal e FinOps Local.md].
 - Essa simplificação cognitiva economiza a capacidade de representação do modelo quantizado, focando $100\%$ de seu poder de atenção exclusivamente na _extração semântica_ das propriedades do código local analisado, enquanto o plano de controle de Rust cuida da rigidez estrutural externa.

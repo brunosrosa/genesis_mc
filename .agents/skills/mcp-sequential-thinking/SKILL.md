@@ -10,7 +10,7 @@ triggers: ["mcp-sequential-thinking", "raciocinar passo a passo", "pensar", "ana
 Este skill governa o servidor `ultrafast-mcp-sequential-thinking` — implementação Rust do protocolo MCP 2025-06-18.
 - **Ferramenta MCP canônica:** `core_think` (mapeada pelo lean-ctx como alias para `sequentialthinking`)
 - **Ferramentas auxiliares:** `core_analyze_session`, `core_export_session`, `core_merge_sessions`
-- **Transporte:** STDIO (intra-processo via Gateway L7 do SODA)
+- **Transporte:** STDIO (intra-processo via Gateway L7 do SOULS)
 - **Performance baseline (bare-metal):** ~0.1ms/pensamento, ~0.2ms/branch, sessão cria em ~0.5ms
 
 #### API Canônica — ThoughtData (Lei de Ferro)
@@ -60,7 +60,7 @@ Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruí
 3. **A Tríade de Construtos (Max 5 Iterações — HARD-LIMIT FINOPS):**
    * Emita os pensamentos de forma iterativa, aplicando obrigatoriamente a mecânica de Falsificação Coercitiva (Free-MAD):
      * **Regular Thoughts:** Decomposição do problema e proposição da tese. (`isRevision: false`)
-     * **Revision Thoughts:** Avaliação retroativa das suas premissas. Aplique as Leis Duras do SODA (Zero-Copy? Menos de 6GB VRAM? Node.js proibido em produção?) para tentar destruir a tese original e corrigir o curso. (`isRevision: true`, `revisesThought: N`)
+     * **Revision Thoughts:** Avaliação retroativa das suas premissas. Aplique as Leis Duras do SOULS (Zero-Copy? Menos de 6GB VRAM? Node.js proibido em produção?) para tentar destruir a tese original e corrigir o curso. (`isRevision: true`, `revisesThought: N`)
      * **Branching Thoughts:** Se o impasse técnico persistir, gere pensamentos de ramificação para explorar abordagens arquiteturais antagônicas sem corromper a árvore central. (`branchFromThought: N`, `branchId: "branch-nome-descritivo"`)
    * **HARD-LIMIT FINOPS:** Orçamento inegociável de **5 pensamentos** (`thoughtNumber: 5`). No 5º pensamento, force o encerramento: `nextThoughtNeeded: false`.
    * **EXCEÇÃO AUTORIZADA:** Se e somente se o Arquiteto Humano autorizar explicitamente a expansão ("expanda o raciocínio"), use `needsMoreThoughts: true` no pensamento corrente e adicione até +2 pensamentos (máximo absoluto: 7).
@@ -73,7 +73,7 @@ Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruí
    * **Roteamento de Alvos:** Cada nó do DAG DEVE conter uma etiqueta de delegação dinâmica:
      * `target: local_slm` (para tarefas triviais e extração de dados)
      * `target: cloud_claude_opus` ou `cloud_deepseek` (apenas para subtarefas insolúveis localmente)
-   * Peça autorização humana para acionar o `@soda-sdd` e gravar o plano no `docs/design.md`.
+   * Peça autorização humana para acionar o `@souls-sdd` e gravar o plano no `docs/design.md`.
 
 6. **Pós-Sessão — Injeção na Memória Persistente:**
    * Após a geração do DAG, se a conclusão contiver uma **decisão arquitetural nova ou validada**, você DEVE acionar o `@mcp-memory-master` para gravar a entidade de conhecimento no knowledge graph via `mem_create_entities` antes de encerrar a tarefa.

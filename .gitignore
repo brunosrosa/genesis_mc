@@ -29,13 +29,13 @@ dist-ssr
 .agents/scratch/*/
 
 .souls_data/
-.soda_data/
+.souls_data/
 .archive/
 .souls_cache/
-.soda_sandbox/
+.souls_sandbox/
 .souls_scratchpad/
 .jcodemunch_index/
-.soda_semgrep/
+.souls_semgrep/
 .pytest_cache/
 .lean-ctx/
 src-tauri/third_party/ultrafast-mcp-sequential-thinking/
@@ -43,7 +43,7 @@ docs/audits/blobs/inspect/
 docs/context_dumps/
 
 # ==============================================================================
-# SODA BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO
+# SOULS BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO
 # ==============================================================================
 # Ignora caches e diretórios de saída de compilação do Rust e CMake dentro de vendor
 src-tauri/vendor/**/target/

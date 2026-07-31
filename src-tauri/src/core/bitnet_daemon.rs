@@ -1,4 +1,4 @@
-// SODA-CANIBALIZED: Gerenciador de Subprocesso CPU BitNetDaemon (SODA V4)
+// SOULS-CANIBALIZED: Gerenciador de Subprocesso CPU BitNetDaemon (SOULS V4)
 // Subprocesso efêmero de 1.58-bits com enjaulamento Windows Job Object (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
 // e Drop Guard síncrono para imunidade total contra processos zumbis na RAM.
 
@@ -208,18 +208,18 @@ mod tests {
         };
 
         let dir = tempdir().expect("Falha ao criar tempdir para teste CUDA");
-        let cu_file = dir.path().join("soda_test_kernel.cu");
-        let obj_file = dir.path().join("soda_test_kernel.obj");
+        let cu_file = dir.path().join("souls_test_kernel.cu");
+        let obj_file = dir.path().join("souls_test_kernel.obj");
 
         std::fs::write(
             &cu_file,
             r#"
-extern "C" __global__ void soda_test_kernel(float* data) {
+extern "C" __global__ void souls_test_kernel(float* data) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx == 0) { data[0] = 42.0f; }
 }
 "#,
-        ).expect("Falha ao escrever soda_test_kernel.cu");
+        ).expect("Falha ao escrever souls_test_kernel.cu");
 
         let mut cmd = std::process::Command::new(&nvcc);
         cmd.arg("-c").arg(&cu_file).arg("-o").arg(&obj_file);

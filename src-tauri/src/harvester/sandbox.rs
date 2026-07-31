@@ -209,7 +209,7 @@ fn attach_child_to_kill_on_close_job(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GAIOLA DE SILÍCIO — AppContainer / LPAC
-// Isolamento real de Kernel para sidecars efêmeros do SODA.
+// Isolamento real de Kernel para sidecars efêmeros do SOULS.
 // Arquitetura: AppContainerProfile (Drop → higiene do Registro) +
 //              STARTUPINFOEX (injeção de credenciais antes do spawn) +
 //              ACLs NTFS Fail-Closed + DELETE_ON_CLOSE handle efêmero.
@@ -287,8 +287,8 @@ fn create_appcontainer_profile(
     container_name: &str,
 ) -> Result<AppContainerProfile, SandboxError> {
     let name_wide = str_to_wide(container_name);
-    let display_wide = str_to_wide(&format!("SODA Sidecar: {container_name}"));
-    let desc_wide = str_to_wide("SODA ephemeral AppContainer for sidecar isolation");
+    let display_wide = str_to_wide(&format!("SOULS Sidecar: {container_name}"));
+    let desc_wide = str_to_wide("SOULS ephemeral AppContainer for sidecar isolation");
 
     let mut sid: PSID = std::ptr::null_mut();
     let hr = unsafe {
@@ -339,7 +339,7 @@ fn create_appcontainer_profile(
 /// Muro do NTFS — Fail-Closed.
 /// Adiciona uma entrada de permissão para o AppContainer SID no DACL do diretório.
 /// Se SetNamedSecurityInfoW falhar, retorna Err(AclInjectionFailed) e o processo
-/// NÃO é spawnado (princípio SODA de Zero-Falhas-Silenciosas).
+/// NÃO é spawnado (princípio SOULS de Zero-Falhas-Silenciosas).
 ///
 /// `access_mask`: use combinações de FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE.
 #[cfg(target_os = "windows")]
@@ -818,8 +818,8 @@ fn open_dir_delete_on_close(path: &std::path::Path) -> Result<HANDLE, SandboxErr
 /// Esta função é best-effort: se CheckNetIsolation não estiver disponível,
 /// emite um warning mas não falha (a conectividade real será testada no runtime).
 ///
-/// SODA IPC — PLACEHOLDER DACL DOS NAMED PIPES:
-/// O processo pai (SODA Gateway) precisa adicionar a seguinte ACE ao DACL
+/// SOULS IPC — PLACEHOLDER DACL DOS NAMED PIPES:
+/// O processo pai (SOULS Gateway) precisa adicionar a seguinte ACE ao DACL
 /// de cada Named Pipe que o sidecar consumirá:
 ///   Trustee: "ALL APPLICATION PACKAGES" (SID: S-1-15-2-1)
 ///   Permissões: GENERIC_READ | GENERIC_WRITE
@@ -2062,7 +2062,7 @@ fn semgrep_support_root(repo_path: &Path) -> PathBuf {
     repo_path
         .parent()
         .unwrap_or(repo_path)
-        .join(".soda_semgrep")
+        .join(".souls_semgrep")
         .join(repo_name)
 }
 
@@ -2072,7 +2072,7 @@ pub(crate) fn sandbox_tool_state_root(repo_path: &Path, tool_name: &str) -> Path
         .and_then(|value| value.to_str())
         .unwrap_or("repo");
     workspace_root()
-        .join(".soda_sandbox")
+        .join(".souls_sandbox")
         .join(tool_name)
         .join(repo_name)
 }
@@ -2115,7 +2115,7 @@ fn build_host_write_roots(repo_path: &Path, policy: SandboxPolicy) -> Result<Vec
         SandboxPolicy::ReadOnly => Vec::new(),
         SandboxPolicy::ReadWrite => vec![
             semgrep_support_root(repo_path),
-            workspace_root().join(".soda_sandbox"),
+            workspace_root().join(".souls_sandbox"),
         ],
     };
 
@@ -3160,7 +3160,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             }
         }
 
-        // PRD-031 §D: O support_dir (.soda_semgrep) DEVE receber leitura NTFS via extra_acl_paths
+        // PRD-031 §D: O support_dir (.souls_semgrep) DEVE receber leitura NTFS via extra_acl_paths
         // para que o OpenGrep possa ler seu --config sem ser bloqueado pelo AppContainer.
         if command == "opengrep" || command == "semgrep" {
             let support_dir = semgrep_support_root(&self.repo_path);
@@ -3200,7 +3200,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
         let uuid_str = uuid::Uuid::new_v4().simple().to_string();
         let slot = APPCONTAINER_SETUP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst) % 4;
         // Gera nome do perfil AppContainer baseado no comando/lâmina e slot exclusivo de concorrência para evitar colisões
-        let container_name = format!("soda-ac-{}-{}", command, slot);
+        let container_name = format!("souls-ac-{}-{}", command, slot);
         let container_name = if container_name.len() > 64 {
             container_name[..64].to_string()
         } else {
@@ -3307,7 +3307,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
 
             // ── Passo 2: Diretório temporário efêmero ────────────────────────────
             // Criado no %TEMP% do host; o handle DELETE_ON_CLOSE o evaporará no Drop.
-            let ephemeral_dir = strip_unc_prefix(&std::env::temp_dir().join(format!("soda-ac-{uuid_str_clone}")));
+            let ephemeral_dir = strip_unc_prefix(&std::env::temp_dir().join(format!("souls-ac-{uuid_str_clone}")));
             std::fs::create_dir_all(&ephemeral_dir).map_err(|e| SandboxError::AppContainerSetupFailed {
                 detail: format!("Falha ao criar diretório efêmero '{}': {e}", ephemeral_dir.display()),
             })?;
@@ -3916,13 +3916,13 @@ mod tests {
 
         // Executa comando básico trivial do próprio sistema para verificar I/O
         #[cfg(target_os = "windows")]
-            let output = sandbox.execute("cmd", &["/C", "echo SODA_SANDBOX"], 30).await.unwrap();
+            let output = sandbox.execute("cmd", &["/C", "echo SOULS_SANDBOX"], 30).await.unwrap();
         
         #[cfg(not(target_os = "windows"))]
-            let output = sandbox.execute("echo", &["SODA_SANDBOX"], 30).await.unwrap();
+            let output = sandbox.execute("echo", &["SOULS_SANDBOX"], 30).await.unwrap();
 
         let output_str = String::from_utf8_lossy(&output);
-        assert!(output_str.trim().contains("SODA_SANDBOX"));
+        assert!(output_str.trim().contains("SOULS_SANDBOX"));
     }
 
     #[tokio::test]
@@ -3939,12 +3939,12 @@ mod tests {
             .expect("sandbox read-write deve ser criado");
 
         assert_eq!(sandbox.policy(), SandboxPolicy::ReadWrite);
-        assert!(repo_dir.parent().unwrap().join(".soda_semgrep").join("repo").exists());
+        assert!(repo_dir.parent().unwrap().join(".souls_semgrep").join("repo").exists());
     }
 
     #[test]
     fn test_resolve_mix_wraps_shell_on_windows() {
-        let repo_dir = std::env::temp_dir().join("soda-mix-repo");
+        let repo_dir = std::env::temp_dir().join("souls-mix-repo");
         let resolved = resolve_command("mix", &["sobelow", "--format", "json", "--private"], &repo_dir)
             .expect("mix deve ser resolvido");
 
@@ -4062,7 +4062,7 @@ mod tests {
         let _ = grant_runtime_and_tool_acls(
             &repo_dir,
             std::ptr::null_mut(), // PSID nulo — ACL Win32 falha gracefully
-            "soda-ac-test",
+            "souls-ac-test",
             "opengrep",
             &mut env,
         );
@@ -4103,7 +4103,7 @@ mod tests {
         let _ = grant_runtime_and_tool_acls(
             &repo_dir,
             std::ptr::null_mut(),
-            "soda-ac-test",
+            "souls-ac-test",
             "opengrep",
             &mut env,
         );
@@ -4128,7 +4128,7 @@ mod tests {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // PRD-031 §B — TDD: soda_clean_path / soda_strip_unc_prefix
+    // PRD-031 §B — TDD: souls_clean_path / souls_strip_unc_prefix
     // (testes canônicos já estão em path_sanitizer.rs)
     // ═══════════════════════════════════════════════════════════════════════
 

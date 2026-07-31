@@ -187,7 +187,7 @@ async fn read_cell_at(
 
 fn try_extract_repo_id_from_repo_url(repo_url: &str) -> Option<String> {
     let url = Url::parse(repo_url).ok()?;
-    let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+    let allow_host_override = std::env::var("SOULS_GITHUB_API_BASE_URL").is_ok();
     if url.host_str() != Some("github.com") && !allow_host_override {
         return None;
     }
@@ -237,7 +237,7 @@ async fn fetch_enxame_batch_candidates(spreadsheet_id: &str) -> io::Result<Vec<B
     .await?;
     let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
 
-    let lote_override = std::env::var("SODA_LOTE_ID_OVERRIDE")
+    let lote_override = std::env::var("SOULS_LOTE_ID_OVERRIDE")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
@@ -276,7 +276,7 @@ async fn fetch_enxame_batch_candidates(spreadsheet_id: &str) -> io::Result<Vec<B
 
 async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
     let url = Url::parse(repo_url).ok()?;
-    let allow_host_override = std::env::var("SODA_GITHUB_API_BASE_URL").is_ok();
+    let allow_host_override = std::env::var("SOULS_GITHUB_API_BASE_URL").is_ok();
     if url.host_str() != Some("github.com") && !allow_host_override {
         return None;
     }
@@ -294,7 +294,7 @@ async fn try_fetch_github_latest_release_tag(repo_url: &str) -> Option<String> {
     let repo = segments.pop()?;
     let owner = segments.pop()?;
 
-    let base = std::env::var("SODA_GITHUB_API_BASE_URL").unwrap_or_else(|_| "https://api.github.com".to_string());
+    let base = std::env::var("SOULS_GITHUB_API_BASE_URL").unwrap_or_else(|_| "https://api.github.com".to_string());
     let endpoint = format!("{}/repos/{owner}/{repo}/releases/latest", base.trim_end_matches('/'));
 
     #[derive(Deserialize)]
@@ -468,7 +468,7 @@ async fn fetch_resume_f3_candidates(spreadsheet_id: &str) -> io::Result<Vec<Batc
     .await?;
     let values = extract_values_2d_strict(&result).map_err(io::Error::other)?;
 
-    let lote_override = std::env::var("SODA_LOTE_ID_OVERRIDE")
+    let lote_override = std::env::var("SOULS_LOTE_ID_OVERRIDE")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
@@ -965,7 +965,7 @@ fn response_format_for_block(block: u8) -> Value {
             props.insert("logic_math_heuristic".to_string(), with_description(string_schema(5000), "Heuristica ou logica matematica de maior valor."));
             props.insert("real_structural_problem".to_string(), with_description(string_schema(5000), "Problema estrutural real que o ativo tenta resolver."));
             props.insert("categoria_nuance_tecnica".to_string(), with_description(string_schema(2000), "Nuance tecnica dominante do caso."));
-            props.insert("integracao_papel_exato".to_string(), with_description(string_schema(2000), "Papel exato do ativo dentro da stack SODA."));
+            props.insert("integracao_papel_exato".to_string(), with_description(string_schema(2000), "Papel exato do ativo dentro da stack SOULS."));
             strict_object(
                 props,
                 vec![
@@ -1086,7 +1086,7 @@ fn response_format_for_block(block: u8) -> Value {
                     "Daemon / Background Service",
                     "App Nativo / CLI Independente",
                     "Middleware / Proxy",
-                ]), "Modo de integracao recomendado para o SODA."),
+                ]), "Modo de integracao recomendado para o SOULS."),
             );
             props.insert(
                 "capability_nature_primary".to_string(),
@@ -1337,7 +1337,7 @@ fn response_format_for_block(block: u8) -> Value {
         }
         4 => {
             let mut props = serde_json::Map::new();
-            props.insert("score_philosophical_fit".to_string(), with_description(int_0_10_schema(), "Aderencia filosofica aos principios SODA."));
+            props.insert("score_philosophical_fit".to_string(), with_description(int_0_10_schema(), "Aderencia filosofica aos principios SOULS."));
             props.insert("score_bare_metal_fit".to_string(), with_description(int_0_10_schema(), "Compatibilidade com execucao bare-metal local."));
             props.insert("score_architectural_extractability".to_string(), with_description(int_0_10_schema(), "Facilidade de extrair o nucleo arquitetural."));
             props.insert("score_operability".to_string(), with_description(int_0_10_schema(), "Facilidade de operar e manter em producao."));
@@ -1372,7 +1372,7 @@ fn response_format_for_block(block: u8) -> Value {
     json!({
         "type": "json_schema",
         "json_schema": {
-            "name": format!("soda_f3_block_{block}"),
+            "name": format!("souls_f3_block_{block}"),
             "strict": true,
             "schema": schema
         }
@@ -1836,7 +1836,7 @@ fn try_fetch_repo_heuristics_row(
                     score_philosophical_fit, score_bare_metal_fit, score_architectural_extractability,
                     score_operability, score_creep_risk, score_runtime_sovereignty, score_model_logic_value,
                     score_ethics_safety, score_intrinsic_risk,
-                    score_final, score_fit_geral_soda,
+                    score_final, score_fit_geral_souls,
                     score_architectural_priority, score_human_product_priority, score_absorption_readiness,
                     score_operational_priority, score_sustainability_adjusted_fit,
                     valid_from, valid_to, embargo_status
@@ -1925,7 +1925,7 @@ fn try_fetch_repo_heuristics_row(
             obj.insert("score_ethics_safety".to_string(), serde_json::json!(row.get::<_, i64>(73)?));
             obj.insert("score_intrinsic_risk".to_string(), serde_json::json!(row.get::<_, i64>(74)?));
             obj.insert("score_final".to_string(), serde_json::json!(row.get::<_, f64>(75)?));
-            obj.insert("score_fit_geral_soda".to_string(), serde_json::json!(row.get::<_, f64>(76)?));
+            obj.insert("score_fit_geral_souls".to_string(), serde_json::json!(row.get::<_, f64>(76)?));
             obj.insert("score_architectural_priority".to_string(), serde_json::json!(row.get::<_, f64>(77)?));
             obj.insert("score_human_product_priority".to_string(), serde_json::json!(row.get::<_, f64>(78)?));
             obj.insert("score_absorption_readiness".to_string(), serde_json::json!(row.get::<_, f64>(79)?));
@@ -3071,7 +3071,7 @@ async fn main() -> io::Result<()> {
             format!("https://github.com/{}", repo_id),
         )
     });
-    let lote_id = std::env::var("SODA_LOTE_ID_OVERRIDE")
+    let lote_id = std::env::var("SOULS_LOTE_ID_OVERRIDE")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -3079,7 +3079,7 @@ async fn main() -> io::Result<()> {
 
     let mut n4_sheet_proposta: Option<String> = None;
     let mut n4_sheet_categoria: Option<String> = None;
-    let force_status_gate = env_flag_enabled("SODA_FORCE_F3_STATUS_GATE");
+    let force_status_gate = env_flag_enabled("SOULS_FORCE_F3_STATUS_GATE");
     if !dry_run && (skip_harvester || !e2e_full) {
         let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
             .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
@@ -3101,7 +3101,7 @@ async fn main() -> io::Result<()> {
                 row_number,
                 status_atualizacao = %status_atualizacao,
                 status_fase = %status_fase,
-                "N4/N5: bypass administrativo ativado via SODA_FORCE_F3_STATUS_GATE"
+                "N4/N5: bypass administrativo ativado via SOULS_FORCE_F3_STATUS_GATE"
             );
         }
         if !status_ok && !force_status_gate {
@@ -3369,7 +3369,7 @@ async fn main() -> io::Result<()> {
         ultima_versao_online,
         lote_id: lote_id.clone(),
         data_ultima_analise: now,
-        analise_origem: "SODA_E2E_F3".to_string(),
+        analise_origem: "SOULS_E2E_F3".to_string(),
         licenca,
         stack_base,
         declared_description,

@@ -1,6 +1,6 @@
-# PRD & Spike de Compilação: Atualização de Motores de Inferência Soberanos (SODA V4)
+# PRD & Spike de Compilação: Atualização de Motores de Inferência Soberanos (SOULS V4)
 
-Este documento estabelece as diretrizes de especificação, fiação de compilação e plano de contingência para o transplante do **Inference Core** do Souls MC na **Arquitetura SODA V4**.
+Este documento estabelece as diretrizes de especificação, fiação de compilação e plano de contingência para o transplante do **Inference Core** do Souls MC na **Arquitetura SOULS V4**.
 
 ---
 
@@ -110,7 +110,7 @@ pub struct BitNetDaemon {
 
 impl BitNetDaemon {
     pub async fn spawn_isolated_daemon(bin_path: &Path) -> Result<Self, std::io::Error> {
-        let segment_id = format!("soda_shm_bitnet_{}", std::process::id());
+        let segment_id = format!("souls_shm_bitnet_{}", std::process::id());
         
         let child = Command::new(bin_path)
             .arg("--shm-id")
@@ -142,7 +142,7 @@ impl BitNetDaemon {
 
 ## 5. SUÍTE DE TESTES UNITÁRIOS RESTRITA (TDD MANDATÓRIO)
 
-A fim de garantir a conformidade com as diretrizes do SODA, o agente na IDE deverá obrigatoriamente implementar e passar nos seguintes 3 cenários de validação física:
+A fim de garantir a conformidade com as diretrizes do SOULS, o agente na IDE deverá obrigatoriamente implementar e passar nos seguintes 3 cenários de validação física:
 
 1. **`test_model_registry_respects_max_depth_5`:** Garante que a varredura do `WalkDir` interrompa a recursão estritamente no 5º nível de pastas.
 2. **`test_single_mmap_per_inference`:** Prova que o cabeçalho do arquivo `.gguf` é mapeado na memória virtual e lido apenas uma vez por ciclo de inferência, impedindo redundâncias.

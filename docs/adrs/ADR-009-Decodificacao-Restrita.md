@@ -11,6 +11,6 @@ description: "Documento obsoleto. A decodificação restrita e o uso do llguidan
 
 **ESTA LEI FOI REVOGADA E SUBSTITUÍDA.**
 
-Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SODA. 
+Todo o conteúdo e contexto teórico anterior foi expurgado cirurgicamente para evitar *Context Rot* e asfixia de tokens na memória dos Agentes do SOULS. 
 
 Para ler as regras atuais em vigor sobre o Cercadinho do Determinismo, amostragem Min-P, In-Context Learning (Few-Shot) e a imposição matemática de JSON via `llguidance` operando em AVX2 na CPU, consulte exclusivamente o **ADR-028**.

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 NOTEBOOK_ID = "0737996f-cf30-4050-a9a8-e18a16899937"
-CRYSTALIZED_DIR = Path(__file__).parent / "soda_canon" / "crystalized"
+CRYSTALIZED_DIR = Path(__file__).parent / "souls_canon" / "crystalized"
 
 # Limite seguro para argumento de linha de comando no Windows (~30K chars)
 # Arquivos maiores serao divididos em partes
@@ -54,7 +54,7 @@ def main():
     total = len(files)
 
     print(f"\n{'='*60}")
-    print(f"  Upload SODA Canon V2 ao NotebookLM")
+    print(f"  Upload SOULS Canon V2 ao NotebookLM")
     print(f"  Notebook: {NOTEBOOK_ID}")
     print(f"  Arquivos: {total}")
     print(f"{'='*60}\n")
@@ -76,7 +76,7 @@ def main():
 
             all_ok = True
             for p_idx, part in enumerate(parts):
-                part_title = f"SODA {theme_name} (Parte {p_idx+1}/{len(parts)})"
+                part_title = f"SOULS {theme_name} (Parte {p_idx+1}/{len(parts)})"
                 print(f"    Parte {p_idx+1}/{len(parts)}...", end=" ", flush=True)
                 ok = upload_text(NOTEBOOK_ID, part_title, part)
                 if ok:
@@ -91,7 +91,7 @@ def main():
             else:
                 failures.append(theme_name)
         else:
-            title = f"SODA {theme_name}"
+            title = f"SOULS {theme_name}"
             print(f"  [{idx}/{total}] {theme_name} ({size_kb}KB)...", end=" ", flush=True)
             ok = upload_text(NOTEBOOK_ID, title, content)
             if ok:

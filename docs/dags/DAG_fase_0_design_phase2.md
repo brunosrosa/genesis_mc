@@ -1,7 +1,7 @@
-# SODA Harvester — Design Arquitetural (Fase 2)
+# SOULS Harvester — Design Arquitetural (Fase 2)
 
 > **Versão:** 0.1.0
-> **Território:** PRODUTO (Daemon SODA — Rust/Tokio, arquitetura apenas)
+> **Território:** PRODUTO (Daemon SOULS — Rust/Tokio, arquitetura apenas)
 > **Escopo:** Fase 0 + Fase A
 > **Status:** Blueprint autorizado. Nenhum código Rust nasce nesta etapa.
 
@@ -23,7 +23,7 @@ Pacotes A, B e C em três pareceres curtos, densos e auditáveis.
 ### 1.1. Princípio Operacional
 
 - O orquestrador distribui os Pacotes A, B e C em paralelo para três Lentes.
-- Cada Lente recebe seu dossiê já anexado ao `blob_10_soda_canon_context`.
+- Cada Lente recebe seu dossiê já anexado ao `blob_10_souls_canon_context`.
 - Cada Lente produz um mini-JSON factual, curto e comparável.
 - O sistema persiste os três pareceres como artefatos atômicos da Fase 2.
 
@@ -31,7 +31,7 @@ Pacotes A, B e C em três pareceres curtos, densos e auditáveis.
 
 | Item | Função |
 |---|---|
-| Entrada | Pacote A, Pacote B, Pacote C, todos aterrados por `blob_10_soda_canon_context` |
+| Entrada | Pacote A, Pacote B, Pacote C, todos aterrados por `blob_10_souls_canon_context` |
 | Processo | Debate paralelo e isolado entre Lentes especializadas |
 | Saída | 3 mini-JSONs com bullets curtos e acionáveis |
 | Próximo estado | Repositório marcado como `FASE_2_OK` |
@@ -40,14 +40,14 @@ Pacotes A, B e C em três pareceres curtos, densos e auditáveis.
 
 ## 2. Fase 0 — Advogado do Diabo e Proibições (Red Lines)
 
-### 2.1. Tabela SLOP vs Lei Dura SODA
+### 2.1. Tabela SLOP vs Lei Dura SOULS
 
-| SLOP (Mercado) | Risco letal | Lei Dura SODA |
+| SLOP (Mercado) | Risco letal | Lei Dura SOULS |
 |---|---|---|
 | Câmara de Eco: IAs concordando entre si | Colapso crítico da diversidade analítica e falso consenso | **Isolamento Absoluto (Free-MAD):** as Lentes NUNCA se comunicam durante a Fase 2 |
 | Execução sequencial: Lente A, depois B, depois C | Latência desnecessária, madrugada travada e throughput baixo | **Paralelismo Obrigatório:** o Rust DEVE usar `tokio::join!` ou `JoinSet` para disparar as chamadas de rede simultaneamente |
 | Verborragia: relatórios longos e opinativos | Queima de tokens, persistência gorda e comparação difícil | **Saída Estruturada Interna:** cada Lente devolve mini-JSON com 3 a 5 bullets, limite alvo de ~250 tokens |
-| Cegueira doutrinária: cada IA julga sem canon | Recomendações desalinhadas com a Constituição do produto | **Aterramento Canônico:** toda Lente deve avaliar a solução com base no `blob_10_soda_canon_context` anexado |
+| Cegueira doutrinária: cada IA julga sem canon | Recomendações desalinhadas com a Constituição do produto | **Aterramento Canônico:** toda Lente deve avaliar a solução com base no `blob_10_souls_canon_context` anexado |
 
 ### 2.2. Invariantes da Fase 2
 
@@ -56,7 +56,7 @@ Pacotes A, B e C em três pareceres curtos, densos e auditáveis.
 | Isolamento entre Lentes | Não existe troca de contexto entre N2, N3 e N4 |
 | Paralelismo real | As três chamadas remotas nascem juntas, não em cascata |
 | Saída mínima | Resposta curta, bulletizada e serializável |
-| Canon obrigatório | `blob_10_soda_canon_context` acompanha todos os prompts |
+| Canon obrigatório | `blob_10_souls_canon_context` acompanha todos os prompts |
 | Persistência única | Os três pareceres são gravados atomicamente por `repo_id` |
 | Escopo fechado | A Fase 2 não preenche Google Sheets e não produz PRD final |
 
@@ -190,7 +190,7 @@ graph TD
 |---|---|
 | Debate paralelo definido | N2, N3 e N4 estão formalizados como nós concorrentes |
 | Anti-consenso protegido | As Lentes operam sem comunicação entre si |
-| Canon obrigatório | `blob_10_soda_canon_context` acompanha todas as análises |
+| Canon obrigatório | `blob_10_souls_canon_context` acompanha todas as análises |
 | Payload compacto | O mini-JSON está limitado a 3-5 bullets e ~250 tokens |
 | Resiliência explícita | O protocolo fail-fast com 2 retries está documentado |
 | Persistência atômica | `debates_enxame` e `FASE_2_OK` estão definidos como saída oficial |
@@ -203,7 +203,7 @@ graph TD
 1. Não permitir comunicação lateral entre Lentes durante a Fase 2.
 2. Não executar N2, N3 e N4 em sequência.
 3. Não aceitar resposta longa, opinativa ou fora do mini-JSON.
-4. Não remover o `blob_10_soda_canon_context` do contexto das Lentes.
+4. Não remover o `blob_10_souls_canon_context` do contexto das Lentes.
 5. Não persistir resultado parcial em `debates_enxame`.
 6. Não travar a madrugada por falha de rede em um único repositório.
 7. Não preencher Google Sheets na Fase 2.

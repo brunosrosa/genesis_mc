@@ -115,7 +115,7 @@ impl<'a, DB: DbReader> PackageAssembler<'a, DB> {
 
         let blob_10 = self
             .db
-            .fetch_raw_blob(repo_id, "blob_10_soda_canon_context")
+            .fetch_raw_blob(repo_id, "blob_10_souls_canon_context")
             .map_err(AssemblerError::DatabaseReadError)?;
 
         let canon_marker = "\n=== BLOB_10_CANON_CONTEXT ===\n";
@@ -208,7 +208,7 @@ mod tests {
         db.add_essence("_essence_07_ops_blueprint", "[ESSENCE_07_CONTENT]");
         db.add_essence("_essence_08_health_report", "[ESSENCE_08_CONTENT]");
         db.add_essence("_essence_09_community_meta", "[ESSENCE_09_CONTENT]");
-        db.add_raw_blob("blob_10_soda_canon_context", "[BLOB_10_CANON_CONTEXT]");
+        db.add_raw_blob("blob_10_souls_canon_context", "[BLOB_10_CANON_CONTEXT]");
 
         let assembler = PackageAssembler::new(&db);
         let result = assembler.assemble("aaif-goose/goose").expect("Should succeed");
@@ -234,7 +234,7 @@ mod tests {
         db.add_essence("_essence_07_ops_blueprint", "[ESSENCE_07_CONTENT]");
         db.add_essence("_essence_08_health_report", "[ESSENCE_08_CONTENT]");
         db.add_essence("_essence_09_community_meta", "[ESSENCE_09_CONTENT]");
-        db.add_raw_blob("blob_10_soda_canon_context", "[BLOB_10_CANON_CONTEXT]");
+        db.add_raw_blob("blob_10_souls_canon_context", "[BLOB_10_CANON_CONTEXT]");
 
         let assembler = PackageAssembler::new(&db);
         let result = assembler.assemble("aaif-goose/goose").expect("Should succeed");
@@ -260,7 +260,7 @@ mod tests {
         db.add_essence("_essence_07_ops_blueprint", "[ESSENCE_07_CONTENT]");
         db.add_essence("_essence_08_health_report", "[ESSENCE_08_CONTENT]");
         db.add_essence("_essence_09_community_meta", "[ESSENCE_09_CONTENT]");
-        db.add_raw_blob("blob_10_soda_canon_context", "[BLOB_10_CANON_CONTEXT]");
+        db.add_raw_blob("blob_10_souls_canon_context", "[BLOB_10_CANON_CONTEXT]");
 
         let assembler = PackageAssembler::new(&db);
         let result = assembler.assemble("aaif-goose/goose").expect("Should succeed");
@@ -291,7 +291,7 @@ mod tests {
         db.add_essence("_essence_07_ops_blueprint", "[ESSENCE_07_CONTENT]");
         db.add_essence("_essence_08_health_report", "[ESSENCE_08_CONTENT]");
         db.add_essence("_essence_09_community_meta", "[ESSENCE_09_CONTENT]");
-        db.add_raw_blob("blob_10_soda_canon_context", "[BLOB_10_CANON_CONTEXT]");
+        db.add_raw_blob("blob_10_souls_canon_context", "[BLOB_10_CANON_CONTEXT]");
 
         let assembler = PackageAssembler::new(&db);
         let result = assembler.assemble("aaif-goose/goose").expect("Should succeed");
@@ -315,9 +315,9 @@ mod tests {
         db.add_essence("_essence_08_health_report", "[ESSENCE_08_CONTENT]");
         db.add_essence("_essence_09_community_meta", "[ESSENCE_09_CONTENT]");
 
-        db.add_raw_blob("blob_10_soda_canon_context", "[BLOB_10_FROM_RAW]");
+        db.add_raw_blob("blob_10_souls_canon_context", "[BLOB_10_FROM_RAW]");
 
-        db.add_essence("_essence_10_soda_canon_context", "[WRONG_ESSENCE_10]");
+        db.add_essence("_essence_10_souls_canon_context", "[WRONG_ESSENCE_10]");
 
         let assembler = PackageAssembler::new(&db);
         let result = assembler.assemble("aaif-goose/goose").expect("Should succeed");
@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn test_missing_essence_returns_error() {
         let db = MockDbReader::new();
-        db.add_raw_blob("blob_10_soda_canon_context", "[BLOB_10]");
+        db.add_raw_blob("blob_10_souls_canon_context", "[BLOB_10]");
 
         let assembler = PackageAssembler::new(&db);
         let result = assembler.assemble("aaif-goose/goose");

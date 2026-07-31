@@ -217,7 +217,7 @@ mod mock_executor {
                     } else if is_health {
                         if let Some(pos) = guard.iter().position(|r| {
                             if let Ok(bytes) = r {
-                                String::from_utf8_lossy(bytes).contains("soda.tech-debt.todo-fixme")
+                                String::from_utf8_lossy(bytes).contains("souls.tech-debt.todo-fixme")
                             } else {
                                 false
                             }

@@ -158,8 +158,8 @@ impl BloblessCloner {
         match clone_result {
             Ok(sha) => {
                 // Grava as versões do repositório
-                let _ = tokio::fs::write(dest.join(".soda_repo_version"), &sha).await;
-                let _ = tokio::fs::write(dest.join(".soda_ultima_versao_online"), &sha).await;
+                let _ = tokio::fs::write(dest.join(".souls_repo_version"), &sha).await;
+                let _ = tokio::fs::write(dest.join(".souls_ultima_versao_online"), &sha).await;
                 Ok(RepoPath(dest))
             }
             Err(e) => {
@@ -185,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_clone_success() {
-        if std::env::var("SODA_RUN_GITHUB_NETWORK_TESTS")
+        if std::env::var("SOULS_RUN_GITHUB_NETWORK_TESTS")
             .ok()
             .as_deref()
             != Some("1")
@@ -219,7 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_clone_stays_in_ramdisk() {
-        if std::env::var("SODA_RUN_GITHUB_NETWORK_TESTS")
+        if std::env::var("SOULS_RUN_GITHUB_NETWORK_TESTS")
             .ok()
             .as_deref()
             != Some("1")
