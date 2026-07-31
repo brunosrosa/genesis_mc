@@ -175,8 +175,8 @@ mod tests {
         let db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
-            .join(".soda_data")
-            .join("soda_heuristic_vault.db");
+            .join(".souls_data")
+            .join("souls_heuristic_vault.db");
 
         if !db_path.exists() {
             println!("\n=== SMOKE TEST: BLOB_08 FROM SQLITE VAULT ===");

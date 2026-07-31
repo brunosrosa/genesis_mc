@@ -1,7 +1,7 @@
-# DB_STATE_REPORT — soda_heuristic_vault.db
+# DB_STATE_REPORT — souls_heuristic_vault.db
 
 - Generated at (UTC): 2026-05-25T23:56:24Z
-- Database path: c:\Users\rosas\Dev_Projects\genesis_mc\.soda_data\soda_heuristic_vault.db
+- Database path: c:\Users\rosas\Dev_Projects\genesis_mc\.souls_data\souls_heuristic_vault.db
 - SQLite version: 3.49.1
 - PRAGMA user_version: 0
 - PRAGMA foreign_keys: 0
@@ -712,10 +712,10 @@ CREATE UNIQUE INDEX idx_artefatos_repo_tipo
 
 ---
 
-# DB_STATE_REPORT — soda_state.db
+# DB_STATE_REPORT — souls_state.db
 
 - Generated at (UTC): 2026-05-25T23:59:54Z
-- Database path: c:\Users\rosas\Dev_Projects\genesis_mc\.soda_data\soda_state.db
+- Database path: c:\Users\rosas\Dev_Projects\genesis_mc\.souls_data\souls_state.db
 - SQLite version: 3.49.1
 - PRAGMA user_version: 0
 - PRAGMA foreign_keys: 0

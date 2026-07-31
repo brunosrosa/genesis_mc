@@ -18,7 +18,7 @@ Este artefato é a Constituição do ecossistema SODA (Sistema Operacional Agên
 
 A linha do tempo do SODA repudia o "Context Rot" dividindo a construção da ferramenta e a construção do produto final.
 
-* **Fase 0 (A Fábrica / ETL Cognitivo):** O motor de ingestão $\mathcal{O}(1)$ (via MCPs e parser AST nativo) que mastiga repositórios e extrai o "ouro matemático" para a matriz de dados. Ambiente pragmático onde scripts temporários (Python/Bash) habitam o `.soda_scratchpad`.
+* **Fase 0 (A Fábrica / ETL Cognitivo):** O motor de ingestão $\mathcal{O}(1)$ (via MCPs e parser AST nativo) que mastiga repositórios e extrai o "ouro matemático" para a matriz de dados. Ambiente pragmático onde scripts temporários (Python/Bash) habitam o `.souls_scratchpad`.
 * **Fases A, B, C... (O Produto / Souls MC):** O código de produção final. Intolerância absoluta a runtimes interpretados. Backend 100% Rust assíncrono (Tokio). Frontend 100% Svelte 5 (Runes).
 
 ---
@@ -28,9 +28,9 @@ A linha do tempo do SODA repudia o "Context Rot" dividindo a construção da fer
 A estrutura de pastas é uma barreira de proteção. O Agente é **proibido** de invocar `mkdir` ou criar diretórios como `utils/` ou `scripts/` fora desta cartografia.
 
 ### 2.1. O Motor Cognitivo (Ignorado pelo Git)
-* `.soda_data/`: **O Disco de Estado.** Bancos SQLite, LanceDB (`lancedb_store`) e Grafos (`ladybug_graph`). Intocável por engenheiros de UI.
-* `.soda_cache/`: **O Hipocampo L1.** Respostas de APIs e ASTs brutas transientes.
-* `.soda_scratchpad/`: **O Chão de Fábrica.** OBRIGATÓRIO salvar relatórios analíticos (`/reports/`) e logs de erro (`.log`) aqui. *Proibido ejetar logs na raiz.*
+* `.souls_data/`: **O Disco de Estado.** Bancos SQLite, LanceDB (`lancedb_store`) e Grafos (`ladybug_graph`). Intocável por engenheiros de UI.
+* `.souls_cache/`: **O Hipocampo L1.** Respostas de APIs e ASTs brutas transientes.
+* `.souls_scratchpad/`: **O Chão de Fábrica.** OBRIGATÓRIO salvar relatórios analíticos (`/reports/`) e logs de erro (`.log`) aqui. *Proibido ejetar logs na raiz.*
 * `.soda_sandbox/`: **Isolamento.** Ambientes para execução não confiável de código de terceiros.
 
 ### 2.2. A Fortaleza Documental (`docs/`)

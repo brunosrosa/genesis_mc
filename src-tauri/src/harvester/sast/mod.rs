@@ -2075,7 +2075,7 @@ pub(crate) fn sanitize_repo_relative_path(repo_path: &Path, value: &str) -> Opti
     let host_drive = lower.as_bytes().get(1) == Some(&b':');
     let internal = lower.starts_with(".soda_semgrep/")
         || lower.starts_with(".native_ast_cache/")
-        || lower.starts_with(".soda_scratchpad/")
+        || lower.starts_with(".souls_scratchpad/")
         || lower.starts_with("sandbox/")
         || lower.starts_with("diagnostics/")
         || lower.contains(".souls_workspaces");

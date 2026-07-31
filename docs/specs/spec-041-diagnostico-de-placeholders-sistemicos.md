@@ -124,7 +124,7 @@ Se a coluna `n_with_header` for ~0 na era `pos_prd`, **H3 (persistência parcial
 - [ ] Query SQL ao `artefatos_brutos` para distribuição temporal dos runs (confirma/refuta H4).
 - [ ] Query SQL para `blob_06`/`blob_08`/`blob_11`: amostra de 10 payloads de 100 bytes para inspeção do conteúdo.
 - [ ] Inspeção visual: os 100 bytes são "summary: clean" (H5) ou "skeleton vazio" (bug)?
-- [ ] Grep nos logs do `.soda_scratchpad\reports\` por padrões `sidecar.*fail`, `acl.*denied`, `appcontainer`, `-1073740791`.
+- [ ] Grep nos logs do `.souls_scratchpad\reports\` por padrões `sidecar.*fail`, `acl.*denied`, `appcontainer`, `-1073740791`.
 
 ### Fase 1 — Análise Comparativa (read-only, eu executo)
 - [ ] Se H5 for correta: documentar a taxonomia de "payload curto = clean real".

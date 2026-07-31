@@ -337,7 +337,7 @@ fn sanitize_repo_id(repo_id: &str) -> String {
 }
 
 fn etl_report_path(root_dir: &Path, repo_id: &str) -> io::Result<PathBuf> {
-    let dir = root_dir.join(".soda_scratchpad").join("reports");
+    let dir = root_dir.join(".souls_scratchpad").join("reports");
     std::fs::create_dir_all(&dir)
         .map_err(|e| io::Error::other(format!("Falha ao criar reports_dir: {}", e)))?;
 
@@ -514,7 +514,7 @@ async fn fetch_resume_f3_candidates(spreadsheet_id: &str) -> io::Result<Vec<Batc
 }
 
 fn feedback_bmad_report_path(root_dir: &Path) -> io::Result<PathBuf> {
-    let reports_dir = root_dir.join(".soda_scratchpad").join("reports");
+    let reports_dir = root_dir.join(".souls_scratchpad").join("reports");
     std::fs::create_dir_all(&reports_dir)?;
     Ok(reports_dir.join("_FEEDBACK_BMAD_E2E.md"))
 }
@@ -2885,7 +2885,7 @@ async fn main() -> io::Result<()> {
         info!(repo_id = %repo_id, "E2E: iniciando F3 → F4 (munição real)");
     }
 
-    let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root_dir.join(".souls_data").join("souls_heuristic_vault.db");
     let conn = Connection::open(&db_path).map_err(|e| {
         io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
     })?;

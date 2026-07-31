@@ -641,7 +641,7 @@ async fn main() -> io::Result<()> {
     let root_dir = workspace_root()?;
     dotenvy::from_path(root_dir.join(".env")).ok();
 
-    let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root_dir.join(".souls_data").join("souls_heuristic_vault.db");
     if let Some(parent) = db_path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }

@@ -35,13 +35,18 @@ fn main() {
             };
 
             let project_root = resolve_project_root();
+            let agentgateway_spec = ProgramSpec::global("agentgateway.exe");
+            ensure_program_path_exists(&agentgateway_spec)?;
             let agentgateway = spawn_supervised(
-                ProgramSpec::global("agentgateway.exe"),
+                agentgateway_spec,
                 vec!["-f".to_string(), "gateway-config.yaml".to_string()],
                 project_root.clone(),
             );
+
+            let tcp_proxy_spec = ProgramSpec::path(bin_dir.join("agentgateway_tcp_proxy.exe"));
+            ensure_program_path_exists(&tcp_proxy_spec)?;
             let tcp_proxy = spawn_supervised(
-                ProgramSpec::path(bin_dir.join("agentgateway_tcp_proxy.exe")),
+                tcp_proxy_spec,
                 vec![
                     "--listen".to_string(),
                     "127.0.0.1:3000".to_string(),

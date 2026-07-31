@@ -23,10 +23,10 @@ description: SODA Workspace Map & Territorial Governance (Canon v5.1 - Revisado)
 - `.vscode/` -> Perfis de workspace, tarefas e debugger local.
 
 ### [ZONA 2: ESTADO DA MÁQUINA E CACHE] *(Ignorados no Git Principal)*
-- `.soda_data/` -> [L2/L3 Memory] SQLite transacional (`soda_state.db` / `soda_heuristic_vault.db`) e LanceDB vetorial.
-- `.soda_cache/` -> Chunks temporários, hashes de arquivos e tokens.
+- `.souls_data/` -> [L2/L3 Memory] SQLite transacional (`souls_state.db` / `souls_heuristic_vault.db`) e LanceDB vetorial.
+- `.souls_cache/` -> Chunks temporários, hashes de arquivos e tokens.
 - `.soda_sandbox/` -> Sandboxing para execução segura de módulos externos.
-- `.soda_scratchpad/reports/` -> **OBRIGATÓRIO:** Destino exclusivo de outputs textuais da IA (Ex: os relatórios de execução `_PHASE_REPORT_...txt`).
+- `.souls_scratchpad/reports/` -> **OBRIGATÓRIO:** Destino exclusivo de outputs textuais da IA (Ex: os relatórios de execução `_PHASE_REPORT_...txt`).
 
 ### [ZONA 3: O CÂNONE E MEMÓRIA DE PRODUTO] *(Repositório Rígido de Documentação)*
 - `.archive/` -> Arquivo Frio / Histórico Forense do workspace. Destino legítimo para relatórios congelados, scripts órfãos desativados, dumps de contexto e artefatos históricos fora do caminho crítico do Produto.

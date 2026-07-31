@@ -3,29 +3,26 @@
 // Transmutação pura da "Alma Matemática" do `third_party/lean-ctx/` (cadáver READ-ONLY).
 // Este módulo é 100% nativo: zero dependência de `rmcp`, `axum`, `ratatui`, `crossterm`,
 // `lettre`, `jsonwebtoken`, `rten`, `tokio-postgres` ou qualquer toxidade do cadáver.
-//
-// Funções移植adas (mapa de origem → destino):
-//   - `strip_ansi` / `ansi_density`  ← lean-ctx/src/core/compressor.rs
-//   - `dot_flatten`                  ← NOVO (síntese do formato LEAN canônico)
-//   - `myers_diff`                   ← lean-ctx/src/core/compressor.rs::diff_content
-//   - `aggressive_compress`          ← lean-ctx/src/core/compressor.rs
-//   - `lightweight_cleanup`          ← lean-ctx/src/core/compressor.rs
-//   - `compress_to_lean`             ← NOVO (orquestrador nativo)
-//   - `read_to_lean`                 ← NOVO (file IO + compress)
-//
-// Princípio de pureza: apenas `serde_json` (já no workspace), `similar` 2.7.0
-// (adicionado como dep direta em T1.6) e a stdlib. Nenhuma crate do cadáver.
 
 use std::path::Path;
 
 pub mod ansi_filter;
+pub mod dedup;
 pub mod dot_flatten;
 pub mod myers_diff;
+pub mod search;
+pub mod smart_read;
 pub mod text_compress;
 
 pub use ansi_filter::{ansi_density, strip_ansi};
+pub use dedup::{
+    clear_session_cache, clear_session_dedup_cache, deduplicate_blocks, deduplicate_blocks_session,
+    SESSION_DEDUP_CACHE,
+};
 pub use dot_flatten::dot_flatten;
 pub use myers_diff::myers_diff;
+pub use search::{format_lean_notation, search_lean, SearchMatch};
+pub use smart_read::{count_tokens, smart_read_text};
 pub use text_compress::{aggressive_compress, lightweight_cleanup};
 
 /// Limite rígido de leitura de arquivo: 5 MB.
@@ -70,9 +67,6 @@ mod tests {
 
     #[test]
     fn compress_to_lean_removes_ansi_and_comments() {
-        // IMPORTANTE: aggressive_compress remove apenas linhas INTEIRAS de comentário
-        // (que começam com `//` etc.), não fragmentos in-line. Aqui a linha
-        // "// debug print" é uma linha de comentário pura.
         let raw = "\x1b[31mERROR\x1b[0m\n// debug print\nreal line\n";
         let out = compress_to_lean(raw, Some("rs"));
         assert!(!out.contains("\x1b[31m"), "ANSI should be stripped: {out}");
@@ -82,9 +76,6 @@ mod tests {
 
     #[test]
     fn read_to_lean_rejects_oversized_file() {
-        // Não conseguimos criar 5MB+ em memória sem custo; testamos via path inexistente
-        // porque o erro de I/O é emitido antes do cap check. Em ambiente real, o cap é
-        // exercitado em testes de integração com fixtures grandes.
         let bogus = Path::new("__no_such_file_lean_vacuum__.rs");
         assert!(read_to_lean(bogus).is_err());
     }

@@ -13,7 +13,7 @@ description: "Formaliza a máquina de estados (Enums) do SQLite e o fluxo das 4 
 Aceito (Ativo, Inegociável e Fundacional para a Fábrica SODA V4)
 
 #### Contexto Técnico
-A extração de dados e a análise profunda de repositórios operam sob condições hostis (falhas de rede, limites de taxa de APIs, restrições de memória). Para garantir a integridade da "Matriz Mestre" (SSOT) de 85 colunas (incluindo campos de governança como `status_atualizacao`, `status_fase` e `embargo_status`), o sistema exige checkpoints precisos. A documentação anterior estava defasada em relação aos Enums físicos gravados no banco de dados SQLite (`soda_heuristic_vault.db`). A arquitetura exige que a "Lei" (documentação) reflita estritamente o "Metal" (o código Rust implementado).
+A extração de dados e a análise profunda de repositórios operam sob condições hostis (falhas de rede, limites de taxa de APIs, restrições de memória). Para garantir a integridade da "Matriz Mestre" (SSOT) de 85 colunas (incluindo campos de governança como `status_atualizacao`, `status_fase` e `embargo_status`), o sistema exige checkpoints precisos. A documentação anterior estava defasada em relação aos Enums físicos gravados no banco de dados SQLite (`souls_heuristic_vault.db`). A arquitetura exige que a "Lei" (documentação) reflita estritamente o "Metal" (o código Rust implementado).
 
 #### Decisão Arquitetural (A Máquina de Estados Físicos)
 O controle transacional do pipeline e o *Self-Healing* do sistema obedecem exclusivamente à taxonomia de Enums abaixo, extraída do ambiente físico em Rust:

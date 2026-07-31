@@ -96,7 +96,7 @@ fn try_extract_project_name_from_repo_url(repo_url: &str) -> Option<String> {
 
 fn short_circuit_cleanup_sqlite(project_name: &str) -> Result<usize, String> {
     let root = workspace_root().map_err(|e| e.to_string())?;
-    let db_path = root.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root.join(".souls_data").join("souls_heuristic_vault.db");
     let conn =
         Connection::open(&db_path).map_err(|e| format!("Falha ao abrir vault {}: {e}", db_path.display()))?;
     match conn.execute("DELETE FROM artefatos_brutos WHERE repo_id = ?1", [project_name]) {
@@ -828,7 +828,7 @@ async fn main() -> io::Result<()> {
     let watcher = DaemonWatcher {
         sheets: Arc::new(SheetsMcpClient),
         dispatcher: Arc::new(SqliteBootstrapDispatcher::new(
-            workspace_root()?.join(".soda_data").join("soda_heuristic_vault.db"),
+            workspace_root()?.join(".souls_data").join("souls_heuristic_vault.db"),
         )),
         guard: BackoffGuard {
             policy: RetryPolicy {

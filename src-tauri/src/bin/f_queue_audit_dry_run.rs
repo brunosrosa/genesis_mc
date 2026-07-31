@@ -146,7 +146,7 @@ fn is_safe_sql_ident(s: &str) -> bool {
 }
 
 fn open_vault_db(root_dir: &Path) -> io::Result<Connection> {
-    let db_path = root_dir.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root_dir.join(".souls_data").join("souls_heuristic_vault.db");
     Connection::open(&db_path).map_err(|e| {
         io::Error::other(format!(
             "Falha ao abrir vault em {}: {}",

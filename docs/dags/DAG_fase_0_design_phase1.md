@@ -54,7 +54,7 @@ Zero escrita estrutural do checkout toca o SSD do host.
 
 **Lei Dura:** O output de todos os Sidecars Efêmeros DEVE trafegar via **IPC Zero-Copy**
 (captura de `stdout` via `tokio::process::Command`). Dados transitam como `Vec<u8>` na RAM
-e são injetados diretamente como blobs no `soda_heuristic_vault.db` (SQLite).
+e são injetados diretamente como blobs no `souls_heuristic_vault.db` (SQLite).
 A pasta `_RAW_DATA` está **morta**.
 
 ### PT-3: PROIBIDO BLOQUEAR O EVENT LOOP DO TOKIO

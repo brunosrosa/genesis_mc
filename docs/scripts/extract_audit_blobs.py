@@ -32,7 +32,7 @@ CANDIDATE_PAYLOAD_COLUMNS = [
 def parse_args() -> argparse.Namespace:
     # parents[0]=scripts, parents[1]=docs, parents[2]=souls_mc (raiz)
     root = Path(__file__).resolve().parents[2]
-    default_db = root / ".soda_data" / "soda_heuristic_vault.db"
+    default_db = root / ".souls_data" / "souls_heuristic_vault.db"
     default_reports = root / "docs" / "audits" / "blobs"
 
     parser = argparse.ArgumentParser(
@@ -43,7 +43,7 @@ def parse_args() -> argparse.Namespace:
         "--db-path",
         type=Path,
         default=default_db,
-        help="Caminho do SQLite do vault heuristico. Default = raiz/.soda_data/soda_heuristic_vault.db",
+        help="Caminho do SQLite do vault heuristico. Default = raiz/.souls_data/souls_heuristic_vault.db",
     )
     parser.add_argument(
         "--reports-dir",

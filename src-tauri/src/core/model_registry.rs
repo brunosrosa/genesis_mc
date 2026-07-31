@@ -545,7 +545,7 @@ pub fn resolve_db_path() -> PathBuf {
     } else {
         cwd
     };
-    root.join(".soda_data").join("soda_heuristic_vault.db")
+    root.join(".souls_data").join("souls_heuristic_vault.db")
 }
 
 pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
@@ -554,7 +554,7 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     }
 
     let conn = Connection::open(db_path)
-        .map_err(|e| format!("Falha ao abrir soda_heuristic_vault.db: {e}"))?;
+        .map_err(|e| format!("Falha ao abrir souls_heuristic_vault.db: {e}"))?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS model_registry (
@@ -635,7 +635,7 @@ pub fn is_architecture_supported(arch: &str) -> bool {
 pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Result<usize, String> {
     let mut scanned_paths = Vec::new();
 
-    for entry in WalkDir::new(models_dir).into_iter().flatten() {
+    for entry in WalkDir::new(models_dir).max_depth(5).into_iter().flatten() {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
@@ -785,7 +785,7 @@ pub fn fetch_approved_tier1_models(conn: &Connection) -> Result<Vec<PathBuf>, St
 /// Coleta modelos locais RECURSIVAMENTE via WalkDir ignorando projetores multimodais (mmproj).
 pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    for entry in WalkDir::new(models_dir).into_iter().flatten() {
+    for entry in WalkDir::new(models_dir).max_depth(5).into_iter().flatten() {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
@@ -1129,6 +1129,26 @@ mod tests {
             est.total_estimated_vram_bytes,
             2_700_000_000 + 614_400_000 + (256 * 1024 * 1024 + 30_000 * 16 * 64) + lora_bytes
         );
+    }
+
+    #[test]
+    fn test_collect_local_models_respects_max_depth_5() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path();
+
+        // Profundidade 5: root / d1 / d2 / d3 / d4 / model_l5.gguf
+        let l5_dir = root.join("d1").join("d2").join("d3").join("d4");
+        std::fs::create_dir_all(&l5_dir).unwrap();
+        std::fs::write(l5_dir.join("model_l5.gguf"), b"GGUF").unwrap();
+
+        // Profundidade 6 (acima de max_depth 5): root / d1 / d2 / d3 / d4 / d5 / model_l6.gguf
+        let l6_dir = l5_dir.join("d5");
+        std::fs::create_dir_all(&l6_dir).unwrap();
+        std::fs::write(l6_dir.join("model_l6.gguf"), b"GGUF").unwrap();
+
+        let models = collect_local_models(root);
+        assert!(models.iter().any(|p| p.file_name().unwrap() == "model_l5.gguf"));
+        assert!(!models.iter().any(|p| p.file_name().unwrap() == "model_l6.gguf"));
     }
 }
 

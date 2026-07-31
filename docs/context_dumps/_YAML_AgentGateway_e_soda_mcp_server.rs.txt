@@ -1,4 +1,4 @@
-_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-28 20:10:41
+_YAML_AgentGateway_e_soda_mcp_server.rs Gerado em: 2026-07-30 00:24:10
 
 ### ====================================================================================================
 ARQUIVO: gateway-config.yaml
@@ -16,68 +16,38 @@ binds:
                 allowOrigins: ['*']
                 allowHeaders: ['*']
                 exposeHeaders: ['Mcp-Session-Id']
-              mcpAuthorization:
-                # VÁLVULA INTELIGENTE CEL (FIREWALL L7) (v1.3 Zero-Brand & SODA Data Governance)
-                # Permite a passagem do namespace souls_ctx_ e protege o handshake de inicialização
-                rules:
-                  - >
-                    !has(mcp.tool)
-                    || mcp.tool.name.startsWith("souls_")
-                    || mcp.tool.name.startsWith("souls_ctx_")
-                    || mcp.tool.name.startsWith("soda_")
-                    || mcp.tool.name.startsWith("core_")
-                    || mcp.tool.name.startsWith("mem_")
-                    || !mcp.tool.name.matches("^(.*delete.*|clear_values)$")
             backends:
               - mcp:
-                  failureMode: failClosed
                   targets:
                     - name: souls
                       stdio:
-                        cmd: 'Z:/souls_mc/src-tauri/target/debug/lean-ctx.exe'
-                        args: []
-                        env:
-                          LEAN_CTX_PROJECT_ROOT: 'Z:/souls_mc'
-                          LEAN_CTX_DATA_DIR: 'Z:/souls_mc/.soda_data'
-                          LEAN_CTX_CACHE_DIR: 'Z:/souls_mc/.soda_cache'
-                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
-                    - name: soda
-                      stdio:
                         cmd: 'Z:/souls_mc/src-tauri/target/debug/souls_mcp_server.exe'
-                        args: []
-                        env:
-                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32;C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin/x64'
                     - name: core
                       stdio:
                         cmd: 'Z:/souls_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
                         args: ['--', 'Z:/souls_mc/src-tauri/target/debug/sequential-thinking-server.exe']
-                        env:
-                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
-                          RUST_LOG: 'off'
                     - name: mem
                       stdio:
                         cmd: 'Z:/souls_mc/src-tauri/target/debug/mcp_stdio_guard.exe'
-                        args: ['--', 'Z:/souls_mc/src-tauri/target/debug/memory-mcp-rs.exe', '--db-path', 'Z:/souls_mc/.soda_data/soda_state.db']
-                        env:
-                          PATH: 'C:/Users/rosas/.cargo/bin;C:/Windows/System32'
+                        args: ['--', 'Z:/souls_mc/src-tauri/target/debug/memory-mcp-rs.exe', '--db-path', 'Z:/souls_mc/.souls_data/souls_state.db']
 
 ### ====================================================================================================
 ARQUIVO: mcp_config.json
 CAMINHO: C:\Users\rosas\.gemini\config\mcp_config.json
 ---
 {
-  "mcpServers": {
-    "souls": {
-      "command": "mcp-remote.cmd",
-      "args": [
-        "http://127.0.0.1:3000/"
-      ],
-      "env": {
-        "AG_BRIDGE_URL": "http://127.0.0.1:3000",
-        "GPU_RASTERIZATION": "true",
-        "ZERO_COPY_MODE": "1"
-      },
-      "disabled": false
-    }
-  }
+    "mcpServers":  {
+                       "souls":  {
+                                     "args":  [
+                                                  "http://127.0.0.1:3001/"
+                                              ],
+                                     "env":  {
+                                                 "AG_BRIDGE_URL":  "http://127.0.0.1:3001",
+                                                 "ZERO_COPY_MODE":  "1",
+                                                 "GPU_RASTERIZATION":  "true"
+                                             },
+                                     "command":  "mcp-remote.cmd",
+                                     "disabled":  false
+                                 }
+                   }
 }

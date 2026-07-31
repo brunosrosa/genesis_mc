@@ -363,7 +363,7 @@ fn clone_or_fetch_to_workspace_blocking(
     })?;
     let (owner, repo) = github_owner_repo(&repo_url).map_err(map_tracker_to_clone_error)?;
     let scratchpad_root = workspace_root()
-        .join(".soda_scratchpad")
+        .join(".souls_scratchpad")
         .join("gitoxide_cache")
         .join(owner)
         .join(repo);

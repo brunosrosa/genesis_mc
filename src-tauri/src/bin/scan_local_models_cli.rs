@@ -10,7 +10,7 @@ use souls_mc_lib::core::model_registry::{
 
 fn collect_model_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    for entry in WalkDir::new(dir).into_iter().flatten() {
+    for entry in WalkDir::new(dir).max_depth(5).into_iter().flatten() {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
@@ -28,7 +28,7 @@ fn init_sqlite_vault(db_path: &Path) -> Connection {
     if let Some(parent) = db_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let conn = Connection::open(db_path).expect("Falha ao abrir soda_heuristic_vault.db");
+    let conn = Connection::open(db_path).expect("Falha ao abrir souls_heuristic_vault.db");
     
     conn.execute(
         "CREATE TABLE IF NOT EXISTS local_models (

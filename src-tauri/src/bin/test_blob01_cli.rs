@@ -18,7 +18,7 @@ fn workspace_root() -> PathBuf {
 }
 
 fn output_report_path(root: &Path) -> PathBuf {
-    root.join(".soda_scratchpad")
+    root.join(".souls_scratchpad")
         .join("reports")
         .join("_TESTE_BLOB_01.md")
 }
@@ -39,11 +39,11 @@ fn to_io_error(context: &str, err: impl std::fmt::Display) -> io::Error {
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let root = workspace_root();
-    let db_path = root.join(".soda_data").join("soda_heuristic_vault.db");
+    let db_path = root.join(".souls_data").join("souls_heuristic_vault.db");
     let report_path = output_report_path(&root);
 
     let conn = Connection::open(&db_path)
-        .map_err(|err| to_io_error("Falha ao abrir soda_heuristic_vault.db", err))?;
+        .map_err(|err| to_io_error("Falha ao abrir souls_heuristic_vault.db", err))?;
     let repo_url = load_repo_url(&conn, TARGET_REPO_ID)?;
     let parsed_url = Url::parse(&repo_url)
         .map_err(|err| to_io_error("Falha ao parsear repo_url do banco", err))?;
