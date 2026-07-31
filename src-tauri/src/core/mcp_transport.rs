@@ -259,12 +259,14 @@ mod tests {
         assert!(encoded.contains("\"id\":42"));
         assert!(encoded.contains("\"text\":\"hello world\""));
 
-        // Decode: parseia o envelope de volta.
+        // Decode: parseia o envelope de requisição de volta.
+        let raw_req = r#"{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"test"}}"#;
         let request = transport
-            .decode_envelope(&encoded)
+            .decode_envelope(raw_req)
             .expect("decode should succeed");
         assert_eq!(request.jsonrpc, "2.0");
         assert_eq!(request.id, json!(42));
+        assert_eq!(request.method, "tools/call");
     }
 
     #[test]

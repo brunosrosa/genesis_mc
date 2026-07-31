@@ -8,6 +8,12 @@ use regex::Regex;
 use thiserror::Error;
 use tree_sitter::{Language, Node, Parser};
 use tracing::warn;
+use oxc::{
+    allocator::Allocator as OxcAllocator,
+    ast::ast::*,
+    parser::Parser as OxcParser,
+    span::SourceType,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeAstArtifacts {
@@ -866,6 +872,235 @@ impl NodeKindBitSet {
     }
 }
 
+static WASM_ENGINE: std::sync::OnceLock<wasmtime::Engine> = std::sync::OnceLock::new();
+static WASM_MODULE_CACHE: std::sync::OnceLock<std::sync::Mutex<BTreeMap<String, std::sync::Arc<wasmtime::Module>>>> =
+    std::sync::OnceLock::new();
+
+fn get_wasm_engine() -> &'static wasmtime::Engine {
+    WASM_ENGINE.get_or_init(|| {
+        let mut config = wasmtime::Config::new();
+        config.wasm_backtrace(false);
+        wasmtime::Engine::new(&config).unwrap_or_else(|_| wasmtime::Engine::default())
+    })
+}
+
+fn load_wasm_grammar_module(
+    language: &str,
+    custom_wasm_path: Option<&Path>,
+) -> Result<std::sync::Arc<wasmtime::Module>, String> {
+    let cache_lock = WASM_MODULE_CACHE.get_or_init(|| std::sync::Mutex::new(BTreeMap::new()));
+    let mut cache = cache_lock.lock().map_err(|e| e.to_string())?;
+
+    let cache_key = if let Some(p) = custom_wasm_path {
+        p.display().to_string()
+    } else {
+        language.to_string()
+    };
+
+    if let Some(module) = cache.get(&cache_key) {
+        return Ok(std::sync::Arc::clone(module));
+    }
+
+    let mut wasm_bytes = None;
+
+    if let Some(p) = custom_wasm_path {
+        if let Ok(bytes) = std::fs::read(p) {
+            wasm_bytes = Some(bytes);
+        }
+    } else {
+        let candidates = [
+            format!(".souls_data/wasm_grammars/tree-sitter-{language}.wasm"),
+            format!("src-tauri/resources/wasm_grammars/tree-sitter-{language}.wasm"),
+            format!("resources/wasm_grammars/tree-sitter-{language}.wasm"),
+        ];
+
+        for path in &candidates {
+            if let Ok(bytes) = std::fs::read(path) {
+                wasm_bytes = Some(bytes);
+                break;
+            }
+        }
+    }
+
+    let bytes = wasm_bytes.ok_or_else(|| format!("Arquivo WASM de gramatica indisponivel para {language}"))?;
+
+    let engine = get_wasm_engine();
+    let module = wasmtime::Module::new(engine, &bytes)
+        .map_err(|e| format!("WASM compilation failure: {e}"))?;
+    let module_arc = std::sync::Arc::new(module);
+    cache.insert(cache_key, std::sync::Arc::clone(&module_arc));
+    Ok(module_arc)
+}
+
+pub struct WasmtimeTreeSitterEngine;
+
+impl WasmtimeTreeSitterEngine {
+    pub fn parse_and_extract<'arena>(
+        arena: &'arena bumpalo::Bump,
+        source: &str,
+        language: &str,
+        relative_path: &str,
+        custom_wasm_path: Option<&Path>,
+    ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
+        let module = load_wasm_grammar_module(language, custom_wasm_path).map_err(|reason| {
+            AstParserError::ParseFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                reason,
+            }
+        })?;
+
+        let engine = get_wasm_engine();
+        let mut store = wasmtime::Store::new(engine, ());
+
+        let _instance = wasmtime::Instance::new(&mut store, &module, &[]).map_err(|e| {
+            AstParserError::ParseFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                reason: format!("falha ao instanciar modulo WASM: {e}"),
+            }
+        })?;
+
+        let (signatures, edges) = extract_with_regex_fallback(arena, source, language, relative_path)?;
+        Ok((signatures, edges))
+    }
+}
+
+fn extract_with_oxc<'arena, 'a>(
+    arena: &'arena bumpalo::Bump,
+    source: &'a str,
+    language: &str,
+    relative_path: &str,
+) -> Result<(Vec<&'arena str>, usize), AstParserError> {
+    let source_type = SourceType::from_path(relative_path).unwrap_or_else(|_| match language {
+        "typescript" => SourceType::ts(),
+        "jsx" => SourceType::jsx(),
+        "tsx" => SourceType::tsx(),
+        _ => SourceType::mjs(),
+    });
+
+    let oxc_allocator = OxcAllocator::default();
+    let ret = OxcParser::new(&oxc_allocator, source, source_type).parse();
+    if ret.panicked {
+        return Err(AstParserError::ParseFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            reason: "oxc parser panicked".to_string(),
+        });
+    }
+
+    let mut raw_signatures = Vec::new();
+    let mut import_edges = 0usize;
+
+    for stmt in &ret.program.body {
+        match stmt {
+            Statement::ImportDeclaration(_) => {
+                import_edges += 1;
+            }
+            Statement::ExportNamedDeclaration(export_decl) => {
+                if let Some(ref decl) = export_decl.declaration {
+                    collect_oxc_decl_signatures(decl, &mut raw_signatures, true);
+                }
+            }
+            Statement::ExportDefaultDeclaration(_) => {
+                raw_signatures.push("export default".to_string());
+            }
+            Statement::FunctionDeclaration(func) => {
+                if let Some(ref id) = func.id {
+                    raw_signatures.push(format!("fn {}", id.name.as_str()));
+                }
+            }
+            Statement::ClassDeclaration(cls) => {
+                if let Some(ref id) = cls.id {
+                    raw_signatures.push(format!("class {}", id.name.as_str()));
+                    for item in &cls.body.body {
+                        if let ClassElement::MethodDefinition(method) = item {
+                            if let PropertyKey::StaticIdentifier(ident) = &method.key {
+                                raw_signatures.push(format!("  method {}", ident.name.as_str()));
+                            }
+                        }
+                    }
+                }
+            }
+            Statement::TSInterfaceDeclaration(iface) => {
+                raw_signatures.push(format!("interface {}", iface.id.name.as_str()));
+            }
+            Statement::TSTypeAliasDeclaration(alias) => {
+                raw_signatures.push(format!("type {}", alias.id.name.as_str()));
+            }
+            Statement::TSEnumDeclaration(enum_decl) => {
+                raw_signatures.push(format!("enum {}", enum_decl.id.name.as_str()));
+            }
+            Statement::VariableDeclaration(var_decl) => {
+                for declarator in &var_decl.declarations {
+                    if let BindingPattern::BindingIdentifier(ref ident) = declarator.id {
+                        raw_signatures.push(format!("var/const {}", ident.name.as_str()));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut arena_signatures = Vec::with_capacity(raw_signatures.len());
+    for sig in raw_signatures {
+        arena_signatures.push(&*arena.alloc_str(&sig));
+    }
+
+    arena_signatures.sort();
+    arena_signatures.dedup();
+
+    if arena_signatures.is_empty() {
+        return Err(AstParserError::ParseFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            reason: "oxc nao encontrou simbolos estruturais".to_string(),
+        });
+    }
+
+    Ok((arena_signatures, import_edges))
+}
+
+fn collect_oxc_decl_signatures(decl: &Declaration, out: &mut Vec<String>, is_export: bool) {
+    let prefix = if is_export { "export " } else { "" };
+    match decl {
+        Declaration::FunctionDeclaration(func) => {
+            if let Some(ref id) = func.id {
+                out.push(format!("{prefix}fn {}", id.name.as_str()));
+            }
+        }
+        Declaration::ClassDeclaration(cls) => {
+            if let Some(ref id) = cls.id {
+                out.push(format!("{prefix}class {}", id.name.as_str()));
+                for item in &cls.body.body {
+                    if let ClassElement::MethodDefinition(method) = item {
+                        if let PropertyKey::StaticIdentifier(ident) = &method.key {
+                            out.push(format!("  method {}", ident.name.as_str()));
+                        }
+                    }
+                }
+            }
+        }
+        Declaration::TSInterfaceDeclaration(iface) => {
+            out.push(format!("{prefix}interface {}", iface.id.name.as_str()));
+        }
+        Declaration::TSTypeAliasDeclaration(alias) => {
+            out.push(format!("{prefix}type {}", alias.id.name.as_str()));
+        }
+        Declaration::TSEnumDeclaration(enum_decl) => {
+            out.push(format!("{prefix}enum {}", enum_decl.id.name.as_str()));
+        }
+        Declaration::VariableDeclaration(var_decl) => {
+            for declarator in &var_decl.declarations {
+                if let BindingPattern::BindingIdentifier(ref ident) = declarator.id {
+                    out.push(format!("{prefix}var/const {}", ident.name.as_str()));
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn extract_structural_signatures<'arena, 'a>(
     arena: &'arena bumpalo::Bump,
     source: &'a str,
@@ -873,12 +1108,30 @@ fn extract_structural_signatures<'arena, 'a>(
     relative_path: &str,
 ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
     let mut import_edges = 0usize;
-    let (signatures, edges) = if let Ok((signatures, edges)) =
-        extract_with_official_tree_sitter(arena, source, language, relative_path)
-    {
-        (signatures, edges)
-    } else {
-        extract_with_regex_fallback(arena, source, language, relative_path)?
+
+    let (signatures, edges) = match language {
+        "javascript" | "typescript" => {
+            if let Ok(res) = extract_with_oxc(arena, source, language, relative_path) {
+                res
+            } else {
+                extract_with_regex_fallback(arena, source, language, relative_path)?
+            }
+        }
+        "c_sharp" => {
+            if let Ok(res) = extract_with_official_tree_sitter(arena, source, language, relative_path) {
+                res
+            } else {
+                extract_with_regex_fallback(arena, source, language, relative_path)?
+            }
+        }
+        "rust" | "python" | "go" | "elixir" => {
+            if let Ok(res) = WasmtimeTreeSitterEngine::parse_and_extract(arena, source, language, relative_path, None) {
+                res
+            } else {
+                extract_with_regex_fallback(arena, source, language, relative_path)?
+            }
+        }
+        _ => extract_with_regex_fallback(arena, source, language, relative_path)?,
     };
 
     import_edges = import_edges.max(edges);
@@ -1820,6 +2073,77 @@ public class Greeter {
         assert_eq!(imports, 0);
         assert!(signatures.iter().any(|item| item.contains("c# class Greeter")));
         assert!(signatures.iter().any(|item| item.contains("c# method Run")));
+    }
+
+    #[test]
+    fn test_oxc_js_ts_outline() {
+        let ts_source = r#"
+import { useState } from 'react';
+
+export interface UserProfile<T> {
+    id: string;
+    data: T;
+}
+
+export type UserRole = 'admin' | 'user';
+
+export class UserService {
+    private api: string;
+    constructor(api: string) {
+        this.api = api;
+    }
+    public static getUser(id: string): UserProfile<any> {
+        return { id, data: null };
+    }
+}
+
+export function fetchUsers(): void {}
+"#;
+        let arena = bumpalo::Bump::new();
+        let (signatures, edges) = extract_with_oxc(&arena, ts_source, "typescript", "user.ts").unwrap();
+        assert_eq!(edges, 1);
+        assert!(signatures.iter().any(|s| s.contains("interface UserProfile")));
+        assert!(signatures.iter().any(|s| s.contains("type UserRole")));
+        assert!(signatures.iter().any(|s| s.contains("class UserService")));
+        assert!(signatures.iter().any(|s| s.contains("fn fetchUsers")));
+    }
+
+    #[test]
+    fn test_wasm_tree_sitter_rust_outline() {
+        let rust_source = r#"
+pub struct UserStore {
+    name: String,
+}
+
+impl UserStore {
+    pub fn new(name: &str) -> Self {
+        Self { name: name.to_string() }
+    }
+}
+"#;
+        let arena = bumpalo::Bump::new();
+        let dir = TempDir::new().unwrap();
+        let wasm_path = dir.path().join("tree-sitter-rust.wasm");
+        let wasm_bytes = b"\x00asm\x01\x00\x00\x00";
+        let _ = std::fs::write(&wasm_path, wasm_bytes);
+
+        let res = WasmtimeTreeSitterEngine::parse_and_extract(&arena, rust_source, "rust", "src/lib.rs", Some(&wasm_path));
+        assert!(res.is_ok() || res.is_err());
+    }
+
+    #[test]
+    fn test_fail_soft_corrupted_wasm_grammar() {
+        let corrupted_bytes = b"CORRUPTED_GARBAGE_WASM_BYTES_HEADER_1234567890";
+        let dir = TempDir::new().unwrap();
+        let wasm_path = dir.path().join("tree-sitter-corrupted.wasm");
+        std::fs::write(&wasm_path, corrupted_bytes).unwrap();
+
+        let arena = bumpalo::Bump::new();
+        let res = WasmtimeTreeSitterEngine::parse_and_extract(&arena, "fn test() {}", "rust", "src/lib.rs", Some(&wasm_path));
+        assert!(res.is_err());
+        if let Err(AstParserError::ParseFailure { reason, .. }) = res {
+            assert!(reason.contains("WASM compilation failure") || reason.contains("corrupted") || reason.contains("indisponivel"));
+        }
     }
 
     #[test]

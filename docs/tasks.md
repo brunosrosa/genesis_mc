@@ -20,3 +20,20 @@
     2. `test_bitnet_daemon_lifecycle_sigkill`
     3. `test_cuda_msvc_build_compatibility`
   - **DoD Final:** `cargo check --features llama_backend` e `cargo clippy --features llama_backend -- -D warnings` executados sem erros ou warnings.
+
+---
+
+## Milestone: Universalização AST Poliglota & OXC Routing
+
+- [ ] **Task 1: Roteamento de Alto Rendimento JS/TS via OXC em `ast_parser.rs`**
+  - **DoD:** Implementar `extract_with_oxc` em `ast_parser.rs` utilizando `oxc::allocator::Allocator` e `oxc::parser::Parser`. Rotear extensões `.js`, `.ts`, `.jsx`, `.tsx` diretamente para a AST do OXC com alocação zero-copy na arena.
+
+- [ ] **Task 2: Executor Sandbox Wasmtime para Gramáticas Tree-Sitter WASM**
+  - **DoD:** Implementar `WasmtimeTreeSitterEngine` em `ast_parser.rs` utilizando a crate `wasmtime`. Carregar gramáticas `.wasm` de `.souls_data/wasm_grammars/` ou `resources/wasm_grammars/` de forma lazy, capturando qualquer trap/erro e retornando fallback limpo sem panic no host.
+
+- [ ] **Task 3: Atualização de Rotas e Fallback Fail-Soft em `extract_structural_signatures`**
+  - **DoD:** Rotear JS/TS -> OXC, C# -> Native Tree-Sitter, Rust/Python/Go/Elixir -> WASM Tree-Sitter (com fallback estrito se o arquivo `.wasm` estiver ausente).
+
+- [ ] **Task 4: Cobertura de Testes TDD Mandatórios**
+  - **DoD:** Implementar os 3 testes unitários mandatórios (`test_oxc_js_ts_outline`, `test_wasm_tree_sitter_rust_outline`, `test_fail_soft_corrupted_wasm_grammar`) e obter Exit Code 0 em `cargo test --lib --features "tauri-app,gateway_ccr,llama_backend"`.
+

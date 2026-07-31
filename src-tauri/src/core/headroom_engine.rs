@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use dashmap::DashMap;
 use sha2::{Sha256, Digest};
 use thiserror::Error;
@@ -93,11 +93,22 @@ pub fn calculate_headroom_budget_for_model(
     ))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LexerState {
+    Code,
+    String,
+    Char,
+    LineComment,
+    BlockComment,
+}
+
 pub struct CodeCompressor;
 
 impl CodeCompressor {
     /// Lei 2: Poda Semântica Determinística em Rust (Zero-Copy)
     /// Subdivide corpos de funções por `{ /* stubbed */ }` preservando assinaturas.
+    /// Utiliza uma Máquina de Estados de Lexer em uma única passada (Single-pass Lexer State Machine)
+    /// resiliente a aspas, escapes e comentários.
     pub fn compress_ast_zero_copy<'a>(code: &'a str) -> Cow<'a, str> {
         let bytes = code.as_bytes();
         let mut modified = false;
@@ -116,7 +127,7 @@ impl CodeCompressor {
                     || code[i..].starts_with("def "));
 
             if is_func {
-                // Encontra a abertura de chave '{'
+                // Encontra a abertura de chave '{' ignorando chaves em comentários ou strings da própria assinatura
                 let mut brace_start = None;
                 let mut j = i;
                 while j < len {
@@ -132,14 +143,56 @@ impl CodeCompressor {
                 }
 
                 if let Some(start_idx) = brace_start {
-                    // Encontra o encerramento '}' correspondente
+                    // Encontra o encerramento '}' correspondente via Lexer State Machine
                     let mut depth = 1;
                     let mut k = start_idx + 1;
+                    let mut state = LexerState::Code;
+
                     while k < len && depth > 0 {
-                        if bytes[k] == b'{' {
-                            depth += 1;
-                        } else if bytes[k] == b'}' {
-                            depth -= 1;
+                        let b = bytes[k];
+                        match state {
+                            LexerState::Code => {
+                                if b == b'"' {
+                                    state = LexerState::String;
+                                } else if b == b'\'' {
+                                    state = LexerState::Char;
+                                } else if b == b'/' && k + 1 < len && bytes[k + 1] == b'/' {
+                                    state = LexerState::LineComment;
+                                    k += 1;
+                                } else if b == b'/' && k + 1 < len && bytes[k + 1] == b'*' {
+                                    state = LexerState::BlockComment;
+                                    k += 1;
+                                } else if b == b'{' {
+                                    depth += 1;
+                                } else if b == b'}' {
+                                    depth -= 1;
+                                }
+                            }
+                            LexerState::String => {
+                                if b == b'\\' {
+                                    k += 1; // Pula caractere escapado
+                                } else if b == b'"' {
+                                    state = LexerState::Code;
+                                }
+                            }
+                            LexerState::Char => {
+                                if b == b'\\' {
+                                    k += 1; // Pula caractere escapado
+                                } else if b == b'\'' {
+                                    state = LexerState::Code;
+                                }
+                            }
+                            LexerState::LineComment => {
+                                if b == b'\n' {
+                                    state = LexerState::Code;
+                                }
+                            }
+                            LexerState::BlockComment => {
+                                if b == b'*' && k + 1 < len && bytes[k + 1] == b'/' {
+                                    state = LexerState::Code;
+                                    k += 1;
+                                }
+                            }
                         }
                         k += 1;
                     }
@@ -167,12 +220,18 @@ impl CodeCompressor {
     }
 }
 
+pub struct CcrEntry {
+    pub payload: Vec<u8>,
+    pub last_accessed_at: AtomicU64,
+}
+
 /// Lei 3 & 4: CCR Store (Compress-Cache-Retrieve) alocado 100% em Host RAM (Zero-VRAM)
 pub struct SoulsCcrStore {
-    cache: Arc<DashMap<[u8; 16], Vec<u8>>>,
+    cache: Arc<DashMap<[u8; 16], CcrEntry>>,
     max_ram_bytes: usize,
     current_ram_bytes: AtomicUsize,
     vram_bytes_allocated: AtomicUsize,
+    access_counter: AtomicU64,
 }
 
 impl SoulsCcrStore {
@@ -182,6 +241,7 @@ impl SoulsCcrStore {
             max_ram_bytes,
             current_ram_bytes: AtomicUsize::new(0),
             vram_bytes_allocated: AtomicUsize::new(0),
+            access_counter: AtomicU64::new(1),
         }
     }
 
@@ -193,7 +253,8 @@ impl SoulsCcrStore {
         Self::new(max_mb * 1024 * 1024)
     }
 
-    /// Armazena o payload original e retorna o Hash de 16 bytes
+    /// Armazena o payload original e retorna o Hash de 16 bytes.
+    /// Dispara evicção LRU se current_ram_bytes atingir a maré alta de 90%.
     pub fn store(&self, payload: &[u8]) -> [u8; 16] {
         let mut hasher = Sha256::new();
         hasher.update(payload);
@@ -203,18 +264,90 @@ impl SoulsCcrStore {
         hash.copy_from_slice(&digest[..16]);
 
         let payload_len = payload.len();
-        self.current_ram_bytes.fetch_add(payload_len, Ordering::Relaxed);
-        self.cache.insert(hash, payload.to_vec());
+
+        if let Some(old_entry) = self.cache.get(&hash) {
+            let old_len = old_entry.payload.len();
+            self.current_ram_bytes.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |curr| {
+                Some(curr.saturating_sub(old_len))
+            }).ok();
+        }
+
+        let access_time = self.access_counter.fetch_add(1, Ordering::Relaxed);
+        self.current_ram_bytes.fetch_add(payload_len, Ordering::SeqCst);
+
+        self.cache.insert(
+            hash,
+            CcrEntry {
+                payload: payload.to_vec(),
+                last_accessed_at: AtomicU64::new(access_time),
+            },
+        );
 
         // Zero VRAM Footprint Invariante
         self.vram_bytes_allocated.store(0, Ordering::Relaxed);
 
+        // Checagem de Maré Alta (High Watermark: >= 90% do limite max_ram_bytes)
+        let high_watermark = (self.max_ram_bytes * 90) / 100;
+        let target_watermark = (self.max_ram_bytes * 80) / 100;
+
+        if self.current_ram_bytes.load(Ordering::SeqCst) >= high_watermark {
+            self.evict_lru_until(target_watermark);
+        }
+
         hash
     }
 
-    /// Resgata o payload original via Hash de 16 bytes
+    /// Resgata o payload original via Hash de 16 bytes e atualiza o timestamp de acesso
     pub fn retrieve(&self, hash: &[u8; 16]) -> Option<Vec<u8>> {
-        self.cache.get(hash).map(|val| val.value().clone())
+        if let Some(entry) = self.cache.get(hash) {
+            let now = self.access_counter.fetch_add(1, Ordering::Relaxed);
+            entry.last_accessed_at.store(now, Ordering::Relaxed);
+            Some(entry.payload.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Rotina de evicção LRU: expurga registros mais antigos/frios até que current_ram_bytes <= target_bytes
+    pub fn evict_lru_until(&self, target_bytes: usize) {
+        while self.current_ram_bytes.load(Ordering::SeqCst) > target_bytes {
+            // 1. Coleta e clona chaves e timestamps em passo isolado liberando locks do DashMap
+            let mut entries: Vec<([u8; 16], u64)> = self
+                .cache
+                .iter()
+                .map(|kv| (*kv.key(), kv.value().last_accessed_at.load(Ordering::Relaxed)))
+                .collect();
+
+            if entries.is_empty() {
+                break;
+            }
+
+            // 2. Ordena por idade de acesso (LRU)
+            entries.sort_unstable_by_key(|&(_, ts)| ts);
+
+            let mut evicted_any = false;
+            // 3. Remoção individual fora de qualquer laço de travamento
+            for (hash, _) in entries {
+                if self.current_ram_bytes.load(Ordering::SeqCst) <= target_bytes {
+                    break;
+                }
+                if let Some((_, entry)) = self.cache.remove(&hash) {
+                    let len = entry.payload.len();
+                    self.current_ram_bytes.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |curr| {
+                        Some(curr.saturating_sub(len))
+                    }).ok();
+                    evicted_any = true;
+                }
+            }
+
+            if !evicted_any {
+                break;
+            }
+        }
+    }
+
+    pub fn current_ram_bytes(&self) -> usize {
+        self.current_ram_bytes.load(Ordering::Relaxed)
     }
 
     /// Registra footprint de VRAM (deve ser estritamente 0)
@@ -376,5 +509,88 @@ pub fn calculate_total(a: i32, b: i32) -> i32 {
         let loopback_resp = store.intercept_loopback(&tool_json);
         assert!(loopback_resp.is_some());
         assert!(loopback_resp.unwrap().contains("critical_business_logic"));
+    }
+
+    #[test]
+    fn test_ccr_lru_eviction_high_watermark() {
+        let max_bytes = 1000;
+        let store = SoulsCcrStore::new(max_bytes);
+
+        // Insere 10 payloads de 100 bytes = 1000 bytes (excede a maré alta de 90% = 900 bytes)
+        let mut hashes = Vec::new();
+        for i in 0..10 {
+            let mut payload = vec![i as u8; 100];
+            payload[0] = i as u8;
+            hashes.push(store.store(&payload));
+        }
+
+        // Deve ter expurgado os itens mais antigos até a maré segura <= 80% (800 bytes)
+        assert!(store.current_ram_bytes() <= 800);
+
+        // O primeiro item (hashes[0]) deve ter sido ejetado
+        assert!(store.retrieve(&hashes[0]).is_none());
+        // O último item (hashes[9]) deve permanecer
+        assert!(store.retrieve(&hashes[9]).is_some());
+    }
+
+    #[tokio::test]
+    async fn test_souls_ccr_store_lru_eviction() {
+        let max_bytes = 1 * 1024 * 1024; // 1 MB limit
+        let store = Arc::new(SoulsCcrStore::new(max_bytes));
+
+        let low_watermark = (max_bytes * 80) / 100;
+
+        let mut handles = Vec::new();
+        for task_idx in 0..10 {
+            let store_clone = Arc::clone(&store);
+            handles.push(tokio::spawn(async move {
+                for i in 0..50 {
+                    let mut payload = vec![(task_idx * 10 + i) as u8; 4096];
+                    payload[0..4].copy_from_slice(&(task_idx as u32).to_le_bytes());
+                    payload[4..8].copy_from_slice(&(i as u32).to_le_bytes());
+                    store_clone.store(&payload);
+                }
+            }));
+        }
+
+        for h in handles {
+            h.await.expect("Task concorrente finalizou sem pânico");
+        }
+
+        // Dispara uma gravação final para garantir o cruzamento da Maré Alta (90%)
+        let trigger_payload = vec![0xffu8; 8192];
+        store.store(&trigger_payload);
+
+        let final_bytes = store.current_ram_bytes();
+        assert!(
+            final_bytes <= low_watermark + 8192,
+            "current_ram_bytes ({}) excede a maré baixa ({})",
+            final_bytes,
+            low_watermark
+        );
+        assert_eq!(store.vram_bytes_allocated(), 0);
+    }
+
+    #[test]
+    fn test_code_compressor_resilient_scope() {
+        let code = r#"
+fn fn_with_strings_and_comments() {
+    let s = "struct Dummy { field: i32 } // inside string";
+    let c = '{';
+    // Single line comment { ignore me }
+    /* Block comment { ignore me too } */
+    println!("Done: {}", s);
+}
+
+pub fn another_fn() -> i32 {
+    42
+}
+"#;
+        let compressed = CodeCompressor::compress_ast_zero_copy(code);
+        assert!(compressed.contains("fn fn_with_strings_and_comments"));
+        assert!(compressed.contains("/* stubbed */"));
+        assert!(compressed.contains("pub fn another_fn"));
+        assert!(!compressed.contains("struct Dummy"));
+        assert!(!compressed.contains("println!"));
     }
 }

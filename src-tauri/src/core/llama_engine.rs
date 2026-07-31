@@ -432,5 +432,33 @@ mod tests {
         assert!(model_registry::is_architecture_supported("qwen3"));
         assert!(model_registry::is_architecture_supported("gemma4"));
     }
+
+    #[test]
+    fn test_llama_engine_pending_engine_interception() {
+        let engine = LlamaCppEngine;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let fake_path = temp_dir.path().join("bitnet_i2_s.gguf");
+        std::fs::write(&fake_path, b"fake GGUF content").unwrap();
+
+        let req_fake = SoulsInferenceRequest {
+            model_path: fake_path.to_string_lossy().to_string(),
+            system_prompt: "".to_string(),
+            few_shot_examples: vec![],
+            user_query: "test".to_string(),
+            max_tokens: 10,
+            min_p: 0.05,
+            temperature: 0.7,
+            json_schema: None,
+        };
+
+        let err = engine.run_inference(req_fake, None).unwrap_err();
+        match err {
+            InferenceError::ExecutionError(msg) => {
+                assert!(msg.contains("PENDING_ENGINE"), "Mensagem de erro deveria conter PENDING_ENGINE: {msg}");
+                assert!(msg.contains("bitnet.cpp/mamba-ssm"), "Mensagem de erro deveria explicar a causa: {msg}");
+            }
+            _ => panic!("Esperava InferenceError::ExecutionError com PENDING_ENGINE"),
+        }
+    }
 }
 

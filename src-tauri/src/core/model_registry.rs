@@ -685,8 +685,6 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                         .map(|n| n.to_string_lossy().to_lowercase())
                         .unwrap_or_default();
 
-                    let mod_type = infer_module_type(&filename, "");
-
                     if let Some(m) = parse_gguf_metadata_zero_copy(path) {
                         let actual_mod_type = infer_module_type(&filename, &m.family);
 
@@ -1137,6 +1135,7 @@ mod tests {
                 head_count: 16,
                 head_count_kv: 4, // GQA 4:1
                 feed_forward_length: 9216,
+                rope_scaling_attn_factor: None,
             },
         }
     }
