@@ -17,6 +17,15 @@ $env:RUST_LOG = "souls_mc_lib=info,souls_sast=debug,souls_harvester=debug,headro
 $env:SOULS_CCR_MAX_RAM_MB = "256"
 $env:SOULS_HEADROOM_SAFETY_MARGIN = "512"
 $env:SOULS_HEADROOM_OUTPUT_BUFFER = "4096"
+# SOULS FinOps (fix/cargo-finops-v1): sccache persiste artefatos rustc entre branches
+# e sobrevive a `cargo clean`. Cache vive em Z: (NTFS 80GB) com 8GB de budget.
+# Se sccache nao estiver instalado, .cargo/config.toml[build] rustc-wrapper apenas
+# e ignorado (cargo emite warning mas nao quebra).
+$env:SCCACHE_DIR = "Z:\.sccache"
+$env:SCCACHE_CACHE_SIZE = "8G"
+$env:RUSTC_WRAPPER = "sccache"
+# Reforca paralelismo (defesa em profundidade: .cargo/config.toml[build] jobs=8).
+$env:CARGO_BUILD_JOBS = "8"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -204,7 +213,8 @@ try {
                 "--bin", "mcp_stdio_guard",
                 "--bin", "scan_local_models_cli",
                 "--bin", "souls_ephemeral_infer_cli",
-                "--bin", "souls_mc"
+                "--bin", "souls_mc",
+                "--locked"
             ) `
             -Label "cargo-build-supervisores" `
             -WorkingDirectory $srcTauriDir

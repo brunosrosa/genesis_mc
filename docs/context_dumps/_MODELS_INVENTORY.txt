@@ -1,5 +1,5 @@
 === SOULS LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===
-GERADO EM: 2026-07-31 15:46:36
+GERADO EM: 2026-07-31 22:01:49
 FONTE DE ESTADO SQLITE: Z:\souls_mc\.souls_data\souls_heuristic_vault.db (VIEW NATIVA: vw_finops_routing)
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 TOTAL DE MODELOS ENCONTRADOS: 24

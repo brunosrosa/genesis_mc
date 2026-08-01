@@ -1,5 +1,5 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
-GERADO EM: 2026-07-31 15:46:36
+GERADO EM: 2026-07-31 22:01:49
 TOTAL DE FERRAMENTAS: 42
 ----------------------------------------------------------------------------------------------------
 • core_analyze_session: Analyze the current thinking session and provide insights
