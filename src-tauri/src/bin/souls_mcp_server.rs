@@ -126,7 +126,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     }
                 },
                 "serverInfo": {
-                    "name": "souls",
+                    "name": "souls_mcp",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }),
@@ -293,7 +293,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "fill",
-                        "description": "Injeta cirurgicamente um bloco de código funcional no offset de um stub/placeholder (souls-stub: marker) sem alterar a casca sintática adjacente.",
+                        "description": "Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -307,7 +307,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "headroom_retrieve",
-                        "description": "Recupera um stub comprimido via `SoulsCcrStore::intercept_loopback`. Retorno SSE-style via Tokio < 1ms. Hash hex (16 bytes / 32 chars) identifica o payload.",
+                        "description": "Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -453,7 +453,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     // ============================================================
                     {
                         "name": "mem_create_entities",
-                        "description": "Cria entidades no grafo de memória cognitivo (souls_graph). Idempotente via INSERT OR IGNORE. Persistência sequencializada via MPSC.",
+                        "description": "Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -614,7 +614,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "core_think",
-                        "description": "Scratchpad socrático (souls_thinking). Hard-Limit 5 pensamentos (HITL estende para 7). Tríade: Regular | Revision | Branching.",
+                        "description": "Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -4021,6 +4021,49 @@ mod tests {
         let resp2 = super::handle_mcp(dedup_req2).await.expect("deve processar dedup 2");
         let text2 = resp2["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text2.contains("// [dedup: 5 lines hidden"));
+    }
+
+    /// ADR-041 (Emenda Constitucional 32/120): o `tools/list` retornado pelo server
+    /// `souls_mcp` DEVE respeitar os tetos rígidos de 32 caracteres (nome) e 120
+    /// caracteres (descrição). Este teste é a cerca perimétrica em runtime que
+    /// valida a integridade de toda nova tool adicionada.
+    #[tokio::test]
+    async fn tools_list_respects_32_120_tetos() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+
+        assert!(!tools.is_empty(), "tools/list nao pode ser vazio");
+        for t in tools {
+            let n = t["name"].as_str().unwrap_or_else(|| panic!("tool sem name: {t:?}"));
+            assert!(
+                n.len() <= 32,
+                "ADR-041: tool '{n}' excede teto de 32 chars ({}): {n}",
+                n.len()
+            );
+            let d = t["description"].as_str().unwrap_or("");
+            assert!(
+                d.len() <= 120,
+                "ADR-041: tool '{n}' desc excede teto de 120 chars ({}): {d}",
+                d.len()
+            );
+        }
+    }
+
+    /// ADR-041: `serverInfo.name` DEVE ser `souls_mcp` (Emenda Constitucional).
+    #[tokio::test]
+    async fn server_info_name_is_souls_mcp() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let name = resp["result"]["serverInfo"]["name"]
+            .as_str()
+            .expect("serverInfo.name deve ser string");
+        assert_eq!(
+            name, "souls_mcp",
+            "ADR-041: serverInfo.name deve ser 'souls_mcp', encontrado '{name}'"
+        );
     }
 }
 
