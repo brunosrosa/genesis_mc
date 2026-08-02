@@ -1664,8 +1664,26 @@ async fn run_callees(params: &serde_json::Map<String, Value>) -> Result<Value, R
 
 /// Helper privado: abre `souls_state.db` em modo leitura+escrita.
 /// Garante que `PRAGMA foreign_keys = ON` para validar FK em tempo de INSERT.
+///
+/// **Idempotência de bootstrap (Marco 3.9 Fase E follow-up)**: cria o
+/// diretório `.souls_data/` se ele ainda não existir. Segue o mesmo
+/// padrão de `scan_local_models_cli.rs::init_sqlite_vault` (L27-30).
+/// Sem isso, o primeiro uso dos tools `export_session` /
+/// `analyze_session` / `merge_sessions` em uma instalação limpa
+/// quebraria com `Os { code: 3, kind: NotFound }` (SQLite não cria
+/// diretórios pais automaticamente).
 fn open_socratic_state_db() -> Result<Connection, RpcError> {
     let souls_data_dir = workspace_root().join(".souls_data");
+    // `create_dir_all` é idempotente: se o diretório já existe, retorna
+    // `Ok(())`. Erros reais (permissão, IO) são mapeados para `RpcError`.
+    std::fs::create_dir_all(&souls_data_dir).map_err(|e| RpcError {
+        code: -32000,
+        message: format!(
+            "Falha ao criar diretório .souls_data/ ({}): {e}",
+            souls_data_dir.display()
+        ),
+        data: None,
+    })?;
     let db_path = souls_data_dir.join("souls_state.db");
     let conn = Connection::open_with_flags(
         &db_path,
@@ -4571,8 +4589,8 @@ async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, 
 #[cfg(test)]
 mod tests {
     use super::{
-        build_socratic_tree, normalize_duckduckgo_result_url, parse_duckduckgo_results,
-        render_socratic_markdown, validate_sqlite_query,
+        build_socratic_tree, normalize_duckduckgo_result_url, open_socratic_state_db,
+        parse_duckduckgo_results, render_socratic_markdown, validate_sqlite_query, workspace_root,
     };
     use super::thinking::persistence::ThoughtType;
 
@@ -6239,6 +6257,57 @@ mod tests {
         dur_ms: u32,
     ) -> souls_mc_lib::cognition::thinking::persistence::SocraticThought {
         mk_thought_sess("sess", id, branch, parent, ty, dur_ms)
+    }
+
+    /// T-bootstrap: Valida que `open_socratic_state_db()` cria o
+    /// diretório `.souls_data/` quando ausente e é idempotente em
+    /// chamadas subsequentes. Ref: follow-up do Marco 3.9 Fase E
+    /// (gap identificado pelo Arquiteto).
+    #[test]
+    fn test_open_socratic_state_db_creates_directory_idempotently() {
+        let _g = marco_39_lock();
+        let souls_data_dir = workspace_root().join(".souls_data");
+        let db_path = souls_data_dir.join("souls_state.db");
+
+        // Pré-condição flexível: o teste passa se .souls_data existir
+        // ou não. Se existir de runs anteriores, tudo bem — `create_dir_all`
+        // é idempotente. Se não existir (instalação limpa), o teste
+        // valida o gap que foi corrigido.
+        let pre_existed = souls_data_dir.exists();
+        let db_pre_existed = db_path.exists();
+
+        // Primeira chamada: deve criar o dir se não existir.
+        let conn1 = open_socratic_state_db().expect("1ª chamada deve abrir com sucesso");
+        drop(conn1);
+        assert!(
+            souls_data_dir.exists(),
+            "Diretório .souls_data/ deve existir após open_socratic_state_db(). \
+             Path: {}",
+            souls_data_dir.display()
+        );
+        // Após a 1ª chamada, a DB pode ou não existir (depende de ter
+        // rodado migrate). Mas a partir de agora ela DEVE existir
+        // (open_with_flags com SQLITE_OPEN_CREATE cria o arquivo).
+        assert!(
+            db_path.exists(),
+            "Arquivo souls_state.db deve existir após 1ª abertura. \
+             Path: {}",
+            db_path.display()
+        );
+
+        // Segunda chamada: idempotência. Não deve falhar se o dir já existe.
+        let conn2 = open_socratic_state_db().expect("2ª chamada (idempotente) deve abrir com sucesso");
+        drop(conn2);
+        assert!(souls_data_dir.exists(), ".souls_data/ ainda existe após 2ª chamada");
+
+        // Limpeza opcional: restaura o estado pré-teste para não
+        // interferir em outros runs. Removemos apenas o que criamos.
+        if !db_pre_existed {
+            let _ = std::fs::remove_file(&db_path);
+        }
+        if !pre_existed {
+            let _ = std::fs::remove_dir(&souls_data_dir);
+        }
     }
 }
 
