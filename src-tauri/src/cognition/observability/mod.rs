@@ -22,9 +22,9 @@ pub mod ops;
 pub mod routes;
 pub mod types;
 
-pub use feedback::{TelemetryReport, aggregate_telemetry, e3_efficiency};
+pub use feedback::{TelemetryReport, aggregate_telemetry, e3_efficiency, e3_efficiency_v2};
 pub use heatmap::{HeatmapEntry, compute_heatmap, langevin_score};
 pub use impact::{ImpactReport, blast_radius, build_import_graph, impact_report};
-pub use ops::migrate_v2_to_v3;
+pub use ops::{migrate_v2_to_v3, migrate_v3_to_v4};
 pub use routes::{RouteReport, scan_routes};
 pub use types::{FileAccessLog, TelemetryLog};
