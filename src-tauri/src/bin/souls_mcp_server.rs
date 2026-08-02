@@ -338,7 +338,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_stub_fill",
+                        "name": "souls_fill",
                         "description": "Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM.",
                         "inputSchema": {
                             "type": "object",
