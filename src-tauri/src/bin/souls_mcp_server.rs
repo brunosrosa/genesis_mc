@@ -10,6 +10,7 @@ use souls_mc_lib::cognition::context_compression; // SOULS-CANIBALIZED Marco 3.6
 use souls_mc_lib::cognition::memory_graph;
 use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
 use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
+use souls_mc_lib::cognition::observability; // SOULS-CANIBALIZED Marco 3.7 Fase B: Observabilidade Cognitiva Sensorial
 use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
 use souls_mc_lib::cognition::thinking::ThinkingEngine;
 use souls_mc_lib::harvester::ast_parser;
@@ -678,6 +679,55 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "required": ["thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"],
                             "additionalProperties": false
                         }
+                    },
+                    // ============================================================
+                    // SOULS-CANIBALIZED Marco 3.7 Fase B: 4 tools de Observabilidade Cognitiva Sensorial
+                    // (heatmap, impact, routes, feedback) — namespace canonico `souls_mcp.<tool>`
+                    // ============================================================
+                    {
+                        "name": "heatmap",
+                        "description": "Mapeia dinamicamente os caminhos quentes de acesso a arquivos locais na RAM Host usando Langevin decay.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "limit": { "type": "integer", "description": "Numero maximo de entradas retornadas (padrao 50).", "minimum": 1, "maximum": 500 },
+                                "lambda": { "type": "number", "description": "Constante de decaimento Langevin (padrao 0.05)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "impact",
+                        "description": "Calcula o Blast Radius (importadores afetados) de qualquer arquivo no monorepo via BFS em grafo transposto.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ou absoluto)." },
+                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." }
+                            },
+                            "required": ["path"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "routes",
+                        "description": "Mapeia os contratos de endpoints ativos e a reatividade de comunicacao entre Tauri Rust e Svelte 5.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "feedback",
+                        "description": "Dumps FinOps de telemetria, latencia e eficiencia de token E3 a partir de logs locais de execucao.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": false
+                        }
                     }
                 ]
             }),
@@ -770,6 +820,13 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "mem_delete_observations" => run_mem_delete_observations(params).await,
         "mem_delete_relations" => run_mem_delete_relations(params).await,
         "core_think" => run_core_think(params).await,
+        // Marco 3.7 Fase B — Observabilidade Cognitiva Sensorial.
+        // Emenda ADR-041 (Lei 32/120): servername soberano `souls_mcp`,
+        // toolname curto, aliases canonicos.
+        "heatmap" | "souls_heatmap" => run_heatmap(params).await,
+        "impact" | "souls_impact" => run_impact(params).await,
+        "routes" | "souls_routes" => run_routes(params).await,
+        "feedback" | "souls_feedback" => run_feedback(params).await,
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -804,6 +861,10 @@ async fn run_souls_read(params: &serde_json::Map<String, Value>) -> Result<Value
             message: "Argumento path é obrigatório".to_string(),
             data: Some(json!({ "required": "path" })),
         })?;
+
+    // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
+    // HIPER-FORWARD: o log NAO bloqueia o critical path.
+    try_log_file_access(path_str, "read");
 
     let path = PathBuf::from(path_str);
     if !path.exists() {
@@ -2451,6 +2512,23 @@ enum StateDbOp {
         confidence: f64,
         reply: oneshot::Sender<Result<Value, RpcError>>,
     },
+    // Marco 3.7 Fase B: Observabilidade Cognitiva Sensorial.
+    // Instrumentadas no dispatcher via `try_log_file_access` (leitura+edicao+multi_read).
+    #[allow(dead_code)] // API V3: tambem chamada por integracoes futuras (compress, dedup, sync)
+    LogFileAccess {
+        file_path: String,
+        tool: String,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
+    #[allow(dead_code)] // API V3: FinOps; sera instrumentada na Fase C (cloud brain)
+    LogTelemetry {
+        tool: String,
+        tokens_in: i64,
+        tokens_out: i64,
+        cost_usd: f64,
+        duration_ms: i64,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
 }
 
 static STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>> = OnceLock::new();
@@ -2555,7 +2633,7 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
 
     let db_path_thread = db_path.clone();
     std::thread::spawn(move || {
-        let conn = match Connection::open_with_flags(
+        let mut conn = match Connection::open_with_flags(
             &db_path_thread,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         ) {
@@ -2566,6 +2644,12 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
         let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+
+        // Marco 3.7 Fase B: migracao V2→V3 (Observabilidade Sensorial).
+        // Idempotente: no-op em banco ja migrado.
+        if let Err(e) = observability::migrate_v2_to_v3(&mut conn) {
+            eprintln!("[StateDbWorker] ALERTA: falha na migracao V2→V3: {e}");
+        }
 
         while let Some(op) = rx.blocking_recv() {
             let now = std::time::SystemTime::now()
@@ -2646,6 +2730,54 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
                         Err(e) => Err(RpcError {
                             code: -32000,
                             message: format!("Falha de gravação no banco de estado: {}", e),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                // Marco 3.7 Fase B: log append-only em file_access_logs.
+                StateDbOp::LogFileAccess { file_path, tool, reply } => {
+                    let res = conn.execute(
+                        "INSERT INTO file_access_logs (file_path, tool, accessed_at) \
+                         VALUES (?1, ?2, ?3)",
+                        rusqlite::params![file_path, tool, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Acesso registrado: tool='{}' path='{}' t={}", tool, file_path, now)
+                            }]
+                        })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Falha de log de acesso: {}", e),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                // Marco 3.7 Fase B: log FinOps em telemetry_logs.
+                StateDbOp::LogTelemetry { tool, tokens_in, tokens_out, cost_usd, duration_ms, reply } => {
+                    let res = conn.execute(
+                        "INSERT INTO telemetry_logs \
+                            (tool, tokens_in, tokens_out, cost_usd, duration_ms, created_at) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        rusqlite::params![tool, tokens_in, tokens_out, cost_usd, duration_ms, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!(
+                                    "Telemetria '{}': in={} out={} cost=${:.6} dur={}ms",
+                                    tool, tokens_in, tokens_out, cost_usd, duration_ms
+                                )
+                            }]
+                        })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Falha de log FinOps: {}", e),
                             data: None,
                         }),
                     };
@@ -2951,6 +3083,10 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
         message: "Parâmetro obrigatório 'path' ausente".to_string(),
         data: None,
     })?;
+
+    // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
+    try_log_file_access(path_str, "edit");
+
     let old_string = args.get("old_string").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
         message: "Parâmetro obrigatório 'old_string' ausente".to_string(),
@@ -3178,6 +3314,11 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
             message: "Array 'paths' não pode ser vazio".to_string(),
             data: None,
         });
+    }
+
+    // Marco 3.7 Fase B: instrumentacao observability (filesystem spy em batch).
+    for p in raw_paths.iter().filter_map(Value::as_str) {
+        try_log_file_access(p, "multi_read");
     }
 
     let path_strs: Vec<String> = raw_paths
@@ -3483,6 +3624,41 @@ async fn memgraph_request(op: MemGraphOp) -> Result<Value, RpcError> {
     }))
 }
 
+// Marco 3.7 Fase B: helper nao-bloqueante para enfileirar log de acesso
+// a arquivo no StateDbWorker. Silencia-se em caso de falha (HIPER-FORWARD;
+// o critical path da tool NAO pode esperar o I/O do log).
+fn try_log_file_access(file_path: &str, tool: &str) {
+    let Some(tx) = STATE_DB_TX.get() else {
+        return;
+    };
+    let (reply_tx, _reply_rx) = oneshot::channel();
+    let op = StateDbOp::LogFileAccess {
+        file_path: file_path.to_string(),
+        tool: tool.to_string(),
+        reply: reply_tx,
+    };
+    let _ = tx.try_send(op); // best-effort, nao bloqueia
+}
+
+// Marco 3.7 Fase B: helper para enfileirar telemetria FinOps no StateDbWorker.
+// Sera instrumentado na Fase C (cloud brain) — por ora reservado como API.
+#[allow(dead_code)]
+fn try_log_telemetry(tool: &str, tokens_in: i64, tokens_out: i64, cost_usd: f64, duration_ms: i64) {
+    let Some(tx) = STATE_DB_TX.get() else {
+        return;
+    };
+    let (reply_tx, _reply_rx) = oneshot::channel();
+    let op = StateDbOp::LogTelemetry {
+        tool: tool.to_string(),
+        tokens_in,
+        tokens_out,
+        cost_usd,
+        duration_ms,
+        reply: reply_tx,
+    };
+    let _ = tx.try_send(op); // best-effort
+}
+
 fn parse_entities(args: &serde_json::Map<String, Value>) -> Result<Vec<Entity>, RpcError> {
     let raw = args.get("entities").and_then(Value::as_array).ok_or_else(|| RpcError {
         code: -32602,
@@ -3728,6 +3904,145 @@ async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value
         "content": [{
             "type": "text",
             "text": serde_json::to_string_pretty(&response).unwrap_or_default()
+        }]
+    }))
+}
+
+// =============================================================================
+// SOULS-CANIBALIZED Marco 3.7 Fase B: 4 handlers MCP de Observabilidade Sensorial.
+// Atomicidade: leem o `souls_state.db` (State DB v3) diretamente via
+// `Connection::open_with_flags` e emitem o relatorio canonico em JSON.
+// =============================================================================
+
+/// `heatmap` — mapeia arquivos quentes via Langevin decay (lambda=0.05).
+async fn run_heatmap(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let limit: usize = args
+        .get("limit")
+        .and_then(Value::as_i64)
+        .map(|v| v.max(1) as usize)
+        .unwrap_or(50);
+    let lambda: f64 = args
+        .get("lambda")
+        .and_then(Value::as_f64)
+        .unwrap_or(observability::heatmap::DEFAULT_LAMBDA);
+
+    let souls_data_dir = workspace_root().join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    let conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao abrir souls_state.db: {e}"),
+        data: None,
+    })?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let entries = observability::compute_heatmap(&conn, now, lambda, limit)
+        .map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Heatmap falhou: {e}"),
+            data: None,
+        })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&json!({
+                "lambda": lambda,
+                "limit": limit,
+                "now": now,
+                "scores": entries,
+            }))
+            .unwrap_or_default()
+        }]
+    }))
+}
+
+/// `impact` — Blast Radius (BFS no grafo transposto de imports).
+async fn run_impact(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let path = args
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento 'path' e obrigatorio".to_string(),
+            data: None,
+        })?;
+    let repo_root = args
+        .get("repo_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .unwrap_or_else(workspace_root);
+    let graph = observability::build_import_graph(&repo_root).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao construir grafo de imports: {e}"),
+        data: None,
+    })?;
+    // Normaliza o path-alvo para o formato canonico (relativo + `.rs`).
+    let target_norm = if path.ends_with(".rs") {
+        path.to_string()
+    } else {
+        format!("{path}.rs")
+    };
+    let report = observability::impact_report(&graph, &target_norm);
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
+        }]
+    }))
+}
+
+/// `routes` — varredura regex de comandos Tauri e invokes Svelte.
+async fn run_routes(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let repo_root = args
+        .get("repo_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .unwrap_or_else(workspace_root);
+    let report = observability::scan_routes(&repo_root).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao escanear rotas: {e}"),
+        data: None,
+    })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
+        }]
+    }))
+}
+
+/// `feedback` — dump FinOps agregado com E3.
+async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let _ = params;
+    let souls_data_dir = workspace_root().join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    let conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao abrir souls_state.db: {e}"),
+        data: None,
+    })?;
+    let report = observability::aggregate_telemetry(&conn).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao agregar telemetria: {e}"),
+        data: None,
+    })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
         }]
     }))
 }
@@ -4452,6 +4767,245 @@ mod tests {
         );
         // Equivalência literal byte-a-byte.
         assert_eq!(expanded, original, "Expandido deve ser byte-a-byte idêntico ao original");
+    }
+
+    // =========================================================================
+    // SOULS-CANIBALIZED Marco 3.7 Fase B: 4 testes TDD de Observabilidade Sensorial.
+    // Cobertura: heatmap (Langevin decay), impact (BFS grafo transposto),
+    // routes (regex contract), feedback (E3 FinOps).
+    // =========================================================================
+
+    /// T1: Valida que o Langevin decay produz scores corretos para acessos
+    /// simulados no tempo. Lambda=0.05, agora=1000.
+    #[test]
+    fn test_file_access_logging_and_heatmap_decay() {
+        use souls_mc_lib::cognition::observability::heatmap::{
+            compute_heatmap, langevin_aggregate, langevin_score, DEFAULT_LAMBDA,
+        };
+        use rusqlite::Connection;
+
+        // Score de um unico acesso no mesmo instante: 1.0.
+        let s_now = langevin_score(1000, 1000, DEFAULT_LAMBDA);
+        assert!((s_now - 1.0).abs() < 1e-9, "score(t, t) = 1.0 (got {s_now})");
+
+        // Acesso a 20 segundos: exp(-0.05 * 20) = exp(-1.0) ≈ 0.3679.
+        let s_20 = langevin_score(980, 1000, DEFAULT_LAMBDA);
+        assert!(
+            (s_20 - (-1.0_f64).exp()).abs() < 1e-6,
+            "score(20s) ≈ 0.3679 (got {s_20})"
+        );
+
+        // Acesso futuro (relogio desregulado): clamp em 1.0.
+        let s_future = langevin_score(2000, 1000, DEFAULT_LAMBDA);
+        assert!((s_future - 1.0).abs() < 1e-9, "score futuro = 1.0 (got {s_future})");
+
+        // Agregado: dois acessos em t=999 e t=998. Decaimento a partir de t=1000.
+        let agg = langevin_aggregate(&[999, 998], 1000, DEFAULT_LAMBDA);
+        // exp(-0.05) + exp(-0.10) = 0.9512 + 0.9048 = 1.8560
+        let expected = (-0.05_f64).exp() + (-0.10_f64).exp();
+        assert!(
+            (agg - expected).abs() < 1e-4,
+            "agregado(2 acessos) ≈ {expected} (got {agg})"
+        );
+
+        // Persistencia + leitura via SQLite (in-memory).
+        let conn = Connection::open_in_memory().expect("abre in-memory");
+        conn.execute_batch(
+            "CREATE TABLE file_access_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                tool TEXT NOT NULL,
+                accessed_at INTEGER NOT NULL
+            )",
+        )
+        .expect("schema file_access_logs");
+        // 3 acessos recentes no path "hot.rs", 1 acesso antigo em "cold.rs".
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["hot.rs", "read", 999],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["hot.rs", "read", 998],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["hot.rs", "edit", 997],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["cold.rs", "read", 0],
+        )
+        .unwrap();
+
+        let entries = compute_heatmap(&conn, 1000, DEFAULT_LAMBDA, 10).expect("compute_heatmap");
+        assert_eq!(entries.len(), 2, "deve haver 2 paths distintos");
+        // hot.rs vem primeiro (score mais alto).
+        assert_eq!(entries[0].path, "hot.rs", "hot.rs deve ser o mais quente");
+        assert_eq!(entries[0].access_count, 3);
+        // cold.rs tem score muito menor (exp(-0.05 * 1000) ≈ 0).
+        assert_eq!(entries[1].path, "cold.rs");
+        assert!(
+            entries[0].score > entries[1].score * 100.0,
+            "hot.rs deve ser ordens de grandeza > cold.rs"
+        );
+    }
+
+    /// T2: Valida que o BFS no grafo transposto retorna o array ordenado [B, A]
+    /// quando o grafo e A -> B -> C (ou seja, A importa B que importa C).
+    #[test]
+    fn test_blast_radius_dag_bfs() {
+        use souls_mc_lib::cognition::observability::impact::blast_radius;
+        use std::collections::BTreeMap;
+
+        // Grafo: A importa B; B importa C. (Quem importa C transitivamente?)
+        let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        graph.insert("A.rs".to_string(), vec!["B.rs".to_string()]);
+        graph.insert("B.rs".to_string(), vec!["C.rs".to_string()]);
+        graph.insert("C.rs".to_string(), vec![]);
+
+        // Blast radius de C: deve retornar [B, A] (B importa C diretamente,
+        // A importa B que importa C transitivamente).
+        let affected = blast_radius(&graph, "C.rs");
+        assert_eq!(affected, vec!["B.rs".to_string(), "A.rs".to_string()]);
+
+        // Blast radius de A: ninguem importa A.
+        let affected_a = blast_radius(&graph, "A.rs");
+        assert!(affected_a.is_empty(), "A.rs nao tem importadores");
+
+        // Blast radius de path inexistente: nao panica, retorna vazio.
+        let affected_ghost = blast_radius(&graph, "ghost.rs");
+        assert!(affected_ghost.is_empty());
+    }
+
+    /// T3: Valida que o parser de rotas detecta comandos Tauri e invokes Svelte
+    /// via regex compilado.
+    #[test]
+    fn test_routes_contract_regex() {
+        use souls_mc_lib::cognition::observability::routes::scan_routes;
+        use std::fs;
+        use tempfile::tempdir;
+
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+
+        // Mock backend Rust: 2 comandos Tauri.
+        let backend = r#"
+            use tauri::command;
+
+            #[tauri::command]
+            fn greet(name: String) -> String {
+                format!("Hello, {}!", name)
+            }
+
+            #[tauri::command(async)]
+            async fn fetch_data() -> Result<String, String> {
+                Ok("data".to_string())
+            }
+        "#;
+        fs::write(root.join("commands.rs"), backend).expect("escreve commands.rs");
+
+        // Mock frontend Svelte: 3 invokes (1 backend existe, 2 nao existem).
+        let frontend = r#"
+            <script>
+                import { invoke } from '@tauri-apps/api/core';
+                async function handleClick() {
+                    await invoke('greet', { name: 'World' });
+                    await invoke('fetch_data');
+                    await invoke('unknown_command');
+                }
+            </script>
+        "#;
+        let frontend_dir = root.join("src");
+        fs::create_dir(&frontend_dir).expect("mkdir src");
+        fs::write(frontend_dir.join("App.svelte"), frontend).expect("escreve App.svelte");
+
+        let report = scan_routes(root).expect("scan_routes");
+
+        // Backend: 2 comandos.
+        let backend_names: Vec<String> = report.backend.iter().map(|e| e.name.clone()).collect();
+        assert!(backend_names.contains(&"greet".to_string()));
+        assert!(backend_names.contains(&"fetch_data".to_string()));
+
+        // Frontend: 3 invokes.
+        let frontend_names: Vec<String> = report.frontend.iter().map(|e| e.name.clone()).collect();
+        assert_eq!(frontend_names.len(), 3);
+
+        // Orphans (backend sem frontend): nenhum (greet + fetch_data tem invoke).
+        assert!(report.orphans.is_empty(), "nao deve haver orphans: {:?}", report.orphans);
+
+        // Dead calls (frontend sem backend): unknown_command.
+        assert_eq!(report.dead_calls, vec!["unknown_command".to_string()]);
+    }
+
+    /// T4: Insere logs artificiais de tokens no `telemetry_logs` e valida
+    /// que o calculo da formula E3 e gerado sem panics.
+    #[test]
+    fn test_feedback_telemetry_insert_and_e3_calc() {
+        use souls_mc_lib::cognition::observability::feedback::{aggregate_telemetry, e3_efficiency};
+        use rusqlite::Connection;
+
+        // E3(0, 0) = 1.0 (caso degenerado).
+        assert!((e3_efficiency(0, 0) - 1.0).abs() < 1e-9);
+        // E3(100, 0) = 1.0 (output zero = maxima economia).
+        assert!((e3_efficiency(100, 0) - 1.0).abs() < 1e-9);
+        // E3(100, 25) = 1 - 25/125 = 0.80.
+        let e3 = e3_efficiency(100, 25);
+        assert!((e3 - 0.80).abs() < 1e-6, "E3(100,25) = 0.80 (got {e3})");
+        // E3(0, 100) = 1 - 100/100 = 0.0.
+        assert!((e3_efficiency(0, 100) - 0.0).abs() < 1e-9);
+        // E3 com valores negativos (defensivo): clamp em 0.
+        assert!((e3_efficiency(-10, -10) - 1.0).abs() < 1e-9, "E3 defensivo contra negativos");
+
+        // Persistencia + agregado via SQLite (in-memory).
+        let conn = Connection::open_in_memory().expect("abre in-memory");
+        conn.execute_batch(
+            "CREATE TABLE telemetry_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool TEXT NOT NULL,
+                tokens_in INTEGER NOT NULL DEFAULT 0,
+                tokens_out INTEGER NOT NULL DEFAULT 0,
+                cost_usd REAL NOT NULL DEFAULT 0.0,
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            )",
+        )
+        .expect("schema telemetry_logs");
+
+        // 3 ferramentas: read (alto out), compress (alto in, baixo out), edit (balanceado).
+        for (tool, tin, tout, cost, dur) in [
+            ("read", 100, 200, 0.0, 50),
+            ("compress", 1000, 50, 0.0, 200),
+            ("edit", 50, 50, 0.0, 30),
+        ] {
+            conn.execute(
+                "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![tool, tin, tout, cost, dur, 1000_i64],
+            )
+            .expect("insert telemetry");
+        }
+
+        let report = aggregate_telemetry(&conn).expect("aggregate_telemetry");
+        // Total: 1150 in, 300 out. E3 = 1 - 300/1450 ≈ 0.7931.
+        assert_eq!(report.total_tokens_in, 1150);
+        assert_eq!(report.total_tokens_out, 300);
+        assert_eq!(report.total_calls, 3);
+        assert!(
+            (report.e3_efficiency - 0.7931).abs() < 1e-3,
+            "E3 global ≈ 0.7931 (got {})",
+            report.e3_efficiency
+        );
+        // Por tool: compress deve ter E3 alto.
+        let compress_e3 = report
+            .by_tool
+            .get("compress")
+            .map(|t| t.e3_efficiency)
+            .unwrap_or(0.0);
+        assert!(compress_e3 > 0.90, "compress deve ter E3 > 0.90 (got {compress_e3})");
     }
 }
 
