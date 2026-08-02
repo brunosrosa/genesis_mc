@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-_MCP_INVENTORY Gerado em: 2026-08-02 01:37:27
-=======
-_MCP_INVENTORY Gerado em: 2026-08-02 03:16:34
->>>>>>> Stashed changes
+_MCP_INVENTORY Gerado em: 2026-08-02 05:51:55
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -12,11 +8,11 @@ CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
 SERVER_NAME: souls
 LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt
 SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
-TOOL_COUNT: 42
+TOOL_COUNT: 93
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.
 
 === SUMMARY ===
-OK_COUNT: 42
+OK_COUNT: 93
 WARN_COUNT: 0
 FAIL_COUNT: 0
 OVERALL_STATUS: HEALTHY
@@ -102,6 +98,11 @@ DESCRIPTION: Aplica o compressor LEAN ao texto fornecido removendo comentários 
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
+NAME: souls_core_think
+DESCRIPTION: Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
 NAME: souls_dedup
 DESCRIPTION: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
 TEST_STATUS: OK
@@ -128,7 +129,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_fill
-DESCRIPTION: Injeta cirurgicamente um bloco de código funcional no offset de um stub/placeholder (souls-stub: marker) sem alterar a casca sintática adjacente.
+DESCRIPTION: Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -142,6 +143,11 @@ DESCRIPTION: Registra a transferência de contexto (handoff) entre subagentes no
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
+NAME: souls_headroom_retrieve
+DESCRIPTION: Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
 NAME: souls_intent
 DESCRIPTION: not_implemented_yet: Detecta intent do tool call (read/edit/search).
 TEST_STATUS: OK
@@ -149,6 +155,251 @@ TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_knowledge
 DESCRIPTION: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_callees
+DESCRIPTION: not_implemented_yet: Call graph: o que esta fn chama.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_callers
+DESCRIPTION: not_implemented_yet: Call graph: quem chama esta fn.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_compress
+DESCRIPTION: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_core_think
+DESCRIPTION: Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_dedup
+DESCRIPTION: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_delta_diff
+DESCRIPTION: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_edit
+DESCRIPTION: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_execute
+DESCRIPTION: not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_fetch_web
+DESCRIPTION: Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_fill
+DESCRIPTION: Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_get_ast
+DESCRIPTION: Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_handoff
+DESCRIPTION: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_headroom_retrieve
+DESCRIPTION: Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_intent
+DESCRIPTION: not_implemented_yet: Detecta intent do tool call (read/edit/search).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_knowledge
+DESCRIPTION: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_add_observations
+DESCRIPTION: Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_create_entities
+DESCRIPTION: Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_create_relations
+DESCRIPTION: Cria relações direcionadas entre entidades (souls_graph). Idempotente.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_delete_entities
+DESCRIPTION: Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_delete_observations
+DESCRIPTION: Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_delete_relations
+DESCRIPTION: Remove arestas do grafo.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_open_nodes
+DESCRIPTION: Abre entidades específicas por nome e hidrata observations via JOIN.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_read_graph
+DESCRIPTION: Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_mem_search
+DESCRIPTION: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_metrics
+DESCRIPTION: not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_multi_read
+DESCRIPTION: not_implemented_yet: Leitura em batch com dedup via SharedBlock.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_outline
+DESCRIPTION: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline / souls_symbol)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_read
+DESCRIPTION: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_repo_meta
+DESCRIPTION: Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SOULS, ex-repo_meta)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_search
+DESCRIPTION: Busca textual compacta via regex com formatação LEAN agrupada por arquivo. (souls_search)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_semantic_search
+DESCRIPTION: not_implemented_yet: BM25 + cosine fusion (gated embeddings).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_session
+DESCRIPTION: Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_shell
+DESCRIPTION: not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_smart_read
+DESCRIPTION: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_sqlite_query
+DESCRIPTION: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SOULS. (Cânone SOULS, ex-db_query)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_sub_agent
+DESCRIPTION: Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_symbol
+DESCRIPTION: not_implemented_yet: Resolve symbol name → file:line.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_sys_time
+DESCRIPTION: Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SOULS, ex-sys_time)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_tree
+DESCRIPTION: Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mcp_web_search
+DESCRIPTION: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SOULS, ex-web_search)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_add_observations
+DESCRIPTION: Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_create_entities
+DESCRIPTION: Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_create_relations
+DESCRIPTION: Cria relações direcionadas entre entidades (souls_graph). Idempotente.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_delete_entities
+DESCRIPTION: Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_delete_observations
+DESCRIPTION: Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_delete_relations
+DESCRIPTION: Remove arestas do grafo.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_open_nodes
+DESCRIPTION: Abre entidades específicas por nome e hidrata observations via JOIN.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_read_graph
+DESCRIPTION: Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_mem_search
+DESCRIPTION: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
