@@ -1,11 +1,6 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
-<<<<<<< Updated upstream
-GERADO EM: 2026-08-02 01:37:27
-TOTAL DE FERRAMENTAS: 42
-=======
-GERADO EM: 2026-08-02 03:16:34
+GERADO EM: 2026-08-02 05:51:55
 TOTAL DE FERRAMENTAS: 93
->>>>>>> Stashed changes
 ----------------------------------------------------------------------------------------------------
 • core_analyze_session: Analyze the current thinking session and provide insights
 • core_export_session: Export the current thinking session in various formats
@@ -23,16 +18,67 @@ TOTAL DE FERRAMENTAS: 93
 • souls_callees: not_implemented_yet: Call graph: o que esta fn chama.
 • souls_callers: not_implemented_yet: Call graph: quem chama esta fn.
 • souls_compress: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
+• souls_core_think: Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.
 • souls_dedup: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
 • souls_delta_diff: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).
 • souls_edit: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
 • souls_execute: not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.
 • souls_fetch_web: Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)
-• souls_fill: Injeta cirurgicamente um bloco de código funcional no offset de um stub/placeholder (souls-stub: marker) sem alterar a casca sintática adjacente.
+• souls_fill: Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.
 • souls_get_ast: Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)
 • souls_handoff: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
+• souls_headroom_retrieve: Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.
 • souls_intent: not_implemented_yet: Detecta intent do tool call (read/edit/search).
 • souls_knowledge: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
+• souls_mcp_callees: not_implemented_yet: Call graph: o que esta fn chama.
+• souls_mcp_callers: not_implemented_yet: Call graph: quem chama esta fn.
+• souls_mcp_compress: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
+• souls_mcp_core_think: Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.
+• souls_mcp_dedup: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
+• souls_mcp_delta_diff: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).
+• souls_mcp_edit: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
+• souls_mcp_execute: not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.
+• souls_mcp_fetch_web: Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)
+• souls_mcp_fill: Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.
+• souls_mcp_get_ast: Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)
+• souls_mcp_handoff: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
+• souls_mcp_headroom_retrieve: Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.
+• souls_mcp_intent: not_implemented_yet: Detecta intent do tool call (read/edit/search).
+• souls_mcp_knowledge: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
+• souls_mcp_mem_add_observations: Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.
+• souls_mcp_mem_create_entities: Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.
+• souls_mcp_mem_create_relations: Cria relações direcionadas entre entidades (souls_graph). Idempotente.
+• souls_mcp_mem_delete_entities: Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).
+• souls_mcp_mem_delete_observations: Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.
+• souls_mcp_mem_delete_relations: Remove arestas do grafo.
+• souls_mcp_mem_open_nodes: Abre entidades específicas por nome e hidrata observations via JOIN.
+• souls_mcp_mem_read_graph: Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).
+• souls_mcp_mem_search: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
+• souls_mcp_metrics: not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.
+• souls_mcp_multi_read: not_implemented_yet: Leitura em batch com dedup via SharedBlock.
+• souls_mcp_outline: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline / souls_symbol)
+• souls_mcp_read: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
+• souls_mcp_repo_meta: Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SOULS, ex-repo_meta)
+• souls_mcp_search: Busca textual compacta via regex com formatação LEAN agrupada por arquivo. (souls_search)
+• souls_mcp_semantic_search: not_implemented_yet: BM25 + cosine fusion (gated embeddings).
+• souls_mcp_session: Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).
+• souls_mcp_shell: not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.
+• souls_mcp_smart_read: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)
+• souls_mcp_sqlite_query: Executa consulta SQLite local em modo somente leitura nos bancos nativos do SOULS. (Cânone SOULS, ex-db_query)
+• souls_mcp_sub_agent: Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).
+• souls_mcp_symbol: not_implemented_yet: Resolve symbol name → file:line.
+• souls_mcp_sys_time: Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SOULS, ex-sys_time)
+• souls_mcp_tree: Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)
+• souls_mcp_web_search: Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SOULS, ex-web_search)
+• souls_mem_add_observations: Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.
+• souls_mem_create_entities: Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.
+• souls_mem_create_relations: Cria relações direcionadas entre entidades (souls_graph). Idempotente.
+• souls_mem_delete_entities: Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).
+• souls_mem_delete_observations: Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.
+• souls_mem_delete_relations: Remove arestas do grafo.
+• souls_mem_open_nodes: Abre entidades específicas por nome e hidrata observations via JOIN.
+• souls_mem_read_graph: Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).
+• souls_mem_search: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
 • souls_metrics: not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.
 • souls_multi_read: not_implemented_yet: Leitura em batch com dedup via SharedBlock.
 • souls_outline: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline / souls_symbol)

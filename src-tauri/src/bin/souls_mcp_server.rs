@@ -293,20 +293,6 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "fill",
-                        "description": "Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string", "description": "Caminho do arquivo contendo o stub (alias: path)." },
-                                "stub_marker": { "type": "string", "description": "Marcador do stub a ser preenchido (alias: marker)." },
-                                "code_payload": { "type": "string", "description": "Bloco de código a ser injetado (alias: content)." }
-                            },
-                            "required": ["file_path", "stub_marker", "code_payload"],
-                            "additionalProperties": false
-                        }
-                    },
-                    {
                         "name": "headroom_retrieve",
                         "description": "Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.",
                         "inputSchema": {
@@ -322,8 +308,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     // SOULS-CANIBALIZED Marco 3.6: Conveyor Belt de Contexto (CCR Lossless)
                     // ============================================================
                     {
-                        "name": "souls_multi_read",
-                        "description": "Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR.",
+                        "name": "multi_read",
+                        "description": "Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -338,7 +324,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_stub_fill",
+                        "name": "fill",
                         "description": "Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM.",
                         "inputSchema": {
                             "type": "object",
@@ -346,20 +332,6 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                                 "text": { "type": "string", "description": "Texto compactado contendo marcadores [SOULS-DEDUP: ...] a serem reidratados." }
                             },
                             "required": ["text"],
-                            "additionalProperties": false
-                        }
-                    },
-                    {
-                        "name": "souls_stub_fill",
-                        "description": "Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente. (Legacy fill)",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string", "description": "Caminho do arquivo contendo o stub (alias: path)." },
-                                "stub_marker": { "type": "string", "description": "Marcador do stub a ser preenchido (alias: marker)." },
-                                "code_payload": { "type": "string", "description": "Bloco de código a ser injetado (alias: content)." }
-                            },
-                            "required": ["file_path", "stub_marker", "code_payload"],
                             "additionalProperties": false
                         }
                     },
@@ -393,7 +365,6 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     // Stubs (15) - contratos canônicos para cobertura semântica.
                     // Implementação real virá em iterações SOULS-SDD subsequentes (Fase 4+).
-                    { "name": "multi_read", "description": "not_implemented_yet: Leitura em batch com dedup via SharedBlock.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "smart_read",
                         "description": "Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)",
@@ -438,7 +409,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "outline",
-                        "description": "Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline / souls_symbol)",
+                        "description": "Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -448,11 +419,11 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "symbol", "description": "not_implemented_yet: Resolve symbol name → file:line.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "symbol", "description": "Resolve a localização física (file:line) de símbolos sintáticos da AST do monorepo. (Pendente).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "callers", "description": "not_implemented_yet: Call graph: quem chama esta fn.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "callees", "description": "not_implemented_yet: Call graph: o que esta fn chama.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "shell", "description": "not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "shell", "description": "Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "compress",
                         "description": "Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)",
@@ -726,8 +697,12 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         })?;
 
     // SOULS-CANIBALIZED: higiene canônica. Aceita tanto nomes simples quanto prefixados/aliases.
+    // ADR-041 (Emenda Constitucional 32/120): cada tool expõe 3 aliases de transição:
+    //   1. canônico curto   (ex: `read`)         — único nome registrado no `tools/list`.
+    //   2. prefixo `souls_` (ex: `souls_read`)   — emenda retroativa para clientes legados.
+    //   3. prefixo `ctx_`   (ex: `ctx_read`)     — emenda retroativa para o cânone lean-ctx.
     match tool_name {
-        // Cânone SOULS (preferido)
+        // ============ Cânone SOULS — tools de orquestração e IO ============
         "get_ast" | "souls_get_ast" | "repo_ast" => run_repo_ast(params).await,
         "fetch_web" | "souls_fetch_web" | "web_fetch" => run_web_fetch(params).await,
         "sys_time" | "souls_sys_time" => run_sys_time(params).await,
@@ -738,28 +713,34 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "handoff" | "souls_handoff" => run_souls_handoff(params).await,
         "knowledge" | "souls_knowledge" => run_souls_knowledge(params).await,
         "edit" | "souls_edit" => run_souls_edit(params).await,
-        "fill" | "souls_stub_fill" | "stub_fill" => run_souls_stub_fill(params).await,
-        "souls_fill" | "ccr_fill" => run_souls_ccr_fill(params).await,
-        // 17 tools canônicas (2 implementadas + 15 stubs)
-        "read" | "souls_read" => run_souls_read(params).await,
-        "delta_diff" | "souls_delta_diff" => run_souls_delta_diff(params).await,
-        "tree" | "souls_tree" => run_souls_tree(params).await,
-        "outline" | "souls_outline" | "symbol" | "souls_symbol" => run_souls_outline(params).await,
-        "smart_read" | "souls_smart_read" => run_souls_smart_read(params).await,
-        "search" | "souls_search" => run_souls_search(params).await,
-        "compress" | "souls_compress" => run_souls_compress(params).await,
-        "dedup" | "souls_dedup" => run_souls_dedup(params).await,
-        "headroom_retrieve" | "souls_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
-        "session" | "souls_session" => run_souls_session(params).await,
-        "multi_read" | "souls_multi_read" => run_souls_multi_read(params).await,
-        "semantic_search" | "souls_semantic_search"
-        | "callers" | "souls_callers"
-        | "callees" | "souls_callees"
-        | "metrics" | "souls_metrics"
-        | "intent" | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
-        "execute" | "souls_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
-        "shell" | "souls_shell" => run_souls_shell(params).await,
-        // Marco 3.5 — souls_graph (9 ops) + souls_thinking (1 op = core_think)
+        // ============ Cânone CCR — reidratador canônico + alias legacy preservado ============
+        // `fill` é o nome canônico do reidratador CCR (texto → texto lossless).
+        // O legacy `run_souls_stub_fill` (file_path/stub_marker) é mantido SOB `souls_stub_fill`
+        // exclusivamente para preservar a suíte de testes de injeção pré-Macro 3.6.
+        "fill" | "souls_fill" | "ccr_fill" => run_souls_ccr_fill(params).await,
+        "souls_stub_fill" | "stub_fill" => run_souls_stub_fill(params).await,
+        // ============ 17 tools canônicas da engenharia de contexto (ADR-041 §3) ============
+        "read" | "souls_read" | "ctx_read" => run_souls_read(params).await,
+        "delta_diff" | "souls_delta_diff" | "ctx_delta" => run_souls_delta_diff(params).await,
+        "tree" | "souls_tree" | "ctx_tree" => run_souls_tree(params).await,
+        "outline" | "souls_outline" | "ctx_outline" => run_souls_outline(params).await,
+        "smart_read" | "souls_smart_read" | "ctx_smart_read" => run_souls_smart_read(params).await,
+        "search" | "souls_search" | "ctx_search" => run_souls_search(params).await,
+        "compress" | "souls_compress" | "ctx_compress" => run_souls_compress(params).await,
+        "dedup" | "souls_dedup" | "ctx_dedup" => run_souls_dedup(params).await,
+        "headroom_retrieve" | "souls_headroom_retrieve" | "ctx_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
+        "session" | "souls_session" | "ctx_session" => run_souls_session(params).await,
+        "multi_read" | "souls_multi_read" | "ctx_multi_read" => run_souls_multi_read(params).await,
+        // ============ Stubs (Pendente) — em transição para Marco 3.8 (Call Graph) ============
+        "symbol" | "souls_symbol" | "ctx_symbol"
+        | "semantic_search" | "souls_semantic_search" | "ctx_semantic_search"
+        | "callers" | "souls_callers" | "ctx_callers"
+        | "callees" | "souls_callees" | "ctx_callees"
+        | "metrics" | "souls_metrics" | "ctx_metrics"
+        | "intent" | "souls_intent" | "ctx_intent" => Ok(stub_not_implemented_yet(tool_name)),
+        "execute" | "souls_execute" | "ctx_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "shell" | "souls_shell" | "ctx_shell" => run_souls_shell(params).await,
+        // ============ Marco 3.5 — souls_graph (9 ops) + souls_thinking (1 op = core_think) ============
         "mem_create_entities" => run_mem_create_entities(params).await,
         "mem_create_relations" => run_mem_create_relations(params).await,
         "mem_add_observations" => run_mem_add_observations(params).await,
@@ -3797,18 +3778,26 @@ mod tests {
         let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
         let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
         let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
-        
+
         let tool_names: Vec<&str> = tools.iter()
             .map(|t| t["name"].as_str().expect("tool deve ter name"))
             .collect();
 
+        // ADR-041 §3: nomes canônicos curtos da engenharia de contexto.
         assert!(tool_names.contains(&"get_ast"));
         assert!(tool_names.contains(&"read"));
         assert!(tool_names.contains(&"search"));
+        assert!(tool_names.contains(&"tree"));
+        assert!(tool_names.contains(&"outline"));
         assert!(tool_names.contains(&"sub_agent"));
         assert!(tool_names.contains(&"handoff"));
         assert!(tool_names.contains(&"knowledge"));
-        // Marco 3.5 — Core Cognitivo: 9 tools mem_* + 1 core_think.
+        // ADR-041 Fase A: `fill` é o reidratador CCR canônico (deduplicação da duplicata stub_fill).
+        assert!(tool_names.contains(&"fill"));
+        assert!(tool_names.contains(&"multi_read"));
+        assert!(tool_names.contains(&"headroom_retrieve"));
+        assert!(tool_names.contains(&"session"));
+        // Marco 3.5 — Core Cognitivo: 9 tools mem_* + 1 core_think (intactos).
         assert!(tool_names.contains(&"mem_create_entities"));
         assert!(tool_names.contains(&"mem_create_relations"));
         assert!(tool_names.contains(&"mem_add_observations"));
@@ -3819,8 +3808,13 @@ mod tests {
         assert!(tool_names.contains(&"mem_delete_observations"));
         assert!(tool_names.contains(&"mem_delete_relations"));
         assert!(tool_names.contains(&"core_think"));
+        // ADR-041 §1: nenhum tool de contexto deve expor o prefixo `souls_` no `name`.
+        // (aliases `souls_*` e `ctx_*` continuam aceitos no dispatcher, mas NÃO no registro.)
         assert!(!tool_names.contains(&"souls_get_ast"));
         assert!(!tool_names.contains(&"souls_read"));
+        assert!(!tool_names.contains(&"souls_multi_read"));
+        assert!(!tool_names.contains(&"souls_stub_fill"));
+        assert!(!tool_names.contains(&"souls_fill"));
     }
 
     /// V4: `headroom_retrieve` DEVE estar exposto no `tools/list` (alinhado com `intercept_loopback`).
@@ -4259,18 +4253,85 @@ mod tests {
         assert!(!tools.is_empty(), "tools/list nao pode ser vazio");
         for t in tools {
             let n = t["name"].as_str().unwrap_or_else(|| panic!("tool sem name: {t:?}"));
+            // ADR-041 §1 — teto de nome em **caracteres** (Unicode-aware), não bytes.
             assert!(
-                n.len() <= 32,
-                "ADR-041: tool '{n}' excede teto de 32 chars ({}): {n}",
-                n.len()
+                n.chars().count() <= 32,
+                "ADR-041 §1: tool '{n}' excede teto de 32 chars ({}): {n}",
+                n.chars().count()
             );
             let d = t["description"].as_str().unwrap_or("");
+            // ADR-041 §2 — teto de descrição em **caracteres** (Unicode-aware).
             assert!(
-                d.len() <= 120,
-                "ADR-041: tool '{n}' desc excede teto de 120 chars ({}): {d}",
-                d.len()
+                d.chars().count() <= 120,
+                "ADR-041 §2: tool '{n}' desc excede teto de 120 chars ({}): {d}",
+                d.chars().count()
             );
         }
+    }
+
+    /// ADR-041 Fase A: asserções específicas das curas dos 3 Falsos Verdes.
+    /// Garante que as descrições mentirosas foram removidas e substituídas por verdade SSOT.
+    #[tokio::test]
+    async fn tools_list_cura_3_falsos_verdes() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+
+        let find_desc = |target: &str| -> Option<String> {
+            tools.iter()
+                .find(|t| t["name"].as_str() == Some(target))
+                .and_then(|t| t["description"].as_str().map(|s| s.to_string()))
+        };
+
+        // 1. `multi_read` — cura o FALSO VERDE (era "not_implemented_yet: ...").
+        let multi_read_desc = find_desc("multi_read").expect("multi_read deve existir");
+        assert!(
+            !multi_read_desc.contains("not_implemented_yet"),
+            "multi_read ainda carrega a desc mentirosa 'not_implemented_yet': {multi_read_desc}"
+        );
+        assert!(
+            multi_read_desc.contains("CCR lossless"),
+            "multi_read deve refletir compressao CCR lossless (FALSO VERDE curado): {multi_read_desc}"
+        );
+
+        // 2. `shell` — cura o FALSO VERDE (era "not_implemented_yet sandbox_audit_pending: ...").
+        let shell_desc = find_desc("shell").expect("shell deve existir");
+        assert!(
+            !shell_desc.contains("not_implemented_yet"),
+            "shell ainda carrega a desc mentirosa 'not_implemented_yet': {shell_desc}"
+        );
+        assert!(
+            !shell_desc.contains("sandbox_audit_pending"),
+            "shell ainda carrega a desc mentirosa 'sandbox_audit_pending': {shell_desc}"
+        );
+        assert!(
+            shell_desc.contains("Tokio"),
+            "shell deve refletir execucao assincrona via Tokio (FALSO VERDE curado): {shell_desc}"
+        );
+
+        // 3. `symbol` — stub explicito (Pendente) — sem fingimento.
+        let symbol_desc = find_desc("symbol").expect("symbol deve existir");
+        assert!(
+            symbol_desc.contains("Pendente"),
+            "symbol deve marcar-se explicitamente como Pendente (transparencia SSOT): {symbol_desc}"
+        );
+    }
+
+    /// ADR-041 Fase A: valida que `fill` (reidratador CCR) e UNICO no `tools/list`
+    /// e que a antiga duplicata `souls_stub_fill` foi exterminada.
+    #[tokio::test]
+    async fn tools_list_fill_unico_sem_duplicata() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+
+        let fill_count = tools.iter().filter(|t| t["name"].as_str() == Some("fill")).count();
+        let stub_fill_count = tools.iter().filter(|t| t["name"].as_str() == Some("souls_stub_fill")).count();
+
+        assert_eq!(fill_count, 1, "`fill` deve aparecer exatamente 1 vez no tools/list (reidratador CCR)");
+        assert_eq!(stub_fill_count, 0, "duplicata `souls_stub_fill` deve ser EXTERMINADA do registro");
     }
 
     /// ADR-041: `serverInfo.name` DEVE ser `souls_mcp` (Emenda Constitucional).
