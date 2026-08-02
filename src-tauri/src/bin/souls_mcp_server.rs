@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot};
 use souls_mc_lib::cognition::lean_vacuum;
+use souls_mc_lib::cognition::context_compression; // SOULS-CANIBALIZED Marco 3.6: Conveyor Belt (CCR Lossless)
 use souls_mc_lib::cognition::memory_graph;
 use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
 use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
@@ -126,7 +127,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     }
                 },
                 "serverInfo": {
-                    "name": "souls",
+                    "name": "souls_mcp",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }),
@@ -293,7 +294,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "fill",
-                        "description": "Injeta cirurgicamente um bloco de código funcional no offset de um stub/placeholder (souls-stub: marker) sem alterar a casca sintática adjacente.",
+                        "description": "Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -307,13 +308,58 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "headroom_retrieve",
-                        "description": "Recupera um stub comprimido via `SoulsCcrStore::intercept_loopback`. Retorno SSE-style via Tokio < 1ms. Hash hex (16 bytes / 32 chars) identifica o payload.",
+                        "description": "Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
                                 "hash": { "type": "string", "description": "Hash hex de 16 bytes (32 chars) emitido por souls_fill ou souls_compress." }
                             },
                             "required": ["hash"],
+                            "additionalProperties": false
+                        }
+                    },
+                    // ============================================================
+                    // SOULS-CANIBALIZED Marco 3.6: Conveyor Belt de Contexto (CCR Lossless)
+                    // ============================================================
+                    {
+                        "name": "souls_multi_read",
+                        "description": "Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "paths": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "Lista de caminhos de arquivos a serem lidos em paralelo via tokio::fs."
+                                }
+                            },
+                            "required": ["paths"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "souls_stub_fill",
+                        "description": "Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "text": { "type": "string", "description": "Texto compactado contendo marcadores [SOULS-DEDUP: ...] a serem reidratados." }
+                            },
+                            "required": ["text"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "souls_stub_fill",
+                        "description": "Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente. (Legacy fill)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho do arquivo contendo o stub (alias: path)." },
+                                "stub_marker": { "type": "string", "description": "Marcador do stub a ser preenchido (alias: marker)." },
+                                "code_payload": { "type": "string", "description": "Bloco de código a ser injetado (alias: content)." }
+                            },
+                            "required": ["file_path", "stub_marker", "code_payload"],
                             "additionalProperties": false
                         }
                     },
@@ -453,7 +499,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     // ============================================================
                     {
                         "name": "mem_create_entities",
-                        "description": "Cria entidades no grafo de memória cognitivo (souls_graph). Idempotente via INSERT OR IGNORE. Persistência sequencializada via MPSC.",
+                        "description": "Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -614,7 +660,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "core_think",
-                        "description": "Scratchpad socrático (souls_thinking). Hard-Limit 5 pensamentos (HITL estende para 7). Tríade: Regular | Revision | Branching.",
+                        "description": "Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -692,7 +738,8 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "handoff" | "souls_handoff" => run_souls_handoff(params).await,
         "knowledge" | "souls_knowledge" => run_souls_knowledge(params).await,
         "edit" | "souls_edit" => run_souls_edit(params).await,
-        "fill" | "souls_fill" => run_souls_fill(params).await,
+        "fill" | "souls_stub_fill" | "stub_fill" => run_souls_stub_fill(params).await,
+        "souls_fill" | "ccr_fill" => run_souls_ccr_fill(params).await,
         // 17 tools canônicas (2 implementadas + 15 stubs)
         "read" | "souls_read" => run_souls_read(params).await,
         "delta_diff" | "souls_delta_diff" => run_souls_delta_diff(params).await,
@@ -704,8 +751,8 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "dedup" | "souls_dedup" => run_souls_dedup(params).await,
         "headroom_retrieve" | "souls_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
         "session" | "souls_session" => run_souls_session(params).await,
-        "multi_read" | "souls_multi_read"
-        | "semantic_search" | "souls_semantic_search"
+        "multi_read" | "souls_multi_read" => run_souls_multi_read(params).await,
+        "semantic_search" | "souls_semantic_search"
         | "callers" | "souls_callers"
         | "callees" | "souls_callees"
         | "metrics" | "souls_metrics"
@@ -2968,7 +3015,7 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
     }))
 }
 
-async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_souls_stub_fill(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
 
     let path_str = args
@@ -3103,6 +3150,181 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
             "type": "text",
             "text": format!("Stub '{}' em '{}' preenchido com sucesso.", stub_marker, canonical_path.display())
         }]
+    }))
+}
+
+// =============================================================================
+// SOULS-CANIBALIZED Marco 3.6: Conveyor Belt de Contexto (CCR Lossless).
+// Implementa as 2 tools agênticas: `souls_multi_read` e `souls_fill` (CCR rehydrator).
+// Zero alocação de chaves String no DashMap (chave=u64); bloco original lossless
+// no valor. Conformidade total com ADR-037 §3 + ADR-041 (tetos 32/120).
+// =============================================================================
+
+/// `souls_multi_read` — Lê múltiplos arquivos em paralelo via tokio::fs
+/// e aplica compressão CCR (`context_compression::dedup`) em cada um.
+/// Retorna mapeamento JSON `Filepath -> CompactedContent`.
+#[allow(dead_code)] // Invocado indiretamente via match em handle_tool_call; clippy não rastreia.
+async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let raw_paths = args.get("paths").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'paths' deve ser um array de strings".to_string(),
+        data: Some(json!({ "required": "paths" })),
+    })?;
+
+    if raw_paths.is_empty() {
+        return Err(RpcError {
+            code: -32602,
+            message: "Array 'paths' não pode ser vazio".to_string(),
+            data: None,
+        });
+    }
+
+    let path_strs: Vec<String> = raw_paths
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect();
+
+    if path_strs.len() != raw_paths.len() {
+        return Err(RpcError {
+            code: -32602,
+            message: "Todos os elementos de 'paths' devem ser strings".to_string(),
+            data: None,
+        });
+    }
+
+    let compactions = context_compression::multi_read_concurrent(path_strs.iter().map(|s| s.as_str())).await;
+
+    // Constrói o mapeamento JSON Filepath -> {compacted, original_bytes, compacted_bytes, error}
+    let mut entries = serde_json::Map::new();
+    let mut ok_count = 0usize;
+    let mut err_count = 0usize;
+    let mut total_original_bytes = 0usize;
+    let mut total_compacted_bytes = 0usize;
+    for fc in compactions {
+        total_original_bytes += fc.original_bytes;
+        total_compacted_bytes += fc.compacted_bytes;
+        let entry = json!({
+            "compacted": fc.compacted,
+            "original_bytes": fc.original_bytes,
+            "compacted_bytes": fc.compacted_bytes,
+            "error": fc.error,
+        });
+        if fc.error.is_some() {
+            err_count += 1;
+        } else {
+            ok_count += 1;
+        }
+        entries.insert(fc.filepath, entry);
+    }
+
+    let saved_pct = if total_original_bytes == 0 {
+        0
+    } else {
+        let ratio = total_compacted_bytes as f64 / total_original_bytes as f64;
+        (((1.0 - ratio) * 100.0).round().clamp(0.0, 100.0)) as u32
+    };
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!(
+                "Conveyor Belt: {ok_count} arquivos compactados, {err_count} erros. \
+                 {total_original_bytes}→{total_compacted_bytes} bytes ({saved_pct}% saved)."
+            )
+        }],
+        "structuredContent": {
+            "files": entries,
+            "stats": {
+                "ok_count": ok_count,
+                "error_count": err_count,
+                "total_original_bytes": total_original_bytes,
+                "total_compacted_bytes": total_compacted_bytes,
+                "saved_percent": saved_pct,
+            },
+            "engine": "context_compression.multi_read (Marco 3.6, CCR Lossless)"
+        },
+        "isError": err_count > 0 && ok_count == 0
+    }))
+}
+
+/// `souls_fill` (CCR rehydrator) — Localiza marcadores `[SOULS-DEDUP: Block Hash 0xHASH. ...]`
+/// no texto e os substitui pelos blocos originais armazenados no `DEDUP_CACHE` (Host RAM).
+/// Operação puramente O(N) com lookup O(1) por marcador no DashMap.
+/// Fail-soft: marcadores ausentes viram string vazia + warning estruturado (nunca aborta).
+#[allow(dead_code)] // Invocado indiretamente via match em handle_tool_call; clippy não rastreia.
+async fn run_souls_ccr_fill(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let text = args.get("text").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Parâmetro obrigatório 'text' ausente".to_string(),
+        data: Some(json!({ "required": "text" })),
+    })?;
+
+    let cache = &context_compression::DEDUP_CACHE;
+    let mut expanded = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    let mut rehydrated = 0usize;
+    let mut misses: Vec<String> = Vec::new();
+    const HEX_LEN: usize = 16; // u64 = 64 bits = 16 hex chars canônicos.
+    const SUFFIX: &str = context_compression::dedup::MARKER_SUFFIX;
+
+    // Localiza o PRIMEIRO marcador a partir de `cursor`; itera até o fim.
+    // O marker é: `[SOULS-DEDUP: Block Hash 0x<16hex><MARKER_SUFFIX>`
+    // onde MARKER_SUFFIX = ". Use souls_fill para resgatar se necessário]".
+    while let Some(rel_idx) = text[cursor..].find(context_compression::dedup::MARKER_PREFIX) {
+        let abs_idx = cursor + rel_idx;
+        // Empurra tudo entre cursor e o início do marcador.
+        expanded.push_str(&text[cursor..abs_idx]);
+
+        let after_prefix = abs_idx + context_compression::dedup::MARKER_PREFIX.len();
+        // O marker válido tem: 16 chars hex + sufixo inteiro (46 chars incluindo ']').
+        if after_prefix + HEX_LEN + SUFFIX.len() > text.len() {
+            // Texto terminou antes do marker completo: mantém o resto como literal.
+            expanded.push_str(&text[abs_idx..]);
+            cursor = text.len();
+            break;
+        }
+        let hex = &text[after_prefix..after_prefix + HEX_LEN];
+        let suffix_start = after_prefix + HEX_LEN;
+        let candidate_suffix = &text[suffix_start..suffix_start + SUFFIX.len()];
+        if candidate_suffix != SUFFIX {
+            // Marker malformado (sufixo divergente): mantém como literal e avança
+            // apenas o prefixo, deixando o `find` relocalizar o próximo marker.
+            expanded.push_str(&text[abs_idx..suffix_start]);
+            cursor = suffix_start;
+            continue;
+        }
+        if let Ok(hash) = u64::from_str_radix(hex, 16) {
+            if let Some(entry) = cache.get(&hash) {
+                expanded.push_str(entry.value());
+                rehydrated += 1;
+            } else {
+                misses.push(hex.to_string());
+            }
+        } else {
+            // Hex inválido: mantém o marker como literal.
+            expanded.push_str(&text[abs_idx..suffix_start + SUFFIX.len()]);
+        }
+        cursor = suffix_start + SUFFIX.len();
+    }
+    // Empurra o restante do texto.
+    expanded.push_str(&text[cursor..]);
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": expanded.clone()
+        }],
+        "structuredContent": {
+            "expanded": expanded,
+            "rehydrated_count": rehydrated,
+            "miss_count": misses.len(),
+            "misses": misses,
+            "engine": "context_compression.dedup.fill (Marco 3.6, CCR Lossless)"
+        },
+        "isError": false
     }))
 }
 
@@ -3747,7 +3969,7 @@ mod tests {
             "id": 15,
             "method": "tools/call",
             "params": {
-                "name": "souls_fill",
+                "name": "souls_stub_fill",
                 "arguments": {
                     "file_path": file_path.to_str().unwrap(),
                     "stub_marker": "// souls-stub: my_logic",
@@ -3779,7 +4001,7 @@ mod tests {
             "id": 16,
             "method": "tools/call",
             "params": {
-                "name": "souls_fill",
+                "name": "souls_stub_fill",
                 "arguments": {
                     "file_path": file_path.to_str().unwrap(),
                     "stub_marker": "// souls-stub: non_existent",
@@ -3819,7 +4041,7 @@ mod tests {
                     "id": 20 + i,
                     "method": "tools/call",
                     "params": {
-                        "name": "souls_fill",
+                        "name": "souls_stub_fill",
                         "arguments": {
                             "file_path": p,
                             "stub_marker": format!("// souls-stub: stub_{i}"),
@@ -3853,7 +4075,7 @@ mod tests {
             "id": 30,
             "method": "tools/call",
             "params": {
-                "name": "souls_fill",
+                "name": "souls_stub_fill",
                 "arguments": {
                     "file_path": ".env",
                     "stub_marker": "stub",
@@ -3869,7 +4091,7 @@ mod tests {
             "id": 31,
             "method": "tools/call",
             "params": {
-                "name": "souls_fill",
+                "name": "souls_stub_fill",
                 "arguments": {
                     "file_path": "malicious.db",
                     "stub_marker": "stub",
@@ -4021,6 +4243,215 @@ mod tests {
         let resp2 = super::handle_mcp(dedup_req2).await.expect("deve processar dedup 2");
         let text2 = resp2["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text2.contains("// [dedup: 5 lines hidden"));
+    }
+
+    /// ADR-041 (Emenda Constitucional 32/120): o `tools/list` retornado pelo server
+    /// `souls_mcp` DEVE respeitar os tetos rígidos de 32 caracteres (nome) e 120
+    /// caracteres (descrição). Este teste é a cerca perimétrica em runtime que
+    /// valida a integridade de toda nova tool adicionada.
+    #[tokio::test]
+    async fn tools_list_respects_32_120_tetos() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+
+        assert!(!tools.is_empty(), "tools/list nao pode ser vazio");
+        for t in tools {
+            let n = t["name"].as_str().unwrap_or_else(|| panic!("tool sem name: {t:?}"));
+            assert!(
+                n.len() <= 32,
+                "ADR-041: tool '{n}' excede teto de 32 chars ({}): {n}",
+                n.len()
+            );
+            let d = t["description"].as_str().unwrap_or("");
+            assert!(
+                d.len() <= 120,
+                "ADR-041: tool '{n}' desc excede teto de 120 chars ({}): {d}",
+                d.len()
+            );
+        }
+    }
+
+    /// ADR-041: `serverInfo.name` DEVE ser `souls_mcp` (Emenda Constitucional).
+    #[tokio::test]
+    async fn server_info_name_is_souls_mcp() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let name = resp["result"]["serverInfo"]["name"]
+            .as_str()
+            .expect("serverInfo.name deve ser string");
+        assert_eq!(
+            name, "souls_mcp",
+            "ADR-041: serverInfo.name deve ser 'souls_mcp', encontrado '{name}'"
+        );
+    }
+
+    // =============================================================================
+    // SOULS-CANIBALIZED Marco 3.6: TDD Conveyor Belt (CCR Lossless).
+    // Mutex global com `unwrap_or_else(|p| p.into_inner())` para isolar o estado
+    // compartilhado do `DEDUP_CACHE` entre os 4 tests TDD (paralelos por padrão
+    // em cargo test). Fail-soft: envenenamento de lock por panic de outro test
+    // não aborta a suíte inteira.
+    // =============================================================================
+    fn ccr_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static CCR_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        match CCR_TEST_MUTEX.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        }
+    }
+
+    /// 1. `test_dedup_5_lines_trigger`: bloco idêntico de 5+ linhas consecutivas
+    /// GERA compactação com marcador e SALVA o original no `DEDUP_CACHE`.
+    /// Segunda ocorrência vira marcador `[SOULS-DEDUP: Block Hash 0x<hex_8>...]`.
+    #[test]
+    fn test_dedup_5_lines_trigger() {
+        let _g = ccr_test_lock();
+        souls_mc_lib::cognition::context_compression::clear_dedup_cache();
+        let block = "alpha\nbeta\ngamma\ndelta\nepsilon\n";
+        // Primeira ocorrência: registra no cache, mantém texto físico.
+        let (out1, stats1) =
+            souls_mc_lib::cognition::context_compression::compress_with_dedup(block);
+        assert_eq!(out1, block, "Primeira ocorrência deve preservar o texto físico");
+        assert_eq!(stats1.deduplicated_blocks, 0);
+        assert_eq!(stats1.cache_inserts, 1);
+        // Segunda ocorrência (mesmo bloco): deve virar marcador e bloco deve estar no cache.
+        let (out2, stats2) =
+            souls_mc_lib::cognition::context_compression::compress_with_dedup(block);
+        assert!(
+            out2.contains("[SOULS-DEDUP: Block Hash 0x"),
+            "Segunda ocorrência deve produzir marcador. Saida: {out2}"
+        );
+        assert_eq!(stats2.deduplicated_blocks, 1);
+        // Verifica que o bloco original está no cache (lossless reversível).
+        let cache = &souls_mc_lib::cognition::context_compression::DEDUP_CACHE;
+        assert!(cache.len() >= 1, "DEDUP_CACHE deve conter ao menos 1 entrada");
+        let block_trim = block.trim_end_matches('\n');
+        let found = cache.iter().any(|e| e.value() == block_trim);
+        assert!(found, "Bloco original lossless deve estar gravado no DEDUP_CACHE");
+    }
+
+    /// 2. `test_dedup_under_5_lines_ignored`: repetições de apenas 4 linhas ou
+    /// menos SÃO IGNORADAS pelo compressor (não viram marcador).
+    #[test]
+    fn test_dedup_under_5_lines_ignored() {
+        let _g = ccr_test_lock();
+        souls_mc_lib::cognition::context_compression::clear_dedup_cache();
+        // Bloco de apenas 4 linhas duplicado 2 vezes.
+        let block_4 = "one\ntwo\nthree\nfour\n";
+        let (out1, stats1) =
+            souls_mc_lib::cognition::context_compression::compress_with_dedup(block_4);
+        let (out2, stats2) =
+            souls_mc_lib::cognition::context_compression::compress_with_dedup(block_4);
+        // Nenhuma das duas deve produzir marcador.
+        assert!(
+            !out1.contains("[SOULS-DEDUP:") && !out2.contains("[SOULS-DEDUP:"),
+            "Blocos < 5 linhas não devem ser compactados. out1={out1:?} out2={out2:?}"
+        );
+        assert_eq!(stats1.deduplicated_blocks, 0);
+        assert_eq!(stats2.deduplicated_blocks, 0);
+    }
+
+    /// 3. `test_multi_read_concurrency_and_compression`: lê 3 arquivos em paralelo
+    /// (com bloco duplicado entre dois deles) e valida que `souls_multi_read`
+    /// retorna 3 entradas com compactação aplicada.
+    #[tokio::test]
+    async fn test_multi_read_concurrency_and_compression() {
+        use serde_json::json;
+        let _g = ccr_test_lock();
+        souls_mc_lib::cognition::context_compression::clear_dedup_cache();
+
+        let test_dir = super::workspace_root().join("target").join("test_scratch_ccr");
+        let _ = std::fs::create_dir_all(&test_dir);
+        let file_a = test_dir.join("a.txt");
+        let file_b = test_dir.join("b.txt");
+        let file_c = test_dir.join("c.txt");
+
+        let shared_block = "linha1\nlinha2\nlinha3\nlinha4\nlinha5\n";
+        let content_a = format!("preamble\n{shared_block}epilogue_a\n");
+        let content_b = format!("preamble\n{shared_block}epilogue_b\n");
+        let content_c = "outro\nconteudo\nsem\nduplicatas\nrelevantes\n".to_string();
+
+        tokio::fs::write(&file_a, &content_a).await.unwrap();
+        tokio::fs::write(&file_b, &content_b).await.unwrap();
+        tokio::fs::write(&file_c, &content_c).await.unwrap();
+
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 50,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_multi_read",
+                "arguments": {
+                    "paths": [
+                        file_a.to_str().unwrap(),
+                        file_b.to_str().unwrap(),
+                        file_c.to_str().unwrap(),
+                    ]
+                }
+            }
+        });
+        let resp = super::handle_mcp(req).await.expect("deve processar multi_read");
+        assert!(resp["result"]["structuredContent"]["files"].is_object());
+        let files = resp["result"]["structuredContent"]["files"].as_object().unwrap();
+        assert_eq!(files.len(), 3, "Devem haver 3 entradas no map");
+        // Stats agregados
+        let stats = &resp["result"]["structuredContent"]["stats"];
+        assert_eq!(stats["ok_count"].as_u64().unwrap(), 3);
+        assert_eq!(stats["error_count"].as_u64().unwrap(), 0);
+
+        // Limpa fixtures para não vazar estado entre runs.
+        let _ = std::fs::remove_file(&file_a);
+        let _ = std::fs::remove_file(&file_b);
+        let _ = std::fs::remove_file(&file_c);
+    }
+
+    /// 4. `test_fill_rehydration_equivalence`: aplica `souls_fill` em texto
+    /// compactado e valida que a string final é EXATAMENTE idêntica ao original
+    /// byte-a-byte (lossless), validada por hash SHA-256.
+    #[tokio::test]
+    async fn test_fill_rehydration_equivalence() {
+        use serde_json::json;
+        use sha2::{Digest, Sha256};
+        use souls_mc_lib::cognition::context_compression;
+
+        let _g = ccr_test_lock();
+        context_compression::clear_dedup_cache();
+
+        let original = "header\nrow1\nrow2\nrow3\nrow4\nrow5\nfooter\n";
+        // Comprime duas vezes: a 1ª popula o cache, a 2ª produz o marcador.
+        let _ = context_compression::compress_with_dedup(original);
+        let (compacted, _) = context_compression::compress_with_dedup(original);
+        assert!(compacted.contains("[SOULS-DEDUP: Block Hash 0x"));
+
+        // Rehidratação via tool MCP `souls_fill`.
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 60,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_fill",
+                "arguments": {
+                    "text": compacted
+                }
+            }
+        });
+        let resp = super::handle_mcp(req).await.expect("deve processar fill");
+        let expanded = resp["result"]["structuredContent"]["expanded"]
+            .as_str()
+            .expect("expanded deve ser string");
+        // SHA-256 do original e do expandido devem ser idênticos (lossless reversível).
+        let hash_orig = Sha256::digest(original.as_bytes());
+        let hash_expanded = Sha256::digest(expanded.as_bytes());
+        assert_eq!(
+            format!("{:x}", hash_orig),
+            format!("{:x}", hash_expanded),
+            "SHA-256 do expandido DEVE ser igual ao do original (lossless CCR)."
+        );
+        // Equivalência literal byte-a-byte.
+        assert_eq!(expanded, original, "Expandido deve ser byte-a-byte idêntico ao original");
     }
 }
 

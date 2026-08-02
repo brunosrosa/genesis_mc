@@ -1,4 +1,8 @@
-_MCP_INVENTORY Gerado em: 2026-07-31 22:01:49
+<<<<<<< Updated upstream
+_MCP_INVENTORY Gerado em: 2026-08-02 01:37:27
+=======
+_MCP_INVENTORY Gerado em: 2026-08-02 03:16:34
+>>>>>>> Stashed changes
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory

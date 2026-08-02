@@ -1,4 +1,4 @@
-_ADRs_ALL Gerado em: 2026-07-31 15:46:59
+_ADRs_ALL Gerado em: 2026-08-02 03:16:07
 
 ### ====================================================================================================
 ARQUIVO: ADR-001-Core-Stack-Restrita.md
@@ -2389,3 +2389,322 @@ A emissão descontrolada e bruta dessas saídas de terminal traz duas ameaças c
 
 ### Impactos Negativos:
 - **Perda de Verbosidade Cosmética:** Em diagnósticos complexos de build onde um warning omitido pode indicar a causa raiz indireta, o operador humano pode precisar requisitar o log bruto não comprimido.
+
+### ====================================================================================================
+ARQUIVO: ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
+---
+---
+id: "ADR-039"
+title: "ADR-039: Auditoria de Cargo FinOps & Pipeline de Build Determinístico"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura"
+description: "Consolida as decisões de otimização do pipeline `cargo build` no SOULS MC (RTX 2060m 6GB / Z: ReFS): sccache persistente, rust-lld, perfis granulares, exclusões Defender, migração NTFS→ReFS e patch GGML_CCACHE=OFF com idempotência. Speedup medido: 120x (sem CUDA) e ~1000x (com CUDA) entre cold e warm."
+---
+
+# ADR-039: Auditoria de Cargo FinOps & Pipeline de Build Determinístico
+
+## Status
+
+Aceito (Ativo e Inegociável) — Branch `fix/cargo-finops-v1` consolidada
+
+## Contexto Técnico e Ameaça ao Determinismo
+
+O SOULS MC é uma esteira **bare-metal Rust + Tauri v2** que compila 7 binários supervisionados (`souls_mc`, `souls_mcp_server`, `agentgateway_tcp_proxy`, `mcp_stdio_guard`, `scan_local_models_cli`, `souls_ephemeral_infer_cli`, e variantes CUDA) com dependências pesadas: `wasmtime`, `gix`, `reqwest`, `llama-cpp-sys-2` (vendor pinado em 0.1.152 com 343 arquivos CUDA), `mistralrs`, `tauri-build` (codegen re-iterativo). Ambiente: Windows 11 + Rust 1.94.1 + RTX 2060m (6GB VRAM) com disco Z: (ReFS Dev Drive 80GB) e `target/debug/` chegando a **27+ GB** após builds CUDA.
+
+A auditoria realizada nas sessões 2026-07-31 → 2026-08-01 (documentada em [`.souls_scratchpad/_CARGO_AUDIT_2026-07-31.md`](file:///z:/souls_mc/.souls_scratchpad/_CARGO_AUDIT_2026-07-31.md)) identificou **três ameaças críticas** ao ciclo de desenvolvimento iterativo:
+
+1. **Saturação de tempo de build (cold ~42 min com CUDA)**: o `link.exe` do MSVC é single-thread e gargalo nº1 do link. Sem cache persistente, `cargo clean` invalida **100% do trabalho de rustc** a cada vez. Defender em modo default escaneia cada `.rlib`/`.rmeta` em tempo real, multiplicando I/O por 3-5x.
+2. **Bug upstream bloqueante (`option(GGML_CCACHE ... ON)` no llama.cpp)**: o vendor pinado cria um CACHE BOOL no CMake que **ignora `GGML_CCACHE=OFF` no ambiente**. Quando `sccache` está no PATH, CMake wrappa `sccache nvcc`, que falha com `fatbinary: Could not open input file '*.ptx'`. Bloqueio total de builds com `llama_backend` feature (CUDA).
+3. **Premissas operacionais incorretas herdadas** (`_CARGO_VERIFICATION.txt`): 5/15 premissas estavam erradas ou não-implementadas (rust-lld ausente, sccache não instalado, ReFS assumido mas Z: era NTFS, perfis granulares inexistentes, `[profile.release]` ausente).
+
+## Decisões Inegociáveis
+
+### 1. Migração do Volume de Build: NTFS → ReFS Dev Drive
+
+- O disco Z: foi inadvertidamente criado como **NTFS** (default do Windows ao formatar). Recriado como **ReFS Dev Drive** via `Format-Volume -FileSystem ReFS -DevDrive`, preservando 85.83 GB com hard links nativos e block cloning.
+- ReFS entrega 20-30% mais I/O em workloads de milhares de arquivos pequenos (padrão de `target/debug/deps/` com 22+ GB em 65k arquivos).
+- `Get-MpPreference | Select-Object DevDriveProtectionMode` deve retornar `RealTimeAsync` (proteção assíncrona, zero overhead de scan). Limitação aceita: em build 26H2 Insider Preview, este parâmetro não existe; as exclusões de path/processo suprem parcialmente.
+
+### 2. sccache Persistente com Wrapper em `RUSTC_WRAPPER`
+
+- Instalação: `cargo install sccache --locked --jobs 8` (16m 34s para v0.17.0).
+- Cache vive em `Z:\.sccache` (NÃO em `target/`), sobrevive a `cargo clean` e a trocas de branch. Budget: `SCCACHE_CACHE_SIZE=8G`.
+- Wrapper declarado em [`.cargo/config.toml`](file:///z:/souls_mc/.cargo/config.toml) via `[build] rustc-wrapper = "sccache"`, com env `RUSTC_WRAPPER="sccache"` injetado pelo [`boot.ps1`](file:///z:/souls_mc/boot.ps1).
+- Defesa em profundidade: `CARGO_BUILD_JOBS=8` (paralelismo de rustc) declarado no `.cargo/config.toml` e reforçado no `boot.ps1`.
+- Flag `--locked` obrigatória no `cargo build` do `boot.ps1` (evita regenerar `Cargo.lock` e invalidar chaves do cache).
+
+### 3. rust-lld como Linker (Paralelização do Link)
+
+- `linker = "rust-lld.exe"` em `[target.x86_64-pc-windows-msvc]`. O `link.exe` do MSVC é single-thread e gargalo principal; rust-lld paraleliza por padrão.
+- Rustflags adicionais: `/OPT:REF` (remove seções não-referenciadas), `/OPT:ICF` (folding de funções idênticas), `/Brepro` (reprodutibilidade bit-a-bit do binário).
+- **NÃO usamos** `/GUARD:CF` (mitigação Spectre) no dev — adiciona latência de link sem ganho mensurável em prototipagem.
+
+### 4. Perfis Granulares (dev / test / release) no Cargo
+
+- **[`.cargo/config.toml`](file:///z:/souls_mc/.cargo/config.toml) `[profile.dev]`**:
+  - `incremental = false` (LEI DE FERRO — Tauri-codegen + multi-vendor corrompe cache incremental em silêncio; confiamos 100% no sccache).
+  - `opt-level = 1` em código nosso (ganho de runtime sem esticar compile).
+  - `debug = 1` (line-tables only — stack traces claros, sem PDBs gigantes de ~30 MB por crate).
+  - `codegen-units = 256` em código nosso (máxima paralelização de LLVM).
+- **`[profile.dev.package."*"]`**: `opt-level=3`, `codegen-units=1` para deps (estabilidade de RAM; evita RSS >12 GB durante build paralela de 5 binários).
+- **Memory-killers explícitos** (`opt-level=0`): `wasmtime`, `wasmtime-cranelift`, `wasmtime-environ`, `gix`, `reqwest`, `llama-cpp-sys-2`, `mistralrs`. Mantém RSS do build agregado < 6 GB (alinhado ao orçamento VRAM do host).
+- **[`src-tauri/Cargo.toml`](file:///z:/souls_mc/src-tauri/Cargo.toml) `[profile.release]`**: `lto = "thin"`, `panic = "abort"`, `codegen-units = 1`, `strip = "symbols"`, `opt-level = 3`, `incremental = false`.
+- **`[profile.test]`** herda de dev, mas `opt-level = 0` (sem ganho real em otimizar para test; economiza ~10%).
+
+### 5. Patch Local `GGML_CCACHE=OFF` no Vendor + Idempotência
+
+- **Arquivo patcheado**: [`src-tauri/vendor/llama-cpp-sys-2/llama.cpp/ggml/CMakeLists.txt:125`](file:///z:/souls_mc/src-tauri/vendor/llama-cpp-sys-2/llama.cpp/ggml/CMakeLists.txt#L125-L125)
+  - Antes: `option(GGML_CCACHE "ggml: use ccache if available" ON)`
+  - Depois: `option(GGML_CCACHE "ggml: use ccache if available" OFF)`
+- **Causa raiz**: `option(... ON)` cria CACHE BOOL no CMake com precedência sobre env var. `GGML_CCACHE=OFF` no ambiente é **ignorado**. CMake sempre wrappa `sccache nvcc` quando `sccache` está no PATH, e nvcc falha com `fatbinary: Could not open input file '*.ptx'`.
+- **Idempotência obrigatória no [`boot.ps1`](file:///z:/souls_mc/boot.ps1#L29-L43)** (linhas 29-43): bloco PowerShell que re-aplica o patch em todo boot, tolerante a `cargo update` que reverte o vendor. Regex match → `-replace` → `Set-Content`. Logado como `[PATCH] vendor/llama-cpp-sys-2 GGML_CCACHE -> OFF (auto-fix CUDA+sccache)`.
+- **Workarounds testados e rejeitados** (todos falharam): `GGML_CCACHE=OFF` no env (ignorado), `SCCACHE_DISABLE=1` (RULE_LAUNCH_COMPILE do build.ninja sobrescreve), `find_program` filter (ninja cacheado ignora PATH), renomear `sccache.exe` (ninja invoca por path absoluto), `cargo clean -p llama-cpp-sys-2` (fingerprint recriado).
+- **Issue draft** preparado em [`.souls_scratchpad/_ISSUE_DRAFT_GGML_CCACHE.md`](file:///z:/souls_mc/.souls_scratchpad/_ISSUE_DRAFT_GGML_CCACHE.md) para postar em `ggml-org/llama.cpp` (template `010-bug-compilation.yml`).
+
+### 6. 8 Exclusões Windows Defender (Paths + Processes)
+
+- Script: [`scripts/add_defender_exclusions.ps1`](file:///z:/souls_mc/scripts/add_defender_exclusions.ps1) — auto-eleva privilégio, idempotente.
+- **Bug corrigido na linha 74**: `@{ $Kind = $Value }` produzia `Path`/`Process` em vez de `ExclusionPath`/`ExclusionProcess` que `Add-MpPreference` espera. Patch aplicado: `if ($Kind -eq 'Path') { Add-MpPreference -ExclusionPath $Value } else { Add-MpPreference -ExclusionProcess $Value }`.
+- **Paths (3)**: `Z:\souls_mc`, `Z:\souls_mc\src-tauri\target`, `C:\Users\rosas\.cargo`, `C:\Users\rosas\.rustup`.
+- **Processes (5)**: `rustc.exe`, `cargo.exe`, `sccache.exe`, `rust-lld.exe`, `link.exe`.
+- Aplicadas em janela admin via `Invoke-TrackedProcess` ou execução direta. Validação: `Get-MpPreference | Select-Object ExclusionPath -ExpandProperty ExclusionPath` lista 7+ paths.
+
+### 7. Baseline Empírico Capturado (Medições, Não Estimativas)
+
+| Build | Cold real | Warm | Speedup |
+|---|---|---|---|
+| **Sem `llama_backend`** (CUDA off) | **16m 35s** (708 rustc) | 1-8s | **~120x** |
+| **Com `llama_backend`** (CUDA on) | **42m 9s** (343 CUDA + 708 rustc) | 2.4s | **~1000x** |
+
+- **Cold real corrigido pós-`cargo clean`**: o baseline inicial de 2m era **warm disfarçado de cold** (artefatos em `target/debug/` do build anterior). O cold real é 16-17 min para o grafo completo sem CUDA. Builds < 5 min "cold" sem `cargo clean` prévio são na verdade warm.
+- `cargo clean` liberou **27.66 GB em 30s** de `target/debug/` pós-builds CUDA. Padrão correto: `cargo clean -p <crate>` para limpar 1 pacote; `cargo clean` total é operação rara.
+
+## Consequências e Trade-offs
+
+### Impactos Positivos
+
+- **Speedup massivo entre iterações**: warm builds < 10s (sem CUDA) e < 3s (com CUDA). O ganho está 100% no ciclo dev iterativo, não no cold (que ainda é demorado por causa do CUDA device code).
+- **CUDA destravado**: builds com `llama_backend` (feature `["dep:llama-cpp-2", "llama-cpp-2/cuda", "dep:llguidance"]`) agora completam em 42m cold / 2.4s warm. Antes: EXIT 101 imediato.
+- **Idempotência absoluta**: o patch GGML_CCACHE sobrevive a `cargo update` via auto-reaplicação no `boot.ps1`. O Defender exclusions é idempotente. O sccache cache é persistente em Z: (ReFS).
+- **I/O alinhado com VRAM**: perfis granulares mantêm RSS do build agregado < 6 GB, alinhado ao teto da RTX 2060m. Sem OOM durante build paralela de 5 binários.
+- **Documentação cross-session**: [`project_memory.md`](file:///c:/Users/rosas/.trae/memory/projects/-z-souls-mc/project_memory.md) carrega baseline, hard constraints, lessons learned — engenheiro SOULS retoma sem repetir auditoria.
+
+### Impactos Negativos
+
+- **sccache NÃO wrappa compiladores C/C++ do llama.cpp**: o `option(GGML_CCACHE ... OFF)` desabilita o cache de C/C++ no llama.cpp. Ganho perdido: ~0.5-1s no cold. Aceitável (era bloqueante antes).
+- **Patch vendor é invasivo**: embora idempotente, depende de patch local em arquivo do vendor. Se o upstream mudar a linha (ex: reformatação), o regex do `boot.ps1` pode não casar. Mitigação: regex tolerante a whitespace variável (`\s+ON\)`).
+- **Mover `CARGO_HOME` para Z: foi rejeitado**: ganho marginal (10-20% I/O no cold) com risco não-zero de quebrar symlinks/hooks do rustup. Trade-off FinOps desfavorável.
+- **Mover `~/.rustup` foi rejeitado**: mesma análise — risco médio, ganho marginal (5-10% cold).
+- **Unificar `base64` 0.21.7/0.22.1 via `[patch.crates-io]` rejeitado**: ganho <1% no cold, risco alto de quebrar grafo de features. `cargo tree --workspace --duplicates` documenta, mas unificação não compensa.
+
+## Restrições Bare-Metal
+
+- **Latência de warm build**: deve permanecer **abaixo de 10s** (sem CUDA) e **abaixo de 5s** (com CUDA). Acima disso, regressão indica invalidação do cache sccache ou mudança estrutural que requer nova auditoria.
+- **Carga de RAM durante build**: RSS agregado do `cargo build` (paralelo de 5 binários) deve permanecer **abaixo de 6 GB** (alinhado ao orçamento VRAM da RTX 2060m).
+- **Patch GGML_CCACHE idempotente**: o `boot.ps1` DEVE re-aplicar o patch em toda execução. `cargo update` que reverter o vendor sem re-patch é regressão — bloquear `cargo update` automático e exigir revisão manual.
+- **Defender exclusions ativas**: 8 exclusões (4 paths + 5 processes) devem estar sempre presentes. Validação: `Get-MpPreference | Select-Object ExclusionPath, ExclusionProcess` retorna lista não-vazia antes de qualquer `cargo build` em CI/CD.
+- **Disco Z: livre**: manter **≥ 20 GB livres** em Z: (ReFS) para acomodar `target/debug/` (até 27 GB em cold CUDA) + sccache cache (8 GB) + overhead de build scripts. Abaixo disso: `cargo clean -p <crate>` antes de build pesado.
+- **`incremental = false` inegociável**: Tauri-codegen + multi-vendor corrompe o cache incremental em silêncio. Habilitar `incremental = true` reverte FinOps de semanas.
+
+## Anti-Slop (Decisões Rejeitadas)
+
+- ❌ **`cargo clean` como rotina** — proibido. Use `cargo clean -p <crate>` para 1 pacote.
+- ❌ **Mover `CARGO_HOME` (`.cargo/registry`) para Z:** — risco/benefício desfavorável.
+- ❌ **Mover `~/.rustup/toolchains` para Z:** — risco médio, ganho marginal.
+- ❌ **Habilitar `incremental = true` em dev** — Tauri-codegen + multi-vendor corrompe cache (lei de ferro).
+- ❌ **`cargo nextest` por padrão** — pode ser mais lento no Windows para suítes pequenas.
+- ❌ **`opt-level = "s"` em release** — inferência numérica (mistralrs/llama) se beneficia agressivamente de AVX2; opt-level=3 é correto.
+- ❌ **`Set-MpPreference -DisableRealtimeMonitoring $true`** — risco de segurança inaceitável.
+- ❌ **Migrar para cloud build** — overhead FinOps, sem ganho claro.
+- ❌ **Instalar nightly Rust** — perde reprodutibilidade do toolchain.
+
+## Pendentes (Backlog de Investigação — Não Críticos)
+
+- **D1 (tauri handler split)**: wrap cada handler em sua própria função para evitar re-typecheck de TODOS os commands. Adiar para sprint FinOps dedicado.
+- **C4 (workspace split)**: avaliar split de `souls_mc_lib` em `core/`, `infer/`, `harvest/`, `mcp/` para criar fronteiras de compilação.
+- **F4 (cargo tree --duplicates)**: unificar `base64` 0.21.7/0.22.1, `bitflags` 2.13.0 via features mais específicas em `tauri-utils` (ganho <1%, não urgente).
+- **B1 (cargo --timings)**: já executado (1.38s, pouca info útil para o grafo atual). Re-executar após workspace split.
+- **O1-O7 (auditorias específicas)**: target/build 2.99 GB, examples 363 MB, vendor pinning, `tauri-plugin-opener` audit, etc.
+- **Reportar bug ao upstream**: postar issue draft em `ggml-org/llama.cpp` (decisão do engenheiro humano).
+
+## Referências Operacionais
+
+- Auditoria completa: [`.souls_scratchpad/_CARGO_AUDIT_2026-07-31.md`](file:///z:/souls_mc/.souls_scratchpad/_CARGO_AUDIT_2026-07-31.md) (16 seções, 858 linhas).
+- Issue draft: [`.souls_scratchpad/_ISSUE_DRAFT_GGML_CCACHE.md`](file:///z:/souls_mc/.souls_scratchpad/_ISSUE_DRAFT_GGML_CCACHE.md).
+- Config build: [`.cargo/config.toml`](file:///z:/souls_mc/.cargo/config.toml).
+- Profile release: [`src-tauri/Cargo.toml`](file:///z:/souls_mc/src-tauri/Cargo.toml).
+- Bootstrap: [`boot.ps1`](file:///z:/souls_mc/boot.ps1).
+- Defender exclusions: [`scripts/add_defender_exclusions.ps1`](file:///z:/souls_mc/scripts/add_defender_exclusions.ps1).
+- Vendor patch: [`src-tauri/vendor/llama-cpp-sys-2/llama.cpp/ggml/CMakeLists.txt`](file:///z:/souls_mc/src-tauri/vendor/llama-cpp-sys-2/llama.cpp/ggml/CMakeLists.txt) (linha 125).
+- Cross-session memory: [`project_memory.md`](file:///c:/Users/rosas/.trae/memory/projects/-z-souls-mc/project_memory.md).
+
+### ====================================================================================================
+ARQUIVO: ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
+---
+---
+id: "ADR-040"
+title: "ADR-040: Migração do souls_state.db v1→v2 e Disjuntor Cognitivo (5→7) no Marco 3.5"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Cognição / Memória"
+description: "Promove o banco L2 `souls_state.db` para v2 (PRAGMA user_version), separando observações em tabela normalizada própria com triggers FTS5; institui o disjuntor cognitivo 5→7 (HITL) do scratchpad socrático `souls_thinking`. Materializa o Marco 3.5 (Core Cognitivo) sob PRD-031 e PRD-032 sem dependências novas no Cargo.toml."
+---
+
+# ADR-040: Migração do souls_state.db v1→v2 e Disjuntor Cognitivo (5→7)
+
+## Status
+
+Aceito (Ativo e Inegociável) — Branch `feat/cognition-core-v1` em forja. Marco 3.5 (Core Cognitivo) do SOULS MC.
+
+## Contexto Técnico e Ameaça à Cognição Local
+
+A esteira SOULS MC (Rust + Tauri v2, RTX 2060m 6GB, Z: ReFS) opera 100% offline, air-gapped, com latências sub-milissegundo. Subagentes locais (LlamaVanguardEngine, LlamaCppEngine) sofrem de duas patologias agudas que comprometem a autonomia do sistema:
+
+1. **Amnésia Epistêmica Temporal (Context Rot)** — subagentes perdem o rastro de decisões tomadas em turnos passados, repetindo buscas e redigitando código. Causa raiz: a memória relacional (`entities`/`relations`) existe fisicamente no `souls_state.db` (criada por `init_state_db_and_worker()` em [src-tauri/src/bin/souls_mcp_server.rs:2206](file:///z:/souls_mc/src-tauri/src/bin/souls_mcp_server.rs#L2206)), porém **as 9 ferramentas MCP canônicas do `memory-mcp-rs` (`mem_create_entities`, `mem_search`, etc.) não estão expostas no `tools/list`**. As observações estão embutidas como coluna JSON em `entities.observations` — violando a 3FN e impossibilitando busca observacional indexada.
+2. **Paralisia de Análise (Overthinking)** — modelos compactos locais tentam cuspir a resposta inteira em um único passo estocástico, falhando em manter restrições lógicas. Causa raiz: ausência de uma máquina de estados socrática (`Regular | Revision | Branching`) que force decomposição iterativa sob orçamento rígido, e ausência de um disjuntor FinOps que limite a profundidade do raciocínio.
+
+A auditoria de trincheira (laudo 2026-08-01) confirmou que **70% do alicerce físico já existe** (WAL, `busy_timeout=5000ms`, `foreign_keys=ON`, `entities`/`relations`, FTS5 e MPSC buffer 100 em `StateDbOp`). O gap é 100% código novo, sem dependências externas, com canibalização cirúrgica das APIs do `memory-mcp-rs` e do `ultrafast-mcp-sequential-thinking`.
+
+## Decisão Arquitetural (A Matriz do Marco 3.5)
+
+### 1. Migração V1 → V2 (PRAGMA user_version)
+- Fica introduzido o versionamento explícito do schema via `PRAGMA user_version` (canônica do SQLite, presente no trunk desde 3.x).
+- V1 = estado atual (somente `entities`/`relations` com `observations` como coluna JSON).
+- V2 = adiciona tabela normalizada `observations` + virtual table FTS5 espelhada + triggers de sincronização.
+- **Sem drops destrutivos** (a coluna `entities.observations` é mantida para retrocompatibilidade; nenhum dado existente é perdido). A hidratação de `Entity.observations: Vec<String>` na API é feita via JOIN em runtime, lendo exclusivamente da nova tabela.
+- Toda migração é executada dentro de **transação atômica** (`conn.transaction()` do rusqlite), garantindo que um crash no meio do DDL não corrompa o banco.
+
+### 2. A Tríade de Segurança do SQLite (já canônica, agora auditada)
+- `PRAGMA journal_mode = WAL` — append-only, protege SSD (TBW) [ADR-004].
+- `PRAGMA foreign_keys = ON` — `ON DELETE CASCADE` real entre `entities` e `observations`.
+- `PRAGMA busy_timeout = 5000ms` — tolerância a contenção sob swarm.
+- Idempotência: `CREATE TABLE IF NOT EXISTS` + `CREATE TRIGGER IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`. Re-rodar `init_state_db_and_worker` é seguro.
+
+### 3. O MPSC Buffer 100 e a Concorrência
+- O canal `tokio::sync::mpsc` (buffer 100) já existe como `STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>>` para `SubAgent`/`Handoff`/`Knowledge`. O Core Cognitivo **estende o mesmo padrão** introduzindo variantes `MemGraphOp` (9 operações do grafo) e o estado in-RAM do `ThinkingEngine` (sem persistência obrigatória).
+- Worker canônico: `std::thread::spawn` + `rx.blocking_recv()` — sincronia pura para `rusqlite`, isolada do event loop do Tokio (sem `spawn_blocking`).
+- Backpressure: `try_send` com jitter de 0–8ms (Jitter determinístico via `rand::thread_rng` se disponível; caso contrário, sleep de 0 nanossegundos) para telemetria. `request().await` apenas para confirmação transacional.
+
+### 4. Disjuntor Cognitivo 5 → 7 (HITL)
+- `DEFAULT_HARD_LIMIT = 5` — teto absoluto por padrão.
+- `HITL_EXTENDED_LIMIT = 7` — teto elástico sob autorização explícita do Arquiteto via `hitl_authorized: true` no payload MCP de `core_think`.
+- Validação server-side pura: nenhuma variável de ambiente, nenhum bypass por flag de boot. O sinal de "liberação" viaja **fim-de-fio** no payload e é validado pelo `ThinkingEngine` antes de cada `push_thought`.
+- Erro tipado: `CognitiveError::OverthinkingThresholdBreached { actual: u32, max: u32 }` — Fail-Closed L7 conforme [ADR-006](file:///z:/souls_mc/docs/adrs/ADR-006-SSOT-Sheets.md).
+- Tríade obrigatória no `souls_thinking`: `Regular | Revision | Branching`. Validação de `is_revision=true ⇒ revises_thought.is_some()` (sob `CognitiveError::RevisionWithoutTarget`).
+
+### 5. Lei do Zero-Dep (Hard Constraint)
+- **Nenhuma crate nova é adicionada ao `Cargo.toml`**. A forja inteira usa exclusivamente: `rusqlite = "=0.39.0"` (já bundled), `tokio = "=1.51.1"` (full), `thiserror`, `serde`, `serde_json`, `dashmap`, `tracing`. Timestamps via `std::time::SystemTime` em milissegundos — `chrono` permanece banido (canon do ADR-005 / ADR-030).
+
+### 6. Canonical Souls_* Naming
+- Módulo: `src-tauri/src/cognition/memory_graph/` (souls_graph canibalizado).
+- Módulo: `src-tauri/src/cognition/thinking/` (souls_thinking canibalizado).
+- Operações: `mem_create_entities`, `mem_create_relations`, `mem_add_observations`, `mem_search`, `mem_open_nodes`, `mem_read_graph`, `mem_delete_entities`, `mem_delete_observations`, `mem_delete_relations`, `core_think`. **Não recebem o prefixo `souls_`** no `tools/list` (canônico do memory-mcp-rs), mas o módulo Rust subjacente é `memory_graph::*` e `thinking::*`.
+
+## Caminhos Físicos da Mutação
+
+```
+docs/adrs/ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md   [NEW] este arquivo
+src-tauri/src/cognition/mod.rs                                     [EDIT] +2 pub mod
+src-tauri/src/cognition/memory_graph/mod.rs                        [NEW]
+src-tauri/src/cognition/memory_graph/types.rs                      [NEW] Entity, Relation, Observation
+src-tauri/src/cognition/memory_graph/errors.rs                     [NEW] CognitiveError
+src-tauri/src/cognition/memory_graph/ops.rs                        [NEW] 9 funções canônicas
+src-tauri/src/cognition/memory_graph/fts.rs                        [NEW] DDL dos triggers FTS5
+src-tauri/src/cognition/memory_graph/mpsc_bridge.rs                [NEW] MemGraphOp + spawn worker
+src-tauri/src/cognition/thinking/mod.rs                            [NEW]
+src-tauri/src/cognition/thinking/types.rs                          [NEW] ThoughtData, BranchId, ThoughtId
+src-tauri/src/cognition/thinking/errors.rs                         [NEW] ThinkingError (estende CognitiveError)
+src-tauri/src/cognition/thinking/state_machine.rs                  [NEW] ThinkingEngine + disjuntor
+src-tauri/src/bin/souls_mcp_server.rs                              [EDIT] migração V2, tools/list, handle_mcp, testes
+docs/state/SODA_CURRENT_STATE.md                                   [EDIT] Marco 3.5 → Ativo
+```
+
+## Consequências Operacionais (Trade-offs)
+
+**Positivo:**
+- Grafo relacional cognitivo (9 ops) e scratchpad socrático (1 op) nativos, sem daemons Python/Node, sem dependências novas.
+- Custo de migration é O(1) em cold start (DDL idempotente) e zero em warm start (apenas `PRAGMA user_version`).
+- Disjuntor FinOps: o `core_think` nunca ultrapassa 7 pensamentos, blindando VRAM contra loops socráticos infinitos.
+- FTS5 sub-milissegundo: triggers de sincronização mantêm `observations_fts` consistente com `observations` em <1ms por batch.
+
+**Negativo (manutenção):**
+- O `entities.observations` legado permanece como coluna morta no schema (backwards compat). Decisão consciente: drop em ADR futura, após validação de migração estável em produção.
+- O `ThinkingEngine` mantém estado in-RAM (`HashMap<BranchId, Vec<ThoughtId>>`); sessões de pensamento não sobrevivem a restart do `souls_mc`. Persistência é ADR futura (Marco 4).
+
+## Definition of Done (DoD) — Verificável
+
+1. `cargo test --features "tauri-app,gateway_ccr,llama_backend"` retorna Exit Code 0.
+2. `cargo clippy --features "tauri-app,gateway_ccr,llama_backend" -- -D warnings` retorna 0.
+3. `Cargo.toml` permanece com **0 deps novas** (verificável via `git diff src-tauri/Cargo.toml`).
+4. Os 5 testes TDD obrigatórios passam: `test_graph_cascade_delete`, `test_thinking_disjuntor_loop`, `test_thinking_hitl_extension_to_7`, `test_migration_user_version_bump`, `test_fts5_observational_grounding`.
+5. `PRAGMA user_version = 2` cravado após `init_state_db_and_worker` em banco migrado (verificável via `sqlite3 .souls_data/souls_state.db "PRAGMA user_version"`).
+6. `tools/list` retorna 10 novas ferramentas canônicas (`mem_*` + `core_think`).
+
+### ====================================================================================================
+ARQUIVO: ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
+---
+---
+id: "ADR-041"
+title: "ADR-041-Nomenclatura-Soberana-Servername-souls_mcp"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Infraestrutura / Governanca"
+amends: ["ADR-026"]
+revoga_parcialmente: "ADR-026 §1 (nome de servidor atômico 'souls' passa a 'souls_mcp')"
+description: "Emenda Constitucional 32/120 + Servername Soberano 'souls_mcp': institui o nome canonico do Agent Gateway e os tetos rigidos de 32 caracteres (nome) e 120 (descricao) para ferramentas MCP."
+---
+
+# ADR-041 — Nomenclatura Soberana & Servername `souls_mcp` (Emenda Constitucional 32/120)
+
+## Status
+Aceito (Ativo e Inegociavel). Emenda parcial da [ADR-026](docs/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) (revoga §1 sobre o nome de servidor `souls` e fixa o nome canonico `souls_mcp`).
+
+## Contexto
+A ADR-026 instituiu a **Lei Zero-Brand** e fixou o servidor atomico `souls` para evitar nomes acoplados a marcas. Com a chegada do **Roteador Semantico ParetoBandit** e a previsao de 50+ ferramentas, a cerca perimetrica do Roteador (distincao nativo vs terceiro) precisa de um **radical unico e inequivoco** no servername. Alem disso, o crescimento das tools exige tetos dimensionais para impedir a hemorragia FinOps (cada caractere e token) e a quebra de clientes MCP com limites de exibicao < 60 chars.
+
+A concaternacao tipica de clientes MCP (`<server>_<tool>` ou `<server>.<tool>`) demonstrou que `souls.get_ast` (servername `souls` + tool curta) consome **11 chars por chamada**, enquanto `souls_mcp.get_ast` consome **18 chars** mas entrega **cerca perimetrica no server** (1 lookup O(1) identifica tudo que e nativo) em vez de espalhada em 40 tools (canibalizadas ou futuras).
+
+## Decisao (Emenda Constitucional 32/120 + Servername Soberano)
+
+Fica **revogada parcialmente** a §1 da ADR-026 (que fixava o servername como `souls`) e ficam **instituidas** as seguintes Leis Duras:
+
+1. **Servername Soberano:** O Agent Gateway exportado para os clientes MCP passa a se chamar estritamente **`souls_mcp`**. O nome antigo `souls` fica obsoleto.
+
+2. **Cerca Perimetrica por Servername (Canibalizacao Cirurgica Preservada):** Toda ferramenta dentro de `souls_mcp.*` e, por construcao, **nativa, local-first e segura do SODA**. O Roteador Semantico distingue nativo de terceiro por **1 lookup O(1) no servername**, em vez de parsear prefixos em N tools.
+
+3. **Preservacao da Canibalizacao:** As ferramentas ja canibalizadas (`get_ast`, `read`, `search`, `mem_search`, `core_think`, etc.) **mantem seus nomes curtos** (Zero-Brand da ADR-026 §2-4). Apenas ferramentas **novas** (Marcos futuros) podem opcionalmente adotar o prefixo `souls_` se houver ambiguidade semantica.
+
+4. **Teto Rigido de Nome (≤ 32 caracteres):** Toda tool, presente ou futura, DEVE respeitar o teto de **32 caracteres** no campo `name` do `tools/list`. Validacao em tempo de compilacao (teste de snapshot) e em runtime (panic se violar).
+
+5. **Teto Rigido de Descricao (≤ 120 caracteres):** Toda descricao de tool DEVE respeitar o teto de **120 caracteres**, ser **seca, tecnica, informativa e livre de prosa ou floreios de marketing** ("slop" e vetado).
+
+6. **Reserva de Namespace:** Tools de terceiros ou APIs online NAO podem ser hospedadas sob o servername `souls_mcp`. Devem usar servernames proprios (`brave`, `actual_budget`, etc.).
+
+7. **Backward Compat de Servername:** Durante a janela de transicao (1 release), clientes que consumem `souls.*` continuam funcionando via alias no `gateway-config.yaml` (target dual: `souls` → `souls_mcp_server.exe`, `souls_mcp` → mesmo binario). Apos a janela, alias `souls` e removido.
+
+## Consequencias
+* **Imunidade a Colisao de Namespace:** `souls_mcp.*` e a cerca perimetrica; nenhum terceiro pode injetar ferramentas nativas.
+* **Canibalizacao Cirurgica Preservada:** Tools ja existentes (`get_ast`, `mem_search`, `core_think`) nao sofrem churn. Skills e docs nao precisam de Search and Replace em 90+ ocorrencias.
+* **FinOps Controlado:** Render medio passa de `souls.get_ast` (11) para `souls_mcp.get_ast` (18) = +7 chars/chamada. Custo compensado pela **reducao de 1 lookup O(1)** no Roteador (em vez de parsear prefixo em 40 tools).
+* **Tolerancia a Limite 60 chars MCP:** Servername `souls_mcp` (9) + ponto (1) + toolname (≤32) + ponto (1) = ate **43 chars**, abaixo do limite 60 com margem de 17.
+* **Tetos 32/120:** Cobertura retroativa via teste de snapshot. Tools existentes em `tools/list` (40) que violem tetos serao flagged pelo teste.
+
+## Restricoes Bare-Metal e Blast Radius
+* **`src-tauri/src/bin/souls_mcp_server.rs`:** Trocar `serverInfo.name = "souls"` para `"souls_mcp"` (L129). Adicionar teste de snapshot `tools_list_respects_32_120_tetos` que valida tetos em runtime.
+* **`gateway-config.yaml`:** Trocar `targets[0].name = "souls"` para `"souls_mcp"`. Adicionar target alias `souls` apontando para o mesmo binario (backward compat).
+* **`.trae/rules/project_rules.md`:** Adicionar §5 (Lei do Servername Soberano + tetos 32/120).
+* **`.agents/skills/**/SKILL.md`:** **Zero mutacao obrigatoria** (canibalizacao preservada). Search and Replace cirurgico apenas se alguma Skill invocar `souls.server` em vez de `souls_mcp.server`.
+* **`docs/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt`:** Re-snapshot via `docs/scripts/souls_context_dumps_compiler.py`.
+
+## Metricas de Sucesso
+* `git grep "serverInfo.*souls\""` retorna 0 matches (substituido por `souls_mcp`).
+* `git grep "targets\[0\].name: souls$"` retorna 0 matches em `gateway-config.yaml`.
+* Suite TDD verde: `cargo test --bin souls_mcp_server` com `tools_list_respects_32_120_tetos` e os 2 snapshots existentes (`unprefixed`, `headroom_included`).
+* Auditoria FinOps: soma de `len(server) + 1 + len(tool)` para todas as 40 tools <= 50 chars em media.
+
+## Razao de Ser desta ADR
+> "A Alma Matematica das tools (nomes curtos canibalizados) e o que importa. O brasao (servername) fica em uma unica torre: `souls_mcp`." — Bruno, 2026-08-02.
