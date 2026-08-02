@@ -1,6 +1,6 @@
 # SODA Current State - SOULS V4 Architectural State & ADR Registry
 
-Last Updated: 2026-08-01
+Last Updated: 2026-08-02
 
 ## Status Geral dos ADRs Constitucionais
 
@@ -16,6 +16,7 @@ Last Updated: 2026-08-01
 | ADR-037 | Gestão Dinâmica de Contexto CCR | Ativo_Inegociavel | Infraestrutura | Algoritmo Headroom em Rust, DashMap Host RAM, **souls_compress_memory**, **souls_dedup**, **souls_fill**. |
 | ADR-038 | Execução Elástica & Compressão de Logs | Proposed | Infraestrutura | **Isolamento de Stdio via tokio::process::Command**, **Pattern Log Compression (90% pruning)**. |
 | ADR-040 | Migração State DB v2 + Disjuntor Cognitivo | Ativo_Inegociavel | Cognição | **Marco 3.5 ATIVO**: souls_graph (9 tools mem_*) + souls_thinking (core_think, disjuntor 5→7 HITL). Tabela `observations` normalizada + FTS5 + triggers. PRAGMA user_version=2. |
+| ADR-043 | Observabilidade Cognitiva Sensorial (SODA State v3) | Ativo_Inegociavel | Cognição | **Marco 3.7 Fase B ATIVO**: 4 tools (heatmap/impact/routes/feedback) no `tools/list` canônico `souls_mcp.*`. Módulo `cognition::observability` com Langevin decay (lambda=0.05), BFS no grafo transposto de imports, regex `OnceLock` para IPC contracts, FinOps E3 = 1 - out/(in+out). Tabelas `file_access_logs` + `telemetry_logs` + 4 índices. PRAGMA user_version=3. Dispatcher instrumentado em `read`/`edit`/`multi_read` via `try_log_file_access` (HIPER-FORWARD, sem bloquear critical path). |
 
 ---
 
