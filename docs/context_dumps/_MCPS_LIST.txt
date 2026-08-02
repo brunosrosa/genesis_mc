@@ -1,6 +1,11 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
+<<<<<<< Updated upstream
 GERADO EM: 2026-08-02 01:37:27
 TOTAL DE FERRAMENTAS: 42
+=======
+GERADO EM: 2026-08-02 03:16:34
+TOTAL DE FERRAMENTAS: 93
+>>>>>>> Stashed changes
 ----------------------------------------------------------------------------------------------------
 • core_analyze_session: Analyze the current thinking session and provide insights
 • core_export_session: Export the current thinking session in various formats

@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 _IGNITION_SCRIPTS Gerado em: 2026-08-02 01:37:27
+=======
+_IGNITION_SCRIPTS Gerado em: 2026-08-02 03:16:34
+>>>>>>> Stashed changes
 
 ### ====================================================================================================
 ARQUIVO: boot.ps1

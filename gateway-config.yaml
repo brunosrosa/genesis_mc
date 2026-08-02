@@ -13,9 +13,6 @@ binds:
             backends:
               - mcp:
                   targets:
-                    - name: souls_mcp
-                      stdio:
-                        cmd: 'Z:/souls_mc/src-tauri/target/debug/souls_mcp_server.exe'
                     - name: souls
                       stdio:
                         cmd: 'Z:/souls_mc/src-tauri/target/debug/souls_mcp_server.exe'

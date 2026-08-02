@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 _SKILLS_IN_IDEs Gerado em: 2026-08-02 01:37:27
+=======
+_SKILLS_IN_IDEs Gerado em: 2026-08-02 03:16:34
+>>>>>>> Stashed changes
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md

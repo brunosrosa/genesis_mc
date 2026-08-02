@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 _RULES_IN_IDEs Gerado em: 2026-08-02 01:37:27
+=======
+_RULES_IN_IDEs Gerado em: 2026-08-02 03:16:34
+>>>>>>> Stashed changes
 
 ### ====================================================================================================
 ARQUIVO: GEMINI.md
