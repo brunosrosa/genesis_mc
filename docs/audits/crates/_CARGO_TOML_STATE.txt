@@ -83,6 +83,8 @@ walkdir = "=2.5.0"
 core_affinity = "0.8.1"
 dashmap = "6.1.0"
 similar = "=2.7.0"  # SOULS-CANIBALIZED Fase 3: Myers diff nativo (homologada; antes vinha como dep transitiva do lean-ctx)
+wasmtime = { version = "=29.0.0", features = ["wat"] }
+wasmtime-wasi = "=29.0.0"
 
 llama-cpp-2 = { version = "0.1", optional = true, features = ["cuda"] }
 mistralrs = { version = "0.8", optional = true }
@@ -93,6 +95,8 @@ windows-projfs = "=0.1.8"
 
 [patch.crates-io]
 crc32fast = { path = "vendor/crc32fast" }
+llama-cpp-2 = { path = "vendor/llama-cpp-2" }
+llama-cpp-sys-2 = { path = "vendor/llama-cpp-sys-2" }
 
 [dev-dependencies]
 mockito = "=1.7.2"
@@ -113,6 +117,11 @@ required-features = ["tauri-app"]
 [[bin]]
 name = "souls_mcp_server"
 path = "src/bin/souls_mcp_server.rs"
+
+[[bin]]
+name = "souls_vanguard_worker"
+path = "src/bin/souls_vanguard_worker.rs"
+required-features = ["llama_backend"]
 
 [profile.dev]
 incremental = false

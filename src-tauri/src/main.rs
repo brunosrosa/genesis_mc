@@ -92,7 +92,7 @@ fn main() {
                         ..
                     } = event
                     {
-                        toggle_overlay_window(&tray.app_handle());
+                        toggle_overlay_window(tray.app_handle());
                     }
                 })
                 .build(app)?;

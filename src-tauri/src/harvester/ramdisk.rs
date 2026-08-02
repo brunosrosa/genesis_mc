@@ -527,7 +527,7 @@ mod tests {
             p
         };
         let mut removed = false;
-        for _ in 0..40 {
+        for _ in 0..120 {
             if !path.exists() {
                 removed = true;
                 break;

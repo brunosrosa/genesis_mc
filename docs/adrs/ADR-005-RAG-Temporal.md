@@ -36,6 +36,11 @@ Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação p
 *   Conhecimentos transitórios ou dinâmicos receberão a tag **`EVOLVING`**, sujeitos ao decaimento temporal e poda orgânica [5].
 *   A ingestão de novos documentos utilizará Busca Híbrida e "Contextual Chunks" para enriquecer o payload no banco [4].
 
+**Módulo 4: Memória Neuro-Sintética (MNS) e Resiliência Temporal**
+*   **Diários de Bordo (`diary` / `recall_diary`):** Subagentes registram de forma síncrona suas descobertas, decisões e progresso em arquivos locais simples. No boot de novas sessões de depuração, o agente substituto consome apenas as observações consolidadas de seu antecessor, contendo o *Context Rot* e mitigando a inflação de tokens.
+*   **Ciclo `gotcha` / `wakeup`:** Mapeia o par Gatilho e Resolução de erros compilados. O comando `wakeup` extrai a consolidação noturna pelo `Chyros Daemon` e injeta um payload de briefing AAAK de no máximo ~200 tokens no início da thread para imunizar o sistema contra regressões sintáticas.
+*   **Higiene Vetorial com `zstd`:** O arquivo frio do cemitério vetorial é compactado exclusivamente com a biblioteca `zstd` (Zstandard), banindo o uso do `zip` no runtime.
+
 #### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
 *   **Impacto Positivo:** Consumo de VRAM zerado para cálculos temporais, liberando a placa de vídeo exclusivamente para raciocínio semântico [6]. A precisão de resposta a perguntas temporais atinge o estado da arte sem alucinação, já que a filtragem é matemática e não generativa. O tempo de resposta permanece sub-milissegundo na CPU.
 *   **Impacto Negativo (Rigidez de Ingestão):** O *pipeline* de ETL cognitivo (Fase 0/1) se torna brutalmente mais engessado. Para o sistema funcionar, cada documento, arquivo ou *log* obrigatoriamente deve ter suas datas "parseadas" e estruturadas impecavelmente *antes* da inserção no LanceDB. Se o parser falhar na ingestão, o arquivo ficará fora do tempo.

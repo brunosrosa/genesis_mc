@@ -118,9 +118,29 @@ required-features = ["tauri-app"]
 name = "souls_mcp_server"
 path = "src/bin/souls_mcp_server.rs"
 
+[[bin]]
+name = "souls_vanguard_worker"
+path = "src/bin/souls_vanguard_worker.rs"
+required-features = ["llama_backend"]
+
+# ---------- PROFILES (fix/cargo-finops-v1) ----------
+# Dev/test já estão definidos abaixo. Aqui entramos com [profile.release]:
+# lto=thin (cross-module sem dobar tempo de link), panic=abort (binário menor,
+# sem unwind), codegen-units=1 (LTO eficaz), strip=symbols (release sem PDB).
+# Opt-level=3 porque temos inferência numérica (mistralrs/llama) que se beneficia
+# agressivamente de AVX2 — não trocamos runtime por tamanho.
+# ATENÇÃO: settings granulares de package.* vivem em .cargo/config.toml (workspace-level).
 [profile.dev]
 incremental = false
 
 [profile.test]
+incremental = false
+
+[profile.release]
+lto = "thin"
+panic = "abort"
+codegen-units = 1
+strip = "symbols"
+opt-level = 3
 incremental = false
 

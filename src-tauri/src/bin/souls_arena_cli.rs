@@ -82,8 +82,8 @@ fn print_backend_info() {
     }
 }
 
-/// Extrai candidatos a objetos ou arrays JSON no meio de preâmbulos e blocos markdown em O(1).
-fn extract_json_candidate(raw_text: &str) -> Option<String> {
+/// Extrai candidatos a objetos ou arrays JSON no meio de preâmbulos e blocos markdown em O(1) usando Balanço de Pilha (Stack-Based Extractor).
+fn extract_json_candidate_stack_based(raw_text: &str) -> Option<String> {
     let trimmed = raw_text.trim();
     if trimmed.is_empty() {
         return None;
@@ -111,24 +111,72 @@ fn extract_json_candidate(raw_text: &str) -> Option<String> {
         return Some(working.to_string());
     }
 
-    // 2. Extração via delimitação por chaves {} ou colchetes []
-    let obj_start = working.find('{');
-    let obj_end = working.rfind('}');
-    let arr_start = working.find('[');
-    let arr_end = working.rfind(']');
+    // 2. Extração via Balanço de Pilha (Stack-Based Bracket Extractor)
+    let chars: Vec<(usize, char)> = working.char_indices().collect();
+    let mut in_string = false;
+    let mut is_escaped = false;
+    let mut stack: Vec<char> = Vec::new();
+    let mut start_byte: Option<usize> = None;
 
-    match (obj_start, obj_end, arr_start, arr_end) {
-        (Some(os), Some(oe), Some(as_), Some(ae)) if os < oe && as_ < ae => {
-            if os < as_ && oe > ae {
-                Some(working[os..=oe].trim().to_string())
-            } else {
-                Some(working[as_..=ae].trim().to_string())
+    for &(byte_pos, ch) in &chars {
+        if in_string {
+            if is_escaped {
+                is_escaped = false;
+            } else if ch == '\\' {
+                is_escaped = true;
+            } else if ch == '"' {
+                in_string = false;
             }
+            continue;
         }
-        (Some(os), Some(oe), _, _) if os < oe => Some(working[os..=oe].trim().to_string()),
-        (_, _, Some(as_), Some(ae)) if as_ < ae => Some(working[as_..=ae].trim().to_string()),
-        _ => Some(working.to_string()),
+
+        match ch {
+            '"' => {
+                in_string = true;
+            }
+            '{' | '[' => {
+                if stack.is_empty() {
+                    start_byte = Some(byte_pos);
+                }
+                stack.push(ch);
+            }
+            '}' => {
+                if let Some(&top) = stack.last() {
+                    if top == '{' {
+                        stack.pop();
+                        if stack.is_empty() {
+                            if let Some(sb) = start_byte {
+                                let end_byte = byte_pos + ch.len_utf8();
+                                let candidate = working[sb..end_byte].trim().to_string();
+                                return Some(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+            ']' => {
+                if let Some(&top) = stack.last() {
+                    if top == '[' {
+                        stack.pop();
+                        if stack.is_empty() {
+                            if let Some(sb) = start_byte {
+                                let end_byte = byte_pos + ch.len_utf8();
+                                let candidate = working[sb..end_byte].trim().to_string();
+                                return Some(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
     }
+
+    if let Some(sb) = start_byte {
+        return Some(working[sb..].trim().to_string());
+    }
+
+    Some(working.to_string())
 }
 
 /// Avaliador sintático resiliente com suporte a preâmbulos, sufixos, marcações markdown e arrays JSON.
@@ -142,7 +190,7 @@ fn is_valid_json_response(raw_text: &str) -> bool {
         return true;
     }
 
-    if let Some(candidate) = extract_json_candidate(clean) {
+    if let Some(candidate) = extract_json_candidate_stack_based(clean) {
         if serde_json::from_str::<serde_json::Value>(&candidate).is_ok() {
             return true;
         }
@@ -304,7 +352,7 @@ fn check_already_evaluated(model_id: &str, conn: &Connection) -> bool {
     model_registry::check_already_evaluated(model_id, conn)
 }
 
-async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path) {
+async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: &Path, force_eval: bool) {
     println!("\n=== RUNNING TIER 1: GUILLOTINE (FAST SANITY CHECK) ===");
 
     let _thermal_rx = souls_thermal_governor::spawn_thermal_governor();
@@ -326,7 +374,7 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
             .unwrap_or_else(|| "desconhecido".to_string());
         let model_path_str = model_path.to_string_lossy().to_string();
 
-        if model_registry::check_already_evaluated(&model_path_str, conn) {
+        if !force_eval && model_registry::check_already_evaluated(&model_path_str, conn) {
             println!("[SKIP] Modelo '{}' ja avaliado previamente.", model_path.display());
             skipped_count += 1;
             continue;
@@ -350,6 +398,8 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
         let mut total_ttft_sum = 0.0f64;
         let mut total_tpot_sum = 0.0f64;
         let mut total_vram_sum = 0.0f64;
+
+        let mut is_pending_engine = false;
 
         for (idx, prompt) in prompts.iter().enumerate() {
             let req = SoulsInferenceRequest {
@@ -379,7 +429,13 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
                     (is_valid, resp.completion_tokens.max(1))
                 }
                 Err(e) => {
-                    println!("    [!] Erro de inferencia: {:?}", e);
+                    let err_str = format!("{:?}", e);
+                    if err_str.contains("PENDING_ENGINE") {
+                        println!("    [PENDING_ENGINE] Modelo requer engine especializada (bitnet.cpp/mamba-ssm) ainda nao integrada no runtime.");
+                        is_pending_engine = true;
+                    } else {
+                        println!("    [!] Erro de inferencia: {:?}", e);
+                    }
                     (false, 1)
                 }
             };
@@ -411,6 +467,10 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
                 is_valid,
                 prompt_e3_score,
             );
+
+            if is_pending_engine {
+                break;
+            }
         }
 
         let total_evaluated = prompts.len().max(1);
@@ -424,7 +484,13 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
         let consolidated_e3 = (global_acc * global_acc) / (avg_latency_sec + 0.001);
 
         let passed = success_rate >= 70.0;
-        let status: &'static str = if passed { "APROVADO" } else { "REPROVADO" };
+        let status: String = if is_pending_engine {
+            "PENDING_ENGINE (bitnet.cpp/mamba-ssm)".to_string()
+        } else if passed {
+            "APROVADO".to_string()
+        } else {
+            "REPROVADO".to_string()
+        };
 
         if model_registry::update_tier1_result(
             conn,
@@ -517,7 +583,7 @@ fn run_tier2_colosseum(bench_dir: &Path, approved_models_input: &[PathBuf]) {
     if let Ok(entries) = fs::read_dir(bench_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |e| e.to_string_lossy().to_lowercase() == "jsonl") {
+            if path.extension().is_some_and(|e| e.to_string_lossy().to_lowercase() == "jsonl") {
                 bench_files.push(path);
             }
         }
@@ -759,7 +825,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             models.push(PathBuf::from("mock_model_tier1.gguf"));
         }
 
-        run_tier1_guillotine(&conn, &models, &bench_dir).await;
+        let force_eval = target_model_filter.is_some();
+        run_tier1_guillotine(&conn, &models, &bench_dir, force_eval).await;
     }
 
     Ok(())

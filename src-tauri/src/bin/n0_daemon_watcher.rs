@@ -933,15 +933,47 @@ mod tests {
 
     #[test]
     fn jitter_respects_base_plus_random_fluctuation() {
+        // CURA DO FLAKY TEST (V4.5):
+        // O assert_ne!(a, b) original fervia em panicos estocasticos quando
+        // `dynamic_wyrand().next_range(0..51)` sorteava 0 duas vezes seguidas
+        // (P ~ 1/51^2 ~= 0.04%). Substituido por:
+        //   1. validacao do envelope matematico (base <= sample <= base + max_jitter)
+        //      para cada uma das N amostras;
+        //   2. variacao estatistica num lote maior (pelo menos 1 das N difere da
+        //      primeira), o que reduz a P de colisao total para ~(1/(N+1))^(N-1).
         let p = JitterPolicy {
             base_ms: 100,
             jitter_max_ms: 50,
         };
-        let a = p.compute_sleep();
-        let b = p.compute_sleep();
-        assert!(a >= Duration::from_millis(100) && a <= Duration::from_millis(150));
-        assert!(b >= Duration::from_millis(100) && b <= Duration::from_millis(150));
-        assert_ne!(a, b);
+        const SAMPLES: usize = 10;
+        let min = Duration::from_millis(p.base_ms);
+        let max = Duration::from_millis(p.base_ms + p.jitter_max_ms);
+
+        let samples: Vec<Duration> = (0..SAMPLES).map(|_| p.compute_sleep()).collect();
+
+        // (1) Limites matematicos: cada amostra tem que estar dentro do envelope.
+        for s in &samples {
+            assert!(
+                *s >= min && *s <= max,
+                "amostra {s:?} fora do envelope [{min:?}, {max:?}]"
+            );
+        }
+
+        // (2) Variacao estatistica: pelo menos uma das 10 difere da primeira.
+        // Probabilidade de colisao total = (1/(jitter_max_ms+1))^(SAMPLES-1)
+        // ~= (1/51)^9 ~= 1e-15 em seeds saudaveis.
+        let first = samples[0];
+        assert!(
+            samples.iter().any(|s| *s != first),
+            "todas as {SAMPLES} amostras colidiram em {first:?}; \
+             a distribuicao do jitter colapsou estatisticamente"
+        );
+
+        // (3) Borda deterministica: jitter_max_ms == 0 => exatamente base.
+        let p_zero = JitterPolicy { base_ms: 100, jitter_max_ms: 0 };
+        for _ in 0..SAMPLES {
+            assert_eq!(p_zero.compute_sleep(), Duration::from_millis(100));
+        }
     }
 
     #[test]

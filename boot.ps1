@@ -17,6 +17,30 @@ $env:RUST_LOG = "souls_mc_lib=info,souls_sast=debug,souls_harvester=debug,headro
 $env:SOULS_CCR_MAX_RAM_MB = "256"
 $env:SOULS_HEADROOM_SAFETY_MARGIN = "512"
 $env:SOULS_HEADROOM_OUTPUT_BUFFER = "4096"
+# SOULS FinOps (fix/cargo-finops-v1): sccache persiste artefatos rustc entre branches
+# e sobrevive a `cargo clean`. Cache vive em Z: (ReFS Dev Drive 80GB) com 8GB de budget.
+# Se sccache nao estiver instalado, .cargo/config.toml[build] rustc-wrapper apenas
+# e ignorado (cargo emite warning mas nao quebra).
+$env:SCCACHE_DIR = "Z:\.sccache"
+$env:SCCACHE_CACHE_SIZE = "8G"
+$env:RUSTC_WRAPPER = "sccache"
+# Reforca paralelismo (defesa em profundidade: .cargo/config.toml[build] jobs=8).
+$env:CARGO_BUILD_JOBS = "8"
+# Patch idempotente vendor/llama-cpp-sys-2: GGML_CCACHE=ON (default upstream) faz
+# cmake wrappear `sccache nvcc`, que falha com "fatbinary: Could not open input
+# file '*.ptx'". Mantemos OFF para destravar CUDA. Re-aplicado em todo boot pois
+# `cargo update` pode reverter o patch. Tolerante a patch ausente.
+$vendorLlamaCmake = Join-Path $PSScriptRoot "src-tauri\vendor\llama-cpp-sys-2\llama.cpp\ggml\CMakeLists.txt"
+if (Test-Path $vendorLlamaCmake) {
+    $content = Get-Content -LiteralPath $vendorLlamaCmake -Raw -ErrorAction SilentlyContinue
+    if ($content -and $content -match 'option\(GGML_CCACHE "ggml: use ccache if available"\s+ON\)') {
+        (Get-Content -LiteralPath $vendorLlamaCmake) -replace `
+            'option\(GGML_CCACHE "ggml: use ccache if available"\s+ON\)',
+            'option(GGML_CCACHE "ggml: use ccache if available"                   OFF)' |
+            Set-Content -LiteralPath $vendorLlamaCmake
+        Write-Host "[PATCH] vendor/llama-cpp-sys-2 GGML_CCACHE -> OFF (auto-fix CUDA+sccache)" -ForegroundColor DarkGreen
+    }
+}
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -204,7 +228,8 @@ try {
                 "--bin", "mcp_stdio_guard",
                 "--bin", "scan_local_models_cli",
                 "--bin", "souls_ephemeral_infer_cli",
-                "--bin", "souls_mc"
+                "--bin", "souls_mc",
+                "--locked"
             ) `
             -Label "cargo-build-supervisores" `
             -WorkingDirectory $srcTauriDir

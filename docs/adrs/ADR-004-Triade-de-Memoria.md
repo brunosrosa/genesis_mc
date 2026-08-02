@@ -31,7 +31,12 @@ Fica decretado o uso da "Tríade de Memória" segmentada, operada sob regras rí
 
 **Módulo 3: Higiene de Cemitério e Compressão Vetorial (`zstd`)**
 *   Quando a "Dinâmica de Langevin" (arquivamento de memórias marginais) empurrar vetores antigos para as bordas hiperbólicas do arquivo frio, a compressão dos dados não utilizará algoritmos padrão.
-*   A adoção da crate `zip` fica **banida** das engrenagens de compressão de memória contínua. Fica imposto o uso estrito do motor **`zstd`** (Zstandard), garantindo compressão e descompressão de dicionários com características **Zero-Copy**, velocidade extrema e economia brutal de espaço de armazenamento sem gargalos na CPU i9.
+*   A adoção da crate `zip` fica **banida** das engrenagens de compressão de memória em tempo de execução. Fica imposto o uso estrito do motor **`zstd`** (Zstandard), garantindo compressão e descompressão de dicionários com características **Zero-Copy**, velocidade extrema e economia brutal de espaço de armazenamento sem gargalos na CPU i9.
+
+**Módulo 4: Infraestrutura de Memória Neuro-Sintética (MNS)**
+Para combater o "Context Rot" e conter o inchaço desnecessário da janela de atenção:
+*   **Os Diários de Bordo (`diary` / `recall_diary`):** Subagentes registram de forma síncrona suas descobertas, decisões e progressos em arquivos locais simples. No boot de novas sessões de depuração, o agente substituto consome exclusivamente as observações consolidadas de seu antecessor, mitigando drasticamente a inflação de tokens.
+*   **O Ciclo `gotcha` / `wakeup`:** Mapeia-se explicitamente o par Gatilho e Resolução para cada erro aceito pelo compilador. O SODA prevê o comando `wakeup`, que extrai a consolidação noturna dessas lições gerada pelo `Chyros Daemon` e injeta um payload de briefing AAAK de no máximo ~200 tokens no início de cada thread, vacinando a IA contra regressões sintáticas e repetição de bugs conhecidos.
 
 #### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
 *   **Impacto Positivo:** Desgaste do SSD (TBW) reduzido a níveis mínimos através de gravações em lote. Sobrevivência 24/7 do daemon sem congelamento do Tokio por I/O. Recuperação perfeita do histórico da IA sem corrupção silenciosa (SDC) e otimização radical de espaço no "arquivo frio" via `zstd`.

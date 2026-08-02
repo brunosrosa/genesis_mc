@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-07-30 13:12:21
+_MCP_INVENTORY Gerado em: 2026-07-31 22:01:49
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -8,11 +8,11 @@ CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
 SERVER_NAME: souls
 LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt
 SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
-TOOL_COUNT: 41
+TOOL_COUNT: 42
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.
 
 === SUMMARY ===
-OK_COUNT: 41
+OK_COUNT: 42
 WARN_COUNT: 0
 FAIL_COUNT: 0
 OVERALL_STATUS: HEALTHY
@@ -94,12 +94,12 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_compress
-DESCRIPTION: not_implemented_yet: Aplica compressor LEAN a texto arbitrário.
+DESCRIPTION: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_dedup
-DESCRIPTION: not_implemented_yet: Detecta/aplica dedup cross-file (5-line blocks).
+DESCRIPTION: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -159,7 +159,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_outline
-DESCRIPTION: not_implemented_yet: Outline de símbolos via tree-sitter (gated tree-sitter-rust).
+DESCRIPTION: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline / souls_symbol)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -174,12 +174,17 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_search
-DESCRIPTION: not_implemented_yet: Regex search com output LEAN.
+DESCRIPTION: Busca textual compacta via regex com formatação LEAN agrupada por arquivo. (souls_search)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_semantic_search
 DESCRIPTION: not_implemented_yet: BM25 + cosine fusion (gated embeddings).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: souls_session
+DESCRIPTION: Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -189,7 +194,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_smart_read
-DESCRIPTION: not_implemented_yet: Leitura com adaptive depth (LRU + auto-shrink).
+DESCRIPTION: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -214,7 +219,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: souls_tree
-DESCRIPTION: not_implemented_yet: Árvore de diretórios com max_depth(5).
+DESCRIPTION: Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

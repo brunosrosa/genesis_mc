@@ -1,7 +1,16 @@
+// Aumento do limite de recursão do macro `json!` (serde_json) para acomodar
+// o `tools/list` canônico do Marco 3.5 (50+ ferramentas, incluindo os 10
+// novos tools mem_* + core_think com inputSchemas profundos).
+#![recursion_limit = "1024"]
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot};
 use souls_mc_lib::cognition::lean_vacuum;
+use souls_mc_lib::cognition::memory_graph;
+use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
+use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
+use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
+use souls_mc_lib::cognition::thinking::ThinkingEngine;
 use souls_mc_lib::harvester::ast_parser;
 use souls_mc_lib::harvester::community::RateLimiter;
 use souls_mc_lib::harvester::github_tracker;
@@ -296,6 +305,18 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
+                    {
+                        "name": "headroom_retrieve",
+                        "description": "Recupera um stub comprimido via `SoulsCcrStore::intercept_loopback`. Retorno SSE-style via Tokio < 1ms. Hash hex (16 bytes / 32 chars) identifica o payload.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "hash": { "type": "string", "description": "Hash hex de 16 bytes (32 chars) emitido por souls_fill ou souls_compress." }
+                            },
+                            "required": ["hash"],
+                            "additionalProperties": false
+                        }
+                    },
                     // ============================================================
                     // SOULS-CANIBALIZED: 17 tools canônicas (2 implementadas + 15 stubs)
                     // ============================================================
@@ -426,7 +447,192 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     { "name": "metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } }
+                    { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    // ============================================================
+                    // SOULS-CANIBALIZED Marco 3.5: 9 tools do `souls_graph` + 1 do `souls_thinking` (core_think)
+                    // ============================================================
+                    {
+                        "name": "mem_create_entities",
+                        "description": "Cria entidades no grafo de memória cognitivo (souls_graph). Idempotente via INSERT OR IGNORE. Persistência sequencializada via MPSC.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "entities": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": { "type": "string" },
+                                            "entityType": { "type": "string" },
+                                            "observations": { "type": "array", "items": { "type": "string" } }
+                                        },
+                                        "required": ["name", "entityType"]
+                                    }
+                                }
+                            },
+                            "required": ["entities"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_create_relations",
+                        "description": "Cria relações direcionadas entre entidades (souls_graph). Idempotente.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "relations": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "from": { "type": "string" },
+                                            "to": { "type": "string" },
+                                            "relationType": { "type": "string" }
+                                        },
+                                        "required": ["from", "to", "relationType"]
+                                    }
+                                }
+                            },
+                            "required": ["relations"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_add_observations",
+                        "description": "Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "observations": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "entityName": { "type": "string" },
+                                            "contents": { "type": "array", "items": { "type": "string" } }
+                                        },
+                                        "required": ["entityName", "contents"]
+                                    }
+                                }
+                            },
+                            "required": ["observations"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_search",
+                        "description": "Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "Query FTS5 (sintaxe MATCH)." },
+                                "limit": { "type": "integer", "description": "Limite de entidades retornadas (padrão: 50)." }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_open_nodes",
+                        "description": "Abre entidades específicas por nome e hidrata observations via JOIN.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "names": { "type": "array", "items": { "type": "string" } }
+                            },
+                            "required": ["names"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_read_graph",
+                        "description": "Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "limit": { "type": "integer", "description": "Teto de elementos (default 500, max 500)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_delete_entities",
+                        "description": "Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "entityNames": { "type": "array", "items": { "type": "string" } }
+                            },
+                            "required": ["entityNames"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_delete_observations",
+                        "description": "Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "deletions": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "entityName": { "type": "string" },
+                                            "observations": { "type": "array", "items": { "type": "string" } }
+                                        },
+                                        "required": ["entityName", "observations"]
+                                    }
+                                }
+                            },
+                            "required": ["deletions"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_delete_relations",
+                        "description": "Remove arestas do grafo.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "relations": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "from": { "type": "string" },
+                                            "to": { "type": "string" },
+                                            "relationType": { "type": "string" }
+                                        },
+                                        "required": ["from", "to", "relationType"]
+                                    }
+                                }
+                            },
+                            "required": ["relations"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "core_think",
+                        "description": "Scratchpad socrático (souls_thinking). Hard-Limit 5 pensamentos (HITL estende para 7). Tríade: Regular | Revision | Branching.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "thought": { "type": "string", "description": "Conteúdo do pensamento." },
+                                "thoughtNumber": { "type": "integer", "description": "Índice 1-based do pensamento." },
+                                "totalThoughts": { "type": "integer", "description": "Estimativa total (ajustável)." },
+                                "nextThoughtNeeded": { "type": "boolean", "description": "true se ainda há pensamentos por vir." },
+                                "isRevision": { "type": "boolean", "description": "true se revisa um pensamento anterior." },
+                                "revisesThought": { "type": "integer", "description": "Índice do pensamento revisado (obrigatório se isRevision=true)." },
+                                "branchFromThought": { "type": "integer", "description": "Índice do nó-pai do branch." },
+                                "branchId": { "type": "string", "description": "ID único do branch." },
+                                "needsMoreThoughts": { "type": "boolean", "description": "true se o orçamento precisar ser expandido." },
+                                "hitlAuthorized": { "type": "boolean", "description": "Sinal server-side do Arquiteto: estica teto de 5 para 7." }
+                            },
+                            "required": ["thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"],
+                            "additionalProperties": false
+                        }
+                    }
                 ]
             }),
         )),
@@ -496,6 +702,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "search" | "souls_search" => run_souls_search(params).await,
         "compress" | "souls_compress" => run_souls_compress(params).await,
         "dedup" | "souls_dedup" => run_souls_dedup(params).await,
+        "headroom_retrieve" | "souls_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
         "session" | "souls_session" => run_souls_session(params).await,
         "multi_read" | "souls_multi_read"
         | "semantic_search" | "souls_semantic_search"
@@ -503,7 +710,19 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         | "callees" | "souls_callees"
         | "metrics" | "souls_metrics"
         | "intent" | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
-        "execute" | "souls_execute" | "shell" | "souls_shell" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "execute" | "souls_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "shell" | "souls_shell" => run_souls_shell(params).await,
+        // Marco 3.5 — souls_graph (9 ops) + souls_thinking (1 op = core_think)
+        "mem_create_entities" => run_mem_create_entities(params).await,
+        "mem_create_relations" => run_mem_create_relations(params).await,
+        "mem_add_observations" => run_mem_add_observations(params).await,
+        "mem_search" => run_mem_search(params).await,
+        "mem_open_nodes" => run_mem_open_nodes(params).await,
+        "mem_read_graph" => run_mem_read_graph(params).await,
+        "mem_delete_entities" => run_mem_delete_entities(params).await,
+        "mem_delete_observations" => run_mem_delete_observations(params).await,
+        "mem_delete_relations" => run_mem_delete_relations(params).await,
+        "core_think" => run_core_think(params).await,
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -726,6 +945,53 @@ async fn run_souls_dedup(
         },
         "isError": false
     }))
+}
+
+/// `souls_headroom_retrieve` — Recupera um stub comprimido via `SoulsCcrStore::intercept_loopback`.
+/// Stub inicial: enquadra a chamada como `intercept_loopback` espera (com `headroom_retrieve`
+/// no JSON e campo `hash`).
+async fn run_souls_headroom_retrieve(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+
+    let hash = args
+        .get("hash")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro obrigatório 'hash' ausente".to_string(),
+            data: None,
+        })?;
+
+    // Enquadra como `intercept_loopback` espera sem interpolação manual insegura.
+    let tool_call_json = json!({
+        "headroom_retrieve": true,
+        "hash": hash,
+    })
+    .to_string();
+
+    let store = souls_mc_lib::core::headroom_engine::SoulsCcrStore::from_env();
+    let retrieved = store.intercept_loopback(&tool_call_json);
+
+    match retrieved {
+        Some(payload) => Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": payload
+            }],
+            "structuredContent": { "retrieved": true },
+            "isError": false
+        })),
+        None => Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": format!("Hash '{hash}' nao encontrado no CCR store (loopback miss).")
+            }],
+            "structuredContent": { "retrieved": false },
+            "isError": false
+        })),
+    }
 }
 
 /// `souls_smart_read` — Leitura Token-Aware com Auto-Shrink e Fail-Closed.
@@ -2142,6 +2408,8 @@ enum StateDbOp {
 
 static STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>> = OnceLock::new();
 
+static MEMORY_GRAPH_TX: OnceLock<mpsc::Sender<MemGraphOp>> = OnceLock::new();
+
 fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
     let souls_data_dir = workspace_root().join(".souls_data");
     std::fs::create_dir_all(&souls_data_dir)?;
@@ -2340,6 +2608,19 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // Marco 3.5: spawn do worker do `souls_graph` (grafo cognitivo).
+    // A migração V1→V2 (PRAGMA user_version=2, tabela `observations` + FTS5)
+    // é executada no boot do próprio worker — idempotente.
+    let mem_graph_db_path = souls_data_dir.join("souls_state.db");
+    match memory_graph::spawn_memory_graph_worker(mem_graph_db_path) {
+        Ok(tx) => {
+            let _ = MEMORY_GRAPH_TX.set(tx);
+        }
+        Err(e) => {
+            eprintln!("[souls_mcp_server] ALERTA: falha ao spawnar MemGraphWorker: {e}");
+        }
+    }
+
     Ok(())
 }
 
@@ -2498,14 +2779,20 @@ async fn run_souls_knowledge(params: &serde_json::Map<String, Value>) -> Result<
 // FILE EDIT & ATOMIC FILL INFRASTRUCTURE (CLUSTER 1 - FIREWALL & ATOMIC LOCKS)
 // =============================================================================
 
-static FILE_LOCKS: OnceLock<dashmap::DashMap<PathBuf, std::sync::Arc<tokio::sync::Mutex<()>>>> = OnceLock::new();
 
-fn get_file_lock(path: &Path) -> std::sync::Arc<tokio::sync::Mutex<()>> {
-    let map = FILE_LOCKS.get_or_init(dashmap::DashMap::new);
-    map.entry(path.to_path_buf())
-        .or_insert_with(|| std::sync::Arc::new(tokio::sync::Mutex::new(())))
-        .value()
-        .clone()
+
+fn get_active_model_context_limit() -> Option<usize> {
+    let db_path = souls_mc_lib::core::model_registry::resolve_db_path();
+    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+        let _ = conn.execute_batch("PRAGMA journal_mode=WAL;");
+        if let Ok(mut stmt) = conn.prepare("SELECT max_context_length FROM model_registry WHERE is_active = 1 LIMIT 1") {
+            if let Ok(limit) = stmt.query_row([], |row| row.get::<_, i64>(0)) {
+                return Some(limit as usize);
+            }
+        }
+    }
+    None
 }
 
 fn validate_and_canonicalize_path(path_str: &str) -> Result<PathBuf, RpcError> {
@@ -2638,10 +2925,10 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
         });
     }
 
-    let lock = get_file_lock(&canonical_path);
+    let lock = souls_mc_lib::core::file_locker::acquire_file_lock(&canonical_path);
     let _guard = lock.lock().await;
 
-    let raw_content = std::fs::read_to_string(&canonical_path).map_err(|e| RpcError {
+    let raw_content = tokio::fs::read_to_string(&canonical_path).await.map_err(|e| RpcError {
         code: -32012,
         message: format!("Falha ao ler conteúdo do arquivo: {e}"),
         data: Some(json!({ "path": canonical_path.display().to_string() })),
@@ -2665,38 +2952,13 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
 
     let updated_content = raw_content.replacen(old_string, new_string, 1);
 
-    let path_clone = canonical_path.clone();
-    tokio::task::spawn_blocking(move || {
-        let parent = path_clone.parent().unwrap_or(&path_clone);
-        let tmp_file_name = format!(".tmp_{}", uuid::Uuid::new_v4().simple());
-        let tmp_path = parent.join(tmp_file_name);
-
-        std::fs::write(&tmp_path, updated_content.as_bytes()).map_err(|e| RpcError {
-            code: -32013,
-            message: format!("Falha ao escrever arquivo temporário: {e}"),
-            data: Some(json!({ "tmp_path": tmp_path.display().to_string() })),
+    souls_mc_lib::core::file_locker::atomic_write_file(&canonical_path, &updated_content)
+        .await
+        .map_err(|e| RpcError {
+            code: -32014,
+            message: format!("Falha no swap atômico de arquivo: {e}"),
+            data: Some(json!({ "path": canonical_path.display().to_string() })),
         })?;
-
-        if let Err(e) = std::fs::rename(&tmp_path, &path_clone) {
-            if std::fs::copy(&tmp_path, &path_clone).is_ok() {
-                let _ = std::fs::remove_file(&tmp_path);
-            } else {
-                let _ = std::fs::remove_file(&tmp_path);
-                return Err(RpcError {
-                    code: -32014,
-                    message: format!("Falha no swap atômico de arquivo: {e}"),
-                    data: Some(json!({ "path": path_clone.display().to_string() })),
-                });
-            }
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|e| RpcError {
-        code: -32000,
-        message: format!("Falha na tarefa de gravação: {e}"),
-        data: None,
-    })??;
 
     Ok(json!({
         "content": [{
@@ -2729,7 +2991,7 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
             data: None,
         })?;
 
-    let code_payload = args
+    let mut code_payload = args
         .get("code_payload")
         .or_else(|| args.get("content"))
         .and_then(Value::as_str)
@@ -2737,7 +2999,8 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
             code: -32602,
             message: "Parâmetro obrigatório 'code_payload' (ou 'content') ausente".to_string(),
             data: None,
-        })?;
+        })?
+        .to_string();
 
     let canonical_path = validate_and_canonicalize_path(path_str)?;
 
@@ -2749,10 +3012,23 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
         });
     }
 
-    let lock = get_file_lock(&canonical_path);
+    // Consulta limite do modelo ativo no SQLite model_registry com busy_timeout(5s)
+    let max_context_tokens = get_active_model_context_limit().unwrap_or(8192);
+    let payload_tokens = lean_vacuum::count_tokens(&code_payload);
+
+    // Se > 80% do teto máximo de tokens (Zona Vermelha FinOps), aciona CodeCompressor/lean_vacuum
+    if payload_tokens > (max_context_tokens * 8 / 10) {
+        let ext = canonical_path.extension().and_then(|s| s.to_str());
+        code_payload = souls_mc_lib::core::headroom_engine::CodeCompressor::compress_ast_zero_copy(&code_payload).into_owned();
+        if lean_vacuum::count_tokens(&code_payload) > (max_context_tokens * 8 / 10) {
+            code_payload = lean_vacuum::compress_to_lean(&code_payload, ext);
+        }
+    }
+
+    let lock = souls_mc_lib::core::file_locker::acquire_file_lock(&canonical_path);
     let _guard = lock.lock().await;
 
-    let raw_content = std::fs::read_to_string(&canonical_path).map_err(|e| RpcError {
+    let raw_content = tokio::fs::read_to_string(&canonical_path).await.map_err(|e| RpcError {
         code: -32012,
         message: format!("Falha ao ler conteúdo do arquivo: {e}"),
         data: Some(json!({ "path": canonical_path.display().to_string() })),
@@ -2808,49 +3084,428 @@ async fn run_souls_fill(params: &serde_json::Map<String, Value>) -> Result<Value
     // Montar o buffer atualizado preservando a casca sintática adjacente
     let mut updated_content = String::with_capacity(raw_content.len() + code_payload.len() - target_slice_len);
     updated_content.push_str(&raw_content[..line_start]);
-    updated_content.push_str(code_payload);
+    updated_content.push_str(&code_payload);
     if !code_payload.ends_with('\n') && line_end < raw_content.len() {
         updated_content.push('\n');
     }
     updated_content.push_str(&raw_content[line_end..]);
 
-    let path_clone = canonical_path.clone();
-    tokio::task::spawn_blocking(move || {
-        let parent = path_clone.parent().unwrap_or(&path_clone);
-        let tmp_file_name = format!(".tmp_{}", uuid::Uuid::new_v4().simple());
-        let tmp_path = parent.join(tmp_file_name);
-
-        std::fs::write(&tmp_path, updated_content.as_bytes()).map_err(|e| RpcError {
-            code: -32013,
-            message: format!("Falha ao escrever arquivo temporário: {e}"),
-            data: Some(json!({ "tmp_path": tmp_path.display().to_string() })),
+    souls_mc_lib::core::file_locker::atomic_write_file(&canonical_path, &updated_content)
+        .await
+        .map_err(|e| RpcError {
+            code: -32014,
+            message: format!("Falha no swap atômico de arquivo: {e}"),
+            data: Some(json!({ "path": canonical_path.display().to_string() })),
         })?;
-
-        if let Err(e) = std::fs::rename(&tmp_path, &path_clone) {
-            if std::fs::copy(&tmp_path, &path_clone).is_ok() {
-                let _ = std::fs::remove_file(&tmp_path);
-            } else {
-                let _ = std::fs::remove_file(&tmp_path);
-                return Err(RpcError {
-                    code: -32014,
-                    message: format!("Falha no swap atômico de arquivo: {e}"),
-                    data: Some(json!({ "path": path_clone.display().to_string() })),
-                });
-            }
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|e| RpcError {
-        code: -32000,
-        message: format!("Falha na tarefa de gravação: {e}"),
-        data: None,
-    })??;
 
     Ok(json!({
         "content": [{
             "type": "text",
             "text": format!("Stub '{}' em '{}' preenchido com sucesso.", stub_marker, canonical_path.display())
+        }]
+    }))
+}
+
+pub fn compress_cmd_logs(raw: &str) -> String {
+    let mut compressed_lines = Vec::new();
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut in_error_block = false;
+
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.contains("error:")
+            || trimmed.contains("error[E")
+            || trimmed.contains("FAILED")
+            || trimmed.contains("panicked at")
+            || trimmed.contains("stack backtrace:")
+            || trimmed.starts_with("--> ")
+            || (trimmed.contains(".rs:") && (trimmed.contains(':') || trimmed.contains("line")))
+        {
+            in_error_block = true;
+            compressed_lines.push(line);
+        } else if in_error_block {
+            if trimmed.is_empty() || trimmed.starts_with("warning:") || trimmed.starts_with("Compiling ") || trimmed.starts_with("Finished ") {
+                in_error_block = false;
+            } else {
+                compressed_lines.push(line);
+            }
+        } else if trimmed.contains("summary") || trimmed.contains("test result:") {
+            compressed_lines.push(line);
+        }
+    }
+
+    if compressed_lines.is_empty() {
+        raw.lines().rev().take(20).collect::<Vec<&str>>().into_iter().rev().collect::<Vec<&str>>().join("\n")
+    } else {
+        compressed_lines.join("\n")
+    }
+}
+
+async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+    let command_str = args
+        .get("command")
+        .or_else(|| args.get("cmd"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro 'command' é obrigatório para souls_shell".to_string(),
+            data: None,
+        })?;
+
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = Command::new("cmd");
+        c.args(["/C", command_str]);
+        c
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
+        let mut c = Command::new("sh");
+        c.args(["-c", command_str]);
+        c
+    };
+
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.current_dir(workspace_root());
+
+    let child = cmd.spawn().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao disparar comando assíncrono: {e}"),
+        data: None,
+    })?;
+
+    let output = child.wait_with_output().await.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha na execução do processo filho: {e}"),
+        data: None,
+    })?;
+
+    let stdout_raw = String::from_utf8_lossy(&output.stdout);
+    let stderr_raw = String::from_utf8_lossy(&output.stderr);
+    let combined_raw = format!("{stdout_raw}\n{stderr_raw}");
+
+    let compressed = compress_cmd_logs(&combined_raw);
+    let exit_code = output.status.code().unwrap_or(-1);
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!("Comando executado com Exit Code {exit_code}.\nOutput Comprimido:\n{compressed}")
+        }],
+        "structuredContent": {
+            "exit_code": exit_code,
+            "raw_bytes_len": combined_raw.len(),
+        "compressed_bytes_len": compressed.len(),
+        "command": command_str
+        },
+        "isError": !output.status.success()
+    }))
+}
+
+// =============================================================================
+// SOULS-CANIBALIZED Marco 3.5: 10 handlers MCP do Core Cognitivo.
+// 9 ops do `souls_graph` (mem_*) + 1 op do `souls_thinking` (core_think).
+// Padrão: extrai `arguments` (obrigatório) → deserializa tipado →
+// envia op via MPSC (`MEMORY_GRAPH_TX`) para o worker → `request().await`
+// devolve o `Value` MCP padrão. Erros viram `RpcError` (cód. -32000).
+// O `core_think` é in-RAM (sem MPSC): a máquina de estados `ThinkingEngine`
+// mantém a sessão no heap do próprio binário.
+// =============================================================================
+
+fn extract_arguments<'a>(params: &'a serde_json::Map<String, Value>) -> &'a serde_json::Map<String, Value> {
+    params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .unwrap_or(params)
+}
+
+async fn memgraph_request(op: MemGraphOp) -> Result<Value, RpcError> {
+    let tx = MEMORY_GRAPH_TX.get().ok_or_else(|| RpcError {
+        code: -32000,
+        message: "MemGraphWorker não inicializado. Verifique init_state_db_and_worker().".to_string(),
+        data: None,
+    })?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    let op_with_reply = match op {
+        MemGraphOp::CreateEntities { entities, .. } => MemGraphOp::CreateEntities { entities, reply: reply_tx },
+        MemGraphOp::CreateRelations { relations, .. } => MemGraphOp::CreateRelations { relations, reply: reply_tx },
+        MemGraphOp::AddObservations { observations, .. } => MemGraphOp::AddObservations { observations, reply: reply_tx },
+        MemGraphOp::Search { query, limit, .. } => MemGraphOp::Search { query, limit, reply: reply_tx },
+        MemGraphOp::OpenNodes { names, .. } => MemGraphOp::OpenNodes { names, reply: reply_tx },
+        MemGraphOp::ReadGraph { limit, .. } => MemGraphOp::ReadGraph { limit, reply: reply_tx },
+        MemGraphOp::DeleteEntities { names, .. } => MemGraphOp::DeleteEntities { names, reply: reply_tx },
+        MemGraphOp::DeleteObservations { deletions, .. } => MemGraphOp::DeleteObservations { deletions, reply: reply_tx },
+        MemGraphOp::DeleteRelations { relations, .. } => MemGraphOp::DeleteRelations { relations, reply: reply_tx },
+    };
+    if tx.try_send(op_with_reply).is_err() {
+        return Err(RpcError {
+            code: -32000,
+            message: "Falha de backpressure no MPSC do MemGraph (buffer 100 saturado).".to_string(),
+            data: None,
+        });
+    }
+    reply_rx.await.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Worker desconectado antes da resposta: {e}"),
+        data: None,
+    }).and_then(|inner| inner.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Worker reportou erro: {e}"),
+        data: None,
+    }))
+}
+
+fn parse_entities(args: &serde_json::Map<String, Value>) -> Result<Vec<Entity>, RpcError> {
+    let raw = args.get("entities").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `entities` ausente ou não-array".to_string(),
+        data: None,
+    })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        let obj = v.as_object().ok_or_else(|| RpcError {
+            code: -32602,
+            message: "entidade deve ser objeto JSON".to_string(),
+            data: None,
+        })?;
+        let name = obj.get("name").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "entidade sem `name`".to_string(),
+            data: None,
+        })?.to_string();
+        let entity_type = obj.get("entityType").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: format!("entidade `{name}` sem `entityType`"),
+            data: None,
+        })?.to_string();
+        out.push(Entity {
+            name,
+            entity_type,
+            observations: Vec::new(),
+        });
+    }
+    Ok(out)
+}
+
+fn parse_relations(args: &serde_json::Map<String, Value>) -> Result<Vec<Relation>, RpcError> {
+    let raw = args.get("relations").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `relations` ausente ou não-array".to_string(),
+        data: None,
+    })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        let obj = v.as_object().ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação deve ser objeto JSON".to_string(),
+            data: None,
+        })?;
+        let from = obj.get("from").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação sem `from`".to_string(),
+            data: None,
+        })?.to_string();
+        let to = obj.get("to").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação sem `to`".to_string(),
+            data: None,
+        })?.to_string();
+        let relation_type = obj.get("relationType").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação sem `relationType`".to_string(),
+            data: None,
+        })?.to_string();
+        out.push(Relation { from, to, relation_type });
+    }
+    Ok(out)
+}
+
+fn parse_observation_inputs(args: &serde_json::Map<String, Value>, key: &str) -> Result<Vec<ObservationInput>, RpcError> {
+    let raw = args.get(key).and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: format!("campo `{key}` ausente ou não-array"),
+        data: None,
+    })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        let obj = v.as_object().ok_or_else(|| RpcError {
+            code: -32602,
+            message: "observação deve ser objeto JSON".to_string(),
+            data: None,
+        })?;
+        let entity_name = obj.get("entityName").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "observação sem `entityName`".to_string(),
+            data: None,
+        })?.to_string();
+        let contents_arr = obj.get("contents").or_else(|| obj.get("observations")).and_then(Value::as_array).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "observação sem `contents` (ou `observations`)".to_string(),
+            data: None,
+        })?;
+        let contents: Vec<String> = contents_arr.iter()
+            .filter_map(Value::as_str)
+            .map(|s| s.to_string())
+            .collect();
+        out.push(ObservationInput { entity_name, contents });
+    }
+    Ok(out)
+}
+
+async fn run_mem_create_entities(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let entities = parse_entities(args)?;
+    memgraph_request(MemGraphOp::CreateEntities { entities, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_create_relations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let relations = parse_relations(args)?;
+    memgraph_request(MemGraphOp::CreateRelations { relations, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_add_observations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let observations = parse_observation_inputs(args, "observations")?;
+    memgraph_request(MemGraphOp::AddObservations { observations, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_search(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let query = args.get("query").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `query` ausente".to_string(),
+        data: None,
+    })?.to_string();
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
+    memgraph_request(MemGraphOp::Search { query, limit, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_open_nodes(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let names = args.get("names").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `names` ausente ou não-array".to_string(),
+        data: None,
+    })?.iter()
+        .filter_map(Value::as_str)
+        .map(|s| s.to_string())
+        .collect();
+    memgraph_request(MemGraphOp::OpenNodes { names, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_read_graph(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
+    memgraph_request(MemGraphOp::ReadGraph { limit, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_delete_entities(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let names = args.get("entityNames").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `entityNames` ausente ou não-array".to_string(),
+        data: None,
+    })?.iter()
+        .filter_map(Value::as_str)
+        .map(|s| s.to_string())
+        .collect();
+    memgraph_request(MemGraphOp::DeleteEntities { names, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_delete_observations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let deletions = parse_observation_inputs(args, "deletions")?;
+    memgraph_request(MemGraphOp::DeleteObservations { deletions, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_delete_relations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let relations = parse_relations(args)?;
+    memgraph_request(MemGraphOp::DeleteRelations { relations, reply: oneshot::channel().0 }).await
+}
+
+// Estado in-RAM das sessões socráticas (chave: session_id).
+// Heap limpo no teardown do binário (sem persistência obrigatória no Marco 3.5).
+use std::sync::Mutex as StdMutex;
+use std::collections::HashMap as StdHashMap;
+static THINKING_SESSIONS: OnceLock<StdMutex<StdHashMap<String, StdMutex<ThinkingEngine>>>> = OnceLock::new();
+
+fn thinking_sessions_registry() -> &'static StdMutex<StdHashMap<String, StdMutex<ThinkingEngine>>> {
+    THINKING_SESSIONS.get_or_init(|| StdMutex::new(StdHashMap::new()))
+}
+
+async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    // session_id opcional no payload (HITL e telemetria). Default: "default".
+    let session_id = args
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .unwrap_or("default")
+        .to_string();
+    // O MCP cliente envia campos achatados (thought, thoughtNumber, etc.) no
+    // payload. Reconstruímos um Value no formato canônico do `ThoughtData`.
+    let mut thought_obj = serde_json::Map::new();
+    if let Some(v) = args.get("thought") {
+        thought_obj.insert("thought".to_string(), v.clone());
+    } else {
+        thought_obj.insert(
+            "thought".to_string(),
+            Value::String(String::new()),
+        );
+    }
+    for key in [
+        "thoughtNumber",
+        "totalThoughts",
+        "nextThoughtNeeded",
+        "isRevision",
+        "revisesThought",
+        "branchFromThought",
+        "branchId",
+        "needsMoreThoughts",
+        "hitlAuthorized",
+    ] {
+        if let Some(v) = args.get(key) {
+            thought_obj.insert(key.to_string(), v.clone());
+        }
+    }
+    let thought_value = Value::Object(thought_obj);
+    let thought: ThoughtData = serde_json::from_value(thought_value).map_err(|e| RpcError {
+        code: -32602,
+        message: format!("Payload de core_think inválido: {e}"),
+        data: None,
+    })?;
+
+    // Resolve ou cria a sessão.
+    let registry = thinking_sessions_registry();
+    let mut map = registry.lock().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Mutex THINKING_SESSIONS envenenado: {e}"),
+        data: None,
+    })?;
+    let engine_lock = map
+        .entry(session_id.clone())
+        .or_insert_with(|| StdMutex::new(ThinkingEngine::new()));
+    let mut engine = engine_lock.lock().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Mutex ThinkingEngine envenenado: {e}"),
+        data: None,
+    })?;
+    let response: ThinkingResponse = engine.push_thought(thought).map_err(|e| RpcError {
+        code: -32000,
+        message: e.to_string(),
+        data: None,
+    })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&response).unwrap_or_default()
         }]
     }))
 }
@@ -2931,8 +3586,36 @@ mod tests {
         assert!(tool_names.contains(&"sub_agent"));
         assert!(tool_names.contains(&"handoff"));
         assert!(tool_names.contains(&"knowledge"));
+        // Marco 3.5 — Core Cognitivo: 9 tools mem_* + 1 core_think.
+        assert!(tool_names.contains(&"mem_create_entities"));
+        assert!(tool_names.contains(&"mem_create_relations"));
+        assert!(tool_names.contains(&"mem_add_observations"));
+        assert!(tool_names.contains(&"mem_search"));
+        assert!(tool_names.contains(&"mem_open_nodes"));
+        assert!(tool_names.contains(&"mem_read_graph"));
+        assert!(tool_names.contains(&"mem_delete_entities"));
+        assert!(tool_names.contains(&"mem_delete_observations"));
+        assert!(tool_names.contains(&"mem_delete_relations"));
+        assert!(tool_names.contains(&"core_think"));
         assert!(!tool_names.contains(&"souls_get_ast"));
         assert!(!tool_names.contains(&"souls_read"));
+    }
+
+    /// V4: `headroom_retrieve` DEVE estar exposto no `tools/list` (alinhado com `intercept_loopback`).
+    #[tokio::test]
+    async fn test_tools_list_includes_headroom_retrieve() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 100, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+        let tool_names: Vec<&str> = tools.iter()
+            .map(|t| t["name"].as_str().expect("tool deve ter name"))
+            .collect();
+
+        assert!(
+            tool_names.contains(&"headroom_retrieve"),
+            "headroom_retrieve deve estar em tools/list. Tools atuais: {tool_names:?}"
+        );
     }
 
     #[tokio::test]
@@ -3306,22 +3989,38 @@ mod tests {
     #[tokio::test]
     async fn test_dedup_mcp_handler() {
         use serde_json::json;
+        souls_mc_lib::cognition::lean_vacuum::clear_session_cache();
         let block = "l1\nl2\nl3\nl4\nl5\n";
-        let payload = format!("{block}sep\n{block}");
-        let dedup_req = json!({
+
+        let dedup_req1 = json!({
             "jsonrpc": "2.0",
             "id": 41,
             "method": "tools/call",
             "params": {
                 "name": "souls_dedup",
                 "arguments": {
-                    "text": payload
+                    "text": block,
+                    "file_path": "file1.rs"
                 }
             }
         });
-        let resp = super::handle_mcp(dedup_req).await.expect("deve processar dedup");
-        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("// [dedup: 5 lines hidden]"));
+        let _ = super::handle_mcp(dedup_req1).await.expect("deve processar dedup 1");
+
+        let dedup_req2 = json!({
+            "jsonrpc": "2.0",
+            "id": 42,
+            "method": "tools/call",
+            "params": {
+                "name": "souls_dedup",
+                "arguments": {
+                    "text": block,
+                    "file_path": "file2.rs"
+                }
+            }
+        });
+        let resp2 = super::handle_mcp(dedup_req2).await.expect("deve processar dedup 2");
+        let text2 = resp2["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text2.contains("// [dedup: 5 lines hidden"));
     }
 }
 

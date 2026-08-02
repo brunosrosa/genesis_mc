@@ -1,4 +1,4 @@
-_ADRs_ALL Gerado em: 2026-07-29 00:17:59
+_ADRs_ALL Gerado em: 2026-07-31 15:46:59
 
 ### ====================================================================================================
 ARQUIVO: ADR-001-Core-Stack-Restrita.md
@@ -137,6 +137,9 @@ Fica decretada a extinção da serialização JSON nas rotinas centrais de alta 
     *   **Proibição Absoluta:** É terminantemente PROIBIDO instanciar bibliotecas de logging ou telemetria (como `tracing-subscriber`, `env_logger`, `log`) ou rotinas manuais de escrita (`println!`, `print!`) que despejem registros no `stdout`. Qualquer byte de log emitido no `stdout` corrompe o enquadramento de payload JSON-RPC (`Content-Length`), provocando falha catastrófica de desserialização e encerramento imediato do canal MCP no cliente (`upstream closed on receive`).
     *   **Ancoragem Mandatória no `stderr`:** Todo e qualquer evento de observabilidade, telemetria e diagnóstico (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`) DEVE ser obrigatoriamente ancorado no fluxo de erro padrão (`stderr`). A inicialização de formatadores e subscritores de log deve impor a trava explícita de escrita para `stderr` (ex: `.with_writer(std::io::stderr)` ou `eprintln!`).
 
+*   **Proibição de JSON Completo na Heap para Payloads > 1MB:** Para corpos de payload superiores a 1MB no *hot-path* de comunicação contínua entre subagentes e o core, a desserialização de strings JSON completas via `serde_json::from_slice` alocando dinamicamente na Heap é terminantemente **PROIBIDA**.
+*   **Zero-Allocation Slice Parsing (`sonic-rs` / Buffers Estáticos):** Impõe-se a adoção mandatória de parsing de fatias de bytes brutos (zero-allocation slice parsing via `sonic-rs` ou buffers estáticos pré-alocados) para erradicar picos de latência e eliminar pausas no Garbage Collector (GC) da UI Svelte 5 / WebView.
+
 **Módulo 3: Expurgo de Filas e Message Brokers Obesos**
 *   Fica terminantemente banido o uso de *message brokers* genéricos (como NATS JetStream, RabbitMQ) para IPC local intra-sistema [5, 8]. Tais sistemas incorrem em *overhead* de *loopback* de rede desnecessário. Adicionalmente, implementações instáveis de canais baseadas em experimentação (como `shaq` ou `Promisqs`) são reprovadas em favor da maturidade automotiva do `iceoryx2` [8].
 
@@ -181,7 +184,12 @@ Fica decretado o uso da "Tríade de Memória" segmentada, operada sob regras rí
 
 **Módulo 3: Higiene de Cemitério e Compressão Vetorial (`zstd`)**
 *   Quando a "Dinâmica de Langevin" (arquivamento de memórias marginais) empurrar vetores antigos para as bordas hiperbólicas do arquivo frio, a compressão dos dados não utilizará algoritmos padrão.
-*   A adoção da crate `zip` fica **banida** das engrenagens de compressão de memória contínua. Fica imposto o uso estrito do motor **`zstd`** (Zstandard), garantindo compressão e descompressão de dicionários com características **Zero-Copy**, velocidade extrema e economia brutal de espaço de armazenamento sem gargalos na CPU i9.
+*   A adoção da crate `zip` fica **banida** das engrenagens de compressão de memória em tempo de execução. Fica imposto o uso estrito do motor **`zstd`** (Zstandard), garantindo compressão e descompressão de dicionários com características **Zero-Copy**, velocidade extrema e economia brutal de espaço de armazenamento sem gargalos na CPU i9.
+
+**Módulo 4: Infraestrutura de Memória Neuro-Sintética (MNS)**
+Para combater o "Context Rot" e conter o inchaço desnecessário da janela de atenção:
+*   **Os Diários de Bordo (`diary` / `recall_diary`):** Subagentes registram de forma síncrona suas descobertas, decisões e progressos em arquivos locais simples. No boot de novas sessões de depuração, o agente substituto consome exclusivamente as observações consolidadas de seu antecessor, mitigando drasticamente a inflação de tokens.
+*   **O Ciclo `gotcha` / `wakeup`:** Mapeia-se explicitamente o par Gatilho e Resolução para cada erro aceito pelo compilador. O SODA prevê o comando `wakeup`, que extrai a consolidação noturna dessas lições gerada pelo `Chyros Daemon` e injeta um payload de briefing AAAK de no máximo ~200 tokens no início de cada thread, vacinando a IA contra regressões sintáticas e repetição de bugs conhecidos.
 
 #### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
 *   **Impacto Positivo:** Desgaste do SSD (TBW) reduzido a níveis mínimos através de gravações em lote. Sobrevivência 24/7 do daemon sem congelamento do Tokio por I/O. Recuperação perfeita do histórico da IA sem corrupção silenciosa (SDC) e otimização radical de espaço no "arquivo frio" via `zstd`.
@@ -228,6 +236,11 @@ Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação p
 *   Conhecimentos consolidados receberão a tag **`STABLE`**, garantindo permanência no contexto [5].
 *   Conhecimentos transitórios ou dinâmicos receberão a tag **`EVOLVING`**, sujeitos ao decaimento temporal e poda orgânica [5].
 *   A ingestão de novos documentos utilizará Busca Híbrida e "Contextual Chunks" para enriquecer o payload no banco [4].
+
+**Módulo 4: Memória Neuro-Sintética (MNS) e Resiliência Temporal**
+*   **Diários de Bordo (`diary` / `recall_diary`):** Subagentes registram de forma síncrona suas descobertas, decisões e progresso em arquivos locais simples. No boot de novas sessões de depuração, o agente substituto consome apenas as observações consolidadas de seu antecessor, contendo o *Context Rot* e mitigando a inflação de tokens.
+*   **Ciclo `gotcha` / `wakeup`:** Mapeia o par Gatilho e Resolução de erros compilados. O comando `wakeup` extrai a consolidação noturna pelo `Chyros Daemon` e injeta um payload de briefing AAAK de no máximo ~200 tokens no início da thread para imunizar o sistema contra regressões sintáticas.
+*   **Higiene Vetorial com `zstd`:** O arquivo frio do cemitério vetorial é compactado exclusivamente com a biblioteca `zstd` (Zstandard), banindo o uso do `zip` no runtime.
 
 #### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
 *   **Impacto Positivo:** Consumo de VRAM zerado para cálculos temporais, liberando a placa de vídeo exclusivamente para raciocínio semântico [6]. A precisão de resposta a perguntas temporais atinge o estado da arte sem alucinação, já que a filtragem é matemática e não generativa. O tempo de resposta permanece sub-milissegundo na CPU.
@@ -454,6 +467,13 @@ Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer 
 2. **M - Mutate (Escrita Atômica Protegida):** O código é alterado por meio de escritas atômicas baseadas em Mutex concorrentes em Rust. As alterações passam pela alfândega de compilação obtendo obrigatoriamente Exit Code 0.
 3. **A - Approve (A Agent Inbox):** O agente consolida o **Blast Radius** (arquivos tocados e impactos previsíveis) e o envia como sugestão passiva para a **Agent Inbox** na interface Svelte 5. O sistema aguarda a aprovação explícita do usuário em modo **Human-In-The-Loop (HITL)**. A aprovação dispara a transição estética **Glow Revelation Transition** (brilho térmico suave nas bordas da janela sem reflow).
 4. **D - Diff (Rebase Semântico):** Uma vez aprovado pelo humano, o core em Rust realiza um **Rebase Semântico** direto e atômico em direção à branch de produção, eliminando a ramificação temporária. Fica expressamente proibido o uso de commits de mesclagem convencionais (*Merge Commits*) que poluem a árvore histórica do projeto.
+
+## Prevenção de Colisões Concorrentes de Escrita
+
+- **Gerenciador de Travas `file_locker.rs`:** Torna-se obrigatório o uso do gerenciador centralizado de travas `file_locker.rs` para toda operação de Mutate.
+- **Sequenciamento de Escrita Concorrente:** Toda escrita concorrente iniciada por múltiplos subagentes agindo no background do Souls MC deve ser estritamente sequenciada por um `Mutex` assíncrono do Tokio indexado ao caminho físico do arquivo e gerenciado estaticamente em um `OnceLock` contendo um `DashMap`.
+- **Higiene de RAM Host e Limpeza de Chaves Órfãs:** Para evitar vazamentos de memória monotônicos na RAM do host devido ao acúmulo de chaves de arquivos analisados ao longo de execuções contínuas, o `file_locker.rs` deve varrer o `DashMap` e limpar chaves órfãs cuja contagem de referências fortes do `Arc` seja igual a 1 (`Arc::strong_count(&lock) == 1`) antes de liberar o escopo de execução.
+- **Mitigação de Silent Data Corruption (SDC):** Toda modificação de arquivo deve obrigatoriamente passar por swap temporário e escrita atômica via `atomic-write-file` para erradicar corrupção silenciosa de dados durante picos de I/O ou desligamentos repentinos.
 
 ## Consequências
 - **Soberania do Usuário:** O humano retém o controle absoluto sobre o silício e o repositório físico da aplicação.
@@ -1191,14 +1211,15 @@ $$V_{\text{total\_souls}} = 3.78 \text{ GB} + 0.91 \text{ GB} + 0.20 \text{ GB} 
 
 A compressão garante um headroom de segurança física de $1.11 \text{ GB}$ **(**$1136 \text{ MB}$**)** livre na GPU RTX 2060m para gerenciar picos de inicialização de tensores e manipulação gráfica da interface do host (Tauri v2 e sistema operacional local).
 
-### 3. Mecanismo de Salvaguarda "Fail-Closed" via `inspector_gguf`
+### 3. Mecanismo de Salvaguarda "Fail-Closed", `EngineCascade` e Isolamento Fiscais de Workers C++
 
-Fica terminantemente proibido inicializar qualquer modelo local de inteligência artificial de forma cega ou baseada em heurísticas opinativas de configuração do usuário.
+Fica terminantemente proibido inicializar qualquer modelo local de inteligência artificial de forma cega ou baseada em heurísticas opinativas de configuração do usuário, assim como o uso de qualquer whitelist estática de strings de nomes de arquitetura.
 
-- O SOULS implementará o utilitário nativo de baixo nível `inspector_gguf` escrito em Rust.
-- Antes de acoplar qualquer arquivo `.gguf` à dGPU, o orquestrador invoca o `inspector_gguf` para parsear o cabeçalho binário do modelo em tempo $O(1)$, extraindo metadados críticos: o formato de quantização exato do modelo (`general.architecture`), contagem de camadas, número de cabeças de atenção e tensores.
-- O sistema executa em tempo real o cálculo matemático da equação de VRAM descrita neste ADR, confrontando a pegada teórica calculada contra o headroom físico real disponível no hardware no milissegundo do boot (buscando dados via chamadas nativas de NVML no Rust).
-- **Comportamento Fail-Closed:** Se a soma projetada exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SOULS aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
+- **EngineCascade e TopologyFeatures Dinâmico ($\mathcal{O}(1)$):** O SOULS adota o mecanismo `EngineCascade` para orquestrar e selecionar dinamicamente o motor de inferência. As características de topologia (`TopologyFeatures`) do modelo são extraídas dinamicamente via mapeamento de memória (`mmap`) do cabeçalho GGUF em tempo constante $\mathcal{O}(1)$ durante a fase de boot, sem necessidade de inferências prévias ou tabelas estáticas de strings.
+- **Enjaulamento de Motores FFI C++ em Subprocessos Trabalhadores (`souls_vanguard_worker.exe`):** Motores FFI em C++ não-confiáveis, instáveis ou experimentais devem ser compulsoriamente isolados em subprocessos trabalhadores independentes (`souls_vanguard_worker.exe`), comunicando-se via IPC desidratado e blindado contra interrupções.
+- **Tratamento de Crashes Nativos sem Panic:** Se o subprocesso trabalhador (`souls_vanguard_worker.exe`) sofrer um crash devido a exceções C++ nativas (tais como *vector out-of-bounds* ou *Access Violation*), o processo pai gerenciado pelo Tokio deve capturar a falha sem sofrer panic, marcar o modelo afetado como **INATIVO** na SSOT SQLite (FrankenSQLite) e retornar um erro estruturado `InferenceError`. O fallback *in-process* é **TERMINANTEMENTE PROIBIDO** para falhas estruturais de carregamento de tensores.
+- **Renderização Dinâmica via `minijinja` (Zero-Allocation):** Integra-se a adoção da crate `minijinja` (compilada com `default-features = false`) no *hot-path* de bootstrapping do worker para renderização dinâmica e com zero-alocação de `chat_templates` contidos diretamente nos metadados extraídos do arquivo GGUF.
+- **Comportamento Fail-Closed:** Se a soma projetada de memória de vídeo exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SOULS aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
 
 ## Consequências e Trade-offs
 
@@ -2109,17 +2130,17 @@ CAMINHO: Z:\souls_mc\docs\adrs\ADR-037-Gestao-Dinamica-Contexto-CCR.md
 ---
 id: "ADR-037"
 title: "ADR-037-Gestao-Dinamica-Contexto-CCR"
-version: 1.0
-status: Proposed
+version: 1.1
+status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Mitigação de Context Rot e OOM no Gateway Rust via Gestão Dinâmica de Orçamento de Contexto, Poda Semântica Determinística em Rust (tree-sitter/AST) e Compressão Reversível CCR (DashMap Zero-VRAM)."
+description: "Mitigação de Context Rot e OOM no Gateway Rust via Gestão Dinâmica de Orçamento de Contexto, Poda Semântica Determinística em Rust (tree-sitter/AST), Desidratação Semântica Ativa (souls_compress_memory, souls_dedup, souls_fill) e Compressão Reversível CCR (DashMap Zero-VRAM)."
 ---
 
 # ADR-037: Gestão Dinâmica de Contexto e Compressão Reversível (CCR)
 
 ## Status
 
-Proposed (Proposto para Validação no Cânone SOULS V5)
+Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
 
 ## Contexto Técnico e Gargalo de Context Rot / OOM
 
@@ -2220,24 +2241,27 @@ $$\Delta R = T_{\text{total}} - H_{\text{in}}$$
 
 ---
 
-### Lei 2: Poda Semântica Determinística em Rust (Zero-Copy via `tree-sitter` e `simd-json`)
+### Lei 2: Poda Semântica Determinística em Rust e Garras de Desidratação Ativa
 
-É terminantemente **PROIBIDO** o uso de modelos baseados em redes neurais (PyTorch, ONNX, ModernBERT, HuggingFace) ou chamadas de runtime Python para classificação e poda de texto no Gateway. 
+É terminantemente **PROIBIDO** o uso de modelos baseados em redes neurais (PyTorch, ONNX, ModernBERT, HuggingFace) ou chamadas de runtime Python para classificação e poda de texto no Gateway.
 
-A compressão de $T_{\text{hist}}$ é realizada por motores determinísticos $O(N)$ em memória RAM Host:
+A compressão de $T_{\text{hist}}$ é realizada por motores determinísticos $O(N)$ em memória RAM Host, reforçada pelas **Garras de Desidratação Semântica Ativa**:
 
-1. **Roteamento de Conteúdo por SWAR/AVX2 (`souls-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
+1. **'souls_compress_memory':** Algoritmo de poda semântica que desidrata manuais e arquivos de regras (`.cursorrules` / `CLAUDE.md`) reduzindo a prosa a linguagem telegráfica, preservando intactos caminhos de arquivo, tipos e blocos de código.
+2. **'souls_dedup':** Motor de varredura que analisa referências cruzadas e deduplica trechos compartilhados entre múltiplos arquivos antes de enviá-los ao contexto do LLM, economizando até 40% de massa textual.
+3. **'souls_fill':** Mecanismo de preenchimento dinâmico de contexto que ajusta cirurgicamente a taxa de compressão de cada arquivo de forma individual com base nas restrições físicas de VRAM e no orçamento de tokens de API.
+4. **Roteamento de Conteúdo por SWAR/AVX2 (`souls-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
    - JSON (`[` ou `{`) $\rightarrow$ Rota `SmartCrusher`.
    - Logs/ANSI (`[ERROR]`, `WARN`, `stacktrace`) $\rightarrow$ Rota `LogCompressor`.
    - Código Fonte (`fn`, `pub struct`, `def`, `class`, `import`) $\rightarrow$ Rota `CodeCompressor` (AST).
    - Prosa/Texto Livre $\rightarrow$ Rota `Pruning` Determinístico por Frases/Parágrafos.
-2. **Poda Sintática de Código (`CodeCompressor` via `tree-sitter`):**
+5. **Poda Sintática de Código (`CodeCompressor` via `tree-sitter`):**
    - Utilização nativa do crate Rust `tree-sitter`.
    - Nó da AST correspondentes a declarações (`FunctionDeclarations`, `ImportDeclarations`, `StructDefinitions`) são preservados.
    - Blocos de implementação interna (`body`, `block`) têm os limites de bytes substituídos em tempo de varredura por stubs estáticos (`/* ... corpo omitido via CCR ... */`).
-3. **Poda Estrutural JSON (`SmartCrusher` via `simd-json` / `serde_json`):**
+6. **Poda Estrutural JSON (`SmartCrusher` via `simd-json` / `serde_json`):**
    - Estratégia de divisão em 3 zonas ($K$-Split): preserva o cabeçalho ($K_{\text{head}}$), o rodapé ($K_{\text{tail}}$) e condensa elementos intermediários de baixa variância em um nó estatístico explicativo.
-4. **Alocação Arena e Zero-Copy (`bumpalo` + `Cow<'a, str>`):**
+7. **Alocação Arena e Zero-Copy (`bumpalo` + `Cow<'a, str>`):**
    - Estruturas de mensagem reutilizam ponteiros da camada de transporte (`&'a str`). Fatias modificadas utilizam alocação em Arena de vida curta (`bumpalo`), garantindo desalocação em tempo constante $O(1)$ ao término do despacho.
 
 ---
@@ -2307,3 +2331,61 @@ O Gateway Tokio injeta de forma transparente no payload da requisição a ferram
 | **No Python/Node Runtime** | **CONFORME** | Transmutado inteiramente para Rust nativo (`tree-sitter`, `simd-json`, `bumpalo`). |
 | **SDD / Spec-Driven** | **CONFORME** | Este ADR oficializa a física de gestão de contexto antes de qualquer código/PRD. |
 | **Latência Sub-milissegundo**| **CONFORME** | Interceção loopback $< 100 \ \mu\text{s}$ no Tokio, total $< 1.0 \text{ ms}$. |
+
+### ====================================================================================================
+ARQUIVO: ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
+CAMINHO: Z:\souls_mc\docs\adrs\ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
+---
+---
+id: "ADR-038"
+title: "ADR-038: Execução Elástica e Compressão de Logs do Compilador"
+version: 1.0
+status: Proposed
+epic: "Infraestrutura"
+description: "Isolamento de Stdio em execuções de terminal assíncronas do Tokio e compressão de logs de compilador via Pattern Log Compression para mitigação de Context Rot e sanidade do MCP JSON-RPC."
+---
+
+# ADR-038: Execução Elástica e Compressão de Logs do Compilador
+
+## Status
+
+Proposed (Proposto para Cânone SOULS V4)
+
+## Contexto Técnico e Ameaça ao Protocolo MCP
+
+Durante os ciclos de desenvolvimento iterativo e loops de autonomia agêntica (TDD / Ralph Loop), os subagentes executam frequentemente comandos pesados de compilação, verificação estática ou execução de suítes de testes (`cargo check`, `cargo clippy`, `cargo test`). 
+
+A emissão descontrolada e bruta dessas saídas de terminal traz duas ameaças críticas ao sistema:
+
+1. **Saturação da Janela de Atenção ("Context Rot"):** Enviar milhares de linhas de logs brutos de compilação — incluindo warnings cosméticos de linter, mensagens repetitivas de compilação de crates intermediárias e relatórios verbosos — destrói o orçamento de tokens do LLM e degrada severamente o alinhamento semântico do modelo.
+2. **Corrupção Fatal do Protocolo MCP (JSON-RPC Breakdown):** Se o processo hospedeiro ou sidecars emitirem saídas textuais ou warnings diretamente na saída padrão (`stdout`) do processo principal, as mensagens do barramento JSON-RPC do protocolo MCP serão corrompidas (`invalid Content-Length` ou JSON inválido), provocando a queda instantânea da sessão e da IDE.
+
+## Decisões Inegociáveis
+
+### 1. Isolamento Absoluto de Standard Output em Execuções de Terminal
+
+- Toda e qualquer execução de comandos de terminal engatilhada por agentes (por exemplo, via `souls_shell`) deve ser instanciada estritamente através do executor assíncrono do Tokio (`tokio::process::Command`).
+- Os pipes de saída padrão (`stdout`) e erro padrão (`stderr`) do subprocesso trabalhador devem ser compulsoriamente redirecionados para `Stdio::piped()`.
+- Os bytes emitidos pelo subprocesso são capturados de forma totalmente privada em buffers de memória no host Rust, sendo **TERMINANTEMENTE PROIBIDO** qualquer vazamento direto para o `stdout` do processo pai. Isso garante imunidade total contra a corrupção de enquadramento das mensagens JSON-RPC do canal MCP.
+
+### 2. Algoritmo de Pattern Log Compression (Poda de 90%)
+
+- O motor Rust do SOULS intercepta o fluxo textual bruto capturado dos buffers privados do subprocesso e aplica a pipeline de **Pattern Log Compression**.
+- O compressor filtra e elimina até 90% do volume textual inútil, expurgando:
+  - Warnings cosméticos de linter desnecessários para a resolução da falha imediata.
+  - Linhas repetitivas de progresso de compilação de crates de terceiros (`Compiling ...`, `Downloaded ...`).
+  - Cabulagens e informações verbosas de sucesso intermediário.
+- O algoritmo reconstrói e sintetiza um relatório ultracompacto focado, entregando ao contexto do LLM estritamente:
+  - As linhas exatas com erros sintáticos estruturados (caminho do arquivo, linha, coluna e mensagem de erro do compilador).
+  - Stacktraces nativos de panic em falhas de execução.
+  - Asserções e relatórios exatos de falhas de testes comportamentais.
+
+## Consequências e Trade-offs
+
+### Impactos Positivos:
+- **Sanidade do Barramento MCP:** Imunidade absoluta contra desconexões acidentais da sessão MCP por contaminação de `stdout`.
+- **Economia Extrema de Contexto:** Economia de até 90% dos tokens gastos com saídas de terminal durante loops de TDD/Ralph Loop.
+- **Raciocínio Cirúrgico:** Agentes focam imediatamente na causa raiz do erro sintático ou falha de teste sem ruído de linter.
+
+### Impactos Negativos:
+- **Perda de Verbosidade Cosmética:** Em diagnósticos complexos de build onde um warning omitido pode indicar a causa raiz indireta, o operador humano pode precisar requisitar o log bruto não comprimido.

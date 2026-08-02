@@ -2,3 +2,73 @@
 LLAMA_CUDA = "1"
 CMAKE_CUDA_ARCHITECTURES = "75"
 CMAKE_GENERATOR = "Ninja"
+
+# =============================================================================
+# SOULS MC — Cargo Build FinOps (fix/cargo-finops-v1)
+# Auditoria: .souls_scratchpad/_CARGO_AUDIT_2026-07-31.md
+# Hard rules: incremental=false, sccache persistente, rust-lld em paralelo.
+# =============================================================================
+
+# rust-lld paraleliza o link (link.exe do MSVC é single-threaded e gargalo nº1).
+# Aplica-se a todos os alvos MSVC; no GNU a stack já é linkada por gcc.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+# /OPT:REF remove seções não-referenciadas; /OPT:ICF faz folding de funções idênticas.
+# Não usamos /GUARD:CF (mitigação Spectre) no dev para não esticar o link.
+rustflags = [
+  "-C", "link-arg=/OPT:REF",
+  "-C", "link-arg=/OPT:ICF",
+  "-C", "link-arg=/Brepro",
+]
+
+# sccache sobrevive a `cargo clean` (cache vive em SCCACHE_DIR, não em target/).
+# Wrapper no nível do build (env RUSTC_WRAPPER) — sccache intercepta rustc.
+[build]
+rustc-wrapper = "sccache"
+# 8 jobs paralelos: a máquina não ganha mais nada acima disso com codegen-units=1
+# em deps pesadas, e limita OOM na build paralela de 5 binários.
+jobs = 8
+
+# ---------- PROFILE DEV: iteração rápida sem comprometer o cache de sccache ----------
+# `incremental = false` é LEI DE FERRO (project_memory): Tauri-codegen + multi-vendor
+# corrompe o cache incremental em silêncio. Confiamos 100% no sccache.
+[profile.dev]
+incremental = false
+# opt-level=1 em código nosso: pequeno ganho de runtime, sem esticar o compile.
+opt-level = 1
+# debug=1 = line-tables only. Mantém stack traces claros, mas não enche a target/
+# com PDBs gigantes (cada crate nosso gera ~30 MB de debug info em default).
+debug = 1
+# codegen-units=256 em código nosso = máxima paralelização de LLVM.
+codegen-units = 256
+
+# Dependências: opt-level=3 (runtime) MAS codegen-units=1 (estabilidade de RAM).
+# wasmtime/gix/reqwest/mistralrs/llama-cpp-sys-2 sozinhas explodem 12+ GB de RSS
+# em codegen-units alto, durante a build paralela de 5 binários.
+[profile.dev.package."*"]
+opt-level = 3
+codegen-units = 1
+incremental = false
+
+# Memória-killers explícitos: opt-level=0 (zero overhead de otimização, mas ainda
+# compilam). Mantém o RSS do build agregado < 6 GB (alinhado ao orçamento VRAM do host).
+[profile.dev.package.wasmtime]
+opt-level = 0
+[profile.dev.package.wasmtime-cranelift]
+opt-level = 0
+[profile.dev.package.wasmtime-environ]
+opt-level = 0
+[profile.dev.package.gix]
+opt-level = 0
+[profile.dev.package.reqwest]
+opt-level = 0
+[profile.dev.package.llama-cpp-sys-2]
+opt-level = 0
+[profile.dev.package.mistralrs]
+opt-level = 0
+
+# ---------- PROFILE TEST: herda de dev, mas com opt-level=0 ----------
+# Não há ganho real em otimizar crates durante test; economiza ~10% do tempo.
+[profile.test]
+incremental = false
+opt-level = 0

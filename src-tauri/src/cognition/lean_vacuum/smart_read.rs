@@ -1,3 +1,4 @@
+#![allow(clippy::if_same_then_else)]
 // SOULS-CANIBALIZED: Leitor Inteligente Poliglota (Token-Aware Auto-Shrink)
 // Medição de tokens via tiktoken (cl100k_base) com desidratação poliglota (Rust, Python, Elixir, etc.) e Fail-Closed.
 

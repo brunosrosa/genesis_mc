@@ -980,19 +980,18 @@ fn extract_fallback_frontend_contracts(content: &str) -> Vec<String> {
     let mut items = Vec::new();
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("export function ")
+        if (trimmed.starts_with("export function ")
             || trimmed.starts_with("export const ")
             || trimmed.starts_with("export class ")
             || trimmed.starts_with("export default function")
             || trimmed.contains("createFileRoute")
             || trimmed.contains("createRoute")
             || trimmed.contains("<Route")
-            || trimmed.contains("defineComponent")
+            || trimmed.contains("defineComponent"))
+            && items.len() < 10
         {
-            if items.len() < 10 {
-                let item = trimmed.chars().take(120).collect::<String>();
-                items.push(format!("component {item}"));
-            }
+            let item = trimmed.chars().take(120).collect::<String>();
+            items.push(format!("component {item}"));
         }
     }
     items

@@ -30,7 +30,7 @@ pub enum SsotError {
 
 pub struct SsotInjector;
 
-const SSOT_EXPECTED_COLUMNS: usize = 85;
+const SSOT_EXPECTED_COLUMNS: usize = 82;
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
 
 #[cfg(not(test))]

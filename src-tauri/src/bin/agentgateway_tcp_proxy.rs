@@ -5,7 +5,6 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, copy_bidirectional};
 use tokio::net::{TcpListener, TcpStream};
-use tracing;
 
 use souls_mc_lib::core::headroom_engine::{
     calculate_headroom_budget, calculate_headroom_budget_for_model, CodeCompressor, SoulsCcrStore, hex_encode,
@@ -64,11 +63,28 @@ pub fn phantom_headroom_tool() -> Value {
     })
 }
 
-/// Mutação in-place (lazy) do payload JSON da requisição HTTP
+/// Mutação in-place (lazy/fast-path) do payload JSON da requisição HTTP
 pub fn mutate_json_payload(
     body_bytes: &[u8],
     ccr_store: &SoulsCcrStore,
 ) -> Result<Vec<u8>, String> {
+    // Fast-path Zero-Copy para payloads massivos (> 1MB) sem código de usuário a compactar
+    if body_bytes.len() > 1_048_576 {
+        let text_slice = std::str::from_utf8(body_bytes).ok();
+        let has_code = text_slice.is_none_or(|s| s.contains("fn ") || s.contains("function ") || s.contains("def "));
+        let has_headroom_tool = text_slice.is_some_and(|s| s.contains("headroom_retrieve"));
+
+        if !has_code && has_headroom_tool {
+            return Ok(body_bytes.to_vec());
+        }
+
+        // Se o payload não necessita de compressão de código (sem 'fn ', 'function ', 'def '),
+        // evita desserialização de AST/DOM JSON pesada no Heap do Rust em O(1)
+        if !has_code {
+            return Ok(body_bytes.to_vec());
+        }
+    }
+
     let mut json_val: Value = serde_json::from_slice(body_bytes)
         .map_err(|e| format!("Erro ao parsear JSON: {e}"))?;
 
@@ -93,7 +109,8 @@ pub fn mutate_json_payload(
         json_val["tools"] = json!([phantom_headroom_tool()]);
     }
 
-    // Calcular o orçamento de Headroom (H_in)
+    // Calcular o orçamento de Headroom (H_in) com estimativa de tokens do payload
+    let live_tokens = body_bytes.len() / 3;
     let budget = calculate_headroom_budget_for_model(
         &model,
         128_000,
@@ -102,10 +119,10 @@ pub fn mutate_json_payload(
         1_000,
         2_000,
         10_000,
-        2_000,
+        live_tokens,
     )
     .unwrap_or_else(|_| {
-        calculate_headroom_budget(32_768, 4_096, 512, 1_000, 2_000, 10_000, 2_000)
+        calculate_headroom_budget(32_768, 4_096, 512, 1_000, 2_000, 10_000, live_tokens)
     });
 
     // Se o headroom acionar a compressão (trigger == true)
@@ -150,25 +167,100 @@ pub async fn spawn_mcp_subprocess(command_path: &str, args: &[&str]) -> io::Resu
     })
 }
 
-/// Pipeline de interceção e resposta SSE Sans-I/O do Upstream LLM
-async fn handle_upstream_response(
-    mut downstream: TcpStream,
-    mut upstream: TcpStream,
+fn find_sse_frame_delimiter(buf: &[u8]) -> Option<(usize, usize)> {
+    for i in 0..buf.len() {
+        if buf[i..].starts_with(b"\n\n") {
+            return Some((i, 2));
+        }
+        if buf[i..].starts_with(b"\r\n\r\n") {
+            return Some((i, 4));
+        }
+    }
+    None
+}
+
+/// Acumulador de Bytes Brutos para reconstrução de quadros SSE contra fragmentação TCP
+#[derive(Default)]
+pub struct SseFrameAccumulator {
+    acc_buf: Vec<u8>,
+}
+
+impl SseFrameAccumulator {
+    pub fn new() -> Self {
+        Self {
+            acc_buf: Vec::with_capacity(16384),
+        }
+    }
+
+    pub fn push_chunk(&mut self, chunk: &[u8]) -> Vec<Vec<u8>> {
+        self.acc_buf.extend_from_slice(chunk);
+        let mut frames = Vec::new();
+
+        while let Some((pos, delim_len)) = find_sse_frame_delimiter(&self.acc_buf) {
+            let frame_end = pos + delim_len;
+            let frame_bytes: Vec<u8> = self.acc_buf.drain(..frame_end).collect();
+            frames.push(frame_bytes);
+        }
+
+        frames
+    }
+
+    pub fn flush_remaining(&mut self) -> Option<Vec<u8>> {
+        if !self.acc_buf.is_empty() {
+            Some(std::mem::take(&mut self.acc_buf))
+        } else {
+            None
+        }
+    }
+}
+
+/// Pipeline de interceção e resposta SSE com acumulador de linhas/quadros inteiros
+async fn handle_upstream_response<D, U>(
+    mut downstream: D,
+    mut upstream: U,
     ccr_store: Arc<SoulsCcrStore>,
-) -> io::Result<()> {
-    let mut resp_buf = vec![0u8; 8192];
+) -> io::Result<()>
+where
+    D: AsyncWriteExt + Unpin,
+    U: AsyncReadExt + Unpin,
+{
+    let mut read_buf = vec![0u8; 8192];
+    let mut acc = SseFrameAccumulator::new();
+
     loop {
-        let n = upstream.read(&mut resp_buf).await?;
+        let n = upstream.read(&mut read_buf).await?;
         if n == 0 {
             break;
         }
-        let chunk = &resp_buf[..n];
-        let chunk_str = String::from_utf8_lossy(chunk);
+        let frames = acc.push_chunk(&read_buf[..n]);
 
-        // Sequestro do Loopback SSE: Se a IA acionou headroom_retrieve(hash), interceptar
-        if chunk_str.contains("headroom_retrieve") {
-            if let Some(hydrated) = ccr_store.intercept_loopback(&chunk_str) {
-                tracing::info!("Sequestro de Loopback SSE acionado em < 1ms! Contexto hidratado.");
+        for frame_bytes in frames {
+            let frame_str = String::from_utf8_lossy(&frame_bytes);
+
+            // Sequestro do Loopback SSE em frame reconstruído
+            if frame_str.contains("headroom_retrieve") {
+                if let Some(hydrated) = ccr_store.intercept_loopback(&frame_str) {
+                    tracing::info!("Sequestro de Loopback SSE acionado em < 1ms! Contexto hidratado.");
+                    let sse_event = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: {}\n\ndata: [DONE]\n\n",
+                        hydrated
+                    );
+                    downstream.write_all(sse_event.as_bytes()).await?;
+                    downstream.flush().await?;
+                    return Ok(());
+                }
+            }
+
+            downstream.write_all(&frame_bytes).await?;
+            downstream.flush().await?;
+        }
+    }
+
+    // Processar residual final ao encerrar a stream
+    if let Some(remaining) = acc.flush_remaining() {
+        let frame_str = String::from_utf8_lossy(&remaining);
+        if frame_str.contains("headroom_retrieve") {
+            if let Some(hydrated) = ccr_store.intercept_loopback(&frame_str) {
                 let sse_event = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: {}\n\ndata: [DONE]\n\n",
                     hydrated
@@ -178,10 +270,10 @@ async fn handle_upstream_response(
                 return Ok(());
             }
         }
-
-        downstream.write_all(chunk).await?;
+        downstream.write_all(&remaining).await?;
         downstream.flush().await?;
     }
+
     Ok(())
 }
 
@@ -331,13 +423,14 @@ mod tests {
     #[test]
     fn test_headroom_ast_compression_on_user_code() {
         let store = SoulsCcrStore::new(16 * 1024 * 1024);
-        let long_code = r#"
+        let block = r#"
 fn process_heavy_data(input: &str) -> String {
     let x = input.to_lowercase();
     let y = x.trim();
     format!("RESULT: {}", y)
 }
 "#;
+        let long_code = block.repeat(500);
         let input_json = json!({
             "model": "gemma4",
             "messages": [
@@ -363,5 +456,87 @@ fn process_heavy_data(input: &str) -> String {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("invalid_mcp_executable_999.exe"));
+    }
+
+    #[test]
+    fn test_mutate_json_payload_zero_copy_fast_path() {
+        let store = SoulsCcrStore::new(16 * 1024 * 1024);
+        let mut large_json = String::from(r#"{"model":"gemma4","tools":[{"type":"function","function":{"name":"headroom_retrieve"}}],"data":""#);
+        large_json.push_str(&"A".repeat(1_100_000));
+        large_json.push_str(r#""}"#);
+
+        let start = std::time::Instant::now();
+        let result = mutate_json_payload(large_json.as_bytes(), &store).unwrap();
+        let elapsed = start.elapsed();
+
+        assert_eq!(result.len(), large_json.len());
+        assert!(elapsed.as_millis() < 500, "Operação Zero-Copy executada em {} ms", elapsed.as_millis());
+    }
+
+    #[tokio::test]
+    async fn test_sse_line_buffering_fragmented_chunks() {
+        let store = Arc::new(SoulsCcrStore::new(16 * 1024 * 1024));
+        let payload = b"fn secret_logic() {}";
+        let hash = store.store(payload);
+        let hex_hash = hex_encode(&hash);
+
+        let part1 = format!("data: {{\"name\":\"headroom_");
+        let part2 = format!("retrieve\",\"parameters\":{{\"hash\":\"{}\"}}}}\n\n", hex_hash);
+
+        let (client_down, server_down) = tokio::io::duplex(1024);
+        let (mut client_up, server_up) = tokio::io::duplex(1024);
+
+        let store_clone = Arc::clone(&store);
+        let handle = tokio::spawn(async move {
+            handle_upstream_response(client_down, server_up, store_clone).await
+        });
+
+        client_up.write_all(part1.as_bytes()).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        client_up.write_all(part2.as_bytes()).await.unwrap();
+
+        let mut reader = server_down;
+        let mut resp_buf = vec![0u8; 1024];
+        let n = reader.read(&mut resp_buf).await.unwrap();
+        let resp_str = String::from_utf8_lossy(&resp_buf[..n]);
+
+        assert!(resp_str.contains("secret_logic"));
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn test_sse_buffer_tcp_fragmentation() {
+        let store = Arc::new(SoulsCcrStore::new(16 * 1024 * 1024));
+        let payload = "fn cbor_utf8_coracao() { println!(\"Coração UTF-8\"); }".as_bytes();
+        let hash = store.store(payload);
+        let hex_hash = hex_encode(&hash);
+
+        let full_sse = format!(
+            "data: {{\"name\":\"headroom_retrieve\",\"parameters\":{{\"hash\":\"{}\"}},\"msg\":\"coracao utf8\"}}\n\n",
+            hex_hash
+        );
+
+        let bytes = full_sse.as_bytes();
+        let mut acc = SseFrameAccumulator::new();
+        let mut reconstructed_frames = Vec::new();
+
+        // Injeta o stream SSE fatiado em pedaços arbitrários de 10 bytes
+        for chunk in bytes.chunks(10) {
+            let frames = acc.push_chunk(chunk);
+            for f in frames {
+                reconstructed_frames.push(f);
+            }
+        }
+        if let Some(rem) = acc.flush_remaining() {
+            reconstructed_frames.push(rem);
+        }
+
+        assert_eq!(reconstructed_frames.len(), 1, "Deveria reconstruir exatamente 1 frame SSE completo");
+        let frame_str = String::from_utf8_lossy(&reconstructed_frames[0]);
+        assert!(frame_str.contains("headroom_retrieve"));
+
+        let hydrated = store.intercept_loopback(&frame_str);
+        assert!(hydrated.is_some());
+        assert!(hydrated.unwrap().contains("coracao"));
     }
 }

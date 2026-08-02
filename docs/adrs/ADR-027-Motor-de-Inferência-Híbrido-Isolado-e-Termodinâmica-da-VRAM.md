@@ -103,14 +103,15 @@ $$V_{\text{total\_souls}} = 3.78 \text{ GB} + 0.91 \text{ GB} + 0.20 \text{ GB} 
 
 A compressão garante um headroom de segurança física de $1.11 \text{ GB}$ **(**$1136 \text{ MB}$**)** livre na GPU RTX 2060m para gerenciar picos de inicialização de tensores e manipulação gráfica da interface do host (Tauri v2 e sistema operacional local).
 
-### 3. Mecanismo de Salvaguarda "Fail-Closed" via `inspector_gguf`
+### 3. Mecanismo de Salvaguarda "Fail-Closed", `EngineCascade` e Isolamento Fiscais de Workers C++
 
-Fica terminantemente proibido inicializar qualquer modelo local de inteligência artificial de forma cega ou baseada em heurísticas opinativas de configuração do usuário.
+Fica terminantemente proibido inicializar qualquer modelo local de inteligência artificial de forma cega ou baseada em heurísticas opinativas de configuração do usuário, assim como o uso de qualquer whitelist estática de strings de nomes de arquitetura.
 
-- O SOULS implementará o utilitário nativo de baixo nível `inspector_gguf` escrito em Rust.
-- Antes de acoplar qualquer arquivo `.gguf` à dGPU, o orquestrador invoca o `inspector_gguf` para parsear o cabeçalho binário do modelo em tempo $O(1)$, extraindo metadados críticos: o formato de quantização exato do modelo (`general.architecture`), contagem de camadas, número de cabeças de atenção e tensores.
-- O sistema executa em tempo real o cálculo matemático da equação de VRAM descrita neste ADR, confrontando a pegada teórica calculada contra o headroom físico real disponível no hardware no milissegundo do boot (buscando dados via chamadas nativas de NVML no Rust).
-- **Comportamento Fail-Closed:** Se a soma projetada exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SOULS aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
+- **EngineCascade e TopologyFeatures Dinâmico ($\mathcal{O}(1)$):** O SOULS adota o mecanismo `EngineCascade` para orquestrar e selecionar dinamicamente o motor de inferência. As características de topologia (`TopologyFeatures`) do modelo são extraídas dinamicamente via mapeamento de memória (`mmap`) do cabeçalho GGUF em tempo constante $\mathcal{O}(1)$ durante a fase de boot, sem necessidade de inferências prévias ou tabelas estáticas de strings.
+- **Enjaulamento de Motores FFI C++ em Subprocessos Trabalhadores (`souls_vanguard_worker.exe`):** Motores FFI em C++ não-confiáveis, instáveis ou experimentais devem ser compulsoriamente isolados em subprocessos trabalhadores independentes (`souls_vanguard_worker.exe`), comunicando-se via IPC desidratado e blindado contra interrupções.
+- **Tratamento de Crashes Nativos sem Panic:** Se o subprocesso trabalhador (`souls_vanguard_worker.exe`) sofrer um crash devido a exceções C++ nativas (tais como *vector out-of-bounds* ou *Access Violation*), o processo pai gerenciado pelo Tokio deve capturar a falha sem sofrer panic, marcar o modelo afetado como **INATIVO** na SSOT SQLite (FrankenSQLite) e retornar um erro estruturado `InferenceError`. O fallback *in-process* é **TERMINANTEMENTE PROIBIDO** para falhas estruturais de carregamento de tensores.
+- **Renderização Dinâmica via `minijinja` (Zero-Allocation):** Integra-se a adoção da crate `minijinja` (compilada com `default-features = false`) no *hot-path* de bootstrapping do worker para renderização dinâmica e com zero-alocação de `chat_templates` contidos diretamente nos metadados extraídos do arquivo GGUF.
+- **Comportamento Fail-Closed:** Se a soma projetada de memória de vídeo exceder $5.4 \text{ GB}$ ($90\%$ da VRAM total de $6\text{GB}$), o SOULS aborta síncronamente a operação de carregamento local, emite um log seco em terminal para o operador e desvia o roteamento de inferência do `ParetoBanditRouter` para o Fallback na Nuvem Soberana. Evita-se assim pânicos imprevisíveis no driver do sistema operacional do host.
 
 ## Consequências e Trade-offs
 

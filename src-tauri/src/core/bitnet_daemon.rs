@@ -146,10 +146,7 @@ impl BitNetDaemon {
     /// Retorna verdadeiro se o processo ainda estiver ativo.
     pub fn is_running(&mut self) -> bool {
         if let Some(ref mut child) = self.child_process {
-            match child.try_wait() {
-                Ok(None) => true,
-                _ => false,
-            }
+            matches!(child.try_wait(), Ok(None))
         } else {
             false
         }
