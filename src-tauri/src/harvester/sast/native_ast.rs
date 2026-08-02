@@ -251,6 +251,29 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
     let mut blocks: Vec<(i32, ScopedTextBlock)> = Vec::new();
     let mut all_text = String::new();
     let mut skill_signal = false;
+
+    // ADR-031 §5: heurísticas canônicas de detecção de SkillLibrary.
+    // Camada A (skill_signal → kind) e Camada B (score → ordem) são
+    // ortogonais por design; a invariante de consistência é:
+    //   "qualquer keyword de A também está em B (com peso), exceto
+    //    pelas keywords-only-B documentadas no ADR".
+    let skill_signal_rel = ["skill", "prompt"];
+    let skill_signal_content = [
+        "skills for ai",
+        "coding agents",
+        "diagram",
+        "visualization",
+    ];
+    let score_rules: &[(&str, &str, i32)] = &[
+        ("rel", "readme", 5),
+        ("rel", "skill", 3),
+        ("rel", "prompt", 3),
+        // Camada-B-only: troubleshooting/curadoria. NÃO promove
+        // skill_signal (um repo de código com troubleshooting.md é
+        // ContentRepo). Documentado em ADR-031 §5.
+        ("content", "problems_and_diagnostics", 10),
+    ];
+
     for path in &md_files {
         let rel = sanitize_repo_relative_path(repo_path, &path.to_string_lossy())
             .unwrap_or_else(|| path.file_name().and_then(|n| n.to_str()).unwrap_or("file").to_string());
@@ -259,32 +282,34 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
             Err(_) => continue,
         };
         let mut score = 0i32;
+
+        // Camada A: skill_signal (curto-circuito no primeiro hit).
         if !skill_signal {
             let rel_l = rel.to_ascii_lowercase();
             let c_l = content.to_ascii_lowercase();
-            if rel_l.contains("skill")
-                || rel_l.contains("prompt")
-                || c_l.contains("skills for ai")
-                || c_l.contains("coding agents")
-                || c_l.contains("diagram")
-                || c_l.contains("visualization")
+            if skill_signal_rel.iter().any(|k| rel_l.contains(k))
+                || skill_signal_content.iter().any(|k| c_l.contains(k))
             {
                 skill_signal = true;
             }
         }
+
+        // Camada B: score acumulado para ordenação.
         {
             let rel_l = rel.to_ascii_lowercase();
-            if rel_l.contains("readme") {
-                score += 5;
-            }
-            if rel_l.contains("skill") || rel_l.contains("prompt") {
-                score += 3;
-            }
             let c_l = content.to_ascii_lowercase();
-            if c_l.contains("problems_and_diagnostics") {
-                score += 10;
+            for (origin, kw, weight) in score_rules {
+                let hit = match *origin {
+                    "rel" => rel_l.contains(kw),
+                    "content" => c_l.contains(kw),
+                    _ => false,
+                };
+                if hit {
+                    score += weight;
+                }
             }
         }
+
         all_text.push_str(&content);
         all_text.push('\n');
         blocks.push((

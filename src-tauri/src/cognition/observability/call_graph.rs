@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_symbol_index_remove_for_file() {
-        let mut count = symbol_count();
+        let count = symbol_count();
         insert_symbol(SymbolEntry {
             qualified_name: "temp::a".to_string(),
             kind: SymbolKind::Fn,
