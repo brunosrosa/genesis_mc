@@ -1,6 +1,6 @@
 # SODA Current State - SOULS V4 Architectural State & ADR Registry
 
-Last Updated: 2026-07-31
+Last Updated: 2026-08-01
 
 ## Status Geral dos ADRs Constitucionais
 
@@ -15,6 +15,7 @@ Last Updated: 2026-07-31
 | ADR-027 | Motor de Inferência Híbrido & VRAM | Ativo_Inegociavel | Cognição | RTX 2060m limit, **EngineCascade**, **TopologyFeatures O(1) via mmap**, **Worker FFI C++ (souls_vanguard_worker.exe)**, **minijinja zero-alloc**. |
 | ADR-037 | Gestão Dinâmica de Contexto CCR | Ativo_Inegociavel | Infraestrutura | Algoritmo Headroom em Rust, DashMap Host RAM, **souls_compress_memory**, **souls_dedup**, **souls_fill**. |
 | ADR-038 | Execução Elástica & Compressão de Logs | Proposed | Infraestrutura | **Isolamento de Stdio via tokio::process::Command**, **Pattern Log Compression (90% pruning)**. |
+| ADR-040 | Migração State DB v2 + Disjuntor Cognitivo | Ativo_Inegociavel | Cognição | **Marco 3.5 ATIVO**: souls_graph (9 tools mem_*) + souls_thinking (core_think, disjuntor 5→7 HITL). Tabela `observations` normalizada + FTS5 + triggers. PRAGMA user_version=2. |
 
 ---
 
