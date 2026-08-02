@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-_RULES_IN_IDEs Gerado em: 2026-08-02 01:37:27
-=======
-_RULES_IN_IDEs Gerado em: 2026-08-02 03:16:34
->>>>>>> Stashed changes
+_RULES_IN_IDEs Gerado em: 2026-08-02 05:51:55
 
 ### ====================================================================================================
 ARQUIVO: GEMINI.md
@@ -61,6 +57,18 @@ As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em
 
 CRITICAL: É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read, Grep, Terminal) para navegação de código. O uso das ferramentas MCP de contexto (ex: `souls_read`, `souls_search`, `souls_tree`, `souls_shell`) é MANDATÓRIO e inegociável para economizar tokens. Para sintaxe, modos de leitura (LEAN) e Memória de Sessão (CCP), invoque a skill @souls-context-master imediatamente.
 <!-- /souls-context -->
+
+## 5. SERVERNAME SOBERANO & EMENDA CONSTITUCIONAL 32/120 (ADR-041)
+
+O Agent Gateway exportado para clientes MCP chama-se **`souls_mcp`** (não `souls`). Toda ferramenta dentro de `souls_mcp.*` é, por construção, **nativa, local-first e segura do SODA** — cerca perimétrica transferida do toolname para o servername (1 lookup O(1) no Roteador Semântico).
+
+**Leis Duras de Nomenclatura (vinculantes):**
+- **Servername:** estritamente `souls_mcp` ([ADR-041](docs/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md)). Emenda da [ADR-026](docs/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) §1.
+- **Teto de Nome (tool):** ≤ **32 caracteres**.
+- **Teto de Descrição (tool):** ≤ **120 caracteres**, seca, técnica, sem "slop" de marketing.
+- **Canibalização preservada:** tools já canibalizadas (`get_ast`, `read`, `mem_search`, `core_think`) **mantêm nomes curtos** (Zero-Brand da ADR-026 §2-4). Apenas tools novas com ambiguidade semântica podem opcionalmente adotar prefixo `souls_`.
+- **Reserva:** tools de terceiros NÃO podem ser hospedadas em `souls_mcp`. Devem usar servernames próprios (`brave`, `actual_budget`).
+- **Backward compat:** durante 1 release, alias `souls` no `gateway-config.yaml` aponta para o mesmo binário.
 
 
 ### ====================================================================================================

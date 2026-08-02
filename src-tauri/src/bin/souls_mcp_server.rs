@@ -10,6 +10,7 @@ use souls_mc_lib::cognition::context_compression; // SOULS-CANIBALIZED Marco 3.6
 use souls_mc_lib::cognition::memory_graph;
 use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
 use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
+use souls_mc_lib::cognition::observability; // SOULS-CANIBALIZED Marco 3.7 Fase B: Observabilidade Cognitiva Sensorial
 use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
 use souls_mc_lib::cognition::thinking::ThinkingEngine;
 use souls_mc_lib::harvester::ast_parser;
@@ -293,20 +294,6 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "fill",
-                        "description": "Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string", "description": "Caminho do arquivo contendo o stub (alias: path)." },
-                                "stub_marker": { "type": "string", "description": "Marcador do stub a ser preenchido (alias: marker)." },
-                                "code_payload": { "type": "string", "description": "Bloco de código a ser injetado (alias: content)." }
-                            },
-                            "required": ["file_path", "stub_marker", "code_payload"],
-                            "additionalProperties": false
-                        }
-                    },
-                    {
                         "name": "headroom_retrieve",
                         "description": "Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.",
                         "inputSchema": {
@@ -322,8 +309,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     // SOULS-CANIBALIZED Marco 3.6: Conveyor Belt de Contexto (CCR Lossless)
                     // ============================================================
                     {
-                        "name": "souls_multi_read",
-                        "description": "Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR.",
+                        "name": "multi_read",
+                        "description": "Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -338,7 +325,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "souls_fill",
+                        "name": "fill",
                         "description": "Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM.",
                         "inputSchema": {
                             "type": "object",
@@ -346,20 +333,6 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                                 "text": { "type": "string", "description": "Texto compactado contendo marcadores [SOULS-DEDUP: ...] a serem reidratados." }
                             },
                             "required": ["text"],
-                            "additionalProperties": false
-                        }
-                    },
-                    {
-                        "name": "souls_stub_fill",
-                        "description": "Injeta bloco funcional no offset de stub (souls-stub: marker) sem alterar a casca adjacente. (Legacy fill)",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string", "description": "Caminho do arquivo contendo o stub (alias: path)." },
-                                "stub_marker": { "type": "string", "description": "Marcador do stub a ser preenchido (alias: marker)." },
-                                "code_payload": { "type": "string", "description": "Bloco de código a ser injetado (alias: content)." }
-                            },
-                            "required": ["file_path", "stub_marker", "code_payload"],
                             "additionalProperties": false
                         }
                     },
@@ -393,7 +366,6 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     // Stubs (15) - contratos canônicos para cobertura semântica.
                     // Implementação real virá em iterações SOULS-SDD subsequentes (Fase 4+).
-                    { "name": "multi_read", "description": "not_implemented_yet: Leitura em batch com dedup via SharedBlock.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "smart_read",
                         "description": "Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)",
@@ -438,7 +410,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "outline",
-                        "description": "Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline / souls_symbol)",
+                        "description": "Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline)",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -448,11 +420,11 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "symbol", "description": "not_implemented_yet: Resolve symbol name → file:line.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "symbol", "description": "Resolve a localização física (file:line) de símbolos sintáticos da AST do monorepo. (Pendente).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "callers", "description": "not_implemented_yet: Call graph: quem chama esta fn.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "callees", "description": "not_implemented_yet: Call graph: o que esta fn chama.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "shell", "description": "not_implemented_yet sandbox_audit_pending: shell command com whitelist/timeout requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "shell", "description": "Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "compress",
                         "description": "Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)",
@@ -678,6 +650,55 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "required": ["thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"],
                             "additionalProperties": false
                         }
+                    },
+                    // ============================================================
+                    // SOULS-CANIBALIZED Marco 3.7 Fase B: 4 tools de Observabilidade Cognitiva Sensorial
+                    // (heatmap, impact, routes, feedback) — namespace canonico `souls_mcp.<tool>`
+                    // ============================================================
+                    {
+                        "name": "heatmap",
+                        "description": "Mapeia dinamicamente os caminhos quentes de acesso a arquivos locais na RAM Host usando Langevin decay.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "limit": { "type": "integer", "description": "Numero maximo de entradas retornadas (padrao 50).", "minimum": 1, "maximum": 500 },
+                                "lambda": { "type": "number", "description": "Constante de decaimento Langevin (padrao 0.05)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "impact",
+                        "description": "Calcula o Blast Radius (importadores afetados) de qualquer arquivo no monorepo via BFS em grafo transposto.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ou absoluto)." },
+                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." }
+                            },
+                            "required": ["path"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "routes",
+                        "description": "Mapeia os contratos de endpoints ativos e a reatividade de comunicacao entre Tauri Rust e Svelte 5.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "feedback",
+                        "description": "Dumps FinOps de telemetria, latencia e eficiencia de token E3 a partir de logs locais de execucao.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": false
+                        }
                     }
                 ]
             }),
@@ -726,8 +747,12 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         })?;
 
     // SOULS-CANIBALIZED: higiene canônica. Aceita tanto nomes simples quanto prefixados/aliases.
+    // ADR-041 (Emenda Constitucional 32/120): cada tool expõe 3 aliases de transição:
+    //   1. canônico curto   (ex: `read`)         — único nome registrado no `tools/list`.
+    //   2. prefixo `souls_` (ex: `souls_read`)   — emenda retroativa para clientes legados.
+    //   3. prefixo `ctx_`   (ex: `ctx_read`)     — emenda retroativa para o cânone lean-ctx.
     match tool_name {
-        // Cânone SOULS (preferido)
+        // ============ Cânone SOULS — tools de orquestração e IO ============
         "get_ast" | "souls_get_ast" | "repo_ast" => run_repo_ast(params).await,
         "fetch_web" | "souls_fetch_web" | "web_fetch" => run_web_fetch(params).await,
         "sys_time" | "souls_sys_time" => run_sys_time(params).await,
@@ -738,28 +763,34 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "handoff" | "souls_handoff" => run_souls_handoff(params).await,
         "knowledge" | "souls_knowledge" => run_souls_knowledge(params).await,
         "edit" | "souls_edit" => run_souls_edit(params).await,
-        "fill" | "souls_stub_fill" | "stub_fill" => run_souls_stub_fill(params).await,
-        "souls_fill" | "ccr_fill" => run_souls_ccr_fill(params).await,
-        // 17 tools canônicas (2 implementadas + 15 stubs)
-        "read" | "souls_read" => run_souls_read(params).await,
-        "delta_diff" | "souls_delta_diff" => run_souls_delta_diff(params).await,
-        "tree" | "souls_tree" => run_souls_tree(params).await,
-        "outline" | "souls_outline" | "symbol" | "souls_symbol" => run_souls_outline(params).await,
-        "smart_read" | "souls_smart_read" => run_souls_smart_read(params).await,
-        "search" | "souls_search" => run_souls_search(params).await,
-        "compress" | "souls_compress" => run_souls_compress(params).await,
-        "dedup" | "souls_dedup" => run_souls_dedup(params).await,
-        "headroom_retrieve" | "souls_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
-        "session" | "souls_session" => run_souls_session(params).await,
-        "multi_read" | "souls_multi_read" => run_souls_multi_read(params).await,
-        "semantic_search" | "souls_semantic_search"
-        | "callers" | "souls_callers"
-        | "callees" | "souls_callees"
-        | "metrics" | "souls_metrics"
-        | "intent" | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
-        "execute" | "souls_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
-        "shell" | "souls_shell" => run_souls_shell(params).await,
-        // Marco 3.5 — souls_graph (9 ops) + souls_thinking (1 op = core_think)
+        // ============ Cânone CCR — reidratador canônico + alias legacy preservado ============
+        // `fill` é o nome canônico do reidratador CCR (texto → texto lossless).
+        // O legacy `run_souls_stub_fill` (file_path/stub_marker) é mantido SOB `souls_stub_fill`
+        // exclusivamente para preservar a suíte de testes de injeção pré-Macro 3.6.
+        "fill" | "souls_fill" | "ccr_fill" => run_souls_ccr_fill(params).await,
+        "souls_stub_fill" | "stub_fill" => run_souls_stub_fill(params).await,
+        // ============ 17 tools canônicas da engenharia de contexto (ADR-041 §3) ============
+        "read" | "souls_read" | "ctx_read" => run_souls_read(params).await,
+        "delta_diff" | "souls_delta_diff" | "ctx_delta" => run_souls_delta_diff(params).await,
+        "tree" | "souls_tree" | "ctx_tree" => run_souls_tree(params).await,
+        "outline" | "souls_outline" | "ctx_outline" => run_souls_outline(params).await,
+        "smart_read" | "souls_smart_read" | "ctx_smart_read" => run_souls_smart_read(params).await,
+        "search" | "souls_search" | "ctx_search" => run_souls_search(params).await,
+        "compress" | "souls_compress" | "ctx_compress" => run_souls_compress(params).await,
+        "dedup" | "souls_dedup" | "ctx_dedup" => run_souls_dedup(params).await,
+        "headroom_retrieve" | "souls_headroom_retrieve" | "ctx_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
+        "session" | "souls_session" | "ctx_session" => run_souls_session(params).await,
+        "multi_read" | "souls_multi_read" | "ctx_multi_read" => run_souls_multi_read(params).await,
+        // ============ Stubs (Pendente) — em transição para Marco 3.8 (Call Graph) ============
+        "symbol" | "souls_symbol" | "ctx_symbol"
+        | "semantic_search" | "souls_semantic_search" | "ctx_semantic_search"
+        | "callers" | "souls_callers" | "ctx_callers"
+        | "callees" | "souls_callees" | "ctx_callees"
+        | "metrics" | "souls_metrics" | "ctx_metrics"
+        | "intent" | "souls_intent" | "ctx_intent" => Ok(stub_not_implemented_yet(tool_name)),
+        "execute" | "souls_execute" | "ctx_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "shell" | "souls_shell" | "ctx_shell" => run_souls_shell(params).await,
+        // ============ Marco 3.5 — souls_graph (9 ops) + souls_thinking (1 op = core_think) ============
         "mem_create_entities" => run_mem_create_entities(params).await,
         "mem_create_relations" => run_mem_create_relations(params).await,
         "mem_add_observations" => run_mem_add_observations(params).await,
@@ -770,6 +801,13 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "mem_delete_observations" => run_mem_delete_observations(params).await,
         "mem_delete_relations" => run_mem_delete_relations(params).await,
         "core_think" => run_core_think(params).await,
+        // Marco 3.7 Fase B — Observabilidade Cognitiva Sensorial.
+        // Emenda ADR-041 (Lei 32/120): servername soberano `souls_mcp`,
+        // toolname curto, aliases canonicos.
+        "heatmap" | "souls_heatmap" => run_heatmap(params).await,
+        "impact" | "souls_impact" => run_impact(params).await,
+        "routes" | "souls_routes" => run_routes(params).await,
+        "feedback" | "souls_feedback" => run_feedback(params).await,
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -804,6 +842,10 @@ async fn run_souls_read(params: &serde_json::Map<String, Value>) -> Result<Value
             message: "Argumento path é obrigatório".to_string(),
             data: Some(json!({ "required": "path" })),
         })?;
+
+    // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
+    // HIPER-FORWARD: o log NAO bloqueia o critical path.
+    try_log_file_access(path_str, "read");
 
     let path = PathBuf::from(path_str);
     if !path.exists() {
@@ -2451,6 +2493,23 @@ enum StateDbOp {
         confidence: f64,
         reply: oneshot::Sender<Result<Value, RpcError>>,
     },
+    // Marco 3.7 Fase B: Observabilidade Cognitiva Sensorial.
+    // Instrumentadas no dispatcher via `try_log_file_access` (leitura+edicao+multi_read).
+    #[allow(dead_code)] // API V3: tambem chamada por integracoes futuras (compress, dedup, sync)
+    LogFileAccess {
+        file_path: String,
+        tool: String,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
+    #[allow(dead_code)] // API V3: FinOps; sera instrumentada na Fase C (cloud brain)
+    LogTelemetry {
+        tool: String,
+        tokens_in: i64,
+        tokens_out: i64,
+        cost_usd: f64,
+        duration_ms: i64,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
 }
 
 static STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>> = OnceLock::new();
@@ -2555,7 +2614,7 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
 
     let db_path_thread = db_path.clone();
     std::thread::spawn(move || {
-        let conn = match Connection::open_with_flags(
+        let mut conn = match Connection::open_with_flags(
             &db_path_thread,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         ) {
@@ -2566,6 +2625,12 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
         let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+
+        // Marco 3.7 Fase B: migracao V2→V3 (Observabilidade Sensorial).
+        // Idempotente: no-op em banco ja migrado.
+        if let Err(e) = observability::migrate_v2_to_v3(&mut conn) {
+            eprintln!("[StateDbWorker] ALERTA: falha na migracao V2→V3: {e}");
+        }
 
         while let Some(op) = rx.blocking_recv() {
             let now = std::time::SystemTime::now()
@@ -2646,6 +2711,54 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
                         Err(e) => Err(RpcError {
                             code: -32000,
                             message: format!("Falha de gravação no banco de estado: {}", e),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                // Marco 3.7 Fase B: log append-only em file_access_logs.
+                StateDbOp::LogFileAccess { file_path, tool, reply } => {
+                    let res = conn.execute(
+                        "INSERT INTO file_access_logs (file_path, tool, accessed_at) \
+                         VALUES (?1, ?2, ?3)",
+                        rusqlite::params![file_path, tool, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Acesso registrado: tool='{}' path='{}' t={}", tool, file_path, now)
+                            }]
+                        })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Falha de log de acesso: {}", e),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                // Marco 3.7 Fase B: log FinOps em telemetry_logs.
+                StateDbOp::LogTelemetry { tool, tokens_in, tokens_out, cost_usd, duration_ms, reply } => {
+                    let res = conn.execute(
+                        "INSERT INTO telemetry_logs \
+                            (tool, tokens_in, tokens_out, cost_usd, duration_ms, created_at) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        rusqlite::params![tool, tokens_in, tokens_out, cost_usd, duration_ms, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!(
+                                    "Telemetria '{}': in={} out={} cost=${:.6} dur={}ms",
+                                    tool, tokens_in, tokens_out, cost_usd, duration_ms
+                                )
+                            }]
+                        })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Falha de log FinOps: {}", e),
                             data: None,
                         }),
                     };
@@ -2951,6 +3064,10 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
         message: "Parâmetro obrigatório 'path' ausente".to_string(),
         data: None,
     })?;
+
+    // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
+    try_log_file_access(path_str, "edit");
+
     let old_string = args.get("old_string").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
         message: "Parâmetro obrigatório 'old_string' ausente".to_string(),
@@ -3178,6 +3295,11 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
             message: "Array 'paths' não pode ser vazio".to_string(),
             data: None,
         });
+    }
+
+    // Marco 3.7 Fase B: instrumentacao observability (filesystem spy em batch).
+    for p in raw_paths.iter().filter_map(Value::as_str) {
+        try_log_file_access(p, "multi_read");
     }
 
     let path_strs: Vec<String> = raw_paths
@@ -3483,6 +3605,41 @@ async fn memgraph_request(op: MemGraphOp) -> Result<Value, RpcError> {
     }))
 }
 
+// Marco 3.7 Fase B: helper nao-bloqueante para enfileirar log de acesso
+// a arquivo no StateDbWorker. Silencia-se em caso de falha (HIPER-FORWARD;
+// o critical path da tool NAO pode esperar o I/O do log).
+fn try_log_file_access(file_path: &str, tool: &str) {
+    let Some(tx) = STATE_DB_TX.get() else {
+        return;
+    };
+    let (reply_tx, _reply_rx) = oneshot::channel();
+    let op = StateDbOp::LogFileAccess {
+        file_path: file_path.to_string(),
+        tool: tool.to_string(),
+        reply: reply_tx,
+    };
+    let _ = tx.try_send(op); // best-effort, nao bloqueia
+}
+
+// Marco 3.7 Fase B: helper para enfileirar telemetria FinOps no StateDbWorker.
+// Sera instrumentado na Fase C (cloud brain) — por ora reservado como API.
+#[allow(dead_code)]
+fn try_log_telemetry(tool: &str, tokens_in: i64, tokens_out: i64, cost_usd: f64, duration_ms: i64) {
+    let Some(tx) = STATE_DB_TX.get() else {
+        return;
+    };
+    let (reply_tx, _reply_rx) = oneshot::channel();
+    let op = StateDbOp::LogTelemetry {
+        tool: tool.to_string(),
+        tokens_in,
+        tokens_out,
+        cost_usd,
+        duration_ms,
+        reply: reply_tx,
+    };
+    let _ = tx.try_send(op); // best-effort
+}
+
 fn parse_entities(args: &serde_json::Map<String, Value>) -> Result<Vec<Entity>, RpcError> {
     let raw = args.get("entities").and_then(Value::as_array).ok_or_else(|| RpcError {
         code: -32602,
@@ -3732,6 +3889,145 @@ async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value
     }))
 }
 
+// =============================================================================
+// SOULS-CANIBALIZED Marco 3.7 Fase B: 4 handlers MCP de Observabilidade Sensorial.
+// Atomicidade: leem o `souls_state.db` (State DB v3) diretamente via
+// `Connection::open_with_flags` e emitem o relatorio canonico em JSON.
+// =============================================================================
+
+/// `heatmap` — mapeia arquivos quentes via Langevin decay (lambda=0.05).
+async fn run_heatmap(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let limit: usize = args
+        .get("limit")
+        .and_then(Value::as_i64)
+        .map(|v| v.max(1) as usize)
+        .unwrap_or(50);
+    let lambda: f64 = args
+        .get("lambda")
+        .and_then(Value::as_f64)
+        .unwrap_or(observability::heatmap::DEFAULT_LAMBDA);
+
+    let souls_data_dir = workspace_root().join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    let conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao abrir souls_state.db: {e}"),
+        data: None,
+    })?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let entries = observability::compute_heatmap(&conn, now, lambda, limit)
+        .map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Heatmap falhou: {e}"),
+            data: None,
+        })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&json!({
+                "lambda": lambda,
+                "limit": limit,
+                "now": now,
+                "scores": entries,
+            }))
+            .unwrap_or_default()
+        }]
+    }))
+}
+
+/// `impact` — Blast Radius (BFS no grafo transposto de imports).
+async fn run_impact(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let path = args
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento 'path' e obrigatorio".to_string(),
+            data: None,
+        })?;
+    let repo_root = args
+        .get("repo_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .unwrap_or_else(workspace_root);
+    let graph = observability::build_import_graph(&repo_root).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao construir grafo de imports: {e}"),
+        data: None,
+    })?;
+    // Normaliza o path-alvo para o formato canonico (relativo + `.rs`).
+    let target_norm = if path.ends_with(".rs") {
+        path.to_string()
+    } else {
+        format!("{path}.rs")
+    };
+    let report = observability::impact_report(&graph, &target_norm);
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
+        }]
+    }))
+}
+
+/// `routes` — varredura regex de comandos Tauri e invokes Svelte.
+async fn run_routes(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let repo_root = args
+        .get("repo_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .unwrap_or_else(workspace_root);
+    let report = observability::scan_routes(&repo_root).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao escanear rotas: {e}"),
+        data: None,
+    })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
+        }]
+    }))
+}
+
+/// `feedback` — dump FinOps agregado com E3.
+async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let _ = params;
+    let souls_data_dir = workspace_root().join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    let conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao abrir souls_state.db: {e}"),
+        data: None,
+    })?;
+    let report = observability::aggregate_telemetry(&conn).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao agregar telemetria: {e}"),
+        data: None,
+    })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
+        }]
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -3797,18 +4093,26 @@ mod tests {
         let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
         let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
         let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
-        
+
         let tool_names: Vec<&str> = tools.iter()
             .map(|t| t["name"].as_str().expect("tool deve ter name"))
             .collect();
 
+        // ADR-041 §3: nomes canônicos curtos da engenharia de contexto.
         assert!(tool_names.contains(&"get_ast"));
         assert!(tool_names.contains(&"read"));
         assert!(tool_names.contains(&"search"));
+        assert!(tool_names.contains(&"tree"));
+        assert!(tool_names.contains(&"outline"));
         assert!(tool_names.contains(&"sub_agent"));
         assert!(tool_names.contains(&"handoff"));
         assert!(tool_names.contains(&"knowledge"));
-        // Marco 3.5 — Core Cognitivo: 9 tools mem_* + 1 core_think.
+        // ADR-041 Fase A: `fill` é o reidratador CCR canônico (deduplicação da duplicata stub_fill).
+        assert!(tool_names.contains(&"fill"));
+        assert!(tool_names.contains(&"multi_read"));
+        assert!(tool_names.contains(&"headroom_retrieve"));
+        assert!(tool_names.contains(&"session"));
+        // Marco 3.5 — Core Cognitivo: 9 tools mem_* + 1 core_think (intactos).
         assert!(tool_names.contains(&"mem_create_entities"));
         assert!(tool_names.contains(&"mem_create_relations"));
         assert!(tool_names.contains(&"mem_add_observations"));
@@ -3819,8 +4123,13 @@ mod tests {
         assert!(tool_names.contains(&"mem_delete_observations"));
         assert!(tool_names.contains(&"mem_delete_relations"));
         assert!(tool_names.contains(&"core_think"));
+        // ADR-041 §1: nenhum tool de contexto deve expor o prefixo `souls_` no `name`.
+        // (aliases `souls_*` e `ctx_*` continuam aceitos no dispatcher, mas NÃO no registro.)
         assert!(!tool_names.contains(&"souls_get_ast"));
         assert!(!tool_names.contains(&"souls_read"));
+        assert!(!tool_names.contains(&"souls_multi_read"));
+        assert!(!tool_names.contains(&"souls_stub_fill"));
+        assert!(!tool_names.contains(&"souls_fill"));
     }
 
     /// V4: `headroom_retrieve` DEVE estar exposto no `tools/list` (alinhado com `intercept_loopback`).
@@ -4259,18 +4568,85 @@ mod tests {
         assert!(!tools.is_empty(), "tools/list nao pode ser vazio");
         for t in tools {
             let n = t["name"].as_str().unwrap_or_else(|| panic!("tool sem name: {t:?}"));
+            // ADR-041 §1 — teto de nome em **caracteres** (Unicode-aware), não bytes.
             assert!(
-                n.len() <= 32,
-                "ADR-041: tool '{n}' excede teto de 32 chars ({}): {n}",
-                n.len()
+                n.chars().count() <= 32,
+                "ADR-041 §1: tool '{n}' excede teto de 32 chars ({}): {n}",
+                n.chars().count()
             );
             let d = t["description"].as_str().unwrap_or("");
+            // ADR-041 §2 — teto de descrição em **caracteres** (Unicode-aware).
             assert!(
-                d.len() <= 120,
-                "ADR-041: tool '{n}' desc excede teto de 120 chars ({}): {d}",
-                d.len()
+                d.chars().count() <= 120,
+                "ADR-041 §2: tool '{n}' desc excede teto de 120 chars ({}): {d}",
+                d.chars().count()
             );
         }
+    }
+
+    /// ADR-041 Fase A: asserções específicas das curas dos 3 Falsos Verdes.
+    /// Garante que as descrições mentirosas foram removidas e substituídas por verdade SSOT.
+    #[tokio::test]
+    async fn tools_list_cura_3_falsos_verdes() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+
+        let find_desc = |target: &str| -> Option<String> {
+            tools.iter()
+                .find(|t| t["name"].as_str() == Some(target))
+                .and_then(|t| t["description"].as_str().map(|s| s.to_string()))
+        };
+
+        // 1. `multi_read` — cura o FALSO VERDE (era "not_implemented_yet: ...").
+        let multi_read_desc = find_desc("multi_read").expect("multi_read deve existir");
+        assert!(
+            !multi_read_desc.contains("not_implemented_yet"),
+            "multi_read ainda carrega a desc mentirosa 'not_implemented_yet': {multi_read_desc}"
+        );
+        assert!(
+            multi_read_desc.contains("CCR lossless"),
+            "multi_read deve refletir compressao CCR lossless (FALSO VERDE curado): {multi_read_desc}"
+        );
+
+        // 2. `shell` — cura o FALSO VERDE (era "not_implemented_yet sandbox_audit_pending: ...").
+        let shell_desc = find_desc("shell").expect("shell deve existir");
+        assert!(
+            !shell_desc.contains("not_implemented_yet"),
+            "shell ainda carrega a desc mentirosa 'not_implemented_yet': {shell_desc}"
+        );
+        assert!(
+            !shell_desc.contains("sandbox_audit_pending"),
+            "shell ainda carrega a desc mentirosa 'sandbox_audit_pending': {shell_desc}"
+        );
+        assert!(
+            shell_desc.contains("Tokio"),
+            "shell deve refletir execucao assincrona via Tokio (FALSO VERDE curado): {shell_desc}"
+        );
+
+        // 3. `symbol` — stub explicito (Pendente) — sem fingimento.
+        let symbol_desc = find_desc("symbol").expect("symbol deve existir");
+        assert!(
+            symbol_desc.contains("Pendente"),
+            "symbol deve marcar-se explicitamente como Pendente (transparencia SSOT): {symbol_desc}"
+        );
+    }
+
+    /// ADR-041 Fase A: valida que `fill` (reidratador CCR) e UNICO no `tools/list`
+    /// e que a antiga duplicata `souls_stub_fill` foi exterminada.
+    #[tokio::test]
+    async fn tools_list_fill_unico_sem_duplicata() {
+        use serde_json::json;
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let resp = super::handle_mcp(req).await.expect("deve retornar resposta");
+        let tools = resp["result"]["tools"].as_array().expect("deve conter array de tools");
+
+        let fill_count = tools.iter().filter(|t| t["name"].as_str() == Some("fill")).count();
+        let stub_fill_count = tools.iter().filter(|t| t["name"].as_str() == Some("souls_stub_fill")).count();
+
+        assert_eq!(fill_count, 1, "`fill` deve aparecer exatamente 1 vez no tools/list (reidratador CCR)");
+        assert_eq!(stub_fill_count, 0, "duplicata `souls_stub_fill` deve ser EXTERMINADA do registro");
     }
 
     /// ADR-041: `serverInfo.name` DEVE ser `souls_mcp` (Emenda Constitucional).
@@ -4452,6 +4828,245 @@ mod tests {
         );
         // Equivalência literal byte-a-byte.
         assert_eq!(expanded, original, "Expandido deve ser byte-a-byte idêntico ao original");
+    }
+
+    // =========================================================================
+    // SOULS-CANIBALIZED Marco 3.7 Fase B: 4 testes TDD de Observabilidade Sensorial.
+    // Cobertura: heatmap (Langevin decay), impact (BFS grafo transposto),
+    // routes (regex contract), feedback (E3 FinOps).
+    // =========================================================================
+
+    /// T1: Valida que o Langevin decay produz scores corretos para acessos
+    /// simulados no tempo. Lambda=0.05, agora=1000.
+    #[test]
+    fn test_file_access_logging_and_heatmap_decay() {
+        use souls_mc_lib::cognition::observability::heatmap::{
+            compute_heatmap, langevin_aggregate, langevin_score, DEFAULT_LAMBDA,
+        };
+        use rusqlite::Connection;
+
+        // Score de um unico acesso no mesmo instante: 1.0.
+        let s_now = langevin_score(1000, 1000, DEFAULT_LAMBDA);
+        assert!((s_now - 1.0).abs() < 1e-9, "score(t, t) = 1.0 (got {s_now})");
+
+        // Acesso a 20 segundos: exp(-0.05 * 20) = exp(-1.0) ≈ 0.3679.
+        let s_20 = langevin_score(980, 1000, DEFAULT_LAMBDA);
+        assert!(
+            (s_20 - (-1.0_f64).exp()).abs() < 1e-6,
+            "score(20s) ≈ 0.3679 (got {s_20})"
+        );
+
+        // Acesso futuro (relogio desregulado): clamp em 1.0.
+        let s_future = langevin_score(2000, 1000, DEFAULT_LAMBDA);
+        assert!((s_future - 1.0).abs() < 1e-9, "score futuro = 1.0 (got {s_future})");
+
+        // Agregado: dois acessos em t=999 e t=998. Decaimento a partir de t=1000.
+        let agg = langevin_aggregate(&[999, 998], 1000, DEFAULT_LAMBDA);
+        // exp(-0.05) + exp(-0.10) = 0.9512 + 0.9048 = 1.8560
+        let expected = (-0.05_f64).exp() + (-0.10_f64).exp();
+        assert!(
+            (agg - expected).abs() < 1e-4,
+            "agregado(2 acessos) ≈ {expected} (got {agg})"
+        );
+
+        // Persistencia + leitura via SQLite (in-memory).
+        let conn = Connection::open_in_memory().expect("abre in-memory");
+        conn.execute_batch(
+            "CREATE TABLE file_access_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                tool TEXT NOT NULL,
+                accessed_at INTEGER NOT NULL
+            )",
+        )
+        .expect("schema file_access_logs");
+        // 3 acessos recentes no path "hot.rs", 1 acesso antigo em "cold.rs".
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["hot.rs", "read", 999],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["hot.rs", "read", 998],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["hot.rs", "edit", 997],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_access_logs (file_path, tool, accessed_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["cold.rs", "read", 0],
+        )
+        .unwrap();
+
+        let entries = compute_heatmap(&conn, 1000, DEFAULT_LAMBDA, 10).expect("compute_heatmap");
+        assert_eq!(entries.len(), 2, "deve haver 2 paths distintos");
+        // hot.rs vem primeiro (score mais alto).
+        assert_eq!(entries[0].path, "hot.rs", "hot.rs deve ser o mais quente");
+        assert_eq!(entries[0].access_count, 3);
+        // cold.rs tem score muito menor (exp(-0.05 * 1000) ≈ 0).
+        assert_eq!(entries[1].path, "cold.rs");
+        assert!(
+            entries[0].score > entries[1].score * 100.0,
+            "hot.rs deve ser ordens de grandeza > cold.rs"
+        );
+    }
+
+    /// T2: Valida que o BFS no grafo transposto retorna o array ordenado [B, A]
+    /// quando o grafo e A -> B -> C (ou seja, A importa B que importa C).
+    #[test]
+    fn test_blast_radius_dag_bfs() {
+        use souls_mc_lib::cognition::observability::impact::blast_radius;
+        use std::collections::BTreeMap;
+
+        // Grafo: A importa B; B importa C. (Quem importa C transitivamente?)
+        let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        graph.insert("A.rs".to_string(), vec!["B.rs".to_string()]);
+        graph.insert("B.rs".to_string(), vec!["C.rs".to_string()]);
+        graph.insert("C.rs".to_string(), vec![]);
+
+        // Blast radius de C: deve retornar [B, A] (B importa C diretamente,
+        // A importa B que importa C transitivamente).
+        let affected = blast_radius(&graph, "C.rs");
+        assert_eq!(affected, vec!["B.rs".to_string(), "A.rs".to_string()]);
+
+        // Blast radius de A: ninguem importa A.
+        let affected_a = blast_radius(&graph, "A.rs");
+        assert!(affected_a.is_empty(), "A.rs nao tem importadores");
+
+        // Blast radius de path inexistente: nao panica, retorna vazio.
+        let affected_ghost = blast_radius(&graph, "ghost.rs");
+        assert!(affected_ghost.is_empty());
+    }
+
+    /// T3: Valida que o parser de rotas detecta comandos Tauri e invokes Svelte
+    /// via regex compilado.
+    #[test]
+    fn test_routes_contract_regex() {
+        use souls_mc_lib::cognition::observability::routes::scan_routes;
+        use std::fs;
+        use tempfile::tempdir;
+
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+
+        // Mock backend Rust: 2 comandos Tauri.
+        let backend = r#"
+            use tauri::command;
+
+            #[tauri::command]
+            fn greet(name: String) -> String {
+                format!("Hello, {}!", name)
+            }
+
+            #[tauri::command(async)]
+            async fn fetch_data() -> Result<String, String> {
+                Ok("data".to_string())
+            }
+        "#;
+        fs::write(root.join("commands.rs"), backend).expect("escreve commands.rs");
+
+        // Mock frontend Svelte: 3 invokes (1 backend existe, 2 nao existem).
+        let frontend = r#"
+            <script>
+                import { invoke } from '@tauri-apps/api/core';
+                async function handleClick() {
+                    await invoke('greet', { name: 'World' });
+                    await invoke('fetch_data');
+                    await invoke('unknown_command');
+                }
+            </script>
+        "#;
+        let frontend_dir = root.join("src");
+        fs::create_dir(&frontend_dir).expect("mkdir src");
+        fs::write(frontend_dir.join("App.svelte"), frontend).expect("escreve App.svelte");
+
+        let report = scan_routes(root).expect("scan_routes");
+
+        // Backend: 2 comandos.
+        let backend_names: Vec<String> = report.backend.iter().map(|e| e.name.clone()).collect();
+        assert!(backend_names.contains(&"greet".to_string()));
+        assert!(backend_names.contains(&"fetch_data".to_string()));
+
+        // Frontend: 3 invokes.
+        let frontend_names: Vec<String> = report.frontend.iter().map(|e| e.name.clone()).collect();
+        assert_eq!(frontend_names.len(), 3);
+
+        // Orphans (backend sem frontend): nenhum (greet + fetch_data tem invoke).
+        assert!(report.orphans.is_empty(), "nao deve haver orphans: {:?}", report.orphans);
+
+        // Dead calls (frontend sem backend): unknown_command.
+        assert_eq!(report.dead_calls, vec!["unknown_command".to_string()]);
+    }
+
+    /// T4: Insere logs artificiais de tokens no `telemetry_logs` e valida
+    /// que o calculo da formula E3 e gerado sem panics.
+    #[test]
+    fn test_feedback_telemetry_insert_and_e3_calc() {
+        use souls_mc_lib::cognition::observability::feedback::{aggregate_telemetry, e3_efficiency};
+        use rusqlite::Connection;
+
+        // E3(0, 0) = 1.0 (caso degenerado).
+        assert!((e3_efficiency(0, 0) - 1.0).abs() < 1e-9);
+        // E3(100, 0) = 1.0 (output zero = maxima economia).
+        assert!((e3_efficiency(100, 0) - 1.0).abs() < 1e-9);
+        // E3(100, 25) = 1 - 25/125 = 0.80.
+        let e3 = e3_efficiency(100, 25);
+        assert!((e3 - 0.80).abs() < 1e-6, "E3(100,25) = 0.80 (got {e3})");
+        // E3(0, 100) = 1 - 100/100 = 0.0.
+        assert!((e3_efficiency(0, 100) - 0.0).abs() < 1e-9);
+        // E3 com valores negativos (defensivo): clamp em 0.
+        assert!((e3_efficiency(-10, -10) - 1.0).abs() < 1e-9, "E3 defensivo contra negativos");
+
+        // Persistencia + agregado via SQLite (in-memory).
+        let conn = Connection::open_in_memory().expect("abre in-memory");
+        conn.execute_batch(
+            "CREATE TABLE telemetry_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool TEXT NOT NULL,
+                tokens_in INTEGER NOT NULL DEFAULT 0,
+                tokens_out INTEGER NOT NULL DEFAULT 0,
+                cost_usd REAL NOT NULL DEFAULT 0.0,
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            )",
+        )
+        .expect("schema telemetry_logs");
+
+        // 3 ferramentas: read (alto out), compress (alto in, baixo out), edit (balanceado).
+        for (tool, tin, tout, cost, dur) in [
+            ("read", 100, 200, 0.0, 50),
+            ("compress", 1000, 50, 0.0, 200),
+            ("edit", 50, 50, 0.0, 30),
+        ] {
+            conn.execute(
+                "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![tool, tin, tout, cost, dur, 1000_i64],
+            )
+            .expect("insert telemetry");
+        }
+
+        let report = aggregate_telemetry(&conn).expect("aggregate_telemetry");
+        // Total: 1150 in, 300 out. E3 = 1 - 300/1450 ≈ 0.7931.
+        assert_eq!(report.total_tokens_in, 1150);
+        assert_eq!(report.total_tokens_out, 300);
+        assert_eq!(report.total_calls, 3);
+        assert!(
+            (report.e3_efficiency - 0.7931).abs() < 1e-3,
+            "E3 global ≈ 0.7931 (got {})",
+            report.e3_efficiency
+        );
+        // Por tool: compress deve ter E3 alto.
+        let compress_e3 = report
+            .by_tool
+            .get("compress")
+            .map(|t| t.e3_efficiency)
+            .unwrap_or(0.0);
+        assert!(compress_e3 > 0.90, "compress deve ter E3 > 0.90 (got {compress_e3})");
     }
 }
 
