@@ -1,4 +1,4 @@
-_SKILLS_IN_IDEs Gerado em: 2026-07-31 22:01:50
+_SKILLS_IN_IDEs Gerado em: 2026-08-02 01:37:27
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md
@@ -1066,7 +1066,12 @@ Sempre que for invocado para planejar código, gerenciar fluxo de versionamento 
    * Ao fechar a *Feature*, você está PROIBIDO de sincronizar os índices massivos do LanceDB ou LadybugDB de forma síncrona na *thread* principal.
    * Atualize o estado leve no **SQLite (L2)** (Kanban) e delegue Imediatamente a indexação pesada dos vetores e grafos para as filas de baixa prioridade do **Chyros Daemon** (Consistência Eventual), mantendo a resposta mecânica local em 50ms [1, 2].
 
-5. **Governança de Aprovação (Dynamic Trust Scoring):**
+5. **Protocolo de PR Limpo e Code Review Humano (HITL):**
+   * Ao concluir as mutações com `Exit Code 0`, o agente DEVE empurrar a branch para o origin (`git push origin <branch>`) e abrir o Pull Request remotamente utilizando a CLI do GitHub (`gh pr create`) ou fornecendo a URL de criação de PR direta do GitHub.
+   * Fica terminantemente proibido tentar realizar merges síncronos manuais diretos na branch `main`/infraestrutura no background, garantindo a integridade e o **Code Review Humano (HITL)**.
+   * Se a CLI `gh` não estiver instalada ou autenticada, o agente DEVE gerar e devolver ao Arquiteto Humano a URL canônica de criação de PR (`https://github.com/<owner>/<repo>/compare/<base>...<head>?expand=1`) para autorização manual — NUNCA merge automático.
+
+6. **Governança de Aprovação (Dynamic Trust Scoring):**
    * Não asfixie o usuário enviando tudo para o *Blast Radius Canvas*. Avalie a métrica do agente:
    * **Se EMA > 0.94 e Z-Score Normal:** A tarefa ganhou *Maturidade Simbiótica*. Execute o *Rebase* silenciosamente em modo HOTL (Human-On-The-Loop) [6].
    * **Se EMA < 0.94 ou Risco Nível 3 (ex: exclusões massivas):** Congele a rotina. Intercepte via *Zero-Copy* IPC e envie a notificação para a **Agent Inbox** em modo HITL (Human-In-The-Loop), aguardando aprovação tátil ou biométrica do Arquiteto Humano [6, 7, 10].
