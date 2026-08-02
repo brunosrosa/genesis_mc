@@ -1,7 +1,16 @@
+// Aumento do limite de recursão do macro `json!` (serde_json) para acomodar
+// o `tools/list` canônico do Marco 3.5 (50+ ferramentas, incluindo os 10
+// novos tools mem_* + core_think com inputSchemas profundos).
+#![recursion_limit = "1024"]
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot};
 use souls_mc_lib::cognition::lean_vacuum;
+use souls_mc_lib::cognition::memory_graph;
+use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
+use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
+use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
+use souls_mc_lib::cognition::thinking::ThinkingEngine;
 use souls_mc_lib::harvester::ast_parser;
 use souls_mc_lib::harvester::community::RateLimiter;
 use souls_mc_lib::harvester::github_tracker;
@@ -438,7 +447,192 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     { "name": "metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } }
+                    { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    // ============================================================
+                    // SOULS-CANIBALIZED Marco 3.5: 9 tools do `souls_graph` + 1 do `souls_thinking` (core_think)
+                    // ============================================================
+                    {
+                        "name": "mem_create_entities",
+                        "description": "Cria entidades no grafo de memória cognitivo (souls_graph). Idempotente via INSERT OR IGNORE. Persistência sequencializada via MPSC.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "entities": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": { "type": "string" },
+                                            "entityType": { "type": "string" },
+                                            "observations": { "type": "array", "items": { "type": "string" } }
+                                        },
+                                        "required": ["name", "entityType"]
+                                    }
+                                }
+                            },
+                            "required": ["entities"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_create_relations",
+                        "description": "Cria relações direcionadas entre entidades (souls_graph). Idempotente.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "relations": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "from": { "type": "string" },
+                                            "to": { "type": "string" },
+                                            "relationType": { "type": "string" }
+                                        },
+                                        "required": ["from", "to", "relationType"]
+                                    }
+                                }
+                            },
+                            "required": ["relations"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_add_observations",
+                        "description": "Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "observations": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "entityName": { "type": "string" },
+                                            "contents": { "type": "array", "items": { "type": "string" } }
+                                        },
+                                        "required": ["entityName", "contents"]
+                                    }
+                                }
+                            },
+                            "required": ["observations"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_search",
+                        "description": "Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "Query FTS5 (sintaxe MATCH)." },
+                                "limit": { "type": "integer", "description": "Limite de entidades retornadas (padrão: 50)." }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_open_nodes",
+                        "description": "Abre entidades específicas por nome e hidrata observations via JOIN.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "names": { "type": "array", "items": { "type": "string" } }
+                            },
+                            "required": ["names"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_read_graph",
+                        "description": "Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "limit": { "type": "integer", "description": "Teto de elementos (default 500, max 500)." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_delete_entities",
+                        "description": "Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "entityNames": { "type": "array", "items": { "type": "string" } }
+                            },
+                            "required": ["entityNames"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_delete_observations",
+                        "description": "Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "deletions": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "entityName": { "type": "string" },
+                                            "observations": { "type": "array", "items": { "type": "string" } }
+                                        },
+                                        "required": ["entityName", "observations"]
+                                    }
+                                }
+                            },
+                            "required": ["deletions"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "mem_delete_relations",
+                        "description": "Remove arestas do grafo.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "relations": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "from": { "type": "string" },
+                                            "to": { "type": "string" },
+                                            "relationType": { "type": "string" }
+                                        },
+                                        "required": ["from", "to", "relationType"]
+                                    }
+                                }
+                            },
+                            "required": ["relations"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "core_think",
+                        "description": "Scratchpad socrático (souls_thinking). Hard-Limit 5 pensamentos (HITL estende para 7). Tríade: Regular | Revision | Branching.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "thought": { "type": "string", "description": "Conteúdo do pensamento." },
+                                "thoughtNumber": { "type": "integer", "description": "Índice 1-based do pensamento." },
+                                "totalThoughts": { "type": "integer", "description": "Estimativa total (ajustável)." },
+                                "nextThoughtNeeded": { "type": "boolean", "description": "true se ainda há pensamentos por vir." },
+                                "isRevision": { "type": "boolean", "description": "true se revisa um pensamento anterior." },
+                                "revisesThought": { "type": "integer", "description": "Índice do pensamento revisado (obrigatório se isRevision=true)." },
+                                "branchFromThought": { "type": "integer", "description": "Índice do nó-pai do branch." },
+                                "branchId": { "type": "string", "description": "ID único do branch." },
+                                "needsMoreThoughts": { "type": "boolean", "description": "true se o orçamento precisar ser expandido." },
+                                "hitlAuthorized": { "type": "boolean", "description": "Sinal server-side do Arquiteto: estica teto de 5 para 7." }
+                            },
+                            "required": ["thought", "thoughtNumber", "totalThoughts", "nextThoughtNeeded"],
+                            "additionalProperties": false
+                        }
+                    }
                 ]
             }),
         )),
@@ -518,6 +712,17 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         | "intent" | "souls_intent" => Ok(stub_not_implemented_yet(tool_name)),
         "execute" | "souls_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
         "shell" | "souls_shell" => run_souls_shell(params).await,
+        // Marco 3.5 — souls_graph (9 ops) + souls_thinking (1 op = core_think)
+        "mem_create_entities" => run_mem_create_entities(params).await,
+        "mem_create_relations" => run_mem_create_relations(params).await,
+        "mem_add_observations" => run_mem_add_observations(params).await,
+        "mem_search" => run_mem_search(params).await,
+        "mem_open_nodes" => run_mem_open_nodes(params).await,
+        "mem_read_graph" => run_mem_read_graph(params).await,
+        "mem_delete_entities" => run_mem_delete_entities(params).await,
+        "mem_delete_observations" => run_mem_delete_observations(params).await,
+        "mem_delete_relations" => run_mem_delete_relations(params).await,
+        "core_think" => run_core_think(params).await,
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -2203,6 +2408,8 @@ enum StateDbOp {
 
 static STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>> = OnceLock::new();
 
+static MEMORY_GRAPH_TX: OnceLock<mpsc::Sender<MemGraphOp>> = OnceLock::new();
+
 fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
     let souls_data_dir = workspace_root().join(".souls_data");
     std::fs::create_dir_all(&souls_data_dir)?;
@@ -2400,6 +2607,19 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     });
+
+    // Marco 3.5: spawn do worker do `souls_graph` (grafo cognitivo).
+    // A migração V1→V2 (PRAGMA user_version=2, tabela `observations` + FTS5)
+    // é executada no boot do próprio worker — idempotente.
+    let mem_graph_db_path = souls_data_dir.join("souls_state.db");
+    match memory_graph::spawn_memory_graph_worker(mem_graph_db_path) {
+        Ok(tx) => {
+            let _ = MEMORY_GRAPH_TX.set(tx);
+        }
+        Err(e) => {
+            eprintln!("[souls_mcp_server] ALERTA: falha ao spawnar MemGraphWorker: {e}");
+        }
+    }
 
     Ok(())
 }
@@ -2981,10 +3201,312 @@ async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<Valu
         "structuredContent": {
             "exit_code": exit_code,
             "raw_bytes_len": combined_raw.len(),
-            "compressed_bytes_len": compressed.len(),
-            "command": command_str
+        "compressed_bytes_len": compressed.len(),
+        "command": command_str
         },
         "isError": !output.status.success()
+    }))
+}
+
+// =============================================================================
+// SOULS-CANIBALIZED Marco 3.5: 10 handlers MCP do Core Cognitivo.
+// 9 ops do `souls_graph` (mem_*) + 1 op do `souls_thinking` (core_think).
+// Padrão: extrai `arguments` (obrigatório) → deserializa tipado →
+// envia op via MPSC (`MEMORY_GRAPH_TX`) para o worker → `request().await`
+// devolve o `Value` MCP padrão. Erros viram `RpcError` (cód. -32000).
+// O `core_think` é in-RAM (sem MPSC): a máquina de estados `ThinkingEngine`
+// mantém a sessão no heap do próprio binário.
+// =============================================================================
+
+fn extract_arguments<'a>(params: &'a serde_json::Map<String, Value>) -> &'a serde_json::Map<String, Value> {
+    params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .unwrap_or(params)
+}
+
+async fn memgraph_request(op: MemGraphOp) -> Result<Value, RpcError> {
+    let tx = MEMORY_GRAPH_TX.get().ok_or_else(|| RpcError {
+        code: -32000,
+        message: "MemGraphWorker não inicializado. Verifique init_state_db_and_worker().".to_string(),
+        data: None,
+    })?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    let op_with_reply = match op {
+        MemGraphOp::CreateEntities { entities, .. } => MemGraphOp::CreateEntities { entities, reply: reply_tx },
+        MemGraphOp::CreateRelations { relations, .. } => MemGraphOp::CreateRelations { relations, reply: reply_tx },
+        MemGraphOp::AddObservations { observations, .. } => MemGraphOp::AddObservations { observations, reply: reply_tx },
+        MemGraphOp::Search { query, limit, .. } => MemGraphOp::Search { query, limit, reply: reply_tx },
+        MemGraphOp::OpenNodes { names, .. } => MemGraphOp::OpenNodes { names, reply: reply_tx },
+        MemGraphOp::ReadGraph { limit, .. } => MemGraphOp::ReadGraph { limit, reply: reply_tx },
+        MemGraphOp::DeleteEntities { names, .. } => MemGraphOp::DeleteEntities { names, reply: reply_tx },
+        MemGraphOp::DeleteObservations { deletions, .. } => MemGraphOp::DeleteObservations { deletions, reply: reply_tx },
+        MemGraphOp::DeleteRelations { relations, .. } => MemGraphOp::DeleteRelations { relations, reply: reply_tx },
+    };
+    if tx.try_send(op_with_reply).is_err() {
+        return Err(RpcError {
+            code: -32000,
+            message: "Falha de backpressure no MPSC do MemGraph (buffer 100 saturado).".to_string(),
+            data: None,
+        });
+    }
+    reply_rx.await.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Worker desconectado antes da resposta: {e}"),
+        data: None,
+    }).and_then(|inner| inner.map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Worker reportou erro: {e}"),
+        data: None,
+    }))
+}
+
+fn parse_entities(args: &serde_json::Map<String, Value>) -> Result<Vec<Entity>, RpcError> {
+    let raw = args.get("entities").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `entities` ausente ou não-array".to_string(),
+        data: None,
+    })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        let obj = v.as_object().ok_or_else(|| RpcError {
+            code: -32602,
+            message: "entidade deve ser objeto JSON".to_string(),
+            data: None,
+        })?;
+        let name = obj.get("name").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "entidade sem `name`".to_string(),
+            data: None,
+        })?.to_string();
+        let entity_type = obj.get("entityType").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: format!("entidade `{name}` sem `entityType`"),
+            data: None,
+        })?.to_string();
+        out.push(Entity {
+            name,
+            entity_type,
+            observations: Vec::new(),
+        });
+    }
+    Ok(out)
+}
+
+fn parse_relations(args: &serde_json::Map<String, Value>) -> Result<Vec<Relation>, RpcError> {
+    let raw = args.get("relations").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `relations` ausente ou não-array".to_string(),
+        data: None,
+    })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        let obj = v.as_object().ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação deve ser objeto JSON".to_string(),
+            data: None,
+        })?;
+        let from = obj.get("from").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação sem `from`".to_string(),
+            data: None,
+        })?.to_string();
+        let to = obj.get("to").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação sem `to`".to_string(),
+            data: None,
+        })?.to_string();
+        let relation_type = obj.get("relationType").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "relação sem `relationType`".to_string(),
+            data: None,
+        })?.to_string();
+        out.push(Relation { from, to, relation_type });
+    }
+    Ok(out)
+}
+
+fn parse_observation_inputs(args: &serde_json::Map<String, Value>, key: &str) -> Result<Vec<ObservationInput>, RpcError> {
+    let raw = args.get(key).and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: format!("campo `{key}` ausente ou não-array"),
+        data: None,
+    })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        let obj = v.as_object().ok_or_else(|| RpcError {
+            code: -32602,
+            message: "observação deve ser objeto JSON".to_string(),
+            data: None,
+        })?;
+        let entity_name = obj.get("entityName").and_then(Value::as_str).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "observação sem `entityName`".to_string(),
+            data: None,
+        })?.to_string();
+        let contents_arr = obj.get("contents").or_else(|| obj.get("observations")).and_then(Value::as_array).ok_or_else(|| RpcError {
+            code: -32602,
+            message: "observação sem `contents` (ou `observations`)".to_string(),
+            data: None,
+        })?;
+        let contents: Vec<String> = contents_arr.iter()
+            .filter_map(Value::as_str)
+            .map(|s| s.to_string())
+            .collect();
+        out.push(ObservationInput { entity_name, contents });
+    }
+    Ok(out)
+}
+
+async fn run_mem_create_entities(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let entities = parse_entities(args)?;
+    memgraph_request(MemGraphOp::CreateEntities { entities, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_create_relations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let relations = parse_relations(args)?;
+    memgraph_request(MemGraphOp::CreateRelations { relations, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_add_observations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let observations = parse_observation_inputs(args, "observations")?;
+    memgraph_request(MemGraphOp::AddObservations { observations, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_search(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let query = args.get("query").and_then(Value::as_str).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `query` ausente".to_string(),
+        data: None,
+    })?.to_string();
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
+    memgraph_request(MemGraphOp::Search { query, limit, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_open_nodes(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let names = args.get("names").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `names` ausente ou não-array".to_string(),
+        data: None,
+    })?.iter()
+        .filter_map(Value::as_str)
+        .map(|s| s.to_string())
+        .collect();
+    memgraph_request(MemGraphOp::OpenNodes { names, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_read_graph(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
+    memgraph_request(MemGraphOp::ReadGraph { limit, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_delete_entities(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let names = args.get("entityNames").and_then(Value::as_array).ok_or_else(|| RpcError {
+        code: -32602,
+        message: "campo `entityNames` ausente ou não-array".to_string(),
+        data: None,
+    })?.iter()
+        .filter_map(Value::as_str)
+        .map(|s| s.to_string())
+        .collect();
+    memgraph_request(MemGraphOp::DeleteEntities { names, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_delete_observations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let deletions = parse_observation_inputs(args, "deletions")?;
+    memgraph_request(MemGraphOp::DeleteObservations { deletions, reply: oneshot::channel().0 }).await
+}
+
+async fn run_mem_delete_relations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let relations = parse_relations(args)?;
+    memgraph_request(MemGraphOp::DeleteRelations { relations, reply: oneshot::channel().0 }).await
+}
+
+// Estado in-RAM das sessões socráticas (chave: session_id).
+// Heap limpo no teardown do binário (sem persistência obrigatória no Marco 3.5).
+use std::sync::Mutex as StdMutex;
+use std::collections::HashMap as StdHashMap;
+static THINKING_SESSIONS: OnceLock<StdMutex<StdHashMap<String, StdMutex<ThinkingEngine>>>> = OnceLock::new();
+
+fn thinking_sessions_registry() -> &'static StdMutex<StdHashMap<String, StdMutex<ThinkingEngine>>> {
+    THINKING_SESSIONS.get_or_init(|| StdMutex::new(StdHashMap::new()))
+}
+
+async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    // session_id opcional no payload (HITL e telemetria). Default: "default".
+    let session_id = args
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .unwrap_or("default")
+        .to_string();
+    // O MCP cliente envia campos achatados (thought, thoughtNumber, etc.) no
+    // payload. Reconstruímos um Value no formato canônico do `ThoughtData`.
+    let mut thought_obj = serde_json::Map::new();
+    if let Some(v) = args.get("thought") {
+        thought_obj.insert("thought".to_string(), v.clone());
+    } else {
+        thought_obj.insert(
+            "thought".to_string(),
+            Value::String(String::new()),
+        );
+    }
+    for key in [
+        "thoughtNumber",
+        "totalThoughts",
+        "nextThoughtNeeded",
+        "isRevision",
+        "revisesThought",
+        "branchFromThought",
+        "branchId",
+        "needsMoreThoughts",
+        "hitlAuthorized",
+    ] {
+        if let Some(v) = args.get(key) {
+            thought_obj.insert(key.to_string(), v.clone());
+        }
+    }
+    let thought_value = Value::Object(thought_obj);
+    let thought: ThoughtData = serde_json::from_value(thought_value).map_err(|e| RpcError {
+        code: -32602,
+        message: format!("Payload de core_think inválido: {e}"),
+        data: None,
+    })?;
+
+    // Resolve ou cria a sessão.
+    let registry = thinking_sessions_registry();
+    let mut map = registry.lock().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Mutex THINKING_SESSIONS envenenado: {e}"),
+        data: None,
+    })?;
+    let engine_lock = map
+        .entry(session_id.clone())
+        .or_insert_with(|| StdMutex::new(ThinkingEngine::new()));
+    let mut engine = engine_lock.lock().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Mutex ThinkingEngine envenenado: {e}"),
+        data: None,
+    })?;
+    let response: ThinkingResponse = engine.push_thought(thought).map_err(|e| RpcError {
+        code: -32000,
+        message: e.to_string(),
+        data: None,
+    })?;
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&response).unwrap_or_default()
+        }]
     }))
 }
 
@@ -3064,6 +3586,17 @@ mod tests {
         assert!(tool_names.contains(&"sub_agent"));
         assert!(tool_names.contains(&"handoff"));
         assert!(tool_names.contains(&"knowledge"));
+        // Marco 3.5 — Core Cognitivo: 9 tools mem_* + 1 core_think.
+        assert!(tool_names.contains(&"mem_create_entities"));
+        assert!(tool_names.contains(&"mem_create_relations"));
+        assert!(tool_names.contains(&"mem_add_observations"));
+        assert!(tool_names.contains(&"mem_search"));
+        assert!(tool_names.contains(&"mem_open_nodes"));
+        assert!(tool_names.contains(&"mem_read_graph"));
+        assert!(tool_names.contains(&"mem_delete_entities"));
+        assert!(tool_names.contains(&"mem_delete_observations"));
+        assert!(tool_names.contains(&"mem_delete_relations"));
+        assert!(tool_names.contains(&"core_think"));
         assert!(!tool_names.contains(&"souls_get_ast"));
         assert!(!tool_names.contains(&"souls_read"));
     }
