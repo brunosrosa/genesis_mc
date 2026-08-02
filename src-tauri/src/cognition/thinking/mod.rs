@@ -4,15 +4,32 @@
 //! Estado in-RAM (`HashMap<BranchId, Vec<ThoughtId>>`); sem persistência
 //! obrigatória (Marco 4 cuidará disso).
 //! API: `core_think` (MCP tool), `ThinkingEngine::push_thought` (Rust API).
+//!
+//! Marco 3.9 Fase E: persistência SQLite V5 (Souls State).
+//!
+//! - [`persistence`]: tipos canônicos (`SocraticThought`, `ThoughtType`).
+//! - [`ops`]: DDL V5 idempotente, INSERT/SELECT/DELETE com FK CASCADE.
+//! - [`analytics`]: métricas FinOps cognitivas (revision rate, branching,
+//!   latência) — pure functions, sem I/O.
 
+pub mod analytics;
 pub mod errors;
+pub mod ops;
+pub mod persistence;
 pub mod state_machine;
 pub mod types;
 
+pub use analytics::{compute_metrics, SessionMetrics};
 pub use errors::{CognitiveError, ThinkingError};
+pub use ops::{
+    delete_socratic_session, fetch_thought, gen_simple_uuid, list_thoughts_for_session,
+    migrate_v3_to_v5, upsert_socratic_session, upsert_socratic_thought, TARGET_VERSION,
+    V5_SCHEMA_DDL,
+};
+pub use persistence::{BranchId, SessionId, SocraticThought, ThoughtId, ThoughtType};
 pub use state_machine::{
     DEFAULT_HARD_LIMIT, HITL_EXTENDED_LIMIT, ThinkingEngine,
 };
 pub use types::{
-    BranchId, BranchSummary, ThoughtData, ThoughtId, ThinkingMode, ThinkingResponse,
+    BranchSummary, ThoughtData, ThinkingMode, ThinkingResponse,
 };

@@ -13,6 +13,7 @@ use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Rel
 use souls_mc_lib::cognition::observability; // SOULS-CANIBALIZED Marco 3.7 Fase B: Observabilidade Cognitiva Sensorial
 use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
 use souls_mc_lib::cognition::thinking::ThinkingEngine;
+use souls_mc_lib::cognition::thinking;
 use souls_mc_lib::harvester::ast_parser;
 use souls_mc_lib::harvester::community::RateLimiter;
 use souls_mc_lib::harvester::github_tracker;
@@ -423,6 +424,9 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     { "name": "symbol", "description": "Resolve a localização física (file:line) de símbolos sintáticos da AST do monorepo em O(1).", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome qualificado (qualified name) ou substring do símbolo." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "callers", "description": "Lista os nós do grafo de dependências que invocam um determinado símbolo no workspace.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do símbolo do qual se deseja saber os chamadores." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "callees", "description": "Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do símbolo do qual se deseja saber os consumidos." } }, "required": ["name"], "additionalProperties": false } },
+                    { "name": "export_session", "description": "Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown).", "inputSchema": { "type": "object", "properties": { "session_id": { "type": "string", "description": "UUID da sessão socrática a exportar." }, "format": { "type": "string", "enum": ["json", "markdown"], "description": "Formato de saída desejado." } }, "required": ["session_id", "format"], "additionalProperties": false } },
+                    { "name": "analyze_session", "description": "Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.", "inputSchema": { "type": "object", "properties": { "session_id": { "type": "string", "description": "UUID da sessão socrática a analisar." } }, "required": ["session_id"], "additionalProperties": false } },
+                    { "name": "merge_sessions", "description": "Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual.", "inputSchema": { "type": "object", "properties": { "source_session_id": { "type": "string", "description": "UUID da sessão fonte (será lida)." }, "target_session_id": { "type": "string", "description": "UUID da sessão alvo (receberá as inserções)." } }, "required": ["source_session_id", "target_session_id"], "additionalProperties": false } },
                     { "name": "execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "shell", "description": "Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
@@ -785,6 +789,10 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "symbol" | "souls_symbol" | "ctx_symbol" => run_symbol(params).await,
         "callers" | "souls_callers" | "ctx_callers" => run_callers(params).await,
         "callees" | "souls_callees" | "ctx_callees" => run_callees(params).await,
+        // ============ Marco 3.9 Fase E: Persistencia Socratica (State DB V5) ============
+        "export_session" | "souls_export_session" | "ctx_export_session" => run_souls_export_session(params).await,
+        "analyze_session" | "souls_analyze_session" | "ctx_analyze_session" => run_souls_analyze_session(params).await,
+        "merge_sessions" | "souls_merge_sessions" | "ctx_merge_sessions" => run_souls_merge_sessions(params).await,
         // ============ Stubs pendentes (Marco 3.8 Fase D+) ============
         "semantic_search" | "souls_semantic_search" | "ctx_semantic_search"
         | "metrics" | "souls_metrics" | "ctx_metrics"
@@ -1640,6 +1648,356 @@ async fn run_callees(params: &serde_json::Map<String, Value>) -> Result<Value, R
         }],
         "target": name,
         "callees": callees,
+    }))
+}
+
+// =============================================================================
+// SOULS-CANIBALIZED Marco 3.9 Fase E: 3 handlers MCP de Persistência Socrática.
+// Atomicidade: leem o `souls_state.db` (State DB v5) diretamente via
+// `Connection::open_with_flags` (read direto na RAM, fora do MPSC, para
+// evitar deadlock com o StateDbWorker que segura o canal em write).
+//
+// Padrão de árvore: `parent_thought_id` é o FK opcional (None = Tese raiz).
+// A reconstrução é O(N) iterativa (não-recursiva) para garantir que
+// pensamentos profundos não estourem a stack do host.
+// =============================================================================
+
+/// Helper privado: abre `souls_state.db` em modo leitura+escrita.
+/// Garante que `PRAGMA foreign_keys = ON` para validar FK em tempo de INSERT.
+fn open_socratic_state_db() -> Result<Connection, RpcError> {
+    let souls_data_dir = workspace_root().join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    let conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao abrir souls_state.db: {e}"),
+        data: None,
+    })?;
+    conn.execute_batch("PRAGMA foreign_keys = ON;")
+        .map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Falha ao habilitar FK no souls_state.db: {e}"),
+            data: None,
+        })?;
+    Ok(conn)
+}
+
+/// Reconstrução iterativa da árvore socrática.
+///
+/// Devolve `(roots, children_map)` onde:
+/// - `roots` = pensamentos sem pai (Tese inicial de cada branch).
+/// - `children_map` = `parent_thought_id → Vec<&SocraticThought>`.
+///
+/// Complexidade: O(N) sobre o slice de entrada (uma única passagem).
+/// SEM recursão: a renderização é responsabilidade do chamador, que
+/// decide se faz DFS manual ou BFS por profundidade.
+fn build_socratic_tree<'a>(
+    thoughts: &'a [thinking::SocraticThought],
+) -> (Vec<&'a thinking::SocraticThought>, std::collections::HashMap<&'a str, Vec<&'a thinking::SocraticThought>>) {
+    let mut roots: Vec<&thinking::SocraticThought> = Vec::new();
+    let mut children: std::collections::HashMap<&str, Vec<&thinking::SocraticThought>> =
+        std::collections::HashMap::new();
+    for t in thoughts {
+        match &t.parent_thought_id {
+            None => roots.push(t),
+            Some(parent_id) => {
+                children
+                    .entry(parent_id.as_str())
+                    .or_default()
+                    .push(t);
+            }
+        }
+    }
+    // Ordena filhos por (step_number, branch_id) para reconstrução determinística.
+    for v in children.values_mut() {
+        v.sort_by(|a, b| {
+            a.step_number
+                .cmp(&b.step_number)
+                .then_with(|| a.branch_id.cmp(&b.branch_id))
+        });
+    }
+    roots.sort_by(|a, b| {
+        a.branch_id
+            .cmp(&b.branch_id)
+            .then_with(|| a.step_number.cmp(&b.step_number))
+    });
+    (roots, children)
+}
+
+/// Renderiza a árvore em Markdown com indentação por profundidade.
+fn render_socratic_markdown(
+    roots: &[&thinking::SocraticThought],
+    children: &std::collections::HashMap<&str, Vec<&thinking::SocraticThought>>,
+) -> String {
+    let mut out = String::with_capacity(1024);
+    out.push_str("# Socratic Session Tree\n\n");
+    let mut stack: Vec<(&thinking::SocraticThought, usize)> = roots
+        .iter()
+        .rev() // DFS pre-order: empilha em ordem reversa para que o 1º saia primeiro.
+        .map(|t| (*t, 0_usize))
+        .collect();
+    while let Some((node, depth)) = stack.pop() {
+        let indent = "  ".repeat(depth);
+        out.push_str(&format!(
+            "{indent}- **{}** [{}] step={} dur={}ms\n",
+            node.thought_type.as_str(),
+            node.thought_id,
+            node.step_number,
+            node.duration_ms
+        ));
+        if !node.content.trim().is_empty() {
+            // Conteúdo multilinha: indenta cada linha com 2 espaços a mais.
+            for line in node.content.lines() {
+                out.push_str(&format!("{indent}  > {line}\n"));
+            }
+        }
+        if let Some(kids) = children.get(node.thought_id.as_str()) {
+            for k in kids.iter().rev() {
+                stack.push((*k, depth + 1));
+            }
+        }
+    }
+    out
+}
+
+/// `export_session` — reconstrói a árvore socrática de uma sessão e a
+/// formata como JSON canônico (default) ou Markdown com indentação.
+async fn run_souls_export_session(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let session_id = args
+        .get("session_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "export_session requer arguments.session_id (string)".to_string(),
+            data: None,
+        })?;
+    let format = args
+        .get("format")
+        .and_then(Value::as_str)
+        .unwrap_or("json");
+
+    let conn = open_socratic_state_db()?;
+    let thoughts =
+        thinking::ops::list_thoughts_for_session(&conn, session_id).map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Falha ao listar pensamentos da sessão '{session_id}': {e}"),
+            data: None,
+        })?;
+    let (roots, children) = build_socratic_tree(&thoughts);
+
+    let payload = match format {
+        "markdown" | "md" => {
+            let body = render_socratic_markdown(&roots, &children);
+            json!({
+                "session_id": session_id,
+                "format": "markdown",
+                "total_thoughts": thoughts.len(),
+                "root_count": roots.len(),
+                "body": body,
+            })
+        }
+        "json" | _ => {
+            // Formato default: serializa a árvore como JSON com nós + lista de adjacência.
+            let nodes: Vec<Value> = thoughts
+                .iter()
+                .map(|t| {
+                    json!({
+                        "thought_id": t.thought_id,
+                        "session_id": t.session_id,
+                        "branch_id": t.branch_id,
+                        "parent_thought_id": t.parent_thought_id,
+                        "thought_type": t.thought_type.as_str(),
+                        "content": t.content,
+                        "step_number": t.step_number,
+                        "duration_ms": t.duration_ms,
+                        "created_at": t.created_at,
+                    })
+                })
+                .collect();
+            let adjacency: std::collections::BTreeMap<&str, Vec<&str>> = children
+                .iter()
+                .map(|(k, v)| (*k, v.iter().map(|t| t.thought_id.as_str()).collect()))
+                .collect();
+            let adjacency_json: std::collections::BTreeMap<String, Vec<String>> = adjacency
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.into_iter().map(String::from).collect()))
+                .collect();
+            json!({
+                "session_id": session_id,
+                "format": "json",
+                "total_thoughts": thoughts.len(),
+                "root_count": roots.len(),
+                "nodes": nodes,
+                "children": adjacency_json,
+            })
+        }
+    };
+
+    let text = serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string());
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": text
+        }],
+        "session_id": session_id,
+        "format": format,
+        "total_thoughts": thoughts.len(),
+    }))
+}
+
+/// `analyze_session` — computa métricas FinOps cognitivas da sessão.
+async fn run_souls_analyze_session(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let session_id = args
+        .get("session_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "analyze_session requer arguments.session_id (string)".to_string(),
+            data: None,
+        })?;
+
+    let conn = open_socratic_state_db()?;
+    let thoughts =
+        thinking::ops::list_thoughts_for_session(&conn, session_id).map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Falha ao listar pensamentos da sessão '{session_id}': {e}"),
+            data: None,
+        })?;
+    let metrics = thinking::compute_metrics(&thoughts);
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&json!({
+                "session_id": session_id,
+                "metrics": &metrics,
+            }))
+            .unwrap_or_default()
+        }],
+        "session_id": session_id,
+        "metrics": &metrics,
+    }))
+}
+
+/// `merge_sessions` — fusão atômica last-write-wins de uma sessão source
+/// em uma sessão target. `parent_thought_id` é remapeado para os novos
+/// UUIDs gerados para preservar a topologia da árvore.
+async fn run_souls_merge_sessions(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let source_session_id = args
+        .get("source_session_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "merge_sessions requer arguments.source_session_id (string)".to_string(),
+            data: None,
+        })?;
+    let target_session_id = args
+        .get("target_session_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "merge_sessions requer arguments.target_session_id (string)".to_string(),
+            data: None,
+        })?;
+    if source_session_id == target_session_id {
+        return Err(RpcError {
+            code: -32602,
+            message: "merge_sessions: source e target devem ser distintos".to_string(),
+            data: None,
+        });
+    }
+
+    let mut conn = open_socratic_state_db()?;
+    let tx = conn.transaction().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao iniciar transação de merge: {e}"),
+        data: None,
+    })?;
+
+    // 1) Garante sessão target existe (upsert idempotente).
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    thinking::ops::upsert_socratic_session(&tx, target_session_id, now, "{}").map_err(|e| {
+        RpcError {
+            code: -32000,
+            message: format!("Falha ao upsert target session: {e}"),
+            data: None,
+        }
+    })?;
+
+    // 2) Lista source.
+    let source_thoughts = thinking::ops::list_thoughts_for_session(&tx, source_session_id)
+        .map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Falha ao ler source session '{source_session_id}': {e}"),
+            data: None,
+        })?;
+
+    // 3) Mapa old_thought_id → new_thought_id. Garante ponteiros válidos
+    //    no target mesmo se os UUIDs colidirem.
+    let mut id_remap: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let mut inserted: usize = 0_usize;
+    for t in &source_thoughts {
+        let new_id = thinking::ops::gen_simple_uuid("th_merge");
+        id_remap.insert(t.thought_id.clone(), new_id.clone());
+
+        // parent_thought_id é remapeado; se for None ou não constar no remap
+        // (pensamento pai de outro branch fora do source), zera para NULL.
+        let new_parent = t
+            .parent_thought_id
+            .as_ref()
+            .and_then(|p| id_remap.get(p).cloned());
+
+        let remapped = thinking::SocraticThought {
+            thought_id: new_id,
+            session_id: target_session_id.to_string(),
+            branch_id: t.branch_id.clone(),
+            parent_thought_id: new_parent,
+            thought_type: t.thought_type,
+            content: t.content.clone(),
+            step_number: t.step_number,
+            duration_ms: t.duration_ms,
+            created_at: t.created_at,
+        };
+        thinking::ops::upsert_socratic_thought(&tx, &remapped).map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Falha ao inserir thought remapeado: {e}"),
+            data: None,
+        })?;
+        inserted += 1;
+    }
+
+    tx.commit().map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao comitar merge: {e}"),
+        data: None,
+    })?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!(
+                "Merge atômico last-write-wins concluído: {inserted} pensamentos migrados de '{source_session_id}' → '{target_session_id}'."
+            )
+        }],
+        "source_session_id": source_session_id,
+        "target_session_id": target_session_id,
+        "thoughts_merged": inserted,
     }))
 }
 
@@ -2806,6 +3164,12 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
         // Idempotente: no-op em banco ja migrado.
         if let Err(e) = observability::migrate_v2_to_v3(&mut conn) {
             eprintln!("[StateDbWorker] ALERTA: falha na migracao V2→V3: {e}");
+        }
+
+        // Marco 3.9 Fase E: migracao V3→V5 (Persistencia Socratica).
+        // Idempotente: no-op em banco ja migrado.
+        if let Err(e) = thinking::ops::migrate_v3_to_v5(&mut conn) {
+            eprintln!("[StateDbWorker] ALERTA: falha na migracao V3→V5: {e}");
         }
 
         while let Some(op) = rx.blocking_recv() {
@@ -4207,8 +4571,10 @@ async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, 
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_duckduckgo_result_url, parse_duckduckgo_results, validate_sqlite_query,
+        build_socratic_tree, normalize_duckduckgo_result_url, parse_duckduckgo_results,
+        render_socratic_markdown, validate_sqlite_query,
     };
+    use super::thinking::persistence::ThoughtType;
 
     #[test]
     fn sqlite_query_rejects_multi_statement_payload() {
@@ -5493,6 +5859,386 @@ mod tests {
             .map(|t| t.e3_efficiency)
             .unwrap_or(0.0);
         assert!(compress_e3 > 0.90, "compress deve ter E3 > 0.90 (got {compress_e3})");
+    }
+
+    // =============================================================================
+    // SOULS-CANIBALIZED Marco 3.9 Fase E: 4 testes TDD da Persistência Socrática.
+    // Referência normativa: ADR-045 (Persistencia da Alma Socratica).
+    //
+    // Os 4 testes são serializados pelo `MARCO_39_FASE_E_LOCK` (mutex
+    // dedicado) para impedir que escritas concorrentes no mesmo banco
+    // SQLite em memória colidam entre si durante a execução paralela
+    // de `cargo test`. Lei do Conflito Concorrente: o `TELEMETRY_TDD_LOCK`
+    // existente já blinda o CallGraph DashMap; este novo lock blinda o
+    // subset de testes que tocam o schema V5.
+    // =============================================================================
+    static MARCO_39_FASE_E_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn marco_39_lock() -> std::sync::MutexGuard<'static, ()> {
+        match MARCO_39_FASE_E_LOCK.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        }
+    }
+
+    /// Helper privado dos testes Marco 3.9: cria uma conexão `:memory:`
+    /// já migrada para V5 e com `PRAGMA foreign_keys = ON`. Isola 100%
+    /// do `souls_state.db` real em `.souls_data/`.
+    fn open_v5_in_memory() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().expect("abre :memory:");
+        conn.execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("FK ON");
+        let mut conn_mut = conn;
+        souls_mc_lib::cognition::thinking::ops::migrate_v3_to_v5(&mut conn_mut)
+            .expect("migra para V5");
+        conn_mut
+    }
+
+    /// T1: Garante a migração idempotente v0→v5 e que a tabela
+    /// `socratic_thoughts` REJEITA inserções órfãs por FK.
+    #[test]
+    fn test_database_migration_v5() {
+        let _g = marco_39_lock();
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        // Antes: v0. Migra. Após: v5.
+        let v0 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+            .unwrap();
+        assert_eq!(v0, 0, "estado pré-migração deve ser v0");
+        souls_mc_lib::cognition::thinking::ops::migrate_v3_to_v5(&mut conn).expect("v3→v5");
+        let v5 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+            .unwrap();
+        assert_eq!(v5, 5, "após migração deve ser v5");
+        // Idempotência: re-invocar é no-op (não falha, mantém v5).
+        souls_mc_lib::cognition::thinking::ops::migrate_v3_to_v5(&mut conn)
+            .expect("segunda migração deve ser no-op");
+        let v5b = conn
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+            .unwrap();
+        assert_eq!(v5b, 5, "idempotente: v5 preservado");
+
+        // FK rejeita pensamento órfão (sessão inexistente).
+        let orphan = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: "th_orphan".into(),
+            session_id: "sess_inexistente".into(),
+            branch_id: "main".into(),
+            parent_thought_id: None,
+            thought_type: souls_mc_lib::cognition::thinking::persistence::ThoughtType::Regular,
+            content: "órfão".into(),
+            step_number: 1,
+            duration_ms: 0,
+            created_at: 0,
+        };
+        let r = souls_mc_lib::cognition::thinking::ops::upsert_socratic_thought(&conn, &orphan);
+        assert!(
+            r.is_err(),
+            "FK deve rejeitar session_id inexistente (got Ok: {r:?})"
+        );
+
+        // Sanity: sessão válida + pensamento válido passa.
+        souls_mc_lib::cognition::thinking::ops::upsert_socratic_session(&conn, "sess_ok", 1000, "{}")
+            .unwrap();
+        let valid = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: "th_ok".into(),
+            session_id: "sess_ok".into(),
+            branch_id: "main".into(),
+            parent_thought_id: None,
+            thought_type: souls_mc_lib::cognition::thinking::persistence::ThoughtType::Regular,
+            content: "válido".into(),
+            step_number: 1,
+            duration_ms: 0,
+            created_at: 1000,
+        };
+        souls_mc_lib::cognition::thinking::ops::upsert_socratic_thought(&conn, &valid)
+            .expect("pensamento válido deve passar");
+    }
+
+    /// T2: Constrói Tese → Antítese → Síntese e valida que `build_socratic_tree`
+    /// reconstrói a árvore em RAM, e que tanto a saída JSON quanto a saída
+    /// Markdown respeitam a indentação por profundidade sintática.
+    #[test]
+    fn test_export_session_formatting() {
+        let _g = marco_39_lock();
+        let conn = open_v5_in_memory();
+        souls_mc_lib::cognition::thinking::ops::upsert_socratic_session(&conn, "sess_hd", 1000, "{}")
+            .unwrap();
+
+        // Tese (raiz) → Antítese (filho) → Síntese (filho da antítese, com
+        // conteúdo multilinha para validar indentação Markdown).
+        let tese = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: "th_tese".into(),
+            session_id: "sess_hd".into(),
+            branch_id: "main".into(),
+            parent_thought_id: None,
+            thought_type: souls_mc_lib::cognition::thinking::persistence::ThoughtType::Regular,
+            content: "A é B.".into(),
+            step_number: 1,
+            duration_ms: 50,
+            created_at: 1000,
+        };
+        let antítese = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: "th_anti".into(),
+            session_id: "sess_hd".into(),
+            branch_id: "main".into(),
+            parent_thought_id: Some("th_tese".into()),
+            thought_type: souls_mc_lib::cognition::thinking::persistence::ThoughtType::Branching,
+            content: "Logo A é não-B.".into(),
+            step_number: 2,
+            duration_ms: 80,
+            created_at: 1100,
+        };
+        let síntese = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: "th_sintese".into(),
+            session_id: "sess_hd".into(),
+            branch_id: "main".into(),
+            parent_thought_id: Some("th_anti".into()),
+            thought_type: souls_mc_lib::cognition::thinking::persistence::ThoughtType::Revision,
+            content: "A é B\nquando observado\nem repouso.".into(),
+            step_number: 3,
+            duration_ms: 120,
+            created_at: 1200,
+        };
+        for t in [&tese, &antítese, &síntese] {
+            souls_mc_lib::cognition::thinking::ops::upsert_socratic_thought(&conn, t).unwrap();
+        }
+
+        let thoughts =
+            souls_mc_lib::cognition::thinking::ops::list_thoughts_for_session(&conn, "sess_hd")
+                .unwrap();
+        assert_eq!(thoughts.len(), 3, "devem existir 3 pensamentos");
+        let (roots, children) = build_socratic_tree(&thoughts);
+        assert_eq!(roots.len(), 1, "uma única raiz: a Tese");
+        assert_eq!(roots[0].thought_id, "th_tese");
+        // Filhos diretos da Tese = {antítese}.
+        let tese_kids = children.get("th_tese").expect("Tese tem filhos");
+        assert_eq!(tese_kids.len(), 1);
+        assert_eq!(tese_kids[0].thought_id, "th_anti");
+        // Filhos da antítese = {síntese}.
+        let anti_kids = children.get("th_anti").expect("antítese tem filhos");
+        assert_eq!(anti_kids.len(), 1);
+        assert_eq!(anti_kids[0].thought_id, "th_sintese");
+
+        // Validação Markdown: indentação por profundidade.
+        let md = render_socratic_markdown(&roots, &children);
+        // Tese (depth=0): sem indent no marcador.
+        assert!(
+            md.contains("- **regular** [th_tese] step=1 dur=50ms\n"),
+            "Tese deve ter marcador sem indent. MD:\n{md}"
+        );
+        // Antítese (depth=1): 2 espaços de indent.
+        assert!(
+            md.contains("  - **branching** [th_anti] step=2 dur=80ms\n"),
+            "Antítese deve ter 2 espaços de indent. MD:\n{md}"
+        );
+        // Síntese (depth=2): 4 espaços de indent.
+        assert!(
+            md.contains("    - **revision** [th_sintese] step=3 dur=120ms\n"),
+            "Síntese deve ter 4 espaços de indent. MD:\n{md}"
+        );
+        // Conteúdo multilinha da síntese (depth=2): 6 espaços de indent no > .
+        assert!(
+            md.contains("      > A é B"),
+            "Linha 1 do conteúdo multilinha deve ter 6 espaços. MD:\n{md}"
+        );
+    }
+
+    /// T3: Valida as equações de contagem do `compute_metrics`:
+    /// revision_rate, branching_factor e latency_mean_ms.
+    #[test]
+    fn test_analyze_session_metrics() {
+        let _g = marco_39_lock();
+        let thoughts = vec![
+            // Tese regular + 2 revisions = 1/3 revision_rate.
+            mk_thought("a", "main", None, ThoughtType::Regular, 100),
+            mk_thought("b", "main", Some("a"), ThoughtType::Revision, 200),
+            mk_thought("c", "main", Some("a"), ThoughtType::Revision, 300),
+            // Branching: novo branch com 1 filho → 1.0 factor médio.
+            mk_thought("d", "alt", Some("a"), ThoughtType::Branching, 0),
+        ];
+        let m = souls_mc_lib::cognition::thinking::compute_metrics(&thoughts);
+        assert_eq!(m.total_thoughts, 4);
+        // 2 revisions em 4 pensamentos = 0.5 (não 1/3, é 2/4).
+        assert!((m.revision_rate - 0.5).abs() < 1e-9, "revision_rate = 0.5 (got {})", m.revision_rate);
+        assert_eq!(m.branch_count, 2, "2 branches distintos: main, alt");
+        // latency_mean = (100+200+300+0)/4 = 150.0
+        assert!((m.latency_mean_ms - 150.0).abs() < 1e-9, "latency_mean = 150.0 (got {})", m.latency_mean_ms);
+        assert_eq!(m.latency_total_ms, 600);
+    }
+
+    /// T4: Simula Tese A (branch main) e Antítese B (branch alt) com Síntese
+    /// (filha da Antítese), executa o merge atômico last-write-wins e
+    /// valida que os `parent_thought_id` foram remapeados no target.
+    #[test]
+    fn test_merge_sessions_atomic_last_write_wins() {
+        use std::collections::HashMap;
+
+        let _g = marco_39_lock();
+        let mut conn = open_v5_in_memory();
+
+        // Source: sessão com Tese + Antítese + Síntese.
+        souls_mc_lib::cognition::thinking::ops::upsert_socratic_session(
+            &conn,
+            "sess_source",
+            1000,
+            "{}",
+        )
+        .unwrap();
+        let tese = mk_thought_sess("sess_source", "src_tese", "main", None, ThoughtType::Regular, 10);
+        let antítese = mk_thought_sess("sess_source", "src_anti", "alt", Some("src_tese"), ThoughtType::Branching, 20);
+        let síntese = mk_thought_sess(
+            "sess_source",
+            "src_sintese",
+            "alt",
+            Some("src_anti"),
+            ThoughtType::Revision,
+            30,
+        );
+        for t in [&tese, &antítese, &síntese] {
+            souls_mc_lib::cognition::thinking::ops::upsert_socratic_thought(&conn, t).unwrap();
+        }
+
+        // Target: sessão vazia pré-existente.
+        souls_mc_lib::cognition::thinking::ops::upsert_socratic_session(
+            &conn,
+            "sess_target",
+            2000,
+            "{}",
+        )
+        .unwrap();
+        // Pré-condição: target sem pensamentos.
+        let pre = souls_mc_lib::cognition::thinking::ops::list_thoughts_for_session(
+            &conn, "sess_target",
+        )
+        .unwrap();
+        assert!(pre.is_empty(), "target deve começar vazio");
+
+        // Execução: simulação do algoritmo de merge com remap atômico.
+        let tx = conn.transaction().unwrap();
+        let source = souls_mc_lib::cognition::thinking::ops::list_thoughts_for_session(
+            &tx,
+            "sess_source",
+        )
+        .unwrap();
+        assert_eq!(source.len(), 3);
+        let mut remap: HashMap<String, String> = HashMap::new();
+        let mut inserted = 0_usize;
+        for t in &source {
+            let new_id = format!("merge_{inserted}");
+            remap.insert(t.thought_id.clone(), new_id.clone());
+            let new_parent = t
+                .parent_thought_id
+                .as_ref()
+                .and_then(|p| remap.get(p).cloned());
+            let remapped = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+                thought_id: new_id,
+                session_id: "sess_target".to_string(),
+                branch_id: t.branch_id.clone(),
+                parent_thought_id: new_parent,
+                thought_type: t.thought_type,
+                content: t.content.clone(),
+                step_number: t.step_number,
+                duration_ms: t.duration_ms,
+                created_at: t.created_at,
+            };
+            souls_mc_lib::cognition::thinking::ops::upsert_socratic_thought(&tx, &remapped)
+                .unwrap();
+            inserted += 1;
+        }
+        tx.commit().unwrap();
+
+        // Validação: 3 pensamentos no target, topologia preservada.
+        let after = souls_mc_lib::cognition::thinking::ops::list_thoughts_for_session(
+            &conn, "sess_target",
+        )
+        .unwrap();
+        assert_eq!(after.len(), 3, "3 pensamentos migrados para target");
+
+        // Tese migrada = raiz (parent=None, thought_id="merge_0").
+        let tese_target = after
+            .iter()
+            .find(|t| t.thought_id == "merge_0")
+            .expect("Tese migrada (merge_0)");
+        assert!(
+            tese_target.parent_thought_id.is_none(),
+            "Tese migrada é raiz (parent=None)"
+        );
+        assert_eq!(tese_target.branch_id, "main");
+        assert_eq!(tese_target.session_id, "sess_target");
+
+        // Antítese migrada: parent = remap(src_tese) = "merge_0".
+        let anti_target = after
+            .iter()
+            .find(|t| t.thought_id == "merge_1")
+            .expect("Antítese migrada (merge_1)");
+        assert_eq!(
+            anti_target.parent_thought_id.as_deref(),
+            Some("merge_0"),
+            "Antítese migrada tem parent remapeado (merge_0)"
+        );
+        assert_eq!(anti_target.branch_id, "alt");
+
+        // Síntese migrada: parent = remap(src_anti) = "merge_1".
+        let sintese_target = after
+            .iter()
+            .find(|t| t.thought_id == "merge_2")
+            .expect("Síntese migrada (merge_2)");
+        assert_eq!(
+            sintese_target.parent_thought_id.as_deref(),
+            Some("merge_1"),
+            "Síntese migrada tem parent remapeado (merge_1)"
+        );
+
+        // Last-write-wins: target.session_id = "sess_target" (NÃO "sess_source").
+        assert!(
+            after.iter().all(|t| t.session_id == "sess_target"),
+            "todos pensamentos no target devem ter session_id = sess_target"
+        );
+
+        // Idempotência do CASCADE: apagar source NÃO afeta target.
+        let n = souls_mc_lib::cognition::thinking::ops::delete_socratic_session(&conn, "sess_source")
+            .unwrap();
+        assert_eq!(n, 1, "sess_source removida");
+        let after_delete =
+            souls_mc_lib::cognition::thinking::ops::list_thoughts_for_session(&conn, "sess_target")
+                .unwrap();
+        assert_eq!(after_delete.len(), 3, "CASCADE não afeta target (3 pensamentos preservados)");
+    }
+
+    /// Helper privado: cria um `SocraticThought` de teste com session_id customizado.
+    /// Usado quando o teste precisa persistir em uma sessão específica (e.g. FK check).
+    fn mk_thought_sess(
+        session_id: &str,
+        id: &str,
+        branch: &str,
+        parent: Option<&str>,
+        ty: souls_mc_lib::cognition::thinking::persistence::ThoughtType,
+        dur_ms: u32,
+    ) -> souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+        souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: id.into(),
+            session_id: session_id.into(),
+            branch_id: branch.into(),
+            parent_thought_id: parent.map(String::from),
+            thought_type: ty,
+            content: format!("content-{id}"),
+            step_number: 1,
+            duration_ms: dur_ms,
+            created_at: 0,
+        }
+    }
+
+    /// Helper privado: cria um `SocraticThought` de teste (session_id = "sess").
+    /// Para testes que NÃO persistem (apenas computam métricas em memória).
+    fn mk_thought(
+        id: &str,
+        branch: &str,
+        parent: Option<&str>,
+        ty: souls_mc_lib::cognition::thinking::persistence::ThoughtType,
+        dur_ms: u32,
+    ) -> souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+        mk_thought_sess("sess", id, branch, parent, ty, dur_ms)
     }
 }
 

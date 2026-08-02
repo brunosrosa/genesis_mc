@@ -536,23 +536,38 @@ fn extract_github_repo_ids(urls: &[String], max_repos: usize) -> Vec<String> {
     out.into_iter().take(max_repos).collect()
 }
 
+/// Tabela canônica de pesos para priorização de URLs de documentação externa.
+///
+/// 12 keywords ordenadas por **peso descendente** (canonização do ranking):
+/// - `codewiki` (30) e `deepwiki` (24): wikis de alto sinal sobre a estrutura
+///   interna do repositório.
+/// - `readthedocs` (20), `docs.` (18), `/docs` (18), `documentation` (16):
+///   fontes oficiais de documentação canônica (Sphinx, MkDocs, Docusaurus).
+/// - `/wiki` (16), `guide` (12), `manual` (12): guias não-oficiais / tutoriais.
+/// - `reference` (10), `api` (8), `tutorial` (8): páginas técnicas pontuais.
+///
+/// **DRY (ADR-031 §5)**: Esta constante é a ÚNICA fonte de verdade. Editar
+/// aqui propaga para `score_external_doc_url` e o teste de Camada B sem
+/// duplicar a tabela em 2 lugares (drift zero entre detecção e scoring).
+pub const SCORE_URL_RULES: &[(&str, i32)] = &[
+    ("codewiki", 30),
+    ("deepwiki", 24),
+    ("readthedocs", 20),
+    ("docs.", 18),
+    ("/docs", 18),
+    ("documentation", 16),
+    ("/wiki", 16),
+    ("guide", 12),
+    ("manual", 12),
+    ("reference", 10),
+    ("api", 8),
+    ("tutorial", 8),
+];
+
 fn score_external_doc_url(url: &str) -> i32 {
     let lower = url.to_ascii_lowercase();
     let mut score = 0i32;
-    for (needle, weight) in [
-        ("codewiki", 30),
-        ("deepwiki", 24),
-        ("readthedocs", 20),
-        ("docs.", 18),
-        ("/docs", 18),
-        ("documentation", 16),
-        ("/wiki", 16),
-        ("guide", 12),
-        ("manual", 12),
-        ("reference", 10),
-        ("api", 8),
-        ("tutorial", 8),
-    ] {
+    for (needle, weight) in SCORE_URL_RULES {
         if lower.contains(needle) {
             score += weight;
         }
@@ -1079,5 +1094,133 @@ pub fn boot(_runtime: Runtime) {}
 
         let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+    }
+
+    // =============================================================================
+    // SOULS-CANIBALIZED Marco 3.9 Fase E (BLOCO 4.2): 4 testes Camada A do
+    // Harvester (ADR-031 §5). Validam que cada uma das 4 keywords
+    // canônicas de `skill_signal_content` PROMOVE o repositório para
+    // `kind: SkillLibrary` no outline gerado por `content_repo_artifacts`.
+    //
+    // Padrão: o `MockExecutor` falha em todos os comandos (caminho de
+    // `EmptyRepository` → `content_repo_artifacts`). Cada teste cria um
+    // único `.md` cuja `content.to_ascii_lowercase().contains(keyword)`
+    // deve disparar o curto-circuito da Camada A.
+    // =============================================================================
+
+    /// Camada A — keyword 1 de 4: `skills for ai` (curto-circuito na 1ª hit).
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_skills_for_ai_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "guides/intro.md",
+            "# Curated Skills for AI Agents\n\nThis is a curated guide.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["guides/intro.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'skills for ai' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
+    }
+
+    /// Camada A — keyword 2 de 4: `coding agents`.
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_coding_agents_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "prompts/agent_patterns.md",
+            "# Coding Agents Patterns\n\nReference patterns for autonomous agents.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["prompts/agent_patterns.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'coding agents' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
+    }
+
+    /// Camada A — keyword 3 de 4: `diagram`.
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_diagram_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "skills/architecture.md",
+            "# System Diagram Reference\n\nContains the canonical diagram of the system.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["skills/architecture.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'diagram' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
+    }
+
+    /// Camada A — keyword 4 de 4: `visualization`.
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_visualization_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "skills/metrics.md",
+            "# Visualization Cookbook\n\nHow to produce compelling visualization dashboards.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["skills/metrics.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'visualization' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
     }
 }
