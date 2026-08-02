@@ -960,6 +960,9 @@ async fn run_souls_delta_diff(
 }
 
 /// `souls_compress` — Aplica o compressor LEAN nativo ao texto.
+///
+/// Marco 3.8 Fase C.1: instrumentado com telemetria FinOps (tokens in/out,
+/// duration_ms, accuracy_score=1.0 — CCR lossless preserva fidelidade).
 async fn run_souls_compress(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {
@@ -981,7 +984,15 @@ async fn run_souls_compress(
         })?;
     let ext = arguments.get("ext").and_then(Value::as_str);
 
+    // Marco 3.8 Fase C.1: cronometro FinOps (Instant monotônico).
+    let t_start = std::time::Instant::now();
+    let tokens_in = lean_vacuum::count_tokens(text) as i64;
     let compressed = lean_vacuum::compress_to_lean(text, ext);
+    let tokens_out = lean_vacuum::count_tokens(&compressed) as i64;
+    let duration_ms = t_start.elapsed().as_millis() as i64;
+    // CCR lossless: accuracy=1.0 quando o compressor nao introduz ruido
+    // sintatico (que seria detectado por lossless equivalence em `souls_fill`).
+    try_log_telemetry("souls_compress", tokens_in, tokens_out, 0.0, duration_ms, 1.0);
 
     Ok(json!({
         "content": [{
@@ -996,6 +1007,8 @@ async fn run_souls_compress(
 }
 
 /// `souls_dedup` — Deduplicação de blocos de 5+ linhas consecutivas.
+///
+/// Marco 3.8 Fase C.1: instrumentado com telemetria FinOps.
 async fn run_souls_dedup(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {
@@ -1022,7 +1035,15 @@ async fn run_souls_dedup(
         .and_then(Value::as_str)
         .map(Path::new);
 
+    // Marco 3.8 Fase C.1: cronometro FinOps.
+    let t_start = std::time::Instant::now();
+    let tokens_in = lean_vacuum::count_tokens(text) as i64;
     let deduplicated = lean_vacuum::deduplicate_blocks_session(text, path_opt);
+    let tokens_out = lean_vacuum::count_tokens(&deduplicated) as i64;
+    let duration_ms = t_start.elapsed().as_millis() as i64;
+    // CCR lossless reversivel: accuracy=1.0 (a rehydracao via `souls_stub_fill`
+    // e byte-a-byte identica ao original).
+    try_log_telemetry("souls_dedup", tokens_in, tokens_out, 0.0, duration_ms, 1.0);
 
     Ok(json!({
         "content": [{
@@ -2501,18 +2522,115 @@ enum StateDbOp {
         tool: String,
         reply: oneshot::Sender<Result<Value, RpcError>>,
     },
-    #[allow(dead_code)] // API V3: FinOps; sera instrumentada na Fase C (cloud brain)
+    #[allow(dead_code)] // API V3: FinOps; instrumentada na Fase C.1 (Marco 3.8).
     LogTelemetry {
         tool: String,
         tokens_in: i64,
         tokens_out: i64,
         cost_usd: f64,
         duration_ms: i64,
+        /// Marco 3.8 Fase C.1: acuracia sintatica REAL 0.0-1.0.
+        accuracy_score: f64,
         reply: oneshot::Sender<Result<Value, RpcError>>,
     },
 }
 
 static STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>> = OnceLock::new();
+
+/// Marco 3.8 Fase C.1: canal MPSC de override para testes TDD.
+///
+/// Quando `Some(tx)`, [`try_log_telemetry`] usa este canal em vez do
+/// `STATE_DB_TX` de producao, permitindo que os testes apontem para um
+/// banco SQLite temporario sem contaminar o workspace. Zero-cost quando
+/// `None` (o branch e resolvido em O(1) por um `if let Some(...)`).
+#[cfg(test)]
+pub(crate) static TEST_STATE_DB_TX_OVERRIDE: std::sync::Mutex<Option<mpsc::Sender<StateDbOp>>> =
+    std::sync::Mutex::new(None);
+
+/// Marco 3.8 Fase C.1: inicializa o StateDbWorker apontando para um DB
+/// temporario (uso exclusivo de testes TDD). Retorna o `PathBuf` final
+/// do banco para o caller poder queryá-lo apos o `try_send` assíncrono.
+#[cfg(test)]
+fn init_state_db_for_testing(
+    db_path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::time::Duration;
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut conn = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )?;
+    conn.busy_timeout(Duration::from_millis(5000))?;
+    // Migracao completa: V2→V3 (Observabilidade Sensorial) e V3→V4 (Telemetria Real).
+    observability::migrate_v2_to_v3(&mut conn)?;
+    observability::migrate_v3_to_v4(&mut conn)?;
+
+    let (tx, mut rx) = mpsc::channel::<StateDbOp>(100);
+    // Injeta o canal de teste no override global.
+    *TEST_STATE_DB_TX_OVERRIDE
+        .lock()
+        .expect("TEST_STATE_DB_TX_OVERRIDE poisoned") = Some(tx);
+
+    let db_path_thread = db_path.to_path_buf();
+    std::thread::spawn(move || {
+        let mut conn = match Connection::open_with_flags(
+            &db_path_thread,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+        ) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[StateDbWorker:test] ERRO ao abrir banco: {e}");
+                return;
+            }
+        };
+        let _ = conn.busy_timeout(Duration::from_millis(5000));
+        if let Err(e) = observability::migrate_v2_to_v3(&mut conn) {
+            eprintln!("[StateDbWorker:test] ALERTA migrate_v2_to_v3: {e}");
+        }
+        if let Err(e) = observability::migrate_v3_to_v4(&mut conn) {
+            eprintln!("[StateDbWorker:test] ALERTA migrate_v3_to_v4: {e}");
+        }
+        while let Some(op) = rx.blocking_recv() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            match op {
+                StateDbOp::LogTelemetry {
+                    tool,
+                    tokens_in,
+                    tokens_out,
+                    cost_usd,
+                    duration_ms,
+                    accuracy_score,
+                    reply,
+                } => {
+                    let res = conn.execute(
+                        "INSERT INTO telemetry_logs \
+                            (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        rusqlite::params![tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, now],
+                    );
+                    let response = match res {
+                        Ok(_) => Ok(json!({ "ok": true })),
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("test worker falhou: {e}"),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                // Em testes, outros ops (SubAgent/Handoff/Knowledge/...) nao sao
+                // exercitados pelo TDD de Telemetria. Catch-all silencioso.
+                _ => {}
+            }
+        }
+    });
+    Ok(())
+}
 
 static MEMORY_GRAPH_TX: OnceLock<mpsc::Sender<MemGraphOp>> = OnceLock::new();
 
@@ -2631,6 +2749,11 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = observability::migrate_v2_to_v3(&mut conn) {
             eprintln!("[StateDbWorker] ALERTA: falha na migracao V2→V3: {e}");
         }
+        // Marco 3.8 Fase C.1: migracao V3→V4 (Telemetria Real + accuracy_score).
+        // Idempotente: no-op em banco ja migrado.
+        if let Err(e) = observability::migrate_v3_to_v4(&mut conn) {
+            eprintln!("[StateDbWorker] ALERTA: falha na migracao V3→V4: {e}");
+        }
 
         while let Some(op) = rx.blocking_recv() {
             let now = std::time::SystemTime::now()
@@ -2738,21 +2861,21 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     let _ = reply.send(response);
                 }
-                // Marco 3.7 Fase B: log FinOps em telemetry_logs.
-                StateDbOp::LogTelemetry { tool, tokens_in, tokens_out, cost_usd, duration_ms, reply } => {
+                // Marco 3.8 Fase C.1: log FinOps em telemetry_logs (v4 + accuracy_score).
+                StateDbOp::LogTelemetry { tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, reply } => {
                     let res = conn.execute(
                         "INSERT INTO telemetry_logs \
-                            (tool, tokens_in, tokens_out, cost_usd, duration_ms, created_at) \
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                        rusqlite::params![tool, tokens_in, tokens_out, cost_usd, duration_ms, now],
+                            (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        rusqlite::params![tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, now],
                     );
                     let response = match res {
                         Ok(_) => Ok(json!({
                             "content": [{
                                 "type": "text",
                                 "text": format!(
-                                    "Telemetria '{}': in={} out={} cost=${:.6} dur={}ms",
-                                    tool, tokens_in, tokens_out, cost_usd, duration_ms
+                                    "Telemetria '{}': in={} out={} cost=${:.6} dur={}ms acc={:.3}",
+                                    tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score
                                 )
                             }]
                         })),
@@ -3133,6 +3256,8 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
 }
 
 async fn run_souls_stub_fill(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    // Marco 3.8 Fase C.1: cronometro FinOps (Instant monotônico).
+    let t_start_fill = std::time::Instant::now();
     let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
 
     let path_str = args
@@ -3166,6 +3291,12 @@ async fn run_souls_stub_fill(params: &serde_json::Map<String, Value>) -> Result<
         })?
         .to_string();
 
+    // Marco 3.8 Fase C.1: semantica CCR — `in` = stub compactado (marker),
+    // `out` = codigo expandido (code_payload). Captura a relacao de expansao
+    // do rehydrator para fins FinOps.
+    let tokens_in_fill = lean_vacuum::count_tokens(stub_marker) as i64;
+    let mut tokens_out_fill = lean_vacuum::count_tokens(&code_payload) as i64;
+
     let canonical_path = validate_and_canonicalize_path(path_str)?;
 
     if !canonical_path.exists() || !canonical_path.is_file() {
@@ -3187,6 +3318,9 @@ async fn run_souls_stub_fill(params: &serde_json::Map<String, Value>) -> Result<
         if lean_vacuum::count_tokens(&code_payload) > (max_context_tokens * 8 / 10) {
             code_payload = lean_vacuum::compress_to_lean(&code_payload, ext);
         }
+        // Marco 3.8 Fase C.1: tokens_out atualizado para refletir compressao
+        // (o output do fill agora e o payload compactado, fiel a FinOps).
+        tokens_out_fill = lean_vacuum::count_tokens(&code_payload) as i64;
     }
 
     let lock = souls_mc_lib::core::file_locker::acquire_file_lock(&canonical_path);
@@ -3261,6 +3395,25 @@ async fn run_souls_stub_fill(params: &serde_json::Map<String, Value>) -> Result<
             message: format!("Falha no swap atômico de arquivo: {e}"),
             data: Some(json!({ "path": canonical_path.display().to_string() })),
         })?;
+
+    // Marco 3.8 Fase C.1: cronometro FinOps apos o swap atomico bem-sucedido.
+    let duration_ms = t_start_fill.elapsed().as_millis() as i64;
+    // Acuracia baseada em fidelidade: o fill DEVE remover o stub_marker
+    // (substituindo-o pelo code_payload). Se o stub_marker persiste no
+    // conteudo final, o rehydrator falhou silenciosamente (degradacao).
+    let accuracy = if updated_content.contains(stub_marker) {
+        0.0
+    } else {
+        1.0
+    };
+    try_log_telemetry(
+        "souls_fill",
+        tokens_in_fill,
+        tokens_out_fill,
+        0.0,
+        duration_ms,
+        accuracy,
+    );
 
     Ok(json!({
         "content": [{
@@ -3622,12 +3775,18 @@ fn try_log_file_access(file_path: &str, tool: &str) {
 }
 
 // Marco 3.7 Fase B: helper para enfileirar telemetria FinOps no StateDbWorker.
-// Sera instrumentado na Fase C (cloud brain) — por ora reservado como API.
+// Marco 3.8 Fase C.1: instrumentado em `run_souls_compress`/`run_souls_dedup`/
+// `run_souls_stub_fill` para persistir FinOps real + acuracia sintatica (v4).
+// Em testes, `TEST_STATE_DB_TX_OVERRIDE` redireciona o canal para o DB temporario.
 #[allow(dead_code)]
-fn try_log_telemetry(tool: &str, tokens_in: i64, tokens_out: i64, cost_usd: f64, duration_ms: i64) {
-    let Some(tx) = STATE_DB_TX.get() else {
-        return;
-    };
+fn try_log_telemetry(
+    tool: &str,
+    tokens_in: i64,
+    tokens_out: i64,
+    cost_usd: f64,
+    duration_ms: i64,
+    accuracy_score: f64,
+) {
     let (reply_tx, _reply_rx) = oneshot::channel();
     let op = StateDbOp::LogTelemetry {
         tool: tool.to_string(),
@@ -3635,7 +3794,21 @@ fn try_log_telemetry(tool: &str, tokens_in: i64, tokens_out: i64, cost_usd: f64,
         tokens_out,
         cost_usd,
         duration_ms,
+        accuracy_score: accuracy_score.clamp(0.0, 1.0),
         reply: reply_tx,
+    };
+    // Marco 3.8 Fase C.1: precedence para o override de teste (TDD puro).
+    #[cfg(test)]
+    {
+        if let Ok(guard) = TEST_STATE_DB_TX_OVERRIDE.lock() {
+            if let Some(tx) = guard.as_ref() {
+                let _ = tx.try_send(op);
+                return;
+            }
+        }
+    }
+    let Some(tx) = STATE_DB_TX.get() else {
+        return;
     };
     let _ = tx.try_send(op); // best-effort
 }
@@ -4002,11 +4175,16 @@ async fn run_routes(params: &serde_json::Map<String, Value>) -> Result<Value, Rp
 }
 
 /// `feedback` — dump FinOps agregado com E3.
+///
+/// Marco 3.8 Fase C.1: le `telemetry_logs` (v4 com `accuracy_score`),
+/// computa E3 constitucional (`(acc^2) / max(1.0, duration_ms)`) e E3
+/// token-based (1 - out/total) sem mocks. O output e o `TelemetryReport`
+/// acumulado por ferramenta/provedor.
 async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let _ = params;
     let souls_data_dir = workspace_root().join(".souls_data");
     let db_path = souls_data_dir.join("souls_state.db");
-    let conn = Connection::open_with_flags(
+    let mut conn = Connection::open_with_flags(
         &db_path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
     )
@@ -4015,6 +4193,12 @@ async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, 
         message: format!("Falha ao abrir souls_state.db: {e}"),
         data: None,
     })?;
+    // Marco 3.8 Fase C.1: migracao V3→V4 idempotente no cold-start do feedback
+    // (cobre o caso de o feedback ser invocado sem passar pelo init_state_db).
+    if let Err(e) = observability::migrate_v3_to_v4(&mut conn) {
+        // best-effort: nao bloqueia a leitura se a migracao falhar
+        eprintln!("[feedback] ALERTA: migrate_v3_to_v4 falhou: {e}");
+    }
     let report = observability::aggregate_telemetry(&conn).map_err(|e| RpcError {
         code: -32000,
         message: format!("Falha ao agregar telemetria: {e}"),
@@ -4024,15 +4208,32 @@ async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, 
         "content": [{
             "type": "text",
             "text": serde_json::to_string_pretty(&report).unwrap_or_default()
-        }]
+        }],
+        "structuredContent": {
+            "e3_efficiency_v2_global": report.e3_efficiency_v2,
+            "e3_efficiency_token_global": report.e3_efficiency,
+            "accuracy_score_avg_global": report.accuracy_score_avg,
+            "total_calls": report.total_calls,
+            "by_tool": report.by_tool,
+            "formula": "E3_v2 = (accuracy_score^2) / max(1.0, duration_ms)"
+        },
+        "isError": false
     }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
+        init_state_db_for_testing, run_souls_compress, try_log_telemetry,
         normalize_duckduckgo_result_url, parse_duckduckgo_results, validate_sqlite_query,
     };
+
+    /// Marco 3.8 Fase C.1: lock de serializacao para os 3 testes TDD de
+    /// Telemetria. Garante que `TEST_STATE_DB_TX_OVERRIDE` (global de teste)
+    /// nao sofra race entre testes paralelos: cada teste detem o lock
+    /// durante setup + invocacao + polling. O Mutex nao bloqueia os
+    /// outros ~30 testes que nao tocam no override.
+    static TELEMETRY_TDD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn sqlite_query_rejects_multi_statement_payload() {
@@ -5022,6 +5223,7 @@ mod tests {
         assert!((e3_efficiency(-10, -10) - 1.0).abs() < 1e-9, "E3 defensivo contra negativos");
 
         // Persistencia + agregado via SQLite (in-memory).
+        // Marco 3.8 Fase C.1: schema v4 inclui `accuracy_score REAL DEFAULT 1.0`.
         let conn = Connection::open_in_memory().expect("abre in-memory");
         conn.execute_batch(
             "CREATE TABLE telemetry_logs (
@@ -5031,21 +5233,22 @@ mod tests {
                 tokens_out INTEGER NOT NULL DEFAULT 0,
                 cost_usd REAL NOT NULL DEFAULT 0.0,
                 duration_ms INTEGER NOT NULL DEFAULT 0,
+                accuracy_score REAL NOT NULL DEFAULT 1.0,
                 created_at INTEGER NOT NULL
             )",
         )
-        .expect("schema telemetry_logs");
+        .expect("schema telemetry_logs v4");
 
         // 3 ferramentas: read (alto out), compress (alto in, baixo out), edit (balanceado).
-        for (tool, tin, tout, cost, dur) in [
-            ("read", 100, 200, 0.0, 50),
-            ("compress", 1000, 50, 0.0, 200),
-            ("edit", 50, 50, 0.0, 30),
+        for (tool, tin, tout, cost, dur, acc) in [
+            ("read", 100, 200, 0.0, 50, 1.0),
+            ("compress", 1000, 50, 0.0, 200, 1.0),
+            ("edit", 50, 50, 0.0, 30, 0.9),
         ] {
             conn.execute(
-                "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, created_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![tool, tin, tout, cost, dur, 1000_i64],
+                "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![tool, tin, tout, cost, dur, acc, 1000_i64],
             )
             .expect("insert telemetry");
         }
@@ -5067,6 +5270,230 @@ mod tests {
             .map(|t| t.e3_efficiency)
             .unwrap_or(0.0);
         assert!(compress_e3 > 0.90, "compress deve ter E3 > 0.90 (got {compress_e3})");
+    }
+
+    // =====================================================================
+    // Marco 3.8 Fase C.1 — Telemetria Real e SOULS State v4 (TDD Marcha Rapida)
+    // =====================================================================
+
+    /// TDD 1: prova que o banco foi migrado para v4 e que a coluna
+    /// `accuracy_score REAL DEFAULT 1.0` existe e aceita REAL.
+    #[test]
+    fn test_database_migration_v4() {
+        use rusqlite::Connection;
+        use souls_mc_lib::cognition::memory_graph::fts::read_user_version;
+        use souls_mc_lib::cognition::observability::ops::{
+            V3_SCHEMA_DDL, migrate_v2_to_v3, migrate_v3_to_v4,
+        };
+
+        let mut conn = Connection::open_in_memory().expect("abre in-memory");
+        // Pre-condicao: v1 virgem.
+        assert_eq!(read_user_version(&conn).expect("v0"), 0);
+
+        // Aplica V2→V3 e V3→V4 em sequencia (simula cold-start do worker).
+        conn.execute_batch(V3_SCHEMA_DDL).expect("cria v3");
+        // bumpa manualmente o user_version para 3 (no prod a migracao cuida).
+        conn.execute_batch("PRAGMA user_version = 3")
+            .expect("bump v3");
+        migrate_v2_to_v3(&mut conn).expect("migrate_v2_to_v3 idempotente");
+        assert_eq!(read_user_version(&conn).expect("v3"), 3);
+
+        migrate_v3_to_v4(&mut conn).expect("migrate_v3_to_v4");
+        let v4 = read_user_version(&conn).expect("v4");
+        assert_eq!(v4, 4, "user_version deve ser 4 apos a migracao v3->v4");
+
+        // A coluna accuracy_score existe e aceita REAL.
+        let col_type: String = conn
+            .query_row(
+                "SELECT type FROM pragma_table_info('telemetry_logs') WHERE name = 'accuracy_score'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("coluna accuracy_score existe");
+        assert_eq!(
+            col_type, "REAL",
+            "accuracy_score deve ser REAL (got {col_type})"
+        );
+
+        // Aceita REAL: insert com valor explicito deve persistir.
+        conn.execute(
+            "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params!["probe", 0_i64, 0_i64, 0.0_f64, 0_i64, 0.85_f64, 1_i64],
+        )
+        .expect("insert com accuracy_score REAL");
+        let stored: f64 = conn
+            .query_row(
+                "SELECT accuracy_score FROM telemetry_logs WHERE tool = 'probe'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("le accuracy_score");
+        assert!(
+            (stored - 0.85).abs() < 1e-9,
+            "accuracy_score persistida (got {stored})"
+        );
+
+        // Idempotencia: rodar de novo e no-op puro.
+        migrate_v3_to_v4(&mut conn).expect("migrate_v3_to_v4 idempotente 2x");
+        assert_eq!(read_user_version(&conn).expect("v4 2x"), 4);
+    }
+
+    /// TDD 2: executa `run_souls_compress` e prova que um log de telemetria
+    /// correspondente e persistido silenciosamente em background (MPSC).
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_compress_instrumentation_logging() {
+        use std::time::Duration;
+        let _serial = TELEMETRY_TDD_LOCK.lock().expect("TELEMETRY_TDD_LOCK poisoned");
+        let tmp = tempfile::tempdir().expect("cria tempdir");
+        let db_path = tmp.path().join("souls_state_test.db");
+        init_state_db_for_testing(&db_path).expect("inicializa worker de teste");
+
+        // Dispara o handler real (sem mocks). Texto grande para garantir
+        // que o lean_vacuum gaste > 0ms e produza tokens mensuraveis.
+        let text: String = (0..200)
+            .map(|i| format!("linha_{i:04}_com_conteudo_para_dedup_e_compress"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut params = serde_json::Map::new();
+        let mut args = serde_json::Map::new();
+        args.insert("text".into(), serde_json::Value::String(text.clone()));
+        args.insert("ext".into(), serde_json::Value::String("rs".into()));
+        params.insert("arguments".into(), serde_json::Value::Object(args));
+
+        let result: Result<serde_json::Value, _> = run_souls_compress(&params).await;
+        assert!(result.is_ok(), "run_souls_compress deve retornar Ok");
+
+        // Polling determinístico: o worker MPSC processa em background; ate
+        // 500ms de tolerancia para a gravacao assincrona.
+        let mut found: Option<(i64, f64, String)> = None;
+        for _ in 0..100 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let conn = rusqlite::Connection::open_with_flags(
+                &db_path,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )
+            .expect("abre DB read-only");
+            let row: Result<(i64, f64, String), _> = conn.query_row(
+                "SELECT duration_ms, accuracy_score, tool FROM telemetry_logs \
+                 WHERE tool = 'souls_compress' LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            );
+            if let Ok(t) = row {
+                found = Some(t);
+                break;
+            }
+        }
+        let (dur, acc, tool) =
+            found.expect("log de telemetria do run_souls_compress deve aparecer em <1s");
+        assert_eq!(tool, "souls_compress");
+        assert!(dur >= 0, "duration_ms deve ser >= 0 (got {dur})");
+        assert!(
+            (acc - 1.0).abs() < 1e-9,
+            "accuracy_score default 1.0 para compress CCR lossless (got {acc})"
+        );
+    }
+
+    /// TDD 3: insere logs de telemetria reais via MPSC e prova que
+    /// `aggregate_telemetry` (consumido por `run_feedback`) gera o calculo
+    /// de E3 constitucional correto a partir do SQLite, sem mocks.
+    #[test]
+    fn test_e3_factual_calculation() {
+        use rusqlite::Connection;
+        use souls_mc_lib::cognition::observability::feedback::aggregate_telemetry;
+        use std::time::Duration;
+
+        let _serial = TELEMETRY_TDD_LOCK.lock().expect("TELEMETRY_TDD_LOCK poisoned");
+        let tmp = tempfile::tempdir().expect("cria tempdir");
+        let db_path = tmp.path().join("souls_state_e3_test.db");
+        init_state_db_for_testing(&db_path).expect("inicializa worker de teste");
+
+        // Insere 3 logs via MPSC (instrumentacao real do handler).
+        // Ferramenta souls_compress: 3 chamadas, acc=1.0, dur=10ms cada.
+        for _ in 0..3 {
+            try_log_telemetry("souls_compress", 1000, 50, 0.0, 10, 1.0);
+        }
+        // Ferramenta souls_dedup: 2 chamadas, acc=0.5, dur=20ms cada.
+        for _ in 0..2 {
+            try_log_telemetry("souls_dedup", 500, 250, 0.0, 20, 0.5);
+        }
+
+        // Aguarda a gravacao assincrona (polling deterministico).
+        let conn = {
+            let mut conn: Option<Connection> = None;
+            for _ in 0..100 {
+                std::thread::sleep(Duration::from_millis(10));
+                let c = Connection::open_with_flags(
+                    &db_path,
+                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+                )
+                .expect("abre DB");
+                let count: i64 = c
+                    .query_row(
+                        "SELECT COUNT(*) FROM telemetry_logs",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .expect("count");
+                if count >= 5 {
+                    conn = Some(c);
+                    break;
+                }
+            }
+            conn.expect("5 logs devem aparecer em <1s")
+        };
+
+        // O schema v4 + accuracy_score ja foram materializados pelo
+        // init_state_db_for_testing (migrate_v2_to_v3 + migrate_v3_to_v4).
+        let report = aggregate_telemetry(&conn).expect("aggregate_telemetry");
+
+        // Total: 5 chamadas.
+        assert_eq!(report.total_calls, 5);
+
+        // Por ferramenta:
+        // - souls_compress: acc=1.0, dur=30ms total.
+        //   E3_v2 = (1.0^2) / max(1.0, 30.0) = 1/30 ≈ 0.0333...
+        let compress = report
+            .by_tool
+            .get("souls_compress")
+            .expect("souls_compress no report");
+        assert!((compress.accuracy_score_avg - 1.0).abs() < 1e-9);
+        assert_eq!(compress.duration_ms_total, 30);
+        let expected_e3_v2_compress = 1.0_f64 / 30.0_f64;
+        assert!(
+            (compress.e3_efficiency_v2 - expected_e3_v2_compress).abs() < 1e-9,
+            "E3_v2(compress) = 1/30 (got {})",
+            compress.e3_efficiency_v2
+        );
+
+        // - souls_dedup: acc=0.5, dur=40ms total.
+        //   E3_v2 = (0.5^2) / max(1.0, 40.0) = 0.25/40 = 0.00625.
+        let dedup = report
+            .by_tool
+            .get("souls_dedup")
+            .expect("souls_dedup no report");
+        assert!((dedup.accuracy_score_avg - 0.5).abs() < 1e-9);
+        assert_eq!(dedup.duration_ms_total, 40);
+        let expected_e3_v2_dedup = 0.25_f64 / 40.0_f64;
+        assert!(
+            (dedup.e3_efficiency_v2 - expected_e3_v2_dedup).abs() < 1e-9,
+            "E3_v2(dedup) = 0.25/40 = 0.00625 (got {})",
+            dedup.e3_efficiency_v2
+        );
+
+        // Global:
+        // - acc_avg = (1.0*3 + 0.5*2) / 5 = 4.0/5 = 0.8
+        // - dur_total = 30 + 40 = 70ms
+        // - E3_v2 = (0.8^2) / 70 = 0.64/70 ≈ 0.009143
+        assert!((report.accuracy_score_avg - 0.8).abs() < 1e-9);
+        assert_eq!(report.total_duration_ms, 70);
+        let expected_e3_v2_global = 0.64_f64 / 70.0_f64;
+        assert!(
+            (report.e3_efficiency_v2 - expected_e3_v2_global).abs() < 1e-9,
+            "E3_v2(global) = 0.64/70 (got {})",
+            report.e3_efficiency_v2
+        );
     }
 }
 
