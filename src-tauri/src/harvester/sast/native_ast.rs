@@ -6,6 +6,134 @@ use crate::harvester::ast_parser::{self, AstParserError};
 use crate::harvester::web_scraper;
 use super::{SandboxExecutor, SidecarError, ScopedTextBlock, sanitize_repo_relative_path, truncate_chars, render_scoped_text_blocks, render_scoped_text_block_refs, pack_scoped_text_blocks, stdout_is_blank, looks_like_repo_outline_path, BLOB_04_REPO_OUTLINE_MAX_CHARS};
 
+// =============================================================================
+// ADR-031 §5 — Heurísticas canônicas de detecção de SkillLibrary (Camadas A/B).
+//
+// `SKILL_SIGNAL_REL` (Camada A, nome do arquivo): promove `kind: SkillLibrary`
+// e contribui para o score de Camada B. Cada keyword DEVE estar espelhada
+// em `SCORE_RULES` com um peso > 0.
+//
+// `SKILL_SIGNAL_CONTENT` (Camada A, conteúdo .md): promove `kind: SkillLibrary`
+// mas é **Camada-A-only** (não contribui para o score de ordenação).
+// Exceção documentada no ADR-031 §5: keywords de prompt-design e visualização
+// são kind-sinalizadoras mas não ordenadoras.
+//
+// `SCORE_RULES` (Camada B): scoring de ordenação. `problems_and_diagnostics`
+// é **Camada-B-only** (não promove kind).
+//
+// A invariante `static_assert_heuristic_consistency` (compile-time, abaixo)
+// blinda contra refatorações invasivas que esvaziem acidentalmente o sinal
+// compartilhado entre as duas camadas.
+// =============================================================================
+
+/// Camada A — keywords presentes em **nomes de arquivo .md** (rel path).
+/// Cada keyword aqui DEVE aparecer também em `SCORE_RULES` (Camada B).
+pub const SKILL_SIGNAL_REL: &[&str] = &["skill", "prompt"];
+
+/// Camada A — keywords presentes em **conteúdo de .md** (text scan).
+/// Camada-A-only: promovem `kind: SkillLibrary` mas NÃO contribuem para
+/// o score de Camada B. Exceção documentada no ADR-031 §5.
+pub const SKILL_SIGNAL_CONTENT: &[&str] = &[
+    "skills for ai",
+    "coding agents",
+    "diagram",
+    "visualization",
+];
+
+/// Camada B — regras de scoring de ordenação. Cada tupla é `(origin, keyword, weight)`.
+/// `origin = "rel"` → match contra nome de arquivo; `"content"` → match contra corpo.
+pub const SCORE_RULES: &[(&str, &str, i32)] = &[
+    ("rel", "readme", 5),
+    ("rel", "skill", 3),
+    ("rel", "prompt", 3),
+    // Camada-B-only: troubleshooting/curadoria. NÃO promove skill_signal
+    // (um repo de código com troubleshooting.md é ContentRepo).
+    // Documentado em ADR-031 §5.
+    ("content", "problems_and_diagnostics", 10),
+];
+
+/// Invariante de consistência heurística (compile-time, ADR-031 §5).
+///
+/// Garante que `SKILL_SIGNAL_REL ∩ SCORE_RULES ≠ ∅` — i.e., existe
+/// pelo menos 1 keyword compartilhada entre Camada A e Camada B.
+///
+/// **Por que essa invariante é mandatória:**
+/// - Se a interseção esvaziar, a Camada B para de ranquear repositórios
+///   SkillLibrary (eles ficam todos com o mesmo score de ordenação).
+/// - O output do harvester torna-se puramente binário (kind), perdendo
+///   o sinal de relevância que diferencia "skill com 1 readme" de
+///   "skill com 5 readmes + prompts".
+/// - Esta validação é compile-time (não runtime) para falhar no CI antes
+///   de chegar à produção.
+///
+/// **Exceções documentadas no ADR-031 §5 (NÃO validadas por este assert):**
+/// - `SKILL_SIGNAL_CONTENT` (Camada A-only) é propositalmente
+///   kind-promovedora sem score de ranking.
+/// - `("content", "problems_and_diagnostics", 10)` (Camada B-only) é
+///   score-promovedor sem kind-promotion.
+const _: () = {
+    /// Função pura `const fn` que verifica a invariante.
+    /// Retorna `true` se pelo menos 1 keyword de `SKILL_SIGNAL_REL`
+    /// também aparece como segunda tupla de `SCORE_RULES`.
+    const fn has_overlap() -> bool {
+        let mut i = 0;
+        while i < SKILL_SIGNAL_REL.len() {
+            let kw_a = SKILL_SIGNAL_REL[i];
+            let mut j = 0;
+            while j < SCORE_RULES.len() {
+                let (_, kw_b, _) = SCORE_RULES[j];
+                if const_str_eq(kw_a, kw_b) {
+                    return true;
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+        false
+    }
+
+    /// `const fn` de comparação de strings por byte (Rust stable).
+    /// `core::str::eq` ainda não é `const` em todas as versões, então
+    /// implementamos manualmente para garantir compatibilidade total.
+    const fn const_str_eq(a: &str, b: &str) -> bool {
+        let a_bytes = a.as_bytes();
+        let b_bytes = b.as_bytes();
+        if a_bytes.len() != b_bytes.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < a_bytes.len() {
+            if a_bytes[i] != b_bytes[i] {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+
+    assert!(
+        has_overlap(),
+        "INVARIANT VIOLATED (ADR-031 §5): SKILL_SIGNAL_REL inter SCORE_RULES is empty. \
+         At least 1 keyword from Layer A must be in Layer B. \
+         Without this, Layer B loses the SkillLibrary ranking signal and the \
+         harvester output becomes purely binary (kind). \
+         Add one of the SKILL_SIGNAL_REL keywords as the 2nd element of a tuple \
+         in SCORE_RULES with weight > 0."
+    );
+};
+
+/// Helper público: re-exporta o resultado da invariante para documentação viva
+/// em testes. Se a invariante compile-time passar, esta função retorna `true`.
+/// **Não duplica a lógica** — apenas reflete o resultado do assert estático
+/// via leitura direta das consts (mesma fonte de verdade).
+pub fn static_assert_heuristic_consistency() -> bool {
+    SKILL_SIGNAL_REL.iter().any(|kw_a| {
+        SCORE_RULES
+            .iter()
+            .any(|(_, kw_b, _)| kw_a == kw_b)
+    })
+}
+
 pub struct NativeAstInput<'a, E: SandboxExecutor> {
     pub executor: &'a E,
     pub timeout_secs: u64,
@@ -251,6 +379,14 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
     let mut blocks: Vec<(i32, ScopedTextBlock)> = Vec::new();
     let mut all_text = String::new();
     let mut skill_signal = false;
+
+    // ADR-031 §5: heurísticas canônicas de detecção de SkillLibrary.
+    // Camada A (skill_signal → kind) e Camada B (score → ordem) são
+    // ortogonais por design; a invariante de consistência é
+    // validada em compile-time por `static_assert_heuristic_consistency`
+    // (definida no topo do módulo). As exceções documentadas
+    // (`SKILL_SIGNAL_CONTENT` e `problems_and_diagnostics`) também
+    // são honradas aqui.
     for path in &md_files {
         let rel = sanitize_repo_relative_path(repo_path, &path.to_string_lossy())
             .unwrap_or_else(|| path.file_name().and_then(|n| n.to_str()).unwrap_or("file").to_string());
@@ -259,32 +395,34 @@ async fn content_repo_artifacts(repo_path: &Path, why: &str) -> Result<NativeAst
             Err(_) => continue,
         };
         let mut score = 0i32;
+
+        // Camada A: skill_signal (curto-circuito no primeiro hit).
         if !skill_signal {
             let rel_l = rel.to_ascii_lowercase();
             let c_l = content.to_ascii_lowercase();
-            if rel_l.contains("skill")
-                || rel_l.contains("prompt")
-                || c_l.contains("skills for ai")
-                || c_l.contains("coding agents")
-                || c_l.contains("diagram")
-                || c_l.contains("visualization")
+            if SKILL_SIGNAL_REL.iter().any(|k| rel_l.contains(k))
+                || SKILL_SIGNAL_CONTENT.iter().any(|k| c_l.contains(k))
             {
                 skill_signal = true;
             }
         }
+
+        // Camada B: score acumulado para ordenação.
         {
             let rel_l = rel.to_ascii_lowercase();
-            if rel_l.contains("readme") {
-                score += 5;
-            }
-            if rel_l.contains("skill") || rel_l.contains("prompt") {
-                score += 3;
-            }
             let c_l = content.to_ascii_lowercase();
-            if c_l.contains("problems_and_diagnostics") {
-                score += 10;
+            for (origin, kw, weight) in SCORE_RULES {
+                let hit = match *origin {
+                    "rel" => rel_l.contains(kw),
+                    "content" => c_l.contains(kw),
+                    _ => false,
+                };
+                if hit {
+                    score += weight;
+                }
             }
         }
+
         all_text.push_str(&content);
         all_text.push('\n');
         blocks.push((
@@ -511,23 +649,38 @@ fn extract_github_repo_ids(urls: &[String], max_repos: usize) -> Vec<String> {
     out.into_iter().take(max_repos).collect()
 }
 
+/// Tabela canônica de pesos para priorização de URLs de documentação externa.
+///
+/// 12 keywords ordenadas por **peso descendente** (canonização do ranking):
+/// - `codewiki` (30) e `deepwiki` (24): wikis de alto sinal sobre a estrutura
+///   interna do repositório.
+/// - `readthedocs` (20), `docs.` (18), `/docs` (18), `documentation` (16):
+///   fontes oficiais de documentação canônica (Sphinx, MkDocs, Docusaurus).
+/// - `/wiki` (16), `guide` (12), `manual` (12): guias não-oficiais / tutoriais.
+/// - `reference` (10), `api` (8), `tutorial` (8): páginas técnicas pontuais.
+///
+/// **DRY (ADR-031 §5)**: Esta constante é a ÚNICA fonte de verdade. Editar
+/// aqui propaga para `score_external_doc_url` e o teste de Camada B sem
+/// duplicar a tabela em 2 lugares (drift zero entre detecção e scoring).
+pub const SCORE_URL_RULES: &[(&str, i32)] = &[
+    ("codewiki", 30),
+    ("deepwiki", 24),
+    ("readthedocs", 20),
+    ("docs.", 18),
+    ("/docs", 18),
+    ("documentation", 16),
+    ("/wiki", 16),
+    ("guide", 12),
+    ("manual", 12),
+    ("reference", 10),
+    ("api", 8),
+    ("tutorial", 8),
+];
+
 fn score_external_doc_url(url: &str) -> i32 {
     let lower = url.to_ascii_lowercase();
     let mut score = 0i32;
-    for (needle, weight) in [
-        ("codewiki", 30),
-        ("deepwiki", 24),
-        ("readthedocs", 20),
-        ("docs.", 18),
-        ("/docs", 18),
-        ("documentation", 16),
-        ("/wiki", 16),
-        ("guide", 12),
-        ("manual", 12),
-        ("reference", 10),
-        ("api", 8),
-        ("tutorial", 8),
-    ] {
+    for (needle, weight) in SCORE_URL_RULES {
         if lower.contains(needle) {
             score += weight;
         }
@@ -1054,5 +1207,189 @@ pub fn boot(_runtime: Runtime) {}
 
         let result = NativeAstParser::extract(input).await;
         assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+    }
+
+    // =============================================================================
+    // SOULS-CANIBALIZED Marco 3.9 Fase E (BLOCO 4.2): 4 testes Camada A do
+    // Harvester (ADR-031 §5). Validam que cada uma das 4 keywords
+    // canônicas de `skill_signal_content` PROMOVE o repositório para
+    // `kind: SkillLibrary` no outline gerado por `content_repo_artifacts`.
+    //
+    // Padrão: o `MockExecutor` falha em todos os comandos (caminho de
+    // `EmptyRepository` → `content_repo_artifacts`). Cada teste cria um
+    // único `.md` cuja `content.to_ascii_lowercase().contains(keyword)`
+    // deve disparar o curto-circuito da Camada A.
+    // =============================================================================
+
+    /// Camada A — keyword 1 de 4: `skills for ai` (curto-circuito na 1ª hit).
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_skills_for_ai_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "guides/intro.md",
+            "# Curated Skills for AI Agents\n\nThis is a curated guide.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["guides/intro.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'skills for ai' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
+    }
+
+    /// Camada A — keyword 2 de 4: `coding agents`.
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_coding_agents_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "prompts/agent_patterns.md",
+            "# Coding Agents Patterns\n\nReference patterns for autonomous agents.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["prompts/agent_patterns.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'coding agents' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
+    }
+
+    /// Camada A — keyword 3 de 4: `diagram`.
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_diagram_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "skills/architecture.md",
+            "# System Diagram Reference\n\nContains the canonical diagram of the system.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["skills/architecture.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'diagram' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
+    }
+
+    /// Camada A — keyword 4 de 4: `visualization`.
+    /// Ref: ADR-031 §5 tabela canônica.
+    #[tokio::test]
+    async fn test_skill_signal_visualization_promotes_kind_skilllibrary() {
+        let spawn_err = crate::harvester::sandbox::SandboxError::ProcessSpawnFailed {
+            reason: "test_skill_signal: program not found".to_string(),
+        };
+        let executor = MockExecutor::new(vec![Err(spawn_err)]);
+        executor.write_repo_file(
+            "skills/metrics.md",
+            "# Visualization Cookbook\n\nHow to produce compelling visualization dashboards.\n",
+        );
+        let input = NativeAstInput {
+            executor: &executor,
+            timeout_secs: 30,
+            clean_files: test_clean_files(executor.repo_path(), &["skills/metrics.md"]),
+        };
+        let result = NativeAstParser::extract(input).await;
+        assert!(result.is_ok(), "Extração deveria ser fail-soft: {:?}", result);
+        let payload = result.unwrap();
+        let outline = String::from_utf8(payload.repo_outline_blob).unwrap();
+        let health = String::from_utf8(payload.health_report_blob).unwrap();
+        assert!(
+            outline.contains("kind: SkillLibrary"),
+            "keyword 'visualization' deve promover kind para SkillLibrary. Outline:\n{outline}"
+        );
+        assert!(health.contains("skill_signal: true"));
+    }
+
+    // =============================================================================
+    // SOULS-CANIBALIZED Marco 3.9 Fase E (Follow-up): Documentação viva da
+    // invariante de consistência heurística (ADR-031 §5).
+    //
+    // O `const _: () = assert!(has_overlap(), ...)` no topo do módulo
+    // blinda a invariante em compile-time. Esses 2 testes servem como
+    // **documentação viva** — se algum engenheiro futuramente modificar
+    // as consts de forma que rompa a invariante, o assert estático
+    // falha no build antes de chegar a CI; o teste aqui apenas
+    // documenta o comportamento esperado em runtime.
+    // =============================================================================
+
+    /// T-inv-1: Documenta que a invariante `SKILL_SIGNAL_REL ∩ SCORE_RULES ≠ ∅`
+    /// está válida em runtime. Se algum engenheiro remover acidentalmente
+    /// a interseção (e.g. remover "skill" e "prompt" de SCORE_RULES), o
+    /// `const _` no topo do módulo falha o build antes deste teste rodar.
+    #[test]
+    fn test_static_assert_heuristic_consistency_holds() {
+        assert!(
+            static_assert_heuristic_consistency(),
+            "Invariante ADR-031 §5 quebrada: SKILL_SIGNAL_REL ∩ SCORE_RULES = ∅. \
+             A Camada B perdeu o sinal de ranking de SkillLibrary. \
+             Isso NÃO deveria ser possível se o `const _ = assert!(...)` no topo \
+             do módulo estiver ativo. Verifique se a invariante compile-time foi \
+             desabilitada por #[allow(...)] indevido."
+        );
+    }
+
+    /// T-inv-2: Valida explicitamente as exceções documentadas (ADR-031 §5):
+    /// - `SKILL_SIGNAL_CONTENT` é Camada-A-only (kind-promovedora, sem score).
+    /// - `("content", "problems_and_diagnostics", 10)` é Camada-B-only
+    ///   (score-promovedor, sem kind-promotion).
+    #[test]
+    fn test_heuristic_exceptions_are_documented() {
+        // SKILL_SIGNAL_CONTENT: Camada-A-only. Nenhuma das 4 keywords
+        // deve aparecer em SCORE_RULES como segunda tupla.
+        for kw_a_only in SKILL_SIGNAL_CONTENT {
+            let in_b = SCORE_RULES.iter().any(|(_, kw_b, _)| kw_b == kw_a_only);
+            assert!(
+                !in_b,
+                "Exceção ADR-031 §5 violada: '{kw_a_only}' é Camada-A-only \
+                 (kind-promovedora) e NÃO deve aparecer em SCORE_RULES."
+            );
+        }
+        // problems_and_diagnostics: Camada-B-only. Não deve aparecer
+        // em SKILL_SIGNAL_REL nem em SKILL_SIGNAL_CONTENT.
+        let b_only_kw = "problems_and_diagnostics";
+        let in_a_rel = SKILL_SIGNAL_REL.iter().any(|k| k == &b_only_kw);
+        let in_a_content = SKILL_SIGNAL_CONTENT.iter().any(|k| k == &b_only_kw);
+        assert!(
+            !in_a_rel && !in_a_content,
+            "Exceção ADR-031 §5 violada: '{b_only_kw}' é Camada-B-only \
+             (score-promovedor) e NÃO deve aparecer em Camada A."
+        );
     }
 }

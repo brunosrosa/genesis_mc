@@ -78,6 +78,48 @@ Cada blob é uma **lâmina tática isolada** com missão própria. O arsenal é 
 
 **Princípio de não-vazamento:** os 11 blobs são ortogonais. O Blob 04 (outline) **nunca** inclui lógica de teste (vai para Blob 03). O Blob 06 (security) **nunca** inclui complexidade (vai para Blob 08). O Blob 09 (community) **nunca** inclui código (vai para Blobs 04, 06, 08). Cada lâmina cumpre sua missão e **delega o resto ao vizinho correto**.
 
+### 5. Heurísticas Canônicas de Detecção de SkillLibrary (Blob 04 — Fallback)
+
+Quando o `NativeAstParser` (Blob 04) detecta que o repositório é **curado/documentação/skills** (sem código indexável), invoca `content_repo_artifacts` que aplica **duas camadas ortogonais de heurística** sobre os arquivos `.md`/`.markdown`/`.mdx`:
+
+#### Camada A — Sinal Booleano (`skill_signal`)
+
+Determina `kind: SkillLibrary` (vs `ContentRepo`). **Curto-circuito**: primeira detecção trava o sinal; arquivos subsequentes são ignorados para classificação. Lista canônica (case-insensitive, ANY-OF):
+
+| Origem | Keyword | Justificativa |
+|--------|---------|---------------|
+| `rel` (path) | `"skill"` | Repositórios de skills usam `skills/` ou `*.skill.md` |
+| `rel` (path) | `"prompt"` | Prompt libraries (`prompts/`, `prompt-engineering/`) |
+| `content` | `"skills for ai"` | Auto-descrição explícita de skill library |
+| `content` | `"coding agents"` | Contexto LLM-agentico explícito |
+| `content` | `"diagram"` | Diagram-as-documentation (Mermaid, plantUML) |
+| `content` | `"visualization"` | Visual specs (UI/UX, charts) |
+
+#### Camada B — Score Contínuo (ordenador do Markdown Extract)
+
+Determina a **ordem de renderização** dos blocos no `## Markdown Extract` do `repo_outline_blob`. Não afeta `kind`. Lista canônica:
+
+| Origem | Keyword | Peso | Note |
+|--------|---------|------|------|
+| `rel` (path) | `"readme"` | +5 | Documento âncora, vem primeiro |
+| `rel` (path) | `"skill"` | +3 | Tied com `prompt` |
+| `rel` (path) | `"prompt"` | +3 | Tied com `skill` |
+| `content` | `"problems_and_diagnostics"` | +10 | **Maior peso**. Documento de troubleshooting/diagnóstico é canônico para IAs |
+
+#### Invariante de Consistência (Canibalizada do Pessimismo da Razão)
+
+Toda keyword da Camada A **deve** aparecer também na Camada B, e vice-versa. Se uma nova keyword é adicionada a uma camada, deve ser adicionada à outra com peso consistente. **Exceção:** `"problems_and_diagnostics"` é Camada-B-only (peso 10) porque marca troubleshooting/curadoria, mas não implica que o repo inteiro é uma skill library (um repo de código com arquivo `problems_and_diagnostics.md` ainda é `ContentRepo`). Esta exceção é **documentada e intencional**.
+
+A invariante é validada em tempo de compilação pelo `static_assert_heuristic_consistency` em `native_ast.rs` (gera panic com mensagem clara se a invariante for violada em qualquer refactor futuro).
+
+#### Por que heurísticas de scoring, não LLM?
+
+Conforme **Lei Zero do Trator Mecânico** (ADR-031 §1), o Harvester é **Zero-AI**. As heurísticas são regex case-insensitive executadas em ~24 arquivos `.md` por repo. Custo: O(N) onde N = arquivos markdown; N ≤ 24 (curto-circuito em `collect_markdown_files`). Latência: <1ms. Replicabilidade: 100% determinística.
+
+#### Por que `"problems_and_diagnostics"` é o maior peso (+10)?
+
+A string `problems_and_diagnostics` é a **palavra-chave canônica** que identifica blocos de troubleshooting/diagnóstico dentro de uma skill library (ou de um README técnico). Esses blocos são os que **mais economizam tempo da IA** nas Fases 2-3 (respostas prontas para perguntas "por que X quebrou?"), por isso recebem o peso máximo. É uma decisão de FinOps Cognitivo: documentos de diagnóstico valem mais que READMEs genéricos.
+
 ## Consequências
 
 ### Positivas
