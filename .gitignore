@@ -39,8 +39,8 @@ dist-ssr
 .pytest_cache/
 .lean-ctx/
 src-tauri/third_party/ultrafast-mcp-sequential-thinking/
-docs/audits/blobs/inspect/
-docs/context_dumps/
+docs/observability/audits/blobs/inspect/
+docs/runtime/context_dumps/
 
 # ==============================================================================
 # SOULS BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO
