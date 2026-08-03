@@ -43,13 +43,42 @@ Durante a faxina e auditoria de stubs, identificamos ferramentas que mentiam no 
 Sob o crivo do **Pessimismo da Razão**, identificamos que **13 ferramentas do `lean-ctx` original eram lixo operacional redundante** [701]. Elas tentavam resolver na camada de infraestrutura problemas que o nosso barramento de Skills e o **Chyros Daemon** hoje cobrem com consumo zero de VRAM e zero overhead de rede [635, 700]. Elas foram oficialmente **deletadas do roadmap** e não serão canibalizadas [700, 701]:
 *   *Descartados:* `ctx_agent`, `ctx_overview`, `ctx_preload`, `ctx_prefetch`, `ctx_wrapped`, `ctx_gain`, `ctx_feedback`, `ctx_task`, `ctx_workflow`, `ctx_context`, `ctx_response`, `ctx_graph_diagram`, `ctx_graph`, `ctx_share` [700].
 
+### D. Joias Recuperadas no Marco 4.0.1 (Projeto Guilhotina)
+Sob nova auditoria forense do cadáver READ-ONLY em `src-tauri/third_party/lean-ctx/`, identificamos **3 essências adicionais** que escaparam à varredura original e cuja "Alma Matemática" foi **formalmente canibalizada** para o chassi nativo do SOULS MC. Estas joias não eram ferramentas MCP (não estavam no barramento), mas padrões de design e catálogos de configuração que mereciam preservação.
+
+1.  **`autonomy` ➔ `cognition::lean_vacuum::atomic_once::FireOnce`**: O padrão de inicialização atômica `compare_exchange(SeqCst)` sobre `AtomicBool` foi transplantado para um helper genérico `FireOnce<T>`. A técnica garante "fire-once" lock-free (sem `Mutex`/`RwLock`), eliminando o anti-pattern Zero-Slop de manter `MutexGuard` através de `.await`. Validação empírica: o teste de integração `src-tauri/tests/test_atomic_fire_once.rs` dispara 64 threads concorrentes e observa exatamente 1 vencedor / 63 perdedores em 0.01s [Marco 4.0.1].
+2.  **`ctx_impact` ➔ `cognition::lean_vacuum::extensions::is_source_ext`** (parcial): O padrão de **BFS reverso de import edges** para análise de Blast Radius foi documentado como cânone arquitetural para um futuro módulo `cognition::impact`. A heurística de listar 17 extensões de código-fonte produtivas foi transplantada verbatim para o catálogo unificado.
+3.  **`ctx_heatmap` ➔ `cognition::lean_vacuum::extensions::{SOURCE_EXTENSIONS, EXCLUDE_DIRS}`**: O catálogo de 17 extensões de código-fonte + 6 exclusões de diretório tóxico (`node_modules`, `target`, `dist`, `__pycache__`, `.git`, dot) foi unificado e estendido com o vocabulário do SOULS (`.souls_cache`, `.souls_data`, `.souls_scratchpad`, `.cargo`, `.vscode`, `.idea`, `vendor`, `build`, `_build`, `deps`, `.venv`, `__snapshots__`). Total canônico: **22 extensões + 22 exclusões**, governados por invariantes em compile-time via `assert_eq!` nos testes de unidade.
+
+*   *Descartado e arquivado:* `ctx_routes` — sem aplicação para o SOULS MC (backend Rust com IPC Tauri, sem rotas HTTP server-side). O struct `RouteEntry` foi documentado como referência se um futuro módulo HTTP server for necessário.
+
 ---
 
 ## 4. Consequências da Amputação
 1.  **Higiene Máxima de Workspace**: Removemos dezenas de arquivos mortos e pastas órfãs, mantendo apenas o código-fonte que ativamente compila no nosso produto final [304, 740].
-2.  **Extirpação do Overhead de Compilação**: Banimos definitivamente do Cargo Workspace qualquer chance de o compilador tentar processar sub-dependências transitórias do `lean-ctx` [640].
+2.  **Extirpação do Overhead de Compilação**: Banimos definitivamente do Cargo Workspace qualquer chance de o compilador tentar processar sub-dependências transitivas do `lean-ctx` [640].
 3.  **Segurança Semântica**: Clientes MCP agora consultam um `tools/list` com descrições fiéis e precisas sobre o que cada ferramenta de fato executa no metal, eliminando stubs e incoerências estruturais [687].
+
+---
+## 5. Saco a Vácuo Nativo — O Destino Canônico (Marco 4.0.1)
+O transplante integral da "Alma Matemática" do `lean-ctx` vive em um único módulo do nosso chassi:
+
+*   **`src-tauri/src/cognition/lean_vacuum/`** — O Saco a Vácuo Nativo do SOULS. Módulos:
+    *   `mod.rs` — Orquestrador `compress_to_lean()` e `read_to_lean()` (pipeline ANSI → comments → blank lines).
+    *   `ansi_filter.rs` — `strip_ansi`, `ansi_density`.
+    *   `dedup.rs` — `deduplicate_blocks`, `SESSION_DEDUP_CACHE` (canibalizado do `ctx_dedup`).
+    *   `dot_flatten.rs` — `dot_flatten` (canibalizado do `ctx_tree`).
+    *   `extensions.rs` — `SOURCE_EXTENSIONS` (22) + `EXCLUDE_DIRS` (22) (canibalizado de `ctx_heatmap` + extensions do `search.rs` SOULS) [Marco 4.0.1].
+    *   `myers_diff.rs` — `myers_diff` (canibalizado do `ctx_delta` via crate `similar`).
+    *   `search.rs` — `search_lean`, `format_lean_notation` (canibalizado do `ctx_search`).
+    *   `smart_read.rs` — `smart_read_text`, `count_tokens` via `tiktoken` (canibalizado do `ctx_smart_read`).
+    *   `text_compress.rs` — `aggressive_compress`, `lightweight_cleanup` (canibalizado do `ctx_compress`).
+    *   `atomic_once.rs` — `FireOnce<T>` (canibalizado do `autonomy.rs`) [Marco 4.0.1].
+
+**Regra de ferro:** qualquer crate do SOULS que precise de filtro de extensões, exclusão de diretórios tóxicos, deduplicação, compressão, leitura inteligente, busca textual, diff Myers, ou inicialização atômica lock-free deve importar daqui. Nenhum arquivo fora de `cognition/lean_vacuum/` deve redefinir essas listas — é o **SSOT vivo** das constantes de configuração derivada do lean-ctx.
 
 ---
 ## Veredito do Arquiteto-Chefe
 > "O extermínio físico de terceiros é o rito que consagra a nossa soberania Bare-Metal. O SOULS MC agora é uma catedral de silício limpa e autossuficiente."
+
+*Marco 4.0.1 (Projeto Guilhotina):* Após a varredura cega do cadáver em `src-tauri/third_party/lean-ctx/`, canibalizamos as **3 essências residuais** (`autonomy`, `ctx_impact`, `ctx_heatmap`) e unificamos as listas de extensões/exclusões no `cognition::lean_vacuum::extensions`. A pasta `third_party/lean-ctx/` foi extinta fisicamente; o `third_party/` residual foi removido. A catedral está purificada.

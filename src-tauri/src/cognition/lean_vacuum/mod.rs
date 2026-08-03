@@ -3,23 +3,31 @@
 // Transmutação pura da "Alma Matemática" do `third_party/lean-ctx/` (cadáver READ-ONLY).
 // Este módulo é 100% nativo: zero dependência de `rmcp`, `axum`, `ratatui`, `crossterm`,
 // `lettre`, `jsonwebtoken`, `rten`, `tokio-postgres` ou qualquer toxidade do cadáver.
+//
+// Marco 4.0.1 (Projeto Guilhotina): adicionados `atomic_once` (transplante
+// do padrão CAS do `autonomy.rs`) e `extensions` (transplante unificado
+// das listas de `ctx_heatmap.rs` + `search.rs`).
 
 use std::path::Path;
 
 pub mod ansi_filter;
+pub mod atomic_once;
 pub mod dedup;
 pub mod dot_flatten;
+pub mod extensions;
 pub mod myers_diff;
 pub mod search;
 pub mod smart_read;
 pub mod text_compress;
 
 pub use ansi_filter::{ansi_density, strip_ansi};
+pub use atomic_once::FireOnce;
 pub use dedup::{
     clear_session_cache, clear_session_dedup_cache, deduplicate_blocks, deduplicate_blocks_session,
     SESSION_DEDUP_CACHE,
 };
 pub use dot_flatten::dot_flatten;
+pub use extensions::{is_excluded_dir, is_source_ext, EXCLUDE_DIRS, SOURCE_EXTENSIONS};
 pub use myers_diff::myers_diff;
 pub use search::{format_lean_notation, search_lean, SearchMatch};
 pub use smart_read::{count_tokens, smart_read_text};
