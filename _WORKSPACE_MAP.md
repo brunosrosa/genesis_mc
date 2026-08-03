@@ -23,7 +23,7 @@ description: SOULS Workspace Map & Territorial Governance (Canon v5.1 - Revisado
 - `.vscode/` -> Perfis de workspace, tarefas e debugger local.
 
 ### [ZONA 2: ESTADO DA MÁQUINA E CACHE] *(Ignorados no Git Principal)*
-- `.souls_data/` -> [L2/L3 Memory] SQLite transacional (`souls_state.db` / `souls_heuristic_vault.db`) e LanceDB vetorial.
+- `.souls_data/` -> [L2/L3 Memory] SQLite transacional (`souls_state.db` / `souls_heuristic_vault.db`) e LanceDB vetorial. **Nota Marco 3.9.2:** `souls_heuristic_vault.db` é **auto-curativo** — `Connection::open` (rusqlite) recria o arquivo se ausente, e `ensure_repo_heuristics_schema` materializa a tabela `repo_heuristics` (84 colunas) on first use. Tabelas `kanban_tasks` e `weevolve_learnings` foram migradas para `souls_state.db` V5 (PRD `souls-mc-rebranding-and-state-prd.md`).
 - `.souls_cache/` -> Chunks temporários, hashes de arquivos e tokens.
 - `.souls_sandbox/` -> Sandboxing para execução segura de módulos externos.
 - `.souls_scratchpad/reports/` -> **OBRIGATÓRIO:** Destino exclusivo de outputs textuais da IA (Ex: os relatórios de execução `_PHASE_REPORT_...txt`).

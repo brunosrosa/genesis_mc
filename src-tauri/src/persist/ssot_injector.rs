@@ -229,6 +229,26 @@ impl SsotInjector {
         out
     }
 
+    /// Abre (ou cria) a conexão com o `souls_heuristic_vault.db`.
+    ///
+    /// **Auto-Curativo (Marco 3.9.2):** `Connection::open` (rusqlite) cria o
+    /// arquivo vazio se não existir, e `ensure_repo_heuristics_schema` é
+    /// invocado em todos os call sites (13 em `ssot_injector.rs` + 4 em
+    /// `cognition/synthesizer.rs` + 3 binários f0/f3/f5) antes de qualquer
+    /// `SELECT` ou `INSERT`, materializando a tabela `repo_heuristics` via
+    /// `CREATE TABLE IF NOT EXISTS`.
+    ///
+    /// **Por que ainda existe este DB separado?** A PRD
+    /// `souls-mc-rebranding-and-state-prd.md` migrou `kanban_tasks` e
+    /// `weevolve_learnings` do vault para o `souls_state.db` (V5), mas
+    /// `repo_heuristics` (84 colunas) ficou intencionalmente no vault
+    /// legado para evitar regressão no Harvester/Synthesizer. Esta função
+    /// é o ÚNICO ponto de entrada canônico para o vault.
+    ///
+    /// **Não mover esta função para `souls_state.db` sem:** (1) migrar a
+    /// tabela `repo_heuristics` inteira, (2) atualizar 13+ call sites,
+    /// (3) reescrever `try_load_repo_heuristics_row` para o novo schema.
+    /// Trabalho de Marco futuro, não do 3.9.2.
     pub(crate) fn open_vault_connection() -> Result<Connection, SsotError> {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let root_dir = std::path::Path::new(manifest_dir)
