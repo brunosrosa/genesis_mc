@@ -1,7 +1,7 @@
 # Design — Marco 3.9 Fase E: Persistência Socrática (Souls State V5)
 
 > Documento de design arquitetural para o Marco 3.9 Fase E.
-> Referência normativa: [ADR-045](docs/adrs/ADR-045-Persistencia-da-Alma-Socratica.md).
+> Referência normativa: [ADR-045](docs/decisions/adrs/ADR-045-Persistencia-da-Alma-Socratica.md).
 
 ## 1. Topologia FinOps
 

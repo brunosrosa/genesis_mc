@@ -17,7 +17,7 @@ target_release: "Souls MC V6.1"
 - **v0.2 (2026-07-16):** Adiciona seção **PRDs Parcialmente Implementados** mapeando quais hipóteses já foram **endereçadas por construção** pelos PRDs 033/042/043/044 entregues nos ciclos subsequentes. Diagnóstico precisa ser recalibrado: algumas hipóteses podem ter sido **resolvidas** sem que a Fase 0 (queries SQL) tenha rodado.
 
 ## Contexto
-A [Auditoria Qualitativa (spec-040)](file:///Z:/souls_mc/docs/specs/spec-040-auditoria-qualitativa-blos.md) executada sobre os 7.221 pares `(repo_id, artifact_type)` no SQLite revelou que **3 dos 11 blobs têm mediana de ~100 bytes**, o que caracteriza **placeholders sistemáticos**:
+A [Auditoria Qualitativa (spec-040)](file:///Z:/souls_mc/docs/decisions/specs/spec-040-auditoria-qualitativa-blos.md) executada sobre os 7.221 pares `(repo_id, artifact_type)` no SQLite revelou que **3 dos 11 blobs têm mediana de ~100 bytes**, o que caracteriza **placeholders sistemáticos**:
 
 | Blob | Mediana | Min | Max | Diagnóstico |
 |---|---:|---:|---:|---|
@@ -25,7 +25,7 @@ A [Auditoria Qualitativa (spec-040)](file:///Z:/souls_mc/docs/specs/spec-040-aud
 | `blob_08_health_report` | 102 | 76 | 429.919 | 720/721 repos = placeholder (trailbase é o único rico) |
 | `blob_11_ux_contracts` | 63 | 30 | 164.379 | Maioria = placeholder (alguns repos com UI real) |
 
-A meta da "Fotografia Completa (Zero Truncamento)" do [ADR-031 §2](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) está sendo violada em escala: 720 dos 721 repos têm blobs 06/08/11 como **esqueletos de placeholder**, não como extração real. Isso **não é** violação formal da Lei IV (o conteúdo gravado é "100% verdade" do ponto de vista do payload — placeholder é o conteúdo), mas **é** violação do espírito do ADR-031: a IA das Fases 2-3 recebe um esqueleto vazio, não uma fotografia.
+A meta da "Fotografia Completa (Zero Truncamento)" do [ADR-031 §2](file:///Z:/souls_mc/docs/decisions/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) está sendo violada em escala: 720 dos 721 repos têm blobs 06/08/11 como **esqueletos de placeholder**, não como extração real. Isso **não é** violação formal da Lei IV (o conteúdo gravado é "100% verdade" do ponto de vista do payload — placeholder é o conteúdo), mas **é** violação do espírito do ADR-031: a IA das Fases 2-3 recebe um esqueleto vazio, não uma fotografia.
 
 **Esta spec NÃO é sobre o conteúdo dos payloads (que está em conformidade com a Lei IV)**, mas sobre o **pipeline de extração** que produz esses payloads. Por que 720 dos 721 repos não estão sendo extraídos completamente?
 

@@ -46,7 +46,7 @@ A auditoria de trincheira (laudo 2026-08-01) confirmou que **70% do alicerce fí
 - `DEFAULT_HARD_LIMIT = 5` — teto absoluto por padrão.
 - `HITL_EXTENDED_LIMIT = 7` — teto elástico sob autorização explícita do Arquiteto via `hitl_authorized: true` no payload MCP de `core_think`.
 - Validação server-side pura: nenhuma variável de ambiente, nenhum bypass por flag de boot. O sinal de "liberação" viaja **fim-de-fio** no payload e é validado pelo `ThinkingEngine` antes de cada `push_thought`.
-- Erro tipado: `CognitiveError::OverthinkingThresholdBreached { actual: u32, max: u32 }` — Fail-Closed L7 conforme [ADR-006](file:///z:/souls_mc/docs/adrs/ADR-006-SSOT-Sheets.md).
+- Erro tipado: `CognitiveError::OverthinkingThresholdBreached { actual: u32, max: u32 }` — Fail-Closed L7 conforme [ADR-006](file:///z:/souls_mc/docs/decisions/adrs/ADR-006-SSOT-Sheets.md).
 - Tríade obrigatória no `souls_thinking`: `Regular | Revision | Branching`. Validação de `is_revision=true ⇒ revises_thought.is_some()` (sob `CognitiveError::RevisionWithoutTarget`).
 
 ### 5. Lei do Zero-Dep (Hard Constraint)
@@ -60,7 +60,7 @@ A auditoria de trincheira (laudo 2026-08-01) confirmou que **70% do alicerce fí
 ## Caminhos Físicos da Mutação
 
 ```
-docs/adrs/ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md   [NEW] este arquivo
+docs/decisions/adrs/ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md   [NEW] este arquivo
 src-tauri/src/cognition/mod.rs                                     [EDIT] +2 pub mod
 src-tauri/src/cognition/memory_graph/mod.rs                        [NEW]
 src-tauri/src/cognition/memory_graph/types.rs                      [NEW] Entity, Relation, Observation
@@ -73,7 +73,7 @@ src-tauri/src/cognition/thinking/types.rs                          [NEW] Thought
 src-tauri/src/cognition/thinking/errors.rs                         [NEW] ThinkingError (estende CognitiveError)
 src-tauri/src/cognition/thinking/state_machine.rs                  [NEW] ThinkingEngine + disjuntor
 src-tauri/src/bin/souls_mcp_server.rs                              [EDIT] migração V2, tools/list, handle_mcp, testes
-docs/state/SODA_CURRENT_STATE.md                                   [EDIT] Marco 3.5 → Ativo
+docs/observability/state/SODA_CURRENT_STATE.md                                   [EDIT] Marco 3.5 → Ativo
 ```
 
 ## Consequências Operacionais (Trade-offs)

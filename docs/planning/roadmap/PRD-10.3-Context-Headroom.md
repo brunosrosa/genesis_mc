@@ -4,7 +4,7 @@
 **Módulo:** Gateway Tokio HTTP/Proxy (`souls-router`, `souls-ccr` / `headroom_engine.rs`)  
 **Target Hardware:** NVIDIA RTX 2060 Mobile (6.0 GB VRAM) + Intel i9 (Host RAM)  
 **Arquitetura:** Rust Nativo (Tokio Async Runtime, Zero-Copy `Cow<'a, str>`, `tree-sitter` AST, `simd-json`, `dashmap::DashMap`)  
-**Rastreabilidade ADR:** [ADR-037](file:///z:/souls_mc/docs/adrs/ADR-037-Gestao-Dinamica-Contexto-CCR.md)
+**Rastreabilidade ADR:** [ADR-037](file:///z:/souls_mc/docs/decisions/adrs/ADR-037-Gestao-Dinamica-Contexto-CCR.md)
 
 ---
 
@@ -21,7 +21,7 @@ O objetivo é implementar no Gateway Tokio Rust do SOULS:
 
 ## 2. Rastreabilidade Arquitetural
 
-Este PRD deriva diretamente das Leis Inegociáveis estabelecidas no [ADR-037: Gestão Dinâmica de Contexto e Compressão Reversível (CCR)](file:///z:/souls_mc/docs/adrs/ADR-037-Gestao-Dinamica-Contexto-CCR.md).
+Este PRD deriva diretamente das Leis Inegociáveis estabelecidas no [ADR-037: Gestão Dinâmica de Contexto e Compressão Reversível (CCR)](file:///z:/souls_mc/docs/decisions/adrs/ADR-037-Gestao-Dinamica-Contexto-CCR.md).
 
 - **Princípio Bare-Metal:** Proibição absoluta de modelos PyTorch, ONNX, ModernBERT, wrappers Python (PyO3) ou persistência SQLite no caminho crítico de mediação do Gateway HTTP.
 - **Zero VRAM Footprint:** A totalidade dos buffers de resgate e tabelas de hash reside na memória RAM principal do computador (CPU Host).

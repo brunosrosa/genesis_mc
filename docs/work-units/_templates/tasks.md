@@ -1,7 +1,7 @@
 ---
 spec: v4-engines-mocks-and-compression-stubs
 phase: 3-tasks
-design: docs/fixes/design.md
+design: docs/work-units/_templates/design.md
 branch: fix/v4-engines-mocks-and-compression-stubs
 ---
 

@@ -40,5 +40,5 @@ Sempre que for invocado para pesquisar fundamentos da arquitetura ou atualizar a
 2. Isola o ID do caderno canônico.
 3. Invoca `notebook_get` e varre a array de fontes. Identifica o ID da fonte "ADR_Grafos_KuzuDB_Obsoleto.md".
 4. Executa a faxina: `source_delete(notebook_id, source_id)`.
-5. Injeta o novo estado da arte: `source_add(notebook_id, file_path: "docs/adrs/ADR_LadybugDB.md")`.
+5. Injeta o novo estado da arte: `source_add(notebook_id, file_path: "docs/decisions/adrs/ADR_LadybugDB.md")`.
 6. Retorna silenciosamente no Canvas: *-> Higiene Semântica concluída. ADR antigo expurgado e a nova SSOT do LadybugDB foi cimentada na nuvem. Fechando conexão RPC.*

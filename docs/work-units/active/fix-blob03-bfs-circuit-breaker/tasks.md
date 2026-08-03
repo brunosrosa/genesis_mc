@@ -1,7 +1,7 @@
 # Tasks — Disjuntores BFS no `repo_radar` (Resgate blob_03)
 
 > Branch: `fix/blob03-bfs-circuit-breaker`
-> Pai do design: [docs/fixes/blob03-bfs-circuit-breaker/design.md](file:///Z:/souls_mc/docs/fixes/blob03-bfs-circuit-breaker/design.md)
+> Pai do design: [docs/work-units/active/fix-blob03-bfs-circuit-breaker/design.md](file:///Z:/souls_mc/docs/work-units/active/fix-blob03-bfs-circuit-breaker/design.md)
 > DoD global: `cargo check` exit 0 + `cargo test repo_radar::tests` exit 0 + 0 regressão nos 5 callers.
 
 ---

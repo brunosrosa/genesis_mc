@@ -1,7 +1,7 @@
 # Marco 3.7 — Fase B: Observabilidade Cognitiva (Tasks)
 
 **Branch:** `feat/observability-v1`
-**ADR:** [ADR-043](docs/adrs/ADR-043-Observabilidade-Cognitiva-Sensorial.md)
+**ADR:** [ADR-043](docs/decisions/adrs/ADR-043-Observabilidade-Cognitiva-Sensorial.md)
 **Modo de Validacao:** Marcha Rapida (Fast Pass) — `cargo test --bin souls_mcp_server`
 
 ---
@@ -64,7 +64,7 @@
 
 - [ ] Rodar `cargo test --bin souls_mcp_server` → todos os testes verdes (legado + 4 novos).
 - [ ] Rodar `cargo clippy --bin souls_mcp_server -- -D warnings` → sem warnings.
-- [ ] Atualizar `docs/state/SODA_CURRENT_STATE.md` com a entrada do Marco 3.7.
+- [ ] Atualizar `docs/observability/state/SODA_CURRENT_STATE.md` com a entrada do Marco 3.7.
 - [ ] Sanity check: `git grep "todo!\|unimplemented!\|not_implemented_yet:.*Heatmap\|not_implemented_yet:.*Impact\|not_implemented_yet:.*Routes\|not_implemented_yet:.*Feedback"` retorna 0 matches em codigo novo.
 
 ---

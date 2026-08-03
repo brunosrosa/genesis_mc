@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
         "--reports-dir",
         type=Path,
         default=default_reports,
-        help="Diretorio de saida dos relatorios TXT. Default = raiz/docs/audits/blobs",
+        help="Diretorio de saida dos relatorios TXT. Default = raiz/docs/observability/audits/blobs",
     )
     parser.add_argument(
         "--repo-ids",

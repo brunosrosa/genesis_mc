@@ -108,8 +108,8 @@ flowchart TB
 | Arquivo | Mudança | Linhas |
 |---|---|---|
 | [src-tauri/src/harvester/repo_radar.rs](file:///Z:/souls_mc/src-tauri/src/harvester/repo_radar.rs) | +1 const, +3 linhas de disjuntor no `WalkBuilder`, +contador + break no loop, +3 testes | +124 |
-| [docs/fixes/blob03-bfs-circuit-breaker/design.md](file:///Z:/souls_mc/docs/fixes/blob03-bfs-circuit-breaker/design.md) | (este doc) | novo |
-| [docs/fixes/blob03-bfs-circuit-breaker/tasks.md](file:///Z:/souls_mc/docs/fixes/blob03-bfs-circuit-breaker/tasks.md) | Trilha TDD + DoD | novo |
+| [docs/work-units/active/fix-blob03-bfs-circuit-breaker/design.md](file:///Z:/souls_mc/docs/work-units/active/fix-blob03-bfs-circuit-breaker/design.md) | (este doc) | novo |
+| [docs/work-units/active/fix-blob03-bfs-circuit-breaker/tasks.md](file:///Z:/souls_mc/docs/work-units/active/fix-blob03-bfs-circuit-breaker/tasks.md) | Trilha TDD + DoD | novo |
 
 **Nenhum** dos 5 callers foi tocado. Disjuntor é transparente para eles.
 

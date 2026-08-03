@@ -34,10 +34,10 @@ A estrutura de pastas é uma barreira de proteção. O Agente é **proibido** de
 * `.souls_sandbox/`: **Isolamento.** Ambientes para execução não confiável de código de terceiros.
 
 ### 2.2. A Fortaleza Documental (`docs/`)
-* `docs/adrs/`: **O Por Quê.** Architecture Decision Records.
-* `docs/dags/`: **O Como.** Grafos Acíclicos Dirigidos determinando fluxos de dados (ex: `DAG_fase_0_design_phase1.md`).
-* `docs/prds/`: **A Execução.** Tarefas atômicas de TDD. Arquivos em andamento ficam na raiz, finalizados (Exit Code 0) migram para `docs/prds/archive/`.
-* `docs/state/`: **O Agora.** A "Foto do Momento" (`SOULS_CURRENT_STATE.md`) para o Agente sincronizar o contexto sem ler arquivos defasados.
+* `docs/decisions/adrs/`: **O Por Quê.** Architecture Decision Records.
+* `docs/runtime/dags/`: **O Como.** Grafos Acíclicos Dirigidos determinando fluxos de dados (ex: `DAG_fase_0_design_phase1.md`).
+* `docs/planning/prds/`: **A Execução.** Tarefas atômicas de TDD. Arquivos em andamento ficam na raiz, finalizados (Exit Code 0) migram para `docs/planning/prds/.archive/`.
+* `docs/observability/state/`: **O Agora.** A "Foto do Momento" (`SOULS_CURRENT_STATE.md`) para o Agente sincronizar o contexto sem ler arquivos defasados.
 
 ### 2.3. A Fundação Bare-Metal (Código de Produção)
 * `src-tauri/src/core/` & `src-tauri/src/harvester/`: Motores de negócio em Rust puro.

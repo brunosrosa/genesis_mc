@@ -12,7 +12,7 @@ description: "Emenda Constitucional 32/120 + Servername Soberano 'souls_mcp': in
 # ADR-041 — Nomenclatura Soberana & Servername `souls_mcp` (Emenda Constitucional 32/120)
 
 ## Status
-Aceito (Ativo e Inegociavel). Emenda parcial da [ADR-026](docs/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) (revoga §1 sobre o nome de servidor `souls` e fixa o nome canonico `souls_mcp`).
+Aceito (Ativo e Inegociavel). Emenda parcial da [ADR-026](docs/decisions/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) (revoga §1 sobre o nome de servidor `souls` e fixa o nome canonico `souls_mcp`).
 
 ## Contexto
 A ADR-026 instituiu a **Lei Zero-Brand** e fixou o servidor atomico `souls` para evitar nomes acoplados a marcas. Com a chegada do **Roteador Semantico ParetoBandit** e a previsao de 50+ ferramentas, a cerca perimetrica do Roteador (distincao nativo vs terceiro) precisa de um **radical unico e inequivoco** no servername. Alem disso, o crescimento das tools exige tetos dimensionais para impedir a hemorragia FinOps (cada caractere e token) e a quebra de clientes MCP com limites de exibicao < 60 chars.
@@ -49,7 +49,7 @@ Fica **revogada parcialmente** a §1 da ADR-026 (que fixava o servername como `s
 * **`gateway-config.yaml`:** Trocar `targets[0].name = "souls"` para `"souls_mcp"`. Adicionar target alias `souls` apontando para o mesmo binario (backward compat).
 * **`.trae/rules/project_rules.md`:** Adicionar §5 (Lei do Servername Soberano + tetos 32/120).
 * **`.agents/skills/**/SKILL.md`:** **Zero mutacao obrigatoria** (canibalizacao preservada). Search and Replace cirurgico apenas se alguma Skill invocar `souls.server` em vez de `souls_mcp.server`.
-* **`docs/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt`:** Re-snapshot via `docs/scripts/souls_context_dumps_compiler.py`.
+* **`docs/runtime/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt`:** Re-snapshot via `docs/runtime/scripts/souls_context_dumps_compiler.py`.
 
 ## Metricas de Sucesso
 * `git grep "serverInfo.*souls\""` retorna 0 matches (substituido por `souls_mcp`).

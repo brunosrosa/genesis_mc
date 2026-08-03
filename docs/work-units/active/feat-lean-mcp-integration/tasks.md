@@ -8,8 +8,8 @@
 ## T0 — Atualizar SDD (W1)
 
 **Arquivos:**
-- `docs/features/feat-lean-mcp-integration/design.md` (Fase 3)
-- `docs/features/feat-lean-mcp-integration/tasks.md` (este arquivo)
+- `docs/work-units/active/feat-lean-mcp-integration/design.md` (Fase 3)
+- `docs/work-units/active/feat-lean-mcp-integration/tasks.md` (este arquivo)
 
 ### T0.1 — DoD
 - [x] `design.md` contém diagrama Mermaid da Canibalização Tipo A.

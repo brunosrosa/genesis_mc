@@ -17,7 +17,7 @@ target_release: "Souls MC V6.1"
 - **v0.2 (2026-07-16):** Adiciona **7 novas dimensões de scoring** derivadas dos PRDs entregues nos ciclos 042-047. As dimensões originais continuam válidas; as novas permitem **discriminar** sinais que a v0.1 colapsava (ex: `tamanho_sadio` não distinguia "manifest com version_spec" de "manifest cru").
 
 ## Contexto
-O F0 Harvester extrai 11 artefatos por repositório (ver [ADR-031 §4](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md)) e os persiste em `artefatos_brutos.payload_blob`. O SQLite contém **150+ runs históricas** (uma por repo) para os blobs 06 e 08, e algumas dezenas para outros. A maioria dos runs vem de execuções **pré-rebrand** (placeholder mínimo, ~100-500 bytes) e apenas `trailbaseio/trailbase` tem run pós-rebrand com payload rico.
+O F0 Harvester extrai 11 artefatos por repositório (ver [ADR-031 §4](file:///Z:/souls_mc/docs/decisions/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md)) e os persiste em `artefatos_brutos.payload_blob`. O SQLite contém **150+ runs históricas** (uma por repo) para os blobs 06 e 08, e algumas dezenas para outros. A maioria dos runs vem de execuções **pré-rebrand** (placeholder mínimo, ~100-500 bytes) e apenas `trailbaseio/trailbase` tem run pós-rebrand com payload rico.
 
 **Não temos visibilidade sistêmica** sobre quais blobs são consistentemente fracos. Cada análise feita até hoje foi **ad-hoc, repo a repo**. Esta spec define o instrumento de medida que fecha essa lacuna e serve de **gating decision** para spec-037, spec-038 e spec-039.
 
@@ -61,8 +61,8 @@ score_final = clamp(0, 100, Σ(peso_dim × score_dim × 0.74))
 3. Identificar os **top-N piores casos** (score < 50) para inspeção manual.
 4. Detectar violações da Lei IV (ADR-031), de rebrand (Spec-036) e de slop em escala.
 5. Gerar **2 artefatos** consumíveis:
-   - `docs/audits/quality/_QUALITY_SCORES.md` (human-readable)
-   - `docs/audits/quality/_QUALITY_SCORES.json` (machine-readable)
+   - `docs/observability/audits/quality/_QUALITY_SCORES.md` (human-readable)
+   - `docs/observability/audits/quality/_QUALITY_SCORES.json` (machine-readable)
 6. **Gating decision:** os resultados deste spec determinam se spec-037, spec-038 e spec-039 devem ser executados, pausados ou reescritos.
 
 ## Não-Objetivos
@@ -75,9 +75,9 @@ score_final = clamp(0, 100, Σ(peso_dim × score_dim × 0.74))
 ## Definição de Pronto (DoD)
 
 ### Pré-condições (TDD Red — validação humana)
-- [ ] Script `docs/scripts/audit_blob_quality.py` criado e testado em modo `--help` (sai sem erro).
+- [ ] Script `docs/runtime/scripts/audit_blob_quality.py` criado e testado em modo `--help` (sai sem erro).
 - [ ] Smoke test manual: rodar script com `--repo-allowlist trailbaseio/trailbase` e confirmar que produz 11 scores (1 por blob).
-- [ ] Os 2 artefatos (`_QUALITY_SCORES.md` e `_QUALITY_SCORES.json`) são gerados em `docs/audits/quality/`.
+- [ ] Os 2 artefatos (`_QUALITY_SCORES.md` e `_QUALITY_SCORES.json`) são gerados em `docs/observability/audits/quality/`.
 
 ### Implementação (TDD Green)
 - [ ] 8 dimensões de scoring implementadas com pesos:
@@ -142,13 +142,13 @@ Após executar o audit, os outros 3 specs são revisados:
 | Usuário roda o script esperando JSON mas recebe MD (ou vice-versa) | Baixa | Baixo | Ambos são gerados sempre; sumário no stdout deixa claro |
 
 ## Rollback
-Se o audit revelar problemas graves (ex: violações de Lei IV > 50%), **não há rollback** — o audit é read-only. Os artefatos gerados são `docs/audits/quality/_QUALITY_SCORES.{md,json}` e podem ser apagados sem efeito colateral. As decisões tomadas com base nele são registradas no `project_memory.md` (L2) para auditoria futura.
+Se o audit revelar problemas graves (ex: violações de Lei IV > 50%), **não há rollback** — o audit é read-only. Os artefatos gerados são `docs/observability/audits/quality/_QUALITY_SCORES.{md,json}` e podem ser apagados sem efeito colateral. As decisões tomadas com base nele são registradas no `project_memory.md` (L2) para auditoria futura.
 
 ## Sequência de Execução
 
-1. **Fase 1 — Geração de Instrumento:** este spec + `docs/scripts/audit_blob_quality.py` (escritos; sujeito a revisão do Arquiteto).
-2. **Fase 2 — Smoke Test:** Arquiteto roda `python docs/scripts/audit_blob_quality.py --repo-allowlist trailbaseio/trailbase` para validar output.
-3. **Fase 3 — Full Run:** Arquiteto roda `python docs/scripts/audit_blob_quality.py` (todos os 150+ repos).
+1. **Fase 1 — Geração de Instrumento:** este spec + `docs/runtime/scripts/audit_blob_quality.py` (escritos; sujeito a revisão do Arquiteto).
+2. **Fase 2 — Smoke Test:** Arquiteto roda `python docs/runtime/scripts/audit_blob_quality.py --repo-allowlist trailbaseio/trailbase` para validar output.
+3. **Fase 3 — Full Run:** Arquiteto roda `python docs/runtime/scripts/audit_blob_quality.py` (todos os 150+ repos).
 4. **Fase 4 — Análise Conjunta:** Arquiteto e Agente revisam `_QUALITY_SCORES.md` juntos, decidem gating decision.
 5. **Fase 5 — Replanejamento:** specs 037/038/039 são editados conforme a matriz de gating acima. Promoção de `Draft` para `Aprovado` é feita após o audit, não antes.
 

@@ -28,7 +28,7 @@ CRITICAL: É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read,
 O Agent Gateway exportado para clientes MCP chama-se **`souls_mcp`** (não `souls`). Toda ferramenta dentro de `souls_mcp.*` é, por construção, **nativa, local-first e segura do SODA** — cerca perimétrica transferida do toolname para o servername (1 lookup O(1) no Roteador Semântico).
 
 **Leis Duras de Nomenclatura (vinculantes):**
-- **Servername:** estritamente `souls_mcp` ([ADR-041](docs/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md)). Emenda da [ADR-026](docs/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) §1.
+- **Servername:** estritamente `souls_mcp` ([ADR-041](docs/decisions/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md)). Emenda da [ADR-026](docs/decisions/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) §1.
 - **Teto de Nome (tool):** ≤ **32 caracteres**.
 - **Teto de Descrição (tool):** ≤ **120 caracteres**, seca, técnica, sem "slop" de marketing.
 - **Canibalização preservada:** tools já canibalizadas (`get_ast`, `read`, `mem_search`, `core_think`) **mantêm nomes curtos** (Zero-Brand da ADR-026 §2-4). Apenas tools novas com ambiguidade semântica podem opcionalmente adotar prefixo `souls_`.

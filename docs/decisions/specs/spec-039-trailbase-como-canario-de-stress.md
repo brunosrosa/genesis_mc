@@ -61,18 +61,18 @@ A v0.2 transforma o trailbase em **canário de regressão**: o F0 **deve** rodar
 - [ ] Critérios de aceite **validados empiricamente** com 1 rodada do audit sobre os 3 repos.
 
 ### Implementação (TDD Green)
-- [ ] Documento `docs/state/CANARY_REPOS.md` (novo) com:
+- [ ] Documento `docs/observability/state/CANARY_REPOS.md` (novo) com:
   - Lista dos 3 repos canários (trailbase + happy + zero-hotspots)
   - Justificativa de cada escolha
   - Critérios de aceite específicos por repo
-- [ ] Script `docs/scripts/run_canary.sh` (POSIX) ou `docs/scripts/run_canary.ps1` (Windows) que:
+- [ ] Script `docs/runtime/scripts/run_canary.sh` (POSIX) ou `docs/runtime/scripts/run_canary.ps1` (Windows) que:
   1. Roda F0 sobre os 3 repos em sequência (sequencial, não paralelo, para isolar falhas)
   2. Aguarda cada um completar (sem timeout cego — Lei II)
   3. Roda `audit_blob_quality.py` sobre os 33 blobs resultantes
   4. Falha (exit 1) se qualquer critério for violado
   5. Imprime sumário no stdout com cores ANSI (verde/amarelo/vermelho)
 - [ ] Integração no pipeline de release (`.github/workflows/release.yml` ou equivalente): o canário **deve** passar antes de taggear uma release.
-- [ ] Métricas baseline por repo registradas em `docs/state/CANARY_BASELINES.json`:
+- [ ] Métricas baseline por repo registradas em `docs/observability/state/CANARY_BASELINES.json`:
   - `trailbaseio/trailbase`: scores esperados por blob (do primeiro audit)
   - `tokio-rs/mio`: scores esperados
   - `rust-lang/rust`: scores esperados
@@ -83,7 +83,7 @@ A v0.2 transforma o trailbase em **canário de regressão**: o F0 **deve** rodar
 - [ ] Modificar intencionalmente 1 linha do Harvester que sabidamente piora o F0. Confirmar que o canário **detecta a regressão** e exit 1.
 - [ ] Reverter a modificação. Confirmar que o canário volta a passar.
 - [ ] `cargo check` + `pytest` exit 0.
-- [ ] Documento `docs/state/CANARY_RUNS.md` (log) com os 3 últimos runs do canário.
+- [ ] Documento `docs/observability/state/CANARY_RUNS.md` (log) com os 3 últimos runs do canário.
 
 ## Critérios de Aceite Mensuráveis (por repo)
 
@@ -163,7 +163,7 @@ A v0.2 foi escrita assumindo que o F0 entregaria blobs em formato "raw" e que o 
 - **PRD-045 (`manifest_version_spec_annotation`)** — em [src-tauri/src/harvester/extract.rs](file:///Z:/souls_mc/src-tauri/src/harvester/extract.rs). `extract_manifest_block` agora ordena alfabeticamente e anexa `version_spec` (ex: `serde 1.0`) em vez de apenas `- serde`. **Implicação:** o `Dumb-LLM Test` agora passa para LLM 3B no `blob_02` — o canário precisa incluir um teste de "LLM 3B consegue listar as 5 maiores deps" como gate de aceite.
 - **PRD-033 (`deduplicate_forensic_diagnostics`)** — em [src-tauri/src/harvester/sast/mod.rs](file:///Z:/souls_mc/src-tauri/src/harvester/sast/mod.rs). Colapsa 32+ erros idênticos de `libsqlite3-sys` em 1 entrada canônica. **Implicação direta:** o `blob_08` do trailbase deixa de ter 245KB de ruído e cai para < 60KB. O critério `score ≥ 50` (linha 92) está **subdimensionado** — a qualidade real agora permite ≥ 80.
 
-**Ação obrigatória antes de promover v0.3 → v0.4:** rodar F0 sobre trailbase com os PRDs 042/043/045/033 ativos e gerar **novos baselines** em `docs/state/CANARY_BASELINES.json`. Os limites da v0.2 ficam como **piso mínimo**; os novos valores serão empíricos.
+**Ação obrigatória antes de promover v0.3 → v0.4:** rodar F0 sobre trailbase com os PRDs 042/043/045/033 ativos e gerar **novos baselines** em `docs/observability/state/CANARY_BASELINES.json`. Os limites da v0.2 ficam como **piso mínimo**; os novos valores serão empíricos.
 
 ## Nota para o Futuro
 Quando o F0 amadurecer o suficiente para que os critérios de aceite pareçam "fáceis demais", isso é um sinal de que o canário está saturado. Subir os limites (ex: `score ≥ 90` em vez de `≥ 60`) ou adicionar um quarto canário. O canário deve ser **desafiador**, nunca confortável.

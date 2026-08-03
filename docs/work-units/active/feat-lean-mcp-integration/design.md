@@ -215,7 +215,7 @@ fn stub_not_implemented_yet(tool_name: &str) -> Value {
 
 | Worker | Tarefa | Escopo | DoD |
 |---|---|---|---|
-| **W1** | Atualizar SDD (T0) | `docs/features/feat-lean-mcp-integration/{design,tasks}.md` | Markdown coerente com Fase 3 |
+| **W1** | Atualizar SDD (T0) | `docs/work-units/active/feat-lean-mcp-integration/{design,tasks}.md` | Markdown coerente com Fase 3 |
 | **W2** | Criar `lean_vacuum/` (T1) | `src/cognition/lean_vacuum/{mod,dot_flatten,ansi_filter,myers_diff,text_compress}.rs` | `cargo check --lib` Exit 0 + 6 testes passando |
 | **W3** | Transplante das 2 vitais (T2) | `src/bin/souls_mcp_server.rs` — `souls_read` + `souls_delta_diff` | `cargo check --bin souls_mcp_server` Exit 0 |
 | **W4** | Stubs renomeados (T3) | `src/bin/souls_mcp_server.rs` — 15 stubs | `grep "STUB:" /dev/null` retorna vazio |

@@ -8,7 +8,7 @@
 
 ## T-1: ADR-045 + design.md
 
-**Arquivos:** `docs/adrs/ADR-045-Persistencia-da-Alma-Socratica.md`, `docs/design-marco-3.9-e.md`
+**Arquivos:** `docs/decisions/adrs/ADR-045-Persistencia-da-Alma-Socratica.md`, `docs/design-marco-3.9-e.md`
 
 **DoD:**
 - [x] ADR-045 escrito com Constituição Sintática completa (Lei 32/120, O(n) reconstruction, FK CASCADE, last-write-wins).

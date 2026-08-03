@@ -1,7 +1,7 @@
 # Design — Marco 3.8 Fase C.2: Enjaulamento Wasmtime do Tree-Sitter
 
 > Documento de design arquitetural para o Marco 3.8 Fase C.2.
-> Referência normativa: [ADR-044](docs/adrs/ADR-044-Enjaulamento-Wasmtime-Tree-Sitter.md).
+> Referência normativa: [ADR-044](docs/decisions/adrs/ADR-044-Enjaulamento-Wasmtime-Tree-Sitter.md).
 > Regido pelo protocolo BMAD + SDD + TDD (Red-Green-Refactor).
 
 ## 1. Topologia FinOps

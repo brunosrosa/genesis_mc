@@ -11,7 +11,7 @@ description: "Implementa a janela deslizante de 5 linhas com hash DefaultHasher 
 # ADR-042 — Compressão Reversível CCR & Conveyor Belt de Contexto (Marco 3.6)
 
 ## Status
-Aceito (Ativo e Inegociável). Emenda construtiva da [ADR-037](docs/adrs/ADR-037-Gestao-Dinamica-Contexto-CCR.md) §3 (Paradigma CCR) e compatibiliza com a Cerca Perimétrica de Servername Soberano da [ADR-041](docs/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md).
+Aceito (Ativo e Inegociável). Emenda construtiva da [ADR-037](docs/decisions/adrs/ADR-037-Gestao-Dinamica-Contexto-CCR.md) §3 (Paradigma CCR) e compatibiliza com a Cerca Perimétrica de Servername Soberano da [ADR-041](docs/decisions/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md).
 
 ## Contexto
 A ADR-037 instituiu o Paradigma CCR (Compress-Cache-Retrieve) com `dashmap::DashMap<[u8; 16], Bytes>` indexado por hash BLAKE3/MD5 de 16 bytes, mas a implementação efetiva da janela deslizante e da rehidratação lossless ainda não havia sido canibalizada para Rust nativo. O `lean_vacuum::dedup` (Marco 3) implementa uma variante cross-file que descarta o bloco original (apenas metadata de localização), o que é **destrutivo** e **não-rehidratável**: o LLM recebe um marcador que aponta para `file L1-L5` mas o conteúdo original se perde.
@@ -176,7 +176,7 @@ output: texto expandido (lossless)
   - *Mitigação:* Greedy exige que **todo o bloco estendido** seja idêntico (não apenas a janela de 5). Conflito residual é capturado pelo teste `test_multi_read_concurrency_and_compression` (3 arquivos, blocos sobrepostos).
 
 ## Blast Radius
-- **`docs/adrs/ADR-042-...md`:** NOVO. Este documento.
+- **`docs/decisions/adrs/ADR-042-...md`:** NOVO. Este documento.
 - **`src-tauri/src/cognition/context_compression/`:** NOVO diretório (mod.rs, types.rs, dedup.rs, multi_read.rs).
 - **`src-tauri/src/cognition/mod.rs`:** +1 linha (`pub mod context_compression;`).
 - **`src-tauri/src/bin/souls_mcp_server.rs`:** +2 tools no `tools/list`, +2 match arms em `handle_tool_call`, +2 funções `run_souls_multi_read` e `run_souls_ccr_fill`, renomeação de `run_souls_fill` → `run_souls_stub_fill`, atualização de 4 tests existentes (de `souls_fill` → `souls_stub_fill`), adição de 4 tests novos.

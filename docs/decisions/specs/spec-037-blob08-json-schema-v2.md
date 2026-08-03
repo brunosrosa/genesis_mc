@@ -37,7 +37,7 @@ Esta spec **NÃO deve ser implementada antes de `spec-040` (Auditoria Qualitativ
 **Status atual:** `Draft_Aguardando_Audit`. Será promovido a `Draft` (executável) após a decisão do gating, ou a `Pausado` se o audit revelar que o problema não é sistêmico.
 
 ## Contexto
-O `blob_08_health_report` é definido pelo [ADR-031 §4](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) como "A Podridão Estrutural": o mesmo motor SAST do `blob_06`, mas com a flag `--skip-formatter`, focado em complexidade ciclomática, código morto e code smells.
+O `blob_08_health_report` é definido pelo [ADR-031 §4](file:///Z:/souls_mc/docs/decisions/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md) como "A Podridão Estrutural": o mesmo motor SAST do `blob_06`, mas com a flag `--skip-formatter`, focado em complexidade ciclomática, código morto e code smells.
 
 A auditoria de validação do Spec-036 (rebrand) revelou que o `blob_08` do trailbase (429.781 bytes) é um **texto-relatório com markers `[DOMAIN:...]`** e não JSON estruturado:
 
@@ -45,7 +45,7 @@ A auditoria de validação do Spec-036 (rebrand) revelou que o `blob_08` do trai
 - 1.184 findings no formato: `- [warning] [opengrep] src/records/read_record.rs :: L191: <rule_id> (WARNING / general-debt) -> <message>`
 - 1 govulncheck info: `- [info] [govulncheck] [INFO] Nenhuma vulnerabilidade...`
 
-Consequência prática: o script `docs/scripts/extract_audit_blobs.py --pretty-json` é **no-op** neste blob. A Lente C (Realidade/Operação) das Fases 2-3 não consegue fazer queries estruturadas (ex: "todos os findings com severidade error e source=opengrep"). Cada consumo é parsing ad-hoc regex.
+Consequência prática: o script `docs/runtime/scripts/extract_audit_blobs.py --pretty-json` é **no-op** neste blob. A Lente C (Realidade/Operação) das Fases 2-3 não consegue fazer queries estruturadas (ex: "todos os findings com severidade error e source=opengrep"). Cada consumo é parsing ad-hoc regex.
 
 ## Leis Aplicáveis
 - **ADR-031 Lei IV (Zero-Byte Uniforme):** o schema v2 não pode mascarar falhas. Se o parsing v2 falhar, o payload deve ser gravado como 0 bytes e a flag `ERRO_F0` deve ser acionada (cross-ref ADR-019).
@@ -57,7 +57,7 @@ Consequência prática: o script `docs/scripts/extract_audit_blobs.py --pretty-j
    - Permita queries estruturadas pelas Lentes B e C.
    - Permita retro-compatibilidade com o schema v1 (texto-relatório) durante a migração.
 2. Implementar um parser Python de validação que rejeite payloads v2 malformados (fail-closed).
-3. Atualizar `docs/scripts/extract_audit_blobs.py` para reconhecer e exibir o schema v2 corretamente.
+3. Atualizar `docs/runtime/scripts/extract_audit_blobs.py` para reconhecer e exibir o schema v2 corretamente.
 
 ## Não-Objetivos
 - Mudar a lâmina SAST (continua sendo OpenGrep + Clippy + Biome com `--skip-formatter`).

@@ -40,7 +40,7 @@ A auditoria de validação do Spec-036 (rebrand) sobre o `blob_08_health_report`
 
 Consequência: a Lente C das Fases 2-3 recebe um relatório massivamente homogêneo. Não consegue distinguir "este repo tem 1.183 unwraps perigosos em código de produção" de "este repo tem 1.183 unwraps em testes inofensivos". O sinal agregado é pobre.
 
-Cross-ref com o [ADR-031 §4 Blob 6 e Blob 8](file:///Z:/souls_mc/docs/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md): a lâmina é `opengrep` com `--skip-formatter` no Blob 8. A mudança proposta é **diversificar as regras** que essa lâmina aplica, mantendo o mesmo motor.
+Cross-ref com o [ADR-031 §4 Blob 6 e Blob 8](file:///Z:/souls_mc/docs/decisions/adrs/ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md): a lâmina é `opengrep` com `--skip-formatter` no Blob 8. A mudança proposta é **diversificar as regras** que essa lâmina aplica, mantendo o mesmo motor.
 
 ## Leis Aplicáveis
 - **ADR-031 Lei I (Radar Global + Poda Universal):** novas regras devem respeitar a exclusão de `tests/`, `mocks/`, minificados, lockfiles (cross-ref ADR-024 §B).

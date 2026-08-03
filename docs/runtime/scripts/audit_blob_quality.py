@@ -9,15 +9,15 @@ e gera 3 visões:
 3. Ranking de piores casos: top-20 (repo, blob) com score < 50
 
 Gera:
-- docs/audits/quality/_QUALITY_SCORES.md (relatório human-readable)
-- docs/audits/quality/_QUALITY_SCORES.json (dados machine-readable)
+- docs/observability/audits/quality/_QUALITY_SCORES.md (relatório human-readable)
+- docs/observability/audits/quality/_QUALITY_SCORES.json (dados machine-readable)
 - stdout: sumário executivo
 
 Implementação: zero dependência externa (só stdlib: sqlite3, re, json, pathlib,
 collections, datetime, statistics). Per ADR-001-Core-Stack-Restrita e Anti-Slop Protocol.
 
 Invocação:
-    python docs/scripts/audit_blob_quality.py [--db-path PATH] [--out-dir PATH]
+    python docs/runtime/scripts/audit_blob_quality.py [--db-path PATH] [--out-dir PATH]
                                               [--top N] [--min-score N]
                                               [--repo-allowlist REPO [REPO ...]]
 """

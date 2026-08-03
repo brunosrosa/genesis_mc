@@ -2,8 +2,8 @@
 # Script determinístico para sanear e documentar o estado de dependências do SOULS.
 
 $manifestPath = "src-tauri/Cargo.toml"
-$cargoStatePath = "docs/audits/crates/_CARGO_TOML_STATE.txt"
-$duplicateDepsPath = "docs/audits/crates/_DUPLICATE_DEPS.txt"
+$cargoStatePath = "docs/observability/audits/crates/_CARGO_TOML_STATE.txt"
+$duplicateDepsPath = "docs/observability/audits/crates/_DUPLICATE_DEPS.txt"
 
 # Cria pasta de estado se não existir
 $stateDir = Split-Path -Parent $cargoStatePath

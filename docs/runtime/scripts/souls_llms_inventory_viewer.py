@@ -6,7 +6,7 @@ Este script atua como um extrator/visualizador de leitura (ETL Phase 3)
 do banco `.souls_data/souls_heuristic_vault.db`, unindo as tabelas `model_registry`
 e `arena_telemetry`.
 
-Objetivo: Gerar um relatório visual em Markdown ('docs/reports/souls_llms_inventory_summary.md')
+Objetivo: Gerar um relatório visual em Markdown ('docs/observability/reports/souls_llms_inventory_summary.md')
 com tabelas ASCII alinhadas, métricas empíricas de TTFT, TPOT, Acurácia Sintática e E3 Score:
     Score E3 = (Acurácia^2) / (Latência Média em segundos + 0.001)
 """
