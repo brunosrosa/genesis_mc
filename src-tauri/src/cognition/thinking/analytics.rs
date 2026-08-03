@@ -4,7 +4,7 @@
 //! [`SocraticThought`]s, sem I/O. Pure functions, fail-closed em
 //! divisão por zero.
 //!
-//! Referência normativa: [ADR-045 §3](../../../../docs/adrs/ADR-045-Persistencia-da-Alma-Socratica.md).
+//! Referência normativa: [ADR-045 §3](../../../../docs/decisions/adrs/ADR-045-Persistencia-da-Alma-Socratica.md).
 
 use crate::cognition::thinking::persistence::{SocraticThought, ThoughtType};
 use serde::Serialize;
