@@ -1686,121 +1686,6 @@ async fn run_callees(params: &serde_json::Map<String, Value>) -> Result<Value, R
 // pensamentos profundos não estourem a stack do host.
 // =============================================================================
 
-/// Helper privado: abre `souls_state.db` em modo leitura+escrita.
-/// Garante que `PRAGMA foreign_keys = ON` para validar FK em tempo de INSERT.
-///
-/// **Marco 3.9 Fase E.2:** `open_socratic_state_db` foi movido para a
-/// `cognition::thinking::handlers` (single source of truth). Esta cópia
-/// aqui é mantida **apenas** para o teste T-bootstrap (que valida a
-/// idempotência de criação do diretório `.souls_data/`).
-#[allow(dead_code)] // Apenas o teste T-bootstrap consome este helper.
-fn open_socratic_state_db() -> Result<Connection, RpcError> {
-    let souls_data_dir = workspace_root().join(".souls_data");
-    // `create_dir_all` é idempotente: se o diretório já existe, retorna
-    // `Ok(())`. Erros reais (permissão, IO) são mapeados para `RpcError`.
-    std::fs::create_dir_all(&souls_data_dir).map_err(|e| RpcError {
-        code: -32000,
-        message: format!(
-            "Falha ao criar diretório .souls_data/ ({}): {e}",
-            souls_data_dir.display()
-        ),
-        data: None,
-    })?;
-    let db_path = souls_data_dir.join("souls_state.db");
-    let conn = Connection::open_with_flags(
-        &db_path,
-        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-    )
-    .map_err(|e| RpcError {
-        code: -32000,
-        message: format!("Falha ao abrir souls_state.db: {e}"),
-        data: None,
-    })?;
-    conn.execute_batch("PRAGMA foreign_keys = ON;")
-        .map_err(|e| RpcError {
-            code: -32000,
-            message: format!("Falha ao habilitar FK no souls_state.db: {e}"),
-            data: None,
-        })?;
-    Ok(conn)
-}
-
-/// Reconstrução iterativa da árvore socrática.
-///
-/// **Marco 3.9 Fase E.2:** espelha a versão em `cognition::thinking::handlers`
-/// (que é a canônica). Mantida aqui **apenas** para o teste T2.
-#[allow(dead_code)] // Apenas o teste T2 consome este helper.
-fn build_socratic_tree<'a>(
-    thoughts: &'a [thinking::SocraticThought],
-) -> (Vec<&'a thinking::SocraticThought>, std::collections::HashMap<&'a str, Vec<&'a thinking::SocraticThought>>) {
-    let mut roots: Vec<&thinking::SocraticThought> = Vec::new();
-    let mut children: std::collections::HashMap<&str, Vec<&thinking::SocraticThought>> =
-        std::collections::HashMap::new();
-    for t in thoughts {
-        match &t.parent_thought_id {
-            None => roots.push(t),
-            Some(parent_id) => {
-                children
-                    .entry(parent_id.as_str())
-                    .or_default()
-                    .push(t);
-            }
-        }
-    }
-    for v in children.values_mut() {
-        v.sort_by(|a, b| {
-            a.step_number
-                .cmp(&b.step_number)
-                .then_with(|| a.branch_id.cmp(&b.branch_id))
-        });
-    }
-    roots.sort_by(|a, b| {
-        a.branch_id
-            .cmp(&b.branch_id)
-            .then_with(|| a.step_number.cmp(&b.step_number))
-    });
-    (roots, children)
-}
-
-/// Renderiza a árvore em Markdown com indentação por profundidade.
-///
-/// **Marco 3.9 Fase E.2:** espelha a versão em `cognition::thinking::handlers`.
-/// Mantida aqui **apenas** para o teste T2.
-#[allow(dead_code)] // Apenas o teste T2 consome este helper.
-fn render_socratic_markdown(
-    roots: &[&thinking::SocraticThought],
-    children: &std::collections::HashMap<&str, Vec<&thinking::SocraticThought>>,
-) -> String {
-    let mut out = String::with_capacity(1024);
-    out.push_str("# Socratic Session Tree\n\n");
-    let mut stack: Vec<(&thinking::SocraticThought, usize)> = roots
-        .iter()
-        .rev()
-        .map(|t| (*t, 0_usize))
-        .collect();
-    while let Some((node, depth)) = stack.pop() {
-        let indent = "  ".repeat(depth);
-        out.push_str(&format!(
-            "{indent}- **{}** [{}] step={} dur={}ms\n",
-            node.thought_type.as_str(),
-            node.thought_id,
-            node.step_number,
-            node.duration_ms
-        ));
-        if !node.content.trim().is_empty() {
-            for line in node.content.lines() {
-                out.push_str(&format!("{indent}  > {line}\n"));
-            }
-        }
-        if let Some(kids) = children.get(node.thought_id.as_str()) {
-            for k in kids.iter().rev() {
-                stack.push((*k, depth + 1));
-            }
-        }
-    }
-    out
-}
-
 /// `export_session` — reconstrói a árvore socrática de uma sessão e a
 /// formata como JSON canônico (default) ou Markdown com indentação.
 ///
@@ -1863,6 +1748,10 @@ async fn run_souls_analyze_session(
 async fn run_souls_merge_sessions(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {
+    // Marco 3.9.1: instrumento de telemetria ANTES do trabalho
+    // pesado. Custo negligible; mantém o disjuntor acordado.
+    try_log_socratic_backpressure();
+
     let args = extract_arguments(params);
     let source_session_id = args
         .get("source_session_id")
@@ -1892,6 +1781,34 @@ async fn run_souls_merge_sessions(
         message: e.to_string(),
         data: None,
     })
+}
+
+/// Marco 3.9.1 (Higiene): instrumento de telemetria para detectar
+/// backpressure no `SocraticWriteWorker`.
+///
+/// **Objetivo:** quando o canal MPSC bounded(512) cai a menos da metade
+/// da sua capacidade, registra a métrica `socratic_backpressure_active`
+/// em `telemetry_logs` (accuracy_score=0.0). Quando está saudável,
+/// registra `socratic_backpressure_inactive` (accuracy_score=1.0) para
+/// manter cardinalidade no Prometheus.
+///
+/// **Lei Zero-Slop:** este disjuntor foi projetado no Marco 3.9 Fase E.2
+/// (`is_under_backpressure`) mas ficou ADORMECIDO — ninguém sabia se o
+/// barramento estava saturado. Esta função o ACORDA.
+///
+/// **Custo:** ~2µs (read atômico) + 1 try_send best-effort. Sumido no
+/// I/O de merge. Não bloqueia o critical path.
+fn try_log_socratic_backpressure() {
+    let under_backpressure = socratic_handle()
+        .as_ref()
+        .map(|h| h.is_under_backpressure())
+        .unwrap_or(false);
+    let (tool, accuracy) = if under_backpressure {
+        ("socratic_backpressure_active", 0.0_f64)
+    } else {
+        ("socratic_backpressure_inactive", 1.0_f64)
+    };
+    try_log_telemetry(tool, 0, 0, 0.0, 0, accuracy);
 }
 
 // =============================================================================
@@ -2942,101 +2859,6 @@ enum StateDbOp {
 }
 
 static STATE_DB_TX: OnceLock<mpsc::Sender<StateDbOp>> = OnceLock::new();
-
-/// Marco 3.8 Fase C.1: canal MPSC de override para testes TDD.
-///
-/// Quando `Some(tx)`, [`try_log_telemetry`] usa este canal em vez do
-/// `STATE_DB_TX` de producao, permitindo que os testes apontem para um
-/// banco SQLite temporario sem contaminar o workspace. Zero-cost quando
-/// `None` (o branch e resolvido em O(1) por um `if let Some(...)`).
-#[cfg(test)]
-pub(crate) static TEST_STATE_DB_TX_OVERRIDE: std::sync::Mutex<Option<mpsc::Sender<StateDbOp>>> =
-    std::sync::Mutex::new(None);
-
-/// Marco 3.8 Fase C.1: inicializa o StateDbWorker apontando para um DB
-/// temporario (uso exclusivo de testes TDD). Retorna o `PathBuf` final
-/// do banco para o caller poder queryá-lo apos o `try_send` assíncrono.
-#[cfg(test)]
-fn init_state_db_for_testing(
-    db_path: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use std::time::Duration;
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut conn = Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-    )?;
-    conn.busy_timeout(Duration::from_millis(5000))?;
-    // Migracao completa: V2→V3 (Observabilidade Sensorial) e V3→V4 (Telemetria Real).
-    observability::migrate_v2_to_v3(&mut conn)?;
-    observability::migrate_v3_to_v4(&mut conn)?;
-
-    let (tx, mut rx) = mpsc::channel::<StateDbOp>(100);
-    // Injeta o canal de teste no override global.
-    *TEST_STATE_DB_TX_OVERRIDE
-        .lock()
-        .expect("TEST_STATE_DB_TX_OVERRIDE poisoned") = Some(tx);
-
-    let db_path_thread = db_path.to_path_buf();
-    std::thread::spawn(move || {
-        let mut conn = match Connection::open_with_flags(
-            &db_path_thread,
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-        ) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("[StateDbWorker:test] ERRO ao abrir banco: {e}");
-                return;
-            }
-        };
-        let _ = conn.busy_timeout(Duration::from_millis(5000));
-        if let Err(e) = observability::migrate_v2_to_v3(&mut conn) {
-            eprintln!("[StateDbWorker:test] ALERTA migrate_v2_to_v3: {e}");
-        }
-        if let Err(e) = observability::migrate_v3_to_v4(&mut conn) {
-            eprintln!("[StateDbWorker:test] ALERTA migrate_v3_to_v4: {e}");
-        }
-        while let Some(op) = rx.blocking_recv() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64;
-            match op {
-                StateDbOp::LogTelemetry {
-                    tool,
-                    tokens_in,
-                    tokens_out,
-                    cost_usd,
-                    duration_ms,
-                    accuracy_score,
-                    reply,
-                } => {
-                    let res = conn.execute(
-                        "INSERT INTO telemetry_logs \
-                            (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at) \
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                        rusqlite::params![tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, now],
-                    );
-                    let response = match res {
-                        Ok(_) => Ok(json!({ "ok": true })),
-                        Err(e) => Err(RpcError {
-                            code: -32000,
-                            message: format!("test worker falhou: {e}"),
-                            data: None,
-                        }),
-                    };
-                    let _ = reply.send(response);
-                }
-                // Em testes, outros ops (SubAgent/Handoff/Knowledge/...) nao sao
-                // exercitados pelo TDD de Telemetria. Catch-all silencioso.
-                _ => {}
-            }
-        }
-    });
-    Ok(())
-}
 
 static MEMORY_GRAPH_TX: OnceLock<mpsc::Sender<MemGraphOp>> = OnceLock::new();
 
@@ -4233,7 +4055,6 @@ fn try_log_file_access(file_path: &str, tool: &str) {
 // Marco 3.7 Fase B: helper para enfileirar telemetria FinOps no StateDbWorker.
 // Marco 3.8 Fase C.1: instrumentado em `run_souls_compress`/`run_souls_dedup`/
 // `run_souls_stub_fill` para persistir FinOps real + acuracia sintatica (v4).
-// Em testes, `TEST_STATE_DB_TX_OVERRIDE` redireciona o canal para o DB temporario.
 #[allow(dead_code)]
 fn try_log_telemetry(
     tool: &str,
@@ -4253,16 +4074,6 @@ fn try_log_telemetry(
         accuracy_score: accuracy_score.clamp(0.0, 1.0),
         reply: reply_tx,
     };
-    // Marco 3.8 Fase C.1: precedence para o override de teste (TDD puro).
-    #[cfg(test)]
-    {
-        if let Ok(guard) = TEST_STATE_DB_TX_OVERRIDE.lock() {
-            if let Some(tx) = guard.as_ref() {
-                let _ = tx.try_send(op);
-                return;
-            }
-        }
-    }
     let Some(tx) = STATE_DB_TX.get() else {
         return;
     };
@@ -4680,10 +4491,14 @@ async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Value, 
 #[cfg(test)]
 mod tests {
     use super::{
-        build_socratic_tree, normalize_duckduckgo_result_url, open_socratic_state_db,
-        parse_duckduckgo_results, render_socratic_markdown, validate_sqlite_query, workspace_root,
+        normalize_duckduckgo_result_url, parse_duckduckgo_results, validate_sqlite_query,
+        workspace_root,
     };
     use super::thinking::persistence::ThoughtType;
+    // Helpers socráticos (open_socratic_state_db, build_socratic_tree,
+    // render_socratic_markdown) são importados localmente em cada teste
+    // via `use souls_mc_lib::cognition::thinking::test_helpers::{...}`
+    // para evitar warning de `unused_imports` quando o teste não os usa.
 
     #[test]
     fn sqlite_query_rejects_multi_statement_payload() {
@@ -6067,6 +5882,9 @@ mod tests {
     /// Markdown respeitam a indentação por profundidade sintática.
     #[test]
     fn test_export_session_formatting() {
+        use souls_mc_lib::cognition::thinking::test_helpers::{
+            build_socratic_tree, render_socratic_markdown,
+        };
         let conn = open_v5_in_memory();
         souls_mc_lib::cognition::thinking::ops::upsert_socratic_session(&conn, "sess_hd", 1000, "{}")
             .unwrap();
@@ -6349,8 +6167,12 @@ mod tests {
     /// diretório `.souls_data/` quando ausente e é idempotente em
     /// chamadas subsequentes. Ref: follow-up do Marco 3.9 Fase E
     /// (gap identificado pelo Arquiteto).
+    ///
+    /// **Marco 3.9.1 (Higiene):** o helper foi movido para
+    /// `cognition::thinking::test_helpers` (single source of truth).
     #[test]
     fn test_open_socratic_state_db_creates_directory_idempotently() {
+        use souls_mc_lib::cognition::thinking::test_helpers::open_socratic_state_db;
         let souls_data_dir = workspace_root().join(".souls_data");
         let db_path = souls_data_dir.join("souls_state.db");
 
@@ -6362,7 +6184,7 @@ mod tests {
         let db_pre_existed = db_path.exists();
 
         // Primeira chamada: deve criar o dir se não existir.
-        let conn1 = open_socratic_state_db().expect("1ª chamada deve abrir com sucesso");
+        let conn1 = open_socratic_state_db(&workspace_root()).expect("1ª chamada deve abrir com sucesso");
         drop(conn1);
         assert!(
             souls_data_dir.exists(),
@@ -6381,7 +6203,7 @@ mod tests {
         );
 
         // Segunda chamada: idempotência. Não deve falhar se o dir já existe.
-        let conn2 = open_socratic_state_db().expect("2ª chamada (idempotente) deve abrir com sucesso");
+        let conn2 = open_socratic_state_db(&workspace_root()).expect("2ª chamada (idempotente) deve abrir com sucesso");
         drop(conn2);
         assert!(souls_data_dir.exists(), ".souls_data/ ainda existe após 2ª chamada");
 
