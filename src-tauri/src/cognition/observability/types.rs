@@ -23,10 +23,12 @@ pub struct FileAccessLog {
     pub accessed_at: i64,
 }
 
-/// Schema da tabela `telemetry_logs` (v3).
+/// Schema da tabela `telemetry_logs` (v3 + accuracy_score v4).
 ///
 /// Cada tool MCP que consome tokens pode emitir um registro. Eficiencia E3
-/// e calculada em [`super::e3_efficiency`].
+/// (token-based) e calculada em [`super::e3_efficiency`]. Eficiencia E3 v2
+/// (constitucional) e calculada em [`super::e3_efficiency_v2`] a partir de
+/// `accuracy_score` e `duration_ms`.
 ///
 /// O indice `(tool, created_at)` otimiza agregacoes por ferramenta.
 #[derive(Debug, Clone, PartialEq)]
@@ -43,6 +45,12 @@ pub struct TelemetryLog {
     pub cost_usd: f64,
     /// Duracao da operacao em milissegundos (latencia observada).
     pub duration_ms: i64,
+    /// Marco 3.8 Fase C.1: acuracia sintatica da operacao (REAL, 0.0-1.0).
+    ///
+    /// Alimenta a formula constitucional
+    /// `E3 = (accuracy_score * accuracy_score) / max(1.0, duration_ms)`.
+    /// Default em v4 e `1.0` (degradacao zero; CCR lossless preserva fidelidade).
+    pub accuracy_score: f64,
     /// Timestamp de criacao em epoch seconds.
     pub created_at: i64,
 }

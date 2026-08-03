@@ -58,6 +58,20 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_time
 /// Versao do schema apos a Fase B. Idempotente em bancos ja migrados.
 pub const TARGET_VERSION: i64 = 3;
 
+/// Marco 3.8 Fase C.1: versao alvo apos Telemetria Real (SOULS State v4).
+pub const TARGET_VERSION_V4: i64 = 4;
+
+/// Marco 3.8 Fase C.1: DDL da evolucao v3 -> v4 (Telemetria Real).
+///
+/// Adiciona a coluna `accuracy_score REAL DEFAULT 1.0` na tabela
+/// `telemetry_logs` para alimentar a formula constitucional
+/// `E3 = (acc^2) / max(1.0, duration_ms)`. Idempotente via
+/// `migrate_v3_to_v4` (que swallow-a o erro "duplicate column" caso
+/// um hot-patch parcial anterior tenha materializado a coluna).
+pub const V4_SCHEMA_DDL: &str = "
+ALTER TABLE telemetry_logs ADD COLUMN accuracy_score REAL NOT NULL DEFAULT 1.0;
+";
+
 /// Migra um banco v2 (ou vazio) para v3 de forma atomica.
 ///
 /// Idempotente: se `user_version >= 3`, e no-op.
@@ -70,6 +84,32 @@ pub fn migrate_v2_to_v3(conn: &mut Connection) -> Result<(), CognitiveError> {
     tx.execute_batch(V3_SCHEMA_DDL)
         .map_err(CognitiveError::from)?;
     write_user_version(&tx, TARGET_VERSION).map_err(CognitiveError::from)?;
+    tx.commit().map_err(CognitiveError::from)?;
+    Ok(())
+}
+
+/// Marco 3.8 Fase C.1: migra um banco v3 (ou ja v4) para v4 de forma atomica.
+///
+/// Idempotente:
+/// 1. Se `user_version >= 4`, no-op puro.
+/// 2. Tenta `ALTER TABLE ADD COLUMN accuracy_score`; swallow do erro
+///    "duplicate column" para tolerar bancos onde a coluna foi
+///    adicionada por hot-patch parcial anterior (fail-soft).
+pub fn migrate_v3_to_v4(conn: &mut Connection) -> Result<(), CognitiveError> {
+    let current = read_user_version(conn).map_err(CognitiveError::from)?;
+    if current >= TARGET_VERSION_V4 {
+        return Ok(());
+    }
+    let tx = conn.transaction().map_err(CognitiveError::from)?;
+    // ALTER TABLE ADD COLUMN nao suporta IF NOT EXISTS; swallow defensivo
+    // para hot-patches parciais (a coluna pode ja existir sem o bump de versao).
+    if let Err(e) = tx.execute_batch(V4_SCHEMA_DDL) {
+        let msg = e.to_string();
+        if !msg.contains("duplicate column") && !msg.contains("already exists") {
+            return Err(CognitiveError::from(e));
+        }
+    }
+    write_user_version(&tx, TARGET_VERSION_V4).map_err(CognitiveError::from)?;
     tx.commit().map_err(CognitiveError::from)?;
     Ok(())
 }
@@ -100,14 +140,15 @@ pub fn insert_telemetry(
     let tx = conn.transaction().map_err(CognitiveError::from)?;
     tx.execute(
         "INSERT INTO telemetry_logs \
-            (tool, tokens_in, tokens_out, cost_usd, duration_ms, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             log.tool,
             log.tokens_in,
             log.tokens_out,
             log.cost_usd,
             log.duration_ms,
+            log.accuracy_score,
             log.created_at,
         ],
     )

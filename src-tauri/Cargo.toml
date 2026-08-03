@@ -100,6 +100,7 @@ llama-cpp-sys-2 = { path = "vendor/llama-cpp-sys-2" }
 
 [dev-dependencies]
 mockito = "=1.7.2"
+tempfile = "=3.27.0"
 
 [features]
 default = []

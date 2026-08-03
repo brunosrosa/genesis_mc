@@ -16,11 +16,62 @@ fn souls_ping(payload: &str) -> String {
     format!("Souls MC Core Online. Recebido: {}", payload)
 }
 
+// =============================================================================
+// SOULS-CANIBALIZED Marco 3.9 Fase E.2: Tauri v2 IPC commands para Svelte 5.
+//
+// Padrão: `Result<Value, String>` na fronteira (zero-cost: Svelte 5 captura
+// `invoke().then().catch()` graciosamente sem travar o renderer).
+// As 3 funções delegam 100% para `souls_mc_lib::cognition::thinking::handlers`
+// (canibalização: 0 lógica de negócios no main.rs, conforme ADR-005 §Frontend
+// Passivo).
+// =============================================================================
+
+/// `socratic_export_session` — exporta árvore de pensamentos socráticos.
+#[tauri::command]
+async fn socratic_export_session(
+    session_id: String,
+    format: Option<String>,
+) -> Result<serde_json::Value, String> {
+    souls_mc_lib::cognition::thinking::handlers::handle_export_session(
+        &session_id,
+        format.as_deref(),
+        None,
+    )
+    .map_err(|e| format!("export_session falhou: {e}"))
+}
+
+/// `socratic_analyze_session` — métricas FinOps cognitivas por sessão.
+#[tauri::command]
+async fn socratic_analyze_session(session_id: String) -> Result<serde_json::Value, String> {
+    souls_mc_lib::cognition::thinking::handlers::handle_analyze_session(&session_id, None)
+        .map_err(|e| format!("analyze_session falhou: {e}"))
+}
+
+/// `socratic_merge_sessions` — fusão atômica via barramento MPSC HIPER-FORWARD.
+#[tauri::command]
+async fn socratic_merge_sessions(
+    source_session_id: String,
+    target_session_id: String,
+) -> Result<serde_json::Value, String> {
+    souls_mc_lib::cognition::thinking::handlers::handle_merge_sessions(
+        &source_session_id,
+        &target_session_id,
+        None,
+        None, // síncrono por padrão (Tauri frontend prefere transação explícita)
+    )
+    .map_err(|e| format!("merge_sessions falhou: {e}"))
+}
+
 #[allow(clippy::zombie_processes)]
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![souls_ping])
+        .invoke_handler(tauri::generate_handler![
+            souls_ping,
+            socratic_export_session,
+            socratic_analyze_session,
+            socratic_merge_sessions,
+        ])
         .setup(|app| {
             let fallback_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("target")
