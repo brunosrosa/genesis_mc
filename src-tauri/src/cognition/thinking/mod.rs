@@ -11,11 +11,20 @@
 //! - [`ops`]: DDL V5 idempotente, INSERT/SELECT/DELETE com FK CASCADE.
 //! - [`analytics`]: métricas FinOps cognitivas (revision rate, branching,
 //!   latência) — pure functions, sem I/O.
+//!
+//! Marco 3.9 Fase E.2: barramento assíncrono para gravações socráticas.
+//!
+//! - [`socratic_bridge`]: canal MPSC bounded(512) + worker dedicado
+//!   (`std::thread::spawn` + `blocking_recv`) para extirpar a dependência
+//!   de mutex globais síncronos. Hiper-Forward via `try_send` no critical
+//!   path do Tokio event loop.
 
 pub mod analytics;
 pub mod errors;
+pub mod handlers;
 pub mod ops;
 pub mod persistence;
+pub mod socratic_bridge;
 pub mod state_machine;
 pub mod types;
 
@@ -27,6 +36,7 @@ pub use ops::{
     V5_SCHEMA_DDL,
 };
 pub use persistence::{BranchId, SessionId, SocraticThought, ThoughtId, ThoughtType};
+pub use socratic_bridge::{spawn_socratic_write_worker, SocraticOp, SocraticWriteHandle};
 pub use state_machine::{
     DEFAULT_HARD_LIMIT, HITL_EXTENDED_LIMIT, ThinkingEngine,
 };
