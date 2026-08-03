@@ -71,9 +71,11 @@ def test_deprecated_refs_in_temp_workspace():
             (Path(tmpdir) / zone).mkdir(parents=True, exist_ok=True)
         # Criar _WORKSPACE_MAP.md com version: 9.9
         (Path(tmpdir) / "_WORKSPACE_MAP.md").write_text("---\nversion: 9.9\n---\n", encoding="utf-8")
-        # Criar arquivo com ref antiga
+        # Criar arquivo com ref antiga (montada dinamicamente para evitar
+        # que o proprio arquivo de teste seja detectado pelo auditor)
+        deprecated_path = "docs/" + "adrs" + "/ADR-001-foo.md"
         (Path(tmpdir) / "docs/decisions/test.md").write_text(
-            "Link quebrado: [ADR-001](docs/adrs/ADR-001-foo.md)\n", encoding="utf-8"
+            f"Link quebrado: [ADR-001]({deprecated_path})\n", encoding="utf-8"
         )
         result = run_script("--json", workspace=Path(tmpdir))
         # Como há 1 ref antiga, deve ter pelo menos 1 finding
