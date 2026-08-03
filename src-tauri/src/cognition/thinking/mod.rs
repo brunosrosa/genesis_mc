@@ -28,6 +28,8 @@ pub mod socratic_bridge;
 pub mod state_machine;
 pub mod types;
 
+pub mod test_helpers;
+
 pub use analytics::{compute_metrics, SessionMetrics};
 pub use errors::{CognitiveError, ThinkingError};
 pub use ops::{
