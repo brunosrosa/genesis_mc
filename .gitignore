@@ -38,6 +38,8 @@ dist-ssr
 .souls_semgrep/
 .pytest_cache/
 .lean-ctx/
+__pycache__/
+*.pyc
 src-tauri/third_party/ultrafast-mcp-sequential-thinking/
 docs/observability/audits/blobs/inspect/
 docs/runtime/context_dumps/
