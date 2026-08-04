@@ -291,7 +291,9 @@ fn resolve_import(
                 return Some(strip_root(&p, root));
             }
         }
-        return Some(PathBuf::from(format!("{normalized}.rs")));
+        // Nenhum candidato existe no disco: pulamos para evitar
+        // poluir o grafo com paths fantasmas. Anti-FALSO-VERDE.
+        return None;
     }
 
     // ── TS/JS: relativo `./x` ou `../x` ─────────────────────────
@@ -386,8 +388,6 @@ fn bfs_reverse(
                     edges.insert((from.clone(), to.clone()));
                     if depth < max_depth {
                         queue.push_back((n.clone(), depth + 1));
-                    }
-                    if depth < max_depth {
                         nodes.insert(from);
                     }
                 }
