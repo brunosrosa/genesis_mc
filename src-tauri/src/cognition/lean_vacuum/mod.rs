@@ -16,6 +16,7 @@ pub mod dedup;
 pub mod dot_flatten;
 pub mod extensions;
 pub mod myers_diff;
+pub mod repo_impact;
 pub mod search;
 pub mod smart_read;
 pub mod text_compress;
@@ -29,6 +30,10 @@ pub use dedup::{
 pub use dot_flatten::dot_flatten;
 pub use extensions::{is_excluded_dir, is_source_ext, EXCLUDE_DIRS, SOURCE_EXTENSIONS};
 pub use myers_diff::myers_diff;
+pub use repo_impact::{
+    repo_impact as repo_impact_fn, ImpactEdge, ImpactGraphPayload, ImpactReport, RepoImpactError,
+    DEFAULT_MAX_DEPTH, MAX_DEPTH_CEILING,
+};
 pub use search::{format_lean_notation, search_lean, SearchMatch};
 pub use smart_read::{count_tokens, smart_read_text};
 pub use text_compress::{aggressive_compress, lightweight_cleanup};

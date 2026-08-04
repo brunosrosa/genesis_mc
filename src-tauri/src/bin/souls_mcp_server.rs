@@ -675,15 +675,41 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "impact",
-                        "description": "Calcula o Blast Radius (importadores afetados) de qualquer arquivo no monorepo via BFS em grafo transposto.",
+                        "name": "repo_impact",
+                        "description": "Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ou absoluto)." },
-                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." }
+                                "file_path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ao repo ou absoluto)." },
+                                "max_depth": { "type": "integer", "description": "Profundidade maxima do BFS reverso (1..=10, padrao 3).", "minimum": 1, "maximum": 10, "default": 3 }
                             },
-                            "required": ["path"],
+                            "required": ["file_path"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "souls_impact",
+                        "description": "Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ao repo ou absoluto)." },
+                                "max_depth": { "type": "integer", "description": "Profundidade maxima do BFS reverso (1..=10, padrao 3).", "minimum": 1, "maximum": 10, "default": 3 }
+                            },
+                            "required": ["file_path"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "ctx_impact",
+                        "description": "Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ao repo ou absoluto)." },
+                                "max_depth": { "type": "integer", "description": "Profundidade maxima do BFS reverso (1..=10, padrao 3).", "minimum": 1, "maximum": 10, "default": 3 }
+                            },
+                            "required": ["file_path"],
                             "additionalProperties": false
                         }
                     },
@@ -817,7 +843,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         // Emenda ADR-041 (Lei 32/120): servername soberano `souls_mcp`,
         // toolname curto, aliases canonicos.
         "heatmap" | "souls_heatmap" => run_heatmap(params).await,
-        "impact" | "souls_impact" => run_impact(params).await,
+        "repo_impact" | "souls_impact" | "ctx_impact" => run_repo_impact(params).await,
         "routes" | "souls_routes" => run_routes(params).await,
         "feedback" | "souls_feedback" => run_feedback(params).await,
         other => Err(RpcError {
@@ -4384,34 +4410,41 @@ async fn run_heatmap(params: &serde_json::Map<String, Value>) -> Result<Value, R
     }))
 }
 
-/// `impact` — Blast Radius (BFS no grafo transposto de imports).
-async fn run_impact(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+/// `repo_impact` — Marco 4.1.0: Blast Radius multilíngue via BFS
+/// reverso no grafo de imports (canibalizado de
+/// `lean_vacuum::repo_impact`).
+///
+/// Aceita aliases `repo_impact | souls_impact | ctx_impact` (mesma
+/// implementação, schema canônico `file_path` + `max_depth`).
+async fn run_repo_impact(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
-    let path = args
-        .get("path")
+    let file_path = args
+        .get("file_path")
+        .or_else(|| args.get("path")) // retro-compat com schema legado
         .and_then(Value::as_str)
         .ok_or_else(|| RpcError {
             code: -32602,
-            message: "Argumento 'path' e obrigatorio".to_string(),
+            message: "Argumento 'file_path' e obrigatorio".to_string(),
             data: None,
         })?;
+    let max_depth = args
+        .get("max_depth")
+        .and_then(Value::as_u64)
+        .map(|n| n.clamp(1, lean_vacuum::MAX_DEPTH_CEILING as u64) as u8)
+        .unwrap_or(lean_vacuum::DEFAULT_MAX_DEPTH);
     let repo_root = args
         .get("repo_path")
         .and_then(Value::as_str)
         .map(PathBuf::from)
         .unwrap_or_else(workspace_root);
-    let graph = observability::build_import_graph(&repo_root).map_err(|e| RpcError {
+
+    let target = Path::new(file_path);
+    let report = lean_vacuum::repo_impact_fn(&repo_root, target, max_depth).map_err(|e| RpcError {
         code: -32000,
-        message: format!("Falha ao construir grafo de imports: {e}"),
+        message: format!("Falha ao calcular Blast Radius: {e}"),
         data: None,
     })?;
-    // Normaliza o path-alvo para o formato canonico (relativo + `.rs`).
-    let target_norm = if path.ends_with(".rs") {
-        path.to_string()
-    } else {
-        format!("{path}.rs")
-    };
-    let report = observability::impact_report(&graph, &target_norm);
+
     Ok(json!({
         "content": [{
             "type": "text",
