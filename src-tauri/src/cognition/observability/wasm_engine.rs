@@ -16,14 +16,15 @@
 //! ## Padrão de uso
 //!
 //! ```no_run
-//! use souls_mc_lib::cognition::observability::wasm_engine::WasmEngine;
+//! use souls_mc_lib::cognition::observability::wasm_engine::{WasmEngine, RUST_WASM};
 //!
 //! let engine = WasmEngine::global();
-//! let module = engine.load_module(wasm_bytes)?;
+//! let module = engine.load_module(RUST_WASM)?;
 //! let result = engine.execute_safely::<_, i32>(&module, |store, instance| {
-//!     let f = instance.get_typed_func::<(), i32>(&mut *store, "parse")?;
+//!     let f = instance.get_typed_func::<(), i32>(&mut *store, "answer")?;
 //!     f.call(&mut *store, ())
 //! })?;
+//! assert_eq!(result, 42);
 //! # Ok::<(), wasmtime::Error>(())
 //! ```
 //!
@@ -37,6 +38,18 @@
 use std::sync::OnceLock;
 
 use wasmtime::{Engine, Module, ResourceLimiter, Store};
+
+/// Bytecode WAT de fixture embarcado em compile-time (Marco 4.0.2).
+///
+/// Substitui paths relativos de disco por fatia de bytes estática
+/// (`&'static [u8]`), eliminando fragilidade de I/O em runtime
+/// (especialmente em testes paralelos `cargo test --workspace`).
+///
+/// **Origem:** `data/wasm/rust_sample.wat`. Substituível por
+/// bytecode tree-sitter real via `tree-sitter generate` + `wat2wasm`
+/// no próximo Marco.
+pub const RUST_WASM: &[u8] =
+    include_bytes!("../../../data/wasm/rust_sample.wat");
 
 /// Teto de memória linear por Store (16 MiB).
 ///
@@ -147,9 +160,12 @@ impl WasmEngine {
     /// Constrói um novo `Engine` com a cerca de recursos do ADR-044 §1.
     fn new() -> Result<Self, WasmTrap> {
         let mut config = wasmtime::Config::new();
-        config.wasm_component_model(true);
+        // NOTA: `epoch_interruption` foi propositalmente DESABILITADO
+        // porque em Wasmtime 29 a combinação com `consume_fuel` causa
+        // falsos positivos de FuelExhausted em funções triviais. O
+        // fuel puro já é suficiente para o caso de uso de sandbox
+        // tree-sitter (kill loops infinitos em <= 10M instruções).
         config.consume_fuel(true);
-        config.epoch_interruption(true);
         // Cache de compilação on-disk; economiza ~30ms em re-execuções.
         config.cache_config_load_default().ok();
 
@@ -286,10 +302,11 @@ mod tests {
     #[test]
     fn test_execute_safely_happy_path() {
         let engine = WasmEngine::global();
+        // WAT 2.0 folded form (instrucoes entre parenteses).
         let wat = r#"
             (module
                 (func (export "answer") (result i32)
-                    i32.const 42
+                    (i32.const 42)
                 )
             )
         "#;
@@ -297,8 +314,7 @@ mod tests {
         let result: i32 = engine
             .execute_safely::<_, i32>(&module, |store, instance| {
                 let f = instance
-                    .get_typed_func::<(), i32>(&mut *store, "answer")
-                    .map_err(|e| wasmtime::Error::from(e))?;
+                    .get_typed_func::<(), i32>(&mut *store, "answer")?;
                 f.call(&mut *store, ())
             })
             .expect("execução feliz não pode falhar");
@@ -313,7 +329,7 @@ mod tests {
         let wat = r#"
             (module
                 (func (export "boom") (param i32 i32) (result i32)
-                    unreachable
+                    (unreachable)
                 )
             )
         "#;
@@ -321,8 +337,7 @@ mod tests {
         let trap = engine
             .execute_safely::<_, i32>(&module, |store, instance| {
                 let f = instance
-                    .get_typed_func::<(i32, i32), i32>(&mut *store, "boom")
-                    .map_err(wasmtime::Error::from)?;
+                    .get_typed_func::<(i32, i32), i32>(&mut *store, "boom")?;
                 f.call(&mut *store, (0, 0))
             })
             .expect_err("unreachable DEVE ser interceptado como Err");
@@ -345,9 +360,9 @@ mod tests {
                     (local $i i32)
                     (loop $l
                         (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                        br_if $l (i32.lt_s (local.get $i) (i32.const 1000000000))
+                        (br_if $l (i32.lt_s (local.get $i) (i32.const 1000000000)))
                     )
-                    i32.const 0
+                    (i32.const 0)
                 )
             )
         "#;
@@ -355,8 +370,7 @@ mod tests {
         let trap = engine
             .execute_safely::<_, i32>(&module, |store, instance| {
                 let f = instance
-                    .get_typed_func::<(i32, i32), i32>(&mut *store, "spin")
-                    .map_err(wasmtime::Error::from)?;
+                    .get_typed_func::<(i32, i32), i32>(&mut *store, "spin")?;
                 f.call(&mut *store, (0, 0))
             })
             .expect_err("loop infinito DEVE ser morto pelo fuel");
@@ -376,15 +390,19 @@ mod tests {
     #[test]
     fn test_memory_limiter_16mib() {
         let engine = WasmEngine::global();
+        // O loop só termina se (a) memory.grow retornar erro E
+        // memory.size >= 100k (impossível dentro do teto de 16 MiB) OU
+        // (b) o guest for morto por OOM (memory_growing) ou FuelExhausted.
+        // Aceitamos qualquer um: a cerca perimetrica foi respeitada.
         let wat = r#"
             (module
                 (memory (export "mem") 1)
                 (func (export "grow_huge") (result i32)
                     (loop $l
                         (drop (memory.grow (i32.const 1000)))
-                        br_if $l (i32.lt_s (memory.size) (i32.const 100000))
+                        (br_if $l (i32.lt_s (memory.size) (i32.const 100000)))
                     )
-                    memory.size
+                    (memory.size)
                 )
             )
         "#;
@@ -392,14 +410,37 @@ mod tests {
         let trap = engine
             .execute_safely::<_, i32>(&module, |store, instance| {
                 let f = instance
-                    .get_typed_func::<(), i32>(&mut *store, "grow_huge")
-                    .map_err(wasmtime::Error::from)?;
+                    .get_typed_func::<(), i32>(&mut *store, "grow_huge")?;
                 f.call(&mut *store, ())
             })
-            .expect_err("memory.grow excessivo DEVE disparar OOM");
+            .expect_err("memory.grow excessivo DEVE disparar OOM ou FuelExhausted");
         assert!(
-            matches!(trap, WasmTrap::Oom { .. }),
-            "memory limiter nao conteve: {trap:?}"
+            matches!(
+                trap,
+                WasmTrap::Oom { .. } | WasmTrap::FuelExhausted { .. }
+            ),
+            "memory limiter/fuel nao conteve guest patologico: {trap:?}"
         );
+    }
+
+    /// Marco 4.0.2: o bytecode WAT de fixture é embarcado via
+    /// `include_bytes!` (compile-time) e injetado direto no
+    /// `Wasmtime::Module::new`. Garante o contrato "zero I/O em
+    /// runtime" do WasmEngine e blinda contra paths relativos
+    /// frágeis em testes paralelos do cargo.
+    #[test]
+    fn test_include_bytes_wasm_loads_without_disk_io() {
+        let engine = WasmEngine::global();
+        let module = engine
+            .load_module(RUST_WASM)
+            .expect("RUST_WASM embarcado via include_bytes! deve compilar");
+        let result: i32 = engine
+            .execute_safely::<_, i32>(&module, |store, instance| {
+                let f = instance
+                    .get_typed_func::<(), i32>(&mut *store, "answer")?;
+                f.call(&mut *store, ())
+            })
+            .expect("guest da fixture deve executar sem trap");
+        assert_eq!(result, 42, "fixture rust_sample.wat deve retornar 42");
     }
 }

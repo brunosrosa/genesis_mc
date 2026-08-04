@@ -3993,7 +3993,7 @@ async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<Valu
 // mantém a sessão no heap do próprio binário.
 // =============================================================================
 
-fn extract_arguments<'a>(params: &'a serde_json::Map<String, Value>) -> &'a serde_json::Map<String, Value> {
+fn extract_arguments(params: &serde_json::Map<String, Value>) -> &serde_json::Map<String, Value> {
     params
         .get("arguments")
         .and_then(Value::as_object)
@@ -4311,7 +4311,7 @@ async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value
     let engine_lock = map
         .entry(session_id.clone())
         .or_insert_with(|| StdMutex::new(ThinkingEngine::new()));
-    let mut engine = engine_lock.lock().map_err(|e| RpcError {
+    let engine = engine_lock.get_mut().map_err(|e| RpcError {
         code: -32000,
         message: format!("Mutex ThinkingEngine envenenado: {e}"),
         data: None,
@@ -5109,6 +5109,7 @@ mod tests {
     /// Teste 3: CALL_GRAPH — popula grafo com 5 nós e 8 arestas, valida
     /// que `callers` e `callees` retornam adjacência direcional correta.
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // TELEMETRY_TDD_LOCK serializa o call_graph global; o lock DEVE cobrir o await para isolar contra testes paralelos.
     async fn test_callers_callees_graph() {
         use souls_mc_lib::cognition::observability::{
             call_graph_global, insert_edge, remove_node,
@@ -5396,8 +5397,8 @@ mod tests {
     }
 
     /// 1. `test_dedup_5_lines_trigger`: bloco idêntico de 5+ linhas consecutivas
-    /// GERA compactação com marcador e SALVA o original no `DEDUP_CACHE`.
-    /// Segunda ocorrência vira marcador `[SOULS-DEDUP: Block Hash 0x<hex_8>...]`.
+    ///    GERA compactação com marcador e SALVA o original no `DEDUP_CACHE`.
+    ///    Segunda ocorrência vira marcador `[SOULS-DEDUP: Block Hash 0x<hex_8>...]`.
     #[test]
     fn test_dedup_5_lines_trigger() {
         let _g = ccr_test_lock();
@@ -5419,14 +5420,14 @@ mod tests {
         assert_eq!(stats2.deduplicated_blocks, 1);
         // Verifica que o bloco original está no cache (lossless reversível).
         let cache = &souls_mc_lib::cognition::context_compression::DEDUP_CACHE;
-        assert!(cache.len() >= 1, "DEDUP_CACHE deve conter ao menos 1 entrada");
+        assert!(!cache.is_empty(), "DEDUP_CACHE deve conter ao menos 1 entrada");
         let block_trim = block.trim_end_matches('\n');
         let found = cache.iter().any(|e| e.value() == block_trim);
         assert!(found, "Bloco original lossless deve estar gravado no DEDUP_CACHE");
     }
 
     /// 2. `test_dedup_under_5_lines_ignored`: repetições de apenas 4 linhas ou
-    /// menos SÃO IGNORADAS pelo compressor (não viram marcador).
+    ///    menos SÃO IGNORADAS pelo compressor (não viram marcador).
     #[test]
     fn test_dedup_under_5_lines_ignored() {
         let _g = ccr_test_lock();
@@ -5447,9 +5448,10 @@ mod tests {
     }
 
     /// 3. `test_multi_read_concurrency_and_compression`: lê 3 arquivos em paralelo
-    /// (com bloco duplicado entre dois deles) e valida que `souls_multi_read`
-    /// retorna 3 entradas com compactação aplicada.
+    ///    (com bloco duplicado entre dois deles) e valida que `souls_multi_read`
+    ///    retorna 3 entradas com compactação aplicada.
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // ccr_test_lock serializa fixtures compartilhadas; o lock DEVE cobrir o await.
     async fn test_multi_read_concurrency_and_compression() {
         use serde_json::json;
         let _g = ccr_test_lock();
@@ -5501,9 +5503,10 @@ mod tests {
     }
 
     /// 4. `test_fill_rehydration_equivalence`: aplica `souls_fill` em texto
-    /// compactado e valida que a string final é EXATAMENTE idêntica ao original
-    /// byte-a-byte (lossless), validada por hash SHA-256.
+    ///    compactado e valida que a string final é EXATAMENTE idêntica ao original
+    ///    byte-a-byte (lossless), validada por hash SHA-256.
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // ccr_test_lock serializa fixtures compartilhadas; o lock DEVE cobrir o await.
     async fn test_fill_rehydration_equivalence() {
         use serde_json::json;
         use sha2::{Digest, Sha256};
@@ -6045,8 +6048,7 @@ mod tests {
         .unwrap();
         assert_eq!(source.len(), 3);
         let mut remap: HashMap<String, String> = HashMap::new();
-        let mut inserted = 0_usize;
-        for t in &source {
+        for (inserted, t) in source.iter().enumerate() {
             let new_id = format!("merge_{inserted}");
             remap.insert(t.thought_id.clone(), new_id.clone());
             let new_parent = t
@@ -6066,7 +6068,6 @@ mod tests {
             };
             souls_mc_lib::cognition::thinking::ops::upsert_socratic_thought(&tx, &remapped)
                 .unwrap();
-            inserted += 1;
         }
         tx.commit().unwrap();
 

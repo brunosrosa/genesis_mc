@@ -13,7 +13,9 @@ mod tests {
         let initial_content = "// BASE FILE HEADER\nfn main() {\n    // souls-stub: edit_me\n}\n";
         tokio::fs::write(&file_path, initial_content).await.expect("Falha ao escrever arquivo inicial");
 
-        let path_arc = Arc::new(file_path.clone());
+        // Arc<Path> implementa AsRef<Path> diretamente (Arc<T: ?Sized> -> AsRef<T>),
+        // evitando auto-deref fragil entre camadas de Arc/PathBuf/Path.
+        let path_arc: Arc<std::path::Path> = Arc::from(file_path.clone().into_boxed_path());
         let mut handles = vec![];
 
         for i in 0..5 {
@@ -22,9 +24,9 @@ mod tests {
                 let lock = acquire_file_lock(&path_clone);
                 let _guard = lock.lock().await;
 
-                let content = tokio::fs::read_to_string(&*path_clone).await.expect("Leitura falhou");
+                let content = tokio::fs::read_to_string(&path_clone).await.expect("Leitura falhou");
                 let new_content = format!("{}\n// edit entry {}\n", content, i);
-                atomic_write_file(&*path_clone, &new_content).await.expect("Escrita atômica falhou");
+                atomic_write_file(&path_clone, &new_content).await.expect("Escrita atômica falhou");
             });
             handles.push(handle);
         }

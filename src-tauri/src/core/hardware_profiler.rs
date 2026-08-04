@@ -164,7 +164,7 @@ mod tests {
 
         let default_topo = SystemTopology::default();
         assert_eq!(default_topo.primary_simd_extension, CpuInstructionSet::Base);
-        assert_eq!(default_topo.is_nvme_ssd, false);
+        assert!(!default_topo.is_nvme_ssd);
         assert_eq!(default_topo.pcie_bandwidth_estimated_gbps, None);
     }
 

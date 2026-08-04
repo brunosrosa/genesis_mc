@@ -469,7 +469,7 @@ mod tests {
         assert_eq!(n_observations_before, 4, "4 observações (1+2+1) criadas");
 
         // ATUA: remove a entidade central "ADR-040".
-        delete_entities(&mut conn, &vec!["ADR-040".to_string()]).expect("deleta ADR-040");
+        delete_entities(&mut conn, &["ADR-040".to_string()]).expect("deleta ADR-040");
 
         // PROVA: cascade apagou as 2 relações que apontam para ADR-040
         // e a observação de ADR-040. As relações e observações de

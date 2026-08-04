@@ -4231,9 +4231,7 @@ mod tests {
         let cmd_dir = repo_dir.join("node_modules").join(".bin");
         std::fs::create_dir_all(&cmd_dir).unwrap();
         let cmd_path = cmd_dir.join("biome.cmd");
-        let trampoline_content = format!(
-            "@\"%~dp0\\..\\@biomejs\\cli-win32-x64\\biome.exe\" %*"
-        );
+        let trampoline_content = "@\"%~dp0\\..\\@biomejs\\cli-win32-x64\\biome.exe\" %*";
         std::fs::write(&cmd_path, trampoline_content).unwrap();
 
         let resolved = resolve_real_binary_from_trampoline(cmd_path.clone(), "biome", &repo_dir);
@@ -4326,11 +4324,11 @@ mod tests {
     #[test]
     fn test_resolve_sast_arsenal_binary_candidates() {
         // biome, oxlint, ruff, opengrep devem ser mapeados
-        assert!(resolve_sast_arsenal_binary("biome").is_some() || true);
-        assert!(resolve_sast_arsenal_binary("oxlint").is_some() || true);
-        assert!(resolve_sast_arsenal_binary("ruff").is_some() || true);
-        assert!(resolve_sast_arsenal_binary("opengrep").is_some() || true);
-        
+        assert!(resolve_sast_arsenal_binary("biome").is_some());
+        assert!(resolve_sast_arsenal_binary("oxlint").is_some());
+        assert!(resolve_sast_arsenal_binary("ruff").is_some());
+        assert!(resolve_sast_arsenal_binary("opengrep").is_some());
+
         // mcp-google e outros não devem ser mapeados
         assert!(resolve_sast_arsenal_binary("mcp-google").is_none());
         assert!(resolve_sast_arsenal_binary("cargo").is_none());

@@ -173,7 +173,7 @@ pub fn aggregate_telemetry(conn: &Connection) -> Result<TelemetryReport, Cogniti
         total_tokens_out: total_out,
         total_cost_usd: total_cost,
         total_duration_ms: total_dur,
-        total_calls: total_calls,
+        total_calls,
         e3_efficiency: e3_global,
         accuracy_score_avg: acc_global,
         e3_efficiency_v2: e3_v2_global,

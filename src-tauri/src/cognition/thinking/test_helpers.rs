@@ -66,9 +66,9 @@ pub fn open_socratic_state_db(workspace_root: &Path) -> Result<Connection, Strin
 /// Complexidade: **O(N)** sobre o slice de entrada (uma única passagem).
 /// SEM recursão: a renderização é responsabilidade do chamador, que
 /// decide se faz DFS manual ou BFS por profundidade.
-pub fn build_socratic_tree<'a>(
-    thoughts: &'a [SocraticThought],
-) -> (Vec<&'a SocraticThought>, HashMap<&'a str, Vec<&'a SocraticThought>>) {
+pub fn build_socratic_tree(
+    thoughts: &[SocraticThought],
+) -> (Vec<&SocraticThought>, HashMap<&str, Vec<&SocraticThought>>) {
     let mut roots: Vec<&SocraticThought> = Vec::new();
     let mut children: HashMap<&str, Vec<&SocraticThought>> = HashMap::new();
     for t in thoughts {

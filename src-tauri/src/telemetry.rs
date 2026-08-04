@@ -1,3 +1,9 @@
+// Test module fica no meio do arquivo por historico de organizacao
+// (helpers -> impls -> constantes -> testes). Itens publicos abaixo
+// do `#[cfg(test)]` sao funcionais, nao "depois do teste" no sentido
+// de broken. Marco 4.0.2: silencia o lint pre-existente.
+#![allow(clippy::items_after_test_module)]
+
 use std::fmt::{self, Write as _};
 use std::fs::OpenOptions;
 use std::io::{self, IsTerminal, Write};

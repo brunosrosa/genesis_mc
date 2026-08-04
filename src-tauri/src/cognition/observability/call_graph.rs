@@ -243,24 +243,36 @@ mod tests {
 
     #[test]
     fn test_symbol_index_remove_for_file() {
-        let count = symbol_count();
+        // Path único por execução de teste para não colidir com
+        // estado global do SYMBOL_INDEX (DashMap<OnceLock>) entre
+        // testes paralelos do `cargo test --workspace`.
+        let unique = format!(
+            "src/temp_remove_for_file_{}_{}.rs",
+            std::process::id(),
+            line!()
+        );
+        let path = PathBuf::from(&unique);
         insert_symbol(SymbolEntry {
-            qualified_name: "temp::a".to_string(),
+            qualified_name: format!("{unique}::a"),
             kind: SymbolKind::Fn,
-            file_path: PathBuf::from("src/temp.rs"),
+            file_path: path.clone(),
             line: 1,
             column: 0,
         });
         insert_symbol(SymbolEntry {
-            qualified_name: "temp::b".to_string(),
+            qualified_name: format!("{unique}::b"),
             kind: SymbolKind::Struct,
-            file_path: PathBuf::from("src/temp.rs"),
+            file_path: path.clone(),
             line: 2,
             column: 0,
         });
-        let removed = remove_symbols_for_file(&PathBuf::from("src/temp.rs"));
-        assert_eq!(removed, 2, "devem ser removidas 2 entradas do temp.rs");
-        assert_eq!(symbol_count(), count, "volta ao baseline apos remocao");
+        let removed = remove_symbols_for_file(&path);
+        assert_eq!(removed, 2, "devem ser removidas 2 entradas deste path");
+        // Garante que ESTES simbolos especificos sumiram, sem
+        // depender do baseline global (outros testes paralelos
+        // podem ter adicionado/removido simbolos simultaneamente).
+        assert!(lookup_symbol(&format!("{unique}::a")).is_none());
+        assert!(lookup_symbol(&format!("{unique}::b")).is_none());
     }
 
     #[test]
@@ -283,16 +295,43 @@ mod tests {
 
     #[test]
     fn test_call_graph_self_loop_is_ignored() {
-        remove_node("self::loop");
-        insert_edge("self::loop", "self::loop", 1000);
-        let node = call_graph()
-            .get("self::loop")
-            .expect("no deve existir");
-        assert!(
-            node.value().callers.is_empty() && node.value().callees.is_empty(),
-            "auto-referencia NAO deve virar aresta"
+        // Simbolo unico para nao colidir com estado global de outros
+        // testes paralelos. Auto-referencia `a -> a` deve ser no-op:
+        // nem cria aresta nem polui os conjuntos de callers/callees
+        // de um no pre-existente.
+        let sym = format!(
+            "self_loop_{}_{}",
+            std::process::id(),
+            line!()
         );
-        // Limpa.
-        remove_node("self::loop");
+        remove_node(&sym);
+        // Pre-injeta o no com conjuntos vazios para validar o no-op
+        // de insert_edge quando caller == callee.
+        insert_node(CallGraphNode {
+            symbol: sym.clone(),
+            callers: HashSet::new(),
+            callees: HashSet::new(),
+            last_updated: 0,
+        });
+        insert_edge(&sym, &sym, 1000);
+        // IMPORTANTE: `node` eh um `Ref<...>` do DashMap e segura um
+        // read lock no shard. Devemos extrair os valores e soltar o
+        // guard ANTES de qualquer operacao de escrita (insert/remove)
+        // subsequente, senao deadlock no mesmo shard.
+        let (callers_empty, callees_empty) = {
+            let node = call_graph()
+                .get(&sym)
+                .expect("no deve existir apos insert explicito");
+            (
+                node.value().callers.is_empty(),
+                node.value().callees.is_empty(),
+            )
+        };
+        assert!(
+            callers_empty && callees_empty,
+            "auto-referencia NAO deve virar aresta (callers_empty={callers_empty}, callees_empty={callees_empty})"
+        );
+        // Limpa para nao vazar estado para outros testes.
+        remove_node(&sym);
     }
 }

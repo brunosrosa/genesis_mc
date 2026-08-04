@@ -149,29 +149,29 @@ fn extract_symbols_stub(content: &str, path: &std::path::Path) -> Vec<SymbolEntr
     for (idx, line) in content.lines().enumerate() {
         let trimmed = line.trim_start();
         let (kind, name) = if let Some(rest) = trimmed.strip_prefix("pub fn ") {
-            (SymbolKind::Fn, rest.split('(').next().unwrap_or(rest).trim())
+            (SymbolKind::Fn, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("fn ") {
-            (SymbolKind::Fn, rest.split('(').next().unwrap_or(rest).trim())
+            (SymbolKind::Fn, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("pub struct ") {
-            (SymbolKind::Struct, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Struct, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("struct ") {
-            (SymbolKind::Struct, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Struct, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("pub enum ") {
-            (SymbolKind::Enum, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Enum, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("enum ") {
-            (SymbolKind::Enum, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Enum, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("pub trait ") {
-            (SymbolKind::Trait, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Trait, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("trait ") {
-            (SymbolKind::Trait, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Trait, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("pub const ") {
-            (SymbolKind::Const, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Const, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("const ") {
-            (SymbolKind::Const, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Const, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("pub static ") {
-            (SymbolKind::Static, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Static, first_ident_token(rest))
         } else if let Some(rest) = trimmed.strip_prefix("static ") {
-            (SymbolKind::Static, rest.split_whitespace().next().unwrap_or(rest))
+            (SymbolKind::Static, first_ident_token(rest))
         } else {
             continue;
         };
@@ -253,13 +253,11 @@ fn extract_call_edges_stub(content: &str, path: &std::path::Path) -> Vec<(String
                     }
                     // Próximo char não-espaço deve ser `(`.
                     let after = line[end..].trim_start();
-                    if let Some(rest) = after.strip_prefix('(') {
-                        if !rest.starts_with(')') {
-                            // Filtra keywords comuns.
-                            let name = &line[start..end];
-                            if !is_keyword(name) && is_valid_identifier(name) && name != "if" && name != "while" {
-                                out.push((caller.clone(), name.to_string()));
-                            }
+                    if after.starts_with('(') {
+                        // Filtra keywords comuns (`if`, `while`, etc).
+                        let name = &line[start..end];
+                        if !is_keyword(name) && is_valid_identifier(name) {
+                            out.push((caller.clone(), name.to_string()));
                         }
                     }
                 }
@@ -276,6 +274,26 @@ fn is_valid_identifier(s: &str) -> bool {
         _ => return false,
     }
     chars.all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// Extrai o primeiro token que seja um identificador Rust válido.
+///
+/// Tolera delimitadores não-Whitespace (`(`, `<`, `:`, `=`, `;`, `,`,
+/// `{`, `}`, `[`, `]`, `&`, `*`, `'`, `<=`, `->`, `=>`, `::`) que
+/// `split_whitespace` não separaria, preservando o nome puro do
+/// símbolo. Ex.: `"LIMIT: usize = 100;"` → `"LIMIT"`.
+fn first_ident_token(rest: &str) -> &str {
+    let mut end = 0;
+    let mut started = false;
+    for (i, c) in rest.char_indices() {
+        if c.is_alphabetic() || c == '_' {
+            started = true;
+            end = i + c.len_utf8();
+        } else if started {
+            break;
+        }
+    }
+    &rest[..end]
 }
 
 fn is_keyword(s: &str) -> bool {

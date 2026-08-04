@@ -45,8 +45,7 @@ fn seed_logit(idx: usize, seed: u32) -> f32 {
     let mut h: u32 = seed.wrapping_add(0x811C_9DC5);
     h = h.wrapping_add(idx as u32);
     h = h.wrapping_mul(0x0100_0193);
-    let normalized = (h % 2000) as f32 / 1000.0 - 1.0;
-    normalized
+    (h % 2000) as f32 / 1000.0 - 1.0
 }
 
 impl EphemeralInferEngine for LlamaCpp4LogitEngine {
@@ -100,7 +99,7 @@ mod tests {
 
         assert_eq!(logits.len(), MOCK_VOCAB_SIZE);
         for &v in logits {
-            assert!(v >= -1.0 && v <= 1.0, "logit fora de [-1,1]: {v}");
+            assert!((-1.0..=1.0).contains(&v), "logit fora de [-1,1]: {v}");
         }
 
         // Re-instanciacao deve produzir a mesma distribution (determinismo).

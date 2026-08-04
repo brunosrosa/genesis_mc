@@ -307,14 +307,20 @@ fn process_batch(
 mod tests {
     use super::*;
     use crate::cognition::thinking::persistence::{BranchId, SocraticThought, ThoughtType};
-    use tempfile::tempdir;
+    use tempfile::{TempDir, tempdir};
 
     /// Helper: cria um banco temporário e devolve (handle, db_path).
-    fn fresh_worker() -> (SocraticWriteHandle, PathBuf) {
+    fn fresh_worker() -> (SocraticWriteHandle, PathBuf, TempDir) {
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("socratic_test.db");
         let handle = spawn_socratic_write_worker(db_path.clone()).expect("spawn worker");
-        (handle, db_path)
+        // CRÍTICO: devolver o `TempDir` para o caller. Caso contrário
+        // o `Drop` do TempDir é disparado no retorno desta função e
+        // deleta o diretório — o worker thread, em seguida, tenta
+        // `Connection::open(&db_path)` em uma pasta inexistente, com
+        // "unable to open database file". Marco 4.0.2 (T2): SQLite
+        // isolado por teste, com diretório de teste vivo até o final.
+        (handle, db_path, dir)
     }
 
     fn make_thought(session_id: &str, step: u32, parent: Option<&str>) -> SocraticThought {
@@ -333,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_try_send_succeeds_under_capacity() {
-        let (h, _p) = fresh_worker();
+        let (h, _p, _dir) = fresh_worker();
         // Pequena espera para o worker inicializar e migrar o schema.
         std::thread::sleep(std::time::Duration::from_millis(20));
 
@@ -354,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_upsert_thought_fire_and_forget_persists() {
-        let (h, db_path) = fresh_worker();
+        let (h, db_path, _dir) = fresh_worker();
         std::thread::sleep(std::time::Duration::from_millis(20));
 
         // Sessão.

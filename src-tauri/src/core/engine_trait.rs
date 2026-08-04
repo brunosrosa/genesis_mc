@@ -304,9 +304,11 @@ mod tests {
     #[test]
     fn test_engine_cascade_gguf_support() {
         let cascade = EngineCascade::new();
-        let mut topology = TopologyFeatures::default();
-        topology.family_raw = "nemotron_h".to_string();
-        topology.file_format = FileFormat::Gguf;
+        let topology = TopologyFeatures {
+            family_raw: "nemotron_h".to_string(),
+            file_format: FileFormat::Gguf,
+            ..Default::default()
+        };
 
         let dummy_path = Path::new("Cargo.toml"); // arquivo existente no workspace
         let (engine_id, support) = cascade.probe_best_engine(dummy_path, &topology);
@@ -321,9 +323,11 @@ mod tests {
         // seja um architecture-agnostic como pulp_lele/burn/ort). O retorno "unsupported"
         // so acontece quando NENHUM probe casa.
         let cascade = EngineCascade::new();
-        let mut topology = TopologyFeatures::default();
-        topology.family_raw = "rwkv".to_string();
-        topology.file_format = FileFormat::Gguf;
+        let topology = TopologyFeatures {
+            family_raw: "rwkv".to_string(),
+            file_format: FileFormat::Gguf,
+            ..Default::default()
+        };
 
         let dummy_path = Path::new("Cargo.toml");
         let (engine_id, support) = cascade.probe_best_engine(dummy_path, &topology);

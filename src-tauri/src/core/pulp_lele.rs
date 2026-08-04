@@ -21,15 +21,10 @@ const HOT_PATH_ITERATIONS: u32 = 10_000;
 #[allow(dead_code)] // usado em tests
 const HOT_PATH_TOTAL_BUDGET_MS: u128 = 220;
 
+#[derive(Debug, Clone, Default)]
 pub struct PulpLeleEngine {
     /// Habilita a medicao sintetica de latencia (para o teste TDD).
     pub bench_mode: bool,
-}
-
-impl Default for PulpLeleEngine {
-    fn default() -> Self {
-        Self { bench_mode: false }
-    }
 }
 
 impl PulpLeleEngine {
@@ -106,7 +101,7 @@ mod tests {
         let engine = PulpLeleEngine::new().with_bench(true);
         let start_total = Instant::now();
         let _ = engine.hot_path_stub();
-        let elapsed_total = start_total.elapsed().as_millis() as u128;
+        let elapsed_total = start_total.elapsed().as_millis();
 
         // 10.000 iteracoes em < 220ms = 22µs/iteracao media (alinhado com a meta p99).
         assert!(

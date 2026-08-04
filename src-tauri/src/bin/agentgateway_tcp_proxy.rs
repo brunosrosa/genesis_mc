@@ -480,7 +480,7 @@ fn process_heavy_data(input: &str) -> String {
         let hash = store.store(payload);
         let hex_hash = hex_encode(&hash);
 
-        let part1 = format!("data: {{\"name\":\"headroom_");
+        let part1 = "data: {\"name\":\"headroom_".to_string();
         let part2 = format!("retrieve\",\"parameters\":{{\"hash\":\"{}\"}}}}\n\n", hex_hash);
 
         let (client_down, server_down) = tokio::io::duplex(1024);
