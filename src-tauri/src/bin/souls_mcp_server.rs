@@ -675,6 +675,19 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
+                        "name": "repo_heatmap",
+                        "description": "Calcula o ranking de calor (Frecency) dos arquivos do monorepo baseando-se em modificacoes e acessos.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." },
+                                "limit": { "type": "integer", "description": "Numero maximo de entradas retornadas (padrao 50).", "minimum": 1, "maximum": 500, "default": 50 },
+                                "lambda": { "type": "number", "description": "Constante de decaimento exponencial (padrao 0.0001, meia-vida ~1h55min).", "default": 0.0001 }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    {
                         "name": "repo_impact",
                         "description": "Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.",
                         "inputSchema": {
@@ -818,10 +831,15 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "mem_delete_observations" => run_mem_delete_observations(params).await,
         "mem_delete_relations" => run_mem_delete_relations(params).await,
         "core_think" => run_core_think(params).await,
-        // Marco 3.7 Fase B — Observabilidade Cognitiva Sensorial.
-        // Emenda ADR-041 (Lei 32/120): servername soberano `souls_mcp`,
-        // toolname curto, aliases canonicos.
-        "heatmap" | "souls_heatmap" => run_heatmap(params).await,
+        // Marco 3.7 Fase B — Observabilidade Cognitiva Sensorial (legado).
+        // Emenda Marco 4.1.2: `souls_heatmap` foi redirecionado para
+        // `run_repo_heatmap` (Frecency monitor); o legado `heatmap`
+        // mantem-se apenas sob o nome canonico `heatmap` (Langevin
+        // sobre access logs — retrocompatibilidade).
+        "heatmap" => run_heatmap(params).await,
+        // Marco 4.1.2 — repo_heatmap: Monitor Termico de Frecency.
+        // Aliases: `repo_heatmap` | `souls_heatmap` | `ctx_heatmap`.
+        "repo_heatmap" | "souls_heatmap" | "ctx_heatmap" => run_repo_heatmap(params).await,
         "repo_impact" | "souls_impact" | "ctx_impact" => run_repo_impact(params).await,
         "routes" | "souls_routes" => run_routes(params).await,
         "feedback" | "souls_feedback" => run_feedback(params).await,
@@ -863,6 +881,8 @@ async fn run_souls_read(params: &serde_json::Map<String, Value>) -> Result<Value
     // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
     // HIPER-FORWARD: o log NAO bloqueia o critical path.
     try_log_file_access(path_str, "read");
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap.
+    try_record_repo_heatmap(path_str);
 
     let path = PathBuf::from(path_str);
     if !path.exists() {
@@ -1587,6 +1607,11 @@ async fn run_souls_symbol(params: &serde_json::Map<String, Value>) -> Result<Val
 
     // Match encontrado: retorna `file:line:col` no formato canônico MCP.
     if let Some(loc) = result {
+        // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap
+        // com o path do arquivo onde o simbolo foi encontrado.
+        if let Some(path_str) = loc.file.to_str() {
+            try_record_repo_heatmap(path_str);
+        }
         return Ok(json!({
             "content": [{
                 "type": "text",
@@ -1882,6 +1907,10 @@ async fn run_repo_ast(params: &serde_json::Map<String, Value>) -> Result<Value, 
 
     let repo_path = PathBuf::from(repo_path_raw);
     validate_repo_path(&repo_path)?;
+
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap
+    // com o path do repositorio analizado.
+    try_record_repo_heatmap(repo_path_raw);
 
     let repo_path_for_task = repo_path.clone();
     let clean_files_for_task = repo_radar::build_repo_radar(&repo_path).clean_files().to_vec();
@@ -3481,6 +3510,8 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
 
     // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
     try_log_file_access(path_str, "edit");
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap.
+    try_record_repo_heatmap(path_str);
 
     let old_string = args.get("old_string").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
@@ -3744,6 +3775,10 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
     // Marco 3.7 Fase B: instrumentacao observability (filesystem spy em batch).
     for p in raw_paths.iter().filter_map(Value::as_str) {
         try_log_file_access(p, "multi_read");
+    }
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap.
+    for p in raw_paths.iter().filter_map(Value::as_str) {
+        try_record_repo_heatmap(p);
     }
 
     let path_strs: Vec<String> = raw_paths
@@ -4063,6 +4098,33 @@ fn try_log_file_access(file_path: &str, tool: &str) {
         reply: reply_tx,
     };
     let _ = tx.try_send(op); // best-effort, nao bloqueia
+}
+
+// Marco 4.1.2: hook fire-and-forget para alimentar `repo_heatmap`
+// (monitor termico de Frecency) com telemetria de uso real.
+//
+// Interceptacao Cognitiva (R15-R17):
+// - Apos chamadas bem-sucedidas de read/edit/symbol/repo_impact/repo_ast/multi_read,
+//   o dispatcher invoca silenciosamente este hook.
+// - NUNCA retorna Err ao caller (fire-and-forget).
+// - Filtra por extensao canonica (extensions::is_source_ext).
+// - Recalcula score com `DEFAULT_LAMBDA`.
+//
+// O hook abre o `souls_state.db` em modo read-write, mas se o banco
+// nao estiver disponivel (cold start, race no boot), ignora silenciosamente.
+fn try_record_repo_heatmap(file_path: &str) {
+    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::record_access;
+    let Ok(conn) = Connection::open_with_flags(
+        workspace_root().join(".souls_data").join("souls_state.db"),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    ) else {
+        return; // best-effort: cold start ou DB indisponivel
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    record_access(&conn, file_path, now);
 }
 
 // Marco 3.7 Fase B: helper para enfileirar telemetria FinOps no StateDbWorker.
@@ -4397,6 +4459,102 @@ async fn run_heatmap(params: &serde_json::Map<String, Value>) -> Result<Value, R
     }))
 }
 
+/// `repo_heatmap` — Marco 4.1.2: Monitor Termico de Frecency.
+///
+/// Canibaliza a "Alma Matematica" do observability heatmap (Langevin)
+/// e a substitui por **Frecency** (count × exp decay) com persistencia
+/// SQLite STRICT. Topologia completa: WalkDir filtrado pelas 22
+/// extensoes canonicas + mtime nativo do SO + UPSERT atomico +
+/// ranking por score descendente.
+///
+/// **Aliases retrocompativeis:** `repo_heatmap` | `souls_heatmap` | `ctx_heatmap`.
+///
+/// **Lei R12:** coexiste com a ferramenta legada `heatmap` (Langevin
+/// sobre access logs). Semantica distinta: este mede **modificacoes
+/// reais** (mtime + contagem), aquele mede **acessos em runtime**.
+///
+/// **Interceptacao Cognitiva (R15):** apos `read`/`edit`/`symbol`/
+/// `repo_impact`/`repo_ast`/`multi_read`, o hook
+/// `try_record_repo_heatmap` atualiza silenciosamente este heatmap.
+async fn run_repo_heatmap(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::{
+        compute_repo_heatmap, ensure_heatmap_table, HeatmapError, DEFAULT_LAMBDA,
+    };
+
+    let args = extract_arguments(params);
+    let repo_root = args
+        .get("repo_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .unwrap_or_else(workspace_root);
+    let limit: usize = args
+        .get("limit")
+        .and_then(Value::as_i64)
+        .map(|v| v.max(1) as usize)
+        .unwrap_or(50);
+    let lambda: f64 = args
+        .get("lambda")
+        .and_then(Value::as_f64)
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(DEFAULT_LAMBDA);
+
+    // SSOT souls_state.db (Marco 3.9 Estado V5).
+    let souls_data_dir = workspace_root().join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    let conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao abrir souls_state.db: {e}"),
+        data: None,
+    })?;
+    conn.busy_timeout(std::time::Duration::from_millis(5000))
+        .map_err(|e| RpcError {
+            code: -32000,
+            message: format!("busy_timeout falhou: {e}"),
+            data: None,
+        })?;
+
+    // Migracao idempotente (TASK-04 do Marco 4.1.2).
+    ensure_heatmap_table(&conn).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("ensure_heatmap_table falhou: {e}"),
+        data: None,
+    })?;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let report = compute_repo_heatmap(&repo_root, &conn, now, lambda, limit).map_err(|e| match e {
+        HeatmapError::InvalidPath(msg) => RpcError {
+            code: -32602,
+            message: format!("repo_path invalido: {msg}"),
+            data: Some(json!({ "repo_path": repo_root.display().to_string() })),
+        },
+        HeatmapError::Io(msg) => RpcError {
+            code: -32010,
+            message: format!("Falha de I/O ao varrer repositorio: {msg}"),
+            data: None,
+        },
+        HeatmapError::Sqlite(msg) => RpcError {
+            code: -32000,
+            message: format!("Falha de SQLite: {msg}"),
+            data: None,
+        },
+    })?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
+        }]
+    }))
+}
+
 /// `repo_impact` — Marco 4.1.0: Blast Radius multilíngue via BFS
 /// reverso no grafo de imports (canibalizado de
 /// `lean_vacuum::repo_impact`).
@@ -4431,6 +4589,10 @@ async fn run_repo_impact(params: &serde_json::Map<String, Value>) -> Result<Valu
         message: format!("Falha ao calcular Blast Radius: {e}"),
         data: None,
     })?;
+
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap
+    // com o path do arquivo-alvo analizado.
+    try_record_repo_heatmap(&report.target_file);
 
     Ok(json!({
         "content": [{
