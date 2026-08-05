@@ -16,6 +16,7 @@ pub mod dedup;
 pub mod dot_flatten;
 pub mod extensions;
 pub mod myers_diff;
+pub mod repo_heatmap;
 pub mod repo_impact;
 pub mod search;
 pub mod smart_read;
@@ -31,6 +32,10 @@ pub use dedup::{
 pub use dot_flatten::dot_flatten;
 pub use extensions::{is_excluded_dir, is_source_ext, EXCLUDE_DIRS, SOURCE_EXTENSIONS};
 pub use myers_diff::myers_diff;
+pub use repo_heatmap::{
+    calculate_frecency, compute_repo_heatmap, ensure_heatmap_table, open_heatmap_db, record_access,
+    HeatmapEntry, HeatmapError, HeatmapReport, DEFAULT_LAMBDA, MAX_SCORE, MAX_FILES_SCAN,
+};
 pub use repo_impact::{
     repo_impact as repo_impact_fn, ImpactEdge, ImpactGraphPayload, ImpactReport, RepoImpactError,
     DEFAULT_MAX_DEPTH, MAX_DEPTH_CEILING,
