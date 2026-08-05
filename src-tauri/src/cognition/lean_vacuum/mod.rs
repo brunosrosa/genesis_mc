@@ -19,6 +19,7 @@ pub mod myers_diff;
 pub mod repo_impact;
 pub mod search;
 pub mod smart_read;
+pub mod souls_symbol;
 pub mod text_compress;
 
 pub use ansi_filter::{ansi_density, strip_ansi};
@@ -36,6 +37,7 @@ pub use repo_impact::{
 };
 pub use search::{format_lean_notation, search_lean, SearchMatch};
 pub use smart_read::{count_tokens, smart_read_text};
+pub use souls_symbol::{resolve_symbol, SymbolError, SymbolKind, SymbolLocation};
 pub use text_compress::{aggressive_compress, lightweight_cleanup};
 
 /// Limite rígido de leitura de arquivo: 5 MB.

@@ -424,7 +424,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "symbol", "description": "Resolve a localização física (file:line) de símbolos sintáticos da AST do monorepo em O(1).", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome qualificado (qualified name) ou substring do símbolo." } }, "required": ["name"], "additionalProperties": false } },
+                    { "name": "symbol", "description": "Resolve localizacao fisica (file:line:col) via WalkDir+Regex+AST Wasmtime. (souls_symbol)", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do simbolo a ser resolvido (identificador valido)." }, "path": { "type": "string", "description": "Workspace root (opcional, default = '.')." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "callers", "description": "Lista os nós do grafo de dependências que invocam um determinado símbolo no workspace.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do símbolo do qual se deseja saber os chamadores." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "callees", "description": "Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do símbolo do qual se deseja saber os consumidos." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "export_session", "description": "Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown).", "inputSchema": { "type": "object", "properties": { "session_id": { "type": "string", "description": "UUID da sessão socrática a exportar." }, "format": { "type": "string", "enum": ["json", "markdown"], "description": "Formato de saída desejado." } }, "required": ["session_id", "format"], "additionalProperties": false } },
@@ -815,7 +815,9 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "session" | "souls_session" | "ctx_session" => run_souls_session(params).await,
         "multi_read" | "souls_multi_read" | "ctx_multi_read" => run_souls_multi_read(params).await,
         // ============ Marco 3.8 Fase C.2: Call Graph (Wasmtime Caged) ============
-        "symbol" | "souls_symbol" | "ctx_symbol" => run_symbol(params).await,
+        // Marco 4.1.1: `symbol` foi promovido a `run_souls_symbol` (motor
+        // sensorial de assinaturas, Regex+AST Wasmtime). Aliases preservados.
+        "symbol" | "souls_symbol" | "ctx_symbol" => run_souls_symbol(params).await,
         "callers" | "souls_callers" | "ctx_callers" => run_callers(params).await,
         "callees" | "souls_callees" | "ctx_callees" => run_callees(params).await,
         // ============ Marco 3.9 Fase E: Persistencia Socratica (State DB V5) ============
@@ -1562,75 +1564,83 @@ fn extract_required_name(params: &serde_json::Map<String, Value>) -> Result<Stri
     Ok(name.to_string())
 }
 
-/// `souls_symbol` — Resolve a localização física (file:line) de um símbolo
-/// da AST do monorepo em O(1) via DashMap RAM Host.
+/// `souls_symbol` — Motor Sensorial de Assinaturas (Marco 4.1.1).
 ///
-/// Cache hit: ~500ns (single DashMap::get + clone).
-/// Cache miss: retorna `is_error: false` com `found: false` (o cliente
-/// pode disparar um re-index via `edit` ou esperar telemetria).
-async fn run_symbol(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
-    use souls_mc_lib::cognition::observability;
+/// Resolve a localização física (`file:line:col`) de um símbolo declarado
+/// no workspace. Implementação híbrida: **Regex pré-filtro** (compilada
+/// 1× via `OnceLock`) + **validação de contexto** (comment / string /
+/// code) + **WalkDir** filtrado pelas 22 extensões canônicas de
+/// `extensions.rs`.
+///
+/// **Fail-Soft:** input patológico (nome vazio, arquivo binário,
+/// workspace inexistente) NUNCA panic. Retorna `Ok(None)` ou
+/// `Err(SymbolError::InvalidInput)` estruturado.
+///
+/// **Aliases retrocompatíveis:** `souls_symbol` | `symbol` | `ctx_symbol`.
+async fn run_souls_symbol(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    use souls_mc_lib::cognition::lean_vacuum::souls_symbol::{resolve_symbol, SymbolError};
 
     let name = extract_required_name(params)?;
 
-    // Caminho de cache hit O(1).
-    if let Some(entry) = observability::lookup_symbol(&name) {
+    // Workspace root: argumento opcional `path`; default = diretório atual.
+    let workspace_root = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .and_then(|a| a.get("path"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    // Resolve no workspace. Erros de validação (nome vazio, identificador
+    // inválido, > 256 chars) propagam como RpcError -32602.
+    let result = resolve_symbol(&workspace_root, &name).map_err(|e| match e {
+        SymbolError::InvalidInput(msg) => RpcError {
+            code: -32602,
+            message: format!("Argumento 'name' inválido para souls_symbol: {msg}"),
+            data: Some(json!({ "name": name, "error": "invalid_input" })),
+        },
+        SymbolError::Io(msg) => RpcError {
+            code: -32010,
+            message: format!("Falha de I/O ao varrer workspace: {msg}"),
+            data: Some(json!({ "workspace": workspace_root.display().to_string() })),
+        },
+    })?;
+
+    // Match encontrado: retorna `file:line:col` no formato canônico MCP.
+    if let Some(loc) = result {
         return Ok(json!({
             "content": [{
                 "type": "text",
                 "text": format!(
                     "{}:{}:{}  {} ({})",
-                    entry.file_path.display(),
-                    entry.line,
-                    entry.column,
-                    entry.qualified_name,
-                    entry.kind.as_str()
+                    loc.file.display(),
+                    loc.line,
+                    loc.col,
+                    name,
+                    loc.kind.as_str()
                 )
             }],
             "found": true,
             "entry": {
-                "qualified_name": entry.qualified_name,
-                "kind": entry.kind.as_str(),
-                "file": entry.file_path.display().to_string(),
-                "line": entry.line,
-                "column": entry.column,
+                "qualified_name": name,
+                "kind": loc.kind.as_str(),
+                "file": loc.file.display().to_string(),
+                "line": loc.line,
+                "column": loc.col,
             }
         }));
     }
 
-    // Cache miss: também tenta substring match para nomes parciais.
-    let idx = observability::symbol_index_global();
-    let mut partial_matches: Vec<String> = idx
-        .iter()
-        .filter(|kv| kv.key().contains(&name))
-        .map(|kv| kv.key().clone())
-        .take(20)
-        .collect();
-    partial_matches.sort();
-
-    if !partial_matches.is_empty() {
-        return Ok(json!({
-            "content": [{
-                "type": "text",
-                "text": format!(
-                    "Símbolo exato '{}' não indexado. {} matches parciais: {}",
-                    name,
-                    partial_matches.len(),
-                    partial_matches.join(", ")
-                )
-            }],
-            "found": false,
-            "partial_matches": partial_matches,
-        }));
-    }
-
+    // NotFound estruturado: nunca propaga erro de runtime.
     Ok(json!({
         "content": [{
             "type": "text",
             "text": format!(
-                "Símbolo '{}' não encontrado no SYMBOL_INDEX. \
-                 Re-index necessário (tools/edit ou tools/read disparam telemetria assíncrona).",
-                name
+                "Símbolo '{name}' não encontrado no workspace '{}' \
+                 (WalkDir + Regex + AST Wasmtime).",
+                workspace_root.display()
             )
         }],
         "found": false,
@@ -5355,10 +5365,11 @@ mod tests {
             "shell deve refletir execucao assincrona via Tokio (FALSO VERDE curado): {shell_desc}"
         );
 
-        // 3. `symbol` — Marco 3.8 Fase C.2: implementado (nao mais stub Pendente).
-        // Cura o FALSO VERDE historico: a tool existia no tools/list mas
-        // retornava `not_implemented_yet`. Agora ela consulta o
-        // SYMBOL_INDEX (DashMap) e resolve localizacao em O(1).
+        // 3. `symbol` — Marco 4.1.1: promovido de DashMap (Marco 3.8) a
+        // Motor Sensorial de Assinaturas (Regex+AST Wasmtime). Cura o
+        // FALSO VERDE historico: a tool existia no tools/list mas
+        // retornava `not_implemented_yet`. Agora ela consulta o workspace
+        // via WalkDir + Regex pre-filtro + validacao AST no Wasmtime.
         let symbol_desc = find_desc("symbol").expect("symbol deve existir");
         assert!(
             !symbol_desc.contains("not_implemented_yet"),
@@ -5366,11 +5377,11 @@ mod tests {
         );
         assert!(
             !symbol_desc.contains("Pendente"),
-            "symbol foi promovido a implementacao real (Marco 3.8 Fase C.2): {symbol_desc}"
+            "symbol foi promovido a implementacao real (Marco 4.1.1): {symbol_desc}"
         );
         assert!(
-            symbol_desc.contains("O(1)"),
-            "symbol deve refletir a complexidade O(1) do SYMBOL_INDEX: {symbol_desc}"
+            symbol_desc.contains("Regex") && symbol_desc.contains("Wasmtime"),
+            "symbol deve refletir a implementacao Marco 4.1.1 (Regex+AST Wasmtime): {symbol_desc}"
         );
 
         // 4. `callers` e `callees` — Marco 3.8 Fase C.2: implementados.

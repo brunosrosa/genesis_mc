@@ -1,0 +1,780 @@
+   Compiling souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 25s
+     Running unittests src\lib.rs (target\debug\deps\souls_mc_lib-85422b481de22680.exe)
+
+running 514 tests
+test cognition::lean_vacuum::ansi_filter::tests::strip_ansi_passthrough_when_no_escape ... ok
+test cognition::context_compression::dedup::tests::hash_block_differs_for_different_input ... ok
+test cognition::context_compression::dedup::tests::compress_with_dedup_empty_input_returns_empty ... ok
+test cognition::context_compression::dedup::tests::is_blank_line_detects_empty_and_whitespace_only ... ok
+test cognition::lean_vacuum::ansi_filter::tests::ansi_density_counts_only_esc_chars ... ok
+test cognition::lean_vacuum::ansi_filter::tests::ansi_density_is_zero_for_plain_text ... ok
+test cognition::lean_vacuum::ansi_filter::tests::strip_ansi_handles_cursor_and_clear_codes ... ok
+test cognition::lean_vacuum::atomic_once::tests::unit_get_returns_value_after_init ... ok
+test cognition::context_compression::dedup::tests::compress_with_dedup_first_occurrence_keeps_physical_text ... ok
+test cognition::lean_vacuum::atomic_once::tests::unit_debug_shows_initialized ... ok
+test cognition::context_compression::dedup::tests::dedup_marker_format_is_strict_16char_hex ... ok
+test cognition::context_compression::dedup::tests::hash_block_is_deterministic_for_identical_input ... ok
+test cognition::lean_vacuum::atomic_once::tests::unit_sequential_first_wins ... ok
+test cognition::lean_vacuum::dedup::tests::test_session_cache_clear_successful ... ok
+test cognition::lean_vacuum::ansi_filter::tests::ansi_density_handles_empty_string ... ok
+test cognition::context_compression::dedup::tests::compress_with_dedup_preserves_pre_block_lines_on_duplicate ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_empty_object_returns_empty_string ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_null_value ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_root_scalar ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_array ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_mixed_types_in_object ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_nested_array_of_objects ... ok
+test cognition::lean_vacuum::dedup::tests::test_deduplicate_blocks_5_lines ... ok
+test cognition::lean_vacuum::ansi_filter::tests::strip_ansi_removes_color_codes ... ok
+test cognition::lean_vacuum::dedup::tests::test_cross_file_deduplication_successful ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_simple_object ... ok
+test cognition::lean_vacuum::extensions::tests::constants_have_expected_size ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_string_with_special_chars_preserves_value ... ok
+test cognition::lean_vacuum::atomic_once::tests::unit_concurrent_only_one_winner ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_string_with_quotes_is_escaped ... ok
+test cognition::lean_vacuum::extensions::tests::is_excluded_dir_covers_lean_ctx_list ... ok
+test cognition::lean_vacuum::dot_flatten::tests::dot_flatten_with_booleans_literal ... ok
+test cognition::lean_vacuum::extensions::tests::is_excluded_dir_covers_souls_extras ... ok
+test cognition::lean_vacuum::extensions::tests::is_excluded_dir_does_not_overexclude ... ok
+test cognition::lean_vacuum::extensions::tests::is_excluded_dir_handles_dotfiles ... ok
+test cognition::lean_vacuum::myers_diff::tests::myers_diff_empty_strings ... ok
+test cognition::lean_vacuum::extensions::tests::is_source_ext_covers_lean_ctx_list ... ok
+test cognition::lean_vacuum::extensions::tests::is_source_ext_rejects_non_code ... ok
+test cognition::lean_vacuum::myers_diff::tests::myers_diff_deletion_and_insertion ... ok
+test cognition::lean_vacuum::extensions::tests::is_source_ext_covers_config_as_code ... ok
+test cognition::lean_vacuum::myers_diff::tests::myers_diff_no_changes ... ok
+test cognition::lean_vacuum::myers_diff::tests::myers_diff_with_stats_counts_correctly ... ok
+test cognition::lean_vacuum::myers_diff::tests::myers_diff_single_insertion ... ok
+test cognition::lean_vacuum::repo_impact::tests::unit_bfs_reverse_cuts_cycle_in_o1 ... ok
+test cognition::lean_vacuum::repo_impact::tests::unit_transpose_graph_inverts_edges ... ok
+test cognition::lean_vacuum::search::tests::test_search_lean_notation_formatting ... ok
+test cognition::lean_vacuum::souls_symbol::tests::byte_offset_to_line_col_works_for_multiline ... ok
+test cognition::lean_vacuum::souls_symbol::tests::classify_kind_distinguishes_struct_fn_class ... ok
+test cognition::lean_vacuum::repo_impact::tests::unit_import_regex_captures_python_from ... ok
+test cognition::lean_vacuum::repo_impact::tests::unit_import_regex_captures_js_require ... ok
+test cognition::lean_vacuum::repo_impact::tests::unit_import_regex_captures_rust_crate ... ok
+test cognition::lean_vacuum::souls_symbol::tests::is_in_comment_or_string_detects_block_comment_same_line ... ok
+test cognition::lean_vacuum::souls_symbol::tests::is_in_comment_or_string_allows_real_declaration ... ok
+test cognition::lean_vacuum::souls_symbol::tests::is_in_comment_or_string_detects_line_comment ... ok
+test cognition::lean_vacuum::souls_symbol::tests::is_in_comment_or_string_detects_string_literal ... ok
+test cognition::lean_vacuum::souls_symbol::tests::is_valid_identifier_accepts_canonical_forms ... ok
+test cognition::lean_vacuum::souls_symbol::tests::is_valid_identifier_rejects_invalid ... ok
+test cognition::lean_vacuum::smart_read::tests::test_smart_read_polyglot_elixir_block_end ... ok
+test cognition::lean_vacuum::smart_read::tests::test_smart_read_polyglot_python_indent_pass ... ok
+test cognition::lean_vacuum::tests::compress_to_lean_removes_ansi_and_comments ... ok
+test cognition::lean_vacuum::tests::read_to_lean_rejects_oversized_file ... ok
+test cognition::lean_vacuum::text_compress::tests::aggressive_compress_collapses_long_brace_runs ... ok
+test cognition::lean_vacuum::text_compress::tests::aggressive_compress_strips_python_comments_but_preserves_shebang ... ok
+test cognition::lean_vacuum::text_compress::tests::aggressive_compress_strips_rust_line_comments ... ok
+test cognition::lean_vacuum::text_compress::tests::aggressive_compress_strips_sql_comments ... ok
+test cognition::lean_vacuum::text_compress::tests::lightweight_cleanup_collapses_consecutive_blank_lines ... ok
+test cognition::lean_vacuum::text_compress::tests::lightweight_cleanup_preserves_code_with_brace_run ... ok
+test cognition::observability::call_graph::tests::test_call_graph_edge_insertion_is_symmetric ... ok
+test cognition::observability::call_graph::tests::test_call_graph_self_loop_is_ignored ... ok
+test cognition::observability::call_graph::tests::test_symbol_index_insert_and_lookup ... ok
+test cognition::observability::call_graph::tests::test_symbol_index_remove_for_file ... ok
+test cognition::observability::mpsc_telemetry::tests::test_extract_call_edges_stub_finds_call_relations ... ok
+test cognition::observability::mpsc_telemetry::tests::test_extract_symbols_stub_finds_rust_fns ... ok
+test cognition::observability::mpsc_telemetry::tests::test_try_emit_event_never_blocks_when_channel_full ... ok
+test cognition::lean_vacuum::souls_symbol::tests::resolve_symbol_rejects_invalid_identifier ... ok
+test cognition::lean_vacuum::souls_symbol::tests::resolve_symbol_rejects_empty_name ... ok
+test cognition::memory_graph::ops::tests::test_migration_user_version_bump ... ok
+test cognition::memory_graph::ops::tests::test_graph_cascade_delete ... ok
+test cognition::lean_vacuum::souls_symbol::tests::resolve_symbol_returns_none_for_empty_workspace ... ok
+test cognition::swarm::tests::test_ensure_phase2_schema_migrates_legacy_columns ... ok
+test cognition::swarm::tests::test_from_env_missing_var_returns_config_error ... ok
+test cognition::swarm::tests::test_normalize_lens_payload_extracts_json_from_code_fence ... ok
+test cognition::swarm::tests::test_from_openrouter_env_missing_key_returns_config_error ... ok
+test cognition::observability::wasm_engine::tests::test_engine_singleton_is_stable ... ok
+test cognition::lean_vacuum::repo_impact::tests::integration_direct_dependents_chain ... ok
+test cognition::swarm::tests::test_normalize_lens_payload_salvages_bullets_from_recommendation_when_empty ... ok
+test cognition::swarm::tests::test_normalize_lens_payload_falls_back_to_plain_bullets ... ok
+test cognition::swarm::tests::test_normalize_lens_payload_strips_think_block_before_json ... ok
+test cognition::swarm_dispatcher::tests::test_finops_rejection ... ok
+test cognition::synthesizer::tests::batch_payload_maps_dynamic_range_and_82_columns ... ok
+test cognition::swarm::tests::test_package_isolation_routes_only_its_own_payload_to_each_lens ... ok
+test cognition::lean_vacuum::repo_impact::tests::integration_cyclic_protection_aborts_safely ... ok
+test cognition::lean_vacuum::repo_impact::tests::integration_respects_max_depth_one ... ok
+test cognition::synthesizer::tests::block2a_requires_indicacao_and_all_narrative_fields ... ok
+test cognition::synthesizer::tests::block3_injects_cure_fields_when_stack_base_or_licenca_are_unknown ... ok
+test cognition::synthesizer::tests::block3_models_default_to_preferred_order ... ok
+test cognition::synthesizer::tests::block3_invalid_enum_fails_parse_under_strict_catalog ... ok
+test cognition::synthesizer::tests::canonical_82_columns_are_covered_by_block_contracts_or_phase4_derivation ... ok
+test cognition::synthesizer::tests::cure_normalizers_accept_known_aliases_and_reject_unknown ... ok
+test cognition::synthesizer::tests::extracts_json_code_fence_strictly ... ok
+test cognition::synthesizer::tests::block3_fallback_tries_next_model_after_weak_homogeneous_medium ... ok
+test cognition::synthesizer::tests::detects_homogeneous_block3_payload ... ok
+test cognition::synthesizer::tests::extracts_raw_json_when_no_code_fence_is_present ... ok
+test cognition::synthesizer::tests::finops_skip_omits_categoria_arquitetural_from_block3_field_keys_when_already_present ... ok
+test cognition::synthesizer::tests::finops_skip_omits_proposta_original_resumo_from_block1_field_keys_when_already_present ... ok
+test cognition::synthesizer::tests::homogeneous_medium_only_conflicts_when_scores_leave_middle_band ... ok
+test cognition::synthesizer::tests::lens_json_is_reduced_to_bullets_only ... ok
+test cognition::synthesizer::tests::list_fields_are_humanized_from_json_array_string ... ok
+test cognition::synthesizer::tests::phase4_populates_block5_locally ... ok
+test cognition::synthesizer::tests::master_row_accepts_ptbr_enum_aliases_and_string_floats ... ok
+test cognition::synthesizer::tests::sheet_row_exports_floats_as_dot_strings_and_valid_to_as_empty ... ok
+test cognition::synthesizer::tests::terminal_checkpoint_does_not_override_incomplete_payload_stage ... ok
+test cognition::synthesizer::tests::retries_up_to_three_injecting_error ... ok
+test cognition::thinking::analytics::tests::test_compute_metrics_branching ... ok
+test cognition::thinking::analytics::tests::test_compute_metrics_empty ... ok
+test cognition::thinking::analytics::tests::test_compute_metrics_revision_rate ... ok
+test cognition::thinking::ops::tests::test_fk_cascade_purges_thoughts ... ok
+test cognition::thinking::ops::tests::test_fk_rejects_orphan_session_id ... ok
+test cognition::thinking::ops::tests::test_migrate_v3_to_v5_is_idempotent ... ok
+test cognition::thinking::state_machine::tests::test_thinking_branching_routing ... ok
+test cognition::thinking::state_machine::tests::test_thinking_disjuntor_loop ... ok
+test cognition::thinking::state_machine::tests::test_thinking_hitl_extension_to_7 ... ok
+test cognition::thinking::state_machine::tests::test_thinking_revision_without_target ... ok
+test core::bitnet_engine::tests::test_bitnet_engine_fails_soft_on_non_existent_model ... ok
+test core::bitnet_daemon::tests::test_bitnet_daemon_lifecycle_sigkill ... ok
+test core::burn_agnostic::tests::test_burn_agnostic_engine_pending_error ... ok
+test core::burn_agnostic::tests::test_burn_agnostic_marker_covers_all_target_backends ... ok
+test core::engine_trait::tests::test_bitnet_probe_only_supports_ternary_models ... ok
+test core::engine_trait::tests::test_engine_cascade_gguf_support ... ok
+test core::engine_trait::tests::test_engine_cascade_has_8_probes ... ok
+test core::bitnet_engine::tests::test_bitnet_engine_rejects_non_ternary_path ... ok
+test core::engine_trait::tests::test_engine_cascade_unsupported_arch ... ok
+test cognition::observability::wasm_engine::tests::test_execute_safely_happy_path ... ok
+test core::hardware_profiler::tests::test_pcie_bandwidth_calculation ... ok
+test core::file_locker::tests::test_file_lock_garbage_collection ... ok
+test core::headroom_engine::tests::test_ast_code_compressor_zero_copy ... ok
+test core::hardware_profiler::tests::test_detect_system_topology_fail_safe ... ok
+test core::headroom_engine::tests::test_ccr_dashmap_allocation_host_ram ... ok
+test cognition::observability::wasm_engine::tests::test_include_bytes_wasm_loads_without_disk_io ... ok
+test core::headroom_engine::tests::test_ccr_lru_eviction_high_watermark ... ok
+test core::headroom_engine::tests::test_code_compressor_resilient_scope ... ok
+test cognition::observability::wasm_engine::tests::test_wasm_tree_sitter_isolation ... ok
+test cognition::observability::wasm_engine::tests::test_fuel_limit_kills_infinite_loop ... ok
+test core::headroom_engine::tests::test_headroom_math_budget ... ok
+test core::headroom_engine::tests::test_headroom_math_budget_capped_gemma ... ok
+test core::llama_cpp4_logit::tests::test_llama_cpp4_logit_engine_respects_thermal_paused ... ok
+test core::mcp_transport::tests::test_decode_rejects_missing_method ... ok
+test core::llama_cpp4_logit::tests::test_llama_cpp4_logit_engine_returns_deterministic_logits ... ok
+test core::mcp_transport::tests::test_decode_rejects_invalid_jsonrpc_version ... ok
+test core::headroom_engine::tests::test_llmlingua2_forbidden_on_ast_block ... ok
+test core::headroom_engine::tests::test_rejection_unsupported_architecture_zamba2 ... ok
+test core::mcp_transport::tests::test_lean_vacuum_collapses_blank_lines ... ok
+test core::mcp_transport::tests::test_lean_vacuum_collapses_multiple_spaces ... ok
+test core::mcp_transport::tests::test_lean_vacuum_disabled_returns_input_intact ... ok
+test core::mcp_transport::tests::test_mcp_transport_trait_encode_decode_roundtrip ... ok
+test core::mcp_transport::tests::test_tool_result_error_marker ... ok
+test core::model_manager::tests::test_auto_profiling_rejects_overbudget_gguf ... ok
+test core::mistral_sidecar::tests::test_mistral_sidecar_engine_falls_back_when_binary_missing ... ok
+test core::model_manager::tests::test_ngram_speculation_buffer_allocation_host_ram ... ok
+test core::model_manager::tests::test_critic_worker_core_affinity_pinning ... ok
+test core::model_registry::tests::test_vram_thermodynamics_gqa_asymmetric_kv_and_batch ... ok
+test cognition::swarm::tests::test_fail_fast_aborts_after_third_429_and_last_resort_and_keeps_debate_table_empty ... ok
+test core::model_registry::tests::test_vram_thermodynamics_preventive_oom_without_flash_attention ... ok
+test core::model_manager::tests::test_ralph_loop_prefix_reuse_zero_vram_leak ... ok
+test core::model_registry::tests::test_vram_thermodynamics_system_topology_integration ... ok
+test core::ort_scorer::tests::test_ort_scorer_engine_fails_on_missing_onnx_model ... ok
+test core::ort_scorer::tests::test_ort_scorer_engine_mock_score_is_deterministic_and_normalized ... ok
+test core::ort_scorer::tests::test_ort_scorer_engine_returns_mock_text ... ok
+test core::pulp_lele::tests::test_pulp_lele_engine_completes_under_22us_per_iteration ... ok
+test core::pulp_lele::tests::test_pulp_lele_engine_respects_request_contract ... ok
+test core::response_healing::tests::test_heal_malformed_json_cow ... ok
+test core::response_healing::tests::test_response_healing_sub_millisecond_json_repair ... ok
+test cognition::memory_graph::ops::tests::test_fts5_observational_grounding ... ok
+test core::v3_ignition_tests::tests::test_souls_fill_vram_awareness ... ok
+test core::model_registry::tests::test_format_model_canonical_name ... ok
+test finops::finops_router::tests::smoke_test_blob_08_from_sqlite_vault ... ok
+test cognition::thinking::socratic_bridge::tests::test_try_send_succeeds_under_capacity ... ok
+test finops::iron_cost::tests::test_budget_wall ... ok
+test finops::iron_cost::tests::test_cloud_fallback_to_local ... ok
+test finops::iron_cost::tests::test_cloud_happy_path ... ok
+test finops::iron_cost::tests::test_local_gpu_happy_path ... ok
+test finops::iron_cost::tests::test_local_gpu_vram_exceeded ... ok
+test finops::pareto_bandit::tests::test_hardware_guillotine_blocks_tier1_on_low_pcie_spillover ... ok
+test finops::pareto_bandit::tests::test_pareto_utility_math ... ok
+test finops::pareto_bandit::tests::test_tier0_selection_for_simple_tasks ... ok
+test finops::pareto_bandit::tests::test_tier1_allowed_on_high_pcie_bandwidth_even_with_spillover ... ok
+test finops::pareto_bandit::tests::test_tier1_selection_when_within_vram ... ok
+test finops::pareto_bandit::tests::test_tier2_selection_for_extreme_complexity ... ok
+test core::model_registry::tests::test_collect_local_models_respects_max_depth_5 ... ok
+test core::headroom_engine::tests::test_souls_ccr_store_lru_eviction ... ok
+test finops::phase1_5::cloud_cascade::tests::test_invalid_input_returns_error ... ok
+test finops::phase1_5::cloud_cascade::tests::test_free_tier_success ... ok
+test finops::phase1_5::cloud_cascade::tests::test_free_tier_rate_limit_then_paid_fallback ... ok
+test finops::phase1_5::cloud_cascade::tests::test_whitespace_only_input_returns_error ... ok
+test finops::phase1_5::cloud_cascade::tests::test_paid_tier_also_fails ... ok
+test finops::phase1_5::local_distiller::tests::test_drop_logs_cleanup ... ok
+test cognition::swarm_dispatcher::tests::test_swarm_parallel_execution ... ok
+test finops::phase1_5::local_distiller::tests::test_invalid_input_returns_error ... ok
+test finops::phase1_5::local_distiller::tests::test_exact_boundary_chunking ... ok
+test finops::phase1_5::local_distiller::tests::test_small_input_does_not_chunk ... ok
+test finops::phase1_5::local_distiller::tests::test_truncating_inference_returns_real_payload_without_mock_marker ... ok
+test finops::phase1_5::local_distiller::tests::test_chunking_with_overlap ... ok
+test finops::phase1_5::orchestrator::tests::test_blob_10_naming_conversion ... ok
+test finops::phase1_5::orchestrator::tests::test_error_propagation ... ok
+test finops::phase1_5::orchestrator::tests::test_essence_naming_conversion ... ok
+test finops::phase1_5::local_distiller::tests::test_chunks_15k_tokens_into_6k_blocks ... ok
+test finops::phase1_5::orchestrator::tests::test_invalid_repo_id ... ok
+test finops::phase1_5::orchestrator::tests::test_no_blobs_found_error ... ok
+test finops::phase1_5::orchestrator::tests::test_sequential_processing_no_parallelism ... ok
+test finops::phase1_5::orchestrator::tests::test_zone_routing_green ... ok
+test finops::phase1_5::orchestrator::tests::test_zone_routing_red_routes_to_cloud_cascade ... ok
+test finops::phase1_5::orchestrator::tests::test_zone_routing_yellow_bypasses_local_and_routes_to_cloud_cascade ... ok
+test finops::phase1_5::package_assembler::tests::test_blob_10_appended_to_all_packages ... ok
+test finops::phase1_5::package_assembler::tests::test_missing_blob_10_returns_error ... ok
+test finops::phase1_5::package_assembler::tests::test_missing_essence_returns_error ... ok
+test finops::phase1_5::package_assembler::tests::test_blob_10_fetched_from_raw_blobs_not_destiled ... ok
+test finops::phase1_5::package_assembler::tests::test_invalid_repo_id_returns_error ... ok
+test finops::phase1_5::package_assembler::tests::test_package_a_contains_correct_essences ... ok
+test finops::phase1_5::package_assembler::tests::test_package_b_contains_correct_essences ... ok
+test finops::phase1_5::package_assembler::tests::test_package_c_contains_correct_essences ... ok
+test harvester::ast_parser::tests::allowlist_rejects_non_source_extensions ... ok
+test harvester::ast_parser::tests::architecture_allowlist_accepts_polyglot_source_and_project_files ... ok
+test finops::phase1_5::local_distiller::tests::test_output_respects_3k_token_ceiling ... ok
+test finops::finops_router::tests::smoke_test_real_blob_08_health_report ... ok
+test finops::finops_router::tests::test_10k_tokens_returns_green_zone ... ok
+test finops::finops_router::tests::test_classify_text_routes_yellow_to_cloud_cascade ... ok
+test harvester::ast_parser::tests::detects_expected_languages ... ok
+test finops::finops_router::tests::test_30k_tokens_returns_yellow_zone_with_cloud_cascade ... ok
+test harvester::ast_parser::tests::fallback_parser_extracts_csharp_signatures ... ok
+test finops::finops_router::tests::test_70k_tokens_returns_red_zone_with_cloud_cascade ... ok
+test core::v3_ignition_tests::tests::test_atomic_souls_edit_concurrency ... ok
+test harvester::ast_parser::tests::sanitize_outline_signature_removes_body_and_dead_comments ... ok
+test harvester::ast_parser::tests::test_build_architecture_map_groups_by_layer ... ok
+test harvester::ast_parser::tests::test_classify_layer_backend_segments ... ok
+test harvester::ast_parser::tests::test_classify_layer_cli_segments ... ok
+test harvester::ast_parser::tests::test_classify_layer_core_catchall ... ok
+test harvester::ast_parser::tests::collect_source_files_ignores_workflows_lockfiles_and_shell_scripts ... ok
+test harvester::ast_parser::tests::test_classify_layer_database_segments ... ok
+test harvester::ast_parser::tests::test_classify_layer_docs_and_config ... ok
+test harvester::ast_parser::tests::test_classify_layer_tests_segments ... ok
+test harvester::ast_parser::tests::test_classify_layer_infra_files ... ok
+test harvester::ast_parser::tests::test_classify_layer_frontend_extensions ... ok
+test harvester::ast_parser::tests::test_oxc_js_ts_outline ... ok
+test harvester::ast_parser::tests::blob04_reapplies_universal_pruning_even_with_dirty_clean_files ... ok
+test harvester::ast_parser::tests::test_fail_soft_corrupted_wasm_grammar ... ok
+test cognition::swarm::tests::test_parallel_dispatch_uses_total_time_of_slowest_lens ... ok
+test harvester::ast_parser::tests::test_wasm_tree_sitter_rust_outline ... ok
+test harvester::ast_parser::tests::regex_fallback_covers_target_polyglot_ecosystems ... ok
+test harvester::community::tests::test_map_tracker_rate_limit_to_fetch_error ... ok
+test harvester::community::tests::test_map_tracker_not_found_to_fetch_error ... ok
+test cognition::thinking::socratic_bridge::tests::test_upsert_thought_fire_and_forget_persists ... ok
+test harvester::community::tests::test_fetch_success ... ok
+test harvester::detect::tests::test_detect_dotnet ... ok
+test harvester::ast_parser::tests::collect_architecture_files_prunes_build_cache_and_dependency_noise ... ok
+test harvester::detect::tests::test_detect_empty_repo ... ok
+test harvester::community::tests::test_fetch_uses_canonical_full_name_for_search_routes ... ok
+test harvester::detect::tests::test_detect_elixir_from_root_mix_file ... ok
+test harvester::detect::tests::test_detect_go ... ok
+test cognition::lean_vacuum::smart_read::tests::test_smart_read_budget_enforcement_rust ... ok
+test harvester::detect::tests::test_detect_jvm ... ok
+test harvester::ast_parser::tests::architecture_map_keeps_full_polyglot_topology_without_char_truncation ... ok
+test harvester::ast_parser::tests::extract_repository_outline_native_keeps_blob04_alive_for_target_ecosystems ... ok
+test harvester::extract::tests::tdd_manifest_block_cargo_toml_includes_version_spec_for_string_deps ... ok
+test harvester::extract::tests::tdd_manifest_block_cargo_toml_extracts_version_from_inline_table ... ok
+test harvester::detect::tests::test_detect_mixed ... ok
+test harvester::extract::tests::tdd_manifest_block_go_mod_falls_back_to_wildcard ... ok
+test harvester::extract::tests::test_classify_infra_file_deploy_workflow_paths ... ok
+test harvester::extract::tests::test_classify_infra_file_dockerfile_paths ... ok
+test harvester::extract::tests::test_classify_infra_file_other_paths ... ok
+test harvester::extract::tests::test_classify_infra_file_test_workflow_paths ... ok
+test harvester::extract::tests::tdd_manifest_block_fallback_uses_wildcard_for_unsupported_kinds ... ok
+test harvester::extract::tests::tdd_manifest_block_package_json_includes_version_spec ... ok
+test harvester::detect::tests::test_detect_mixed_rust_and_cpp_prefers_root_stack_order ... ok
+test harvester::extract::tests::test_extract_jsdoc_above_ignores_unrelated_previous_jsdoc ... ok
+test harvester::extract::tests::test_extract_jsdoc_above_returns_first_sentence ... ok
+test harvester::extract::tests::test_corrupted_manifest ... ok
+test harvester::extract::tests::test_extract_jsdoc_above_returns_none_when_no_jsdoc ... ok
+test harvester::extract::tests::test_extract_jsdoc_above_truncates_long_sentences ... ok
+test harvester::extract::tests::test_extract_jsdoc_above_skips_empty_and_tag_only_blocks ... ok
+test harvester::extract::tests::test_extract_cargo_toml ... ok
+test harvester::extract::tests::test_extract_requirements_txt ... ok
+test harvester::detect::tests::test_detect_nested_source_file_via_recursive_walk ... ok
+test harvester::detect::tests::test_detect_nodejs ... ok
+test harvester::extract::tests::test_extract_package_json ... ok
+test harvester::extract::tests::test_local_static_extractor_missing_readme_returns_zero_byte ... ok
+test harvester::detect::tests::test_detect_python ... ok
+test harvester::extract::tests::test_local_static_extractor_removes_readme_badges ... ok
+test harvester::extract::tests::test_local_static_extractor_preserves_readme_narrative_sections ... ok
+test harvester::extract::tests::test_local_static_extractor_preserves_full_readme_below_elastic_limit ... ok
+test harvester::extract::tests::test_local_static_extractor_preserves_pathological_readme_sizes_without_truncation ... ok
+test harvester::extract::tests::test_local_static_extractor_collects_super_pacote_raw ... ok
+test harvester::extract::tests::test_large_manifest_is_parsed_without_hard_limit ... ok
+test harvester::detect::tests::test_detect_rust ... ok
+test harvester::extract::tests::test_local_static_extractor_removes_visual_html_but_keeps_text_and_code_fences ... ok
+test harvester::extract::tests::test_no_manifests ... ok
+test harvester::extract::tests::test_manifest_blob_preserves_all_declared_dependencies_without_omission ... ok
+test harvester::extract::tests::test_multiple_manifests ... ok
+test harvester::extract::tests::test_ops_blob_header_reflects_missing_components ... ok
+test harvester::extract::tests::test_extract_blob_supports_polyglot_manifests_and_ignores_lockfiles ... ok
+test harvester::detect::tests::test_detect_skips_ignored_dirs_during_recursive_walk ... ok
+test harvester::extract::tests::test_partial_failure_aborts_fail_closed ... ok
+test harvester::extract::tests::test_ops_blob_emits_completeness_header ... ok
+test harvester::extract::tests::test_manifest_blob_whitelists_dependency_sections_only ... ok
+test harvester::extract::tests::test_ops_extract_root_files ... ok
+test harvester::extract::tests::test_ops_blob_preserves_full_payload_without_truncation ... ok
+test harvester::detect::tests::test_detect_svelte_without_package_json_still_maps_to_nodejs_family ... ok
+test harvester::extract::tests::test_ux_contracts_fail_soft_for_backend_puro ... ok
+test harvester::extract::tests::test_test_intent_extracts_polyglot_signatures_without_default_fallback ... ok
+test harvester::extract::tests::test_ux_contracts_extract_poliglot_frontend_flow_without_markup ... ok
+test harvester::extract::tests::test_test_intent_preserves_all_items_per_file ... ok
+test harvester::extract::tests::test_test_intent_skips_documentation_paths ... ok
+test harvester::git::tests::test_clone_success ... ok
+test harvester::extract::tests::test_ux_contracts_preserve_all_items_per_file ... ok
+test harvester::guard::tests::test_purge_degradacao_graciosa_mock ... ok
+test harvester::detect::tests::test_detect_unknown ... ok
+test harvester::orchestrator::tests::test_orchestrator_happy_path_mocked ... ok
+test harvester::git::tests::test_clone_stays_in_ramdisk ... ok
+test harvester::path_sanitizer::tests::test_already_clean_absolute_path_is_unchanged ... ok
+test harvester::path_sanitizer::tests::test_forward_slash_unc_variant_is_stripped ... ok
+test harvester::path_sanitizer::tests::test_empty_string_is_unchanged ... ok
+test harvester::extract::tests::test_ux_contracts_skips_documentation_and_keeps_real_ui ... ok
+test harvester::extract::tests::test_ux_contracts_skips_config_generated_and_test_noise ... ok
+test harvester::path_sanitizer::tests::test_root_drive_path_is_unchanged ... ok
+test harvester::path_sanitizer::tests::test_normal_windows_path_is_unchanged ... ok
+test harvester::path_sanitizer::tests::test_normal_path_without_drive_is_unchanged ... ok
+test harvester::detect::tests::test_no_recursive_walk ... ok
+test harvester::path_sanitizer::tests::test_souls_clean_path_existing_temp_dir_has_no_unc ... ok
+test harvester::path_sanitizer::tests::test_unc_extended_prefix_deep_path_is_stripped ... ok
+test harvester::path_sanitizer::tests::test_souls_clean_path_nonexistent_path_strips_unc ... ok
+test harvester::path_sanitizer::tests::test_souls_clean_path_on_std_temp_dir_is_rooted ... ok
+test harvester::path_sanitizer::tests::test_souls_clean_path_normal_path_is_returned_as_is ... ok
+test harvester::path_sanitizer::tests::test_unc_prefix_with_spaces_in_path_is_stripped ... ok
+test harvester::path_sanitizer::tests::test_unc_single_backslash_aberration_is_stripped ... ok
+test harvester::path_sanitizer::tests::test_unc_single_backslash_network_is_stripped ... ok
+test harvester::path_sanitizer::tests::test_unc_extended_prefix_is_stripped ... ok
+test harvester::path_sanitizer::tests::test_unc_network_prefix_is_preserved_correctly ... ok
+test harvester::ramdisk::tests::test_alloc_insufficient_memory ... ok
+test harvester::persist::tests::test_persist_multiple_blobs_success ... ok
+test harvester::persist::tests::test_persist_preserves_unrelated_blob_types_for_same_repo ... ok
+test harvester::persist::tests::test_persist_upserts_existing_blob ... ok
+test harvester::ramdisk::tests::test_wait_until_writable_accepts_real_writes ... ok
+test harvester::extract::tests::test_test_intent_skips_mock_fixture_and_e2e_noise ... ok
+test harvester::router::tests::test_blob_selection_parses_codes_and_names ... ok
+test harvester::router::tests::test_route_dotnet ... ok
+test harvester::router::tests::test_route_go ... ok
+test harvester::router::tests::test_route_jvm ... ok
+test harvester::router::tests::test_route_mixed_dedup ... ok
+test harvester::repo_radar::tests::test_scan_repo_radar_respects_max_depth ... ok
+test harvester::router::tests::test_route_mixed_no_frontend ... ok
+test harvester::router::tests::test_route_nodejs ... ok
+test harvester::router::tests::test_route_only_blobs_06_08_keeps_only_static_analysis ... ok
+test harvester::router::tests::test_route_python ... ok
+test harvester::router::tests::test_route_rust ... ok
+test harvester::router::tests::test_route_unknown_fallback ... ok
+test harvester::router::tests::test_static_analysis_blades_route_go_adds_opengrep_fallback ... ok
+test harvester::router::tests::test_route_never_empty ... ok
+test harvester::ramdisk::tests::test_alloc_success ... ok
+test harvester::router::tests::test_static_analysis_blades_route_unknown_to_opengrep ... ok
+test harvester::router::tests::test_static_analysis_blades_route_mixed_rust_and_cpp ... ok
+test harvester::sandbox::tests::test_classify_process_observability_distinguishes_ok_info_and_lethal ... ok
+test harvester::sandbox::tests::test_classify_process_observability_treats_any_stdout_bytes_as_informational_non_zero ... ok
+test harvester::sandbox::tests::test_classify_process_observability_whitelists_opengrep_exit_code_7 ... ok
+test harvester::router::tests::test_static_analysis_blades_route_nodejs_family_to_biome_and_opengrep ... ok
+test harvester::sandbox::tests::test_create_sandbox_success ... ok
+test harvester::sandbox::tests::test_govulncheck_no_packages_match_is_treated_as_clean ... ok
+test harvester::sandbox::tests::test_needs_js_runtime_rules ... ok
+test harvester::extract::tests::test_ops_extract_allowlist_covers_ci_cd_and_iac_recursively ... ok
+test harvester::sandbox::tests::test_resolve_command_biome_fails_fast_when_no_exe_found ... ok
+test harvester::ramdisk::tests::test_allocator_creates_writable_workspace ... ok
+test harvester::sandbox::tests::test_resolve_mix_wraps_shell_on_windows ... ok
+test harvester::sandbox::tests::test_resolve_real_binary_global_npm_trampoline_resolved_via_native_npm_bin ... ok
+test harvester::sandbox::tests::test_resolve_real_binary_local_trampoline_resolves_to_exe ... ok
+test harvester::sandbox::tests::test_resolve_sast_arsenal_binary_candidates ... ok
+test harvester::sandbox::tests::test_sandbox_path_injection_contains_system32 ... ok
+test harvester::sandbox::tests::test_sandbox_path_injection_no_duplicate_system32 ... ok
+test harvester::sandbox::tests::test_strip_unc_prefix_integration_in_sandbox ... ok
+test harvester::sandbox::tests::test_timeout_profile_promotes_deep_flow_tools ... ok
+test harvester::sandbox::tests::test_resolve_command_injects_isolated_cargo_home_and_sparse_network_guards ... ok
+test harvester::sast::bandit::tests::test_python_linter_args_accept_explicit_scan_targets_and_skip_bandit_b101 ... ok
+test harvester::sast::biome::tests::test_biome_args_accept_explicit_scan_targets_with_health_profile ... ok
+test harvester::sast::biome::tests::test_biome_args_use_security_only_for_blob06_profile ... ok
+test harvester::sast::bandit::tests::test_normalize_bandit_output_drops_assert_noise_even_if_tool_leaks_it ... ok
+Cloning into 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_14064_1785887179144111100\repos\octocat\repo'...
+test cognition::swarm::tests::test_timeout_does_not_hang_join_and_marks_phase2_error ... ok
+test harvester::extract::tests::test_ux_contracts_keeps_tail_sections_without_truncation ... ok
+test harvester::sast::clippy::tests::test_expand_cargo_workspace_wildcards ... ok
+test harvester::sast::clippy::tests::test_derive_rust_clippy_targets_includes_all_manifests_including_ffi ... ok
+test harvester::sast::clippy::tests::test_normalize_clippy_messages_to_souls_health_issue ... ok
+test harvester::sast::cppcheck::tests::test_cppcheck_args_are_security_scoped ... ok
+test harvester::sast::cppcheck::tests::test_cppcheck_blade_enforces_xml_v2_args ... ok
+Cloning into 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_14064_1785887179140808600\repos\invalid_owner_12345\invalid_repo_12345'...
+Cloning into 'C:\Users\rosas\AppData\Local\Temp\.souls_workspaces\souls_mc_workspace_14064_1785887179135193300\repos\fail-closed\repo'...
+test harvester::sast::clippy::tests::test_run_sast_blade_cleans_clippy_target_dir_after_execution ... ok
+test harvester::sast::cppcheck::tests::test_normalize_cppcheck_output_accepts_empty_results_as_clean_info ... ok
+test harvester::sast::cppcheck::tests::test_normalize_cppcheck_output_accepts_self_closing_results_as_clean_info ... ok
+test harvester::sast::cppcheck::tests::test_normalize_cppcheck_output_falls_back_to_unstructured_text_without_crashing ... ok
+test harvester::sast::cppcheck::tests::test_normalize_cppcheck_output_ignores_progress_prefix ... ok
+test harvester::sast::cppcheck::tests::test_derive_cppcheck_execution_targets_requires_productive_cpp_files ... ok
+test harvester::sast::clippy::tests::test_run_sast_blade_with_build_deps_and_global_coverage_runs_clippy_normally ... ok
+test harvester::sast::govulncheck::tests::test_derive_go_execution_targets_anchor_govulncheck_to_real_modules_only ... ok
+test harvester::sast::clippy::tests::test_run_sast_blade_clippy_runs_on_crate_with_build_deps_transitive ... ok
+test harvester::sast::native_ast::tests::test_architecture_map_keeps_backend_visible_amid_scenarios_docs_ui_and_bench_noise ... ok
+test harvester::sast::native_ast::tests::test_architecture_map_skips_visual_noise_and_prioritizes_backend ... ok
+test harvester::sast::native_ast::tests::test_claude_md_empty_stdout_fails_closed ... ok
+test harvester::sast::native_ast::tests::test_code_index_db_path_accepts_local_repo_index_name ... ok
+test harvester::sast::native_ast::tests::test_binary_not_found ... ok
+test harvester::sast::native_ast::tests::test_architecture_map_keeps_backend_visible_amid_tests_examples_and_fixtures ... ok
+test harvester::sast::native_ast::tests::test_empty_stdout_fails_closed ... ok
+test harvester::sast::native_ast::tests::test_empty_repo_payload_fails_closed ... ok
+test harvester::sast::native_ast::tests::test_extract_success_repo_outline_tolerates_invalid_utf8 ... ok
+test harvester::sast::native_ast::tests::test_exit_code_1_fails_soft_for_native_ast_parser ... ok
+test harvester::sast::native_ast::tests::test_extract_success ... ok
+test harvester::sast::native_ast::tests::test_heuristic_exceptions_are_documented ... ok
+test harvester::sast::native_ast::tests::test_execution_failed ... ok
+test harvester::community::tests::test_fetch_connection_error_fails_closed ... ok
+test harvester::sast::native_ast::tests::test_invalid_json ... ok
+test harvester::sast::native_ast::tests::test_skill_signal_skills_for_ai_promotes_kind_skilllibrary ... ok
+test harvester::sast::native_ast::tests::test_skill_signal_diagram_promotes_kind_skilllibrary ... ok
+test harvester::sast::native_ast::tests::test_static_assert_heuristic_consistency_holds ... ok
+test harvester::sast::native_ast::tests::test_native_ast_cache_exit_code_1_with_success_json_is_allowed ... ok
+test harvester::sast::native_ast::tests::test_skill_signal_coding_agents_promotes_kind_skilllibrary ... ok
+test harvester::sast::opengrep::tests::test_normalize_opengrep_findings_separates_red_lines_from_flow_debt ... ok
+test harvester::sast::opengrep::tests::test_opengrep_args_use_runtime_compatible_flags_and_test_excludes ... ok
+test harvester::sast::opengrep::tests::test_normalize_semgrep_payload_keeps_only_repo_relative_paths ... ok
+test harvester::sast::opengrep::tests::test_opengrep_health_args_disable_security_taint_profile ... ok
+test harvester::sast::native_ast::tests::test_skill_signal_visualization_promotes_kind_skilllibrary ... ok
+test harvester::sast::native_ast::tests::test_timeout_propagation ... ok
+test harvester::sast::opengrep::tests::test_render_semgrep_blob_emits_audit_header_for_health_rule_set ... ok
+test harvester::sast::opengrep::tests::test_ensure_semgrep_rule_bundle_is_idempotent_under_concurrency ... ok
+test harvester::sast::opengrep::tests::test_render_semgrep_blob_falls_back_to_unknown_for_opengrep_version ... ok
+test harvester::sast::opengrep::tests::test_render_semgrep_blob_emits_audit_header_with_all_metadata_keys ... ok
+test harvester::sast::opengrep::tests::test_render_semgrep_blob_omits_severity_breakdown_when_empty ... ok
+test harvester::sast::opengrep::tests::test_polyglot_sast_sidecar_captures_clippy_failure_forensically_in_blob08 ... ok
+test harvester::sast::opengrep::tests::test_semgrep_args_share_common_sast_performance_flags ... ok
+test harvester::sast::opengrep::tests::test_render_semgrep_health_blob_keeps_long_tail_without_truncation ... ok
+test harvester::sast::opengrep::tests::test_render_semgrep_security_blob_keeps_long_tail_without_truncation ... ok
+test harvester::guard::tests::test_purge_happy_path ... ok
+fatal: unable to access 'http://127.0.0.1:64282/fail-closed/repo/': The requested URL returned error: 500
+fatal: repository 'http://127.0.0.1:64283/octocat/repo/' not found
+test harvester::orchestrator::tests::test_orchestrator_fail_closed_propagates_err_not_empty_blob ... ok
+test harvester::sast::oxc::tests::test_oxc_empty_repo_valid_json ... ok
+test cognition::observability::wasm_engine::tests::test_memory_limiter_16mib ... ok
+test harvester::sast::oxc::tests::test_oxc_execution_failed ... ok
+test harvester::sast::oxc::tests::test_oxc_binary_not_found ... ok
+test harvester::sast::oxc::tests::test_oxc_extract_success ... ok
+test harvester::sast::sobelow::tests::test_normalize_sobelow_text_fallback_extracts_findings ... ok
+test harvester::orchestrator::tests::test_orchestrator_preemptive_abort ... ok
+test harvester::sast::sobelow::tests::test_sobelow_blade_uses_mix_with_private_json_flags ... ok
+test harvester::sast::oxc::tests::test_oxc_invalid_json ... ok
+test harvester::sast::test_discovery::tests::test_extract_rust_test_body_assertion_finds_expect ... ok
+test harvester::sast::sobelow::tests::test_sobelow_empty_payload_degrades_without_parse_error ... ok
+test harvester::sast::test_discovery::tests::test_extract_rust_test_body_assertion_finds_assert_eq ... ok
+test harvester::sast::test_discovery::tests::test_extract_rust_test_body_assertion_finds_should_panic ... ok
+test harvester::sast::oxc::tests::test_oxc_timeout_propagation ... ok
+test harvester::sast::test_discovery::tests::test_extract_rust_test_body_assertion_finds_unwrap ... ok
+test harvester::sast::test_discovery::tests::test_extract_rust_test_body_assertion_returns_none_for_empty_test ... ok
+test harvester::sast::test_discovery::tests::test_extract_rust_test_entries_attach_assertion_context ... ok
+test harvester::sast::test_discovery::tests::test_extract_rust_test_entries_no_brace_on_same_line_does_not_loop_infinitely ... ok
+test harvester::sast::sobelow::tests::test_derive_elixir_execution_targets_set_explicit_root_and_skip_empty_apps ... ok
+test harvester::sast::tests::test_aesthetic_warning_filter_drops_minor_js_python_noise_but_preserves_signal ... ok
+test harvester::sast::tests::test_blob06_allowlist_only_keeps_biome_and_cppcheck_when_message_has_security_signal ... ok
+test harvester::sast::test_discovery::tests::test_native_test_discovery_detects_inline_go_tests_outside_test_dirs ... ok
+test harvester::sast::tests::test_blob06_semantic_filter_drops_cppcheck_and_biome_slop_but_preserves_security_signal ... ok
+test harvester::sast::tests::test_blob08_allowlist_only_keeps_health_findings_with_technical_debt_signal ... ok
+test harvester::sast::tests::test_deduplicate_forensic_diagnostics_handles_empty_input ... ok
+test harvester::sast::test_discovery::tests::test_native_test_discovery_detects_go_python_elixir_and_frontend_intent ... ok
+test harvester::sast::tests::test_deduplicate_forensic_diagnostics_collapses_identical_failures ... ok
+test harvester::sast::test_discovery::tests::test_native_test_discovery_uses_static_ast_for_rust ... ok
+test harvester::sast::tests::test_normalize_relative_issue_file_prefixes_subproject_scope ... ok
+test harvester::sast::tests::test_deduplicate_forensic_diagnostics_handles_malformed_entries ... ok
+test harvester::sast::tests::test_deduplicate_forensic_diagnostics_keeps_distinct_failures ... ok
+test harvester::sast::test_discovery::tests::test_native_test_discovery_preserves_all_items_per_file ... ok
+test harvester::sast::tests::test_render_scoped_text_blocks_slices_domains_orthogonally ... ok
+test harvester::sast::tests::test_render_souls_health_report_keeps_cppcheck_clean_info_under_cpp_domain ... ok
+test harvester::sast::tests::test_render_souls_health_report_groups_findings_by_domain ... ok
+test harvester::sast::tests::test_sanitize_repo_relative_path_strips_windows_host_prefix ... ok
+test harvester::sast::tests::test_render_unsafe_hotspots_report_keeps_domain_headers_without_findings ... ok
+test harvester::sast::tests::test_should_skip_sast_relative_target_handles_testutil_and_test_file_patterns ... ok
+test harvester::sast::tests::test_sanitize_repo_relative_path_drops_semgrep_support_paths ... ok
+test persist::ssot_injector::tests::categoria_arquitetural_rejects_value_outside_10_enums_fail_closed ... ok
+test persist::ssot_injector::tests::confirmation_accepts_decimal_comma_for_scores ... ok
+test persist::ssot_injector::tests::dispatch_uses_mock_sheets_client ... ok
+test persist::ssot_injector::tests::google_sheets_batch_update_body_preserves_single_atomic_range ... ok
+test persist::ssot_injector::tests::header_idx_requires_exact_name_and_position ... ok
+test persist::ssot_injector::tests::google_sheets_batch_update_body_rejects_non_atomic_multi_range_payload ... ok
+test persist::ssot_injector::tests::google_sheets_values_url_encodes_a1_notation ... ok
+test persist::ssot_injector::tests::maybe_fix_mojibake_is_noop_for_valid_ptbr ... ok
+test persist::ssot_injector::tests::maybe_fix_mojibake_repairs_common_ptbr_sequences ... ok
+test persist::ssot_injector::tests::prepare_batch_payload_rejects_alias_headers ... ok
+test persist::ssot_injector::tests::rejected_lixo_toxico_triggers_systemic_short_circuit_status_fase ... ok
+test persist::ssot_injector::tests::prepare_batch_payload_rejects_header_reordering ... ok
+test persist::ssot_injector::tests::resolve_row_number_accepts_case_whitespace_and_slash_with_lote_priority ... ok
+test persist::ssot_injector::tests::resolve_row_number_never_returns_row_1 ... ok
+test persist::ssot_injector::tests::resolve_row_number_returns_none_when_repo_url_not_found ... ok
+test persist::ssot_injector::tests::short_circuit_cleanup_deletes_only_target_repo_blobs ... ok
+test persist::ssot_injector::tests::test_payload_validation_rejects_missing_required_fields ... ok
+test harvester::sast::tests::test_prd033_clippy_failure_injects_forensic_header_at_top_of_blob08 ... ok
+test persist::ssot_injector::tests::test_prepare_batch_payload_is_82_columns_a_to_cd ... ok
+test persist::ssot_injector::tests::sqlite_busy_retry_aborts_without_infinite_loop ... ok
+test persist::ssot_injector::tests::sqlite_busy_retry_applies_backoff_and_finishes_successfully ... ok
+test souls_thermal_governor::tests::test_thermal_hysteresis_and_idle ... ok
+test persist::ssot_injector::tests::validate_write_values_result_rejects_ambiguous_success ... ok
+test telemetry::tests::sandbox_completion_is_success_only_for_exit_code_zero ... ok
+test persist::ssot_injector::tests::validate_payload_rejects_main_master_and_unknown_repo_analised_version ... ok
+test telemetry::tests::warn_level_with_fail_soft_text_remains_warning ... ok
+test telemetry::tests::semantic_outcome_informational_non_zero_forces_warning ... ok
+test telemetry::tests::strip_ansi_removes_sgr_sequences ... ok
+test harvester::ramdisk::tests::test_drop_cleans_temp_workspace ... ok
+remote: Repository not found.
+fatal: repository 'https://github.com/invalid_owner_12345/invalid_repo_12345/' not found
+test harvester::git::tests::test_clone_repo_not_found ... ok
+test harvester::sast::opengrep::tests::test_semgrep_sidecar_extracts_security_and_health_without_panic ... ok
+test harvester::sast::opengrep::tests::test_semgrep_sidecar_accepts_json_stdout_even_with_exit_code_2 ... ok
+test harvester::sast::tests::test_fail_soft_continues_after_generic_blade_violation ... ok
+test harvester::sast::opengrep::tests::test_polyglot_sast_sidecar_executes_rust_subprojects_with_scoped_cwd ... ok
+test harvester::sast::opengrep::tests::test_polyglot_sast_sidecar_routes_rust_and_cpp_and_breaks_blob06_from_blob08 ... ok
+test harvester::repo_radar::tests::test_scan_repo_radar_circuit_breaker_caps_files ... ok
+test core::bitnet_daemon::tests::test_cuda_msvc_build_compatibility ... ok
+test harvester::sandbox::tests::test_execute_in_sandbox ... ok
+test harvester::sandbox::tests::test_execute_uses_repo_root_as_cwd has been running for over 60 seconds
+test harvester::sandbox::tests::test_read_write_sandbox_creates_allowed_roots has been running for over 60 seconds
+test harvester::sandbox::tests::test_execute_uses_repo_root_as_cwd ... ok
+test harvester::sandbox::tests::test_read_write_sandbox_creates_allowed_roots ... ok
+
+test result: ok. 514 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 83.14s
+
+     Running unittests src\bin\agentgateway_tcp_proxy.rs (target\debug\deps\agentgateway_tcp_proxy-ce68a9d36664ebd3.exe)
+
+running 6 tests
+test tests::test_phantom_headroom_tool_injection ... ok
+test tests::test_sse_buffer_tcp_fragmentation ... ok
+test tests::test_spawn_mcp_observability_logging ... ok
+test tests::test_headroom_ast_compression_on_user_code ... ok
+test tests::test_sse_line_buffering_fragmented_chunks ... ok
+test tests::test_mutate_json_payload_zero_copy_fast_path ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running unittests src\bin\audit_blobs_cli.rs (target\debug\deps\audit_blobs_cli-8a1fad6d53f32dd3.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\f0_harvester_cli.rs (target\debug\deps\f0_harvester_cli-6e1e97a7f9ea918b.exe)
+
+running 4 tests
+test tests::batch_selection_respects_column_indices_and_status_gate ... ok
+test tests::parse_cli_args_reads_repo_and_batch ... ok
+test tests::parse_cli_args_reads_only_blobs_filter ... ok
+test tests::extracts_repo_id_from_github_url_with_git_suffix ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\f1_distiller_cli.rs (target\debug\deps\f1_distiller_cli-4480a0ae9932db1c.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\f2_swarm_cli.rs (target\debug\deps\f2_swarm_cli-ba700884c4d8e55c.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\f3_synthesizer_cli.rs (target\debug\deps\f3_synthesizer_cli-971a6555620d24be.exe)
+
+running 3 tests
+test tests::declared_description_prefers_about_then_readme_then_headline ... ok
+test tests::schema_includes_descriptions_for_new_block_fields ... ok
+test tests::schema_for_block3_has_enums_and_is_strict ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\f5_deep_formatter_cli.rs (target\debug\deps\f5_deep_formatter_cli-95b55963d14a9a91.exe)
+
+running 7 tests
+test tests::compute_first_empty_row_is_never_header ... ok
+test tests::gating_filters_only_aprovado_deep_components_analysis ... ok
+test tests::openrouter_body_includes_response_format_json_schema_strict ... ok
+test tests::schema_is_strict_and_requires_components ... ok
+test tests::sqlite_upsert_is_idempotent ... ok
+test tests::orchestrator_persists_sqlite_and_updates_sheets ... ok
+test tests::openrouter_posts_with_json_schema_strict ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\bin\f_minus_0_5_batedor_cli.rs (target\debug\deps\f_minus_0_5_batedor_cli-0a235d19efb68909.exe)
+
+running 4 tests
+test tests::enum_validation_rejects_outside_catalog ... ok
+test tests::json_validation_requires_fields_and_types ... ok
+test tests::truncation_is_deterministic ... ok
+test tests::test_sqlite_batedor_transition_to_pendente_harvester ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src\bin\f_minus_1_guardian.rs (target\debug\deps\f_minus_1_guardian-9dc27cbea982dd55.exe)
+
+running 3 tests
+test tests::test_sqlite_outbox_no_drift_transition_to_fase_1_ok ... ok
+test tests::test_sqlite_outbox_transition_new_link_to_iniciar_triagem ... ok
+test tests::test_sqlite_outbox_transition_drift_to_iniciar_triagem ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src\bin\f_queue_audit_dry_run.rs (target\debug\deps\f_queue_audit_dry_run-e841525efdc59f0c.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\mcp_stdio_guard.rs (target\debug\deps\mcp_stdio_guard-a5e6a197970b3806.exe)
+
+running 1 test
+test tests::guard_times_out_and_returns_jsonrpc_error_and_kills_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
+
+     Running unittests src\bin\n0_daemon_watcher.rs (target\debug\deps\n0_daemon_watcher-ddda274bceaf9e3b.exe)
+
+running 3 tests
+test tests::jitter_respects_base_plus_random_fluctuation ... ok
+test tests::routing_catalog_is_deterministic_and_strict ... ok
+test tests::rate_limit_429_triggers_exponential_backoff_and_fail_soft_per_row ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\outbox_sync.rs (target\debug\deps\outbox_sync-d79b38c9add2a51b.exe)
+
+running 2 tests
+test tests::test_outbox_sync_skips_when_no_unsynced_rows ... ok
+test tests::test_outbox_bulk_read_and_batch_update_sync ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running unittests src\bin\refresh_blob09_cli.rs (target\debug\deps\refresh_blob09_cli-9372f9ba379c4b31.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\refresh_blob10_cli.rs (target\debug\deps\refresh_blob10_cli-32da231e2a452b08.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\sandbox_tester.rs (target\debug\deps\sandbox_tester-44b6527e34753609.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\scan_local_models_cli.rs (target\debug\deps\scan_local_models_cli-fcd927f95fcf6211.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\souls_arena_cli.rs (target\debug\deps\souls_arena_cli-7ddb8daf2ca1688f.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\souls_cuda_test.rs (target\debug\deps\souls_cuda_test-272b8fb58137ece8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\souls_ephemeral_infer_cli.rs (target\debug\deps\souls_ephemeral_infer_cli-3b2edad8018770c6.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\souls_mcp_server.rs (target\debug\deps\souls_mcp_server-08ce41caf01567b0.exe)
+
+running 41 tests
+test tests::duckduckgo_redirect_url_is_unwrapped_to_destination ... ok
+test tests::duckduckgo_html_parser_extracts_title_url_and_snippet ... ok
+test tests::test_analyze_session_metrics ... ok
+test tests::test_blast_radius_dag_bfs ... ok
+test tests::test_dedup_5_lines_trigger ... ok
+test tests::test_dedup_under_5_lines_ignored ... ok
+test tests::server_info_name_is_souls_mcp ... ok
+test tests::test_callers_callees_graph ... ok
+test tests::sqlite_query_rejects_mutating_pragma ... ok
+test tests::sqlite_query_accepts_single_select_with_trailing_semicolon ... ok
+test tests::sqlite_query_rejects_multi_statement_payload ... ok
+test tests::test_fill_rehydration_equivalence ... ok
+test tests::test_feedback_telemetry_insert_and_e3_calc ... ok
+test tests::test_edit_fail_closed_on_mismatch ... ok
+test tests::test_file_access_logging_and_heatmap_decay ... ok
+test tests::test_database_migration_v5 ... ok
+test tests::test_outline_rust_signatures ... ok
+test tests::test_edit_successful_patch ... ok
+test tests::test_export_session_formatting ... ok
+test tests::test_merge_sessions_atomic_last_write_wins ... ok
+test tests::test_multi_read_concurrency_and_compression ... ok
+test tests::test_tools_list_includes_headroom_retrieve ... ok
+test tests::test_open_socratic_state_db_creates_directory_idempotently ... ok
+test tests::test_routes_contract_regex ... ok
+test tests::test_wasm_sandbox_trap_containment ... ok
+test tests::test_tree_ignores_toxic_paths ... ok
+test tests::tools_list_cura_3_falsos_verdes ... ok
+test tests::tools_list_fill_unico_sem_duplicata ... ok
+test tests::tools_list_returns_unprefixed_names ... ok
+test tests::tools_list_respects_32_120_tetos ... ok
+test tests::test_tree_flattening_successful ... ok
+test tests::test_state_db_mpsc_operations ... ok
+test tests::test_wasm_tree_sitter_isolation ... ok
+test tests::test_symbol_resolution_o1 ... ok
+test tests::test_compress_mcp_handler ... ok
+test tests::test_dedup_mcp_handler ... ok
+test tests::test_firewall_directory_traversal ... ok
+test tests::test_fill_fail_closed_on_missing_stub ... ok
+test tests::test_fill_successful_stub_injection ... ok
+test tests::test_concurrency_file_locking ... ok
+test tests::test_socratic_load_10k_thoughts ... ok
+
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.34s
+
+     Running unittests src\bin\test_blob01_cli.rs (target\debug\deps\test_blob01_cli-66ac3ccfff27dac2.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\test_blob08_polyglot_cli.rs (target\debug\deps\test_blob08_polyglot_cli-6689ca123c947474.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\test_atomic_fire_once.rs (target\debug\deps\test_atomic_fire_once-01a7cbf4ea94837a.exe)
+
+running 5 tests
+test fire_once_compiles_without_mutex ... ok
+test fire_once_is_initialized_reflects_state ... ok
+test fire_once_sequential_first_wins_second_loses ... ok
+test fire_once_winner_value_is_observable ... ok
+test fire_once_concurrent_only_one_winner ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\test_repo_impact.rs (target\debug\deps\test_repo_impact-13f442fd2d2b7f47.exe)
+
+running 3 tests
+test test_repo_impact_cyclic_protection ... ok
+test test_repo_impact_direct_dependents ... ok
+test test_repo_impact_respects_max_depth ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\test_souls_symbol.rs (target\debug\deps\test_souls_symbol-b5fea13f4ac47d8b.exe)
+
+running 3 tests
+test test_resolve_symbol_struct ... ok
+test test_symbol_comment_protection ... ok
+test test_symbol_empty_or_invalid_workspace ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests souls_mc_lib
+
+running 2 tests
+test src\cognition\observability\wasm_engine.rs - cognition::observability::wasm_engine (line 18) - compile ... ok
+test src\cognition\lean_vacuum\atomic_once.rs - cognition::lean_vacuum::atomic_once (line 42) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.98s
+
