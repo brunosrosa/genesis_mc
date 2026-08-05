@@ -33,8 +33,9 @@ pub use dot_flatten::dot_flatten;
 pub use extensions::{is_excluded_dir, is_source_ext, EXCLUDE_DIRS, SOURCE_EXTENSIONS};
 pub use myers_diff::myers_diff;
 pub use repo_heatmap::{
-    calculate_frecency, compute_repo_heatmap, ensure_heatmap_table, open_heatmap_db, record_access,
-    HeatmapEntry, HeatmapError, HeatmapReport, DEFAULT_LAMBDA, MAX_SCORE, MAX_FILES_SCAN,
+    calculate_frecency, compute_repo_heatmap, ensure_heatmap_table, fetch_modification_count,
+    open_heatmap_db, record_access, upsert_heatmap_row, HeatmapEntry, HeatmapError, HeatmapReport,
+    DEFAULT_LAMBDA, MAX_SCORE, MAX_FILES_SCAN,
 };
 pub use repo_impact::{
     repo_impact as repo_impact_fn, ImpactEdge, ImpactGraphPayload, ImpactReport, RepoImpactError,

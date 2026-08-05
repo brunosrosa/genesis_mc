@@ -4110,21 +4110,24 @@ fn try_log_file_access(file_path: &str, tool: &str) {
 // - Filtra por extensao canonica (extensions::is_source_ext).
 // - Recalcula score com `DEFAULT_LAMBDA`.
 //
-// O hook abre o `souls_state.db` em modo read-write, mas se o banco
-// nao estiver disponivel (cold start, race no boot), ignora silenciosamente.
+// O hook abre o `souls_state.db` em modo read-write com `busy_timeout(5s)`
+// para absorver contencao transitoria de outros writers (ex: `run_repo_heatmap`).
+// Se o banco nao estiver disponivel (cold start, race no boot), ignora silenciosamente.
 fn try_record_repo_heatmap(file_path: &str) {
     use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::record_access;
-    let Ok(conn) = Connection::open_with_flags(
+    let Ok(mut conn) = Connection::open_with_flags(
         workspace_root().join(".souls_data").join("souls_state.db"),
         OpenFlags::SQLITE_OPEN_READ_WRITE,
     ) else {
         return; // best-effort: cold start ou DB indisponivel
     };
+    // busy_timeout(5s) absorve SQLITE_BUSY de outros writers concorrentes.
+    let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
-    record_access(&conn, file_path, now);
+    record_access(&mut conn, file_path, now);
 }
 
 // Marco 3.7 Fase B: helper para enfileirar telemetria FinOps no StateDbWorker.
@@ -4501,7 +4504,7 @@ async fn run_repo_heatmap(params: &serde_json::Map<String, Value>) -> Result<Val
     // SSOT souls_state.db (Marco 3.9 Estado V5).
     let souls_data_dir = workspace_root().join(".souls_data");
     let db_path = souls_data_dir.join("souls_state.db");
-    let conn = Connection::open_with_flags(
+    let mut conn = Connection::open_with_flags(
         &db_path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
     )
@@ -4529,7 +4532,7 @@ async fn run_repo_heatmap(params: &serde_json::Map<String, Value>) -> Result<Val
         .unwrap_or_default()
         .as_secs() as i64;
 
-    let report = compute_repo_heatmap(&repo_root, &conn, now, lambda, limit).map_err(|e| match e {
+    let report = compute_repo_heatmap(&repo_root, &mut conn, now, lambda, limit).map_err(|e| match e {
         HeatmapError::InvalidPath(msg) => RpcError {
             code: -32602,
             message: format!("repo_path invalido: {msg}"),

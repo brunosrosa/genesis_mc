@@ -66,6 +66,7 @@ O presente Marco 4.1.2 **adiciona** (sem remover `heatmap` legado) uma nova ferr
 | R15 | **Interceptação Cognitiva**: após chamadas bem-sucedidas de `read`, `edit`, `symbol`, `repo_impact`, `repo_ast`, `multi_read`, o dispatcher invoca `record_access(conn, file_path, now)` que faz UPSERT silencioso em `repo_heatmap` (incrementa `modification_count`, atualiza `last_modified_epoch`, recalcula `frecency_score`) | Enriquece o monitor com a telemetria de uso real sem depender apenas de mtime físico do disco (poluído por checkout de branch). Anti-falso-positivo de I/O. |
 | R16 | **Hook `record_access` é fire-and-forget**: nunca propaga erro para o caller, NUNCA bloqueia o caminho crítico do handler | `try_log_file_access` é o SSOT canônico; novo hook segue o mesmo padrão. |
 | R17 | **Hook só atualiza se `file_path` existir E for extension canônica** | Pastas temporárias e arquivos efêmeros não poluem o heatmap. |
+| R18 | **Read-Modify-Write atômico para Frecency**: o UPSERT em `repo_heatmap` deve (1) selecionar o `modification_count` atual, (2) calcular `new_count = current + 1`, (3) calcular `score = calculate_frecency(new_count, ...)`, (4) executar UPSERT com `modification_count = excluded.modification_count` | O score deve refletir o estado FINAL após incremento; o `+ 1` dentro do UPSERT sem re-cálculo do score produz ranking incorreto. Adicionada no hotfix Marco 4.1.2-ac. |
 
 ## 3. Algoritmo de Frecency
 
