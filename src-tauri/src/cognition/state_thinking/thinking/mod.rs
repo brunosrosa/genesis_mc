@@ -27,6 +27,7 @@ pub mod persistence;
 pub mod socratic_bridge;
 pub mod state_machine;
 pub mod types;
+pub mod worker;
 
 pub mod test_helpers;
 
@@ -45,3 +46,5 @@ pub use state_machine::{
 pub use types::{
     BranchSummary, ThoughtData, ThinkingMode, ThinkingResponse,
 };
+pub use worker::{init_state_db_worker, try_send_cold, StateDbOp, SubAgentDiary, STATE_DB_TX};
+

@@ -73,6 +73,23 @@ fn open_db(workspace_root: &Path) -> Result<Connection, SocraticHandlerError> {
     Ok(conn)
 }
 
+/// Helper privado: abre `souls_state.db` em modo Read-Only exclusivo com `PRAGMA query_only = ON;`.
+fn open_read_db(workspace_root: &Path) -> Result<Connection, SocraticHandlerError> {
+    let souls_data_dir = workspace_root.join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    if !db_path.exists() {
+        return open_db(workspace_root);
+    }
+    let conn = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| SocraticHandlerError(format!("Falha ao abrir souls_state.db (read-only): {e}")))?;
+    conn.execute_batch(
+        "PRAGMA query_only = ON;
+         PRAGMA busy_timeout = 5000;",
+    )
+    .map_err(|e| SocraticHandlerError(format!("Falha ao configurar PRAGMAs Read-Only: {e}")))?;
+    Ok(conn)
+}
+
 /// Resolve o workspace root (1 nível acima de `src-tauri/`, ou env override).
 fn default_workspace_root() -> PathBuf {
     // Tenta o env var primeiro (SODA_ENV_WORKSPACE_ROOT).
@@ -101,7 +118,7 @@ pub fn handle_export_session(
     let root = workspace_root
         .map(|p| p.to_path_buf())
         .unwrap_or_else(default_workspace_root);
-    let conn = open_db(&root)?;
+    let conn = open_read_db(&root)?;
     let thoughts = thinking::ops::list_thoughts_for_session(&conn, session_id)?;
     let (roots, children) = build_socratic_tree(&thoughts);
 
@@ -172,7 +189,8 @@ pub fn handle_analyze_session(
     let root = workspace_root
         .map(|p| p.to_path_buf())
         .unwrap_or_else(default_workspace_root);
-    let conn = open_db(&root)?;
+    let conn = open_read_db(&root)?;
+
     let thoughts = thinking::ops::list_thoughts_for_session(&conn, session_id)?;
     let metrics = thinking::compute_metrics(&thoughts);
 
