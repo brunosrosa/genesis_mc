@@ -145,7 +145,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                 "tools": [
                     {
                         "name": "get_ast",
-                        "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)",
+                        "description": "Extrai o blueprint AST via tree-sitter nativo. Aliases: get_ast | souls_get_ast | repo_ast.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -160,7 +160,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "fetch_web",
-                        "description": "Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)",
+                        "description": "Busca URL com fallback duplo, retorna markdown limpo. Aliases: fetch_web | souls_fetch_web | web_fetch.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -175,7 +175,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "sys_time",
-                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SOULS, ex-sys_time)",
+                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. Aliases: sys_time | souls_sys_time.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {},
@@ -184,7 +184,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "web_search",
-                        "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SOULS, ex-web_search)",
+                        "description": "Busca web DuckDuckGo HTML, retorna titulos, links e snippets. Aliases: web_search | souls_web_search.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -205,7 +205,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "repo_meta",
-                        "description": "Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SOULS, ex-repo_meta)",
+                        "description": "Extrai metadados GitHub via octocrab para owner/repo. Aliases: repo_meta | souls_repo_meta.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -220,7 +220,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "sqlite_query",
-                        "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SOULS. (Cânone SOULS, ex-db_query)",
+                        "description": "Consulta SQLite read-only nos bancos nativos. Aliases: sqlite_query | souls_sqlite_query | db_query.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -399,7 +399,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "semantic_search", "description": "not_implemented_yet: BM25 + cosine fusion (gated embeddings).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "semantic_search", "description": "[Stub] Busca semantica (BM25+cosine), gated embeddings em roadmap.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "tree",
                         "description": "Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)",
@@ -430,7 +430,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     { "name": "export_session", "description": "Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown).", "inputSchema": { "type": "object", "properties": { "session_id": { "type": "string", "description": "UUID da sessão socrática a exportar." }, "format": { "type": "string", "enum": ["json", "markdown"], "description": "Formato de saída desejado." } }, "required": ["session_id", "format"], "additionalProperties": false } },
                     { "name": "analyze_session", "description": "Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.", "inputSchema": { "type": "object", "properties": { "session_id": { "type": "string", "description": "UUID da sessão socrática a analisar." } }, "required": ["session_id"], "additionalProperties": false } },
                     { "name": "merge_sessions", "description": "Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual.", "inputSchema": { "type": "object", "properties": { "source_session_id": { "type": "string", "description": "UUID da sessão fonte (será lida)." }, "target_session_id": { "type": "string", "description": "UUID da sessão alvo (receberá as inserções)." } }, "required": ["source_session_id", "target_session_id"], "additionalProperties": false } },
-                    { "name": "execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "execute", "description": "[Stub] Execucao multi-lang requer auditoria de sandbox. Aliases: execute | souls_execute | ctx_execute.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "shell", "description": "Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "compress",
@@ -471,8 +471,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "metrics", "description": "[Stub] Metricas FinOps (tokens lidos/salvos, hit-rate cache) em roadmap. Aliases: metrics | souls_metrics | ctx_metrics.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "intent", "description": "[Stub] Detector de intent do tool call (read/edit/search) em roadmap. Aliases: intent | souls_intent | ctx_intent.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     // ============================================================
                     // SOULS-CANIBALIZED Marco 3.5: 9 tools do `souls_graph` + 1 do `souls_thinking` (core_think)
                     // ============================================================
@@ -687,32 +687,9 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    {
-                        "name": "souls_impact",
-                        "description": "Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ao repo ou absoluto)." },
-                                "max_depth": { "type": "integer", "description": "Profundidade maxima do BFS reverso (1..=10, padrao 3).", "minimum": 1, "maximum": 10, "default": 3 }
-                            },
-                            "required": ["file_path"],
-                            "additionalProperties": false
-                        }
-                    },
-                    {
-                        "name": "ctx_impact",
-                        "description": "Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ao repo ou absoluto)." },
-                                "max_depth": { "type": "integer", "description": "Profundidade maxima do BFS reverso (1..=10, padrao 3).", "minimum": 1, "maximum": 10, "default": 3 }
-                            },
-                            "required": ["file_path"],
-                            "additionalProperties": false
-                        }
-                    },
+                    // Marco 4.1.3: `souls_impact` e `ctx_impact` foram EXTERMINADOS
+                    // do `tools/list` (canibalizacao cirurgica: aliases permanecem
+                    // no dispatcher para retrocompatibilidade).
                     {
                         "name": "routes",
                         "description": "Mapeia os contratos de endpoints ativos e a reatividade de comunicacao entre Tauri Rust e Svelte 5.",
@@ -4639,6 +4616,15 @@ mod tests {
         assert!(!tool_names.contains(&"souls_multi_read"));
         assert!(!tool_names.contains(&"souls_stub_fill"));
         assert!(!tool_names.contains(&"souls_fill"));
+        // Marco 4.1.3: `souls_impact` e `ctx_impact` foram EXTERMINADOS do tools/list
+        // (canibalizacao cirurgica: aliases permanecem no dispatcher).
+        assert!(!tool_names.contains(&"souls_impact"));
+        assert!(!tool_names.contains(&"ctx_impact"));
+        // ADR-026 §4: nenhum tool deve expor `ctx_` no `name`.
+        assert!(!tool_names.iter().any(|n| n.starts_with("ctx_")));
+        // ADR-026 §4: nenhum tool deve expor `tool_` ou `mcp_` (guilhotina de pleonasmos).
+        assert!(!tool_names.iter().any(|n| n.starts_with("tool_")));
+        assert!(!tool_names.iter().any(|n| n.starts_with("mcp_")));
     }
 
     /// V4: `headroom_retrieve` DEVE estar exposto no `tools/list` (alinhado com `intercept_loopback`).
@@ -5390,6 +5376,32 @@ mod tests {
             assert!(
                 !desc.contains("not_implemented_yet"),
                 "{tool} NAO deve mais ser stub: {desc}"
+            );
+        }
+
+        // 5. Marco 4.1.3: 4 stubs com descricao "honesta" (sem mentira "not_implemented_yet").
+        for tool in &["semantic_search", "execute", "metrics", "intent"] {
+            let desc = find_desc(tool).expect("{tool} deve existir");
+            assert!(
+                !desc.contains("not_implemented_yet"),
+                "{tool} ainda carrega mentira 'not_implemented_yet': {desc}"
+            );
+            assert!(
+                !desc.contains("sandbox_audit_pending"),
+                "{tool} ainda carrega mentira 'sandbox_audit_pending': {desc}"
+            );
+            assert!(
+                desc.contains("[Stub]"),
+                "{tool} deve explicitar o status honesto '[Stub]': {desc}"
+            );
+        }
+
+        // 6. Marco 4.1.3: 6 tools canibalizadas devem estar livres de brand 'SOULS' na desc.
+        for tool in &["get_ast", "fetch_web", "sys_time", "web_search", "repo_meta", "sqlite_query"] {
+            let desc = find_desc(tool).expect("{tool} deve existir");
+            assert!(
+                !desc.contains("Cânone SOULS") && !desc.contains("Canone SOULS"),
+                "{tool} ainda tem brand violation 'SOULS' (ADR-026 §2 Zero-Brand): {desc}"
             );
         }
     }

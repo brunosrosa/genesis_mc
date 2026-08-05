@@ -94,7 +94,7 @@ fn main() {
                 project_root.clone(),
             );
 
-            let tcp_proxy_spec = ProgramSpec::path(bin_dir.join("agentgateway_tcp_proxy.exe"));
+            let tcp_proxy_spec = ProgramSpec::path(resolve_tcp_proxy_path(&bin_dir));
             ensure_program_path_exists(&tcp_proxy_spec)?;
             let tcp_proxy = spawn_supervised(
                 tcp_proxy_spec,
@@ -178,6 +178,36 @@ fn resolve_running_bin_dir() -> Result<PathBuf, String> {
         .parent()
         .ok_or_else(|| "current_exe sem parent()".to_string())?;
     Ok(dir.to_path_buf())
+}
+
+/// Marco 4.1.2 + 4.1.3.5: Resolve o caminho do `agentgateway_tcp_proxy.exe`
+/// seguindo a cerca perimetrica **Fábrica/Produto**.
+///
+/// Ordem de precedência (PDR — Produto antes de Fábrica):
+/// 1. **`<project_root>/.agents/bin/agentgateway_tcp_proxy.exe`** (Produto:
+///    runtime desacoplado transplantado pelo `boot.ps1` step 1.5/5).
+/// 2. `<bin_dir>/agentgateway_tcp_proxy.exe` (Fábrica: `target/debug/`,
+///    onde o supervisor `souls_mc.exe` foi compilado).
+///
+/// Se nenhum dos dois existir, retorna o caminho do Produto (que é o
+/// que será reportado como `not found` pelo `ensure_program_path_exists`).
+pub fn resolve_tcp_proxy_path(bin_dir: &Path) -> PathBuf {
+    // Encontra o project_root subindo a arvore a partir de `bin_dir`.
+    // Estrategia: subir diretorios ate achar `gateway-config.yaml` ou
+    // `.agents/`. Limite de 5 niveis para evitar loops infinitos.
+    let mut candidate = bin_dir.to_path_buf();
+    for _ in 0..5 {
+        let produto = candidate.join(".agents").join("bin").join("agentgateway_tcp_proxy.exe");
+        if produto.exists() {
+            return produto;
+        }
+        // Sobe um nivel (sobe alem de "target/debug/" ate a raiz do projeto).
+        if !candidate.pop() {
+            break;
+        }
+    }
+    // Fallback: caminho da Fabrica (target/debug/).
+    bin_dir.join("agentgateway_tcp_proxy.exe")
 }
 
 #[derive(Clone)]
@@ -415,4 +445,69 @@ fn build_dynamic_path() -> String {
         .unwrap()
         .into_string()
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// Marco 4.1.2 + 4.1.3.5: PDR — Produto (`.agents/bin/`) tem
+    /// precedência sobre Fábrica (`target/debug/`).
+    #[test]
+    fn resolve_tcp_proxy_path_prefers_agents_bin_over_target_debug() {
+        let tmp = TempDir::new().expect("cria tempdir");
+        let project_root = tmp.path();
+        let target_debug = project_root.join("src-tauri").join("target").join("debug");
+        let agents_bin = project_root.join(".agents").join("bin");
+
+        // Cria AMBOS os .exe (Fabrica + Produto).
+        fs::create_dir_all(&target_debug).expect("cria target/debug/");
+        fs::create_dir_all(&agents_bin).expect("cria .agents/bin/");
+        fs::write(target_debug.join("agentgateway_tcp_proxy.exe"), b"OLD").expect("Fabrica");
+        fs::write(agents_bin.join("agentgateway_tcp_proxy.exe"), b"NEW").expect("Produto");
+
+        // A funcao deve preferir o Produto.
+        let resolved = resolve_tcp_proxy_path(&target_debug);
+        assert_eq!(
+            resolved,
+            agents_bin.join("agentgateway_tcp_proxy.exe"),
+            "PDR: Produto (.agents/bin/) tem precedencia sobre Fabrica (target/debug/)"
+        );
+    }
+
+    /// Quando o Produto nao existe, fallback para a Fabrica.
+    #[test]
+    fn resolve_tcp_proxy_path_falls_back_to_target_debug() {
+        let tmp = TempDir::new().expect("cria tempdir");
+        let target_debug = tmp.path().join("target").join("debug");
+        fs::create_dir_all(&target_debug).expect("cria target/debug/");
+        fs::write(target_debug.join("agentgateway_tcp_proxy.exe"), b"FABRICA").expect("Fabrica");
+
+        // NENHUM .agents/bin/ — fallback para Fabrica.
+        let resolved = resolve_tcp_proxy_path(&target_debug);
+        assert_eq!(
+            resolved,
+            target_debug.join("agentgateway_tcp_proxy.exe"),
+            "Fallback: quando Produto nao existe, usa Fabrica (target/debug/)"
+        );
+    }
+
+    /// Quando NEM Produto NEM Fabrica existem, retorna o caminho da Fabrica
+    /// (que sera reportado como not-found pelo `ensure_program_path_exists`).
+    #[test]
+    fn resolve_tcp_proxy_path_returns_target_debug_when_neither_exists() {
+        let tmp = TempDir::new().expect("cria tempdir");
+        let target_debug = tmp.path().join("target").join("debug");
+        // Cria so o diretorio, sem o .exe.
+        fs::create_dir_all(&target_debug).expect("cria target/debug/");
+
+        let resolved = resolve_tcp_proxy_path(&target_debug);
+        assert_eq!(
+            resolved,
+            target_debug.join("agentgateway_tcp_proxy.exe"),
+            "Sem Produto nem Fabrica: retorna caminho da Fabrica (consistente)"
+        );
+    }
 }
