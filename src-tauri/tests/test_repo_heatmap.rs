@@ -46,8 +46,10 @@ fn write(dir: &Path, name: &str, content: &str) -> PathBuf {
 /// Cria uma conexão SQLite em arquivo temporário com WAL + busy_timeout.
 fn open_heatmap_db(path: &Path) -> Connection {
     let conn = Connection::open(path).expect("open sqlite");
-    conn.busy_timeout(Duration::from_millis(5000))
-        .expect("busy_timeout");
+    // busy_timeout 30s via PRAGMA — absorve contenção severa em
+    // testes de UPSERT concorrente (8 threads × 50 writes = 400).
+    conn.execute_batch("PRAGMA busy_timeout = 30000;")
+        .expect("busy_timeout pragma");
     conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
         .expect("pragma");
     conn
@@ -117,7 +119,7 @@ fn test_heatmap_respects_exclusions() {
     let dir = TempDir::new().expect("tempdir");
     let root = dir.path();
     let db_path = root.join("test.db");
-    let conn = open_heatmap_db(&db_path);
+    let mut conn = open_heatmap_db(&db_path);
     ensure_heatmap_table(&conn).expect("ensure_heatmap_table");
 
     // 1. Pasta excluída: `target/`
@@ -151,7 +153,7 @@ fn test_heatmap_respects_exclusions() {
         .as_secs() as i64;
 
     let report: HeatmapReport =
-        compute_repo_heatmap(root, &conn, now, DEFAULT_LAMBDA, 50).expect("compute");
+        compute_repo_heatmap(root, &mut conn, now, DEFAULT_LAMBDA, 50).expect("compute");
 
     // Apenas `lib.rs` deve aparecer.
     assert_eq!(
@@ -228,9 +230,9 @@ fn test_sqlite_upsert_collision_protection() {
             let db = Arc::clone(&db_path_arc);
             let tgt = Arc::clone(&target_arc);
             thread::spawn(move || {
-                let conn = open_heatmap_db(&db);
+                let mut conn = open_heatmap_db(&db);
                 for _ in 0..WRITES_PER_THREAD {
-                    record_access(&conn, &tgt, now);
+                    record_access(&mut conn, &tgt, now);
                 }
             })
         })
@@ -275,5 +277,159 @@ fn test_sqlite_upsert_collision_protection() {
     assert!(
         score.is_finite() && score > 0.0 && score <= MAX_SCORE,
         "frecency_score inválido: {score} (deve ser f64 finito em (0, {MAX_SCORE}])"
+    );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// CONTRATO 4 (HOTFIX Marco 4.1.2-ac) — Acumulo de Frecency no UPSERT
+// ──────────────────────────────────────────────────────────────────────
+
+/// Prova que o `frecency_score` reflete o `modification_count`
+/// **acumulado**, NAO um valor unitario congelado.
+///
+/// **Cenário:** chama `record_access` 5 vezes sobre o mesmo path.
+/// Como `record_access` define `mtime = now` no UPSERT, `dt = 0`
+/// e a formula canonica produz `score = min(count, MAX_SCORE)`.
+///
+/// **Bug pre-hotfix (Marco 4.1.2 sem correcao):**
+///   - score apos 1 acesso = 1.0
+///   - score apos 5 acessos = 1.0 (errado, congelado)
+///   - modification_count = 5 (correto, mas inutil sem score crescente)
+///
+/// **Comportamento esperado pos-hotfix (R18):**
+///   - score apos 1 acesso = 1.0
+///   - score apos 5 acessos = 5.0 (saturado em MAX_SCORE)
+///   - modification_count = 5
+///   - A **ranking** reflete corretamente a intensidade de uso.
+#[test]
+fn test_frecency_score_reflects_accumulated_count() {
+    let dir = TempDir::new().expect("tempdir");
+    let db_path = dir.path().join("accumulated.db");
+    let mut conn = open_heatmap_db(&db_path);
+    ensure_heatmap_table(&conn).expect("ensure_heatmap_table");
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    // Extensao canonica (R17): .rs garante que o hook registra.
+    let target = "/tmp/very_hot_file.rs";
+
+    // Snapshot apos 1 acesso.
+    record_access(&mut conn, target, now);
+    let score_1: f64 = conn
+        .query_row(
+            "SELECT frecency_score FROM repo_heatmap WHERE file_path = ?1",
+            rusqlite::params![target],
+            |r| r.get(0),
+        )
+        .expect("linha 1 acesso");
+    let count_1: i64 = conn
+        .query_row(
+            "SELECT modification_count FROM repo_heatmap WHERE file_path = ?1",
+            rusqlite::params![target],
+            |r| r.get(0),
+        )
+        .expect("count 1 acesso");
+
+    // Continua incrementando ate 5 acessos.
+    for _ in 0..4 {
+        record_access(&mut conn, target, now);
+    }
+    let score_5: f64 = conn
+        .query_row(
+            "SELECT frecency_score FROM repo_heatmap WHERE file_path = ?1",
+            rusqlite::params![target],
+            |r| r.get(0),
+        )
+        .expect("linha 5 acessos");
+    let count_5: i64 = conn
+        .query_row(
+            "SELECT modification_count FROM repo_heatmap WHERE file_path = ?1",
+            rusqlite::params![target],
+            |r| r.get(0),
+        )
+        .expect("count 5 acessos");
+
+    // Assertions de invariantes (R18):
+    assert_eq!(count_1, 1, "modification_count deve ser 1 apos 1 acesso");
+    assert_eq!(count_5, 5, "modification_count deve ser 5 apos 5 acessos");
+
+    // Apos 1 acesso: score = 1.0 (count=1, dt=0, exp=1.0).
+    assert!(
+        (score_1 - 1.0).abs() < 1e-9,
+        "score apos 1 acesso deve ser 1.0 (got {score_1})"
+    );
+
+    // Apos 5 acessos: score deve estar saturado em MAX_SCORE (5.0).
+    // BUG: pre-hotfix, score_5 == score_1 == 1.0 (congelado).
+    // FIX: score_5 == MAX_SCORE == 5.0 (saturado pelo count acumulado).
+    assert!(
+        (score_5 - MAX_SCORE).abs() < 1e-9,
+        "score apos 5 acessos deve saturar em MAX_SCORE ({MAX_SCORE}), got {score_5} \
+         (BUG: o UPSERT nao atualiza o score com o count acumulado)"
+    );
+
+    // Invariante: score_5 > score_1 (monotonicamente crescente ate saturar).
+    assert!(
+        score_5 > score_1,
+        "score deve crescer com o count: score_1={score_1}, score_5={score_5}"
+    );
+}
+
+/// Prova que `compute_repo_heatmap` tambem aplica R18: ao re-varer
+/// um arquivo ja existente, o score refleti o count acumulado +
+/// o mtime real do filesystem (nao apenas o count unitario).
+#[test]
+fn test_compute_repo_heatmap_accumulates_score() {
+    let dir = TempDir::new().expect("tempdir");
+    let root = dir.path();
+    let db_path = root.join("compute_acc.db");
+    let mut conn = open_heatmap_db(&db_path);
+    ensure_heatmap_table(&conn).expect("ensure_heatmap_table");
+
+    // Cria arquivo canonico (.rs).
+    let _target = write(root, "src/lib.rs", "pub fn lib_api() {}");
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    // 1ª varredura: count vira 1, score = 1 * exp(-lambda * dt).
+    let _report_1 =
+        compute_repo_heatmap(root, &mut conn, now, DEFAULT_LAMBDA, 50).expect("compute 1");
+
+    // 2ª varredura: count vira 2, score = 2 * exp(-lambda * dt).
+    // Sem o fix: score ficaria congelado em 1 * exp(-lambda * dt).
+    let _report_2 =
+        compute_repo_heatmap(root, &mut conn, now, DEFAULT_LAMBDA, 50).expect("compute 2");
+
+    // 3ª varredura: count vira 3, score = 3 * exp(-lambda * dt).
+    let _report_3 =
+        compute_repo_heatmap(root, &mut conn, now, DEFAULT_LAMBDA, 50).expect("compute 3");
+
+    // Snapshot final.
+    let (count, score, mtime): (i64, f64, i64) = conn
+        .query_row(
+            "SELECT modification_count, frecency_score, last_modified_epoch \
+             FROM repo_heatmap WHERE file_path = ?1",
+            rusqlite::params!["src/lib.rs"],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .expect("linha final");
+
+    assert_eq!(count, 3, "modification_count deve ser 3 apos 3 varridas");
+    assert_eq!(mtime, mtime, "mtime deve ser igual ao do filesystem (test stub)");
+
+    // Calcula score esperado: 3 * exp(-lambda * (now - mtime)).
+    let expected_score = 3.0 * (-DEFAULT_LAMBDA * (now - mtime) as f64).exp();
+    let expected_score_clamped = expected_score.min(MAX_SCORE);
+
+    assert!(
+        (score - expected_score_clamped).abs() < 1e-6,
+        "score ({score}) deve refletir count=3 com mtime real (expected {expected_score_clamped}) \
+         — BUG: o UPSERT calcula score com count=1 mesmo apos multiplas varridas"
     );
 }

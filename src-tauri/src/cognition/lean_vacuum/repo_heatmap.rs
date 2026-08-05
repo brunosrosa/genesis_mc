@@ -156,13 +156,22 @@ pub fn ensure_heatmap_table(conn: &Connection) -> Result<(), HeatmapError> {
 /// **Lei R15-R17:** NUNCA retorna erro. Filtra por extensao canonica.
 /// Recalcula score com `lambda = DEFAULT_LAMBDA`.
 ///
+/// **Lei R18 (hotfix Marco 4.1.2-ac):** o `frecency_score` e
+/// calculado em Rust com o `modification_count` acumulado (via
+/// read-modify-write serializado por transacao `IMMEDIATE`).
+/// Isso garante:
+/// 1. **Atomicidade:** o write lock exclusivo e adquirido ANTES
+///    do SELECT, eliminando race entre threads concorrentes.
+/// 2. **Acumulo:** o score reflete o count FINAL apos o incremento.
+/// 3. **Coerencia com a formula canonica:** `MIN(count * exp(-lambda * dt), MAX_SCORE)`.
+///
 /// **Uso:** invocado pelo dispatcher apos chamadas bem-sucedidas de
 /// `read`, `edit`, `symbol`, `repo_impact`, `repo_ast`, `multi_read`.
 ///
 /// **Comportamento de erro:** silencioso (log warn, nao propaga).
 /// Caller NUNCA recebe erro deste hook — alinhado ao SSOT
 /// `try_log_file_access` ja presente no dispatcher.
-pub fn record_access(conn: &Connection, file_path: &str, now: i64) {
+pub fn record_access(conn: &mut Connection, file_path: &str, now: i64) {
     // R17: filtro por extensao canonica. Arquivos temporarios e
     // efemeros NAO poluem o heatmap.
     let ext = std::path::Path::new(file_path)
@@ -173,22 +182,11 @@ pub fn record_access(conn: &Connection, file_path: &str, now: i64) {
         return;
     }
 
-    // Calcula score com count=1 (acesso novo). A contagem sera
-    // incrementada via `modification_count + 1` no UPSERT.
-    let score = calculate_frecency(1, now, now, DEFAULT_LAMBDA);
-
-    let result = conn.execute(
-        "INSERT INTO repo_heatmap (file_path, frecency_score, last_modified_epoch, modification_count)
-         VALUES (?1, ?2, ?3, 1)
-         ON CONFLICT(file_path) DO UPDATE SET
-             frecency_score = excluded.frecency_score,
-             last_modified_epoch = excluded.last_modified_epoch,
-             modification_count = repo_heatmap.modification_count + 1;",
-        rusqlite::params![file_path, score, now],
-    );
-
-    // Hook fire-and-forget: log warn em caso de erro mas NAO propaga.
-    if let Err(e) = result {
+    // R18: UPSERT com read-modify-write em transacao IMMEDIATE.
+    // dt = now - mtime = now - now = 0, entao exp(-lambda * 0) = 1.0
+    // e score = count (saturado em MAX_SCORE).
+    if let Err(e) = upsert_heatmap_row(conn, file_path, now, now, DEFAULT_LAMBDA) {
+        // Hook fire-and-forget: log warn mas NAO propaga.
         eprintln!("[repo_heatmap::record_access] WARN: {e} (path={file_path})");
     }
 }
@@ -213,7 +211,7 @@ pub fn record_access(conn: &Connection, file_path: &str, now: i64) {
 /// - `HeatmapError::Sqlite`: erros de persistencia UPSERT.
 pub fn compute_repo_heatmap(
     root: &Path,
-    conn: &Connection,
+    conn: &mut Connection,
     now: i64,
     lambda: f64,
     limit: usize,
@@ -284,19 +282,10 @@ pub fn compute_repo_heatmap(
             .to_string_lossy()
             .replace('\\', "/");
 
-        // Calcula score com count=1 (UPSERT incrementa depois).
-        let score = calculate_frecency(1, mtime, now, lambda);
-
-        // UPSERT atomico (R4): ON CONFLICT(file_path) DO UPDATE.
-        if let Err(e) = conn.execute(
-            "INSERT INTO repo_heatmap (file_path, frecency_score, last_modified_epoch, modification_count)
-             VALUES (?1, ?2, ?3, 1)
-             ON CONFLICT(file_path) DO UPDATE SET
-                 frecency_score = excluded.frecency_score,
-                 last_modified_epoch = excluded.last_modified_epoch,
-                 modification_count = repo_heatmap.modification_count + 1;",
-            rusqlite::params![canonical, score, mtime],
-        ) {
+        // R18: UPSERT canonico com read-modify-write em transacao
+        // IMMEDIATE. Garante que o score reflete o count FINAL
+        // (apos incremento) usando o mtime real do FS.
+        if let Err(e) = upsert_heatmap_row(conn, &canonical, mtime, now, lambda) {
             // Fail-soft: log warn, continua varredura.
             eprintln!("[repo_heatmap] WARN: UPSERT falhou para {canonical}: {e}");
         }
@@ -348,6 +337,112 @@ pub fn now_epoch() -> i64 {
         .as_secs() as i64
 }
 
+/// R18 (hotfix Marco 4.1.2-ac): UPSERT canonico com **read-modify-write**
+/// em transacao `IMMEDIATE` para garantir que o `frecency_score`
+/// reflete o `modification_count` **FINAL** (apos incremento).
+///
+/// **Bug pre-hotfix (Marco 4.1.2 sem correcao):** o score era
+/// calculado com `count=1` (constante), violando a formula
+/// canonica `Frecency(f) = min(count * exp(-lambda * dt), MAX_SCORE)`.
+/// O `modification_count` incrementava corretamente, mas o score
+/// permanecia congelado em 1.0, quebrando o ranking.
+///
+/// **Correcao R18 (algoritmo):**
+/// 1. `BEGIN IMMEDIATE` → write lock exclusivo **imediato**
+///    (antes do SELECT, prevenindo que duas threads leiam o
+///    mesmo `current_count` e ambas computem `new_count = N+1`).
+/// 2. `SELECT current_count` (0 se `QueryReturnedNoRows`).
+/// 3. `new_count = current_count + 1`.
+/// 4. `score = calculate_frecency(new_count, mtime, now, lambda)` — pura Rust.
+/// 5. UPSERT com `new_count` e `score` pre-calculados (sobrescreve).
+/// 6. `tx.commit()` EXPLICITO (Drop nao commitia em algumas builds do rusqlite).
+///
+/// **Por que `IMMEDIATE` e nao `DEFERRED`:** com `DEFERRED` (default
+/// de `Connection::transaction()`), o SELECT roda sem lock, e o
+/// upgrade para `IMMEDIATE` so acontece no INSERT — abrindo uma
+/// janela de race entre threads. Com `IMMEDIATE` explicito, o write
+/// lock e adquirido **antes** do SELECT, serializando corretamente
+/// mesmo com 8 threads x 50 writes (teste `test_sqlite_upsert_collision_protection`).
+///
+/// **Atomicidade verificada:** teste 3 (8 threads x 50 writes = 400)
+/// prova que `modification_count` final == 400 com score saturado
+/// em `MAX_SCORE`. `busy_timeout(30s)` absorve a contencao.
+///
+/// **Parametros:**
+/// - `file_path`: chave primaria do registro.
+/// - `mtime`: epoch seconds do filesystem (ou `now` para o hook).
+/// - `now`: epoch seconds de referencia (sempre `>= mtime`).
+/// - `lambda`: constante de decaimento (default 0.0001).
+#[inline]
+pub fn upsert_heatmap_row(
+    conn: &mut Connection,
+    file_path: &str,
+    mtime: i64,
+    now: i64,
+    lambda: f64,
+) -> rusqlite::Result<()> {
+    use rusqlite::TransactionBehavior;
+
+    // BEGIN IMMEDIATE: write lock exclusivo ANTES do SELECT.
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+
+    // R18: read-modify-write. Le o count atual (0 se nao existir).
+    let current_count: i64 = match tx.query_row(
+        "SELECT modification_count FROM repo_heatmap WHERE file_path = ?1",
+        rusqlite::params![file_path],
+        |row| row.get::<_, i64>(0),
+    ) {
+        Ok(c) => c,
+        Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+        Err(e) => return Err(e),
+    };
+    let new_count = current_count + 1;
+
+    // Calcula score em Rust com o count FINAL + decay real.
+    // Formula canonica: min(count * exp(-lambda * dt), MAX_SCORE).
+    let score = calculate_frecency(new_count, mtime, now, lambda);
+
+    // UPSERT com count e score pre-calculados. `excluded.*` referencia
+    // os valores do INSERT, que sao authoritative (sobrescrevem).
+    tx.execute(
+        "INSERT INTO repo_heatmap (file_path, frecency_score, last_modified_epoch, modification_count)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(file_path) DO UPDATE SET
+             frecency_score = excluded.frecency_score,
+             last_modified_epoch = excluded.last_modified_epoch,
+             modification_count = excluded.modification_count;",
+        rusqlite::params![file_path, score, mtime, new_count],
+    )?;
+
+    // COMMIT explicito (CRITICO: Drop nao commitia em algumas builds do rusqlite).
+    tx.commit()?;
+    Ok(())
+}
+
+/// R18: helper de read-modify-write **read-only**. Le o
+/// `modification_count` atual de um `file_path` (retorna 0 se
+/// nao existir). Usado por APIs externas (ex: debug tooling) que
+/// precisam inspecionar o count sem modificar.
+///
+/// **NAO usado internamente:** `upsert_heatmap_row` ja faz o
+/// read-modify-write atomicamente via transacao `IMMEDIATE`.
+/// Esta funcao e mantida para evitar lock sincrono global
+/// em ferramentas que apenas querem ler a telemetria.
+///
+/// **Atomicidade:** o valor lido e consistente com o ultimo
+/// `COMMIT` visivel. Em caso de write concorrente em andamento,
+/// o valor pode estar momentaneamente desatualizado — mas o
+/// proximo `COMMIT` propagara a versao correta.
+#[inline]
+pub fn fetch_modification_count(conn: &Connection, file_path: &str) -> i64 {
+    conn.query_row(
+        "SELECT modification_count FROM repo_heatmap WHERE file_path = ?1",
+        rusqlite::params![file_path],
+        |row| row.get::<_, i64>(0),
+    )
+    .unwrap_or(0)
+}
+
 /// Helper de conveniência: abre o banco `souls_state.db` em modo
 /// read-write e garante a tabela `repo_heatmap`.
 ///
@@ -363,7 +458,8 @@ pub fn open_heatmap_db(workspace_root: &Path) -> Result<Connection, HeatmapError
         rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_CREATE,
     )
     .map_err(|e| HeatmapError::Sqlite(format!("open souls_state.db: {e}")))?;
-    conn.busy_timeout(std::time::Duration::from_millis(5000))
+    // busy_timeout via PRAGMA (mais robusto que a API em algumas builds).
+    conn.execute_batch("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;")
         .map_err(|e| HeatmapError::Sqlite(e.to_string()))?;
     ensure_heatmap_table(&conn)?;
     Ok(conn)
@@ -441,15 +537,15 @@ mod tests {
     fn record_access_filters_non_canonical_extensions() {
         let dir = tempfile::TempDir::new().unwrap();
         let db_path = dir.path().join("test.db");
-        let conn = Connection::open(&db_path).unwrap();
+        let mut conn = Connection::open(&db_path).unwrap();
         ensure_heatmap_table(&conn).unwrap();
 
         let now = now_epoch();
 
         // Arquivo com extensao nao-canonica → hook ignora silenciosamente.
-        record_access(&conn, "/tmp/foo.png", now);
-        record_access(&conn, "/tmp/bar.log", now);
-        record_access(&conn, "/tmp/baz.exe", now);
+        record_access(&mut conn, "/tmp/foo.png", now);
+        record_access(&mut conn, "/tmp/bar.log", now);
+        record_access(&mut conn, "/tmp/baz.exe", now);
 
         // Tabela deve permanecer vazia.
         let count: i64 = conn
@@ -462,12 +558,12 @@ mod tests {
     fn record_access_increments_count_on_collision() {
         let dir = tempfile::TempDir::new().unwrap();
         let db_path = dir.path().join("test.db");
-        let conn = Connection::open(&db_path).unwrap();
+        let mut conn = Connection::open(&db_path).unwrap();
         ensure_heatmap_table(&conn).unwrap();
 
         let now = now_epoch();
         for _ in 0..5 {
-            record_access(&conn, "/tmp/foo.rs", now);
+            record_access(&mut conn, "/tmp/foo.rs", now);
         }
 
         let entry = fetch_entry(&conn, "/tmp/foo.rs").expect("entry deve existir");
