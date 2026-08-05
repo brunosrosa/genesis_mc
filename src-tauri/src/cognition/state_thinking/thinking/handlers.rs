@@ -58,13 +58,18 @@ fn open_db(workspace_root: &Path) -> Result<Connection, SocraticHandlerError> {
         ))
     })?;
     let db_path = souls_data_dir.join("souls_state.db");
-    let conn = Connection::open_with_flags(
+    let mut conn = Connection::open_with_flags(
         &db_path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
     )
     .map_err(|e| SocraticHandlerError(format!("Falha ao abrir souls_state.db: {e}")))?;
-    conn.execute_batch("PRAGMA foreign_keys = ON;")
-        .map_err(|e| SocraticHandlerError(format!("Falha ao habilitar FK: {e}")))?;
+    conn.execute_batch(
+        "PRAGMA foreign_keys = ON;
+         PRAGMA journal_mode = WAL;
+         PRAGMA busy_timeout = 5000;",
+    )
+    .map_err(|e| SocraticHandlerError(format!("Falha ao configurar PRAGMAs: {e}")))?;
+    thinking::ops::migrate_v3_to_v5(&mut conn)?;
     Ok(conn)
 }
 

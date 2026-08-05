@@ -1952,7 +1952,7 @@ impl SsotInjector {
                 valid_from INTEGER NOT NULL,
                 valid_to INTEGER,
                 embargo_status INTEGER NOT NULL
-            )",
+            ) STRICT",
             [],
         )
         .map_err(|e| format!("Falha ao criar tabela repo_heuristics: {}", e))?;

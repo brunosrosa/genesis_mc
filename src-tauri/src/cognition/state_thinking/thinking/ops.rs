@@ -59,7 +59,32 @@ CREATE TABLE IF NOT EXISTS socratic_thoughts (
     duration_ms       INTEGER NOT NULL DEFAULT 0,
     created_at        INTEGER NOT NULL,
     FOREIGN KEY(session_id)        REFERENCES socratic_sessions(session_id) ON DELETE CASCADE,
-    FOREIGN KEY(parent_thought_id) REFERENCES socratic_thoughts(thought_id) ON DELETE SET NULL
+    FOREIGN KEY(parent_thought_id) REFERENCES socratic_thoughts(thought_id) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS entities (
+    entity_name TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    observations TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS relations (
+    from_entity TEXT NOT NULL,
+    to_entity TEXT NOT NULL,
+    relation_type TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(from_entity, to_entity, relation_type),
+    FOREIGN KEY(from_entity) REFERENCES entities(entity_name) ON DELETE CASCADE,
+    FOREIGN KEY(to_entity) REFERENCES entities(entity_name) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS observations (
+    observation_id TEXT PRIMARY KEY,
+    entity_name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(entity_name) REFERENCES entities(entity_name) ON DELETE CASCADE
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_thoughts_session
@@ -70,6 +95,31 @@ CREATE INDEX IF NOT EXISTS idx_thoughts_parent
     ON socratic_thoughts(parent_thought_id);
 CREATE INDEX IF NOT EXISTS idx_thoughts_session_step
     ON socratic_thoughts(session_id, step_number);
+CREATE INDEX IF NOT EXISTS idx_observations_entity
+    ON observations(entity_name);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
+    observation_id UNINDEXED,
+    entity_name,
+    content
+);
+
+CREATE TRIGGER IF NOT EXISTS after_observation_insert AFTER INSERT ON observations BEGIN
+    INSERT INTO observations_fts(observation_id, entity_name, content)
+    VALUES (new.observation_id, new.entity_name, new.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS after_observation_delete AFTER DELETE ON observations BEGIN
+    INSERT INTO observations_fts(observations_fts, observation_id, entity_name, content)
+    VALUES('delete', old.observation_id, old.entity_name, old.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS after_observation_update AFTER UPDATE ON observations BEGIN
+    INSERT INTO observations_fts(observations_fts, observation_id, entity_name, content)
+    VALUES('delete', old.observation_id, old.entity_name, old.content);
+    INSERT INTO observations_fts(observation_id, entity_name, content)
+    VALUES (new.observation_id, new.entity_name, new.content);
+END;
 ";
 
 /// Versão do schema pós Fase E. Idempotente em bancos já migrados.
