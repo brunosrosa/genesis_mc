@@ -1,3 +1,9 @@
+_WOKSPACE_MAP Gerado em: 2026-08-05 17:43:38
+
+### ====================================================================================================
+ARQUIVO: _WORKSPACE_MAP.md
+CAMINHO: Z:\souls_mc\_WORKSPACE_MAP.md
+---
 ---
 version: 6.0
 description: SOULS Workspace Map & Territorial Governance (Canon v6.0 - Marco 3.10)

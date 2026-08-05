@@ -76,7 +76,7 @@ def compile_env_clean(output_dir):
 def compile_ignition_scripts(output_dir):
     files_to_compile = [
         r"Z:\souls_mc\boot.ps1",
-        r"Z:\souls_mc\src-tauri\souls_ETL_ignition.ps1"
+        r"Z:\souls_mc\docs\runtime\scripts\souls_ETL_ignition.ps1"
     ]
     output_path = os.path.join(output_dir, "_IGNITION_SCRIPTS.txt")
     delete_if_exists(output_path)
@@ -182,44 +182,104 @@ def compile_mcps_list(output_dir):
         outfile.write(content + "\n")
 
 def compile_rules_in_ides(output_dir):
-    primary_rules = [
-        r"Z:\souls_mc\GEMINI.md",
-        r"Z:\souls_mc\.trae\rules\project_rules.md",
-        r"Z:\souls_mc\.trae\rules\user_rules.md"
-    ]
-    rules_dir = r"Z:\souls_mc\docs\.archive\rules"
     output_path = os.path.join(output_dir, "_RULES_IN_IDEs.txt")
     delete_if_exists(output_path)
     timestamp = get_timestamp()
     
+    # 1. Regras do Workspace Core (ex: GEMINI.md, AGENTS.md no root)
+    workspace_core_rules = [
+        r"Z:\souls_mc\GEMINI.md",
+        r"Z:\souls_mc\AGENTS.md",
+        r"Z:\souls_mc\.agents\AGENTS.md"
+    ]
+    
+    # 2. Regras Globais do Usuário / IDE (ex: Antigravity/Gemini Config)
+    global_user_rules = [
+        r"C:\Users\rosas\.gemini\config\AGENTS.md",
+        r"C:\Users\rosas\.gemini\config\rules\lean-ctx.md"
+    ]
+    
+    # 3. Diretórios de Regras de IDEs especificas (ex: Trae rules, Cursor rules, etc)
+    ide_rules_dirs = [
+        ("Trae Rules", r"Z:\souls_mc\.trae\rules"),
+        ("Cursor Rules", r"Z:\souls_mc\.cursor\rules"),
+        ("VSCode Rules", r"Z:\souls_mc\.vscode\rules")
+    ]
+    
+    # 4. Diretórios Arquivados / Legados
+    archived_dirs = [
+        r"Z:\souls_mc\docs\.archive\rules",
+        r"Z:\souls_mc\.archive\docs-rules"
+    ]
+    
+    found_files = set()
+
     with open(output_path, "w", encoding="utf-8") as outfile:
         outfile.write(f"_RULES_IN_IDEs Gerado em: {timestamp}\n")
         
-        # Write active/primary rules first
-        for f_path in primary_rules:
-            if os.path.exists(f_path):
-                write_header(outfile, os.path.basename(f_path), os.path.abspath(f_path))
+        # --- SECTION 1: WORKSPACE CORE RULES ---
+        outfile.write("\n### ====================================================================================================\n")
+        outfile.write("### SECTION 1: WORKSPACE CORE RULES (GEMINI.md / AGENTS.md)\n")
+        outfile.write("### ====================================================================================================\n")
+        for f_path in workspace_core_rules:
+            if os.path.exists(f_path) and f_path not in found_files:
+                found_files.add(f_path)
+                write_header(outfile, f"[WORKSPACE CORE] {os.path.basename(f_path)}", os.path.abspath(f_path))
                 with open(f_path, "r", encoding="utf-8") as infile:
                     content = infile.read()
                 outfile.write(content)
                 if not content.endswith("\n"):
                     outfile.write("\n")
-        
-        # Write archived rules block
-        if os.path.exists(rules_dir):
-            outfile.write("\n\n### ====================================================================================================\n")
-            outfile.write("### ARCHIVED RULES SECTION\n")
-            outfile.write("### ====================================================================================================\n")
-            md_files = glob.glob(os.path.join(rules_dir, "*.md"))
-            md_files.sort(key=lambda x: os.path.basename(x).lower())
-            
-            for f_path in md_files:
-                write_header(outfile, f"archived/{os.path.basename(f_path)}", os.path.abspath(f_path))
+
+        # --- SECTION 2: GLOBAL / IDE CONFIG RULES ---
+        outfile.write("\n### ====================================================================================================\n")
+        outfile.write("### SECTION 2: GLOBAL USER & IDE CONFIG RULES\n")
+        outfile.write("### ====================================================================================================\n")
+        for f_path in global_user_rules:
+            if os.path.exists(f_path) and f_path not in found_files:
+                found_files.add(f_path)
+                write_header(outfile, f"[GLOBAL CONFIG] {os.path.basename(f_path)}", os.path.abspath(f_path))
                 with open(f_path, "r", encoding="utf-8") as infile:
                     content = infile.read()
                 outfile.write(content)
                 if not content.endswith("\n"):
                     outfile.write("\n")
+
+        # --- SECTION 3: SPECIFIC IDE RULES (TRAE / CURSOR / ETC) ---
+        outfile.write("\n### ====================================================================================================\n")
+        outfile.write("### SECTION 3: SPECIFIC IDE RULES (TRAE / CURSOR / VSCODE)\n")
+        outfile.write("### ====================================================================================================\n")
+        for ide_label, dir_path in ide_rules_dirs:
+            if os.path.exists(dir_path):
+                rule_files = glob.glob(os.path.join(dir_path, "*.*"))
+                rule_files.sort(key=lambda x: os.path.basename(x).lower())
+                for f_path in rule_files:
+                    if f_path not in found_files:
+                        found_files.add(f_path)
+                        write_header(outfile, f"[{ide_label}] {os.path.basename(f_path)}", os.path.abspath(f_path))
+                        with open(f_path, "r", encoding="utf-8") as infile:
+                            content = infile.read()
+                        outfile.write(content)
+                        if not content.endswith("\n"):
+                            outfile.write("\n")
+
+        # --- SECTION 4: ARCHIVED / LEGACY RULES ---
+        outfile.write("\n### ====================================================================================================\n")
+        outfile.write("### SECTION 4: ARCHIVED & LEGACY RULES\n")
+        outfile.write("### ====================================================================================================\n")
+        for arch_dir in archived_dirs:
+            if os.path.exists(arch_dir):
+                rule_files = glob.glob(os.path.join(arch_dir, "*.*"))
+                rule_files.sort(key=lambda x: os.path.basename(x).lower())
+                for f_path in rule_files:
+                    if f_path not in found_files:
+                        found_files.add(f_path)
+                        write_header(outfile, f"[ARCHIVED] {os.path.basename(f_path)}", os.path.abspath(f_path))
+                        with open(f_path, "r", encoding="utf-8") as infile:
+                            content = infile.read()
+                        outfile.write(content)
+                        if not content.endswith("\n"):
+                            outfile.write("\n")
 
 def compile_skills_in_ides(output_dir):
     skills_dir = r"Z:\souls_mc\.agents\skills"
@@ -365,7 +425,7 @@ def compile_models_inventory(output_dir):
         outfile.write(content + "\n")
 
 def main():
-    output_dir = r"Z:\souls_mc\docs\context_dumps"
+    output_dir = r"Z:\souls_mc\docs\observability\context_dumps"
     os.makedirs(output_dir, exist_ok=True)
     
     compile_env_clean(output_dir)
@@ -378,8 +438,9 @@ def main():
     compile_workspace_map(output_dir)
     compile_yaml_json_outputs(output_dir)
     
-    print("All SOULS Context Dumps compiled successfully.")
+    print(f"All SOULS Context Dumps compiled successfully into '{output_dir}'.")
 
 if __name__ == "__main__":
     main()
+
 

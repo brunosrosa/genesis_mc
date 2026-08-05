@@ -1,0 +1,260 @@
+_MCP_INVENTORY Gerado em: 2026-08-05 17:43:38
+
+### ====================================================================================================
+ARQUIVO: souls MCP Inventory
+CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
+---
+=== MCP SERVER INVENTORY + SMOKE TEST ===
+SERVER_NAME: souls
+LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt
+SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
+TOOL_COUNT: 48
+SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.
+
+=== SUMMARY ===
+OK_COUNT: 48
+WARN_COUNT: 0
+FAIL_COUNT: 0
+OVERALL_STATUS: HEALTHY
+
+=== TOOLS ===
+NAME: analyze_session
+DESCRIPTION: Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: callees
+DESCRIPTION: Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: callers
+DESCRIPTION: Lista os nós do grafo de dependências que invocam um determinado símbolo no workspace.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: compress
+DESCRIPTION: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: core_think
+DESCRIPTION: Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: dedup
+DESCRIPTION: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: delta_diff
+DESCRIPTION: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: edit
+DESCRIPTION: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: execute
+DESCRIPTION: [Stub] Execucao multi-lang requer auditoria de sandbox. Aliases: execute | souls_execute | ctx_execute.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: export_session
+DESCRIPTION: Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: feedback
+DESCRIPTION: Dumps FinOps de telemetria, latencia e eficiencia de token E3 a partir de logs locais de execucao.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: fetch_web
+DESCRIPTION: Busca URL com fallback duplo, retorna markdown limpo. Aliases: fetch_web | souls_fetch_web | web_fetch.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: fill
+DESCRIPTION: Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: get_ast
+DESCRIPTION: Extrai o blueprint AST via tree-sitter nativo. Aliases: get_ast | souls_get_ast | repo_ast.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: handoff
+DESCRIPTION: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: headroom_retrieve
+DESCRIPTION: Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: heatmap
+DESCRIPTION: Mapeia dinamicamente os caminhos quentes de acesso a arquivos locais na RAM Host usando Langevin decay.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: intent
+DESCRIPTION: [Stub] Detector de intent do tool call (read/edit/search) em roadmap. Aliases: intent | souls_intent | ctx_intent.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: knowledge
+DESCRIPTION: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_add_observations
+DESCRIPTION: Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_create_entities
+DESCRIPTION: Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_create_relations
+DESCRIPTION: Cria relações direcionadas entre entidades (souls_graph). Idempotente.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_delete_entities
+DESCRIPTION: Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_delete_observations
+DESCRIPTION: Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_delete_relations
+DESCRIPTION: Remove arestas do grafo.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_open_nodes
+DESCRIPTION: Abre entidades específicas por nome e hidrata observations via JOIN.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_read_graph
+DESCRIPTION: Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: mem_search
+DESCRIPTION: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: merge_sessions
+DESCRIPTION: Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: metrics
+DESCRIPTION: [Stub] Metricas FinOps (tokens lidos/salvos, hit-rate cache) em roadmap. Aliases: metrics | souls_metrics | ctx_metrics.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: multi_read
+DESCRIPTION: Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: outline
+DESCRIPTION: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: read
+DESCRIPTION: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: repo_heatmap
+DESCRIPTION: Calcula o ranking de calor (Frecency) dos arquivos do monorepo baseando-se em modificacoes e acessos.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: repo_impact
+DESCRIPTION: Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: repo_meta
+DESCRIPTION: Extrai metadados GitHub via octocrab para owner/repo. Aliases: repo_meta | souls_repo_meta.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: routes
+DESCRIPTION: Mapeia os contratos de endpoints ativos e a reatividade de comunicacao entre Tauri Rust e Svelte 5.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: search
+DESCRIPTION: Busca textual compacta via regex com formatação LEAN agrupada por arquivo. (souls_search)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: semantic_search
+DESCRIPTION: [Stub] Busca semantica (BM25+cosine), gated embeddings em roadmap.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: session
+DESCRIPTION: Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: shell
+DESCRIPTION: Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: smart_read
+DESCRIPTION: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: sqlite_query
+DESCRIPTION: Consulta SQLite read-only nos bancos nativos. Aliases: sqlite_query | souls_sqlite_query | db_query.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: sub_agent
+DESCRIPTION: Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: symbol
+DESCRIPTION: Resolve localizacao fisica (file:line:col) via WalkDir+Regex+AST Wasmtime. (souls_symbol)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: sys_time
+DESCRIPTION: Retorna data/hora local, UTC e fuso atual via chrono nativo. Aliases: sys_time | souls_sys_time.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: tree
+DESCRIPTION: Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: web_search
+DESCRIPTION: Busca web DuckDuckGo HTML, retorna titulos, links e snippets. Aliases: web_search | souls_web_search.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---

@@ -30,10 +30,12 @@ CANDIDATE_PAYLOAD_COLUMNS = [
 
 
 def parse_args() -> argparse.Namespace:
-    # parents[0]=scripts, parents[1]=docs, parents[2]=souls_mc (raiz)
-    root = Path(__file__).resolve().parents[2]
+    # __file__ está em Z:\souls_mc\docs\runtime\scripts\extract_audit_blobs.py
+    # parents[0]=scripts, parents[1]=runtime, parents[2]=docs, parents[3]=souls_mc (raiz)
+    script_path = Path(__file__).resolve()
+    root = script_path.parents[3] if len(script_path.parents) > 3 else script_path.parent
     default_db = root / ".souls_data" / "souls_heuristic_vault.db"
-    default_reports = root / "docs" / "audits" / "blobs"
+    default_reports = root / "docs" / "observability" / "audits" / "blobs"
 
     parser = argparse.ArgumentParser(
         description="Extrai blobs de auditoria da tabela artefatos_brutos para TXT na scratchpad. "
@@ -55,18 +57,18 @@ def parse_args() -> argparse.Namespace:
         "--repo-ids",
         nargs="+",
         default=None,
-        help="Lista de repo_ids a extrair (ex: trailbaseio/trailbase huggingface/candle). Default: so 'trailbaseio/trailbase' (retrocompat).",
+        help="Lista de repo_ids a extrair (ex: trailbaseio/trailbase huggingface/candle). Default: se não especificado, extrai todos.",
     )
     parser.add_argument(
         "--artifact-types",
         nargs="+",
         default=None,
-        help="Lista de artifact_types a extrair (ex: blob_06_unsafe_hotspots blob_08_health_report). Default: os 2 do legacy.",
+        help="Lista de artifact_types a extrair (ex: blob_06_unsafe_hotspots blob_08_health_report). Default: se não especificado, extrai todos.",
     )
     parser.add_argument(
         "--all-repos",
         action="store_true",
-        help="Ignora --repo-ids e varre TODOS os repo_ids distintos do banco (pode ser pesado).",
+        help="Ignora --repo-ids e varre TODOS os repo_ids distintos do banco.",
     )
     parser.add_argument(
         "--all-artifacts",
@@ -243,13 +245,21 @@ def list_distinct(conn: sqlite3.Connection, column: str) -> list[str]:
 
 
 def resolve_targets(conn: sqlite3.Connection, args: argparse.Namespace) -> tuple[list[str], list[str]]:
-    """Resolve --all-repos/--all-artifacts OU cai nos defaults legacy."""
-    repo_ids = args.repo_ids if not args.all_repos else list_distinct(conn, "repo_id")
-    if not repo_ids:
-        repo_ids = list(DEFAULT_REPO_IDS)
-    artifact_types = args.artifact_types if not args.all_artifacts else list_distinct(conn, "artifact_type")
-    if not artifact_types:
-        artifact_types = list(DEFAULT_ARTIFACT_TYPES)
+    """Resolve repo_ids e artifact_types de forma totalmente dinâmica/agnóstica."""
+    if args.all_repos or not args.repo_ids:
+        repo_ids = list_distinct(conn, "repo_id")
+        if not repo_ids:
+            repo_ids = list(DEFAULT_REPO_IDS)
+    else:
+        repo_ids = args.repo_ids
+
+    if args.all_artifacts or not args.artifact_types:
+        artifact_types = list_distinct(conn, "artifact_type")
+        if not artifact_types:
+            artifact_types = list(DEFAULT_ARTIFACT_TYPES)
+    else:
+        artifact_types = args.artifact_types
+
     return repo_ids, artifact_types
 
 

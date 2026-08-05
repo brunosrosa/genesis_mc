@@ -1,0 +1,53 @@
+=== SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
+GERADO EM: 2026-08-05 17:43:38
+TOTAL DE FERRAMENTAS: 48
+----------------------------------------------------------------------------------------------------
+• analyze_session: Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.
+• callees: Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado.
+• callers: Lista os nós do grafo de dependências que invocam um determinado símbolo no workspace.
+• compress: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
+• core_think: Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.
+• dedup: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
+• delta_diff: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).
+• edit: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
+• execute: [Stub] Execucao multi-lang requer auditoria de sandbox. Aliases: execute | souls_execute | ctx_execute.
+• export_session: Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown).
+• feedback: Dumps FinOps de telemetria, latencia e eficiencia de token E3 a partir de logs locais de execucao.
+• fetch_web: Busca URL com fallback duplo, retorna markdown limpo. Aliases: fetch_web | souls_fetch_web | web_fetch.
+• fill: Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM.
+• get_ast: Extrai o blueprint AST via tree-sitter nativo. Aliases: get_ast | souls_get_ast | repo_ast.
+• handoff: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
+• headroom_retrieve: Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.
+• heatmap: Mapeia dinamicamente os caminhos quentes de acesso a arquivos locais na RAM Host usando Langevin decay.
+• intent: [Stub] Detector de intent do tool call (read/edit/search) em roadmap. Aliases: intent | souls_intent | ctx_intent.
+• knowledge: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
+• mem_add_observations: Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.
+• mem_create_entities: Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.
+• mem_create_relations: Cria relações direcionadas entre entidades (souls_graph). Idempotente.
+• mem_delete_entities: Remove entidades. CASCADE apaga relations e observations. Uso restrito (HITL recomendado).
+• mem_delete_observations: Remove observações específicas (entity, content). Triggers FTS5 mantêm consistência.
+• mem_delete_relations: Remove arestas do grafo.
+• mem_open_nodes: Abre entidades específicas por nome e hidrata observations via JOIN.
+• mem_read_graph: Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).
+• mem_search: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
+• merge_sessions: Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual.
+• metrics: [Stub] Metricas FinOps (tokens lidos/salvos, hit-rate cache) em roadmap. Aliases: metrics | souls_metrics | ctx_metrics.
+• multi_read: Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.
+• outline: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline)
+• read: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
+• repo_heatmap: Calcula o ranking de calor (Frecency) dos arquivos do monorepo baseando-se em modificacoes e acessos.
+• repo_impact: Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.
+• repo_meta: Extrai metadados GitHub via octocrab para owner/repo. Aliases: repo_meta | souls_repo_meta.
+• routes: Mapeia os contratos de endpoints ativos e a reatividade de comunicacao entre Tauri Rust e Svelte 5.
+• search: Busca textual compacta via regex com formatação LEAN agrupada por arquivo. (souls_search)
+• semantic_search: [Stub] Busca semantica (BM25+cosine), gated embeddings em roadmap.
+• session: Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).
+• shell: Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.
+• smart_read: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)
+• sqlite_query: Consulta SQLite read-only nos bancos nativos. Aliases: sqlite_query | souls_sqlite_query | db_query.
+• sub_agent: Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).
+• symbol: Resolve localizacao fisica (file:line:col) via WalkDir+Regex+AST Wasmtime. (souls_symbol)
+• sys_time: Retorna data/hora local, UTC e fuso atual via chrono nativo. Aliases: sys_time | souls_sys_time.
+• tree: Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)
+• web_search: Busca web DuckDuckGo HTML, retorna titulos, links e snippets. Aliases: web_search | souls_web_search.
+----------------------------------------------------------------------------------------------------

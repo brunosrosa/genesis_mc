@@ -1,3 +1,57 @@
+_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-05 17:43:38
+
+### ====================================================================================================
+ARQUIVO: gateway-config.yaml
+CAMINHO: Z:\souls_mc\gateway-config.yaml
+---
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+config: {}
+binds:
+  - port: 3001
+    listeners:
+      - protocol: HTTP
+        routes:
+          - policies:
+              cors:
+                allowOrigins: ['*']
+                allowHeaders: ['*']
+                exposeHeaders: ['Mcp-Session-Id']
+            backends:
+              - mcp:
+                  targets:
+                    - name: souls_mcp
+                      stdio:
+                        # Marco 4.1.2: Runtime desacoplado de target/debug/
+                        # (Fim dos travamentos NTFS durante `cargo build`).
+                        # O `boot.ps1` transplanta os 3 .exe para
+                        # `.agents/bin/` no step 1.5/5.
+                        cmd: 'Z:/souls_mc/.agents/bin/souls_mcp_server.exe'
+
+### ====================================================================================================
+ARQUIVO: mcp_config.json
+CAMINHO: C:\Users\rosas\.gemini\config\mcp_config.json
+---
+{
+    "mcpServers":  {
+                       "souls":  {
+                                     "args":  [
+                                                  "http://127.0.0.1:3001/"
+                                              ],
+                                     "env":  {
+                                                 "AG_BRIDGE_URL":  "http://127.0.0.1:3001",
+                                                 "ZERO_COPY_MODE":  "1",
+                                                 "GPU_RASTERIZATION":  "true"
+                                             },
+                                     "command":  "mcp-remote.cmd",
+                                     "disabled":  false
+                                 }
+                   }
+}
+
+### ====================================================================================================
+ARQUIVO: souls_mcp_server.rs
+CAMINHO: Z:\souls_mc\src-tauri\src\bin\souls_mcp_server.rs
+---
 // Aumento do limite de recursão do macro `json!` (serde_json) para acomodar
 // o `tools/list` canônico do Marco 3.5 (50+ ferramentas, incluindo os 10
 // novos tools mem_* + core_think com inputSchemas profundos).

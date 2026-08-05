@@ -1,8 +1,8 @@
-_ADRs_ALL Gerado em: 2026-08-02 03:16:07
+_ADRs_ALL Gerado em: 2026-08-05 17:05:42
 
 ### ====================================================================================================
 ARQUIVO: ADR-001-Core-Stack-Restrita.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-001-Core-Stack-Restrita.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-001-Core-Stack-Restrita.md
 ---
 ---
 id: "ADR-001"
@@ -38,7 +38,7 @@ Fica formalmente decidido que a arquitetura de produção do SOULS é estritamen
 
 ### ====================================================================================================
 ARQUIVO: ADR-002-Sandboxing-Hibrido.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-002-Sandboxing-Hibrido.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-002-Sandboxing-Hibrido.md
 ---
 ---
 id: "ADR-002"
@@ -99,7 +99,7 @@ Apesar da ponte de IPC via *Named Pipes* estar liberada com a DACL `ALL APPLICAT
 
 ### ====================================================================================================
 ARQUIVO: ADR-003-Zero-Copy-IPC.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-003-Zero-Copy-IPC.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-003-Zero-Copy-IPC.md
 ---
 ---
 id: "ADR-003"
@@ -149,7 +149,7 @@ Fica decretada a extinção da serialização JSON nas rotinas centrais de alta 
 
 ### ====================================================================================================
 ARQUIVO: ADR-004-Triade-de-Memoria.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-004-Triade-de-Memoria.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-004-Triade-de-Memoria.md
 ---
 ---
 id: "ADR-004"
@@ -197,7 +197,7 @@ Para combater o "Context Rot" e conter o inchaço desnecessário da janela de at
 
 ### ====================================================================================================
 ARQUIVO: ADR-005-RAG-Temporal.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-005-RAG-Temporal.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-005-RAG-Temporal.md
 ---
 ---
 id: "ADR-005"
@@ -248,7 +248,7 @@ Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação p
 
 ### ====================================================================================================
 ARQUIVO: ADR-006-SSOT-Sheets.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-006-SSOT-Sheets.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-006-SSOT-Sheets.md
 ---
 ---
 id: "ADR-006"
@@ -289,7 +289,7 @@ Fica formalmente decidido estabelecer uma planilha do **Google Sheets** estrutur
 
 ### ====================================================================================================
 ARQUIVO: ADR-007-Avaliador-Epistemico.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-007-Avaliador-Epistemico.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-007-Avaliador-Epistemico.md
 ---
 ---
 id: "ADR-007"
@@ -335,7 +335,7 @@ Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "A
 
 ### ====================================================================================================
 ARQUIVO: ADR-008-Roteamento-FinOps.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-008-Roteamento-FinOps.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-008-Roteamento-FinOps.md
 ---
 ---
 id: "ADR-008"
@@ -378,7 +378,7 @@ Fica decretado o uso da malha de roteamento dinâmico "Zero-Trust Sandwich" oper
 
 ### ====================================================================================================
 ARQUIVO: ADR-009-Decodificacao-Restrita.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-009-Decodificacao-Restrita.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-009-Decodificacao-Restrita.md
 ---
 ---
 id: "ADR-009"
@@ -399,7 +399,7 @@ Para ler as regras atuais em vigor sobre o Cercadinho do Determinismo, amostrage
 
 ### ====================================================================================================
 ARQUIVO: ADR-010-Spec-Driven-Development.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-010-Spec-Driven-Development.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-010-Spec-Driven-Development.md
 ---
 ---
 id: "ADR-010"
@@ -442,7 +442,7 @@ Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinad
 
 ### ====================================================================================================
 ARQUIVO: ADR-011-Governanca-HITL.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-011-Governanca-HITL.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-011-Governanca-HITL.md
 ---
 ---
 id: "ADR-011"
@@ -488,7 +488,7 @@ Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer 
 
 ### ====================================================================================================
 ARQUIVO: ADR-012-Guardiao-Idempotente.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-012-Guardiao-Idempotente.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-012-Guardiao-Idempotente.md
 ---
 ---
 id: "ADR-012"
@@ -526,7 +526,7 @@ Implementar a arquitetura do **Guardião Idempotente** como um módulo nativo de
 
 ### ====================================================================================================
 ARQUIVO: ADR-013-Cyber-Neuro-Synthesis.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-013-Cyber-Neuro-Synthesis.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-013-Cyber-Neuro-Synthesis.md
 ---
 ---
 id: "ADR-013"
@@ -578,7 +578,7 @@ Implementar rigidamente o paradigma visual **Cyber-Neuro Synthesis** sob a filos
 
 ### ====================================================================================================
 ARQUIVO: ADR-014-Friccao-Produtiva.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-014-Friccao-Produtiva.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-014-Friccao-Produtiva.md
 ---
 ---
 id: "ADR-014"
@@ -616,7 +616,7 @@ Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estrutur
 
 ### ====================================================================================================
 ARQUIVO: ADR-015-Motor-Generativo-Local.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-015-Motor-Generativo-Local.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-015-Motor-Generativo-Local.md
 ---
 ---
 id: "ADR-015"
@@ -637,7 +637,7 @@ Para ler as leis físicas e térmicas em vigor sobre a dualidade de motores (a a
 
 ### ====================================================================================================
 ARQUIVO: ADR-016-Zero-Config-Install.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-016-Zero-Config-Install.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-016-Zero-Config-Install.md
 ---
 ---
 id: "ADR-016"
@@ -683,7 +683,7 @@ Implementar um motor nativo de **Auto-Profiling de Hardware** em Rust, executado
 
 ### ====================================================================================================
 ARQUIVO: ADR-017-Sovereign-Sync.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-017-Sovereign-Sync.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-017-Sovereign-Sync.md
 ---
 ---
 id: "ADR-017"
@@ -724,7 +724,7 @@ Fica estabelecido que toda sincronização de dados e consistência de estado en
 
 ### ====================================================================================================
 ARQUIVO: ADR-018-Paradigma-NextPlaid.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-018-Paradigma-NextPlaid.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-018-Paradigma-NextPlaid.md
 ---
 ---
 id: "ADR-018"
@@ -767,7 +767,7 @@ Fica decretado o fim do fatiamento cego e a blindagem cirúrgica do *parsing* AS
 
 ### ====================================================================================================
 ARQUIVO: ADR-019-Maquina-de-Estados-ETL.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-019-Maquina-de-Estados-ETL.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-019-Maquina-de-Estados-ETL.md
 ---
 ---
 id: "ADR-019"
@@ -814,7 +814,7 @@ A governança da tabela principal obedece obrigatoriamente a:
 
 ### ====================================================================================================
 ARQUIVO: ADR-020-Enxame-Cognitivo-ELO.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-020-Enxame-Cognitivo-ELO.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-020-Enxame-Cognitivo-ELO.md
 ---
 ---
 id: "ADR-020"
@@ -857,7 +857,7 @@ Implementar a arquitetura de **Enxame Cognitivo Baseado em Reputação ELO** no 
 
 ### ====================================================================================================
 ARQUIVO: ADR-021-Chyros-Meta-Reviewer.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-021-Chyros-Meta-Reviewer.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-021-Chyros-Meta-Reviewer.md
 ---
 ---
 id: "ADR-021"
@@ -898,7 +898,7 @@ Estabelecer o **Chyros Daemon** como o **Meta-Reviewer e Consolidador de Memóri
 
 ### ====================================================================================================
 ARQUIVO: ADR-022-Identidade-Verbal-Voz-Vidro.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-022-Identidade-Verbal-Voz-Vidro.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-022-Identidade-Verbal-Voz-Vidro.md
 ---
 ---
 id: "ADR-022"
@@ -935,7 +935,7 @@ Implementar rigidamente a identidade verbal **Voz de Vidro** em todas as interfa
 
 ### ====================================================================================================
 ARQUIVO: ADR-023-Grafo-De-Proximidade.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-023-Grafo-De-Proximidade.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-023-Grafo-De-Proximidade.md
 ---
 ---
 id: "ADR-023"
@@ -973,7 +973,7 @@ Estabelecer o **LadybugDB** como a camada nativa de grafos local do SOULS, atuan
 
 ### ====================================================================================================
 ARQUIVO: ADR-024-Engenharia-Performance-SAST.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-024-Engenharia-Performance-SAST.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-024-Engenharia-Performance-SAST.md
 ---
 ---
 id: "ADR-024"
@@ -1022,7 +1022,7 @@ Ficam decretadas, para toda extração SAST e para qualquer futura ferramenta CL
 
 ### ====================================================================================================
 ARQUIVO: ADR-025-Consciencia-Monorepos-Qualidade.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-025-Consciencia-Monorepos-Qualidade.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-025-Consciencia-Monorepos-Qualidade.md
 ---
 ---
 id: "ADR-025"
@@ -1055,7 +1055,7 @@ Fica decretada a lei de **Qualidade 100/100** e a **Consciência Obrigatória de
 
 ### ====================================================================================================
 ARQUIVO: ADR-026-Nomenclatura-Semantica-Zero-Brand.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-026-Nomenclatura-Semantica-Zero-Brand.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-026-Nomenclatura-Semantica-Zero-Brand.md
 ---
 ---
 id: "ADR-026"
@@ -1104,7 +1104,7 @@ Fica decretada a **Lei da Nomenclatura Semântica e Zero-Brand** para todo o eco
 
 ### ====================================================================================================
 ARQUIVO: ADR-027-Motor-de-Inferência-Híbrido-Isolado-e-Termodinâmica-da-VRAM.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-027-Motor-de-Inferência-Híbrido-Isolado-e-Termodinâmica-da-VRAM.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-027-Motor-de-Inferência-Híbrido-Isolado-e-Termodinâmica-da-VRAM.md
 ---
 ---
 id: "ADR-027"
@@ -1236,7 +1236,7 @@ Fica terminantemente proibido inicializar qualquer modelo local de inteligência
 
 ### ====================================================================================================
 ARQUIVO: ADR-028-O-Cercadinho-do-Determinismo-e-Decodificação-Restrita.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-028-O-Cercadinho-do-Determinismo-e-Decodificação-Restrita.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-028-O-Cercadinho-do-Determinismo-e-Decodificação-Restrita.md
 ---
 ---
 id: "ADR-028"
@@ -1357,7 +1357,7 @@ O modelo hiper-quantizado operando em contexts longos ($30\text{k}$ tokens) sofr
 
 ### ====================================================================================================
 ARQUIVO: ADR-029-Visão-Cognitiva-O(1)-e-Navegação-Bare-Metal.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-029-Visão-Cognitiva-O(1)-e-Navegação-Bare-Metal.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-029-Visão-Cognitiva-O(1)-e-Navegação-Bare-Metal.md
 ---
 ---
 id: "ADR-029"
@@ -1491,7 +1491,7 @@ Caso o buffer de dados estruturados gerado na descompressão de uma página web 
 
 ### ====================================================================================================
 ARQUIVO: ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates.md
 ---
 ---
 id: "ADR-030"
@@ -1505,7 +1505,7 @@ description: "Doutrina implacável de higiene bare-metal: institui o Version Pin
 ### ADR-030: Doutrina de Curadoria de Dependências e Higiene de Crates (Rust)
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
+Aceito / Consolidado (Ativo, Inegociável e Fundacional para SOULS V4 - Consolidado no Marco 4.2.2)
 
 #### Contexto Técnico e Restrições Físicas de Infraestrutura
 A geometria do ecossistema SOULS V4 opera em uma "arquitetura de sobrevivência" atrelada aos limites físicos do hardware host (Intel i9, 32GB RAM, dGPU RTX 2060m com 6GB VRAM). 
@@ -1523,22 +1523,46 @@ Fica decretada a adoção de quatro módulos inegociáveis de curadoria de *crat
 *   **A Morte do `ring` e Esquizofrenia de Hash:** É proibido o uso da biblioteca `ring` devido à sua bagagem C-FFI pesada. A criptografia será operada pelo `rscrypto` via instruções nativas AVX2.
 *   **O Dogma da Entropia Unificada:** O ecossistema fará a transição absoluta para a *crate* `rustc-hash v2`, banindo bibliotecas legadas de dicionário (`indexmap v1`). O uso de `rand` genérico para entropia fica obsoleto, adotando-se o gerador na CPU `tinyrand`.
 
-**Módulo 3: O Extermínio Sintático (`syn` no Runtime)**
+**Módulo 3: O Extermínio Sintático (`syn` no Runtime) e Erradicação de Wrappers Legados**
 *   **Banimento do `syn`:** A *crate* `syn` é estritamente proibida no tempo de execução (*runtime*). Ela engole corpos inteiros de funções, gerando picos de *Out-Of-Memory* e tempos de compilação absurdos. O seu uso fica enjaulado exclusivamente na fase de compilação (`proc-macros`).
-*   **Adoção Superficial:** Para *parsing* estrutural local, é mandatório o uso de `venial` (leitura exclusiva da "casca" externa de `Structs` e `Enums`) e `unsynn` (manipulação Zero-Copy de tokens vitais).
+*   **Banimento da Crate `core_affinity` e `winapi`:** A crate `core_affinity` e wrappers legados C-FFI WinAPI são estritamente banidos do código de produção.
 *   **Padronização de Erros:** O mapeamento de falhas fica unificado pela diretiva estável do `thiserror v2` (#![no_std]), eliminando overhead de formatação dinâmica de strings (*Garbage Collection*) no Heap central.
 
-**Módulo 4: O Dogma Hermético do Version Pinning Dinâmico**
+**Módulo 4: O Dogma Hermético do Version Pinning Dinâmico (Marco 4.2.2 Consolidação)**
 *   Fica terminantemente proibido o uso de operadores de atualização frouxa (`^`, `*`, `~`) no manifesto de dependências do *Workspace*.
-*   Impõe-se a ancoragem estrita e o bloqueio terminal via operador literal de igualdade (`=`) centralizado unicamente no bloco `[workspace.dependencies]` (ex: `indexmap = "=2.1.4"`). Isso esmaga a "matéria escura" transitória (múltiplas versões de `getrandom` ou `flate2`), forçando todas as dependências a convergirem fisicamente no *build*, garantindo a portabilidade e a prevenção de injeção silenciosa de símbolos `std` conflitantes.
+*   Impõe-se a ancoragem estrita e o bloqueio terminal via operador literal de igualdade (`=`) centralizado unicamente no manifesto `Cargo.toml`.
+*   **Consolidação no Marco 4.2.2:**
+    * `windows-sys` foi unificado e rigidamente pinado na versão `=0.61.2`, aplanando as bindings de sistema operacional com o Tokio 1.51, Gitoxide, tempfile e which.
+    * `thiserror` foi promovido e pinado na versão `=2.0.19`.
+    * `toml` foi promovido e pinado na versão `=1.1.4`.
+
+#### Snippet Oficial SODA: Ancoragem Nativa de CPU Threads (SetThreadAffinityMask)
+Para pinagem de threads críticas de CPU de inferência e workers sem dependências de terceiros (`core_affinity`), adota-se formalmente o padrão nativo via `windows-sys 0.61.2`:
+
+```rust
+#[cfg(target_os = "windows")]
+{
+    use windows_sys::Win32::System::Threading::{GetCurrentThread, SetThreadAffinityMask};
+    let handle = unsafe { GetCurrentThread() };
+    for &idx in allowed_core_indices {
+        if idx < (usize::BITS as usize) {
+            let mask = 1usize << idx;
+            let res = unsafe { SetThreadAffinityMask(handle, mask) };
+            if res != 0 {
+                pinned_indices.push(idx);
+            }
+        }
+    }
+}
+```
 
 #### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
-*   **Positivas:** Redução brutal do tempo de compilação a frio, neutralização de conflitos de resolução de versão pelo Cargo e proteção imediata do Cache L3 do processador contra lixo sintático. Prevenção absoluta contra envenenamento de dependências por alucinação de agentes de IA.
-*   **Negativas:** Manutenção manual severa. O custo das atualizações de segurança é repassado ao Arquiteto-Chefe, que deverá atualizar o *Version Pinning* bloco a bloco para garantir que não haja regressão termodinâmica ou injeção de *bloatware*.
+*   **Positivas:** Redução brutal do tempo de compilação a frio, eliminação da duplicação da stack do `windows-sys` em memória RAM, neutralização de conflitos pelo Cargo e proteção contra alucinação de crates legadas.
+*   **Negativas:** Manutenção manual severa. O custo das atualizações de segurança é repassado ao Arquiteto-Chefe.
 
 ### ====================================================================================================
 ARQUIVO: ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md
 ---
 ---
 id: "ADR-031"
@@ -1620,6 +1644,48 @@ Cada blob é uma **lâmina tática isolada** com missão própria. O arsenal é 
 
 **Princípio de não-vazamento:** os 11 blobs são ortogonais. O Blob 04 (outline) **nunca** inclui lógica de teste (vai para Blob 03). O Blob 06 (security) **nunca** inclui complexidade (vai para Blob 08). O Blob 09 (community) **nunca** inclui código (vai para Blobs 04, 06, 08). Cada lâmina cumpre sua missão e **delega o resto ao vizinho correto**.
 
+### 5. Heurísticas Canônicas de Detecção de SkillLibrary (Blob 04 — Fallback)
+
+Quando o `NativeAstParser` (Blob 04) detecta que o repositório é **curado/documentação/skills** (sem código indexável), invoca `content_repo_artifacts` que aplica **duas camadas ortogonais de heurística** sobre os arquivos `.md`/`.markdown`/`.mdx`:
+
+#### Camada A — Sinal Booleano (`skill_signal`)
+
+Determina `kind: SkillLibrary` (vs `ContentRepo`). **Curto-circuito**: primeira detecção trava o sinal; arquivos subsequentes são ignorados para classificação. Lista canônica (case-insensitive, ANY-OF):
+
+| Origem | Keyword | Justificativa |
+|--------|---------|---------------|
+| `rel` (path) | `"skill"` | Repositórios de skills usam `skills/` ou `*.skill.md` |
+| `rel` (path) | `"prompt"` | Prompt libraries (`prompts/`, `prompt-engineering/`) |
+| `content` | `"skills for ai"` | Auto-descrição explícita de skill library |
+| `content` | `"coding agents"` | Contexto LLM-agentico explícito |
+| `content` | `"diagram"` | Diagram-as-documentation (Mermaid, plantUML) |
+| `content` | `"visualization"` | Visual specs (UI/UX, charts) |
+
+#### Camada B — Score Contínuo (ordenador do Markdown Extract)
+
+Determina a **ordem de renderização** dos blocos no `## Markdown Extract` do `repo_outline_blob`. Não afeta `kind`. Lista canônica:
+
+| Origem | Keyword | Peso | Note |
+|--------|---------|------|------|
+| `rel` (path) | `"readme"` | +5 | Documento âncora, vem primeiro |
+| `rel` (path) | `"skill"` | +3 | Tied com `prompt` |
+| `rel` (path) | `"prompt"` | +3 | Tied com `skill` |
+| `content` | `"problems_and_diagnostics"` | +10 | **Maior peso**. Documento de troubleshooting/diagnóstico é canônico para IAs |
+
+#### Invariante de Consistência (Canibalizada do Pessimismo da Razão)
+
+Toda keyword da Camada A **deve** aparecer também na Camada B, e vice-versa. Se uma nova keyword é adicionada a uma camada, deve ser adicionada à outra com peso consistente. **Exceção:** `"problems_and_diagnostics"` é Camada-B-only (peso 10) porque marca troubleshooting/curadoria, mas não implica que o repo inteiro é uma skill library (um repo de código com arquivo `problems_and_diagnostics.md` ainda é `ContentRepo`). Esta exceção é **documentada e intencional**.
+
+A invariante é validada em tempo de compilação pelo `static_assert_heuristic_consistency` em `native_ast.rs` (gera panic com mensagem clara se a invariante for violada em qualquer refactor futuro).
+
+#### Por que heurísticas de scoring, não LLM?
+
+Conforme **Lei Zero do Trator Mecânico** (ADR-031 §1), o Harvester é **Zero-AI**. As heurísticas são regex case-insensitive executadas em ~24 arquivos `.md` por repo. Custo: O(N) onde N = arquivos markdown; N ≤ 24 (curto-circuito em `collect_markdown_files`). Latência: <1ms. Replicabilidade: 100% determinística.
+
+#### Por que `"problems_and_diagnostics"` é o maior peso (+10)?
+
+A string `problems_and_diagnostics` é a **palavra-chave canônica** que identifica blocos de troubleshooting/diagnóstico dentro de uma skill library (ou de um README técnico). Esses blocos são os que **mais economizam tempo da IA** nas Fases 2-3 (respostas prontas para perguntas "por que X quebrou?"), por isso recebem o peso máximo. É uma decisão de FinOps Cognitivo: documentos de diagnóstico valem mais que READMEs genéricos.
+
 ## Consequências
 
 ### Positivas
@@ -1646,7 +1712,7 @@ Cada blob é uma **lâmina tática isolada** com missão própria. O arsenal é 
 
 ### ====================================================================================================
 ARQUIVO: ADR-032-Especulacao-N-Gram.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-032-Especulacao-N-Gram.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-032-Especulacao-N-Gram.md
 ---
 ---
 id: "ADR-032"
@@ -1746,7 +1812,7 @@ Se o profiling NVML ou a telemetria do motor Rust detectar qualquer tentativa de
 
 ### ====================================================================================================
 ARQUIVO: ADR-033-Isolamento-Termico-Micro-Sidecars.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-033-Isolamento-Termico-Micro-Sidecars.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-033-Isolamento-Termico-Micro-Sidecars.md
 ---
 ---
 id: "ADR-033"
@@ -1845,7 +1911,7 @@ Se o daemon do SOULS detectar que um micro-sidecar foi instanciado sem a máscar
 
 ### ====================================================================================================
 ARQUIVO: ADR-034-Engenharia-de-Representacao-RepE.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-034-Engenharia-de-Representacao-RepE.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-034-Engenharia-de-Representacao-RepE.md
 ---
 ---
 id: "ADR-034"
@@ -1935,7 +2001,7 @@ Se o callback `cb_eval` falhar ao aplicar o vetor ou se o fator $\alpha$ induzir
 
 ### ====================================================================================================
 ARQUIVO: ADR-035-Response-Healing-Zero-Token.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-035-Response-Healing-Zero-Token.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-035-Response-Healing-Zero-Token.md
 ---
 ---
 id: "ADR-035"
@@ -2028,7 +2094,7 @@ Se o motor `jsonrepair` em Rust não conseguir produzir um JSON válido e tipado
 
 ### ====================================================================================================
 ARQUIVO: ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
 ---
 ---
 id: "ADR-036"
@@ -2125,7 +2191,7 @@ Se o Ralph Loop atingir a 3ª iteração sem obter aprovação do *Critic*, a ex
 
 ### ====================================================================================================
 ARQUIVO: ADR-037-Gestao-Dinamica-Contexto-CCR.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-037-Gestao-Dinamica-Contexto-CCR.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-037-Gestao-Dinamica-Contexto-CCR.md
 ---
 ---
 id: "ADR-037"
@@ -2334,7 +2400,7 @@ O Gateway Tokio injeta de forma transparente no payload da requisição a ferram
 
 ### ====================================================================================================
 ARQUIVO: ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
 ---
 ---
 id: "ADR-038"
@@ -2392,7 +2458,7 @@ A emissão descontrolada e bruta dessas saídas de terminal traz duas ameaças c
 
 ### ====================================================================================================
 ARQUIVO: ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
 ---
 ---
 id: "ADR-039"
@@ -2542,7 +2608,7 @@ A auditoria realizada nas sessões 2026-07-31 → 2026-08-01 (documentada em [`.
 
 ### ====================================================================================================
 ARQUIVO: ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
 ---
 ---
 id: "ADR-040"
@@ -2592,7 +2658,7 @@ A auditoria de trincheira (laudo 2026-08-01) confirmou que **70% do alicerce fí
 - `DEFAULT_HARD_LIMIT = 5` — teto absoluto por padrão.
 - `HITL_EXTENDED_LIMIT = 7` — teto elástico sob autorização explícita do Arquiteto via `hitl_authorized: true` no payload MCP de `core_think`.
 - Validação server-side pura: nenhuma variável de ambiente, nenhum bypass por flag de boot. O sinal de "liberação" viaja **fim-de-fio** no payload e é validado pelo `ThinkingEngine` antes de cada `push_thought`.
-- Erro tipado: `CognitiveError::OverthinkingThresholdBreached { actual: u32, max: u32 }` — Fail-Closed L7 conforme [ADR-006](file:///z:/souls_mc/docs/adrs/ADR-006-SSOT-Sheets.md).
+- Erro tipado: `CognitiveError::OverthinkingThresholdBreached { actual: u32, max: u32 }` — Fail-Closed L7 conforme [ADR-006](file:///z:/souls_mc/docs/decisions/adrs/ADR-006-SSOT-Sheets.md).
 - Tríade obrigatória no `souls_thinking`: `Regular | Revision | Branching`. Validação de `is_revision=true ⇒ revises_thought.is_some()` (sob `CognitiveError::RevisionWithoutTarget`).
 
 ### 5. Lei do Zero-Dep (Hard Constraint)
@@ -2606,7 +2672,7 @@ A auditoria de trincheira (laudo 2026-08-01) confirmou que **70% do alicerce fí
 ## Caminhos Físicos da Mutação
 
 ```
-docs/adrs/ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md   [NEW] este arquivo
+docs/decisions/adrs/ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md   [NEW] este arquivo
 src-tauri/src/cognition/mod.rs                                     [EDIT] +2 pub mod
 src-tauri/src/cognition/memory_graph/mod.rs                        [NEW]
 src-tauri/src/cognition/memory_graph/types.rs                      [NEW] Entity, Relation, Observation
@@ -2619,7 +2685,7 @@ src-tauri/src/cognition/thinking/types.rs                          [NEW] Thought
 src-tauri/src/cognition/thinking/errors.rs                         [NEW] ThinkingError (estende CognitiveError)
 src-tauri/src/cognition/thinking/state_machine.rs                  [NEW] ThinkingEngine + disjuntor
 src-tauri/src/bin/souls_mcp_server.rs                              [EDIT] migração V2, tools/list, handle_mcp, testes
-docs/state/SODA_CURRENT_STATE.md                                   [EDIT] Marco 3.5 → Ativo
+docs/observability/state/SODA_CURRENT_STATE.md                                   [EDIT] Marco 3.5 → Ativo
 ```
 
 ## Consequências Operacionais (Trade-offs)
@@ -2645,7 +2711,7 @@ docs/state/SODA_CURRENT_STATE.md                                   [EDIT] Marco 
 
 ### ====================================================================================================
 ARQUIVO: ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
-CAMINHO: Z:\souls_mc\docs\adrs\ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
 ---
 ---
 id: "ADR-041"
@@ -2661,7 +2727,7 @@ description: "Emenda Constitucional 32/120 + Servername Soberano 'souls_mcp': in
 # ADR-041 — Nomenclatura Soberana & Servername `souls_mcp` (Emenda Constitucional 32/120)
 
 ## Status
-Aceito (Ativo e Inegociavel). Emenda parcial da [ADR-026](docs/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) (revoga §1 sobre o nome de servidor `souls` e fixa o nome canonico `souls_mcp`).
+Aceito (Ativo e Inegociavel). Emenda parcial da [ADR-026](docs/decisions/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) (revoga §1 sobre o nome de servidor `souls` e fixa o nome canonico `souls_mcp`).
 
 ## Contexto
 A ADR-026 instituiu a **Lei Zero-Brand** e fixou o servidor atomico `souls` para evitar nomes acoplados a marcas. Com a chegada do **Roteador Semantico ParetoBandit** e a previsao de 50+ ferramentas, a cerca perimetrica do Roteador (distincao nativo vs terceiro) precisa de um **radical unico e inequivoco** no servername. Alem disso, o crescimento das tools exige tetos dimensionais para impedir a hemorragia FinOps (cada caractere e token) e a quebra de clientes MCP com limites de exibicao < 60 chars.
@@ -2698,7 +2764,7 @@ Fica **revogada parcialmente** a §1 da ADR-026 (que fixava o servername como `s
 * **`gateway-config.yaml`:** Trocar `targets[0].name = "souls"` para `"souls_mcp"`. Adicionar target alias `souls` apontando para o mesmo binario (backward compat).
 * **`.trae/rules/project_rules.md`:** Adicionar §5 (Lei do Servername Soberano + tetos 32/120).
 * **`.agents/skills/**/SKILL.md`:** **Zero mutacao obrigatoria** (canibalizacao preservada). Search and Replace cirurgico apenas se alguma Skill invocar `souls.server` em vez de `souls_mcp.server`.
-* **`docs/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt`:** Re-snapshot via `docs/scripts/souls_context_dumps_compiler.py`.
+* **`docs/runtime/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt`:** Re-snapshot via `docs/runtime/scripts/souls_context_dumps_compiler.py`.
 
 ## Metricas de Sucesso
 * `git grep "serverInfo.*souls\""` retorna 0 matches (substituido por `souls_mcp`).
@@ -2708,3 +2774,773 @@ Fica **revogada parcialmente** a §1 da ADR-026 (que fixava o servername como `s
 
 ## Razao de Ser desta ADR
 > "A Alma Matematica das tools (nomes curtos canibalizados) e o que importa. O brasao (servername) fica em uma unica torre: `souls_mcp`." — Bruno, 2026-08-02.
+
+### ====================================================================================================
+ARQUIVO: ADR-042-Compressao-Reversivel-CCR-e-Conveyor-Belt-de-Contexto.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-042-Compressao-Reversivel-CCR-e-Conveyor-Belt-de-Contexto.md
+---
+---
+id: "ADR-042"
+title: "ADR-042-Compressao-Reversivel-CCR-e-Conveyor-Belt-de-Contexto"
+version: 1.0
+status: Ativo_Inegociavel
+epic: "Conveyor Belt de Contexto / Marco 3.6"
+amends: ["ADR-037", "ADR-041"]
+description: "Implementa a janela deslizante de 5 linhas com hash DefaultHasher de 64 bits e a cache de rehidratação lossless via DashMap<u64, String> no Host RAM. Introduz as tools MCP `souls_multi_read` e `souls_fill` (CCR rehydrator) como guardiãs de contexto de baixo custo."
+---
+
+# ADR-042 — Compressão Reversível CCR & Conveyor Belt de Contexto (Marco 3.6)
+
+## Status
+Aceito (Ativo e Inegociável). Emenda construtiva da [ADR-037](docs/decisions/adrs/ADR-037-Gestao-Dinamica-Contexto-CCR.md) §3 (Paradigma CCR) e compatibiliza com a Cerca Perimétrica de Servername Soberano da [ADR-041](docs/decisions/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md).
+
+## Contexto
+A ADR-037 instituiu o Paradigma CCR (Compress-Cache-Retrieve) com `dashmap::DashMap<[u8; 16], Bytes>` indexado por hash BLAKE3/MD5 de 16 bytes, mas a implementação efetiva da janela deslizante e da rehidratação lossless ainda não havia sido canibalizada para Rust nativo. O `lean_vacuum::dedup` (Marco 3) implementa uma variante cross-file que descarta o bloco original (apenas metadata de localização), o que é **destrutivo** e **não-rehidratável**: o LLM recebe um marcador que aponta para `file L1-L5` mas o conteúdo original se perde.
+
+Esse acoplamento destrutivo força o LLM a navegar de volta ao arquivo de origem (que pode estar fora da janela de contexto ou já ter sido podado), criando um **vazio de informação irreversível**. Para garantir CCR genuinamente lossless, o `souls_fill` precisa do bloco original byte-a-byte intacto.
+
+Adicionalmente, a carga cognitiva típica do Gateway SOULS envolve a leitura simultânea de múltiplos arquivos de teste, fixture e regra. Disparar `souls_read` em série (uma chamada por arquivo) é O(N) bloqueante; um orquestrador que realize `multi_read` concorrente (Tokio::spawn + join_all) e aplique compressão em pipeline reduz o tempo de wall-clock e desidrata o contexto simultaneamente.
+
+## Declaração do Problema
+Como implementar compressão reversível (lossless) por janela deslizante de 5 linhas que (a) sobreviva a colisões de hash via armazenamento do bloco original completo, (b) resista à fragmentação de heap mesmo para workloads massivos, e (c) exponha uma tool MCP de rehidratação determinística — sem qualquer dependência nova em produção?
+
+## Decisão Arquitetural
+
+Fica estabelecido o **Conveyor Belt de Contexto (CCR Lossless)** com 3 componentes nativos e 0 dependências externas adicionais:
+
+### 1. `souls_dedup` (canibalização do Lean Vacuum)
+
+A função existente `lean_vacuum::deduplicate_blocks_session` (Marco 3) **permanece** sob o mesmo nome por compatibilidade de testes de snapshot, mas é **encapsulada** por uma nova camada `context_compression::dedup` que adiciona:
+
+| Aspecto | `lean_vacuum::dedup` (existente) | `context_compression::dedup` (novo) |
+| :--- | :--- | :--- |
+| Hasher | `rustc_hash::FxHasher` (não padronizado) | `std::collections::hash_map::DefaultHasher` (canônico stdlib) |
+| Chave da cache | `(PathBuf, start, end)` (metadata) | `u64` (hash) → `String` (bloco original) |
+| Semântica | Cross-file destructivo (aponta para L1-L5) | Intra/Inter-file lossless (rehidratável) |
+| Greedy match | Não (apenas 5 linhas) | **Sim** (estica para N linhas idênticas) |
+| Rehidratação | Não disponível | `souls_fill` lookup O(1) no DashMap |
+| Coexistência | Mantida para back-compat do test suite | Complementar (Marco 3.6) |
+
+**Defesa contra linhas vazias:** Linhas puramente vazias (`""`), quebras isoladas (`"\n"`) ou compostas apenas por whitespace (`split_whitespace().next() == None`) **NÃO disparam a janela deslizante** e passam em forma física original. Isso evita inchaço do texto compactado por marcadores redundantes para blocos triviais de espaçamento vertical.
+
+### 2. `DEDUP_CACHE` — DashMap<u64, String> Bare-Metal
+
+```rust
+pub static DEDUP_CACHE: std::sync::LazyLock<dashmap::DashMap<u64, String>> =
+    std::sync::LazyLock::new(dashmap::DashMap::new);
+```
+
+A chave é **`u64`** (não `String`) para evitar a alocação de milhões de `String` no heap do Host como chaves de hash. O bloco original completo (com indentação, tabs e quebras de linha exatas) é preservado no `String` valor, garantindo **lossless reversível byte-a-byte**.
+
+### 3. Tools MCP — `souls_multi_read` + `souls_fill`
+
+| Tool | Servername | Nome | Teto (32) | Descrição (≤120) |
+| :--- | :--- | :--- | :--- | :--- |
+| Multi-Read Concorrente | `souls_mcp` | `souls_multi_read` | 16 chars | "Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR." |
+| Rehidratação Lossless | `souls_mcp` | `souls_fill` | 10 chars | "Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM." |
+
+> **Migração de contrato do `fill` legado:** A tool `fill`/`souls_fill` (Marco 3, injeção de stub `souls-stub: ...` em código) é renomeada para **`souls_stub_fill`** (com alias legado `fill`) para liberar o nome canônico `souls_fill` ao rehydrator CCR. Esse split preserva back-compat com testes anteriores e Skill que invocam `fill`.
+
+## Diagrama de Fluxo
+
+```
++------------+    list of paths     +------------------+    N arquivos em paralelo   +--------------+
+| Cliente    | -------------------> | souls_multi_read | -------------------------> | tokio::fs    |
+| MCP/LLM    |                      |                  |                            | read_to_str  |
++------------+                      +------------------+                            +------+-------+
+                                              |                                            |
+                                              | apply souls_dedup em cada conteúdo          |
+                                              v                                            |
+                                     +------------------+    hash → bloco original          |
+                                     | DEDUP_CACHE      | <----------------------------------+
+                                     | DashMap<u64,Str> |   (u64 = DefaultHasher do bloco 5+L)
+                                     +------------------+   linhas; Str = bloco lossless)
+                                              |
+                                              v
+                                     +------------------+
+                                     | Texto compactado |  ---> [SOULS-DEDUP: 0xHASH]
+                                     | (marcadores)     |
+                                     +------------------+
+                                              |
+                                              | LLM solicita rehidratação
+                                              v
+                                     +------------------+
+                                     | souls_fill       | --> lookup O(1) no DashMap
+                                     | (text → expand)  | --> substitui marcadores
+                                     +------------------+
+                                              |
+                                              v
+                                     Texto original lossless (byte-a-byte)
+```
+
+## Algoritmo de Janela Deslizante (O(N))
+
+```
+input:  text (String), cache (DashMap<u64, String>)
+output: String compactada
+
+1. lines = text.split('\n') (preserva estrutura exata)
+2. result = Vec::new()
+3. i = 0
+4. while i < lines.len():
+5.   if is_blank(lines[i]):                  // Defesa contra linhas vazias
+6.     result.push(lines[i])
+7.     i += 1
+8.     continue
+9.   if i + 5 <= lines.len():
+10.    block = &lines[i..i+5]                 // janela mínima
+11.    hash  = DefaultHasher::digest(block)   // u64 canônico stdlib
+12.    if cache.contains_key(hash) || block == lines[i+L..i+L+5] (i+L já validado):
+13.      // Greedy: estica enquanto o bloco estendido bater com o armazenado
+14.      L = 5
+15.      while i + L + 5 <= lines.len() && &lines[i+L..i+L+5] == block:  L += 5
+16.      // Pode haver resto parcial se L for múltiplo de 5; usa match exato do bloco armazenado
+17.      cached = cache.get(hash).unwrap()
+18.      marker = format!("[SOULS-DEDUP: Block Hash 0x{hash:08x}. Use souls_fill ...]")
+19.      cache.insert(hash, lines[i..i+L].join("\n"))   // grava o bloco lossless
+20.      result.push(marker)
+21.      i += L
+22.    else:
+23.      cache.insert(hash, lines[i..i+5].join("\n"))   // primeira ocorrência: registra
+24.      for j in 0..5:  result.push(lines[i+j])
+25.      i += 5
+26.  else:
+27.    result.push(lines[i])
+28.    i += 1
+29. return result.join("\n")
+```
+
+> **Complexidade:** O(N) por linha, com 1 lookup O(1) no DashMap por janela e hash `DefaultHasher` O(L). Greedy match é O(N/5) no pior caso. Total: O(N) amortizado.
+
+## Rehidratação `souls_fill`
+
+```
+input:  text (texto compactado com marcadores)
+output: texto expandido (lossless)
+
+1. regex /\[SOULS-DEDUP: Block Hash 0x([0-9a-f]{8})\. Use souls_fill.*?\]/
+2. for each match (hash_hex):
+3.   hash = u64::from_str_radix(hash_hex, 16)?
+4.   original = cache.get(hash).unwrap_or(missing_marker)
+5.   substitui marcador por original
+6. return texto expandido
+```
+
+> Marcadores cuja hash não está em cache retornam string vazia + warning estruturado (`isError=false`, `partial=true`). Fail-soft: nunca aborta a expansão.
+
+## Compliance com a Lei de Ferro SOULS
+
+| Diretiva SOULS | Estado | Garantia |
+| :--- | :--- | :--- |
+| **Zero VRAM Extra** | **CONFORME** | `DashMap` 100% em RAM Host. Zero página de VRAM. |
+| **Zero Dependência Nova** | **CONFORME** | Reusa `dashmap = 6.1.0`, `tokio = 1.51.1`, `std::collections::hash_map::DefaultHasher`. Nenhuma crate adicionada ao `Cargo.toml`. |
+| **Marcha Rápida (TDD)** | **CONFORME** | Build focado em `cargo test --bin souls_mcp_server`; features CUDA/Tauri desligadas. |
+| **Latência Sub-ms** | **CONFORME** | Lookup no DashMap é `RwLock` por shard; O(1) médio ~100-200ns. Hash `DefaultHasher` ~50ns/bloco. |
+| **Tetos 32/120 (ADR-041)** | **CONFORME** | `souls_multi_read` (16) e `souls_fill` (10) bem abaixo de 32; descrições 98 e 89 chars (≤120). |
+| **Servername Soberano** | **CONFORME** | Tools expostas exclusivamente em `souls_mcp.*` (canibalização preservada). |
+| **Lossless Reversível** | **CONFORME** | Bloco original gravado **antes** da substituição, byte-a-byte. Validação por SHA-256 no teste `test_fill_rehydration_equivalence`. |
+
+## Consequências e Trade-offs
+
+### Positivas
+- **Imunidade a Lossy Compression:** Qualquer bloco duplicado pode ser rehidratado deterministicamente sem custo de I/O.
+- **Concorrência Real:** `souls_multi_read` paraleliza I/O em Tokio, reduzindo wall-clock de N leituras em série para `max(read_times)` em paralelo.
+- **Bare-Metal Puro:** DefaultHasher + DashMap + tokio::fs = zero dep nova. KISS absoluto.
+- **Defesa contra whitespace bloat:** Linhas vazias passam intactas, evitando inchaço de marcadores para blocos triviais.
+
+### Riscos & Mitigações
+- **Risco:** Crescimento ilimitado do `DEDUP_CACHE` sob carga contínua.
+  - *Mitigação:* A tool `session` existente (Marco 3.5 PRD-005) já oferece `action: "clear"` que agora também limpa `context_compression::DEDUP_CACHE`.
+- **Risco:** Colisão de hash em `u64` (2^64 cardinalidade).
+  - *Mitigação:* 2^64 ≈ 1.8e19 chaves possíveis. Birthday paradox: 50% em ~6e9 entradas (~6 bilhões de blocos únicos). Workload realista: 10^5-10^6 entradas → risco < 10^-9.
+- **Risco:** Greedy match pode esticar bloco errado se houver 2 blocos distintos de 5 linhas idênticas adjacentes.
+  - *Mitigação:* Greedy exige que **todo o bloco estendido** seja idêntico (não apenas a janela de 5). Conflito residual é capturado pelo teste `test_multi_read_concurrency_and_compression` (3 arquivos, blocos sobrepostos).
+
+## Blast Radius
+- **`docs/decisions/adrs/ADR-042-...md`:** NOVO. Este documento.
+- **`src-tauri/src/cognition/context_compression/`:** NOVO diretório (mod.rs, types.rs, dedup.rs, multi_read.rs).
+- **`src-tauri/src/cognition/mod.rs`:** +1 linha (`pub mod context_compression;`).
+- **`src-tauri/src/bin/souls_mcp_server.rs`:** +2 tools no `tools/list`, +2 match arms em `handle_tool_call`, +2 funções `run_souls_multi_read` e `run_souls_ccr_fill`, renomeação de `run_souls_fill` → `run_souls_stub_fill`, atualização de 4 tests existentes (de `souls_fill` → `souls_stub_fill`), adição de 4 tests novos.
+- **`Cargo.toml`:** **Nenhuma mutação** (todas as deps já presentes).
+
+## Métricas de Sucesso
+- `cargo test --bin souls_mcp_server` retorna **0 errors, 0 warnings do clippy**.
+- `git grep "souls_fill" -- src-tauri/src/bin/souls_mcp_server.rs | grep -v stub_fill` → aponta apenas para a nova semântica CCR.
+- Testes verdes: `test_dedup_5_lines_trigger`, `test_dedup_under_5_lines_ignored`, `test_multi_read_concurrency_and_compression`, `test_fill_rehydration_equivalence`.
+- Snapshot test `tools_list_respects_32_120_tetos` continua verde após inclusão das 2 novas tools.
+
+## Razão de Ser desta ADR
+> "A compressão só é aceitável se for reversível. Caso contrário, é mutilação." — Bruno, 2026-08-02.
+
+### ====================================================================================================
+ARQUIVO: ADR-043-Observabilidade-Cognitiva-Sensorial.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-043-Observabilidade-Cognitiva-Sensorial.md
+---
+---
+id: "ADR-043"
+title: "ADR-043-Observabilidade-Cognitiva-Sensorial"
+version: 1.1
+status: Aprovado
+epic: "Cognicao / Observabilidade"
+amends: ["ADR-040", "ADR-041", "ADR-042"]
+description: "Marco 3.7 Fase B: institui o sistema sensorial nativo (heatmap, impact, routes, feedback) operando 100% em RAM Host + SQLite (State DB v3), quitando a divida de stubs sensoriais do gateway MCP."
+mathematical_anchors: ["langevin_decay", "bfs_transposto", "E3_finops"]
+physical_paths: ["Z:\\souls_mc\\.souls_data\\souls_state.db", "src-tauri\\src\\cognition\\observability\\"]
+pr: "https://github.com/brunosrosa/souls_mc/pull/19"
+test_coverage: "30/30 verdes em 0.07s (Fast Pass)"
+---
+
+# ADR-043: Observabilidade Cognitiva Sensorial e SOULS State v3
+
+## Status
+**Aprovado (Ativo, Inegociável e Fundacional para o SOULS V4).** Emenda cumulativa das ADRs 040 (State DB v2), 041 (Servername Soberano `souls_mcp`) e 042 (CCR Conveyor Belt). Homologado pelo Arquiteto-Chefe em 2026-08-02 após laudo técnico de 30/30 testes verdes.
+
+## Contexto Técnico e Desafio Operacional
+
+Sistemas agênticos tradicionais sofrem de **cegueira de estado**. Eles operam sobre o sistema de arquivos e o contexto do usuário de forma reativa, sem compreender o impacto de suas ações, sem telemetria de custos em voo real e sem otimização térmica/estatística de acesso ao hardware. A tentativa herdada de canibalizar o `lean-ctx` original revelou um cenário de stubs documentados de forma imprecisa ("falsos verdes"), onde metadados mentiam no barramento MCP sobre ferramentas que executavam comandos crus de backend sem o devido sandboxing ou controle de estado.
+
+Para viabilizar a transição segura para o **Roteamento FinOps de Pareto (ParetoBandit)** e blindar a dGPU RTX 2060m de 6GB contra picos térmicos e asfixia de contexto, o SOULS necessita de um sistema sensorial nativo escrito em Rust puro assíncrono (Tokio). Este sistema deve rastrear o conector ativo de trabalho, prever o Blast Radius de alterações e registrar a eficiência real de tokens na RAM Host e no SQLite.
+
+## Decisões de Engenharia e Arquitetura
+
+Fica decretada a implementação do subsistema de **Observabilidade Cognitiva Sensorial (SOULS State v3)**, operando sob as seguintes leis e equações imutáveis:
+
+### 1. Modulação e Rastreamento de Caminhos Quentes (`heatmap`)
+
+* **O Mecanismo de Coleta.** Sempre que uma operação de leitura/escrita (`read`, `edit`, `get_ast`, `multi_read`, `smart_read`, `souls_stub_fill`, `headroom_retrieve`, `tree`, `outline`) cruzar o barramento `souls_mcp`, o servidor registrará assincronamente a atividade no SQLite (`file_access_logs`). Para impedir starvation do Tokio event loop, o disparo do registro utiliza canais MPSC delimitados (`mpsc::Sender::try_send`), operando em background sutil (Heap-Free no critical path). A função `try_log_file_access(path, tool)` em `src-tauri/src/bin/souls_mcp_server.rs` é o ponto único de instrumentação; ela é fire-and-forget via `OnceLock<STATE_DB_TX>` (sem bloqueio do handler).
+
+* **A Equação de Langevin-Decay.** Para mitigar a poluição histórica, aplicamos a Equação de Langevin Riemanniana adaptada ao decaimento temporal no disco de Poincaré:
+
+$$
+\text{Score}(f) \;=\; \sum_{i \in \text{Acessos}(f)} e^{-\lambda \cdot (t_{\text{now}} - t_i)}
+$$
+
+Onde:
+- $f$ é o arquivo (chave do `file_access_logs.file_path`).
+- $t_{\text{now}}$ e $t_i$ são timestamps em epoch seconds.
+- $\lambda = 0{,}05$ é a constante calibrada empiricamente (declarada como `observability::heatmap::DEFAULT_LAMBDA`).
+- O expoente produz **meia-vida de ≈14s** (um acesso perde 50% de peso em 14s, 75% em 28s, 87,5% em 42s).
+
+**Clamp defensivo:** se $t_i > t_{\text{now}}$ (relógio desregulado), o score é fixado em $1.0$ para evitar `exp()` de números positivos inflados.
+
+**Algoritmo SQL/RAM:** a query `SELECT file_path, accessed_at FROM file_access_logs` é executada uma única vez; a agregação Langevin e a ordenação por score descendente (com desempate determinístico por `path` ascendente) são feitas em `BTreeMap<String, Vec<i64>>` na RAM. O resultado é truncado em `limit` entradas (default 50, configurável).
+
+### 2. Cálculo do Blast Radius Sintático (`impact`)
+
+* **O Algoritmo de Transposição.** O SOULS rejeita o overhead de bancos de grafos externos ou algoritmos pesados de CRDT na RAM. A ferramenta `impact` consome o mapeamento de imports gerado pelo harvester, monta uma DAG (Grafo Acíclico Dirigido) direcionada na RAM via `BTreeMap<String, Vec<String>>` e executa uma busca em largura (BFS) sobre o grafo transposto.
+
+* **Definição Formal.** Seja $G = (V, E)$ o grafo de imports, onde $V$ é o conjunto de arquivos `.rs` e $E = \{(a, b) \mid a \text{ importa } b\}$. O grafo transposto é $G^T = (V, E^T)$ com $E^T = \{(b, a) \mid (a, b) \in E\}$. O Blast Radius de um alvo $t \in V$ é:
+
+$$
+\text{BlastRadius}(t) \;=\; \text{BFS}(G^T, t) \setminus \{t\}
+$$
+
+* **O Retorno.** Retorna instantaneamente, ordenado por (profundidade, path ascendente), todos os arquivos importadores afetados caso o alvo sofra mutação, prevenindo falhas em cascata antes da gravação atômica. A ordenação por profundidade segue a ordem FIFO do `VecDeque`, garantindo saída determinística para o mesmo grafo. Complexidade: $\mathcal{O}(|V| + |E|)$ em RAM.
+
+**Filtro de poda (walkdir):** o scanner ignora `target/`, `vendor/`, `third_party/`, `.git/`, `.souls_cache/`, `.souls_sandbox/`, `.souls_data/`, `node_modules/`, `dist/`.
+
+### 3. Validação de Contratos de Comunicação e Reatividade (`routes`)
+
+* **A Extração Estática de Baixo Custo.** O Rust executa um varredor estático baseado em expressões regulares compiladas (Regex) via `std::sync::OnceLock`, cruzando as definições de comandos `#[tauri::command]` do backend com as invocações de `invoke()` do Svelte 5 no frontend. As duas regex são compiladas **uma única vez** por processo e reutilizadas em todos os arquivos.
+
+* **A Poda de Chamadas Órfãs.** O sistema calcula a diferença simétrica dos conjuntos para identificar endpoints mortos ou chamadas de frontend inválidas, garantindo a integridade da comunicação bidirecional antes de acionar rendering de pixels na WebView. O `RouteReport` final expõe quatro coleções canônicas: `backend[]`, `frontend[]`, `orphans[]` (backend ∖ frontend), `dead_calls[]` (frontend ∖ backend).
+
+### 4. Telemetria de FinOps e a Métrica de Eficiência $E^3$ (`feedback`)
+
+* **A Coleta Financeira.** Toda inferência local ou remota (via OpenRouter) registra o consumo factual de tokens no banco `telemetry_logs`. Cada inserção é transacional (`conn.transaction()?.execute()`) e dispara via `try_log_telemetry(tool, tokens_in, tokens_out, cost_usd, duration_ms)`.
+
+* **A Equação $E^3$ (Efficiency-Aware Effectiveness Evaluation).** O sistema abandona avaliações qualitativas estocásticas caras na nuvem. A eficiência matemática real é processada via CPU de forma contínua:
+
+$$
+E^3 \;=\; \frac{A^2}{T}
+$$
+
+Onde:
+- $A$ representa o escore de acurácia ou conformidade sintática da tarefa ($1{,}0$ para sucesso, $0{,}0$ para falha de compilação).
+- $T$ consiste na quantidade de transições ou tempo computacional total em milissegundos.
+- A elevação da exatidão ao quadrado pune agressivamente a ineficácia lógica do modelo.
+
+* **Especialização Operacional (Token-Efficiency Proxy).** Para o domínio de compressão de contexto, onde a "transição" dominante é a relação entre tokens de entrada (prompt) e tokens de saída (resposta), adotamos a proxy determinística `E3_tokens(p_in, p_out)`:
+
+$$
+E^3_{\text{tokens}} \;=\; 1 \;-\; \frac{p_{\text{out}}}{\max(1,\, p_{\text{in}} + p_{\text{out}})}
+$$
+
+Esta proxy é $\mathcal{O}(1)$, defensiva contra divisão por zero, clampada em $[0{,}0;\; 1{,}0]$, e satisfaz `E3(0,0) = 1.0` (operação puramente reflexiva). Implementada em `observability::feedback::e3_efficiency` e validada pelo teste `test_feedback_telemetry_insert_and_e3_calc`.
+
+* **Agregado Global.** O `TelemetryReport` é calculado em uma única query SQL `GROUP BY tool`; o $E^3$ global é o $E^3_{\text{tokens}}$ sobre a soma agregada, e a decomposição por tool é exposta em `BTreeMap<String, ToolTelemetry>` (ordenada lexicograficamente).
+
+### 5. Evolução do Esquema (SOULS State v3 DDL)
+
+O pragma `user_version` do banco local `souls_state.db` é elevado de forma idempotente para `3`, introduzindo as seguintes estruturas físicas relacionais de rastreabilidade. **Esta é a DDL canônica refletida fielmente em `src-tauri/src/cognition/observability/ops.rs::V3_SCHEMA_DDL`** (constante pública consumida por `migrate_v2_to_v3`).
+
+```sql
+-- file_access_logs: rastreamento de acessos fisicos ao filesystem.
+CREATE TABLE IF NOT EXISTS file_access_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path   TEXT    NOT NULL,
+    tool        TEXT    NOT NULL,        -- nome canonico da tool MCP ("read", "edit", "multi_read", ...)
+    accessed_at INTEGER NOT NULL         -- epoch seconds
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_file_access_path_time
+    ON file_access_logs(file_path, accessed_at);
+CREATE INDEX IF NOT EXISTS idx_file_access_time
+    ON file_access_logs(accessed_at);
+
+-- telemetry_logs: telemetria FinOps de tokens, custo, latencia.
+CREATE TABLE IF NOT EXISTS telemetry_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool        TEXT    NOT NULL,        -- nome canonico da tool ("compress", "dedup", "souls_compress_memory", ...)
+    tokens_in   INTEGER NOT NULL DEFAULT 0,
+    tokens_out  INTEGER NOT NULL DEFAULT 0,
+    cost_usd    REAL    NOT NULL DEFAULT 0.0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL         -- epoch seconds
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_telemetry_tool_time
+    ON telemetry_logs(tool, created_at);
+CREATE INDEX IF NOT EXISTS idx_telemetry_time
+    ON telemetry_logs(created_at);
+```
+
+**Sincronização Constitucional:** o nome das colunas `tool` e os sufixos `_time` para timestamps foram adotados como cânone, alinhando-os ao léxico já canônico do `souls_thinking` (Marco 3.5) e do `memgraph` (Marco 3.5). O modo `STRICT` impede coerções implícitas do SQLite (lei de ferro de tipos).
+
+## Implementação Física (Paths & Variáveis Mapeadas)
+
+A materialização do cânone acima no silício produziu o seguinte grafo de artefatos, todos sob a branch `feat/observability-v1` (PR [#19](https://github.com/brunosrosa/souls_mc/pull/19)):
+
+| Artefato | Path Físico | Função |
+|---|---|---|
+| Módulo Cognitivo | `src-tauri\src\cognition\observability\` | Namespace Rust do subsistema. |
+| Schema DDL | `observability\ops.rs::V3_SCHEMA_DDL` | Constante `&str` com SQL idempotente. |
+| Migração V2→V3 | `observability\ops.rs::migrate_v2_to_v3(&mut Connection)` | Lê `user_version`, no-op se `>= 3`. |
+| Langevin | `observability\heatmap.rs::langevin_score` | Função pura determinística, $\mathcal{O}(1)$. |
+| Heatmap SQL | `observability\heatmap.rs::compute_heatmap` | Scan + agregação RAM + ordenação. |
+| DAG Builder | `observability\impact.rs::build_import_graph` | Walkdir + regex de imports, BTreeMap. |
+| BFS Transposto | `observability\impact.rs::blast_radius` | BFS no grafo transposto, O(V+E). |
+| Regex Contratos | `observability\routes.rs::tauri_command_regex`, `svelte_invoke_regex` | `OnceLock<Regex>`, compilação única. |
+| E3 FinOps | `observability\feedback.rs::e3_efficiency` | Função pura, $\mathcal{O}(1)$. |
+| Telemetria | `observability\feedback.rs::aggregate_telemetry` | `GROUP BY tool` em uma query. |
+| Dispatcher MPSC | `souls_mcp_server.rs::try_log_file_access`, `try_log_telemetry` | `mpsc::Sender::try_send` (HIPER-FORWARD). |
+| Enum Op | `souls_mcp_server.rs::StateDbOp::{LogFileAccess, LogTelemetry}` | Variantes do canal `STATE_DB_TX`. |
+| DB Físico | `Z:\souls_mc\.souls_data\souls_state.db` | Path canônico do SQLite v3. |
+| `tools/list` | `souls_mcp_server.rs` L688-L730 | 4 novas entradas com tetos 32/120 (ADR-041). |
+| Aliases | `name \| souls_name` em `handle_tool_call` | 3 campos canônicos. |
+| Migration Boot | `init_state_db_and_worker()` no StateDbWorker thread | `observability::migrate_v2_to_v3(&mut conn)`. |
+
+**Variáveis de Ambiente e Constantes Operacionais:**
+
+- `DEFAULT_LAMBDA: f64 = 0.05` (calibração Langevin, hardcoded no binário).
+- `SQLITE_BUSY_TIMEOUT = 5000ms` (Marco 3.5, herdado).
+- `PRAGMA journal_mode = WAL` (Marco 3.5, herdado).
+- `PRAGMA foreign_keys = ON` (Marco 3.5, herdado).
+- Teto de VRAM: 6 GB (RTX 2060m, piso de validação).
+- Modo de compilação: `cargo test --bin souls_mcp_server` (Fast Pass, sem CUDA/Tauri).
+- Throughput medido: 30/30 testes em 0,07s (determinístico, sem feature flag pesada).
+
+## Consequências Arquiteturais
+
+### Impactos Positivos:
+
+1. **Imunidade à Cegueira de Contexto.** O SOULS passa a compreender o seu próprio ecossistema de dados locais de forma científica, preparando o terreno para o prefetching seletivo no Ramdisk Host. O heatmap identifica candidatos a `Cache::put()` agressivo; o impact previne regressões em cascata; o feedback dá ao ParetoBandit telemetria real para o disjuntor $\lambda_t$ de custos.
+
+2. **Soberania Financeira.** O Roteador de Pareto (ParetoBandit) adquire a telemetria empírica real de $E^3$ na RAM para modular a penalidade $\lambda_t$ de custos e interromper conexões caras de nuvem. A tabela `telemetry_logs` é o feed canônico para o disjuntor cognitivo (Marco 3.5 + Marco 3.7).
+
+3. **Higiene Termodinâmica.** O processamento em background assíncrono via threads dedicadas do Tokio (`std::thread::spawn` consumindo do canal MPSC `rx.blocking_recv()`) garante latência sub-milissegundo sem congelar a WebView passiva de 60 FPS. O `try_send` no critical path nunca bloqueia.
+
+4. **Verdade Semântica no Barramento MCP.** Os 4 stubs `not_implemented_yet: Métricas`, `not_implemented_yet: Intenção`, `not_implemented_yet: Chamadores`, `not_implemented_yet: Chamados` (legados da ADR-040) permanecem mas são **complementados** pelas 4 novas tools canônicas, eliminando os "falsos verdes" do gateway.
+
+### Impactos Negativos:
+
+1. **Fragmentação de Strings Temporária.** O uso do parser Regex em `routes` tolera variações de indentação, mas é passível de falha se comandos forem fatiados de forma exótica em múltiplas linhas. Este trade-off é aceito temporariamente como "Fast Pass" e será curado com a substituição pelo parser de AST nativo via Wasmtime enjaulado na Fase C.
+
+2. **Métrica $E^3$ Canônica vs. Proxy Operacional.** A equação constitucional $E^3 = A^2 / T$ exige instrumentação de acurácia por chamada, ainda não implantada. A Fase B adota a proxy $E^3_{\text{tokens}}$ como aproximação determinística; a substituição pela fórmula plena será feita quando o `telemetry_logs` ganhar a coluna `accuracy_score REAL` (Fase C).
+
+3. **Acréscimo de I/O SQLite.** Cada `read`/`edit`/`multi_read` agora gera um INSERT em `file_access_logs`. Mitigado por: (a) transação atômica curta, (b) índice composto, (c) ausência de FTS5 nesta tabela (queries de heatmap são por timestamp, não por substring). Custo medido: < 50 µs por chamada no ReFS do disco Z:.
+
+## Razao de Ser desta ADR
+
+> "Sem telemetria local, o SODA e um cerebro sem olhos nem ouvidos. O Marco 3.7 doa olhos (heatmap), ouvidos (impact), fala (routes) e memoria metabolica (feedback). Tudo em Rust, tudo em RAM, tudo na casa dos 6GB de VRAM." — Bruno, 2026-08-02.
+
+## Anexos
+
+- **PR canônico:** [https://github.com/brunosrosa/souls_mc/pull/19](https://github.com/brunosrosa/souls_mc/pull/19)
+- **Comparação de branches:** [https://github.com/brunosrosa/souls_mc/compare/main...feat/observability-v1?expand=1](https://github.com/brunosrosa/souls_mc/compare/main...feat/observability-v1?expand=1)
+- **Testes TDD verde (Fast Pass, 0,07s):** `test_file_access_logging_and_heatmap_decay`, `test_blast_radius_dag_bfs`, `test_routes_contract_regex`, `test_feedback_telemetry_insert_and_e3_calc`.
+- **Memória de longo prazo:** `c:\Users\rosas\.trae\memory\projects\-z-souls-mc\project_memory.md` (atualização automática pelo Harvester).
+
+### ====================================================================================================
+ARQUIVO: ADR-044-Enjaulamento-Wasmtime-Tree-Sitter.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-044-Enjaulamento-Wasmtime-Tree-Sitter.md
+---
+---
+id: "ADR-044"
+title: "ADR-044-Enjaulamento-Wasmtime-Tree-Sitter"
+version: 1.0
+status: Aprovado
+epic: "Cognicao / Enjaulamento WASM (Call Graph & Symbol Index)"
+amends: ["ADR-029", "ADR-040", "ADR-041", "ADR-042", "ADR-043"]
+description: "Marco 3.8 Fase C.2: institui o Sandbox Wasmtime WASI 0.2 como cerca perimetrica para parsers C do tree-sitter, estabelece o SYMBOL_INDEX e CALL_GRAPH em DashMap RAM Host e quita a divida dos stubs symbol/callers/callees do gateway MCP."
+mathematical_anchors: ["wasm_fuel_metering", "dashmap_constant_time_lookup", "BFS_callgraph_transposto"]
+physical_paths: ["src-tauri\\src\\cognition\\observability\\wasm_engine.rs", "src-tauri\\src\\cognition\\observability\\call_graph.rs", "src-tauri\\src\\cognition\\observability\\mpsc_telemetry.rs", "resources\\wasm_grammars\\"]
+pr: "https://github.com/brunosrosa/souls_mc/pull/20"
+test_coverage: "38/38 verdes em <0.1s (Fast Pass Marcha Rapida)"
+---
+
+# ADR-044: Enjaulamento Wasmtime do Tree-Sitter e Indice de Símbolos em RAM
+
+## Status
+
+**Aprovado (Ativo, Inegociável e Fundacional para o SOULS V4).** Emenda cumulativa das ADRs 029 (Visão Cognitiva O(1)), 040 (State DB v2), 041 (Servername Soberano `souls_mcp`), 042 (CCR Conveyor Belt) e 043 (Observabilidade Cognitiva Sensorial). Homologado pelo Arquiteto-Chefe em 2026-08-02 após laudo técnico de 38/38 testes verdes (35 baseline + 3 novos da Fase C.2).
+
+## Contexto Técnico e Desafio Operacional
+
+O gateway `souls_mcp` carrega três ferramentas canônicas — `symbol`, `callers` e `callees` — declaradas no `tools/list` desde o Marco 3.5, mas implementadas como stubs `not_implemented_yet`. Esses stubs constituem **falsos verdes** documentais: o cliente MCP (Trae IDE, Claude Desktop) vê o tool no `tools/list`, chama-o, recebe um `is_error: true` com payload stringificado e desperdiça tokens de round-trip. A causa-raiz histórica foi a **covardia arquitetural** de incorporar o `tree-sitter` C nativo diretamente no binário Rust do gateway, contaminando o runtime do Tokio com:
+
+1. **Segfaults não-determinísticos.** Parsers C do tree-sitter carregam estado mutável em `static mut` herdado do upstream; sob concorrência do Tokio, qualquer `panic!` interno vira `SIGSEGV` no gateway.
+2. **Loops infinitos silenciosos.** Gramáticas malformadas ou entradas patológicas (Rust macro expansion, C++ templates) podem levar o parser a consumir 100% da CPU sem retornar, monopolizando um worker thread do Tokio.
+3. **Footprint de memória ilimitado.** O `tree-sitter` aloca o AST completo na heap sem teto físico; arquivos de 5MB viram árvores de 200MB+ em `bumpalo`, sufocando a dGPU RTX 2060m durante o `malloc` no Tauri.
+
+A solução canônica adotada por `bun`, `fastly` e `wasmtime` em produção é **enjaular os parsers em WebAssembly com WASI Preview 2** e impor uma cerca de recursos físicos (memory cap + fuel metering) que mata o guest em O(1) ao violar qualquer limite.
+
+## Decisões de Engenharia e Arquitetura
+
+Fica decretada a implementação do **Enjaulamento Wasmtime do Tree-Sitter** sob as seguintes leis e equações imutáveis:
+
+### 1. Sandbox Wasmtime com WASI Preview 2 e Cerca de Recursos Físicos
+
+* **Runtime Estanque.** O `wasmtime::Engine` é configurado uma única vez por processo (`OnceLock<Engine>` em `wasm_engine.rs`) com as flags defensivas:
+  - `wasm_component_model(true)` — ativa o component model WIT/WASI 0.2.
+  - `consume_fuel(true)` — habilita o fuel metering (cada instrução WASM consome 1 unidade de fuel; o host interrompe quando o contador zera).
+  - `epoch_interruption(true)` — segunda linha de defesa contra loops infinitos não-financeiros.
+  - **Teto de memória linear:** 16 MB (`Store::limiter(|_| 16 * 1024 * 1024)`). Gramáticas tree-sitter nunca excedem 8MB; o teto de 16MB tem folga 2x para entradas grandes sem permitir exaustão.
+  - **Teto de fuel:** 10.000.000 unidades por chamada (`Store::set_fuel(10_000_000)`). Gramática típica consome ~50K; o teto 10M tem folga 200x.
+
+* **Carregamento Dinâmico de Gramáticas.** A função `WasmEngine::load_grammar(&self, bytes: &[u8]) -> Result<Module, WasmTrap>` aceita bytes WASM arbitrários (incluindo WAT compilado em runtime) e devolve um `Module` pré-compilado pelo Cranelift. Gramáticas estáticas (Rust, C, Python) vivem em `resources/wasm_grammars/*.wasm` via `include_bytes!`; gramáticas dinâmicas podem ser injetadas via MPSC para suportar extensões de usuário.
+
+* **Tratamento Gracioso de Traps.** O método `WasmEngine::execute_safely<F, T>(&self, module: &Module, f: F) -> Result<T, WasmTrap>` envolve a invocação do guest em `std::panic::catch_unwind` (Rust-side panic catcher) **e** em pattern matching sobre `anyhow::Error` (Wasm-side trap matcher). Qualquer estouro de memória, divisão por zero, `unreachable` ou exaustão de fuel retorna `WasmTrap::StructuredFailure { reason, fuel_consumed }` em vez de derrubar a thread do Tokio. O `Store` é descartado imediatamente após o erro (RAII garante liberação de todas as páginas lineares).
+
+### 2. SYMBOL_INDEX e CALL_GRAPH em DashMap de RAM Host
+
+* **Índice de Símbolos O(1).** A estrutura `SYMBOL_INDEX: OnceLock<DashMap<String, SymbolEntry>>` mapeia cada símbolo sintático (função, struct, enum, trait) à sua localização física `(file:line)`. O tipo de entrada é:
+
+```rust
+pub struct SymbolEntry {
+    pub qualified_name: String,    // "crate::module::Type::method"
+    pub kind: SymbolKind,          // Fn | Struct | Enum | Trait | Const | Static
+    pub file_path: PathBuf,        // caminho canonicalizado
+    pub line: u32,                 // linha 1-based
+    pub column: u32,               // coluna 0-based
+}
+```
+
+A lookup `SYMBOL_INDEX.get(name)` resolve em **O(1) médio** via hashmap segmentado do `DashMap` (lock-free read path). Para a ferramenta `symbol`, a busca é direta: a query FTS5 do `mem_search` vira `DashMap::get` quando o nome é exato; FTS5 só é invocado para nomes parciais.
+
+* **Grafo de Chamadas Direcionado.** A estrutura `CALL_GRAPH: OnceLock<DashMap<String, CallGraphNode>>` armazena dois DashMaps simétricos (`callees_map` e `callers_map`) para responder ambas as direções da relação `f → g` (f chama g) em O(1) sem BFS no caminho de cache hit. Cada nó:
+
+```rust
+pub struct CallGraphNode {
+    pub symbol: String,            // qualified_name
+    pub adjacents: HashSet<String>, // conjunto de arestas adjacentes
+    pub last_updated: i64,         // epoch seconds (Langevin hook)
+}
+```
+
+* **Custo de Memória.** Para um monorepo de 50K símbolos com fan-out médio de 8 chamadas, o footprint estimado é ~50K * 200 bytes = 10MB. Cabe folgadamente nos 16MB de memória linear do Wasm sandbox e na heap Host (RTX 2060m tem 16GB RAM sistema).
+
+### 3. Telemetria MPSC Assíncrona (Fire-and-Forget)
+
+* **Canal MPSC Dedicado.** A função `spawn_callgraph_telemetry_worker(symbols_tx, callers_tx)` cria um canal `tokio::sync::mpsc::channel::<TelemetryEvent>(256)` bufferizado. Os eventos são:
+
+```rust
+pub enum TelemetryEvent {
+    FileMutated { path: PathBuf, content: String },
+    FileDeleted { path: PathBuf },
+}
+```
+
+* **Worker em Background.** O consumer roda em `std::thread::spawn` (NÃO `tokio::spawn`) para manter o `tree-sitter` síncrono isolado do event loop, espelhando o padrão de `mpsc_bridge.rs` do `souls_graph`. O ciclo:
+  1. `recv()` bloqueia esperando próximo evento.
+  2. Parseia o arquivo com o grammar WASM enjaulado.
+  3. Extrai `(name, kind, line, column)` por símbolo.
+  4. Atualiza `SYMBOL_INDEX` (insert or replace).
+  5. Extrai `caller → callee` edges.
+  6. Atualiza `CALL_GRAPH` (insert or replace com merge de `HashSet`).
+
+* **HIPER-FORWARD.** As tools `read`, `edit` e `write` chamam `try_send` (não `send`) — se o canal estiver cheio (256 eventos enfileirados = workspace sob write storm), o evento é descartado silenciosamente e uma métrica é emitida em `tracing::warn!`. O critical path do tool nunca bloqueia.
+
+### 4. Registro Canônico das 3 Tools e Remoção de Prefixo Redundante
+
+* **Lei 32/120 (ADR-041).** As três novas tools são registradas no `tools/list` com nome curto e descrição ≤120 chars:
+
+```json
+{"name": "symbol",  "description": "Resolve a localização física (file:line) de símbolos sintáticos da AST do monorepo em O(1)."},
+{"name": "callers", "description": "Lista os nós do grafo de dependências que invocam um determinado símbolo no workspace."},
+{"name": "callees", "description": "Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado."}
+```
+
+* **Aliases Unificados.** O dispatcher aceita as 3 formas canônicas para máxima compatibilidade durante a transição:
+
+```rust
+"symbol"  | "souls_symbol"  | "ctx_symbol"  => run_symbol(params).await,
+"callers" | "souls_callers" | "ctx_callers" => run_callers(params).await,
+"callees" | "souls_callees" | "ctx_callees" => run_callees(params).await,
+```
+
+* **Sem Prefixo no tools/list.** Conforme ADR-041 §3 (canibalização preservada), os aliases `souls_*` e `ctx_*` continuam aceitos no dispatcher, mas o `name` exposto é o curto. O teste `tools_list_respects_32_120_tetos` (já existente) valida a invariante em runtime.
+
+### 5. Agnosticismo de Hardware e Transmutabilidade
+
+* **Piso de Validação:** RTX 2060m (6GB VRAM, AVX2, 16GB RAM).
+* **Teto Agnóstico:** O motor Wasmtime é CPU-puro; roda identicamente em Metal/Vulkan/NPU desde que o host Rust seja recompilado. Nenhuma instrução CUDA, Metal ou Vulkan é emitida — o sandbox é 100% bare-metal.
+* **Sandbox Tripartite (Landlock/AppContainer).** Em produção, o `Store` é executado sob Landlock (Linux) ou AppContainer (Windows) com whitelist explícita de paths (apenas `resources/wasm_grammars/` é read-only; o resto do filesystem é inacessível ao guest).
+
+## Equações de Validação
+
+### Cerca de Combustível (Fuel Metering)
+
+$$
+\text{Fuel}_{\max} = 10^7, \quad \text{Mem}_{\max} = 16 \text{ MiB}
+$$
+
+Se o guest consumir todo o fuel antes de retornar, o `Store` é descartado e a função retorna `WasmTrap::FuelExhausted { consumed: 10^7 }`. A complexidade de detecção é $\mathcal{O}(1)$ (single atomic decrement por instrução WASM).
+
+### Complexidade de Lookup
+
+$$
+T_{\text{symbol}}(n) = \mathcal{O}(1) \text{ médio via DashMap hash}
+$$
+
+$$
+T_{\text{callers}}(n) = \mathcal{O}(d) \text{ onde } d = |\text{adjacents}|
+$$
+
+## Testes de Homologação (TDD Fast Pass < 0.1s)
+
+| # | Teste | Validação |
+|---|-------|-----------|
+| 1 | `test_wasm_tree_sitter_isolation` | Wasm guest com `unreachable` ou divisão por zero é interceptado; retorna `WasmTrap::StructuredFailure`; thread Tokio sobrevive. |
+| 2 | `test_symbol_resolution_o1` | Insere 10K símbolos em `SYMBOL_INDEX`; `symbol` resolve cada um em <10μs (caminho de cache hit DashMap). |
+| 3 | `test_callers_callees_graph` | Popula `CALL_GRAPH` com 5 nós e 8 arestas; `callers(X)` retorna o conjunto exato de chamadores; `callees(X)` retorna o conjunto exato de chamados. |
+
+## Consequências
+
+### Positivas
+
+* **Quitação de dívida técnica.** Os 3 stubs `symbol`/`callers`/`callees` deixam de ser falsos verdes.
+* **Segurança operacional.** Parser tree-sitter não pode mais derrubar o gateway; qualquer crash é contido em `WasmTrap`.
+* **Performance preditível.** Telemetry fuel/mem determinística permite cálculo de custo FinOps por chamada WASM.
+* **Padrão replicável.** O sandbox Wasmtime torna-se o template para futuras integrações de parsers (Python, Markdown, SQL) sob a mesma cerca.
+
+### Negativas (Aceitas sob Pessimismo da Razão)
+
+* **Overhead de inicialização do Engine.** ~5ms na primeira chamada (Cranelift JIT). Mitigado por `OnceLock<Engine>` que compartilha a instância entre todos os workers.
+* **Impossibilidade de chamar APIs do Host diretamente.** O guest é estanque; qualquer I/O (file read, network) passa por host functions explicitamente registradas. Aceitável — tree-sitter é CPU-puro.
+* **Footprint de ~10MB para o índice de símbolos.** Aceitável no Teto de 6GB VRAM e nos 16GB de RAM sistema.
+
+## Referências Cruzadas
+
+- **ADR-029** (Visão Cognitiva O(1)) — O SYMBOL_INDEX é a concretização RAM Host do lookup O(1) antes delegado ao FTS5 SQLite.
+- **ADR-041** (Servername Soberano) — Teto 32/120 para nomes/descrições.
+- **ADR-043** (Observabilidade Sensorial) — Langevin decay reaproveitado para `last_updated` no CALL_GRAPH.
+- **Marco 3.7 Fase B** — `observability::routes` e `observability::impact` continuam usando regex puro (não-WASM); a Fase C.2 introduz a cerca Wasmtime para gramáticas estruturadas.
+
+### ====================================================================================================
+ARQUIVO: ADR-045-Persistencia-da-Alma-Socratica.md
+CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-045-Persistencia-da-Alma-Socratica.md
+---
+---
+id: "ADR-045"
+title: "ADR-045-Persistencia-da-Alma-Socratica"
+version: 1.0
+status: Aprovado
+epic: "Cognicao / Persistencia Socratica + Souls State V5"
+amends: ["ADR-029", "ADR-040", "ADR-041", "ADR-043", "ADR-044"]
+description: "Marco 3.9 Fase E: institui a persistencia relacional do ThinkingEngine socratico no SQLite WAL STRICT, quita a amnésia de raciocínio do gateway souls_mcp e adiciona as 3 tools canônicas export_session/analyze_session/merge_sessions sob o teto 32/120."
+mathematical_anchors: ["O(1)_adjacency_reconstruction", "ON_DELETE_CASCADE_subgraph_purge", "last_write_wins_merge"]
+physical_paths: ["src-tauri\\src\\cognition\\thinking\\persistence.rs", "src-tauri\\src\\cognition\\thinking\\ops.rs", "src-tauri\\src\\cognition\\thinking\\analytics.rs", "src-tauri\\src\\bin\\souls_mcp_server.rs", ".souls_data\\souls_state.db"]
+pr: "https://github.com/brunosrosa/souls_mc/pull/21 (commits cumulativos)"
+test_coverage: "39/39 verdes em <0.2s (Fast Pass Marcha Rapida)"
+---
+
+# ADR-045: Persistência da Alma Socrática e Quitação da Amnésia de Raciocínio
+
+## Status
+
+**Aprovado (Marco 3.9 Fase E).** Emenda cumulativa das ADRs 029 (Visão Cognitiva O(1)), 040 (Souls State), 041 (Servername Soberano `souls_mcp`), 043 (Observabilidade Sensorial) e 044 (Enjaulamento Wasmtime). Quita o **déficit de memória de raciocínio** do `ThinkingEngine` (até então in-RAM-only) instituindo a **persistência relacional SQLite WAL STRICT** de árvores socráticas, e expõe 3 tools MCP canônicas para reconstrução, análise e fusão atômica.
+
+## Contexto Técnico e Desafio Operacional
+
+O `ThinkingEngine` (PRD-032 §3) canibalizou o `ultrafast-mcp-sequential-thinking` com sucesso mas opera **estritamente in-RAM**:
+
+```rust
+pub struct ThinkingEngine {
+    session_id: String,
+    main_thread: Vec<ThoughtData>,
+    branches: HashMap<BranchId, Vec<ThoughtId>>,
+    hard_limit: u32,
+    hitl_authorized: bool,
+}
+```
+
+Esta escolha arquitetural previa que o estado era **descartável** (sessão = subagente; teardown = heap freed). Porém, o gateway `souls_mcp` evoluiu para hospedar 3 ferramentas canônicas que **exigem** o histórico da sessão:
+
+1. **`export_session`** — Reconstruir a árvore relacional para auditoria humana (HITL) ou para apresentação a outro agente.
+2. **`analyze_session`** — Computar métricas comportamentais (taxa de revisão, fan-out médio, latência média) para FinOps cognitivo.
+3. **`merge_sessions`** — Fundir dois fluxos de raciocínio concorrentes sob consistência eventual, especialmente em workflows multi-agente onde o `swarm_dispatcher` paraleliza pensamentos e precisa reconciliar divergências.
+
+Sem persistência, estas 3 tools só podem operar enquanto o `ThinkingEngine` está vivo em memória — uma janela de ~segundos durante o dispatch MCP. **A amnésia é estrutural**, não acidental.
+
+## Decisões de Engenharia e Arquitetura
+
+### 1. Souls State V5 — Schema Relacional Socrático
+
+A migração **V3 → V5** (pulamos V4 intencionalmente; o número 4 é reservado para o Marco 4.x do swarm reativo) é **idempotente** sob o padrão já estabelecido em `observability::ops::migrate_v2_to_v3`:
+
+```sql
+-- socratic_sessions: aggregate root de cada sessão de raciocínio.
+CREATE TABLE IF NOT EXISTS socratic_sessions (
+    session_id  TEXT PRIMARY KEY STRICT,  -- UUIDv4 simples
+    created_at  INTEGER NOT NULL,          -- epoch seconds
+    metadata    TEXT NOT NULL DEFAULT '{}' -- JSON blob (tags, task_name, etc.)
+) STRICT;
+
+-- socratic_thoughts: cada pensamento é uma linha com parentesco.
+-- parent_thought_id é NULLABLE (Tese raiz não tem pai).
+-- ON DELETE CASCADE: apagar a sessão purga TODO o grafo dela.
+CREATE TABLE IF NOT EXISTS socratic_thoughts (
+    thought_id        TEXT PRIMARY KEY STRICT,
+    session_id        TEXT NOT NULL,
+    branch_id         TEXT NOT NULL DEFAULT 'main',
+    parent_thought_id TEXT,
+    thought_type      TEXT NOT NULL,  -- 'regular'|'revision'|'branching'
+    content           TEXT NOT NULL,
+    step_number       INTEGER NOT NULL,
+    duration_ms       INTEGER NOT NULL DEFAULT 0,
+    created_at        INTEGER NOT NULL,
+    FOREIGN KEY(session_id)        REFERENCES socratic_sessions(session_id) ON DELETE CASCADE,
+    FOREIGN KEY(parent_thought_id) REFERENCES socratic_thoughts(thought_id) ON DELETE SET NULL
+) STRICT;
+
+-- Índices físicos para acelerar busca de parentesco sintático na RAM Host.
+CREATE INDEX IF NOT EXISTS idx_thoughts_session
+    ON socratic_thoughts(session_id);
+CREATE INDEX IF NOT EXISTS idx_thoughts_branch
+    ON socratic_thoughts(branch_id);
+CREATE INDEX IF NOT EXISTS idx_thoughts_parent
+    ON socratic_thoughts(parent_thought_id);
+CREATE INDEX IF NOT EXISTS idx_thoughts_session_step
+    ON socratic_thoughts(session_id, step_number);
+```
+
+**Lei de Idempotência:** `migrate_v3_to_v5` testa `PRAGMA user_version < 5`; se já é 5, retorna `Ok(())` sem alocar transação.
+
+**Lei do STRICT:** todas as 11 colunas do novo schema declaram `STRICT` para que o SQLite rejeite coercion silenciosa de tipo (princípio do Pessimismo da Razão do `user_profile`).
+
+### 2. Reconstrução de Árvore O(1) na RAM Host (não BFS no SQLite)
+
+O `export_session` lê **uma única query** que devolve TODAS as linhas de uma sessão ordenadas por `(branch_id, step_number)`, e reconstrói a árvore de adjacência em **HashMap<ThoughtId, NodeIndex>** na RAM. A justificativa é tripla:
+
+1. **Latência:** Para uma sessão típica de ≤ 7 pensamentos (5 padrão + 2 HITL), a query retorna ≤ 7 linhas; o overhead de múltiplas queries round-trip seria pior.
+2. **Previsibilidade:** O loop de reconstrução é puro, sem side effects; falha não corrompe estado.
+3. **Determinismo:** A estrutura de adjacência reconstruída é canônica (mesma entrada → mesma árvore), o que é uma propriedade essencial para o test `test_export_session_formatting`.
+
+A query canônica é:
+
+```sql
+SELECT thought_id, branch_id, parent_thought_id, thought_type, content,
+       step_number, duration_ms
+FROM socratic_thoughts
+WHERE session_id = ?1
+ORDER BY branch_id, step_number ASC;
+```
+
+### 3. Análise Comportamental — Fórmulas Fechadas
+
+`analyze_session` computa três métricas que resumem o **FinOps cognitivo** de uma sessão:
+
+$$
+\text{revision\_rate} = \frac{|\{t \in T : t.\text{type} = \text{revision}\}|}{|T|}
+$$
+
+$$
+\text{branching\_factor} = \frac{1}{|B|} \sum_{b \in B} \text{child\_count}(b), \quad B = \text{conjunto de branches}
+$$
+
+$$
+\text{latency\_mean\_ms} = \frac{1}{|T|} \sum_{t \in T} t.\text{duration\_ms}
+$$
+
+A **taxa de revisão** indica o quanto o agente se autocorrige (sinal de qualidade); o **fator de ramificação** indica exploração (sinal de profundidade); a **latência média** indica custo (sinal FinOps direto).
+
+### 4. Merge Atômico Last-Write-Wins (Consistência Eventual)
+
+`merge_sessions(source_session_id, target_session_id)` opera sob o **padrão CRDT simplificado**:
+
+1. **Transação BEGIN EXCLUSIVE** no `souls_state.db` (write lock global).
+2. Para cada pensamento de `source`: INSERT OR IGNORE em `target` com `thought_id` regenerado (evita colisão de PK). Se já existe, **last-write-wins** baseado em `created_at`.
+3. **Remap de `parent_thought_id`:** se o pai de um pensamento movido estava em `source`, reescreve para apontar para o equivalente em `target` (busca por `(step_number, branch_id)`).
+4. **COMMIT atômico.** Falha em qualquer ponto = ROLLBACK automático.
+
+A garantia é **eventual consistency** sob a hipótese de que os `created_at` dos pensamentos são monotonicamente ordenados (garantido pelo relógio do Tokio).
+
+### 5. Três Tools Canônicas sob o Teto 32/120 (ADR-041)
+
+| Tool | Nome | Descrição (≤120 chars) |
+|------|------|------------------------|
+| Export | `export_session` | "Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown)." |
+| Análise | `analyze_session` | "Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM." |
+| Fusão | `merge_sessions` | "Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual." |
+
+Cada tool aceita os 3 aliases canônicos (`name | souls_name | ctx_name`) no dispatcher, mantendo compatibilidade de transição.
+
+## Equações de Validação
+
+### Footprint de Memória
+
+$$
+\text{Memória}_{V5} \approx |T| \times 256 \text{ bytes} + \text{overhead SQLite WAL}
+$$
+
+Para 7 pensamentos, $\approx 1.8\text{ KB}$. Cabe em L1 do CPU.
+
+### Custo de Reconstrução
+
+$$
+T_{\text{reconstruct}}(n) = \mathcal{O}(n), \quad n = \text{|T|}
+$$
+
+O loop de adjacência é linear; não há BFS, não há recursão profunda (depth ≤ 5 por causa do disjuntor cognitivo).
+
+## Testes de Homologação (TDD Fast Pass < 0.2s)
+
+| # | Teste | Validação |
+|---|-------|-----------|
+| 1 | `test_database_migration_v5` | Migração idempotente; FK rejeita inserção inválida. |
+| 2 | `test_export_session_formatting` | Tese→Antítese→Síntese; JSON e Markdown respeitam indentação. |
+| 3 | `test_analyze_session_metrics` | Taxa de revisão, fan-out, latência média calculados corretamente. |
+| 4 | `test_merge_sessions_atomic_last_write_wins` | 2 branches concorrentes fundidas; ponteiros reconciliados. |
+
+## Consequências
+
+### Positivas
+
+* **Amnésia de raciocínio eliminada.** Sessões persistem em `.souls_data/souls_state.db`; crash do gateway não perde contexto socrático.
+* **Auditoria HITL viável.** `export_session` em Markdown é legível para o Arquiteto revisar antes de merge.
+* **FinOps Cognitivo mensurável.** `analyze_session` expõe métricas que alimentam o ParetoBandit.
+* **Merge multi-agente funcional.** O `swarm_dispatcher` pode paralelizar pensamentos e reconciliar divergências.
+
+### Negativas (Aceitas sob Pessimismo da Razão)
+
+* **Custo de I/O por pensamento.** ~50µs por INSERT sob WAL. Aceitável (pensamentos são infrequentes).
+* **Esquema precisa de migração manual** se uma coluna for adicionada no futuro. Mitigado por `IF NOT EXISTS` em todas as DDLs.
+* **`last-write-wins` pode perder edições em sessões paralelas.** Aceitável sob consistência eventual; para ACID estrito seria necessário um CRDT mais sofisticado (Marco 4.x).
+
+## Referências Cruzadas
+
+- **ADR-029** (Visão Cognitiva O(1)) — A reconstrução O(n) em RAM é justificada por n ≤ 7.
+- **ADR-040** (Souls State) — `migrate_v3_to_v5` segue o mesmo padrão de `migrate_v2_to_v3`.
+- **ADR-041** (Servername Soberano) — Teto 32/120 respeitado.
+- **PRD-032** §3 (Socratic Disjuntor) — `ThinkingEngine` é a fonte da verdade para o disjuntor; persistência é projeção.

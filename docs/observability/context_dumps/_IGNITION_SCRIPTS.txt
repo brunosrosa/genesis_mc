@@ -1,3 +1,9 @@
+_IGNITION_SCRIPTS Gerado em: 2026-08-05 17:43:38
+
+### ====================================================================================================
+ARQUIVO: boot.ps1
+CAMINHO: Z:\souls_mc\boot.ps1
+---
 # ============================================================================
 # SOULS CANON V5: BOOTSTRAP DO SOULS MC (SYSTEM TRAY DAEMON)
 # Objetivo: Evitar corrupção, garantir injeção efêmera de variáveis na RAM
