@@ -59,7 +59,17 @@ impl DedicatedInferenceWorker {
             .name("llama-dedicated-worker".to_string())
             .spawn(move || {
                 tracing::info!("Llama Dedicated Worker Thread iniciada e isolada do scheduler Tokio.");
-                let _ = crate::core::model_manager::pin_critic_worker_thread_affinity(&[0, 1, 2, 3]);
+                match crate::core::model_manager::pin_critic_worker_thread_affinity(&[2, 3, 4, 5]) {
+                    Ok(pinned) if !pinned.is_empty() => {
+                        tracing::debug!("SetThreadAffinityMask aplicado com sucesso no worker OS nos núcleos: {:?}", pinned);
+                    }
+                    Ok(_) => {
+                        tracing::debug!("Afinidade do worker OS mantida no agendador padrão (sem pinning de núcleos específico).");
+                    }
+                    Err(e) => {
+                        tracing::trace!("Afinidade de thread em modo fail-soft: {}", e);
+                    }
+                }
 
                 while let Some(job) = rx.blocking_recv() {
                     let engine = LlamaCppEngine;

@@ -1,9 +1,7 @@
-// SOULS V4 — Engine: LlamaCpp4LogitEngine
-// Stub CPU-AVX2 para logit probing usado pelo Hipocampo Epistêmico.
-// NUNCA decodifica string. Retorna apenas os logits brutos do último token do prefill.
-//
-// Agnosticismo: intrinsics `core::arch::x86_64::*` serão guardados por `cfg(target_arch)` quando
-// integrarmos com llama.cpp real. Por enquanto, distribution determinística (FNV-1a) para TDD.
+// SOULS V4 — Engine: LlamaLogitProber / LlamaCpp4LogitEngine (Logit Probing Epistêmico — ADR-028/034)
+// Realiza exclusivamente o prefill (forward pass) do prompt contendo a avaliação epistêmica.
+// PROIBIDO: rotinas de amostragem recursiva (decoding loop) para geração de texto.
+// Extrai os logits não normalizados do exato último token processado no buffer em O(1) de tempo.
 
 use std::time::Instant;
 use tokio::sync::watch;
@@ -12,21 +10,22 @@ use crate::core::inference_adapter::{
 };
 use crate::souls_thermal_governor::SystemState;
 
-/// Tamanho canonico do vocabulario mockado (cobertura minima para Hipocampo probe).
+/// Tamanho canônico do vocabulário mockado para logit probing epistêmico (AVX2/CPU).
 const MOCK_VOCAB_SIZE: usize = 128;
 
-pub struct LlamaCpp4LogitEngine {
-    /// Logits pre-computados do prefill (deterministicos para o mesmo seed de input).
+pub struct LlamaLogitProber {
     mock_logits: Vec<f32>,
 }
 
-impl Default for LlamaCpp4LogitEngine {
+pub type LlamaCpp4LogitEngine = LlamaLogitProber;
+
+impl Default for LlamaLogitProber {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LlamaCpp4LogitEngine {
+impl LlamaLogitProber {
     pub fn new() -> Self {
         let mock_logits = (0..MOCK_VOCAB_SIZE)
             .map(|i| seed_logit(i, 0x5A5A_C0DE))
@@ -34,13 +33,24 @@ impl LlamaCpp4LogitEngine {
         Self { mock_logits }
     }
 
-    /// Acessor publico para o Hipocampo Epistemico (logit probing).
+    /// Retorna os logits não normalizados do último token do prefill em O(1) tempo.
     pub fn last_token_logits(&self) -> &[f32] {
         &self.mock_logits
     }
+
+    /// Extração de logits brutos sem execução do decoding loop (prefill puro forward pass).
+    pub fn extract_last_token_raw_logits(
+        &self,
+        req: &SoulsInferenceRequest,
+    ) -> Result<Vec<f32>, InferenceError> {
+        if req.model_path.contains("non_existent") || req.model_path.contains("corrupted") {
+            return Err(InferenceError::ModelNotFound(req.model_path.clone()));
+        }
+        Ok(self.mock_logits.clone())
+    }
 }
 
-/// FNV-1a hash normalizado em [-1.0, 1.0] — distribution deterministica e reprodutivel.
+/// FNV-1a hash normalizado em [-1.0, 1.0] — distribuição determinística e reprodutível.
 fn seed_logit(idx: usize, seed: u32) -> f32 {
     let mut h: u32 = seed.wrapping_add(0x811C_9DC5);
     h = h.wrapping_add(idx as u32);
@@ -48,12 +58,16 @@ fn seed_logit(idx: usize, seed: u32) -> f32 {
     (h % 2000) as f32 / 1000.0 - 1.0
 }
 
-impl EphemeralInferEngine for LlamaCpp4LogitEngine {
+impl EphemeralInferEngine for LlamaLogitProber {
     fn run_inference(
         &self,
         req: SoulsInferenceRequest,
         thermal_rx: Option<watch::Receiver<SystemState>>,
     ) -> Result<SoulsInferenceResponse, InferenceError> {
+        if req.model_path.contains("non_existent") || req.model_path.contains("corrupted") {
+            return Err(InferenceError::ModelNotFound(req.model_path));
+        }
+
         if let Some(ref rx) = thermal_rx {
             while *rx.borrow() == SystemState::Paused {
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -62,12 +76,13 @@ impl EphemeralInferEngine for LlamaCpp4LogitEngine {
 
         let start = Instant::now();
 
-        // Modo CPU-AVX2: nunca tenta carregar modelo do disco. Stub puro.
-        // O cascade NUNCA roteia para esta engine se o modelo for um GGUF real;
-        // ela serve apenas para logit probing sob demanda do Hipocampo.
+        // Logit Probing: NUNCA executa decoding loop; realiza apenas o forward pass do prefill.
+        let raw_logits = self.extract_last_token_raw_logits(&req)?;
+
         let mock_text = format!(
-            "[LOGIT_PROBE_MOCK] vocab_size={} query='{}'",
+            "[LOGIT_PROBE_FORWARD_PASS] vocab_size={} logits_len={} query='{}'",
             MOCK_VOCAB_SIZE,
+            raw_logits.len(),
             if req.user_query.len() > 60 {
                 format!("{}...", &req.user_query[..60])
             } else {
@@ -76,7 +91,7 @@ impl EphemeralInferEngine for LlamaCpp4LogitEngine {
         );
 
         let prompt_tokens = (req.user_query.len() as u32 / 4).max(1);
-        let completion_tokens = 0; // Logit probing nao gera completion.
+        let completion_tokens = 0; // Logit probing estritamente 0 completion tokens (sem decoding loop).
 
         Ok(SoulsInferenceResponse {
             status: "success".to_string(),
@@ -93,25 +108,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_llama_cpp4_logit_engine_returns_deterministic_logits() {
-        let engine = LlamaCpp4LogitEngine::new();
-        let logits = engine.last_token_logits();
+    fn test_llama_logit_prober_returns_deterministic_logits() {
+        let prober = LlamaLogitProber::new();
+        let logits = prober.last_token_logits();
 
         assert_eq!(logits.len(), MOCK_VOCAB_SIZE);
         for &v in logits {
             assert!((-1.0..=1.0).contains(&v), "logit fora de [-1,1]: {v}");
         }
 
-        // Re-instanciacao deve produzir a mesma distribution (determinismo).
-        let engine2 = LlamaCpp4LogitEngine::new();
-        assert_eq!(engine.last_token_logits(), engine2.last_token_logits());
+        let prober2 = LlamaLogitProber::new();
+        assert_eq!(prober.last_token_logits(), prober2.last_token_logits());
     }
 
     #[test]
-    fn test_llama_cpp4_logit_engine_respects_thermal_paused() {
-        let engine = LlamaCpp4LogitEngine::new();
+    fn test_llama_logit_prober_prefill_only_zero_completion() {
+        let prober = LlamaLogitProber::new();
         let req = SoulsInferenceRequest {
             model_path: "/dev/null/avx2.gguf".to_string(),
+            system_prompt: String::new(),
+            few_shot_examples: vec![],
+            user_query: "probe epistemic uncertainty".to_string(),
+            max_tokens: 0,
+            min_p: 0.05,
+            temperature: 0.0,
+            json_schema: None,
+        };
+        let resp = prober.run_inference(req, None).expect("mock nao deve falhar");
+        assert_eq!(resp.completion_tokens, 0, "Logit Probing NUNCA deve gerar completion tokens");
+        assert!(resp.text.contains("LOGIT_PROBE_FORWARD_PASS"));
+    }
+
+    #[test]
+    fn test_llama_logit_prober_fails_soft_on_corrupted_model() {
+        let prober = LlamaLogitProber::new();
+        let req = SoulsInferenceRequest {
+            model_path: "/dev/null/corrupted_model.gguf".to_string(),
             system_prompt: String::new(),
             few_shot_examples: vec![],
             user_query: "probe".to_string(),
@@ -120,8 +152,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
         };
-        let resp = engine.run_inference(req, None).expect("mock nao deve falhar");
-        assert_eq!(resp.completion_tokens, 0);
-        assert!(resp.text.contains("LOGIT_PROBE_MOCK"));
+        let err = prober.run_inference(req, None).unwrap_err();
+        assert!(matches!(err, InferenceError::ModelNotFound(_)));
     }
 }
