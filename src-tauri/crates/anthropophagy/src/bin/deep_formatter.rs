@@ -845,7 +845,7 @@ async fn main() -> io::Result<()> {
     ensure_deep_components_schema(&conn).map_err(io::Error::other)?;
 
     let sheets = SheetsMcpClient;
-    let header_range = souls_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header_range = anthropophagy::synthesizer::master_solutions_header_range();
     let header = sheets
         .get_sheet_data(&spreadsheet_id, MASTER_SOLUTIONS_SHEET, header_range)
         .await
@@ -854,7 +854,7 @@ async fn main() -> io::Result<()> {
     let cols = resolve_master_columns(&header_row).map_err(io::Error::other)?;
 
     let end_col = col_idx_to_a1(
-        souls_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
+        anthropophagy::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS
             .len()
             .saturating_sub(1),
     );

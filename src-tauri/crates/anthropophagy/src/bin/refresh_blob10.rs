@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::{params, Connection};
 
-use souls_mc_lib::harvester::canon::{SoulsCanonExtractor, CANON_GLOBAL_REPO_ID};
+use anthropophagy::harvester::canon::{SoulsCanonExtractor, CANON_GLOBAL_REPO_ID};
 
 fn workspace_root() -> io::Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");

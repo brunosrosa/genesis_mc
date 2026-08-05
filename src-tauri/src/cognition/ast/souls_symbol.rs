@@ -37,7 +37,7 @@ use std::sync::OnceLock;
 use regex::Regex;
 use walkdir::WalkDir;
 
-use super::extensions::{is_excluded_dir, is_source_ext};
+use crate::cognition::context::extensions::{is_excluded_dir, is_source_ext};
 
 /// Teto rígido do tamanho do nome do símbolo (proteção DoS).
 ///

@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use super::dedup::compress_with_dedup;
+use super::ccr_dedup::compress_with_dedup;
 
 /// Resultado de compactação de UM arquivo.
 #[derive(Debug, Clone, PartialEq, Eq)]

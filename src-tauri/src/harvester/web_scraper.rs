@@ -136,7 +136,7 @@ async fn apply_domain_jitter(url: &Url) {
 
     if should_jitter {
         use tinyrand::RandRange;
-        let jitter_secs = souls_mc_lib::telemetry::dynamic_wyrand().next_range(2..6);
+        let jitter_secs = crate::telemetry::dynamic_wyrand().next_range(2..6);
         tokio::time::sleep(Duration::from_secs(jitter_secs)).await;
     }
 }

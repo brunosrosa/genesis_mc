@@ -3,7 +3,7 @@
 // Medição de tokens via tiktoken (cl100k_base) com desidratação poliglota (Rust, Python, Elixir, etc.) e Fail-Closed.
 
 use super::ansi_filter::strip_ansi;
-use super::text_compress::lightweight_cleanup;
+use super::souls_read::lightweight_cleanup;
 use tiktoken::get_encoding;
 
 /// Paradigmas sintáticos de linguagens para poda cirúrgica de corpos.

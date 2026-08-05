@@ -22,7 +22,7 @@ use std::hash::Hasher;
 
 use dashmap::DashMap;
 
-use super::types::BlockCompressionStats;
+use super::ccr_types::BlockCompressionStats;
 
 /// Cache global de deduplicação, indexada por hash `u64` de 64 bits.
 /// O valor contém o BLOCO ORIGINAL COMPLETO (lossless reversível).

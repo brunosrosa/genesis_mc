@@ -1125,7 +1125,7 @@ fn format_epoch_utc(epoch: i64) -> String {
     if epoch <= 0 {
         return String::new();
     }
-    crate::telemetry::format_brt_rfc3339(epoch)
+    souls_mc_lib::telemetry::format_brt_rfc3339(epoch)
 }
 
 fn embargo_label(value: i64) -> &'static str {

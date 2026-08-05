@@ -49,7 +49,7 @@ use wasmtime::{Engine, Module, ResourceLimiter, Store};
 /// bytecode tree-sitter real via `tree-sitter generate` + `wat2wasm`
 /// no próximo Marco.
 pub const RUST_WASM: &[u8] =
-    include_bytes!("../../../data/wasm/rust_sample.wat");
+    include_bytes!("../../../../data/wasm/rust_sample.wat");
 
 /// Teto de memória linear por Store (16 MiB).
 ///

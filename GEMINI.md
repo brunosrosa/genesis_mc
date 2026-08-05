@@ -17,6 +17,13 @@ O fluxo obrigatório para novas lógicas é solicitar ao usuário o comando `/gr
 ## 4. SKILLS E LATE-BINDING
 As suas habilidades pesadas (ex: manipulador de AST, roteador FinOps) residem em `.agents/skills/`. Invoque-as de forma semântica apenas quando precisar. Não assuma regras além das descritas neste arquivo sem consultar suas Skills.
 
+## 5. HIGIENE DE DEPENDÊNCIAS (ADR-030) E BILINGUISMO TÉCNICO
+- **Crateras Banidas do Runtime:** `winapi v0.3.9` e `core_affinity` são estritamente BANIDOS do código de produção do SOULS.
+- **Kernel & CPU Pinning:** Qualquer ancoragem de threads de CPU ou chamadas nativas do SO deve utilizar exclusivamente a API compilada via `windows-sys = "=0.61.2"` (ex: `SetThreadAffinityMask` e `GetCurrentThread`).
+- **Bilinguismo Técnico:**
+  - **Inglês (English):** Língua oficial para toda a ESTRUTURA (pastas, arquivos `.rs`, toolnames MCP, esquemas de bancos de dados, chaves JSON, variáveis e testes).
+  - **Português:** Língua oficial para COMUNICAÇÃO humana, documentações em `docs/`, relatórios em `.souls_scratchpad/` e comentários complexos de arquitetura.
+
 # souls — Context Engineering Layer (Late-Binding)
 <!-- souls-context-rules-v13-zerobrand -->
 

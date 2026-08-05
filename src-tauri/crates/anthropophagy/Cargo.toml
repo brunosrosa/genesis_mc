@@ -1,0 +1,63 @@
+[package]
+name = "anthropophagy"
+version = "0.1.0"
+description = "Dev & Ingestion ETL Tools (The Anthropophagy Forge)"
+authors = ["SOULS Bare-Metal Team"]
+edition = "2021"
+
+[dependencies]
+souls_mc_lib = { package = "souls_mc", path = "../.." }
+
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
+tokio = { version = "=1.51.1", features = ["full"] }
+rusqlite = { version = "=0.39.0", features = ["bundled"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+thiserror = { version = "=2.0.19", default-features = false }
+gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
+oxc = { version = "=0.120.0", features = ["ast_visit"] }
+url = "=2.5.8"
+regex = "=1.12.4"
+dunce = "=1.0.5"
+tempfile = "=3.27.0"
+enable-ansi-support = "=0.2.1"
+dotenvy = "=0.15.7"
+tinyrand = "=0.5.0"
+uuid = { version = "=1.23.4", features = ["v4"] }
+sha2 = "=0.10.9"
+zstd = "=0.13.3"
+walkdir = "=2.5.0"
+dashmap = "6.1.0"
+tiktoken = "=3.5.1"
+toml = "=1.1.4"
+sqlparser = "=0.62.0"
+quick-xml = "=0.39.4"
+astral-tl = "=0.7.11"
+bumpalo = { version = "=3.20.3", features = ["collections"] }
+memmap2 = "=0.9.11"
+sysinfo = "=0.30.13"
+windows-projfs = "=0.1.8"
+rustc-hash = "=2.1.3"
+which = "=6.0.3"
+wasmtime = { version = "=29.0.0", features = ["wat"] }
+tree-sitter = "=0.26.10"
+tree-sitter-c-sharp = "=0.23.5"
+tree-sitter-yaml = "=0.7.2"
+ignore = "=0.4.25"
+windows-sys = { version = "=0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+] }
+
+[features]
+default = []
+llama_backend = ["souls_mc_lib/llama_backend"]
+mistral_backend = ["souls_mc_lib/mistral_backend"]
+
+[dev-dependencies]
+mockito = "=1.7.2"
+
+

@@ -293,8 +293,10 @@ try {
                 "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
-                "--bin", "scan_local_models_cli",
-                "--bin", "souls_ephemeral_infer_cli",
+                "-p", "anthropophagy",
+                "--bin", "scan_local_models",
+                "--bin", "ephemeral_infer",
+                "-p", "souls_mc",
                 "--bin", "souls_mc",
                 "--locked"
             ) `
@@ -303,15 +305,15 @@ try {
 
         # 4.5. VARREDURA DE MODELOS LOCAIS (Fase 1.5 Model Manager Sync)
         Write-Host "`n[4.5] Sincronizando inventario de modelos locais no SQLite Vault..." -ForegroundColor Yellow
-        $scannerPath = Join-Path $srcTauriDir "target\debug\scan_local_models_cli.exe"
+        $scannerPath = Join-Path $srcTauriDir "target\debug\scan_local_models.exe"
         if (Test-Path $scannerPath) {
             Invoke-TrackedProcess `
                 -FilePath $scannerPath `
-                -Arguments @("C:\Users\rosas\.lmstudio\models") `
+                -Arguments @() `
                 -Label "scan-local-models" `
                 -WorkingDirectory $PSScriptRoot
         } else {
-            Write-BootWarn "Binario scan_local_models_cli.exe nao encontrado em $scannerPath"
+            Write-BootWarn "Binario scan_local_models.exe nao encontrado em $scannerPath"
         }
 
         # 4.6. COMPILAÇÃO DE CONTEXT DUMPS (Exporta inventario de modelos para TXT)

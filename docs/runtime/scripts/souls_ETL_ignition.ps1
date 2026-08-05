@@ -168,17 +168,17 @@ switch ($choice) {
     '0' {
         $binArgs = @()
         if ($isDryRun) { $binArgs = @("--dry-run") }
-        $pipeline += @{ Bin = "n0_daemon_watcher"; Name = "DAEMON WATCHER"; Args = $binArgs }
+        $pipeline += @{ Bin = "daemon_watcher"; Name = "DAEMON WATCHER"; Args = $binArgs }
     }
     '1' {
         $binArgs = @()
         if ($isDryRun) { $binArgs = @("--dry-run") }
-        $pipeline += @{ Bin = "f_minus_1_guardian"; Name = "Fase -1 (GUARDIÃO)"; Args = $binArgs }
+        $pipeline += @{ Bin = "guardian"; Name = "Fase -1 (GUARDIÃO)"; Args = $binArgs }
     }
     '2' {
         $binArgs = @()
         if ($isDryRun) { $binArgs = @("--dry-run") }
-        $pipeline += @{ Bin = "f_minus_0_5_batedor_cli"; Name = "Fase -0.5 (BATEDOR FINOPS)"; Args = $binArgs }
+        $pipeline += @{ Bin = "scout"; Name = "Fase -0.5 (BATEDOR FINOPS)"; Args = $binArgs }
     }
     '3' {
         $binArgs = @()
@@ -200,7 +200,7 @@ switch ($choice) {
             }
             $pName = "Fase 0 (HARVESTER LOCAL) [BATCH]"
         }
-        $pipeline += @{ Bin = "f0_harvester_cli"; Name = $pName; Args = $binArgs }
+        $pipeline += @{ Bin = "harvester"; Name = $pName; Args = $binArgs }
     }
     '5' {
         $effectiveRepo = $RepoId
@@ -217,7 +217,7 @@ switch ($choice) {
             }
             $pName = "Fases 1 a 4 (MOTOR CLOUD COGNITIVO) [BATCH Sheets]"
         }
-        $pipeline += @{ Bin = "f3_synthesizer_cli"; Name = $pName; Args = $binArgs }
+        $pipeline += @{ Bin = "synthesizer"; Name = $pName; Args = $binArgs }
     }
     '6' {
         $effectiveRepo = $RepoId
@@ -240,19 +240,19 @@ switch ($choice) {
             $binArgs = @("--repo", $effectiveRepo)
             $pName = "Fases 3 a 4 (REVISÃO ETL COGNITIVO PESADO)"
         }
-        $pipeline += @{ Bin = "f3_synthesizer_cli"; Name = $pName; Args = $binArgs }
+        $pipeline += @{ Bin = "synthesizer"; Name = $pName; Args = $binArgs }
     }
     '7' {
         $binArgs = @()
         if ($isDryRun) { $binArgs = @("--dry-run") }
-        $pipeline += @{ Bin = "f5_deep_formatter_cli"; Name = "Fase 5 (DEEP COMPONENTS FORMATTER)"; Args = $binArgs }
+        $pipeline += @{ Bin = "deep_formatter"; Name = "Fase 5 (DEEP COMPONENTS FORMATTER)"; Args = $binArgs }
     }
     'C' {
         $dry = if ($isDryRun) { @("--dry-run") } else { @() }
         $n0Args = @("--one-shot") + $dry
-        $pipeline += @{ Bin = "n0_daemon_watcher"; Name = "CASCATA [1/4]: N0 (DAEMON WATCHER)"; Args = $n0Args }
-        $pipeline += @{ Bin = "f_minus_1_guardian"; Name = "CASCATA [2/4]: N1 (GUARDIÃO)"; Args = $dry }
-        $pipeline += @{ Bin = "f_minus_0_5_batedor_cli"; Name = "CASCATA [3/4]: N2 (BATEDOR FINOPS)"; Args = $dry }
+        $pipeline += @{ Bin = "daemon_watcher"; Name = "CASCATA [1/4]: N0 (DAEMON WATCHER)"; Args = $n0Args }
+        $pipeline += @{ Bin = "guardian"; Name = "CASCATA [2/4]: N1 (GUARDIÃO)"; Args = $dry }
+        $pipeline += @{ Bin = "scout"; Name = "CASCATA [3/4]: N2 (BATEDOR FINOPS)"; Args = $dry }
         $pipeline += @{ Bin = "outbox_sync"; Name = "CASCATA [4/4]: OUTBOX SYNC"; Args = $dry }
     }
     'X' {
@@ -283,7 +283,7 @@ try {
         $etlErr = Join-Path $env:TEMP "souls_etl_cargo.err.log"
         Remove-Item -LiteralPath $etlLog, $etlErr -Force -ErrorAction SilentlyContinue
 
-        $cargoArgs = @("run", "--manifest-path", $cargoManifest, "--bin", $bin)
+        $cargoArgs = @("run", "-p", "anthropophagy", "--manifest-path", $cargoManifest, "--bin", $bin)
         if ($binArgs.Count -gt 0) {
             $cargoArgs += "--"
             $cargoArgs += $binArgs

@@ -1,8 +1,8 @@
-use crate::cognition::synthesizer::{
+use crate::synthesizer::{
     apply_phase4_block5, master_solutions_header_range, sheet_range_for_row, ArchitecturalCategory,
     MasterSolutionsRow, MASTER_SOLUTIONS_CANONICAL_COLUMNS,
 };
-use crate::persist::google_workspace_mcp;
+use souls_mc_lib::persist::google_workspace_mcp;
 use thiserror::Error;
 use serde_json::{json, Value};
 use rusqlite::{Connection, ErrorCode};
@@ -753,7 +753,7 @@ impl SsotInjector {
 
                     let jitter = if policy.jitter_ms > 0 {
                         use tinyrand::RandRange;
-                        crate::telemetry::dynamic_wyrand().next_range(0..policy.jitter_ms.saturating_add(1))
+                        souls_mc_lib::telemetry::dynamic_wyrand().next_range(0..policy.jitter_ms.saturating_add(1))
                     } else {
                         0
                     };
@@ -1518,12 +1518,12 @@ impl SsotInjector {
         repo_id: &str,
         payload: &MasterSolutionsRow,
     ) -> Result<ValidatedSsotFields, SsotError> {
-        if payload.categoria_arquitetural == crate::cognition::synthesizer::ArchitecturalCategory::Unknown {
+        if payload.categoria_arquitetural == crate::synthesizer::ArchitecturalCategory::Unknown {
             return Err(SsotError::ValidationFailure(
                 "categoria_arquitetural invalida (fora do catálogo de 10 ENUMs)".to_string(),
             ));
         }
-        let _ = crate::cognition::synthesizer::ArchitecturalCategory::parse_strict(
+        let _ = crate::synthesizer::ArchitecturalCategory::parse_strict(
             payload.categoria_arquitetural.as_str(),
         )
         .map_err(SsotError::ValidationFailure)?;
@@ -2682,7 +2682,7 @@ mod tests {
             valid_from: 1_700_000_000,
             valid_to: None,
             embargo_status: 0,
-            categoria_arquitetural: crate::cognition::synthesizer::ArchitecturalCategory::Unknown,
+            categoria_arquitetural: crate::synthesizer::ArchitecturalCategory::Unknown,
             ..Default::default()
         };
 

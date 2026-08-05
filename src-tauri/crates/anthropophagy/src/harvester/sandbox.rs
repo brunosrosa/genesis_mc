@@ -2289,11 +2289,22 @@ fn resolve_sast_arsenal_binary(command: &str) -> Option<PathBuf> {
     }
     let target_triple = "x86_64-pc-windows-msvc";
     let bin_name = format!("{command}-{target_triple}.exe");
-    let candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("bin")
-        .join(&bin_name);
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let candidate = manifest_dir.join("bin").join(&bin_name);
     if candidate.is_file() {
         return Some(candidate);
+    }
+    if let Some(parent) = manifest_dir.parent() {
+        let parent_candidate = parent.join("bin").join(&bin_name);
+        if parent_candidate.is_file() {
+            return Some(parent_candidate);
+        }
+        if let Some(gparent) = parent.parent() {
+            let gparent_candidate = gparent.join("bin").join(&bin_name);
+            if gparent_candidate.is_file() {
+                return Some(gparent_candidate);
+            }
+        }
     }
     None
 }
@@ -2784,7 +2795,7 @@ fn build_global_allowed_roots() -> Vec<PathBuf> {
             SandboxError::ProcessSpawnFailed { reason: "Não foi possível capturar PID do processo".to_string() }
         })?;
 
-        let mut child_guard = crate::process_guard::ProcessGuard::new(child);
+        let mut child_guard = souls_mc_lib::process_guard::ProcessGuard::new(child);
 
         self.lock_pids().insert(pid);
 

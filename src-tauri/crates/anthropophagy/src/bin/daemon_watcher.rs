@@ -11,7 +11,7 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 
 use rusqlite::{params, Connection};
-use souls_mc_lib::cognition::synthesizer::master_solutions_header_range;
+use anthropophagy::synthesizer::master_solutions_header_range;
 use souls_mc_lib::telemetry::{dynamic_wyrand, enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 use tinyrand::RandRange;
 

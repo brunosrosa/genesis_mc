@@ -1,6 +1,6 @@
-use souls_mc_lib::harvester::extract::LocalStaticExtractor;
-use souls_mc_lib::harvester::git::BloblessCloner;
-use souls_mc_lib::harvester::ramdisk::RamdiskAllocator;
+use anthropophagy::harvester::extract::LocalStaticExtractor;
+use anthropophagy::harvester::git::BloblessCloner;
+use anthropophagy::harvester::ramdisk::RamdiskAllocator;
 use rusqlite::Connection;
 use std::fs;
 use std::io;

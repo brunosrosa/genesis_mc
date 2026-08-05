@@ -4,9 +4,9 @@ use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use souls_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination, RoutingZone as FinopsZone};
-use souls_mc_lib::finops::phase1_5::cloud_cascade::CloudCascade;
-use souls_mc_lib::finops::phase1_5::local_distiller::{LocalDistiller, TruncatingInferenceEngine};
-use souls_mc_lib::finops::phase1_5::package_assembler::{DbReader as PackageDbReader, PackageAssembler};
+use anthropophagy::distillation::cloud_cascade::CloudCascade;
+use anthropophagy::distillation::local_distiller::{LocalDistiller, TruncatingInferenceEngine};
+use anthropophagy::distillation::package_assembler::{DbReader as PackageDbReader, PackageAssembler};
 use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, now_brt_rfc3339, parse_log_level_from_env};
 use rusqlite::{params, Connection};
 use tempfile::NamedTempFile;
@@ -67,7 +67,7 @@ fn parse_repo_id_from_args() -> String {
     repo_id
 }
 
-fn ensure_phase1_5_schema(conn: &Connection) -> io::Result<()> {
+fn ensure_distillation_schema(conn: &Connection) -> io::Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS artefatos_destilados (
             distilled_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -423,7 +423,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::open(&db_path).map_err(|e| {
         io::Error::other(format!("Falha ao abrir vault em {}: {}", db_path.display(), e))
     })?;
-    ensure_phase1_5_schema(&conn)?;
+    ensure_distillation_schema(&conn)?;
 
     let blobs = fetch_required_blobs(&conn, &repo_id)?;
     info!(repo_id = %repo_id, blobs = blobs.len(), "F1 (Destilador FinOps): blobs carregados do vault");

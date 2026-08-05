@@ -1,9 +1,9 @@
-use souls_mc_lib::harvester::detect::LanguageDetector;
-use souls_mc_lib::harvester::git::BloblessCloner;
-use souls_mc_lib::harvester::ramdisk::RamdiskAllocator;
-use souls_mc_lib::harvester::repo_radar;
-use souls_mc_lib::harvester::sandbox::{SandboxOrchestrator, SandboxPolicy};
-use souls_mc_lib::harvester::sast::{PolyglotSastInput, PolyglotSastSidecar};
+use anthropophagy::harvester::detect::LanguageDetector;
+use anthropophagy::harvester::git::BloblessCloner;
+use anthropophagy::harvester::ramdisk::RamdiskAllocator;
+use anthropophagy::harvester::repo_radar;
+use anthropophagy::harvester::sandbox::{SandboxOrchestrator, SandboxPolicy};
+use anthropophagy::harvester::sast::{PolyglotSastInput, PolyglotSastSidecar};
 use rusqlite::Connection;
 use std::fs;
 use std::io;

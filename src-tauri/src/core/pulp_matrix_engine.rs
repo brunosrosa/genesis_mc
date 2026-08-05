@@ -1,10 +1,7 @@
-// SOULS V4 — Engine: PulpLeleEngine
-// Stub AOT (Ahead-of-Time) para matmul pequeno e embedding lookup em CPU pura.
-// Latencia alvo: p99 < 22µs. Hot path esperado: intrinsics AVX2/NEON, sem alocacao dinamica.
-//
-// Por enquanto, este stub executa um no-op deterministico que prova o contrato da trait.
-// A integracao com `pulp` (https://crates.io/crates/pulp) e `lele` (lembar) sera feita
-// em fase posterior, mantendo o stub funcional para o cascade V4.
+// SOULS V4 — Engine: PulpMatrixEngine (Aceleração Matricial SIMD em Hardware Bare-Metal)
+// Stub AOT (Ahead-of-Time) para matmul 64x64x64 em CPU AVX2/NEON nativa.
+// Função de Hardware: Execução acelerada de algebra matricial SIMD sem alocação dinâmica.
+// Latência alvo: p99 < 22µs via instruções vetoriais nativas.
 
 use std::time::Instant;
 use tokio::sync::watch;

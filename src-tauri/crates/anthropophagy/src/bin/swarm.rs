@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use souls_mc_lib::cognition::swarm::{
+use anthropophagy::swarm::{
     ensure_phase2_schema, CognitiveSwarmDispatcher, HttpLensInvoker, SqliteDebateStore,
 };
 use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, now_brt_rfc3339, parse_log_level_from_env};

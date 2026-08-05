@@ -54,7 +54,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use super::extensions::{is_excluded_dir, is_source_ext};
+use crate::cognition::context::extensions::{is_excluded_dir, is_source_ext};
 
 /// Constante de decaimento canonica do SODA para o `repo_heatmap`.
 ///

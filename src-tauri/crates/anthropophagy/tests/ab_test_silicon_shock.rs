@@ -8,8 +8,8 @@
 //
 // Executar: cargo run --example ab_test_silicon_shock
 
-use souls_mc_lib::finops::phase1_5::cloud_cascade::CascadeError;
-use souls_mc_lib::finops::phase1_5::local_distiller::{DistillationError, InferenceEngine, LocalDistiller};
+use anthropophagy::distillation::cloud_cascade::CascadeError;
+use anthropophagy::distillation::local_distiller::{DistillationError, InferenceEngine, LocalDistiller};
 use reqwest::Client as HttpClient;
 use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};

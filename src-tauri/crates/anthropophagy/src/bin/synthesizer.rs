@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use souls_mc_lib::cognition::synthesizer::{
+use anthropophagy::synthesizer::{
     run_phase3_sgr, Block0Context, Phase3Config, Phase3Error, DEFAULT_BLOCK3_MODEL_CANDIDATES,
     OFFICIAL_FORMATTER_MODEL,
 };
 use souls_mc_lib::finops::finops_router::{FinOpsRouter, RoutingDestination};
-use souls_mc_lib::harvester::community::{CommunityMetaFetcher, RateLimiter};
-use souls_mc_lib::persist::ssot_injector::SsotInjector;
-use souls_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, find_col_idx};
+use anthropophagy::harvester::community::{CommunityMetaFetcher, RateLimiter};
+use anthropophagy::persist::ssot_injector::SsotInjector;
+use anthropophagy::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, find_col_idx};
 use souls_mc_lib::telemetry::{append_plaintext_report, enable_virtual_terminal, init_cli_tracing, now_brt_rfc3339, parse_log_level_from_env};
 use reqwest::Client;
 use rusqlite::{params, Connection};
@@ -145,7 +145,7 @@ fn count_raw_blobs_distinct(conn: &Connection, repo_id: &str) -> io::Result<usiz
 }
 
 async fn read_master_header(spreadsheet_id: &str) -> io::Result<Vec<String>> {
-    let header_range = souls_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header_range = anthropophagy::synthesizer::master_solutions_header_range();
     let result = call_mcp(
         "read_values",
         json!({
@@ -630,10 +630,10 @@ fn update_local_status_after_manual_f4(conn: &Connection, repo_id: &str) -> io::
 fn build_dynamic_sheet_ranges_for_row(
     row_number_1based: u32,
     header_row: &[String],
-    row: &souls_mc_lib::cognition::synthesizer::MasterSolutionsRow,
+    row: &anthropophagy::synthesizer::MasterSolutionsRow,
 ) -> serde_json::Map<String, serde_json::Value> {
     let mut ranges = serde_json::Map::new();
-    let canonical_cols = souls_mc_lib::cognition::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS;
+    let canonical_cols = anthropophagy::synthesizer::MASTER_SOLUTIONS_CANONICAL_COLUMNS;
     let canonical_values = row.to_sheet_row();
     let mut by_name: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for (idx, name) in canonical_cols.iter().enumerate() {
@@ -642,13 +642,13 @@ fn build_dynamic_sheet_ranges_for_row(
             .cloned()
             .unwrap_or_default();
         by_name.insert(
-            souls_mc_lib::persist::sheets_utils::normalize_header_cell(name),
+            anthropophagy::persist::sheets_utils::normalize_header_cell(name),
             v,
         );
     }
 
     for (idx, header) in header_row.iter().enumerate() {
-        let key_norm = souls_mc_lib::persist::sheets_utils::normalize_header_cell(header);
+        let key_norm = anthropophagy::persist::sheets_utils::normalize_header_cell(header);
         if key_norm.is_empty() {
             continue;
         }
@@ -1561,7 +1561,7 @@ mod tests {
     }
 }
 
-impl souls_mc_lib::cognition::synthesizer::FormatterClient for OpenRouterFormatterClient {
+impl anthropophagy::synthesizer::FormatterClient for OpenRouterFormatterClient {
     fn format<'a>(
         &'a self,
         model: &'a str,
@@ -1811,7 +1811,7 @@ fn try_fetch_repo_heuristics_seed(
 fn try_fetch_repo_heuristics_row(
     conn: &Connection,
     repo_id: &str,
-) -> Option<souls_mc_lib::cognition::synthesizer::MasterSolutionsRow> {
+) -> Option<anthropophagy::synthesizer::MasterSolutionsRow> {
     let mut stmt = conn
         .prepare(
             "SELECT status_atualizacao, status_fase, project_name, repo_url,
@@ -1937,7 +1937,7 @@ fn try_fetch_repo_heuristics_row(
             Ok(serde_json::Value::Object(obj))
         })
         .ok()?;
-    serde_json::from_value::<souls_mc_lib::cognition::synthesizer::MasterSolutionsRow>(json_val).ok()
+    serde_json::from_value::<anthropophagy::synthesizer::MasterSolutionsRow>(json_val).ok()
 }
 
 fn fetch_block3_justifications(conn: &Connection, repo_id: &str) -> HashMap<String, String> {
@@ -2548,7 +2548,7 @@ async fn confirm_sheet_write(row_number_1based: u32, expected_repo_id: &str) -> 
 async fn inspect_row_width_a_to_cf(row_number_1based: u32) -> io::Result<usize> {
     let spreadsheet_id = std::env::var("GOOGLE_SHEETS_ID")
         .map_err(|_| io::Error::other("Missing GOOGLE_SHEETS_ID"))?;
-    let range = souls_mc_lib::cognition::synthesizer::sheet_range_for_row(row_number_1based);
+    let range = anthropophagy::synthesizer::sheet_range_for_row(row_number_1based);
     let result = call_mcp(
         "read_values",
         json!({
@@ -2922,7 +2922,7 @@ async fn main() -> io::Result<()> {
             .cloned()
             .unwrap_or_else(|| serde_json::json!({}));
 
-        let mut row: souls_mc_lib::cognition::synthesizer::MasterSolutionsRow =
+        let mut row: anthropophagy::synthesizer::MasterSolutionsRow =
             serde_json::from_value(row_val).map_err(|e| {
                 io::Error::other(format!("Falha ao decodificar MasterSolutionsRow do feedback: {}", e))
             })?;
@@ -3181,7 +3181,7 @@ async fn main() -> io::Result<()> {
     } else {
         0
     };
-    let phase1_5_ms = if e2e_full {
+    let distillation_ms = if e2e_full {
         run_phase_binary("f1_distiller_cli", &repo_id).await?
     } else {
         0
@@ -3527,7 +3527,7 @@ async fn main() -> io::Result<()> {
     );
 
     let e2e_full_total_cost_usd = phase2_cost_usd + usage.total_cost_usd;
-    let e2e_full_total_ms = phase1_ms + phase1_5_ms + phase2_ms + elapsed_phase3_4_ms;
+    let e2e_full_total_ms = phase1_ms + distillation_ms + phase2_ms + elapsed_phase3_4_ms;
     let report_path = etl_report_path(&root_dir, &repo_id)?;
     let mut report = String::new();
     report.push_str(&format!(

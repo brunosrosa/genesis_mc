@@ -43,7 +43,7 @@ pub struct CommunityPrMeta {
 impl CommunityMetaPayload {
     pub fn empty() -> Self {
         Self {
-            extracted_at: souls_mc_lib::telemetry::now_utc_rfc3339(),
+            extracted_at: crate::telemetry::now_utc_rfc3339(),
             licenca: "UNKNOWN".to_string(),
             ..Self::default()
         }
@@ -53,7 +53,7 @@ impl CommunityMetaPayload {
 impl Default for CommunityMetaPayload {
     fn default() -> Self {
         Self {
-            extracted_at: souls_mc_lib::telemetry::now_utc_rfc3339(),
+            extracted_at: crate::telemetry::now_utc_rfc3339(),
             stars_count: 0,
             forks_count: 0,
             open_issues_count: 0,

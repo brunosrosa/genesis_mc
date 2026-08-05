@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot};
-use souls_mc_lib::cognition::lean_vacuum;
+use souls_mc_lib::cognition::{context, lean_vacuum};
 use souls_mc_lib::cognition::context_compression; // SOULS-CANIBALIZED Marco 3.6: Conveyor Belt (CCR Lossless)
 use souls_mc_lib::cognition::memory_graph;
 use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
@@ -17,11 +17,7 @@ use souls_mc_lib::cognition::thinking::socratic_bridge::{
 };
 use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
 use souls_mc_lib::cognition::thinking::ThinkingEngine;
-use souls_mc_lib::harvester::ast_parser;
-use souls_mc_lib::harvester::community::RateLimiter;
-use souls_mc_lib::harvester::github_tracker;
-use souls_mc_lib::harvester::repo_radar;
-use souls_mc_lib::harvester::web_scraper;
+use souls_mc_lib::harvester::{ast_parser, community, github_tracker, repo_radar, web_scraper};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
@@ -1180,7 +1176,7 @@ async fn run_souls_smart_read(
             data: None,
         })?;
 
-    let result_text = lean_vacuum::smart_read::smart_read_text_for_lang(&content, budget, Some(path_str)).map_err(|(code, msg)| RpcError {
+    let result_text = context::souls_smart_read::smart_read_text_for_lang(&content, budget, Some(path_str)).map_err(|(code, msg)| RpcError {
         code,
         message: msg,
         data: None,
@@ -1522,7 +1518,7 @@ fn map_wasm_trap_to_rpc<E: std::fmt::Display>(err: &E) -> RpcError {
 }
 
 fn extract_rust_outline_signatures(code: &str) -> String {
-    lean_vacuum::smart_read::extract_outline_signatures(code)
+    context::souls_smart_read::extract_outline_signatures(code)
 }
 
 // =============================================================================
@@ -2348,7 +2344,7 @@ async fn run_repo_meta(params: &serde_json::Map<String, Value>) -> Result<Value,
             })),
         })?;
 
-    let limiter = RateLimiter;
+    let limiter = community::RateLimiter;
     let meta = github_tracker::fetch_community_meta_for_owner_repo(
         &normalized_owner_repo,
         &limiter,
@@ -2432,8 +2428,7 @@ fn format_github_meta_markdown(
     } else {
         for pr in &meta.recent_prs {
             out.push_str(&format!(
-                "- `#{}`
- `{}` updated `{}`\n  {}\n",
+                "- `#{}` `{}` updated `{}`\n  {}\n",
                 pr.number, pr.status, pr.updated_at, pr.title
             ));
         }

@@ -1,4 +1,5 @@
-use crate::finops::iron_cost::{IronCostBreaker, ModelTier, FinOpsError};
+use souls_mc_lib::finops::iron_cost::{IronCostBreaker, ModelTier, FinOpsError};
+use crate::swarm::SwarmDebate;
 use thiserror::Error;
 use tokio::join;
 
@@ -11,8 +12,6 @@ pub enum SwarmError {
 }
 
 pub struct CognitiveSwarmDispatcher;
-
-use crate::cognition::swarm::SwarmDebate;
 
 impl CognitiveSwarmDispatcher {
     pub async fn dispatch_swarm(

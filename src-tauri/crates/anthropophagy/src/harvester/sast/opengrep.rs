@@ -8,8 +8,8 @@ use super::{SandboxExecutor, SidecarError, SidecarExitPolicy, ScopedTextBlock, s
 
 pub const SEMGREP_SECURITY_RULE_FILE: &str = ".souls_semgrep_blob_06_security.yml";
 pub const SEMGREP_HEALTH_RULE_FILE: &str = ".souls_semgrep_blob_08_health.yml";
-const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../../semgrep/blob_06_security.yml");
-const SEMGREP_HEALTH_RULE_SOURCE: &str = include_str!("../../../semgrep/blob_08_health.yml");
+const SEMGREP_SECURITY_RULE_SOURCE: &str = include_str!("../../../../../semgrep/blob_06_security.yml");
+const SEMGREP_HEALTH_RULE_SOURCE: &str = include_str!("../../../../../semgrep/blob_08_health.yml");
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SemgrepRuleSet {
@@ -572,7 +572,7 @@ pub fn normalize_semgrep_payload(
         // o fim do scan e o registro da auditoria. Orquestrador pode
         // sobrescrever se quiser garantir coerencia de janela.
         opengrep_version: None,
-        audit_timestamp: Some(crate::telemetry::now_utc_rfc3339()),
+        audit_timestamp: Some(souls_mc_lib::telemetry::now_utc_rfc3339()),
     })
 }
 
@@ -617,7 +617,7 @@ fn render_semgrep_header(out: &mut String, payload: &SemgrepNormalizedPayload) {
     let ts = match payload.audit_timestamp.as_deref() {
         Some(v) => v,
         None => {
-            ts_owned = crate::telemetry::now_utc_rfc3339();
+            ts_owned = souls_mc_lib::telemetry::now_utc_rfc3339();
             ts_owned.as_str()
         }
     };

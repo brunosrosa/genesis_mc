@@ -5,6 +5,9 @@ description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
 
+[workspace]
+members = ["crates/anthropophagy"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
@@ -20,7 +23,6 @@ tauri-build = { version = "=2.6.3", features = [] }
 [dependencies]
 tauri = { version = "=2.11.5", features = ["tray-icon"], optional = true }
 tauri-plugin-opener = { version = "=2.5.4", optional = true }
-oxc = { version = "=0.120.0", features = ["ast_visit"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.149"  # SOULS-CANIBALIZED Fase 2.5: alinhar com pin do lean-ctx
 httparse = "=1.10.1"
@@ -35,20 +37,21 @@ pulldown-cmark = "=0.13.4"
 tinyrand = "=0.5.0"
 tokio = { version = "=1.51.1", features = ["full"] }  # SOULS-CANIBALIZED Fase 2.5: downgrade para pin do lean-ctx (1.52.3 quebrou path dep)
 sysinfo = "=0.30.13"
-thiserror = { version = "=2.0.18", default-features = false }
+thiserror = { version = "=2.0.19", default-features = false }  # SOULS-CANIBALIZED Marco 4.2.2: pin rígido v2.0.19 (unifica thiserror v2 no workspace; evita regressões de std/no_std)
 ignore = "=0.4.25"  # SOULS-CANIBALIZED Fase 2.5: alinhar com pin do lean-ctx
 dunce = "=1.0.5"
 tracing = "=0.1.44"
 url = "=2.5.8"
 sha2 = "=0.10.9"
-toml = "=1.1.2"
+toml = "=1.1.4"  # SOULS-CANIBALIZED Marco 4.2.2: pin rígido v1.1.4 (alinhado com spec 1.1.0 e parsers toml_writer/toml_parser)
 tiktoken = "=3.5.1"
-reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
+oxc = { version = "=0.120.0", features = ["ast_visit"] }
 astral-tl = "=0.7.11"
 gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
+quick-xml = "=0.39.4"
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
 rusqlite = { version = "=0.39.0", features = ["bundled"] }  # SOULS-CANIBALIZED Fase 2.5: downgrade 0.40.1→0.39.0 (libsqlite3-sys 0.37.0, sem cfg_select! unstable em rustc 1.94.1)
 sqlparser = "=0.62.0"
-quick-xml = "=0.39.4"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 tempfile = "=3.27.0"
 dotenvy = "=0.15.7"
@@ -61,7 +64,7 @@ memmap2 = "=0.9.11"
 # html-to-markdown-rs removido — extração de texto via astral-tl zero-copy
 enable-ansi-support = "=0.2.1"
 uuid = { version = "=1.23.4", features = ["v4"] }
-windows-sys = { version = "=0.59.0", features = [
+windows-sys = { version = "=0.61.2", features = [  # SOULS-CANIBALIZED Marco 4.2.2: unificação rígida v0.61.2 (alinhado com tokio 1.51, gix, tempfile e which; erradica duplicação em RAM - ADR-030)
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Authorization",
@@ -80,7 +83,6 @@ rustc-hash = "=2.1.3"
 which = "=6.0.3"
 zstd = "=0.13.3"
 walkdir = "=2.5.0"
-core_affinity = "0.8.1"
 dashmap = "6.1.0"
 similar = "=2.7.0"  # SOULS-CANIBALIZED Fase 3: Myers diff nativo (homologada; antes vinha como dep transitiva do lean-ctx)
 wasmtime = { version = "=29.0.0", features = ["wat"] }

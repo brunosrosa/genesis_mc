@@ -5,10 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use tinyrand::Rand;
-use souls_mc_lib::harvester::canon::CANON_GLOBAL_REPO_ID;
-use souls_mc_lib::harvester::router::{BlobSelection, PHASE0_BLOB_TYPES};
-use souls_mc_lib::harvester::orchestrator::HarvesterOrchestrator;
-use souls_mc_lib::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
+use anthropophagy::harvester::canon::CANON_GLOBAL_REPO_ID;
+use anthropophagy::harvester::router::{BlobSelection, PHASE0_BLOB_TYPES};
+use anthropophagy::harvester::orchestrator::HarvesterOrchestrator;
+use anthropophagy::persist::sheets_utils::{col_idx_to_a1, extract_values_2d_strict, normalize_header_cell};
 use souls_mc_lib::telemetry::{append_plaintext_report, dynamic_wyrand, enable_virtual_terminal, init_cli_tracing, now_brt_rfc3339, parse_log_level_from_env};
 use reqwest::Client;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -650,7 +650,7 @@ fn compute_missing_blobs(present: &[String], expected: &[String]) -> Vec<String>
 async fn fetch_harvester_batch_candidates(
     spreadsheet_id: &str,
 ) -> Result<(Vec<BatchCandidate>, MasterCols), String> {
-    let header_range = souls_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header_range = anthropophagy::synthesizer::master_solutions_header_range();
     let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone()).await?;
     let header_row = header
         .first()
@@ -892,7 +892,7 @@ async fn process_one_repo_f0(
 
     let max_attempts: u32 = 4;
     let mut attempt: u32 = 0;
-    let mut res: Result<(), souls_mc_lib::harvester::orchestrator::OrchestratorError> = Ok(());
+    let mut res: Result<(), anthropophagy::harvester::orchestrator::OrchestratorError> = Ok(());
     while attempt < max_attempts {
         match HarvesterOrchestrator::run(
             repo_id,
@@ -1204,7 +1204,7 @@ async fn process_one_repo_f0_direct(
     let conn_arc = Arc::new(Mutex::new(conn));
     let max_attempts: u32 = 4;
     let mut attempt: u32 = 0;
-    let mut res: Result<(), souls_mc_lib::harvester::orchestrator::OrchestratorError> = Ok(());
+    let mut res: Result<(), anthropophagy::harvester::orchestrator::OrchestratorError> = Ok(());
     while attempt < max_attempts {
         match HarvesterOrchestrator::run(
             repo_id,
@@ -1449,7 +1449,7 @@ fn resolve_master_cols(header_row: &[String]) -> Result<MasterCols, String> {
 }
 
 async fn gate_harvester_by_sheet(spreadsheet_id: &str, repo_id: &str) -> Result<(u32, MasterCols, usize), String> {
-    let header_range = souls_mc_lib::cognition::synthesizer::master_solutions_header_range();
+    let header_range = anthropophagy::synthesizer::master_solutions_header_range();
     let header = get_sheet_data(spreadsheet_id, "MASTER_SOLUTIONS", header_range.clone()).await?;
     let header_row = header
         .first()

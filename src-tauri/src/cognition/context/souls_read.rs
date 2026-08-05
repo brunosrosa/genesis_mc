@@ -147,6 +147,41 @@ pub fn lightweight_cleanup(content: &str) -> String {
     result.join("\n")
 }
 
+use std::path::Path;
+use super::ansi_filter::strip_ansi;
+
+/// Limite rígido de leitura de arquivo: 5 MB.
+pub const MAX_READ_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Orquestrador nativo do Saco a Vácuo:
+/// 1. `strip_ansi` (remove sequências de escape ANSI)
+/// 2. `aggressive_compress` (remove comentários por extensão)
+/// 3. `lightweight_cleanup` (colapsa blank lines + brace runs)
+pub fn compress_to_lean(text: &str, ext: Option<&str>) -> String {
+    let stripped = strip_ansi(text);
+    let compressed = aggressive_compress(&stripped, ext);
+    lightweight_cleanup(&compressed)
+}
+
+/// Lê um arquivo do disco aplicando o pipeline `compress_to_lean`.
+pub fn read_to_lean(path: &Path) -> std::io::Result<String> {
+    let metadata = std::fs::metadata(path)?;
+    if metadata.len() > MAX_READ_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "Arquivo excede o limite rígido de {} bytes ({} bytes reais). \
+                 O Saco a Vácuo nativo do SOULS recusa payloads >5MB para proteger a VRAM.",
+                MAX_READ_BYTES,
+                metadata.len()
+            ),
+        ));
+    }
+    let raw = std::fs::read_to_string(path)?;
+    let ext = path.extension().and_then(|e| e.to_str());
+    Ok(compress_to_lean(&raw, ext))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

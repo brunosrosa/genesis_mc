@@ -10,7 +10,7 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use souls_mc_lib::persist::ssot_injector::ReqwestGoogleWorkspaceSheetsClient;
+use anthropophagy::persist::ssot_injector::ReqwestGoogleWorkspaceSheetsClient;
 use souls_mc_lib::telemetry::{enable_virtual_terminal, init_cli_tracing, parse_log_level_from_env};
 
 const MASTER_SOLUTIONS_SHEET: &str = "MASTER_SOLUTIONS";
@@ -59,7 +59,7 @@ impl OutboxSheetsClient for ReqwestGoogleWorkspaceSheetsClient {
         sheet: &'a str,
         range: String,
     ) -> SheetsDataFuture<'a> {
-        souls_mc_lib::persist::ssot_injector::SheetsClient::get_sheet_data(
+        anthropophagy::persist::ssot_injector::SheetsClient::get_sheet_data(
             self,
             spreadsheet_id,
             sheet,
@@ -73,7 +73,7 @@ impl OutboxSheetsClient for ReqwestGoogleWorkspaceSheetsClient {
         sheet: &'a str,
         ranges: Value,
     ) -> SheetsFuture<'a> {
-        souls_mc_lib::persist::ssot_injector::SheetsClient::batch_update_cells(
+        anthropophagy::persist::ssot_injector::SheetsClient::batch_update_cells(
             self,
             spreadsheet_id,
             sheet,
