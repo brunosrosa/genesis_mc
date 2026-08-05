@@ -248,8 +248,77 @@ impl<'a> ByteCursor<'a> {
     }
 }
 
-/// Extrai metadados do cabeçalho GGUF em O(1) e Zero-Copy via memmap2 (sem carregar tensores em RAM).
+use std::collections::HashMap;
+use std::sync::{RwLock, LazyLock};
+use std::time::SystemTime;
+
+/// Cache thread-safe de metadados GGUF O(1) para evitar mmap2 síncrono duplo (ADR-027 / Marco 4.2.8)
+pub struct GgufMetadataCache {
+    cache: RwLock<HashMap<PathBuf, (u64, SystemTime, ModelMetadata)>>,
+}
+
+impl GgufMetadataCache {
+    pub fn new() -> Self {
+        Self {
+            cache: RwLock::new(HashMap::new()),
+        }
+    }
+
+    pub fn get_or_parse(&self, file_path: &Path) -> Option<ModelMetadata> {
+        let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.to_path_buf());
+        let fs_meta = fs::metadata(&canonical_path).ok()?;
+        let file_size = fs_meta.len();
+        let mtime = fs_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+
+        if let Ok(guard) = self.cache.read() {
+            if let Some((cached_size, cached_mtime, cached_meta)) = guard.get(&canonical_path) {
+                if *cached_size == file_size && *cached_mtime == mtime {
+                    return Some(cached_meta.clone());
+                }
+            }
+        }
+
+        let parsed = parse_gguf_metadata_zero_copy_uncached(&canonical_path)?;
+        if let Ok(mut guard) = self.cache.write() {
+            guard.insert(canonical_path, (file_size, mtime, parsed.clone()));
+        }
+        Some(parsed)
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut guard) = self.cache.write() {
+            guard.clear();
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        if let Ok(guard) = self.cache.read() {
+            guard.len()
+        } else {
+            0
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl Default for GgufMetadataCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub static GLOBAL_GGUF_METADATA_CACHE: LazyLock<GgufMetadataCache> = LazyLock::new(GgufMetadataCache::new);
+
+/// Extrai metadados do cabeçalho GGUF em O(1) e Zero-Copy via cache RAM (sem mmap2 duplicado).
 pub fn parse_gguf_metadata_zero_copy(file_path: &Path) -> Option<ModelMetadata> {
+    GLOBAL_GGUF_METADATA_CACHE.get_or_parse(file_path)
+}
+
+/// Extrai metadados do cabeçalho GGUF em O(1) e Zero-Copy via memmap2 (sem carregar tensores em RAM).
+pub fn parse_gguf_metadata_zero_copy_uncached(file_path: &Path) -> Option<ModelMetadata> {
     let f = File::open(file_path).ok()?;
     let meta = f.metadata().ok()?;
     let file_size = meta.len();

@@ -1,4 +1,5 @@
 use thiserror::Error;
+pub use crate::core::model_registry::{GgufMetadataCache, GLOBAL_GGUF_METADATA_CACHE};
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ModelManagerError {

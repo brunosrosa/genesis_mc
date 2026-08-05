@@ -37,6 +37,71 @@ fn get_global_llama_backend() -> Result<&'static LlamaBackend, InferenceError> {
 
 pub struct LlamaCppEngine;
 
+use tokio::sync::{mpsc, oneshot};
+
+/// Job de inferência para a Thread Dedicada de Trabalho (ADR-027 / Marco 4.2.8)
+pub struct DedicatedInferenceJob {
+    pub request: SoulsInferenceRequest,
+    pub thermal_rx: Option<watch::Receiver<SystemState>>,
+    pub responder: oneshot::Sender<Result<SoulsInferenceResponse, InferenceError>>,
+}
+
+/// Gerenciador da Thread Dedicada de Inferência (isola inferência de tensores da pool do Tokio)
+pub struct DedicatedInferenceWorker {
+    tx: mpsc::Sender<DedicatedInferenceJob>,
+}
+
+impl DedicatedInferenceWorker {
+    pub fn new(channel_capacity: usize) -> Self {
+        let (tx, mut rx) = mpsc::channel::<DedicatedInferenceJob>(channel_capacity);
+
+        std::thread::Builder::new()
+            .name("llama-dedicated-worker".to_string())
+            .spawn(move || {
+                tracing::info!("Llama Dedicated Worker Thread iniciada e isolada do scheduler Tokio.");
+                let _ = crate::core::model_manager::pin_critic_worker_thread_affinity(&[0, 1, 2, 3]);
+
+                while let Some(job) = rx.blocking_recv() {
+                    let engine = LlamaCppEngine;
+                    let result = engine.run_inference(job.request, job.thermal_rx);
+                    let _ = job.responder.send(result);
+                }
+                tracing::info!("Llama Dedicated Worker Thread encerrada.");
+            })
+            .expect("Falha ao inicializar Llama Dedicated Worker Thread");
+
+        Self { tx }
+    }
+
+    pub async fn run_async(
+        &self,
+        request: SoulsInferenceRequest,
+        thermal_rx: Option<watch::Receiver<SystemState>>,
+    ) -> Result<SoulsInferenceResponse, InferenceError> {
+        let (responder, receiver) = oneshot::channel();
+        let job = DedicatedInferenceJob {
+            request,
+            thermal_rx,
+            responder,
+        };
+
+        self.tx
+            .send(job)
+            .await
+            .map_err(|_| InferenceError::ExecutionError("Canal de retropressão da worker thread fechado".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| InferenceError::ExecutionError("Worker thread dedicada respondeu nulo".to_string()))?
+    }
+}
+
+pub static GLOBAL_DEDICATED_WORKER: OnceLock<DedicatedInferenceWorker> = OnceLock::new();
+
+pub fn get_global_dedicated_worker() -> &'static DedicatedInferenceWorker {
+    GLOBAL_DEDICATED_WORKER.get_or_init(|| DedicatedInferenceWorker::new(16))
+}
+
 fn build_chat_prompt(system: &str, few_shot: &[(String, String)], user_query: &str) -> String {
     let mut prompt = String::new();
     if !system.trim().is_empty() {
@@ -560,6 +625,51 @@ mod tests {
                 assert!(msg.contains("bitnet.cpp/mamba-ssm"), "Mensagem de erro deveria explicar a causa: {msg}");
             }
             _ => panic!("Esperava InferenceError::ExecutionError com PENDING_ENGINE"),
+        }
+    }
+
+    #[test]
+    fn test_gguf_metadata_cache_zero_copy_single_mmap() {
+        use crate::core::model_registry::GLOBAL_GGUF_METADATA_CACHE;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let fake_gguf = temp_dir.path().join("test_model.gguf");
+        // GGUF header mínimo válido (24 bytes): "GGUF" + version(3) + tensor_count(0) + kv_count(0)
+        let mut header = vec![b'G', b'G', b'U', b'F'];
+        header.extend_from_slice(&3u32.to_le_bytes());
+        header.extend_from_slice(&0u64.to_le_bytes());
+        header.extend_from_slice(&0u64.to_le_bytes());
+        std::fs::write(&fake_gguf, &header).unwrap();
+
+        let meta1 = GLOBAL_GGUF_METADATA_CACHE.get_or_parse(&fake_gguf);
+        assert!(meta1.is_some(), "Primeira leitura de metadados GGUF deve suceder");
+
+        let cache_len_before = GLOBAL_GGUF_METADATA_CACHE.len();
+        assert!(cache_len_before >= 1, "Cache deve conter a entrada");
+
+        let meta2 = GLOBAL_GGUF_METADATA_CACHE.get_or_parse(&fake_gguf);
+        assert!(meta2.is_some(), "Segunda leitura GGUF deve vir em O(1) do cache");
+        assert_eq!(meta1.unwrap(), meta2.unwrap(), "Metadados cacheados devem ser idênticos");
+    }
+
+    #[tokio::test]
+    async fn test_dedicated_worker_mpsc_dispatch() {
+        let worker = DedicatedInferenceWorker::new(4);
+        let req = SoulsInferenceRequest {
+            model_path: "/dev/null/non_existent.gguf".to_string(),
+            system_prompt: "".to_string(),
+            few_shot_examples: vec![],
+            user_query: "hello".to_string(),
+            max_tokens: 5,
+            min_p: 0.05,
+            temperature: 0.7,
+            json_schema: None,
+        };
+
+        let result = worker.run_async(req, None).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            InferenceError::ModelNotFound(_) => {}
+            err => panic!("Esperava ModelNotFound, obteve: {err:?}"),
         }
     }
 }
