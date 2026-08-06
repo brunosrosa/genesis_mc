@@ -19,6 +19,7 @@ pub mod v3_ignition_tests;
 
 // SOULS V4 — Topologia dos 8 motores de inferencia (stubs conformantes sob EphemeralInferEngine).
 pub mod llama_logit_probing;
+pub mod epistemic_prober; // SOULS-CANIBALIZED Marco 4.9.3: Avaliador Epistêmico (Hipocampo) - trait síncrono CPU/AVX2
 pub mod mistral_sidecar;
 pub mod bitnet_engine;
 pub mod pulp_matrix_engine;

@@ -26,6 +26,11 @@ use sqlparser::ast::Statement as SqlStatement;
 use sqlparser::dialect::SQLiteDialect;
 use sqlparser::parser::Parser;
 use url::Url;
+// SOULS-CANIBALIZED Marco 4.9.4: Avaliador Epistêmico (Hipocampo CPU/AVX2).
+use souls_mc_lib::core::epistemic_prober::{
+    EpistemicProber, EpistemicRequest, LlamaCppEpistemicProber,
+};
+use souls_mc_lib::core::llama_logit_probing::LlamaLogitProber;
 
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -481,7 +486,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     { "name": "metrics", "description": "[Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "intent", "description": "[Stub] Detector de intent do tool call (read/edit/search) em roadmap. Aliases: intent | souls_intent | ctx_intent.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "intent", "description": "Avalia a ambiguidade, risco relacional e consistência de memória de um prompt antes do disparo de inferência.", "inputSchema": { "type": "object", "properties": { "prompt": { "type": "string" }, "session_id": { "type": "string" }, "memory_window": { "type": "array", "items": { "type": "string" } } }, "required": ["prompt"], "additionalProperties": false } },
                     // ============================================================
                     // SOULS-CANIBALIZED Marco 3.5: 9 tools do `souls_graph` + 1 do `souls_thinking` (core_think)
                     // ============================================================
@@ -836,7 +841,8 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "merge_sessions" => run_souls_merge_sessions(params).await,
         // ============ Stubs ============
         "semantic_search" => run_semantic_search_handler(params).await,
-        "metrics" | "intent" => Ok(stub_not_implemented_yet(tool_name)),
+        "metrics" => Ok(stub_not_implemented_yet(tool_name)),
+        "intent" => run_intent(params).await,
         "execute" => Ok(stub_sandbox_audit_pending(tool_name)),
         "shell" => run_souls_shell(params).await,
         // ============ Grafo de Memória e Thinking ============
@@ -1982,6 +1988,111 @@ fn stub_sandbox_audit_pending(tool_name: &str) -> Value {
         }],
         "is_error": true
     })
+}
+
+// =============================================================================
+// SOULS-CANIBALIZED Marco 4.9.5: `intent` — Detector de Intent Epistêmico.
+//
+// Canibaliza a "Alma Matematica" do Logit Probing Epistêmico (ADR-028/034):
+//   1. Extrai logits brutos do `LlamaLogitProber` (prefill puro, sem decoding).
+//   2. Aplica softmax numericamente estável (subtrai max antes de exp).
+//   3. Computa entropia de Shannon sobre Top-50, normalizada por log2(50).
+//   4. Verbalizadores binários (safe/unsafe, align/conflict) no vocab split.
+//
+// **Stub honesto:** o engine atual é FNV-1a sintético (mock CPU/AVX2, 128
+// logits determinísticos). O bind com modelos GGUF reais fica para o
+// Marco 4.9.6 — quando a alocação O(1) de modelos do `model_manager`
+// for plugada ao orquestrador.
+//
+// **Lei ADR-027 (Termodinâmica VRAM):** zero alocação GPU; pure CPU/AVX2.
+// **Lei ADR-034 (Logit Probing):** zero completion tokens emitidos.
+// **Isolamento Tokio:** probe síncrono é despachado em `spawn_blocking`
+// para não bloquear o event loop do servidor MCP.
+// =============================================================================
+
+async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+
+    // 1. Validar `prompt` (obrigatório, string).
+    let prompt = args
+        .get("prompt")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "intent: parâmetro 'prompt' é obrigatório e deve ser string não-vazia"
+                .to_string(),
+            data: None,
+        })?;
+
+    // 2. Extrair `session_id` (opcional; default "anonymous" para correlação).
+    let session_id = args
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or("anonymous");
+
+    // 3. Extrair `memory_window` (opcional; ordem de Frecency desc).
+    let memory_window: Vec<String> = args
+        .get("memory_window")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // 4. Construir request canônico.
+    let req = EpistemicRequest {
+        prompt: prompt.to_string(),
+        session_id: session_id.to_string(),
+        memory_window,
+    };
+
+    // 5. Probe síncrono isolado em `spawn_blocking` (não bloqueia Tokio).
+    //    O engine mock é construído dentro do closure para que a referência
+    //    ao `LlamaLogitProber` tenha lifetime válido no escopo bloqueante.
+    let probe_result = tokio::task::spawn_blocking(move || {
+        let engine = LlamaLogitProber::new();
+        let prober = LlamaCppEpistemicProber {
+            logit_engine: &engine,
+        };
+        prober.probe(&req)
+    })
+    .await
+    .map_err(|join_err| RpcError {
+        code: -32000,
+        message: format!("intent: spawn_blocking falhou: {join_err}"),
+        data: None,
+    })?;
+
+    // 6. Mapear erro do prober para RpcError estruturado.
+    let scores = probe_result.map_err(|probe_err| RpcError {
+        code: -32000,
+        message: format!("intent: prober epistêmico falhou: {probe_err}"),
+        data: None,
+    })?;
+
+    // 7. Disjuntor de segurança: abortar inferência se o prompt for vago
+    //    demais (amb > 0.80) ou com risco relacional elevado (risco > 0.70).
+    //    Estes limiares estão alinhados com os testes TDD do Marco 4.9.4.
+    let disjuntor_ativo = scores.ambiguidade > 0.80 || scores.risco_relacional > 0.70;
+
+    // 8. Payload canônico flat (4 campos obrigatórios do contrato MCP).
+    let payload = json!({
+        "ambiguidade": scores.ambiguidade,
+        "risco_relacional": scores.risco_relacional,
+        "conflito_memoria": scores.conflito_memoria,
+        "disjuntor_ativo": disjuntor_ativo,
+    });
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&payload)
+                .unwrap_or_default()
+        }],
+        "is_error": false
+    }))
 }
 
 async fn run_repo_ast(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
@@ -4854,6 +4965,9 @@ mod tests {
         workspace_root,
     };
     use super::thinking::persistence::ThoughtType;
+    // SOULS-CANIBALIZED Marco 4.9.4: `Value` e `json` para os helpers
+    // `intent_params`/`extract_intent_payload` e a suíte TDD do handler MCP `intent`.
+    use serde_json::{Value, json};
     // Helpers socráticos (open_socratic_state_db, build_socratic_tree,
     // render_socratic_markdown) são importados localmente em cada teste
     // via `use souls_mc_lib::cognition::thinking::test_helpers::{...}`
@@ -5718,8 +5832,10 @@ mod tests {
             );
         }
 
-        // 5. Marco 4.1.3: 3 stubs com descricao "honesta" (sem mentira "not_implemented_yet").
-        for tool in &["execute", "metrics", "intent"] {
+        // 5. Marco 4.1.3: 2 stubs com descricao "honesta" (sem mentira "not_implemented_yet").
+        // SOULS-CANIBALIZED Marco 4.9.4: `intent` foi canibalizado pelo Hipocampo
+        // (LlamaCppEpistemicProber). Saiu da lista de stubs honestos.
+        for tool in &["execute", "metrics"] {
 
             let desc = find_desc(tool).expect("{tool} deve existir");
             assert!(
@@ -6856,6 +6972,230 @@ mod tests {
             last.parent_thought_id.as_deref(),
             Some(format!("th_{}", N_THOUGHTS - 1).as_str()),
             "th_10000 deve ter parent = th_9999"
+        );
+    }
+
+    // =========================================================================
+    // SOULS-CANIBALIZED Marco 4.9.5: TDD do handler MCP `intent`.
+    // Valida que o slot stub `intent` foi corretamente canibalizado pelo
+    // `LlamaCppEpistemicProber` (entropia de Shannon Top-K + verbalizadores).
+    // =========================================================================
+
+    /// Helper: constrói um params Map canônico para o tool `intent`.
+    fn intent_params(prompt: &str, session_id: Option<&str>, mem: Vec<&str>) -> serde_json::Map<String, Value> {
+        let mut args = serde_json::Map::new();
+        args.insert("prompt".to_string(), Value::String(prompt.to_string()));
+        if let Some(sid) = session_id {
+            args.insert("session_id".to_string(), Value::String(sid.to_string()));
+        }
+        if !mem.is_empty() {
+            let arr: Vec<Value> = mem.into_iter().map(|s| Value::String(s.to_string())).collect();
+            args.insert("memory_window".to_string(), Value::Array(arr));
+        }
+        let mut params = serde_json::Map::new();
+        params.insert("name".to_string(), Value::String("intent".to_string()));
+        params.insert("arguments".to_string(), Value::Object(args));
+        params
+    }
+
+    /// Helper: desserializa o payload JSON dentro de `content[0].text`.
+    fn extract_intent_payload(resp: &Value) -> Value {
+        let text = resp["content"][0]["text"]
+            .as_str()
+            .expect("intent deve retornar content[0].text");
+        serde_json::from_str(text).expect("text deve ser JSON válido")
+    }
+
+    #[tokio::test]
+    async fn intent_handler_vague_prompt_yields_high_ambiguity() {
+        let params = intent_params("edite o config", Some("sess-tdd-vago"), vec![]);
+        let resp = super::run_intent(&params)
+            .await
+            .expect("handler nao deve retornar Err");
+        assert_eq!(resp["is_error"], Value::Bool(false));
+        let payload = extract_intent_payload(&resp);
+        // SOULS-CANIBALIZED Marco 4.9.4: schema flat com `disjuntor_ativo`.
+        assert_eq!(payload["disjuntor_ativo"], Value::Bool(true));
+        let amb = payload["ambiguidade"].as_f64().expect("f64 ambiguidade");
+        assert!(
+            amb > 0.75,
+            "prompt vago deve dar ambiguidade > 0.75, foi {amb}"
+        );
+    }
+
+    #[tokio::test]
+    async fn intent_handler_precise_prompt_yields_low_ambiguity() {
+        let params = intent_params(
+            "Edite o arquivo src-tauri/src/core/llama_logit_probing.rs adicionando \
+             o tipo EpistemicProber síncrono com método probe(&self, &EpistemicRequest) \
+             retornando EpistemicScores.",
+            Some("sess-tdd-preciso"),
+            vec!["mem_a", "mem_b"],
+        );
+        let resp = super::run_intent(&params)
+            .await
+            .expect("handler nao deve retornar Err");
+        let payload = extract_intent_payload(&resp);
+        // SOULS-CANIBALIZED Marco 4.9.4: schema flat com `disjuntor_ativo`.
+        let amb = payload["ambiguidade"].as_f64().expect("f64 ambiguidade");
+        assert!(
+            amb < 0.25,
+            "prompt preciso deve dar ambiguidade < 0.25, foi {amb}"
+        );
+        let risco = payload["risco_relacional"].as_f64().expect("f64 risco_relacional");
+        assert!(
+            amb <= 0.80 && risco <= 0.70,
+            "preciso deve manter disjuntor desarmado, foi amb={amb} risco={risco}"
+        );
+        assert_eq!(payload["disjuntor_ativo"], Value::Bool(false));
+    }
+
+    #[tokio::test]
+    async fn intent_handler_missing_prompt_returns_rpc_error() {
+        let mut args = serde_json::Map::new();
+        args.insert("session_id".to_string(), Value::String("s".to_string()));
+        let mut params = serde_json::Map::new();
+        params.insert("name".to_string(), Value::String("intent".to_string()));
+        params.insert("arguments".to_string(), Value::Object(args));
+        let err = super::run_intent(&params)
+            .await
+            .expect_err("sem 'prompt' deve retornar Err");
+        assert_eq!(err.code, -32602, "JSON-RPC: -32602 = Invalid params");
+        assert!(
+            err.message.contains("prompt"),
+            "mensagem deve mencionar 'prompt': {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn intent_handler_empty_prompt_fails_closed() {
+        // A validação de string vazia fica dentro do prober (fail-closed).
+        let params = intent_params("   \n  ", Some("s"), vec![]);
+        let err = super::run_intent(&params)
+            .await
+            .expect_err("prompt so com whitespace deve falhar");
+        assert_eq!(err.code, -32000);
+        assert!(err.message.contains("PromptVazio") || err.message.contains("vazio"));
+    }
+
+    #[tokio::test]
+    async fn intent_handler_dispatch_no_longer_stub() {
+        // Garante que o dispatch MCP raiz roteia `intent` para o handler real
+        // (nao para `stub_not_implemented_yet`). Invocação via tools/call JSON-RPC.
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "intent",
+                "arguments": {
+                    "prompt": "edite o config",
+                    "session_id": "sess-dispatch-test"
+                }
+            }
+        });
+        let resp = super::handle_mcp(req)
+            .await
+            .expect("handle_mcp nao deve retornar Err");
+        assert!(resp.get("error").is_none(), "tools/call intent nao deve dar erro: {resp}");
+        let payload = extract_intent_payload(&resp["result"]);
+        // SOULS-CANIBALIZED Marco 4.9.4: schema flat com `ambiguidade` direta.
+        assert!(payload["ambiguidade"].as_f64().unwrap() > 0.5);
+    }
+
+    // =========================================================================
+    // SOULS-CANIBALIZED Marco 4.9.4: TDD canônico do disjuntor de inferência.
+    // Spec DIRETRIZ 3: valida `disjuntor_ativo` (true|vago, false|cirúrgico)
+    // via chamada JSON-RPC completa `tools/call` ao MCP.
+    // =========================================================================
+
+    /// Spec DIRETRIZ 3: simulação JSON-RPC end-to-end do disjuntor de inferência.
+    /// Caso 1: prompt vago "edite o config" → disjuntor_ativo=true, ambiguidade elevada.
+    /// Caso 2: prompt cirúrgico (path + tipo + assinatura) → disjuntor_ativo=false.
+    #[tokio::test]
+    async fn test_mcp_intent_tool_evaluation() {
+        // ---------- Caso 1: prompt vago ----------
+        let req_vago = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "intent",
+                "arguments": {
+                    "prompt": "edite o config",
+                    "session_id": "sess-marco-4.9.4-vago"
+                }
+            }
+        });
+        let resp_vago = super::handle_mcp(req_vago)
+            .await
+            .expect("tools/call vago nao deve retornar Err");
+        assert!(
+            resp_vago.get("error").is_none(),
+            "tools/call intent vago nao deve retornar erro JSON-RPC: {resp_vago}"
+        );
+        let payload_vago = extract_intent_payload(&resp_vago["result"]);
+        // Asserções canônicas (spec DIRETRIZ 2 e 3).
+        let amb_vago = payload_vago["ambiguidade"]
+            .as_f64()
+            .expect("ambiguidade deve ser f64");
+        assert!(
+            amb_vago > 0.80,
+            "prompt vago deve dar ambiguidade > 0.80, foi {amb_vago}"
+        );
+        assert_eq!(
+            payload_vago["disjuntor_ativo"],
+            Value::Bool(true),
+            "disjuntor_ativo deve ser true para prompt vago (amb={amb_vago})"
+        );
+        // Contrato MCP: 4 campos obrigatórios.
+        for field in &["ambiguidade", "risco_relacional", "conflito_memoria", "disjuntor_ativo"] {
+            assert!(
+                payload_vago.get(*field).is_some(),
+                "payload vago deve conter campo obrigatório '{field}'"
+            );
+        }
+
+        // ---------- Caso 2: prompt cirúrgico ----------
+        let prompt_cirurgico = "Edite o arquivo src-tauri/src/core/llama_logit_probing.rs \
+             adicionando o trait EpistemicProber síncrono com método probe(\
+             &self, &EpistemicRequest) retornando EpistemicScores. \
+             Implemente também LlamaCppEpistemicProber<'a>.";
+        let req_cirurgico = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "intent",
+                "arguments": {
+                    "prompt": prompt_cirurgico,
+                    "session_id": "sess-marco-4.9.4-cirurgico",
+                    "memory_window": ["mem_a", "mem_b", "mem_c"]
+                }
+            }
+        });
+        let resp_cirurgico = super::handle_mcp(req_cirurgico)
+            .await
+            .expect("tools/call cirurgico nao deve retornar Err");
+        assert!(
+            resp_cirurgico.get("error").is_none(),
+            "tools/call intent cirurgico nao deve retornar erro JSON-RPC: {resp_cirurgico}"
+        );
+        let payload_cirurgico = extract_intent_payload(&resp_cirurgico["result"]);
+        let amb_cirurgico = payload_cirurgico["ambiguidade"]
+            .as_f64()
+            .expect("ambiguidade deve ser f64");
+        let risco_cirurgico = payload_cirurgico["risco_relacional"]
+            .as_f64()
+            .expect("risco_relacional deve ser f64");
+        assert!(
+            amb_cirurgico <= 0.80 && risco_cirurgico <= 0.70,
+            "prompt cirurgico deve manter disjuntor desarmado: amb={amb_cirurgico} risco={risco_cirurgico}"
+        );
+        assert_eq!(
+            payload_cirurgico["disjuntor_ativo"],
+            Value::Bool(false),
+            "disjuntor_ativo deve ser false para prompt cirurgico (amb={amb_cirurgico}, risco={risco_cirurgico})"
         );
     }
 }
