@@ -1,5 +1,5 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
-GERADO EM: 2026-08-05 17:43:38
+GERADO EM: 2026-08-05 20:40:55
 TOTAL DE FERRAMENTAS: 48
 ----------------------------------------------------------------------------------------------------
 • analyze_session: Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.
@@ -31,7 +31,7 @@ TOTAL DE FERRAMENTAS: 48
 • mem_read_graph: Lê o grafo inteiro (entities + relations) com LIMIT defensivo (default: 500).
 • mem_search: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
 • merge_sessions: Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual.
-• metrics: [Stub] Metricas FinOps (tokens lidos/salvos, hit-rate cache) em roadmap. Aliases: metrics | souls_metrics | ctx_metrics.
+• metrics: [Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.
 • multi_read: Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.
 • outline: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline)
 • read: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).

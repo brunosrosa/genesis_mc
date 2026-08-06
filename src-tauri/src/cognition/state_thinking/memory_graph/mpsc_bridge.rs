@@ -1,17 +1,17 @@
 //! Bridge MPSC do `souls_graph`.
 //!
-//! O canal `tokio::sync::mpsc` (buffer 100) é extendido a partir do padrão
-//! `StateDbOp` existente em `souls_mcp_server.rs`. O worker consome operações
-//! via `blocking_recv` em uma `std::thread` dedicada, mantendo `rusqlite`
-//! síncrono e isolado do event loop do Tokio (sem `spawn_blocking`).
+//! O canal `tokio::sync::mpsc` (buffer 100) é estendido a partir do padrão
+//! `StateDbOp`. O worker consome operações via `blocking_recv` em uma `std::thread`
+//! dedicada, mantendo `rusqlite` síncrono e isolado do event loop do Tokio.
 //!
 //! Operações: CreateEntities, CreateRelations, AddObservations, Search,
 //! OpenNodes, ReadGraph, DeleteEntities, DeleteObservations, DeleteRelations.
 
 use crate::cognition::memory_graph::ops;
 use crate::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
+use crate::cognition::thinking::ops::migrate_v3_to_v5;
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use tokio::sync::{mpsc, oneshot};
 
@@ -78,9 +78,9 @@ pub fn spawn_memory_graph_worker(
         let _ = conn.execute_batch("PRAGMA foreign_keys = ON;");
         let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
 
-        // Migração V1→V2 no boot do worker (idempotente, requer &mut).
-        if let Err(e) = ops::migrate_v1_to_v2(&mut conn) {
-            eprintln!("[MemGraphWorker] ERRO na migração V1→V2: {e}");
+        // Migração V5 no boot do worker (idempotente).
+        if let Err(e) = migrate_v3_to_v5(&mut conn) {
+            eprintln!("[MemGraphWorker] ERRO na migração V5: {e}");
         }
 
         while let Some(op) = rx.blocking_recv() {
@@ -112,13 +112,12 @@ pub fn spawn_memory_graph_worker(
                     let _ = reply.send(r);
                 }
                 MemGraphOp::AddObservations { observations, reply } => {
-                    let count: usize = observations.iter().map(|o| o.contents.len()).sum();
                     let r = ops::add_observations(&mut conn, &observations)
-                        .map(|_| {
+                        .map(|records| {
                             json!({
                                 "content": [{
                                     "type": "text",
-                                    "text": format!("{count} observação(ões) adicionada(s).")
+                                    "text": format!("{} observação(ões) adicionada(s).", records.len())
                                 }]
                             })
                         })
@@ -174,8 +173,9 @@ pub fn spawn_memory_graph_worker(
                     let _ = reply.send(r);
                 }
                 MemGraphOp::DeleteObservations { deletions, reply } => {
-                    let count: usize = deletions.iter().map(|d| d.contents.len()).sum();
-                    let r = ops::delete_observations(&mut conn, &deletions).map(|_| {
+                    let ids: Vec<String> = deletions.iter().flat_map(|d| d.contents.clone()).collect();
+                    let count = ids.len();
+                    let r = ops::delete_observations_by_id(&mut conn, &ids).map(|_| {
                         json!({
                             "content": [{
                                 "type": "text",

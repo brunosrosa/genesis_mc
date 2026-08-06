@@ -1,4 +1,4 @@
-_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-05 17:43:38
+_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-05 20:40:55
 
 ### ====================================================================================================
 ARQUIVO: gateway-config.yaml

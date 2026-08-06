@@ -110,16 +110,20 @@ CREATE TRIGGER IF NOT EXISTS after_observation_insert AFTER INSERT ON observatio
 END;
 
 CREATE TRIGGER IF NOT EXISTS after_observation_delete AFTER DELETE ON observations BEGIN
-    INSERT INTO observations_fts(observations_fts, observation_id, entity_name, content)
-    VALUES('delete', old.observation_id, old.entity_name, old.content);
+    DELETE FROM observations_fts WHERE observation_id = old.observation_id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS after_observation_update AFTER UPDATE ON observations BEGIN
-    INSERT INTO observations_fts(observations_fts, observation_id, entity_name, content)
-    VALUES('delete', old.observation_id, old.entity_name, old.content);
+    DELETE FROM observations_fts WHERE observation_id = old.observation_id;
     INSERT INTO observations_fts(observation_id, entity_name, content)
     VALUES (new.observation_id, new.entity_name, new.content);
 END;
+
+CREATE TABLE IF NOT EXISTS repo_heatmap (
+    file_path TEXT PRIMARY KEY,
+    access_count INTEGER NOT NULL DEFAULT 0,
+    last_accessed INTEGER NOT NULL
+) STRICT;
 ";
 
 /// Versão do schema pós Fase E. Idempotente em bancos já migrados.

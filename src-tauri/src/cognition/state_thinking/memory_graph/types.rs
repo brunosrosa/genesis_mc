@@ -50,10 +50,10 @@ pub struct ObservationInput {
     pub contents: Vec<String>,
 }
 
-/// Registro persistido da observação (com `id` e `created_at`).
+/// Registro persistido da observação (com `id` UUIDv7 e `created_at`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObservationRecord {
-    pub id: i64,
+    pub id: String,
     #[serde(rename = "entityName")]
     pub entity_name: String,
     pub content: String,

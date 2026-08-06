@@ -823,15 +823,15 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "execute" => Ok(stub_sandbox_audit_pending(tool_name)),
         "shell" => run_souls_shell(params).await,
         // ============ Grafo de Memória e Thinking ============
-        "mem_create_entities" => run_mem_create_entities(params).await,
-        "mem_create_relations" => run_mem_create_relations(params).await,
-        "mem_add_observations" => run_mem_add_observations(params).await,
-        "mem_search" => run_mem_search(params).await,
-        "mem_open_nodes" => run_mem_open_nodes(params).await,
-        "mem_read_graph" => run_mem_read_graph(params).await,
-        "mem_delete_entities" => run_mem_delete_entities(params).await,
-        "mem_delete_observations" => run_mem_delete_observations(params).await,
-        "mem_delete_relations" => run_mem_delete_relations(params).await,
+        "mem_create_entities" | "create_entities" => run_mem_create_entities(params).await,
+        "mem_create_relations" | "create_relations" => run_mem_create_relations(params).await,
+        "mem_add_observations" | "add_observations" => run_mem_add_observations(params).await,
+        "mem_search" | "search_graph" => run_mem_search(params).await,
+        "mem_open_nodes" | "open_nodes" => run_mem_open_nodes(params).await,
+        "mem_read_graph" | "read_graph" => run_mem_read_graph(params).await,
+        "mem_delete_entities" | "delete_entities" => run_mem_delete_entities(params).await,
+        "mem_delete_observations" | "delete_observations" => run_mem_delete_observations(params).await,
+        "mem_delete_relations" | "delete_relations" => run_mem_delete_relations(params).await,
         "core_think" => run_core_think(params).await,
         // ============ Observabilidade Cognitiva Sensorial (ADR-041 / Marco 4.3) ============
         "heatmap" => run_heatmap(params).await,
@@ -4300,9 +4300,23 @@ async fn run_mem_read_graph(params: &serde_json::Map<String, Value>) -> Result<V
 
 async fn run_mem_delete_entities(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
-    let names = args.get("entityNames").and_then(Value::as_array).ok_or_else(|| RpcError {
+    let hitl_authorized = args.get("hitlAuthorized")
+        .or_else(|| args.get("hitl_approved"))
+        .or_else(|| args.get("confirm"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !hitl_authorized {
+        return Err(RpcError {
+            code: -32001,
+            message: "Operação destrutiva `mem_delete_entities` negada pelo cercadinho de segurança HITL. Aprovação explícita humana é exigida no frontend.".to_string(),
+            data: Some(json!({ "hitl_required": true, "tool": "mem_delete_entities" })),
+        });
+    }
+
+    let names = args.get("entityNames").or_else(|| args.get("names")).and_then(Value::as_array).ok_or_else(|| RpcError {
         code: -32602,
-        message: "campo `entityNames` ausente ou não-array".to_string(),
+        message: "campo `entityNames` (ou `names`) ausente ou não-array".to_string(),
         data: None,
     })?.iter()
         .filter_map(Value::as_str)
@@ -4313,12 +4327,40 @@ async fn run_mem_delete_entities(params: &serde_json::Map<String, Value>) -> Res
 
 async fn run_mem_delete_observations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
+    let hitl_authorized = args.get("hitlAuthorized")
+        .or_else(|| args.get("hitl_approved"))
+        .or_else(|| args.get("confirm"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !hitl_authorized {
+        return Err(RpcError {
+            code: -32001,
+            message: "Operação destrutiva `mem_delete_observations` negada pelo cercadinho de segurança HITL. Aprovação explícita humana é exigida no frontend.".to_string(),
+            data: Some(json!({ "hitl_required": true, "tool": "mem_delete_observations" })),
+        });
+    }
+
     let deletions = parse_observation_inputs(args, "deletions")?;
     memgraph_request(MemGraphOp::DeleteObservations { deletions, reply: oneshot::channel().0 }).await
 }
 
 async fn run_mem_delete_relations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
+    let hitl_authorized = args.get("hitlAuthorized")
+        .or_else(|| args.get("hitl_approved"))
+        .or_else(|| args.get("confirm"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !hitl_authorized {
+        return Err(RpcError {
+            code: -32001,
+            message: "Operação destrutiva `mem_delete_relations` negada pelo cercadinho de segurança HITL. Aprovação explícita humana é exigida no frontend.".to_string(),
+            data: Some(json!({ "hitl_required": true, "tool": "mem_delete_relations" })),
+        });
+    }
+
     let relations = parse_relations(args)?;
     memgraph_request(MemGraphOp::DeleteRelations { relations, reply: oneshot::channel().0 }).await
 }

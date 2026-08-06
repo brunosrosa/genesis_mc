@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-08-05 17:43:38
+_MCP_INVENTORY Gerado em: 2026-08-05 20:40:55
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -164,7 +164,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: metrics
-DESCRIPTION: [Stub] Metricas FinOps (tokens lidos/salvos, hit-rate cache) em roadmap. Aliases: metrics | souls_metrics | ctx_metrics.
+DESCRIPTION: [Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

@@ -8,50 +8,31 @@
 //! - FTS5: busca por `MATCH` síncrono; `LIMIT 50` para defesa.
 
 use crate::cognition::memory_graph::errors::CognitiveError;
-use crate::cognition::memory_graph::fts::{V2_SCHEMA_DDL, read_user_version, write_user_version};
-use crate::cognition::memory_graph::types::{Entity, ObservationInput, Relation, now_epoch_ms};
+use crate::cognition::memory_graph::types::{Entity, ObservationInput, ObservationRecord, Relation, now_epoch_ms};
+use crate::cognition::memory_graph::uuid::generate_uuid_v7;
 use rusqlite::{Connection, params};
-
-/// Migra um banco V1 (ou vazio) para V2 de forma atômica.
-///
-/// Idempotente: se `user_version >= 2`, é no-op.
-pub fn migrate_v1_to_v2(conn: &mut Connection) -> Result<(), CognitiveError> {
-    let current = read_user_version(conn).map_err(CognitiveError::from)?;
-    if current >= 2 {
-        return Ok(());
-    }
-    let tx = conn.transaction().map_err(CognitiveError::from)?;
-    tx.execute_batch(V2_SCHEMA_DDL).map_err(CognitiveError::from)?;
-    write_user_version(&tx, 2).map_err(CognitiveError::from)?;
-    tx.commit().map_err(CognitiveError::from)?;
-    Ok(())
-}
 
 // ---------------------------------------------------------------------------
 // ESCRITA (3 ops)
 // ---------------------------------------------------------------------------
 
-/// `mem_create_entities`: cria entidades novas (idempotente via INSERT OR IGNORE).
-/// Retorna a lista de entidades efetivamente materializadas no banco (incluindo
-/// as pré-existentes — comportamento idêntico ao `memory-mcp-rs`).
-///
-/// Nota de compatibilidade: a coluna legada `entities.observations` (V1, NOT NULL)
-/// é populada com string vazia para satisfazer a constraint. A hidratação
-/// oficial de `Entity.observations` é feita via `open_nodes` (PRD-031 §2.1).
+/// `mem_create_entities`: cria entidades novas (idempotente).
 pub fn create_entities(
     conn: &mut Connection,
     entities: &[Entity],
 ) -> Result<Vec<Entity>, CognitiveError> {
     let tx = conn.transaction().map_err(CognitiveError::from)?;
+    let now = now_epoch_ms();
     {
         let mut stmt = tx
             .prepare(
-                "INSERT OR IGNORE INTO entities (name, entity_type, observations) \
-                 VALUES (?1, ?2, '')",
+                "INSERT INTO entities (entity_name, entity_type, observations, created_at) \
+                 VALUES (?1, ?2, '[]', ?3) \
+                 ON CONFLICT(entity_name) DO UPDATE SET entity_type = excluded.entity_type",
             )
             .map_err(CognitiveError::from)?;
         for e in entities {
-            stmt.execute(params![e.name, e.entity_type])
+            stmt.execute(params![e.name, e.entity_type, now])
                 .map_err(CognitiveError::from)?;
         }
     }
@@ -72,15 +53,16 @@ pub fn create_relations(
     relations: &[Relation],
 ) -> Result<Vec<Relation>, CognitiveError> {
     let tx = conn.transaction().map_err(CognitiveError::from)?;
+    let now = now_epoch_ms();
     {
         let mut stmt = tx
             .prepare(
-                "INSERT OR IGNORE INTO relations (from_entity, to_entity, relation_type) \
-                 VALUES (?1, ?2, ?3)",
+                "INSERT OR IGNORE INTO relations (from_entity, to_entity, relation_type, created_at) \
+                 VALUES (?1, ?2, ?3, ?4)",
             )
             .map_err(CognitiveError::from)?;
         for r in relations {
-            stmt.execute(params![r.from, r.to, r.relation_type])
+            stmt.execute(params![r.from, r.to, r.relation_type, now])
                 .map_err(CognitiveError::from)?;
         }
     }
@@ -89,30 +71,36 @@ pub fn create_relations(
 }
 
 /// `mem_add_observations`: anexa observações a entidades existentes.
-/// Usa `INSERT INTO observations` (a tabela nova V2) — triggers FTS5
-/// mantém `observations_fts` em sincronia.
 pub fn add_observations(
     conn: &mut Connection,
     observations: &[ObservationInput],
-) -> Result<(), CognitiveError> {
+) -> Result<Vec<ObservationRecord>, CognitiveError> {
     let tx = conn.transaction().map_err(CognitiveError::from)?;
     let now = now_epoch_ms();
+    let mut records = Vec::new();
     {
         let mut stmt = tx
             .prepare(
-                "INSERT INTO observations (entity_name, content, created_at) \
-                 VALUES (?1, ?2, ?3)",
+                "INSERT INTO observations (observation_id, entity_name, content, created_at) \
+                 VALUES (?1, ?2, ?3, ?4)",
             )
             .map_err(CognitiveError::from)?;
         for obs in observations {
             for content in &obs.contents {
-                stmt.execute(params![obs.entity_name, content, now])
+                let uuid = generate_uuid_v7();
+                stmt.execute(params![uuid, obs.entity_name, content, now])
                     .map_err(CognitiveError::from)?;
+                records.push(ObservationRecord {
+                    id: uuid,
+                    entity_name: obs.entity_name.clone(),
+                    content: content.clone(),
+                    created_at: now,
+                });
             }
         }
     }
     tx.commit().map_err(CognitiveError::from)?;
-    Ok(())
+    Ok(records)
 }
 
 // ---------------------------------------------------------------------------
@@ -120,114 +108,79 @@ pub fn add_observations(
 // ---------------------------------------------------------------------------
 
 /// `mem_search`: busca FTS5 síncrona por `MATCH` em `observations_fts`.
-/// Retorna entidades cujos nomes ou observações casam com a query.
 pub fn search_observations(
     conn: &Connection,
     query: &str,
     limit: usize,
-) -> Result<Vec<Entity>, CognitiveError> {
-    // Saneamento mínimo: query vazia ou apenas com aspas é tratada como no-op.
+) -> Result<Vec<ObservationRecord>, CognitiveError> {
     let q = query.trim();
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    // Estratégia: casar via JOIN com observations e retornar entidades distintas
-    // (LIMIT aplicado no universo de observações, depois dedup por name).
     let mut stmt = conn
         .prepare(
-            "SELECT DISTINCT e.name, e.entity_type \
+            "SELECT o.observation_id, o.entity_name, o.content, o.created_at \
              FROM observations_fts f \
-             JOIN observations o ON o.id = f.rowid \
-             JOIN entities e ON e.name = o.entity_name \
+             JOIN observations o ON o.observation_id = f.observation_id \
              WHERE observations_fts MATCH ?1 \
              LIMIT ?2",
         )
         .map_err(CognitiveError::from)?;
     let rows = stmt
         .query_map(params![q, limit as i64], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            Ok(ObservationRecord {
+                id: row.get(0)?,
+                entity_name: row.get(1)?,
+                content: row.get(2)?,
+                created_at: row.get(3)?,
+            })
         })
         .map_err(CognitiveError::from)?;
     let mut out = Vec::new();
     for r in rows {
-        let (name, entity_type) = r.map_err(CognitiveError::from)?;
-        out.push(Entity {
-            name,
-            entity_type,
-            observations: Vec::new(),
-        });
+        out.push(r.map_err(CognitiveError::from)?);
     }
     Ok(out)
 }
 
-/// `mem_open_nodes`: abre entidades específicas por nome e hidrata observações
-/// via JOIN. Cobre o caso de nome inexistente (retorna vetor vazio).
-pub fn open_nodes(conn: &Connection, names: &[String]) -> Result<Vec<Entity>, CognitiveError> {
+/// `mem_open_nodes`: abre entidades por nome e retorna todas as suas observações.
+pub fn open_nodes(conn: &Connection, names: &[String]) -> Result<Vec<ObservationRecord>, CognitiveError> {
     if names.is_empty() {
         return Ok(Vec::new());
     }
-    // 1ª passada: metadata de entities distintas solicitadas.
     let placeholders: Vec<String> = (0..names.len()).map(|i| format!("?{}", i + 1)).collect();
-    let sql_entities = format!(
-        "SELECT DISTINCT name, entity_type FROM entities WHERE name IN ({})",
+    let sql_obs = format!(
+        "SELECT observation_id, entity_name, content, created_at FROM observations \
+         WHERE entity_name IN ({}) ORDER BY created_at ASC",
         placeholders.join(",")
     );
-    let params_entities: Vec<&dyn rusqlite::ToSql> =
+    let params_obs: Vec<&dyn rusqlite::ToSql> =
         names.iter().map(|n| n as &dyn rusqlite::ToSql).collect();
     let mut stmt = conn
-        .prepare(&sql_entities)
+        .prepare(&sql_obs)
         .map_err(CognitiveError::from)?;
     let rows = stmt
-        .query_map(params_entities.as_slice(), |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        .query_map(params_obs.as_slice(), |row| {
+            Ok(ObservationRecord {
+                id: row.get(0)?,
+                entity_name: row.get(1)?,
+                content: row.get(2)?,
+                created_at: row.get(3)?,
+            })
         })
         .map_err(CognitiveError::from)?;
-    let mut out: Vec<Entity> = Vec::new();
+    let mut out = Vec::new();
     for r in rows {
-        let (name, entity_type) = r.map_err(CognitiveError::from)?;
-        out.push(Entity {
-            name,
-            entity_type,
-            observations: Vec::new(),
-        });
-    }
-    // 2ª passada: hidrata observations de TODAS as entidades de uma vez
-    // (uma query, não N queries).
-    if !out.is_empty() {
-        let obs_placeholders: Vec<String> = (0..out.len()).map(|i| format!("?{}", i + 1)).collect();
-        let sql_obs = format!(
-            "SELECT entity_name, content FROM observations \
-             WHERE entity_name IN ({}) ORDER BY created_at ASC",
-            obs_placeholders.join(",")
-        );
-        let names_for_obs: Vec<&dyn rusqlite::ToSql> = out
-            .iter()
-            .map(|e| &e.name as &dyn rusqlite::ToSql)
-            .collect();
-        let mut obs_stmt = conn
-            .prepare(&sql_obs)
-            .map_err(CognitiveError::from)?;
-        let obs_rows = obs_stmt
-            .query_map(names_for_obs.as_slice(), |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(CognitiveError::from)?;
-        for r in obs_rows {
-            let (ename, content) = r.map_err(CognitiveError::from)?;
-            if let Some(e) = out.iter_mut().find(|e| e.name == ename) {
-                e.observations.push(content);
-            }
-        }
+        out.push(r.map_err(CognitiveError::from)?);
     }
     Ok(out)
 }
 
 /// `mem_read_graph`: retorna o grafo inteiro (entities + relations) até `LIMIT`.
-/// Defesa: `LIMIT 500` (canônica do memory-mcp-rs).
 pub fn read_graph(conn: &Connection, limit: usize) -> Result<(Vec<Entity>, Vec<Relation>), CognitiveError> {
     let cap = limit.min(500);
     let mut entities_stmt = conn
-        .prepare("SELECT name, entity_type FROM entities LIMIT ?1")
+        .prepare("SELECT entity_name, entity_type FROM entities LIMIT ?1")
         .map_err(CognitiveError::from)?;
     let entity_rows = entities_stmt
         .query_map(params![cap as i64], |row| {
@@ -265,7 +218,7 @@ pub fn read_graph(conn: &Connection, limit: usize) -> Result<(Vec<Entity>, Vec<R
 }
 
 // ---------------------------------------------------------------------------
-// DELEÇÃO (3 ops) — uso restrito, HITL recomendado
+// DELEÇÃO (3 ops)
 // ---------------------------------------------------------------------------
 
 /// `mem_delete_entities`: remove entidades. Cascade apaga relations e observations.
@@ -276,7 +229,7 @@ pub fn delete_entities(conn: &mut Connection, names: &[String]) -> Result<(), Co
     let tx = conn.transaction().map_err(CognitiveError::from)?;
     let placeholders: Vec<String> = (0..names.len()).map(|i| format!("?{}", i + 1)).collect();
     let sql = format!(
-        "DELETE FROM entities WHERE name IN ({})",
+        "DELETE FROM entities WHERE entity_name IN ({})",
         placeholders.join(",")
     );
     let params_dyn: Vec<&dyn rusqlite::ToSql> =
@@ -287,26 +240,24 @@ pub fn delete_entities(conn: &mut Connection, names: &[String]) -> Result<(), Co
     Ok(())
 }
 
-/// `mem_delete_observations`: remove observações específicas por (entity, content).
-pub fn delete_observations(
+/// `mem_delete_observations`: remove observações por `observation_id`.
+pub fn delete_observations_by_id(
     conn: &mut Connection,
-    deletions: &[ObservationInput],
+    observation_ids: &[String],
 ) -> Result<(), CognitiveError> {
-    if deletions.is_empty() {
+    if observation_ids.is_empty() {
         return Ok(());
     }
     let tx = conn.transaction().map_err(CognitiveError::from)?;
-    {
-        let mut stmt = tx
-            .prepare("DELETE FROM observations WHERE entity_name = ?1 AND content = ?2")
-            .map_err(CognitiveError::from)?;
-        for d in deletions {
-            for c in &d.contents {
-                stmt.execute(params![d.entity_name, c])
-                    .map_err(CognitiveError::from)?;
-            }
-        }
-    }
+    let placeholders: Vec<String> = (0..observation_ids.len()).map(|i| format!("?{}", i + 1)).collect();
+    let sql = format!(
+        "DELETE FROM observations WHERE observation_id IN ({})",
+        placeholders.join(",")
+    );
+    let params_dyn: Vec<&dyn rusqlite::ToSql> =
+        observation_ids.iter().map(|n| n as &dyn rusqlite::ToSql).collect();
+    tx.execute(&sql, params_dyn.as_slice())
+        .map_err(CognitiveError::from)?;
     tx.commit().map_err(CognitiveError::from)?;
     Ok(())
 }
@@ -338,99 +289,21 @@ pub fn delete_relations(
 
 #[cfg(test)]
 mod tests {
-    //! TDD obrigatório do Marco 3.5.
-    //! Refs: PRD-031 §2, PRD-032 §4, ADR-040 §Definition-of-Done.
-
     use super::*;
-    use crate::cognition::memory_graph::fts::read_user_version;
+    use crate::cognition::thinking::ops::migrate_v3_to_v5;
     use rusqlite::Connection;
 
-    /// Helper: cria um DB em memória com o schema V1 (entities + relations) já
-    /// materializado, replicando o que `init_state_db_and_worker` faz antes
-    /// da migração V1→V2.
-    fn fresh_v1_db() -> Connection {
-        let conn = Connection::open_in_memory().expect("open in-memory");
-        conn.execute_batch(
-            "CREATE TABLE entities (name TEXT PRIMARY KEY, entity_type TEXT NOT NULL, \
-             observations TEXT NOT NULL) STRICT; \
-             CREATE TABLE relations ( \
-                 id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 from_entity TEXT NOT NULL, \
-                 to_entity TEXT NOT NULL, \
-                 relation_type TEXT NOT NULL, \
-                 UNIQUE(from_entity, to_entity, relation_type), \
-                 FOREIGN KEY(from_entity) REFERENCES entities(name) ON DELETE CASCADE, \
-                 FOREIGN KEY(to_entity) REFERENCES entities(name) ON DELETE CASCADE \
-             ) STRICT;",
-        )
-        .expect("cria schema V1 (entities+relations)");
+    fn fresh_v5_db() -> Connection {
+        let mut conn = Connection::open_in_memory().expect("open in-memory");
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate_v3_to_v5(&mut conn).expect("migração V5");
         conn
-    }
-
-    /// Helper: aplica a migração V1→V2 e devolve a conexão pronta.
-    fn fresh_v2_db() -> Connection {
-        let mut conn = fresh_v1_db();
-        migrate_v1_to_v2(&mut conn).expect("migração V1→V2");
-        conn
-    }
-
-    #[test]
-    fn test_migration_user_version_bump() {
-        let mut conn = fresh_v1_db();
-        // Pré-condição: user_version = 0 (banco V1 virgem).
-        let v0 = read_user_version(&conn).expect("lê user_version");
-        assert_eq!(v0, 0, "V1 deve começar com user_version=0");
-
-        // Executa migração.
-        migrate_v1_to_v2(&mut conn).expect("migração ok");
-
-        // Pós-condição: user_version = 2 e schema V2 existe.
-        let v2 = read_user_version(&conn).expect("lê user_version pós-migração");
-        assert_eq!(v2, 2, "user_version deve ser 2 após migração");
-
-        // Idempotência: rodar de novo não muda nada.
-        migrate_v1_to_v2(&mut conn).expect("idempotente");
-        let v2_again = read_user_version(&conn).expect("lê user_version 2x");
-        assert_eq!(v2_again, 2, "segunda migração deve ser no-op");
-
-        // Verifica que as tabelas do V2 existem.
-        let n_observations: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='observations'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("conta tabela observations");
-        assert_eq!(n_observations, 1, "tabela observations deve existir");
-
-        let n_fts: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='observations_fts'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("conta tabela observations_fts");
-        assert_eq!(n_fts, 1, "tabela observations_fts deve existir");
-
-        let n_triggers: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' \
-                 AND name IN ('observations_ai','observations_ad','observations_au')",
-                [],
-                |row| row.get(0),
-            )
-            .expect("conta triggers FTS");
-        assert_eq!(n_triggers, 3, "3 triggers FTS5 devem existir");
     }
 
     #[test]
     fn test_graph_cascade_delete() {
-        let mut conn = fresh_v2_db();
-        // PRAGMA foreign_keys = ON é mandatória para CASCADE real.
-        conn.execute_batch("PRAGMA foreign_keys = ON;")
-            .expect("liga FK");
+        let mut conn = fresh_v5_db();
 
-        // Setup: cria entidades, relações e observações.
         let entities = vec![
             Entity { name: "ADR-040".to_string(), entity_type: "ADR".to_string(), observations: vec![] },
             Entity { name: "memory_graph".to_string(), entity_type: "Module".to_string(), observations: vec![] },
@@ -452,48 +325,44 @@ mod tests {
         ];
         add_observations(&mut conn, &observations).expect("anexa observações");
 
-        // Conta entidades, relações e observações ANTES.
         let n_entities_before: i64 = conn
             .query_row("SELECT COUNT(*) FROM entities", [], |row| row.get(0))
             .expect("conta entidades");
-        assert_eq!(n_entities_before, 3, "3 entidades criadas");
+        assert_eq!(n_entities_before, 3);
 
         let n_relations_before: i64 = conn
             .query_row("SELECT COUNT(*) FROM relations", [], |row| row.get(0))
             .expect("conta relações");
-        assert_eq!(n_relations_before, 3, "3 relações criadas");
+        assert_eq!(n_relations_before, 3);
 
         let n_observations_before: i64 = conn
             .query_row("SELECT COUNT(*) FROM observations", [], |row| row.get(0))
             .expect("conta observações");
-        assert_eq!(n_observations_before, 4, "4 observações (1+2+1) criadas");
+        assert_eq!(n_observations_before, 4);
 
         // ATUA: remove a entidade central "ADR-040".
         delete_entities(&mut conn, &["ADR-040".to_string()]).expect("deleta ADR-040");
 
-        // PROVA: cascade apagou as 2 relações que apontam para ADR-040
-        // e a observação de ADR-040. As relações e observações de
-        // memory_graph/thinking permanecem intactas.
+        // PROVA: cascade apagou as relações e a observação de ADR-040.
         let n_entities_after: i64 = conn
             .query_row("SELECT COUNT(*) FROM entities", [], |row| row.get(0))
             .expect("conta entidades pós");
-        assert_eq!(n_entities_after, 2, "2 entidades (cascade removeu ADR-040)");
+        assert_eq!(n_entities_after, 2);
 
         let n_relations_after: i64 = conn
             .query_row("SELECT COUNT(*) FROM relations", [], |row| row.get(0))
             .expect("conta relações pós");
-        assert_eq!(n_relations_after, 1, "1 relação (apenas memory_graph→thinking)");
+        assert_eq!(n_relations_after, 1);
 
         let n_observations_after: i64 = conn
             .query_row("SELECT COUNT(*) FROM observations", [], |row| row.get(0))
             .expect("conta observações pós");
-        assert_eq!(n_observations_after, 3, "3 observações (apenas de memory_graph e thinking)");
+        assert_eq!(n_observations_after, 3);
     }
 
     #[test]
-    fn test_fts5_observational_grounding() {
-        let mut conn = fresh_v2_db();
-        // Cria uma entidade âncora.
+    fn test_fts5_lexical_grounding() {
+        let mut conn = fresh_v5_db();
         create_entities(
             &mut conn,
             &[Entity {
@@ -504,7 +373,6 @@ mod tests {
         )
         .expect("cria âncora");
 
-        // Insere 999 observações de "feno" e 1 de "agulha".
         let feno: Vec<String> = (0..999).map(|i| format!("feno observacao {i}")).collect();
         let mut inputs = vec![ObservationInput {
             entity_name: "needle".to_string(),
@@ -516,23 +384,15 @@ mod tests {
         });
         add_observations(&mut conn, &inputs).expect("insere 1000 observações");
 
-        // Mede a latência da busca FTS5 pela agulha.
         let start = std::time::Instant::now();
         let hits = search_observations(&conn, "XYZNEEDLE", 50).expect("busca FTS5");
         let elapsed = start.elapsed();
 
-        // Assertiva 1: FTS5 encontra a agulha.
         assert!(!hits.is_empty(), "FTS5 deve localizar a agulha XYZNEEDLE");
-        assert!(
-            hits.iter().any(|e| e.name == "needle"),
-            "FTS5 deve retornar a entidade `needle`"
-        );
-
-        // Assertiva 2: latência sub-milissegundo. Toleramos até 1ms para
-        // acomodar overhead de wall-clock no Windows (cold cache permitido).
+        assert_eq!(hits[0].entity_name, "needle");
         assert!(
             elapsed.as_millis() < 50,
-            "FTS5 levou {} ms (deve ser sub-ms, tolerância cold-cache 50ms)",
+            "FTS5 levou {} ms (deve ser sub-ms)",
             elapsed.as_millis()
         );
     }
