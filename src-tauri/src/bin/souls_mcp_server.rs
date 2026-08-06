@@ -634,8 +634,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "core_think",
-                        "description": "Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.",
+                        "name": "thinking",
+                        "description": "Invoca o espaço de raciocínio socrático em múltiplos passos com auto-correção e ramificações de hipóteses.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -759,7 +759,10 @@ fn normalize_tool_name(mut name: &str) -> &str {
             break;
         }
     }
-    name
+    match name {
+        "core_think" | "sequential_thinking" | "sequentialthinking" => "thinking",
+        other => other,
+    }
 }
 
 async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
@@ -832,7 +835,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "mem_delete_entities" | "delete_entities" => run_mem_delete_entities(params).await,
         "mem_delete_observations" | "delete_observations" => run_mem_delete_observations(params).await,
         "mem_delete_relations" | "delete_relations" => run_mem_delete_relations(params).await,
-        "core_think" => run_core_think(params).await,
+        "thinking" => run_thinking(params).await,
         // ============ Observabilidade Cognitiva Sensorial (ADR-041 / Marco 4.3) ============
         "heatmap" => run_heatmap(params).await,
         "repo_heatmap" => run_repo_heatmap(params).await,
@@ -4375,7 +4378,7 @@ fn thinking_sessions_registry() -> &'static StdMutex<StdHashMap<String, StdMutex
     THINKING_SESSIONS.get_or_init(|| StdMutex::new(StdHashMap::new()))
 }
 
-async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_thinking(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
     // session_id opcional no payload (HITL e telemetria). Default: "default".
     let session_id = args
@@ -4412,7 +4415,7 @@ async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value
     let thought_value = Value::Object(thought_obj);
     let thought: ThoughtData = serde_json::from_value(thought_value).map_err(|e| RpcError {
         code: -32602,
-        message: format!("Payload de core_think inválido: {e}"),
+        message: format!("Payload de thinking inválido: {e}"),
         data: None,
     })?;
 
@@ -4431,11 +4434,46 @@ async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value
         message: format!("Mutex ThinkingEngine envenenado: {e}"),
         data: None,
     })?;
-    let response: ThinkingResponse = engine.push_thought(thought).map_err(|e| RpcError {
+    let response: ThinkingResponse = engine.push_thought(thought.clone()).map_err(|e| RpcError {
         code: -32000,
         message: e.to_string(),
         data: None,
     })?;
+
+    // MARCO 4.7.0: Persistência assíncrona JIT no barramento socrático
+    if let Some(handle) = socratic_handle() {
+        let socratic = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: souls_mc_lib::cognition::memory_graph::uuid::generate_uuid_v7(),
+            session_id: session_id.clone(),
+            branch_id: thought.branch_id.clone().unwrap_or_else(|| "main".to_string()),
+            parent_thought_id: thought
+                .revises_thought
+                .map(|n| n.to_string())
+                .or_else(|| thought.branch_from_thought.map(|n| n.to_string())),
+            thought_type: match response.mode {
+                souls_mc_lib::cognition::thinking::types::ThinkingMode::Regular => {
+                    souls_mc_lib::cognition::thinking::persistence::ThoughtType::Regular
+                }
+                souls_mc_lib::cognition::thinking::types::ThinkingMode::Revision => {
+                    souls_mc_lib::cognition::thinking::persistence::ThoughtType::Revision
+                }
+                souls_mc_lib::cognition::thinking::types::ThinkingMode::Branching => {
+                    souls_mc_lib::cognition::thinking::persistence::ThoughtType::Branching
+                }
+            },
+            content: thought.thought.clone(),
+            step_number: thought.thought_number,
+            duration_ms: 0,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or_default(),
+        };
+        let _ = handle.try_send(souls_mc_lib::cognition::thinking::socratic_bridge::SocraticOp::UpsertThoughtFire {
+            thought: socratic,
+        });
+    }
+
     Ok(json!({
         "content": [{
             "type": "text",
@@ -4810,7 +4848,7 @@ mod tests {
         assert!(tool_names.contains(&"mem_delete_entities"));
         assert!(tool_names.contains(&"mem_delete_observations"));
         assert!(tool_names.contains(&"mem_delete_relations"));
-        assert!(tool_names.contains(&"core_think"));
+        assert!(tool_names.contains(&"thinking"));
         // ADR-041 §1: nenhum tool de contexto deve expor o prefixo `souls_` no `name`.
         // (aliases `souls_*` e `ctx_*` continuam aceitos no dispatcher, mas NÃO no registro.)
         assert!(!tool_names.contains(&"souls_get_ast"));

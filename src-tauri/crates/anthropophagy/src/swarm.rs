@@ -507,6 +507,7 @@ impl LensInvoker for HttpLensInvoker {
                 temperature: 0.0,
                 response_format,
                 reasoning_effort,
+                stop: Some(vec!["</think>".to_string()]),
             };
 
             #[cfg(not(test))]
@@ -610,6 +611,8 @@ struct ChatCompletionsRequest {
     response_format: Option<ChatResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]

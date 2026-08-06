@@ -20,6 +20,7 @@
 //!   path do Tokio event loop.
 
 pub mod analytics;
+pub mod engine;
 pub mod errors;
 pub mod handlers;
 pub mod ops;
@@ -32,6 +33,9 @@ pub mod worker;
 pub mod test_helpers;
 
 pub use analytics::{compute_metrics, SessionMetrics};
+pub use engine::{
+    DEFAULT_HARD_LIMIT, HITL_EXTENDED_LIMIT, ThinkingContext, ThinkingEngine, ThinkingParadigm,
+};
 pub use errors::{CognitiveError, ThinkingError};
 pub use ops::{
     delete_socratic_session, fetch_thought, gen_simple_uuid, list_thoughts_for_session,
@@ -40,9 +44,6 @@ pub use ops::{
 };
 pub use persistence::{BranchId, SessionId, SocraticThought, ThoughtId, ThoughtType};
 pub use socratic_bridge::{spawn_socratic_write_worker, SocraticOp, SocraticWriteHandle};
-pub use state_machine::{
-    DEFAULT_HARD_LIMIT, HITL_EXTENDED_LIMIT, ThinkingEngine,
-};
 pub use types::{
     BranchSummary, ThoughtData, ThinkingMode, ThinkingResponse,
 };

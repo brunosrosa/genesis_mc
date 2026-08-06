@@ -27,6 +27,8 @@ struct OpenRouterRequest {
     max_tokens: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     include_reasoning: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,6 +189,7 @@ impl CloudCascade {
             temperature: 0.0,
             max_tokens: MAX_OUTPUT_TOKENS,
             include_reasoning: Some(false),
+            stop: Some(vec!["</think>".to_string()]),
         };
 
         let response = self
