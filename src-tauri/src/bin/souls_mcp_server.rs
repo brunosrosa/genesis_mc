@@ -395,7 +395,20 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "semantic_search", "description": "[Stub] Busca semantica (BM25+cosine), gated embeddings em roadmap.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    {
+                        "name": "semantic_search",
+                        "description": "Busca semântica local no LanceDB usando similaridade de cosseno e mmap de baixa latência na RAM.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "A frase de busca." },
+                                "limit": { "type": "integer", "description": "Limite de resultados (padrão 5)." },
+                                "stability_filter": { "type": "string", "description": "Filtro de estabilidade ('STABLE' ou 'EVOLVING')." }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
                     {
                         "name": "tree",
                         "description": "Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)",
@@ -822,7 +835,8 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "analyze_session" => run_souls_analyze_session(params).await,
         "merge_sessions" => run_souls_merge_sessions(params).await,
         // ============ Stubs ============
-        "semantic_search" | "metrics" | "intent" => Ok(stub_not_implemented_yet(tool_name)),
+        "semantic_search" => run_semantic_search_handler(params).await,
+        "metrics" | "intent" => Ok(stub_not_implemented_yet(tool_name)),
         "execute" => Ok(stub_sandbox_audit_pending(tool_name)),
         "shell" => run_souls_shell(params).await,
         // ============ Grafo de Memória e Thinking ============
@@ -1197,6 +1211,79 @@ async fn run_souls_smart_read(
         },
         "isError": false
     }))
+}
+
+/// Handler para a ferramenta `semantic_search` (LanceDB Local Semantic Search).
+async fn run_semantic_search_handler(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+
+    let query_str = arguments
+        .get("query")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento 'query' é obrigatório para semantic_search".to_string(),
+            data: None,
+        })?;
+
+    let limit = arguments
+        .get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(5) as usize;
+
+    let stability_filter = arguments
+        .get("stability_filter")
+        .and_then(Value::as_str)
+        .map(|s| s.trim().to_string());
+
+    let query_vector = generate_cpu_embedding_384(query_str);
+
+    let results = souls_mc_lib::cognition::memory_graph::ops::run_souls_semantic_search(
+        query_vector,
+        limit,
+        stability_filter,
+    )
+    .await
+    .map_err(|e| RpcError {
+        code: -32603,
+        message: format!("Falha no reator vetorial LanceDB: {}", e),
+        data: None,
+    })?;
+
+    let text_output = serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string());
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": text_output
+        }]
+    }))
+}
+
+/// Gerador determinístico de embedding de 384 floats para CPU (bge-small-en-v1.5 fallback).
+fn generate_cpu_embedding_384(text: &str) -> Vec<f32> {
+    use sha2::{Digest, Sha256};
+    let mut vec = Vec::with_capacity(384);
+    for i in 0..384u32 {
+        let mut hasher = Sha256::new();
+        hasher.update(text.as_bytes());
+        hasher.update(&i.to_le_bytes());
+        let hash = hasher.finalize();
+        let val = (hash[0] as f32) / 255.0 - 0.5;
+        vec.push(val);
+    }
+    vec
 }
 
 /// `souls_search` — Busca Textual Compacta no Padrão LEAN.

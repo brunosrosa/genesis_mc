@@ -10,6 +10,7 @@ pub mod mpsc_bridge;
 pub mod ops;
 pub mod types;
 pub mod uuid;
+pub mod vector_store;
 
 pub use errors::CognitiveError;
 pub use mpsc_bridge::{MemGraphOp, spawn_memory_graph_worker};
