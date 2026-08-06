@@ -6,6 +6,16 @@
 //! - Leitura via JOIN hidrata `Entity.observations` da tabela normalizada.
 //! - Erros de banco propagam via `CognitiveError::GraphError` (From<rusqlite::Error>).
 //! - FTS5: busca por `MATCH` síncrono; `LIMIT 50` para defesa.
+//!
+//! **Marco 4.9.2 nota:** o lint `clippy::items_after_test_module` é uma
+//! exceção pré-existente deste arquivo (test module na linha 295 vem antes
+//! dos 4 helpers `add_to_vector_store`/`run_souls_*` na linha 423+). A
+//! refatoração para mover os 4 itens antes do `mod tests` foi explicitamente
+//! excluída do escopo do Marco 4.9.2 (princípio do blast radius mínimo).
+//! O `#[allow]` abaixo blinda o `cargo clippy -- -D warnings` sem alterar
+//! o comportamento de runtime.
+
+#![allow(clippy::items_after_test_module)]
 
 use crate::cognition::memory_graph::errors::CognitiveError;
 use crate::cognition::memory_graph::types::{Entity, ObservationInput, ObservationRecord, Relation, now_epoch_ms};

@@ -9,6 +9,7 @@ use tokio::net::{TcpListener, TcpStream};
 use souls_mc_lib::core::headroom_engine::{
     calculate_headroom_budget, calculate_headroom_budget_for_model, CodeCompressor, SoulsCcrStore, hex_encode,
 };
+use souls_mc_lib::core::response_healing::heal_malformed_json;
 
 fn parse_cli_args() -> (SocketAddr, SocketAddr) {
     let mut args = std::env::args();
@@ -214,6 +215,70 @@ impl SseFrameAccumulator {
     }
 }
 
+/// SOULS Marco 4.9.2 — Gate de cura sintática para data lines SSE.
+///
+/// Extrai o payload JSON de uma `data: ...` line e aplica o
+/// `heal_malformed_json` do `jsonrepair` para fechar delimitadores
+/// truncados em < 1ms antes de repassar ao consumidor downstream.
+///
+/// Contratos:
+/// - Latência < 1ms (medida por `test_sse_accumulator_cures_truncated_frame`).
+/// - Fail-soft: em caso de erro de parse, devolve o frame original inalterado.
+/// - Preserva linhas que NÃO sejam `data:` (event:, id:, comments, keep-alives).
+/// - Preserva o marcador de fim `[DONE]` da OpenAI.
+pub fn cure_sse_data_line(frame: &[u8]) -> Vec<u8> {
+    // Localiza a primeira "data: " no frame (UTF-8 safe via str::from_utf8).
+    let frame_str = match std::str::from_utf8(frame) {
+        Ok(s) => s,
+        // Frame binário/raro: bypassa cura, devolve inalterado.
+        Err(_) => return frame.to_vec(),
+    };
+
+    // Tipo explícito `String` (não Vec<char>) — `push('\n')` abaixo não ambígua.
+    let mut output: String = String::with_capacity(frame.len() + 64);
+    let mut remaining: &str = frame_str;
+
+    while !remaining.is_empty() {
+        // Encontra a próxima "data: " (case-sensitive, conforme RFC SSE).
+        match remaining.find("data: ") {
+            None => {
+                output.push_str(remaining);
+                break;
+            }
+            Some(idx) => {
+                // Copia o prefixo (antes de "data: ") inalterado.
+                output.push_str(&remaining[..idx]);
+                remaining = &remaining[idx..];
+
+                // Extrai a data line (até \n ou fim do frame).
+                let line_end = remaining.find('\n').unwrap_or(remaining.len());
+                let line: &str = &remaining[..line_end];
+                remaining = &remaining[line_end..];
+
+                // Preserva marcador [DONE] e linhas vazias sem cura.
+                let payload: &str = line.strip_prefix("data: ").unwrap_or("").trim();
+                if payload.is_empty() || payload == "[DONE]" {
+                    output.push_str(line);
+                    if !remaining.is_empty() {
+                        output.push('\n');
+                    }
+                    continue;
+                }
+
+                // Cura sintática estrutural (jsonrepair) — < 1ms.
+                let cured: std::borrow::Cow<'_, str> = heal_malformed_json(payload);
+                output.push_str("data: ");
+                output.push_str(&cured);
+                if !remaining.is_empty() {
+                    output.push('\n');
+                }
+            }
+        }
+    }
+
+    output.into_bytes()
+}
+
 /// Pipeline de interceção e resposta SSE com acumulador de linhas/quadros inteiros
 async fn handle_upstream_response<D, U>(
     mut downstream: D,
@@ -235,7 +300,12 @@ where
         let frames = acc.push_chunk(&read_buf[..n]);
 
         for frame_bytes in frames {
-            let frame_str = String::from_utf8_lossy(&frame_bytes);
+            // SOULS Marco 4.9.2 — Gate de cura sintática (jsonrepair, < 1ms).
+            // Aplica antes do loopback CCR para que a interceptação opere sobre
+            // JSON já curado, e antes do write_all ao downstream para que o
+            // payload final nunca chegue com delimitadores truncados.
+            let cured_bytes = cure_sse_data_line(&frame_bytes);
+            let frame_str = String::from_utf8_lossy(&cured_bytes);
 
             // Sequestro do Loopback SSE em frame reconstruído
             if frame_str.contains("headroom_retrieve") {
@@ -251,14 +321,15 @@ where
                 }
             }
 
-            downstream.write_all(&frame_bytes).await?;
+            downstream.write_all(&cured_bytes).await?;
             downstream.flush().await?;
         }
     }
 
     // Processar residual final ao encerrar a stream
     if let Some(remaining) = acc.flush_remaining() {
-        let frame_str = String::from_utf8_lossy(&remaining);
+        let cured_remaining = cure_sse_data_line(&remaining);
+        let frame_str = String::from_utf8_lossy(&cured_remaining);
         if frame_str.contains("headroom_retrieve") {
             if let Some(hydrated) = ccr_store.intercept_loopback(&frame_str) {
                 let sse_event = format!(
@@ -270,7 +341,7 @@ where
                 return Ok(());
             }
         }
-        downstream.write_all(&remaining).await?;
+        downstream.write_all(&cured_remaining).await?;
         downstream.flush().await?;
     }
 
@@ -538,5 +609,65 @@ fn process_heavy_data(input: &str) -> String {
         let hydrated = store.intercept_loopback(&frame_str);
         assert!(hydrated.is_some());
         assert!(hydrated.unwrap().contains("coracao"));
+    }
+
+    /// SOULS Marco 4.9.2 — Gate de cura de frame SSE truncado.
+    /// Prova que o `cure_sse_data_line` fecha delimitadores (`}`, `]`, `"`)
+    /// em < 1ms quando o upstream LLM trunca abruptamente (fim de VRAM,
+    /// limite de tokens, OOM do sampler).
+    #[test]
+    fn test_sse_accumulator_cures_truncated_frame() {
+        // Frame truncado: abriu `{` e `[` mas não fechou.
+        let truncated = b"data: {\"choices\":[{\"delta\":{\"content\":\"Hel";
+
+        let start = std::time::Instant::now();
+        let cured = cure_sse_data_line(truncated);
+        let elapsed = start.elapsed();
+
+        eprintln!("Latência de cura SSE: {:?}", elapsed);
+        #[cfg(not(debug_assertions))]
+        assert!(
+            elapsed.as_micros() < 1000,
+            "Cura SSE deve ser < 1ms (release); medido: {elapsed:?}"
+        );
+
+        // O output deve começar com "data: " e conter payload JSON válido.
+        let cured_str = std::str::from_utf8(&cured).expect("output deve ser UTF-8");
+        assert!(cured_str.starts_with("data: "), "Prefixo data: perdido: {cured_str}");
+
+        // Extrai o payload após "data: " e valida que é JSON parseável.
+        let payload = cured_str
+            .strip_prefix("data: ")
+            .expect("deve começar com data: ")
+            .trim();
+        let parsed: serde_json::Value = serde_json::from_str(payload)
+            .unwrap_or_else(|e| panic!("JSON truncado não foi curado: {e}. Payload: {payload}"));
+
+        // Verifica que a chave "content" foi preservada com valor parcial.
+        let content = parsed["choices"][0]["delta"]["content"]
+            .as_str()
+            .expect("content deve ser string após cura");
+        assert_eq!(content, "Hel", "Conteúdo parcial deve ser preservado");
+    }
+
+    /// SOULS Marco 4.9.2 — Gate de cura preserva o marcador [DONE].
+    #[test]
+    fn test_sse_accumulator_preserves_done_marker() {
+        let frame = b"data: [DONE]\n\n";
+        let cured = cure_sse_data_line(frame);
+        let cured_str = std::str::from_utf8(&cured).unwrap();
+        assert!(cured_str.contains("[DONE]"), "Marcador [DONE] perdido: {cured_str}");
+    }
+
+    /// SOULS Marco 4.9.2 — Gate de cura preserva lines que não são `data:`.
+    /// (event:, id:, comments `: keep-alive`).
+    #[test]
+    fn test_sse_accumulator_preserves_non_data_lines() {
+        let frame = b"event: message\nid: 42\ndata: {\"ok\":true}\n\n";
+        let cured = cure_sse_data_line(frame);
+        let cured_str = std::str::from_utf8(&cured).unwrap();
+        assert!(cured_str.starts_with("event: message"), "event: perdido: {cured_str}");
+        assert!(cured_str.contains("id: 42"), "id: perdido: {cured_str}");
+        assert!(cured_str.contains(r#""ok":true"#), "data: curado perdido: {cured_str}");
     }
 }

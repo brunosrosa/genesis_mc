@@ -29,6 +29,7 @@ httparse = "=1.10.1"
 jsonwebtoken = { version = "=10.4.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 regex = "=1.12.4"
 pulldown-cmark = "=0.13.4"
+jsonrepair = "=0.1.0"  # SOULS-CANIBALIZED Marco 4.9.2: parser recursivo estrutural para cura de JSON malformado (sem `.replace` cego que corromperia strings literais; ADR-030 Módulo 4 pin rígido)
 # SOULS-CANIBALIZED Fase 3: lean-ctx EXPURO do Cargo.toml.
 # Canibalização Tipo A: extraímos a "Alma Matemática" (dot-flattening, ANSI filter,
 # Myers diff) como código NATIVO em src-tauri/src/cognition/lean_vacuum/.
