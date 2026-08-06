@@ -1,4 +1,4 @@
-_IGNITION_SCRIPTS Gerado em: 2026-08-05 20:40:55
+_IGNITION_SCRIPTS Gerado em: 2026-08-06 01:27:35
 
 ### ====================================================================================================
 ARQUIVO: boot.ps1
@@ -30,8 +30,8 @@ $env:SOULS_HEADROOM_OUTPUT_BUFFER = "4096"
 $env:SCCACHE_DIR = "Z:\.sccache"
 $env:SCCACHE_CACHE_SIZE = "8G"
 $env:RUSTC_WRAPPER = "sccache"
-# Reforca paralelismo (defesa em profundidade: .cargo/config.toml[build] jobs=8).
-$env:CARGO_BUILD_JOBS = "8"
+# Reforca paralelismo (defesa em profundidade: .cargo/config.toml[build] jobs=6).
+$env:CARGO_BUILD_JOBS = "6"
 # Patch idempotente vendor/llama-cpp-sys-2: GGML_CCACHE=ON (default upstream) faz
 # cmake wrappear `sccache nvcc`, que falha com "fatbinary: Could not open input
 # file '*.ptx'". Mantemos OFF para destravar CUDA. Re-aplicado em todo boot pois

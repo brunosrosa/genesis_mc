@@ -8,8 +8,9 @@
 //! - Zero consumo contínuo de VRAM (operações em CPU/RAM via Arrow Memory Model).
 //! - Execução isolada em `spawn_blocking` para proteger o reactor loop do Tokio contra page faults síncronos.
 
-use arrow_array::{FixedSizeListArray, Float32Array, RecordBatch, StringArray};
-use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use futures_util::StreamExt;
+use lancedb::arrow::array::{FixedSizeListArray, Float32Array, RecordBatch, RecordBatchIterator, StringArray};
+use lancedb::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use lancedb::connect;
 use lancedb::connection::Connection;
 use lancedb::query::{ExecutableQuery, QueryBase};
@@ -122,7 +123,7 @@ pub async fn insert_observation_vector<P: AsRef<Path>>(
     let table = get_or_create_vector_table(&db).await?;
 
     let batches = vec![batch];
-    let record_batch_stream = arrow_array::RecordBatchIterator::new(
+    let record_batch_stream = RecordBatchIterator::new(
         batches.into_iter().map(Ok),
         schema,
     );
@@ -181,7 +182,6 @@ pub async fn search_observation_vectors<P: AsRef<Path>>(
         .await
         .map_err(|e| format!("Erro ao executar busca vetorial LanceDB: {}", e))?;
 
-    use futures::StreamExt;
     let mut results = Vec::new();
     let mut stream = stream;
 

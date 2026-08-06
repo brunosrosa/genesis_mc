@@ -424,17 +424,8 @@ pub async fn add_to_vector_store(
     let stab = stability.to_string();
     let db_path = default_vector_db_path();
 
-    tokio::task::spawn_blocking(move || {
-        let handle = tokio::runtime::Handle::current();
-        handle.block_on(async move {
-            crate::cognition::memory_graph::vector_store::insert_observation_vector(
-                &db_path, &obs_id, &entity, &cnt, &stab, embedding,
-            )
-            .await
-        })
-    })
-    .await
-    .map_err(|e| format!("Erro no join de spawn_blocking (insert): {}", e))?
+    let _ = (observation_id, entity_name, content, stability, embedding);
+    Err("Vector store pending materialization in Marco 4.9.0".to_string())
 }
 
 /// Realiza a busca vetorial por similaridade de cosseno com pré-filtro escalar de estabilidade.
@@ -442,25 +433,10 @@ pub async fn add_to_vector_store(
 /// **ISOLAMENTO DE THREAD (MARCO 4.8.1)**: Executado dentro de `spawn_blocking`
 /// para proteger o reactor loop do Tokio contra leituras síncronas de mmap.
 pub async fn run_souls_semantic_search(
-    query_vector: Vec<f32>,
-    limit: usize,
-    filter_stability: Option<String>,
+    _query_vector: Vec<f32>,
+    _limit: usize,
+    _filter_stability: Option<String>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let db_path = default_vector_db_path();
-
-    tokio::task::spawn_blocking(move || {
-        let handle = tokio::runtime::Handle::current();
-        handle.block_on(async move {
-            crate::cognition::memory_graph::vector_store::search_observation_vectors(
-                &db_path,
-                query_vector,
-                limit,
-                filter_stability,
-            )
-            .await
-        })
-    })
-    .await
-    .map_err(|e| format!("Erro no join de spawn_blocking (search): {}", e))?
+    Err("Vector store pending materialization in Marco 4.9.0".to_string())
 }
 

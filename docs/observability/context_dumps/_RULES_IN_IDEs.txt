@@ -1,4 +1,4 @@
-_RULES_IN_IDEs Gerado em: 2026-08-05 20:40:55
+_RULES_IN_IDEs Gerado em: 2026-08-06 01:27:35
 
 ### ====================================================================================================
 ### SECTION 1: WORKSPACE CORE RULES (GEMINI.md / AGENTS.md)
