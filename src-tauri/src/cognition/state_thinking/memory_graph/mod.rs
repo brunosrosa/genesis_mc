@@ -10,12 +10,14 @@ pub mod mpsc_bridge;
 pub mod ops;
 pub mod types;
 pub mod uuid;
-// pub mod vector_store;
+pub mod vector_store;
 
 pub use errors::CognitiveError;
 pub use mpsc_bridge::{MemGraphOp, spawn_memory_graph_worker};
 pub use types::{Entity, ObservationInput, ObservationRecord, Relation, now_epoch_ms};
 pub use uuid::generate_uuid_v7;
+pub use vector_store::{HybridSearchResult, RrfDocumentInput, reciprocal_rank_fusion, RRF_K};
+
 
 use crate::cognition::state_thinking::thinking::worker::{StateDbOp, STATE_DB_TX};
 use tokio::sync::oneshot;

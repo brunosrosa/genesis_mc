@@ -397,7 +397,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "semantic_search",
-                        "description": "Busca semântica local no LanceDB usando similaridade de cosseno e mmap de baixa latência na RAM.",
+                        "description": "Busca híbrida local (FTS5 + LanceDB) usando fusão RRF de baixa latência na RAM.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -1213,7 +1213,7 @@ async fn run_souls_smart_read(
     }))
 }
 
-/// Handler para a ferramenta `semantic_search` (LanceDB Local Semantic Search).
+/// Handler para a ferramenta `semantic_search` (Busca Híbrida RRF unificada - FTS5 + LanceDB).
 async fn run_semantic_search_handler(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {
@@ -1239,7 +1239,8 @@ async fn run_semantic_search_handler(
 
     let limit = arguments
         .get("limit")
-        .and_then(Value::as_u64)
+        .and_then(Value::as_i64)
+        .or_else(|| arguments.get("limit").and_then(Value::as_u64).map(|v| v as i64))
         .unwrap_or(5) as usize;
 
     let stability_filter = arguments
@@ -1249,7 +1250,8 @@ async fn run_semantic_search_handler(
 
     let query_vector = generate_cpu_embedding_384(query_str);
 
-    let results = souls_mc_lib::cognition::memory_graph::ops::run_souls_semantic_search(
+    let results = memory_graph::ops::run_souls_hybrid_search(
+        query_str.to_string(),
         query_vector,
         limit,
         stability_filter,
@@ -1257,9 +1259,11 @@ async fn run_semantic_search_handler(
     .await
     .map_err(|e| RpcError {
         code: -32603,
-        message: format!("Falha no reator vetorial LanceDB: {}", e),
+        message: format!("Falha no reator de busca híbrida RRF: {}", e),
         data: None,
     })?;
+
+    try_record_repo_heatmap(".souls_data/souls_vectors.lance");
 
     let text_output = serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string());
 
@@ -1267,9 +1271,16 @@ async fn run_semantic_search_handler(
         "content": [{
             "type": "text",
             "text": text_output
-        }]
+        }],
+        "structuredContent": {
+            "query": query_str,
+            "results": results,
+            "count": results.len()
+        },
+        "isError": false
     }))
 }
+
 
 /// Gerador determinístico de embedding de 384 floats para CPU (bge-small-en-v1.5 fallback).
 fn generate_cpu_embedding_384(text: &str) -> Vec<f32> {
@@ -1278,7 +1289,8 @@ fn generate_cpu_embedding_384(text: &str) -> Vec<f32> {
     for i in 0..384u32 {
         let mut hasher = Sha256::new();
         hasher.update(text.as_bytes());
-        hasher.update(&i.to_le_bytes());
+        hasher.update(i.to_le_bytes());
+
         let hash = hasher.finalize();
         let val = (hash[0] as f32) / 255.0 - 0.5;
         vec.push(val);
@@ -5706,8 +5718,9 @@ mod tests {
             );
         }
 
-        // 5. Marco 4.1.3: 4 stubs com descricao "honesta" (sem mentira "not_implemented_yet").
-        for tool in &["semantic_search", "execute", "metrics", "intent"] {
+        // 5. Marco 4.1.3: 3 stubs com descricao "honesta" (sem mentira "not_implemented_yet").
+        for tool in &["execute", "metrics", "intent"] {
+
             let desc = find_desc(tool).expect("{tool} deve existir");
             assert!(
                 !desc.contains("not_implemented_yet"),

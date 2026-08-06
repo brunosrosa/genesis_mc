@@ -10,7 +10,11 @@
 use crate::cognition::memory_graph::errors::CognitiveError;
 use crate::cognition::memory_graph::types::{Entity, ObservationInput, ObservationRecord, Relation, now_epoch_ms};
 use crate::cognition::memory_graph::uuid::generate_uuid_v7;
+use crate::cognition::memory_graph::vector_store::{
+    self, HybridSearchResult, RrfDocumentInput, reciprocal_rank_fusion,
+};
 use rusqlite::{Connection, params};
+
 
 // ---------------------------------------------------------------------------
 // ESCRITA (3 ops)
@@ -399,8 +403,13 @@ mod tests {
 }
 
 // ---------------------------------------------------------------------------
-// VETORIZAÇÃO E BUSCA SEMÂNTICA (LanceDB - MARCO 4.8.1 Thread-Isolated)
+// VETORIZAÇÃO E BUSCA HÍBRIDA RRF (LanceDB + SQLite - MARCO 4.9.0 Thread-Isolated)
 // ---------------------------------------------------------------------------
+
+/// Caminho padrão do banco de estado SQLite
+pub fn default_state_db_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(".souls_data").join("souls_state.db")
+}
 
 /// Caminho padrão da base vetorial LanceDB
 pub fn default_vector_db_path() -> std::path::PathBuf {
@@ -418,14 +427,15 @@ pub async fn add_to_vector_store(
     stability: &str,
     embedding: Vec<f32>,
 ) -> Result<(), String> {
-    let obs_id = observation_id.to_string();
-    let entity = entity_name.to_string();
-    let cnt = content.to_string();
-    let stab = stability.to_string();
-    let db_path = default_vector_db_path();
-
-    let _ = (observation_id, entity_name, content, stability, embedding);
-    Err("Vector store pending materialization in Marco 4.9.0".to_string())
+    vector_store::insert_observation_vector(
+        default_vector_db_path(),
+        observation_id,
+        entity_name,
+        content,
+        stability,
+        embedding,
+    )
+    .await
 }
 
 /// Realiza a busca vetorial por similaridade de cosseno com pré-filtro escalar de estabilidade.
@@ -433,10 +443,129 @@ pub async fn add_to_vector_store(
 /// **ISOLAMENTO DE THREAD (MARCO 4.8.1)**: Executado dentro de `spawn_blocking`
 /// para proteger o reactor loop do Tokio contra leituras síncronas de mmap.
 pub async fn run_souls_semantic_search(
-    _query_vector: Vec<f32>,
-    _limit: usize,
-    _filter_stability: Option<String>,
+    query_vector: Vec<f32>,
+    limit: usize,
+    filter_stability: Option<String>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    Err("Vector store pending materialization in Marco 4.9.0".to_string())
+    vector_store::search_observation_vectors(
+        default_vector_db_path(),
+        query_vector,
+        limit,
+        filter_stability,
+    )
+    .await
 }
+
+/// Realiza a busca híbrida unificada RRF entre FTS5 (L2) e LanceDB (L3).
+pub async fn run_souls_hybrid_search(
+    query: String,
+    query_vector: Vec<f32>,
+    limit: usize,
+    stability_filter: Option<String>,
+) -> Result<Vec<HybridSearchResult>, String> {
+    run_souls_hybrid_search_with_paths(
+        default_state_db_path(),
+        default_vector_db_path(),
+        query,
+        query_vector,
+        limit,
+        stability_filter,
+    )
+    .await
+}
+
+/// Executa a busca híbrida RRF com caminhos customizáveis para isolamento em testes e produção.
+pub async fn run_souls_hybrid_search_with_paths<P1, P2>(
+    sqlite_db_path: P1,
+    lance_db_path: P2,
+    query: String,
+    query_vector: Vec<f32>,
+    limit: usize,
+    stability_filter: Option<String>,
+) -> Result<Vec<HybridSearchResult>, String>
+where
+    P1: AsRef<std::path::Path> + Send + 'static,
+    P2: AsRef<std::path::Path> + Send + 'static,
+{
+    let fts_limit = limit * 2;
+    let query_fts = query.clone();
+    let sqlite_path_buf = sqlite_db_path.as_ref().to_path_buf();
+
+    let fts_handle = tokio::task::spawn_blocking(move || -> Result<Vec<RrfDocumentInput>, String> {
+        if !sqlite_path_buf.exists() {
+            return Ok(Vec::new());
+        }
+        let conn = rusqlite::Connection::open_with_flags(
+            &sqlite_path_buf,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .or_else(|_| rusqlite::Connection::open(&sqlite_path_buf))
+        .map_err(|e| format!("Erro ao abrir SQLite state.db para FTS5: {e}"))?;
+
+        let records = search_observations(&conn, &query_fts, fts_limit).unwrap_or_default();
+        let docs = records
+            .into_iter()
+            .map(|r| RrfDocumentInput {
+                observation_id: r.id,
+                entity_name: r.entity_name,
+                content: r.content,
+                temporal_stability: "STABLE".to_string(),
+            })
+            .collect();
+        Ok(docs)
+    });
+
+    let vec_limit = limit * 2;
+    let vec_query = query_vector;
+    let vec_stability = stability_filter.clone();
+    let lance_path_buf = lance_db_path.as_ref().to_path_buf();
+
+    let vector_handle = tokio::task::spawn_blocking(move || -> Result<Vec<RrfDocumentInput>, String> {
+        let handle = tokio::runtime::Handle::current();
+        handle.block_on(async move {
+            let raw_results = vector_store::search_observation_vectors(
+                lance_path_buf,
+                vec_query,
+                vec_limit,
+                vec_stability,
+            )
+            .await
+            .unwrap_or_default();
+
+            let docs = raw_results
+                .into_iter()
+                .map(|val| RrfDocumentInput {
+                    observation_id: val["observation_id"].as_str().unwrap_or("").to_string(),
+                    entity_name: val["entity_name"].as_str().unwrap_or("").to_string(),
+                    content: val["content"].as_str().unwrap_or("").to_string(),
+                    temporal_stability: val["temporal_stability"]
+                        .as_str()
+                        .unwrap_or("STABLE")
+                        .to_string(),
+                })
+                .collect();
+            Ok::<Vec<RrfDocumentInput>, String>(docs)
+        })
+    });
+
+
+    let (fts_res, vector_res) = tokio::join!(fts_handle, vector_handle);
+
+    let fts_docs = fts_res
+        .map_err(|e| format!("Falha no join da thread FTS5: {e}"))?
+        .unwrap_or_default();
+    let vector_docs = vector_res
+        .map_err(|e| format!("Falha no join da thread Vector: {e}"))?
+        .unwrap_or_default();
+
+    let mut hybrid_results = reciprocal_rank_fusion(fts_docs, vector_docs);
+
+    if let Some(ref filter) = stability_filter {
+        hybrid_results.retain(|r| r.temporal_stability == *filter);
+    }
+
+    hybrid_results.truncate(limit);
+    Ok(hybrid_results)
+}
+
 
