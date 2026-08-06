@@ -15,4 +15,8 @@ binds:
                   targets:
                     - name: souls_mcp
                       stdio:
-                        cmd: 'Z:/souls_mc/src-tauri/target/debug/souls_mcp_server.exe'
+                        # Marco 4.1.2: Runtime desacoplado de target/debug/
+                        # (Fim dos travamentos NTFS durante `cargo build`).
+                        # O `boot.ps1` transplanta os 3 .exe para
+                        # `.agents/bin/` no step 1.5/5.
+                        cmd: 'Z:/souls_mc/.agents/bin/souls_mcp_server.exe'

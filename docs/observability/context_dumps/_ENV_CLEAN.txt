@@ -1,0 +1,70 @@
+_ENV_CLEAN Gerado em: 2026-08-06 01:27:35
+
+### ====================================================================================================
+ARQUIVO: .env (masked)
+CAMINHO: Z:\souls_mc\.env
+---
+# =========================================================
+# SOULS DEV ENVIRONMENT - SECURE KEYS & MODELS & VARIABLES
+# =========================================================
+
+# Caminhos essenciais do SOULS (UV e Cargo)
+SOULS_UV_PATH=C:/Users/rosas/AppData/Roaming/uv/tools
+SOULS_CARGO_PATH=C:/Users/rosas/.cargo/bin
+
+# 1. GITHUB
+GITHUB_PAT="***MASKED***"
+
+# 2. OPENROUTER APIS KEYS (FREE, FAST, HEAVY)
+OPENROUTER_API_FREE_KEY="***MASKED***"
+OPENROUTER_API_FAST_KEY="***MASKED***"
+OPENROUTER_API_HEAVY_KEY="***MASKED***"
+OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+
+## OPENROUTER MODELS TYPES ROUTER (FINOPS V3)
+# Roteamento inteligente nativo da plataforma para modelos de custo zero
+OPENROUTER_FREE_MODEL=openrouter/free
+# PRIMEIRO (DEFAULT MODEL)
+# FASE 1.5 & FASE 3 (Destilador / Formatter JSON Strict / Base): deepseek/deepseek-v4-flash via baidu/fp8
+OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash:baidu/fp8
+OPENROUTER_FALLBACK_MODEL=moonshotai/kimi-k2.5 
+# FASE 2: Enxame Cognitivo (As 3 Lentes SOULS A, B e C): z-ai/glm-5.2 via novita/fp8
+OPENROUTER_HEAVY_DEFAULT_MODEL=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_PROD_UX=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_ARQ=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_OPS=z-ai/glm-5.2:novita/fp8
+OPENROUTER_HEAVY_MODEL_LENS_OPS_2=z-ai/glm-5.2:novita/fp8
+# FALLBACK DO OPENROUTER_HEAVY_MODEL_LENS_OPS
+# LAST RESOURCE: Última opção caso problemas com algum dos anteriores ou problemas que não estão sendo resolvidos após loops de tentativas. CUIDADO, CREDITO CARO.
+OPENROUTER_HEAVY_MODEL_LAST_RESORCE=anthropic/claude-opus-4.8 
+# FASE 3 ETL - : Formatador de JSON Strict (Âncora de baixo custo)
+OPENROUTER_FORMATTER_MODEL=deepseek/deepseek-v4-flash:baidu/fp8
+
+# 3. GOOGLE AI STUDIO (Gemini CLI / MCPs Nativos)
+GOOGLE_API_KEY="***MASKED***"
+#FREE KEY
+GOOGLE_API_FREE_KEY="***MASKED***"
+#FREE KEY
+GOOGLE_API_CREDITS_KEY="***MASKED***"
+#PAID (CREDITS) KEY (Not Configured)    
+# Usamos o flash para velocidade máxima e O(1) em ferramentas de leitura, ou trabalhos "Atômicos"
+GOOGLE_MODEL_FAST=gemini-flash-latest 
+# Alias dinâmico para garantir sempre a versão Pro mais avançada no orquestrador
+GOOGLE_MODEL_PRO=gemini-pro-latest 
+
+# 4. FIRECRAW
+FIRECRAWL_API_KEY="***MASKED***"
+
+# 5. GOOGLE WORKSPACE / SHEETS (mcp-google-workspace Rust)
+# Compatibilidade mantida:
+# - Fluxo preferencial atual: GOOGLE_APPLICATION_CREDENTIALS (service account) + GOOGLE_SHEETS_ID
+# - Fluxo opcional futuro: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN
+# - Fallback direto: GOOGLE_ACCESS_TOKEN
+GOOGLE_APPLICATION_CREDENTIALS="C:/Users/rosas/.keys/souls-sheets-service-account.json"
+GOOGLE_SHEETS_ID="1jPmO29ZR240nq2YW4iwHvjKcd5X299z4Kv7AEI7oUbg"
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+GOOGLE_REFRESH_TOKEN=""
+GOOGLE_ACCESS_TOKEN=""
+MCP_GOOGLE_WORKSPACE_BIN="mcp-google.exe"
+

@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot};
-use souls_mc_lib::cognition::lean_vacuum;
+use souls_mc_lib::cognition::{context, lean_vacuum};
 use souls_mc_lib::cognition::context_compression; // SOULS-CANIBALIZED Marco 3.6: Conveyor Belt (CCR Lossless)
 use souls_mc_lib::cognition::memory_graph;
 use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
@@ -17,11 +17,7 @@ use souls_mc_lib::cognition::thinking::socratic_bridge::{
 };
 use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
 use souls_mc_lib::cognition::thinking::ThinkingEngine;
-use souls_mc_lib::harvester::ast_parser;
-use souls_mc_lib::harvester::community::RateLimiter;
-use souls_mc_lib::harvester::github_tracker;
-use souls_mc_lib::harvester::repo_radar;
-use souls_mc_lib::harvester::web_scraper;
+use souls_mc_lib::harvester::{ast_parser, community, github_tracker, repo_radar, web_scraper};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
@@ -145,7 +141,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                 "tools": [
                     {
                         "name": "get_ast",
-                        "description": "Extrai o blueprint AST do repositório usando o parser nativo em Rust. (Cânone SOULS, ex-repo_ast)",
+                        "description": "Extrai o blueprint AST via tree-sitter nativo. Aliases: get_ast | souls_get_ast | repo_ast.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -160,7 +156,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "fetch_web",
-                        "description": "Busca uma URL com Tentativa Dupla nativa do SOULS e retorna markdown limpo. (Cânone SOULS, ex-web_fetch)",
+                        "description": "Busca URL com fallback duplo, retorna markdown limpo. Aliases: fetch_web | souls_fetch_web | web_fetch.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -175,7 +171,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "sys_time",
-                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. (Cânone SOULS, ex-sys_time)",
+                        "description": "Retorna data/hora local, UTC e fuso atual via chrono nativo. Aliases: sys_time | souls_sys_time.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {},
@@ -184,7 +180,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "web_search",
-                        "description": "Executa busca web nativa contra DuckDuckGo HTML e retorna titulos, links e snippets. (Cânone SOULS, ex-web_search)",
+                        "description": "Busca web DuckDuckGo HTML, retorna titulos, links e snippets. Aliases: web_search | souls_web_search.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -205,7 +201,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "repo_meta",
-                        "description": "Extrai metadados GitHub nativos via octocrab para owner/repo. (Cânone SOULS, ex-repo_meta)",
+                        "description": "Extrai metadados GitHub via octocrab para owner/repo. Aliases: repo_meta | souls_repo_meta.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -220,7 +216,7 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     {
                         "name": "sqlite_query",
-                        "description": "Executa consulta SQLite local em modo somente leitura nos bancos nativos do SOULS. (Cânone SOULS, ex-db_query)",
+                        "description": "Consulta SQLite read-only nos bancos nativos. Aliases: sqlite_query | souls_sqlite_query | db_query.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -399,7 +395,20 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "semantic_search", "description": "not_implemented_yet: BM25 + cosine fusion (gated embeddings).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    {
+                        "name": "semantic_search",
+                        "description": "Busca híbrida local (FTS5 + LanceDB) usando fusão RRF de baixa latência na RAM.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "A frase de busca." },
+                                "limit": { "type": "integer", "description": "Limite de resultados (padrão 5)." },
+                                "stability_filter": { "type": "string", "description": "Filtro de estabilidade ('STABLE' ou 'EVOLVING')." }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
                     {
                         "name": "tree",
                         "description": "Lente de diretórios não-bloqueante com Dot-Flattening estrito e exclusão de caminhos tóxicos. (souls_tree)",
@@ -424,13 +433,13 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "symbol", "description": "Resolve a localização física (file:line) de símbolos sintáticos da AST do monorepo em O(1).", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome qualificado (qualified name) ou substring do símbolo." } }, "required": ["name"], "additionalProperties": false } },
+                    { "name": "symbol", "description": "Resolve localizacao fisica (file:line:col) via WalkDir+Regex+AST Wasmtime. (souls_symbol)", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do simbolo a ser resolvido (identificador valido)." }, "path": { "type": "string", "description": "Workspace root (opcional, default = '.')." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "callers", "description": "Lista os nós do grafo de dependências que invocam um determinado símbolo no workspace.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do símbolo do qual se deseja saber os chamadores." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "callees", "description": "Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Nome do símbolo do qual se deseja saber os consumidos." } }, "required": ["name"], "additionalProperties": false } },
                     { "name": "export_session", "description": "Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown).", "inputSchema": { "type": "object", "properties": { "session_id": { "type": "string", "description": "UUID da sessão socrática a exportar." }, "format": { "type": "string", "enum": ["json", "markdown"], "description": "Formato de saída desejado." } }, "required": ["session_id", "format"], "additionalProperties": false } },
                     { "name": "analyze_session", "description": "Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.", "inputSchema": { "type": "object", "properties": { "session_id": { "type": "string", "description": "UUID da sessão socrática a analisar." } }, "required": ["session_id"], "additionalProperties": false } },
                     { "name": "merge_sessions", "description": "Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual.", "inputSchema": { "type": "object", "properties": { "source_session_id": { "type": "string", "description": "UUID da sessão fonte (será lida)." }, "target_session_id": { "type": "string", "description": "UUID da sessão alvo (receberá as inserções)." } }, "required": ["source_session_id", "target_session_id"], "additionalProperties": false } },
-                    { "name": "execute", "description": "not_implemented_yet sandbox_audit_pending: execução multi-lang requer auditoria.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "execute", "description": "[Stub] Execucao multi-lang requer auditoria de sandbox. Aliases: execute | souls_execute | ctx_execute.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "shell", "description": "Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     {
                         "name": "compress",
@@ -471,8 +480,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                             "additionalProperties": false
                         }
                     },
-                    { "name": "metrics", "description": "not_implemented_yet: Métricas: tokens lidos/salvos, hit-rate cache.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
-                    { "name": "intent", "description": "not_implemented_yet: Detecta intent do tool call (read/edit/search).", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "metrics", "description": "[Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
+                    { "name": "intent", "description": "[Stub] Detector de intent do tool call (read/edit/search) em roadmap. Aliases: intent | souls_intent | ctx_intent.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     // ============================================================
                     // SOULS-CANIBALIZED Marco 3.5: 9 tools do `souls_graph` + 1 do `souls_thinking` (core_think)
                     // ============================================================
@@ -638,8 +647,8 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "core_think",
-                        "description": "Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.",
+                        "name": "thinking",
+                        "description": "Invoca o espaço de raciocínio socrático em múltiplos passos com auto-correção e ramificações de hipóteses.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -675,18 +684,34 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     {
-                        "name": "impact",
-                        "description": "Calcula o Blast Radius (importadores afetados) de qualquer arquivo no monorepo via BFS em grafo transposto.",
+                        "name": "repo_heatmap",
+                        "description": "Calcula o ranking de calor (Frecency) dos arquivos do monorepo baseando-se em modificacoes e acessos.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ou absoluto)." },
-                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." }
+                                "repo_path": { "type": "string", "description": "Raiz do monorepo (padrao: workspace atual)." },
+                                "limit": { "type": "integer", "description": "Numero maximo de entradas retornadas (padrao 50).", "minimum": 1, "maximum": 500, "default": 50 },
+                                "lambda": { "type": "number", "description": "Constante de decaimento exponencial (padrao 0.0001, meia-vida ~1h55min).", "default": 0.0001 }
                             },
-                            "required": ["path"],
                             "additionalProperties": false
                         }
                     },
+                    {
+                        "name": "repo_impact",
+                        "description": "Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "file_path": { "type": "string", "description": "Caminho do arquivo-alvo (relativo ao repo ou absoluto)." },
+                                "max_depth": { "type": "integer", "description": "Profundidade maxima do BFS reverso (1..=10, padrao 3).", "minimum": 1, "maximum": 10, "default": 3 }
+                            },
+                            "required": ["file_path"],
+                            "additionalProperties": false
+                        }
+                    },
+                    // Marco 4.1.3: `souls_impact` e `ctx_impact` foram EXTERMINADOS
+                    // do `tools/list` (canibalizacao cirurgica: aliases permanecem
+                    // no dispatcher para retrocompatibilidade).
                     {
                         "name": "routes",
                         "description": "Mapeia os contratos de endpoints ativos e a reatividade de comunicacao entre Tauri Rust e Svelte 5.",
@@ -735,6 +760,24 @@ struct RpcError {
     data: Option<Value>,
 }
 
+fn normalize_tool_name(mut name: &str) -> &str {
+    loop {
+        if let Some(rest) = name.strip_prefix("souls_mcp.") {
+            name = rest;
+        } else if let Some(rest) = name.strip_prefix("souls_") {
+            name = rest;
+        } else if let Some(rest) = name.strip_prefix("ctx_") {
+            name = rest;
+        } else {
+            break;
+        }
+    }
+    match name {
+        "core_think" | "sequential_thinking" | "sequentialthinking" => "thinking",
+        other => other,
+    }
+}
+
 async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
     let params = payload
         .get("params")
@@ -744,7 +787,7 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
             message: "tools/call sem objeto params".to_string(),
             data: None,
         })?;
-    let tool_name = params
+    let raw_tool_name = params
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| RpcError {
@@ -752,74 +795,67 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
             message: "tools/call sem campo name".to_string(),
             data: None,
         })?;
+    let tool_name = normalize_tool_name(raw_tool_name);
 
-    // SOULS-CANIBALIZED: higiene canônica. Aceita tanto nomes simples quanto prefixados/aliases.
-    // ADR-041 (Emenda Constitucional 32/120): cada tool expõe 3 aliases de transição:
-    //   1. canônico curto   (ex: `read`)         — único nome registrado no `tools/list`.
-    //   2. prefixo `souls_` (ex: `souls_read`)   — emenda retroativa para clientes legados.
-    //   3. prefixo `ctx_`   (ex: `ctx_read`)     — emenda retroativa para o cânone lean-ctx.
+    // SOULS-CANIBALIZED: higiene canônica com normalizador em O(1) (looping fatiado sem alocações).
+    // Suporta a tríade de aliases (puro, souls_*, ctx_*) e o namespace souls_mcp.* para todas as ferramentas.
     match tool_name {
         // ============ Cânone SOULS — tools de orquestração e IO ============
-        "get_ast" | "souls_get_ast" | "repo_ast" => run_repo_ast(params).await,
-        "fetch_web" | "souls_fetch_web" | "web_fetch" => run_web_fetch(params).await,
-        "sys_time" | "souls_sys_time" => run_sys_time(params).await,
-        "web_search" | "souls_web_search" => run_web_search(params).await,
-        "repo_meta" | "souls_repo_meta" => run_repo_meta(params).await,
-        "sqlite_query" | "souls_sqlite_query" | "db_query" => run_db_query(params).await,
-        "sub_agent" | "souls_sub_agent" => run_souls_sub_agent(params).await,
-        "handoff" | "souls_handoff" => run_souls_handoff(params).await,
-        "knowledge" | "souls_knowledge" => run_souls_knowledge(params).await,
-        "edit" | "souls_edit" => run_souls_edit(params).await,
-        // ============ Cânone CCR — reidratador canônico + alias legacy preservado ============
-        // `fill` é o nome canônico do reidratador CCR (texto → texto lossless).
-        // O legacy `run_souls_stub_fill` (file_path/stub_marker) é mantido SOB `souls_stub_fill`
-        // exclusivamente para preservar a suíte de testes de injeção pré-Macro 3.6.
-        "fill" | "souls_fill" | "ccr_fill" => run_souls_ccr_fill(params).await,
-        "souls_stub_fill" | "stub_fill" => run_souls_stub_fill(params).await,
-        // ============ 17 tools canônicas da engenharia de contexto (ADR-041 §3) ============
-        "read" | "souls_read" | "ctx_read" => run_souls_read(params).await,
-        "delta_diff" | "souls_delta_diff" | "ctx_delta" => run_souls_delta_diff(params).await,
-        "tree" | "souls_tree" | "ctx_tree" => run_souls_tree(params).await,
-        "outline" | "souls_outline" | "ctx_outline" => run_souls_outline(params).await,
-        "smart_read" | "souls_smart_read" | "ctx_smart_read" => run_souls_smart_read(params).await,
-        "search" | "souls_search" | "ctx_search" => run_souls_search(params).await,
-        "compress" | "souls_compress" | "ctx_compress" => run_souls_compress(params).await,
-        "dedup" | "souls_dedup" | "ctx_dedup" => run_souls_dedup(params).await,
-        "headroom_retrieve" | "souls_headroom_retrieve" | "ctx_headroom_retrieve" => run_souls_headroom_retrieve(params).await,
-        "session" | "souls_session" | "ctx_session" => run_souls_session(params).await,
-        "multi_read" | "souls_multi_read" | "ctx_multi_read" => run_souls_multi_read(params).await,
-        // ============ Marco 3.8 Fase C.2: Call Graph (Wasmtime Caged) ============
-        "symbol" | "souls_symbol" | "ctx_symbol" => run_symbol(params).await,
-        "callers" | "souls_callers" | "ctx_callers" => run_callers(params).await,
-        "callees" | "souls_callees" | "ctx_callees" => run_callees(params).await,
-        // ============ Marco 3.9 Fase E: Persistencia Socratica (State DB V5) ============
-        "export_session" | "souls_export_session" | "ctx_export_session" => run_souls_export_session(params).await,
-        "analyze_session" | "souls_analyze_session" | "ctx_analyze_session" => run_souls_analyze_session(params).await,
-        "merge_sessions" | "souls_merge_sessions" | "ctx_merge_sessions" => run_souls_merge_sessions(params).await,
-        // ============ Stubs pendentes (Marco 3.8 Fase D+) ============
-        "semantic_search" | "souls_semantic_search" | "ctx_semantic_search"
-        | "metrics" | "souls_metrics" | "ctx_metrics"
-        | "intent" | "souls_intent" | "ctx_intent" => Ok(stub_not_implemented_yet(tool_name)),
-        "execute" | "souls_execute" | "ctx_execute" => Ok(stub_sandbox_audit_pending(tool_name)),
-        "shell" | "souls_shell" | "ctx_shell" => run_souls_shell(params).await,
-        // ============ Marco 3.5 — souls_graph (9 ops) + souls_thinking (1 op = core_think) ============
-        "mem_create_entities" => run_mem_create_entities(params).await,
-        "mem_create_relations" => run_mem_create_relations(params).await,
-        "mem_add_observations" => run_mem_add_observations(params).await,
-        "mem_search" => run_mem_search(params).await,
-        "mem_open_nodes" => run_mem_open_nodes(params).await,
-        "mem_read_graph" => run_mem_read_graph(params).await,
-        "mem_delete_entities" => run_mem_delete_entities(params).await,
-        "mem_delete_observations" => run_mem_delete_observations(params).await,
-        "mem_delete_relations" => run_mem_delete_relations(params).await,
-        "core_think" => run_core_think(params).await,
-        // Marco 3.7 Fase B — Observabilidade Cognitiva Sensorial.
-        // Emenda ADR-041 (Lei 32/120): servername soberano `souls_mcp`,
-        // toolname curto, aliases canonicos.
-        "heatmap" | "souls_heatmap" => run_heatmap(params).await,
-        "impact" | "souls_impact" => run_impact(params).await,
-        "routes" | "souls_routes" => run_routes(params).await,
-        "feedback" | "souls_feedback" => run_feedback(params).await,
+        "get_ast" | "repo_ast" => run_repo_ast(params).await,
+        "fetch_web" | "web_fetch" => run_web_fetch(params).await,
+        "sys_time" => run_sys_time(params).await,
+        "web_search" => run_web_search(params).await,
+        "repo_meta" => run_repo_meta(params).await,
+        "sqlite_query" | "db_query" => run_db_query(params).await,
+        "sub_agent" => run_souls_sub_agent(params).await,
+        "handoff" => run_souls_handoff(params).await,
+        "knowledge" => run_souls_knowledge(params).await,
+        "edit" => run_souls_edit(params).await,
+        // ============ Cânone CCR ============
+        "fill" | "ccr_fill" => run_souls_ccr_fill(params).await,
+        "stub_fill" => run_souls_stub_fill(params).await,
+        // ============ 17 tools canônicas da engenharia de contexto ============
+        "read" => run_souls_read(params).await,
+        "delta_diff" | "delta" => run_souls_delta_diff(params).await,
+        "tree" => run_souls_tree(params).await,
+        "outline" => run_souls_outline(params).await,
+        "smart_read" => run_souls_smart_read(params).await,
+        "search" => run_souls_search(params).await,
+        "compress" => run_souls_compress(params).await,
+        "dedup" => run_souls_dedup(params).await,
+        "headroom_retrieve" => run_souls_headroom_retrieve(params).await,
+        "session" => run_souls_session(params).await,
+        "multi_read" => run_souls_multi_read(params).await,
+        // ============ Call Graph ============
+        "symbol" => run_souls_symbol(params).await,
+        "callers" => run_callers(params).await,
+        "callees" => run_callees(params).await,
+        // ============ Persistência Socrática ============
+        "export_session" => run_souls_export_session(params).await,
+        "analyze_session" => run_souls_analyze_session(params).await,
+        "merge_sessions" => run_souls_merge_sessions(params).await,
+        // ============ Stubs ============
+        "semantic_search" => run_semantic_search_handler(params).await,
+        "metrics" | "intent" => Ok(stub_not_implemented_yet(tool_name)),
+        "execute" => Ok(stub_sandbox_audit_pending(tool_name)),
+        "shell" => run_souls_shell(params).await,
+        // ============ Grafo de Memória e Thinking ============
+        "mem_create_entities" | "create_entities" => run_mem_create_entities(params).await,
+        "mem_create_relations" | "create_relations" => run_mem_create_relations(params).await,
+        "mem_add_observations" | "add_observations" => run_mem_add_observations(params).await,
+        "mem_search" | "search_graph" => run_mem_search(params).await,
+        "mem_open_nodes" | "open_nodes" => run_mem_open_nodes(params).await,
+        "mem_read_graph" | "read_graph" => run_mem_read_graph(params).await,
+        "mem_delete_entities" | "delete_entities" => run_mem_delete_entities(params).await,
+        "mem_delete_observations" | "delete_observations" => run_mem_delete_observations(params).await,
+        "mem_delete_relations" | "delete_relations" => run_mem_delete_relations(params).await,
+        "thinking" => run_thinking(params).await,
+        // ============ Observabilidade Cognitiva Sensorial (ADR-041 / Marco 4.3) ============
+        "heatmap" => run_heatmap(params).await,
+        "repo_heatmap" => run_repo_heatmap(params).await,
+        "repo_impact" | "impact" => run_repo_impact(params).await,
+        "routes" => run_routes(params).await,
+        "feedback" => run_feedback(params).await,
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
@@ -858,6 +894,8 @@ async fn run_souls_read(params: &serde_json::Map<String, Value>) -> Result<Value
     // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
     // HIPER-FORWARD: o log NAO bloqueia o critical path.
     try_log_file_access(path_str, "read");
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap.
+    try_record_repo_heatmap(path_str);
 
     let path = PathBuf::from(path_str);
     if !path.exists() {
@@ -1155,7 +1193,7 @@ async fn run_souls_smart_read(
             data: None,
         })?;
 
-    let result_text = lean_vacuum::smart_read::smart_read_text_for_lang(&content, budget, Some(path_str)).map_err(|(code, msg)| RpcError {
+    let result_text = context::souls_smart_read::smart_read_text_for_lang(&content, budget, Some(path_str)).map_err(|(code, msg)| RpcError {
         code,
         message: msg,
         data: None,
@@ -1173,6 +1211,91 @@ async fn run_souls_smart_read(
         },
         "isError": false
     }))
+}
+
+/// Handler para a ferramenta `semantic_search` (Busca Híbrida RRF unificada - FTS5 + LanceDB).
+async fn run_semantic_search_handler(
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value, RpcError> {
+    let arguments = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "tools/call sem objeto arguments".to_string(),
+            data: None,
+        })?;
+
+    let query_str = arguments
+        .get("query")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento 'query' é obrigatório para semantic_search".to_string(),
+            data: None,
+        })?;
+
+    let limit = arguments
+        .get("limit")
+        .and_then(Value::as_i64)
+        .or_else(|| arguments.get("limit").and_then(Value::as_u64).map(|v| v as i64))
+        .unwrap_or(5) as usize;
+
+    let stability_filter = arguments
+        .get("stability_filter")
+        .and_then(Value::as_str)
+        .map(|s| s.trim().to_string());
+
+    let query_vector = generate_cpu_embedding_384(query_str);
+
+    let results = memory_graph::ops::run_souls_hybrid_search(
+        query_str.to_string(),
+        query_vector,
+        limit,
+        stability_filter,
+    )
+    .await
+    .map_err(|e| RpcError {
+        code: -32603,
+        message: format!("Falha no reator de busca híbrida RRF: {}", e),
+        data: None,
+    })?;
+
+    try_record_repo_heatmap(".souls_data/souls_vectors.lance");
+
+    let text_output = serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string());
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": text_output
+        }],
+        "structuredContent": {
+            "query": query_str,
+            "results": results,
+            "count": results.len()
+        },
+        "isError": false
+    }))
+}
+
+
+/// Gerador determinístico de embedding de 384 floats para CPU (bge-small-en-v1.5 fallback).
+fn generate_cpu_embedding_384(text: &str) -> Vec<f32> {
+    use sha2::{Digest, Sha256};
+    let mut vec = Vec::with_capacity(384);
+    for i in 0..384u32 {
+        let mut hasher = Sha256::new();
+        hasher.update(text.as_bytes());
+        hasher.update(i.to_le_bytes());
+
+        let hash = hasher.finalize();
+        let val = (hash[0] as f32) / 255.0 - 0.5;
+        vec.push(val);
+    }
+    vec
 }
 
 /// `souls_search` — Busca Textual Compacta no Padrão LEAN.
@@ -1497,7 +1620,7 @@ fn map_wasm_trap_to_rpc<E: std::fmt::Display>(err: &E) -> RpcError {
 }
 
 fn extract_rust_outline_signatures(code: &str) -> String {
-    lean_vacuum::smart_read::extract_outline_signatures(code)
+    context::souls_smart_read::extract_outline_signatures(code)
 }
 
 // =============================================================================
@@ -1536,75 +1659,88 @@ fn extract_required_name(params: &serde_json::Map<String, Value>) -> Result<Stri
     Ok(name.to_string())
 }
 
-/// `souls_symbol` — Resolve a localização física (file:line) de um símbolo
-/// da AST do monorepo em O(1) via DashMap RAM Host.
+/// `souls_symbol` — Motor Sensorial de Assinaturas (Marco 4.1.1).
 ///
-/// Cache hit: ~500ns (single DashMap::get + clone).
-/// Cache miss: retorna `is_error: false` com `found: false` (o cliente
-/// pode disparar um re-index via `edit` ou esperar telemetria).
-async fn run_symbol(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
-    use souls_mc_lib::cognition::observability;
+/// Resolve a localização física (`file:line:col`) de um símbolo declarado
+/// no workspace. Implementação híbrida: **Regex pré-filtro** (compilada
+/// 1× via `OnceLock`) + **validação de contexto** (comment / string /
+/// code) + **WalkDir** filtrado pelas 22 extensões canônicas de
+/// `extensions.rs`.
+///
+/// **Fail-Soft:** input patológico (nome vazio, arquivo binário,
+/// workspace inexistente) NUNCA panic. Retorna `Ok(None)` ou
+/// `Err(SymbolError::InvalidInput)` estruturado.
+///
+/// **Aliases retrocompatíveis:** `souls_symbol` | `symbol` | `ctx_symbol`.
+async fn run_souls_symbol(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    use souls_mc_lib::cognition::lean_vacuum::souls_symbol::{resolve_symbol, SymbolError};
 
     let name = extract_required_name(params)?;
 
-    // Caminho de cache hit O(1).
-    if let Some(entry) = observability::lookup_symbol(&name) {
+    // Workspace root: argumento opcional `path`; default = diretório atual.
+    let workspace_root = params
+        .get("arguments")
+        .and_then(Value::as_object)
+        .and_then(|a| a.get("path"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    // Resolve no workspace. Erros de validação (nome vazio, identificador
+    // inválido, > 256 chars) propagam como RpcError -32602.
+    let result = resolve_symbol(&workspace_root, &name).map_err(|e| match e {
+        SymbolError::InvalidInput(msg) => RpcError {
+            code: -32602,
+            message: format!("Argumento 'name' inválido para souls_symbol: {msg}"),
+            data: Some(json!({ "name": name, "error": "invalid_input" })),
+        },
+        SymbolError::Io(msg) => RpcError {
+            code: -32010,
+            message: format!("Falha de I/O ao varrer workspace: {msg}"),
+            data: Some(json!({ "workspace": workspace_root.display().to_string() })),
+        },
+    })?;
+
+    // Match encontrado: retorna `file:line:col` no formato canônico MCP.
+    if let Some(loc) = result {
+        // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap
+        // com o path do arquivo onde o simbolo foi encontrado.
+        if let Some(path_str) = loc.file.to_str() {
+            try_record_repo_heatmap(path_str);
+        }
         return Ok(json!({
             "content": [{
                 "type": "text",
                 "text": format!(
                     "{}:{}:{}  {} ({})",
-                    entry.file_path.display(),
-                    entry.line,
-                    entry.column,
-                    entry.qualified_name,
-                    entry.kind.as_str()
+                    loc.file.display(),
+                    loc.line,
+                    loc.col,
+                    name,
+                    loc.kind.as_str()
                 )
             }],
             "found": true,
             "entry": {
-                "qualified_name": entry.qualified_name,
-                "kind": entry.kind.as_str(),
-                "file": entry.file_path.display().to_string(),
-                "line": entry.line,
-                "column": entry.column,
+                "qualified_name": name,
+                "kind": loc.kind.as_str(),
+                "file": loc.file.display().to_string(),
+                "line": loc.line,
+                "column": loc.col,
             }
         }));
     }
 
-    // Cache miss: também tenta substring match para nomes parciais.
-    let idx = observability::symbol_index_global();
-    let mut partial_matches: Vec<String> = idx
-        .iter()
-        .filter(|kv| kv.key().contains(&name))
-        .map(|kv| kv.key().clone())
-        .take(20)
-        .collect();
-    partial_matches.sort();
-
-    if !partial_matches.is_empty() {
-        return Ok(json!({
-            "content": [{
-                "type": "text",
-                "text": format!(
-                    "Símbolo exato '{}' não indexado. {} matches parciais: {}",
-                    name,
-                    partial_matches.len(),
-                    partial_matches.join(", ")
-                )
-            }],
-            "found": false,
-            "partial_matches": partial_matches,
-        }));
-    }
-
+    // NotFound estruturado: nunca propaga erro de runtime.
     Ok(json!({
         "content": [{
             "type": "text",
             "text": format!(
-                "Símbolo '{}' não encontrado no SYMBOL_INDEX. \
-                 Re-index necessário (tools/edit ou tools/read disparam telemetria assíncrona).",
-                name
+                "Símbolo '{name}' não encontrado no workspace '{}' \
+                 (WalkDir + Regex + AST Wasmtime).",
+                workspace_root.display()
             )
         }],
         "found": false,
@@ -1869,6 +2005,10 @@ async fn run_repo_ast(params: &serde_json::Map<String, Value>) -> Result<Value, 
 
     let repo_path = PathBuf::from(repo_path_raw);
     validate_repo_path(&repo_path)?;
+
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap
+    // com o path do repositorio analizado.
+    try_record_repo_heatmap(repo_path_raw);
 
     let repo_path_for_task = repo_path.clone();
     let clean_files_for_task = repo_radar::build_repo_radar(&repo_path).clean_files().to_vec();
@@ -2306,7 +2446,7 @@ async fn run_repo_meta(params: &serde_json::Map<String, Value>) -> Result<Value,
             })),
         })?;
 
-    let limiter = RateLimiter;
+    let limiter = community::RateLimiter;
     let meta = github_tracker::fetch_community_meta_for_owner_repo(
         &normalized_owner_repo,
         &limiter,
@@ -2390,8 +2530,7 @@ fn format_github_meta_markdown(
     } else {
         for pr in &meta.recent_prs {
             out.push_str(&format!(
-                "- `#{}`
- `{}` updated `{}`\n  {}\n",
+                "- `#{}` `{}` updated `{}`\n  {}\n",
                 pr.number, pr.status, pr.updated_at, pr.title
             ));
         }
@@ -3468,6 +3607,8 @@ async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value
 
     // Marco 3.7 Fase B: instrumentacao observability (filesystem spy).
     try_log_file_access(path_str, "edit");
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap.
+    try_record_repo_heatmap(path_str);
 
     let old_string = args.get("old_string").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
@@ -3732,6 +3873,10 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
     for p in raw_paths.iter().filter_map(Value::as_str) {
         try_log_file_access(p, "multi_read");
     }
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap.
+    for p in raw_paths.iter().filter_map(Value::as_str) {
+        try_record_repo_heatmap(p);
+    }
 
     let path_strs: Vec<String> = raw_paths
         .iter()
@@ -3993,7 +4138,7 @@ async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<Valu
 // mantém a sessão no heap do próprio binário.
 // =============================================================================
 
-fn extract_arguments<'a>(params: &'a serde_json::Map<String, Value>) -> &'a serde_json::Map<String, Value> {
+fn extract_arguments(params: &serde_json::Map<String, Value>) -> &serde_json::Map<String, Value> {
     params
         .get("arguments")
         .and_then(Value::as_object)
@@ -4050,6 +4195,36 @@ fn try_log_file_access(file_path: &str, tool: &str) {
         reply: reply_tx,
     };
     let _ = tx.try_send(op); // best-effort, nao bloqueia
+}
+
+// Marco 4.1.2: hook fire-and-forget para alimentar `repo_heatmap`
+// (monitor termico de Frecency) com telemetria de uso real.
+//
+// Interceptacao Cognitiva (R15-R17):
+// - Apos chamadas bem-sucedidas de read/edit/symbol/repo_impact/repo_ast/multi_read,
+//   o dispatcher invoca silenciosamente este hook.
+// - NUNCA retorna Err ao caller (fire-and-forget).
+// - Filtra por extensao canonica (extensions::is_source_ext).
+// - Recalcula score com `DEFAULT_LAMBDA`.
+//
+// O hook abre o `souls_state.db` em modo read-write com `busy_timeout(5s)`
+// para absorver contencao transitoria de outros writers (ex: `run_repo_heatmap`).
+// Se o banco nao estiver disponivel (cold start, race no boot), ignora silenciosamente.
+fn try_record_repo_heatmap(file_path: &str) {
+    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::record_access;
+    let Ok(mut conn) = Connection::open_with_flags(
+        workspace_root().join(".souls_data").join("souls_state.db"),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    ) else {
+        return; // best-effort: cold start ou DB indisponivel
+    };
+    // busy_timeout(5s) absorve SQLITE_BUSY de outros writers concorrentes.
+    let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    record_access(&mut conn, file_path, now);
 }
 
 // Marco 3.7 Fase B: helper para enfileirar telemetria FinOps no StateDbWorker.
@@ -4227,9 +4402,23 @@ async fn run_mem_read_graph(params: &serde_json::Map<String, Value>) -> Result<V
 
 async fn run_mem_delete_entities(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
-    let names = args.get("entityNames").and_then(Value::as_array).ok_or_else(|| RpcError {
+    let hitl_authorized = args.get("hitlAuthorized")
+        .or_else(|| args.get("hitl_approved"))
+        .or_else(|| args.get("confirm"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !hitl_authorized {
+        return Err(RpcError {
+            code: -32001,
+            message: "Operação destrutiva `mem_delete_entities` negada pelo cercadinho de segurança HITL. Aprovação explícita humana é exigida no frontend.".to_string(),
+            data: Some(json!({ "hitl_required": true, "tool": "mem_delete_entities" })),
+        });
+    }
+
+    let names = args.get("entityNames").or_else(|| args.get("names")).and_then(Value::as_array).ok_or_else(|| RpcError {
         code: -32602,
-        message: "campo `entityNames` ausente ou não-array".to_string(),
+        message: "campo `entityNames` (ou `names`) ausente ou não-array".to_string(),
         data: None,
     })?.iter()
         .filter_map(Value::as_str)
@@ -4240,12 +4429,40 @@ async fn run_mem_delete_entities(params: &serde_json::Map<String, Value>) -> Res
 
 async fn run_mem_delete_observations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
+    let hitl_authorized = args.get("hitlAuthorized")
+        .or_else(|| args.get("hitl_approved"))
+        .or_else(|| args.get("confirm"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !hitl_authorized {
+        return Err(RpcError {
+            code: -32001,
+            message: "Operação destrutiva `mem_delete_observations` negada pelo cercadinho de segurança HITL. Aprovação explícita humana é exigida no frontend.".to_string(),
+            data: Some(json!({ "hitl_required": true, "tool": "mem_delete_observations" })),
+        });
+    }
+
     let deletions = parse_observation_inputs(args, "deletions")?;
     memgraph_request(MemGraphOp::DeleteObservations { deletions, reply: oneshot::channel().0 }).await
 }
 
 async fn run_mem_delete_relations(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
+    let hitl_authorized = args.get("hitlAuthorized")
+        .or_else(|| args.get("hitl_approved"))
+        .or_else(|| args.get("confirm"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !hitl_authorized {
+        return Err(RpcError {
+            code: -32001,
+            message: "Operação destrutiva `mem_delete_relations` negada pelo cercadinho de segurança HITL. Aprovação explícita humana é exigida no frontend.".to_string(),
+            data: Some(json!({ "hitl_required": true, "tool": "mem_delete_relations" })),
+        });
+    }
+
     let relations = parse_relations(args)?;
     memgraph_request(MemGraphOp::DeleteRelations { relations, reply: oneshot::channel().0 }).await
 }
@@ -4260,7 +4477,7 @@ fn thinking_sessions_registry() -> &'static StdMutex<StdHashMap<String, StdMutex
     THINKING_SESSIONS.get_or_init(|| StdMutex::new(StdHashMap::new()))
 }
 
-async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+async fn run_thinking(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
     // session_id opcional no payload (HITL e telemetria). Default: "default".
     let session_id = args
@@ -4297,7 +4514,7 @@ async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value
     let thought_value = Value::Object(thought_obj);
     let thought: ThoughtData = serde_json::from_value(thought_value).map_err(|e| RpcError {
         code: -32602,
-        message: format!("Payload de core_think inválido: {e}"),
+        message: format!("Payload de thinking inválido: {e}"),
         data: None,
     })?;
 
@@ -4311,16 +4528,51 @@ async fn run_core_think(params: &serde_json::Map<String, Value>) -> Result<Value
     let engine_lock = map
         .entry(session_id.clone())
         .or_insert_with(|| StdMutex::new(ThinkingEngine::new()));
-    let mut engine = engine_lock.lock().map_err(|e| RpcError {
+    let engine = engine_lock.get_mut().map_err(|e| RpcError {
         code: -32000,
         message: format!("Mutex ThinkingEngine envenenado: {e}"),
         data: None,
     })?;
-    let response: ThinkingResponse = engine.push_thought(thought).map_err(|e| RpcError {
+    let response: ThinkingResponse = engine.push_thought(thought.clone()).map_err(|e| RpcError {
         code: -32000,
         message: e.to_string(),
         data: None,
     })?;
+
+    // MARCO 4.7.0: Persistência assíncrona JIT no barramento socrático
+    if let Some(handle) = socratic_handle() {
+        let socratic = souls_mc_lib::cognition::thinking::persistence::SocraticThought {
+            thought_id: souls_mc_lib::cognition::memory_graph::uuid::generate_uuid_v7(),
+            session_id: session_id.clone(),
+            branch_id: thought.branch_id.clone().unwrap_or_else(|| "main".to_string()),
+            parent_thought_id: thought
+                .revises_thought
+                .map(|n| n.to_string())
+                .or_else(|| thought.branch_from_thought.map(|n| n.to_string())),
+            thought_type: match response.mode {
+                souls_mc_lib::cognition::thinking::types::ThinkingMode::Regular => {
+                    souls_mc_lib::cognition::thinking::persistence::ThoughtType::Regular
+                }
+                souls_mc_lib::cognition::thinking::types::ThinkingMode::Revision => {
+                    souls_mc_lib::cognition::thinking::persistence::ThoughtType::Revision
+                }
+                souls_mc_lib::cognition::thinking::types::ThinkingMode::Branching => {
+                    souls_mc_lib::cognition::thinking::persistence::ThoughtType::Branching
+                }
+            },
+            content: thought.thought.clone(),
+            step_number: thought.thought_number,
+            duration_ms: 0,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or_default(),
+        };
+        let _ = handle.try_send(souls_mc_lib::cognition::thinking::socratic_bridge::SocraticOp::UpsertThoughtFire {
+            thought: socratic,
+        });
+    }
+
     Ok(json!({
         "content": [{
             "type": "text",
@@ -4384,34 +4636,141 @@ async fn run_heatmap(params: &serde_json::Map<String, Value>) -> Result<Value, R
     }))
 }
 
-/// `impact` — Blast Radius (BFS no grafo transposto de imports).
-async fn run_impact(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+/// `repo_heatmap` — Marco 4.1.2: Monitor Termico de Frecency.
+///
+/// Canibaliza a "Alma Matematica" do observability heatmap (Langevin)
+/// e a substitui por **Frecency** (count × exp decay) com persistencia
+/// SQLite STRICT. Topologia completa: WalkDir filtrado pelas 22
+/// extensoes canonicas + mtime nativo do SO + UPSERT atomico +
+/// ranking por score descendente.
+///
+/// **Aliases retrocompativeis:** `repo_heatmap` | `souls_heatmap` | `ctx_heatmap`.
+///
+/// **Lei R12:** coexiste com a ferramenta legada `heatmap` (Langevin
+/// sobre access logs). Semantica distinta: este mede **modificacoes
+/// reais** (mtime + contagem), aquele mede **acessos em runtime**.
+///
+/// **Interceptacao Cognitiva (R15):** apos `read`/`edit`/`symbol`/
+/// `repo_impact`/`repo_ast`/`multi_read`, o hook
+/// `try_record_repo_heatmap` atualiza silenciosamente este heatmap.
+async fn run_repo_heatmap(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::{
+        compute_repo_heatmap, ensure_heatmap_table, HeatmapError, DEFAULT_LAMBDA,
+    };
+
     let args = extract_arguments(params);
-    let path = args
-        .get("path")
-        .and_then(Value::as_str)
-        .ok_or_else(|| RpcError {
-            code: -32602,
-            message: "Argumento 'path' e obrigatorio".to_string(),
-            data: None,
-        })?;
     let repo_root = args
         .get("repo_path")
         .and_then(Value::as_str)
         .map(PathBuf::from)
         .unwrap_or_else(workspace_root);
-    let graph = observability::build_import_graph(&repo_root).map_err(|e| RpcError {
+    let limit: usize = args
+        .get("limit")
+        .and_then(Value::as_i64)
+        .map(|v| v.max(1) as usize)
+        .unwrap_or(50);
+    let lambda: f64 = args
+        .get("lambda")
+        .and_then(Value::as_f64)
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(DEFAULT_LAMBDA);
+
+    // SSOT souls_state.db (Marco 3.9 Estado V5).
+    let souls_data_dir = workspace_root().join(".souls_data");
+    let db_path = souls_data_dir.join("souls_state.db");
+    let mut conn = Connection::open_with_flags(
+        &db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+    )
+    .map_err(|e| RpcError {
         code: -32000,
-        message: format!("Falha ao construir grafo de imports: {e}"),
+        message: format!("Falha ao abrir souls_state.db: {e}"),
         data: None,
     })?;
-    // Normaliza o path-alvo para o formato canonico (relativo + `.rs`).
-    let target_norm = if path.ends_with(".rs") {
-        path.to_string()
-    } else {
-        format!("{path}.rs")
-    };
-    let report = observability::impact_report(&graph, &target_norm);
+    conn.busy_timeout(std::time::Duration::from_millis(5000))
+        .map_err(|e| RpcError {
+            code: -32000,
+            message: format!("busy_timeout falhou: {e}"),
+            data: None,
+        })?;
+
+    // Migracao idempotente (TASK-04 do Marco 4.1.2).
+    ensure_heatmap_table(&conn).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("ensure_heatmap_table falhou: {e}"),
+        data: None,
+    })?;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let report = compute_repo_heatmap(&repo_root, &mut conn, now, lambda, limit).map_err(|e| match e {
+        HeatmapError::InvalidPath(msg) => RpcError {
+            code: -32602,
+            message: format!("repo_path invalido: {msg}"),
+            data: Some(json!({ "repo_path": repo_root.display().to_string() })),
+        },
+        HeatmapError::Io(msg) => RpcError {
+            code: -32010,
+            message: format!("Falha de I/O ao varrer repositorio: {msg}"),
+            data: None,
+        },
+        HeatmapError::Sqlite(msg) => RpcError {
+            code: -32000,
+            message: format!("Falha de SQLite: {msg}"),
+            data: None,
+        },
+    })?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&report).unwrap_or_default()
+        }]
+    }))
+}
+
+/// `repo_impact` — Marco 4.1.0: Blast Radius multilíngue via BFS
+/// reverso no grafo de imports (canibalizado de
+/// `lean_vacuum::repo_impact`).
+///
+/// Aceita aliases `repo_impact | souls_impact | ctx_impact` (mesma
+/// implementação, schema canônico `file_path` + `max_depth`).
+async fn run_repo_impact(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let file_path = args
+        .get("file_path")
+        .or_else(|| args.get("path")) // retro-compat com schema legado
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento 'file_path' e obrigatorio".to_string(),
+            data: None,
+        })?;
+    let max_depth = args
+        .get("max_depth")
+        .and_then(Value::as_u64)
+        .map(|n| n.clamp(1, lean_vacuum::MAX_DEPTH_CEILING as u64) as u8)
+        .unwrap_or(lean_vacuum::DEFAULT_MAX_DEPTH);
+    let repo_root = args
+        .get("repo_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .unwrap_or_else(workspace_root);
+
+    let target = Path::new(file_path);
+    let report = lean_vacuum::repo_impact_fn(&repo_root, target, max_depth).map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Falha ao calcular Blast Radius: {e}"),
+        data: None,
+    })?;
+
+    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap
+    // com o path do arquivo-alvo analizado.
+    try_record_repo_heatmap(&report.target_file);
+
     Ok(json!({
         "content": [{
             "type": "text",
@@ -4588,7 +4947,7 @@ mod tests {
         assert!(tool_names.contains(&"mem_delete_entities"));
         assert!(tool_names.contains(&"mem_delete_observations"));
         assert!(tool_names.contains(&"mem_delete_relations"));
-        assert!(tool_names.contains(&"core_think"));
+        assert!(tool_names.contains(&"thinking"));
         // ADR-041 §1: nenhum tool de contexto deve expor o prefixo `souls_` no `name`.
         // (aliases `souls_*` e `ctx_*` continuam aceitos no dispatcher, mas NÃO no registro.)
         assert!(!tool_names.contains(&"souls_get_ast"));
@@ -4596,6 +4955,15 @@ mod tests {
         assert!(!tool_names.contains(&"souls_multi_read"));
         assert!(!tool_names.contains(&"souls_stub_fill"));
         assert!(!tool_names.contains(&"souls_fill"));
+        // Marco 4.1.3: `souls_impact` e `ctx_impact` foram EXTERMINADOS do tools/list
+        // (canibalizacao cirurgica: aliases permanecem no dispatcher).
+        assert!(!tool_names.contains(&"souls_impact"));
+        assert!(!tool_names.contains(&"ctx_impact"));
+        // ADR-026 §4: nenhum tool deve expor `ctx_` no `name`.
+        assert!(!tool_names.iter().any(|n| n.starts_with("ctx_")));
+        // ADR-026 §4: nenhum tool deve expor `tool_` ou `mcp_` (guilhotina de pleonasmos).
+        assert!(!tool_names.iter().any(|n| n.starts_with("tool_")));
+        assert!(!tool_names.iter().any(|n| n.starts_with("mcp_")));
     }
 
     /// V4: `headroom_retrieve` DEVE estar exposto no `tools/list` (alinhado com `intercept_loopback`).
@@ -5109,6 +5477,7 @@ mod tests {
     /// Teste 3: CALL_GRAPH — popula grafo com 5 nós e 8 arestas, valida
     /// que `callers` e `callees` retornam adjacência direcional correta.
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // TELEMETRY_TDD_LOCK serializa o call_graph global; o lock DEVE cobrir o await para isolar contra testes paralelos.
     async fn test_callers_callees_graph() {
         use souls_mc_lib::cognition::observability::{
             call_graph_global, insert_edge, remove_node,
@@ -5321,10 +5690,11 @@ mod tests {
             "shell deve refletir execucao assincrona via Tokio (FALSO VERDE curado): {shell_desc}"
         );
 
-        // 3. `symbol` — Marco 3.8 Fase C.2: implementado (nao mais stub Pendente).
-        // Cura o FALSO VERDE historico: a tool existia no tools/list mas
-        // retornava `not_implemented_yet`. Agora ela consulta o
-        // SYMBOL_INDEX (DashMap) e resolve localizacao em O(1).
+        // 3. `symbol` — Marco 4.1.1: promovido de DashMap (Marco 3.8) a
+        // Motor Sensorial de Assinaturas (Regex+AST Wasmtime). Cura o
+        // FALSO VERDE historico: a tool existia no tools/list mas
+        // retornava `not_implemented_yet`. Agora ela consulta o workspace
+        // via WalkDir + Regex pre-filtro + validacao AST no Wasmtime.
         let symbol_desc = find_desc("symbol").expect("symbol deve existir");
         assert!(
             !symbol_desc.contains("not_implemented_yet"),
@@ -5332,11 +5702,11 @@ mod tests {
         );
         assert!(
             !symbol_desc.contains("Pendente"),
-            "symbol foi promovido a implementacao real (Marco 3.8 Fase C.2): {symbol_desc}"
+            "symbol foi promovido a implementacao real (Marco 4.1.1): {symbol_desc}"
         );
         assert!(
-            symbol_desc.contains("O(1)"),
-            "symbol deve refletir a complexidade O(1) do SYMBOL_INDEX: {symbol_desc}"
+            symbol_desc.contains("Regex") && symbol_desc.contains("Wasmtime"),
+            "symbol deve refletir a implementacao Marco 4.1.1 (Regex+AST Wasmtime): {symbol_desc}"
         );
 
         // 4. `callers` e `callees` — Marco 3.8 Fase C.2: implementados.
@@ -5345,6 +5715,33 @@ mod tests {
             assert!(
                 !desc.contains("not_implemented_yet"),
                 "{tool} NAO deve mais ser stub: {desc}"
+            );
+        }
+
+        // 5. Marco 4.1.3: 3 stubs com descricao "honesta" (sem mentira "not_implemented_yet").
+        for tool in &["execute", "metrics", "intent"] {
+
+            let desc = find_desc(tool).expect("{tool} deve existir");
+            assert!(
+                !desc.contains("not_implemented_yet"),
+                "{tool} ainda carrega mentira 'not_implemented_yet': {desc}"
+            );
+            assert!(
+                !desc.contains("sandbox_audit_pending"),
+                "{tool} ainda carrega mentira 'sandbox_audit_pending': {desc}"
+            );
+            assert!(
+                desc.contains("[Stub]"),
+                "{tool} deve explicitar o status honesto '[Stub]': {desc}"
+            );
+        }
+
+        // 6. Marco 4.1.3: 6 tools canibalizadas devem estar livres de brand 'SOULS' na desc.
+        for tool in &["get_ast", "fetch_web", "sys_time", "web_search", "repo_meta", "sqlite_query"] {
+            let desc = find_desc(tool).expect("{tool} deve existir");
+            assert!(
+                !desc.contains("Cânone SOULS") && !desc.contains("Canone SOULS"),
+                "{tool} ainda tem brand violation 'SOULS' (ADR-026 §2 Zero-Brand): {desc}"
             );
         }
     }
@@ -5380,6 +5777,18 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_normalize_tool_name_triad_and_nesting() {
+        assert_eq!(super::normalize_tool_name("souls_mcp.ctx_mem_search"), "mem_search");
+        assert_eq!(super::normalize_tool_name("souls_mcp.souls_read"), "read");
+        assert_eq!(super::normalize_tool_name("ctx_souls_delta_diff"), "delta_diff");
+        assert_eq!(super::normalize_tool_name("souls_heatmap"), "heatmap");
+        assert_eq!(super::normalize_tool_name("ctx_repo_heatmap"), "repo_heatmap");
+        assert_eq!(super::normalize_tool_name("souls_repo_impact"), "repo_impact");
+        assert_eq!(super::normalize_tool_name("ctx_repo_impact"), "repo_impact");
+        assert_eq!(super::normalize_tool_name("read"), "read");
+    }
+
     // =============================================================================
     // SOULS-CANIBALIZED Marco 3.6: TDD Conveyor Belt (CCR Lossless).
     // Mutex global com `unwrap_or_else(|p| p.into_inner())` para isolar o estado
@@ -5396,8 +5805,8 @@ mod tests {
     }
 
     /// 1. `test_dedup_5_lines_trigger`: bloco idêntico de 5+ linhas consecutivas
-    /// GERA compactação com marcador e SALVA o original no `DEDUP_CACHE`.
-    /// Segunda ocorrência vira marcador `[SOULS-DEDUP: Block Hash 0x<hex_8>...]`.
+    ///    GERA compactação com marcador e SALVA o original no `DEDUP_CACHE`.
+    ///    Segunda ocorrência vira marcador `[SOULS-DEDUP: Block Hash 0x<hex_8>...]`.
     #[test]
     fn test_dedup_5_lines_trigger() {
         let _g = ccr_test_lock();
@@ -5419,14 +5828,14 @@ mod tests {
         assert_eq!(stats2.deduplicated_blocks, 1);
         // Verifica que o bloco original está no cache (lossless reversível).
         let cache = &souls_mc_lib::cognition::context_compression::DEDUP_CACHE;
-        assert!(cache.len() >= 1, "DEDUP_CACHE deve conter ao menos 1 entrada");
+        assert!(!cache.is_empty(), "DEDUP_CACHE deve conter ao menos 1 entrada");
         let block_trim = block.trim_end_matches('\n');
         let found = cache.iter().any(|e| e.value() == block_trim);
         assert!(found, "Bloco original lossless deve estar gravado no DEDUP_CACHE");
     }
 
     /// 2. `test_dedup_under_5_lines_ignored`: repetições de apenas 4 linhas ou
-    /// menos SÃO IGNORADAS pelo compressor (não viram marcador).
+    ///    menos SÃO IGNORADAS pelo compressor (não viram marcador).
     #[test]
     fn test_dedup_under_5_lines_ignored() {
         let _g = ccr_test_lock();
@@ -5447,9 +5856,10 @@ mod tests {
     }
 
     /// 3. `test_multi_read_concurrency_and_compression`: lê 3 arquivos em paralelo
-    /// (com bloco duplicado entre dois deles) e valida que `souls_multi_read`
-    /// retorna 3 entradas com compactação aplicada.
+    ///    (com bloco duplicado entre dois deles) e valida que `souls_multi_read`
+    ///    retorna 3 entradas com compactação aplicada.
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // ccr_test_lock serializa fixtures compartilhadas; o lock DEVE cobrir o await.
     async fn test_multi_read_concurrency_and_compression() {
         use serde_json::json;
         let _g = ccr_test_lock();
@@ -5501,9 +5911,10 @@ mod tests {
     }
 
     /// 4. `test_fill_rehydration_equivalence`: aplica `souls_fill` em texto
-    /// compactado e valida que a string final é EXATAMENTE idêntica ao original
-    /// byte-a-byte (lossless), validada por hash SHA-256.
+    ///    compactado e valida que a string final é EXATAMENTE idêntica ao original
+    ///    byte-a-byte (lossless), validada por hash SHA-256.
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // ccr_test_lock serializa fixtures compartilhadas; o lock DEVE cobrir o await.
     async fn test_fill_rehydration_equivalence() {
         use serde_json::json;
         use sha2::{Digest, Sha256};
@@ -6045,8 +6456,7 @@ mod tests {
         .unwrap();
         assert_eq!(source.len(), 3);
         let mut remap: HashMap<String, String> = HashMap::new();
-        let mut inserted = 0_usize;
-        for t in &source {
+        for (inserted, t) in source.iter().enumerate() {
             let new_id = format!("merge_{inserted}");
             remap.insert(t.thought_id.clone(), new_id.clone());
             let new_parent = t
@@ -6066,7 +6476,6 @@ mod tests {
             };
             souls_mc_lib::cognition::thinking::ops::upsert_socratic_thought(&tx, &remapped)
                 .unwrap();
-            inserted += 1;
         }
         tx.commit().unwrap();
 

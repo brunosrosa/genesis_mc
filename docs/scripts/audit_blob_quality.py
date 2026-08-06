@@ -9,15 +9,15 @@ e gera 3 visões:
 3. Ranking de piores casos: top-20 (repo, blob) com score < 50
 
 Gera:
-- docs/audits/quality/_QUALITY_SCORES.md (relatório human-readable)
-- docs/audits/quality/_QUALITY_SCORES.json (dados machine-readable)
+- docs/observability/audits/quality/_QUALITY_SCORES.md (relatório human-readable)
+- docs/observability/audits/quality/_QUALITY_SCORES.json (dados machine-readable)
 - stdout: sumário executivo
 
 Implementação: zero dependência externa (só stdlib: sqlite3, re, json, pathlib,
 collections, datetime, statistics). Per ADR-001-Core-Stack-Restrita e Anti-Slop Protocol.
 
 Invocação:
-    python docs/scripts/audit_blob_quality.py [--db-path PATH] [--out-dir PATH]
+    python docs/runtime/scripts/audit_blob_quality.py [--db-path PATH] [--out-dir PATH]
                                               [--top N] [--min-score N]
                                               [--repo-allowlist REPO [REPO ...]]
 """
@@ -320,6 +320,12 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 def fetch_latest(conn: sqlite3.Connection, repo_allowlist: list[str] | None) -> list[dict[str, Any]]:
     """Retorna o payload mais recente de cada (repo_id, artifact_type)."""
+    # Checa se a tabela existe
+    table_check = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='artefatos_brutos'").fetchone()
+    if not table_check:
+        print("[!] Aviso: Tabela 'artefatos_brutos' não encontrada no banco SQLite fornecido.")
+        return []
+
     where = ""
     params: tuple = ()
     if repo_allowlist:
@@ -461,12 +467,13 @@ def print_summary(scores: list[dict[str, Any]], top: int) -> None:
 
 
 def main() -> int:
-    default_root = Path(__file__).resolve().parents[2]
+    script_path = Path(__file__).resolve()
+    default_root = script_path.parents[3] if len(script_path.parents) > 3 else script_path.parent
     parser = argparse.ArgumentParser(
         description="Auditoria qualitativa 0-100 dos 11 blobs do Harvester."
     )
     parser.add_argument("--db-path", type=Path, default=default_root / ".souls_data" / "souls_heuristic_vault.db")
-    parser.add_argument("--out-dir", type=Path, default=default_root / "docs" / "audits" / "quality")
+    parser.add_argument("--out-dir", type=Path, default=default_root / "docs" / "observability" / "audits" / "quality")
     parser.add_argument("--top", type=int, default=10, help="Top N piores/melhores casos no relatório")
     parser.add_argument("--min-score", type=float, default=50.0, help="Score mínimo para entrar no 'worst cases'")
     parser.add_argument("--repo-allowlist", nargs="*", default=None, help="Filtrar por repo_ids (default: todos)")

@@ -18,15 +18,10 @@ use crate::souls_thermal_governor::SystemState;
 /// Constante que normaliza o score mock no intervalo [0.0, 1.0].
 const SCORE_NORMALIZER: f32 = 1024.0;
 
+#[derive(Debug, Clone, Default)]
 pub struct OrtScorerEngine {
     /// Modelo ONNX a ser carregado pelo EP CPU. Quando `None`, o engine cai em mock.
     pub onnx_model_path: Option<String>,
-}
-
-impl Default for OrtScorerEngine {
-    fn default() -> Self {
-        Self { onnx_model_path: None }
-    }
 }
 
 impl OrtScorerEngine {
@@ -44,8 +39,7 @@ impl OrtScorerEngine {
     /// Quanto menor a query, maior o score (proxy de "specificidade").
     pub fn mock_score(&self, query: &str) -> f32 {
         let len = query.len().max(1) as f32;
-        let score = (1.0 / (1.0 + (len.ln() / SCORE_NORMALIZER))).clamp(0.0, 1.0);
-        score
+        (1.0 / (1.0 + (len.ln() / SCORE_NORMALIZER))).clamp(0.0, 1.0)
     }
 }
 

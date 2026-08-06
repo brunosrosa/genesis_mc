@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::Once;
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
@@ -9,7 +8,7 @@ use thiserror::Error;
 use url::Url;
 
 use super::community::{CommunityIssueMeta, CommunityMetaPayload, CommunityPrMeta, FetchError, RateLimiter};
-use super::git::CloneError;
+// use super::git::CloneError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitoxideCloneOutcome {
@@ -296,22 +295,6 @@ pub async fn fetch_community_meta_for_owner_repo(
     fetch_community_meta(&repo_url, limiter, api_base).await
 }
 
-pub async fn clone_or_fetch_to_workspace(
-    repo_url: &Url,
-    workspace_dest: &Path,
-) -> Result<GitoxideCloneOutcome, CloneError> {
-    let token = required_github_token().map_err(map_tracker_to_clone_error)?;
-    let repo_url_string = repo_url.to_string();
-    let workspace_dest = workspace_dest.to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        clone_or_fetch_to_workspace_blocking(&repo_url_string, &workspace_dest, &token)
-    })
-    .await
-    .map_err(|e| CloneError::NetworkError {
-        reason: format!("Falha ao aguardar worker gitoxide: {}", e),
-    })?
-}
-
 pub fn map_tracker_to_fetch_error(err: GithubTrackerError) -> FetchError {
     match err {
         GithubTrackerError::MissingGithubToken => {
@@ -326,156 +309,6 @@ pub fn map_tracker_to_fetch_error(err: GithubTrackerError) -> FetchError {
         | GithubTrackerError::Gitoxide(reason)
         | GithubTrackerError::Io(reason) => FetchError::Network(reason),
     }
-}
-
-fn map_tracker_to_clone_error(err: GithubTrackerError) -> CloneError {
-    match err {
-        GithubTrackerError::InvalidGithubUrl(reason)
-        | GithubTrackerError::ClientConfig(reason)
-        | GithubTrackerError::Network(reason)
-        | GithubTrackerError::Gitoxide(reason)
-        | GithubTrackerError::Io(reason) => CloneError::NetworkError { reason },
-        GithubTrackerError::NotFound => CloneError::RepositoryNotFound {
-            url: "github".to_string(),
-        },
-        GithubTrackerError::RateLimit => CloneError::NetworkError {
-            reason: "GitHub rate limit/bloqueio".to_string(),
-        },
-        GithubTrackerError::MissingGithubToken => CloneError::NetworkError {
-            reason: "Missing GITHUB_PAT in .env".to_string(),
-        },
-        GithubTrackerError::InvalidResponse(reason) => CloneError::NetworkError { reason },
-    }
-}
-
-fn clone_or_fetch_to_workspace_blocking(
-    repo_url: &str,
-    workspace_dest: &Path,
-    _token: &str,
-) -> Result<GitoxideCloneOutcome, CloneError> {
-    static GIX_INTERRUPTS: Once = Once::new();
-    GIX_INTERRUPTS.call_once(|| unsafe {
-        let _ = gix::interrupt::init_handler(1, || {});
-    });
-
-    let repo_url = Url::parse(repo_url).map_err(|e| CloneError::NetworkError {
-        reason: format!("URL inválida para clone gitoxide: {}", e),
-    })?;
-    let (owner, repo) = github_owner_repo(&repo_url).map_err(map_tracker_to_clone_error)?;
-    let scratchpad_root = workspace_root()
-        .join(".souls_scratchpad")
-        .join("gitoxide_cache")
-        .join(owner)
-        .join(repo);
-    let parent = scratchpad_root.parent().ok_or_else(|| CloneError::NetworkError {
-        reason: format!("Destino scratchpad inválido: {}", scratchpad_root.display()),
-    })?;
-    std::fs::create_dir_all(parent).map_err(|e| CloneError::NetworkError {
-        reason: format!("Falha ao preparar diretório do cache gitoxide: {}", e),
-    })?;
-
-    let nonce = format!("{}_{}", std::process::id(), crate::telemetry::now_epoch_nanos());
-    let staging_path = parent.join(format!(
-        ".{}_stage_{}",
-        scratchpad_root
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("repo"),
-        nonce
-    ));
-
-    if staging_path.exists() {
-        std::fs::remove_dir_all(&staging_path).map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha ao limpar staging gitoxide anterior: {}", e),
-        })?;
-    }
-    std::fs::create_dir_all(&staging_path).map_err(|e| CloneError::NetworkError {
-        reason: format!("Falha ao criar staging gitoxide: {}", e),
-    })?;
-
-    let url = gix::url::parse(repo_url.as_str().into()).map_err(|e| CloneError::NetworkError {
-        reason: format!("Falha ao parsear URL para gitoxide: {}", e),
-    })?;
-    let mut prepare_clone =
-        gix::prepare_clone(url, &staging_path).map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha ao preparar clone gitoxide: {}", e),
-        })?;
-    let (mut prepare_checkout, _) = prepare_clone
-        .fetch_then_checkout(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
-        .map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha no fetch gitoxide: {}", e),
-        })?;
-    let (repo, _) = prepare_checkout
-        .main_worktree(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
-        .map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha no checkout gitoxide: {}", e),
-        })?;
-    let head_short_sha = repo
-        .head_id()
-        .map(|id| id.to_string())
-        .map(|full| full.chars().take(7).collect::<String>())
-        .unwrap_or_else(|_| "UNKNOWN".to_string());
-    drop(repo);
-
-    if scratchpad_root.exists() {
-        std::fs::remove_dir_all(&scratchpad_root).map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha ao substituir cache gitoxide antigo: {}", e),
-        })?;
-    }
-    std::fs::rename(&staging_path, &scratchpad_root).map_err(|e| CloneError::NetworkError {
-        reason: format!("Falha ao promover clone gitoxide atômico: {}", e),
-    })?;
-
-    if workspace_dest.exists() {
-        std::fs::remove_dir_all(workspace_dest).map_err(|e| CloneError::NetworkError {
-            reason: format!("Falha ao limpar destino do workspace: {}", e),
-        })?;
-    }
-    copy_tree_without_git(&scratchpad_root, workspace_dest).map_err(|e| CloneError::NetworkError {
-        reason: e,
-    })?;
-
-    Ok(GitoxideCloneOutcome {
-        cache_path: scratchpad_root,
-        head_short_sha,
-    })
-}
-
-fn copy_tree_without_git(src: &Path, dest: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(dest)
-        .map_err(|e| format!("Falha ao criar destino do workspace '{}': {}", dest.display(), e))?;
-    for entry in std::fs::read_dir(src)
-        .map_err(|e| format!("Falha ao listar '{}': {}", src.display(), e))?
-    {
-        let entry = entry.map_err(|e| format!("Falha ao ler entrada em '{}': {}", src.display(), e))?;
-        let path = entry.path();
-        let name = entry.file_name();
-        if name.to_string_lossy().eq(".git") {
-            continue;
-        }
-        let dest_path = dest.join(&name);
-        let metadata = entry
-            .metadata()
-            .map_err(|e| format!("Falha ao ler metadata '{}': {}", path.display(), e))?;
-        if metadata.is_dir() {
-            copy_tree_without_git(&path, &dest_path)?;
-        } else {
-            if let Some(parent) = dest_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    format!("Falha ao criar diretório pai '{}': {}", parent.display(), e)
-                })?;
-            }
-            std::fs::copy(&path, &dest_path).map_err(|e| {
-                format!(
-                    "Falha ao copiar '{}' para '{}': {}",
-                    path.display(),
-                    dest_path.display(),
-                    e
-                )
-            })?;
-        }
-    }
-    Ok(())
 }
 
 /// Cliente HTTP bare-metal para a API REST do GitHub.

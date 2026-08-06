@@ -1,4 +1,5 @@
 use thiserror::Error;
+pub use crate::core::model_registry::{GgufMetadataCache, GLOBAL_GGUF_METADATA_CACHE};
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ModelManagerError {
@@ -100,27 +101,33 @@ pub fn allocate_ngram_speculation_buffer(n_match: usize, n_min: usize, n_max: us
 }
 
 pub fn pin_critic_worker_thread_affinity(allowed_core_indices: &[usize]) -> Result<Vec<usize>, String> {
-    // ADR-033 / PRD-10.2: Isolamento térmico de CPU via core_affinity para workers do Critic Model (Fail-Soft)
-    let core_ids = match core_affinity::get_core_ids() {
-        Some(ids) if !ids.is_empty() => ids,
-        _ => {
-            tracing::warn!("WARN: Permissão negada ou falha ao consultar núcleos de CPU para CPU Pinning, rodando com scheduler padrão do SO");
-            return Ok(Vec::new());
-        }
-    };
-
+    // ADR-033 / PRD-10.2 / ADR-030: Isolamento térmico de CPU via SetThreadAffinityMask (windows-sys) para workers do Critic Model (Fail-Soft)
     let mut pinned_indices = Vec::new();
-    for &idx in allowed_core_indices {
-        if let Some(core_target) = core_ids.get(idx % core_ids.len()) {
-            if core_affinity::set_for_current(*core_target) {
-                pinned_indices.push(idx);
-            } else {
-                tracing::warn!("WARN: Permissão negada pelo SO para CPU Pinning no núcleo {}, rodando com scheduler padrão", idx);
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::System::Threading::{GetCurrentThread, SetThreadAffinityMask};
+        let handle = unsafe { GetCurrentThread() };
+        for &idx in allowed_core_indices {
+            if idx < (usize::BITS as usize) {
+                let mask = 1usize << idx;
+                let res = unsafe { SetThreadAffinityMask(handle, mask) };
+                if res != 0 {
+                    pinned_indices.push(idx);
+                } else {
+                    tracing::warn!("WARN: Permissão negada pelo SO para CPU Pinning no núcleo {}, rodando com scheduler padrão", idx);
+                }
             }
         }
     }
 
-    if pinned_indices.is_empty() {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = allowed_core_indices;
+        tracing::warn!("WARN: CPU Pinning nativo só implementado para Windows nesta build");
+    }
+
+    if pinned_indices.is_empty() && !allowed_core_indices.is_empty() {
         tracing::warn!("WARN: Permissão negada para CPU Pinning em todos os núcleos solicitados, rodando com scheduler padrão");
     }
 
@@ -138,7 +145,7 @@ mod tests {
         assert_eq!(
             overbudget_result,
             Err(ModelManagerError::OverbudgetVram(5101)),
-            "Modelo com projeção de VRAM > 5.0 GB deve ser sumariamente rejeitado em O(1)"
+            "Modelo acima do orçamento térmico de 5GB de VRAM deve ser rejeitado"
         );
 
         // Modelo de 4B leve (2.5GB peso + 1.0GB KV + 800MB CUDA = 4.3GB <= 5.0GB limit)

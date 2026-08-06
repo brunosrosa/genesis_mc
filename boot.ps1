@@ -24,8 +24,8 @@ $env:SOULS_HEADROOM_OUTPUT_BUFFER = "4096"
 $env:SCCACHE_DIR = "Z:\.sccache"
 $env:SCCACHE_CACHE_SIZE = "8G"
 $env:RUSTC_WRAPPER = "sccache"
-# Reforca paralelismo (defesa em profundidade: .cargo/config.toml[build] jobs=8).
-$env:CARGO_BUILD_JOBS = "8"
+# Reforca paralelismo (defesa em profundidade: .cargo/config.toml[build] jobs=6).
+$env:CARGO_BUILD_JOBS = "6"
 # Patch idempotente vendor/llama-cpp-sys-2: GGML_CCACHE=ON (default upstream) faz
 # cmake wrappear `sccache nvcc`, que falha com "fatbinary: Could not open input
 # file '*.ptx'". Mantemos OFF para destravar CUDA. Re-aplicado em todo boot pois
@@ -64,7 +64,7 @@ function Assert-CommandAvailable {
 function Invoke-TrackedProcess {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
-        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [string[]]$Arguments = @(),
         [Parameter(Mandatory = $true)][string]$Label,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [int]$HeartbeatSeconds = 20
@@ -76,14 +76,20 @@ function Invoke-TrackedProcess {
     Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
 
     Write-Host ("[PROC] {0}: {1} {2}" -f $Label, $FilePath, ($Arguments -join ' ')) -ForegroundColor DarkCyan
-    $process = Start-Process `
-        -FilePath $FilePath `
-        -ArgumentList $Arguments `
-        -WorkingDirectory $WorkingDirectory `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath `
-        -PassThru `
-        -NoNewWindow
+
+    $startParams = @{
+        FilePath               = $FilePath
+        WorkingDirectory       = $WorkingDirectory
+        RedirectStandardOutput = $stdoutPath
+        RedirectStandardError  = $stderrPath
+        PassThru               = $true
+        NoNewWindow            = $true
+    }
+    if ($Arguments -and $Arguments.Count -gt 0) {
+        $startParams['ArgumentList'] = $Arguments
+    }
+
+    $process = Start-Process @startParams
     # Garante que o handle nativo seja materializado para leitura confiavel do ExitCode.
     $null = $process.Handle
 
@@ -166,6 +172,73 @@ try {
     }
     Write-BootOk "Supervisores antigos encerrados e portas locais liberadas."
 
+    # 1.5. TRANSPLANTE FISICO DE RUNTIME (Marco 4.1.2 — Desacoplamento Fábrica/Produto)
+    Write-Host "`n[1.5/5] Transplante físico de runtime: .agents/bin/ (Fim dos travamentos NTFS)..." -ForegroundColor Yellow
+    $agentsBinDir = Join-Path $PSScriptRoot ".agents\bin"
+    # $srcTauriDir é declarado no step 4 (linha ~285); computamos local
+    # para não criar dependência temporal entre as etapas.
+    $transplantSrcTauriDir = Join-Path $PSScriptRoot "src-tauri"
+    if (-not (Test-Path $agentsBinDir)) {
+        New-Item -ItemType Directory -Path $agentsBinDir -Force | Out-Null
+        Write-BootOk ("Diretório seguro criado: {0}" -f $agentsBinDir)
+    } else {
+        Write-Host ("[TRANSPLANTE] Diretório seguro já existe: {0}" -f $agentsBinDir) -ForegroundColor DarkGray
+    }
+
+    # Build incremental focado nos 3 daemons que o gateway/proxy consomem.
+    # Falha-fechado (R1): qualquer exit != 0 interrompe o boot IMEDIATAMENTE
+    # para evitar transplante de binário defasado.
+    Write-Host "[TRANSPLANTE] Forjando 3 daemons desacoplados (build incremental)..." -ForegroundColor Cyan
+    try {
+        Invoke-TrackedProcess `
+            -FilePath "cargo" `
+            -Arguments @(
+                "build",
+                "--message-format", "short",
+                "--features", "tauri-app,gateway_ccr,llama_backend",
+                "--bin", "souls_mcp_server",
+                "--bin", "agentgateway_tcp_proxy",
+                "--bin", "mcp_stdio_guard",
+                "--locked"
+            ) `
+            -Label "cargo-build-runtime-decoupled" `
+            -WorkingDirectory $transplantSrcTauriDir
+    } catch {
+        Write-Host ("[ERR] Build dos 3 daemons desacoplados falhou: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        Write-Host "[ERR] Boot abortado — binarios de .agents/bin/ NAO serao atualizados (proteção contra stale)." -ForegroundColor Red
+        exit 1
+    }
+
+    # R2 da Linha Vermelha: NTFS demora ~200-900ms para liberar handles
+    # após o término de um processo que abriu o .exe em modo exclusivo.
+    # Sem este sleep, Copy-Item falha intermitentemente com sharing violation.
+    Write-Host "[TRANSPLANTE] Aguardando 1s para liberação de handles NTFS..." -ForegroundColor DarkGray
+    Start-Sleep -Seconds 1
+
+    # R3 da Linha Vermelha: Copy-Item -Force (sobrescrita sem prompt).
+    Write-Host "[TRANSPLANTE] Transplantando 3 .exe para .agents/bin/..." -ForegroundColor Cyan
+    $transplanted = @()
+    $sourceDir = Join-Path $transplantSrcTauriDir "target\debug"
+    $daemonBinaries = @("souls_mcp_server.exe", "agentgateway_tcp_proxy.exe", "mcp_stdio_guard.exe")
+    foreach ($bin in $daemonBinaries) {
+        $sourcePath = Join-Path $sourceDir $bin
+        $destPath = Join-Path $agentsBinDir $bin
+        if (Test-Path $sourcePath) {
+            Copy-Item -LiteralPath $sourcePath -Destination $destPath -Force
+            $destInfo = Get-Item -LiteralPath $destPath
+            $transplanted += [PSCustomObject]@{
+                Name = $bin
+                Size = $destInfo.Length
+            }
+        } else {
+            Write-BootWarn ("Binário esperado nao encontrado em target/debug/: {0}" -f $bin)
+        }
+    }
+    foreach ($t in $transplanted) {
+        Write-Host ("[TRANSPLANTE] {0} → .agents/bin/ ({1:N0} bytes)" -f $t.Name, $t.Size) -ForegroundColor Green
+    }
+    Write-BootOk ("Runtime desacoplado em {0} ({1} binarios transplantados)." -f $agentsBinDir, $transplanted.Count)
+
     # 2. HIGIENE LEVE SEM DESTRUIR CACHE DO MCP REMOTO
     Write-Host "`n[2/5] Validando premissas da sessao..." -ForegroundColor Yellow
     Write-BootWarn "O cache do npx sera preservado para nao rebaixar o bootstrap do mcp-remote."
@@ -226,8 +299,10 @@ try {
                 "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
-                "--bin", "scan_local_models_cli",
-                "--bin", "souls_ephemeral_infer_cli",
+                "-p", "anthropophagy",
+                "--bin", "scan_local_models",
+                "--bin", "ephemeral_infer",
+                "-p", "souls_mc",
                 "--bin", "souls_mc",
                 "--locked"
             ) `
@@ -236,15 +311,15 @@ try {
 
         # 4.5. VARREDURA DE MODELOS LOCAIS (Fase 1.5 Model Manager Sync)
         Write-Host "`n[4.5] Sincronizando inventario de modelos locais no SQLite Vault..." -ForegroundColor Yellow
-        $scannerPath = Join-Path $srcTauriDir "target\debug\scan_local_models_cli.exe"
+        $scannerPath = Join-Path $srcTauriDir "target\debug\scan_local_models.exe"
         if (Test-Path $scannerPath) {
             Invoke-TrackedProcess `
                 -FilePath $scannerPath `
-                -Arguments @("C:\Users\rosas\.lmstudio\models") `
+                -Arguments @() `
                 -Label "scan-local-models" `
                 -WorkingDirectory $PSScriptRoot
         } else {
-            Write-BootWarn "Binario scan_local_models_cli.exe nao encontrado em $scannerPath"
+            Write-BootWarn "Binario scan_local_models.exe nao encontrado em $scannerPath"
         }
 
         # 4.6. COMPILAÇÃO DE CONTEXT DUMPS (Exporta inventario de modelos para TXT)

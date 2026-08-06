@@ -584,7 +584,7 @@ pub fn calculate_total(a: i32, b: i32) -> i32 {
 
     #[tokio::test]
     async fn test_souls_ccr_store_lru_eviction() {
-        let max_bytes = 1 * 1024 * 1024; // 1 MB limit
+        let max_bytes: usize = 1024 * 1024; // 1 MB limit
         let store = Arc::new(SoulsCcrStore::new(max_bytes));
 
         let low_watermark = (max_bytes * 80) / 100;

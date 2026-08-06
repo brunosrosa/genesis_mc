@@ -28,6 +28,10 @@ dist-ssr
 */tmp/*
 .agents/scratch/*/
 
+# Marco 4.1.2: Runtime desacoplado. Os .exe transplantados pelo boot.ps1
+# sao artefatos de build (NAO fonte). Proibido comitar binarios de 100+MB.
+.agents/bin/
+
 .souls_data/
 .souls_data/
 .archive/
@@ -38,9 +42,12 @@ dist-ssr
 .souls_semgrep/
 .pytest_cache/
 .lean-ctx/
+__pycache__/
+*.pyc
 src-tauri/third_party/ultrafast-mcp-sequential-thinking/
-docs/audits/blobs/inspect/
-docs/context_dumps/
+docs/observability/audits/blobs/inspect/
+docs/runtime/context_dumps/
+.agents/bin/
 
 # ==============================================================================
 # SOULS BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO

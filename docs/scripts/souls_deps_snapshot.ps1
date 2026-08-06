@@ -1,14 +1,17 @@
 # souls_deps_snapshot.ps1
 # Script determinístico para sanear e documentar o estado de dependências do SOULS.
 
-$manifestPath = "src-tauri/Cargo.toml"
-$cargoStatePath = "docs/audits/crates/_CARGO_TOML_STATE.txt"
-$duplicateDepsPath = "docs/audits/crates/_DUPLICATE_DEPS.txt"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$rootDir = (Get-Item "$scriptDir/../..").FullName
+
+$manifestPath = Join-Path $rootDir "src-tauri/Cargo.toml"
+$targetDir = Join-Path $rootDir "docs/observability/context_dumps/crates"
+$cargoStatePath = Join-Path $targetDir "_CARGO_TOML_STATE.txt"
+$duplicateDepsPath = Join-Path $targetDir "_DUPLICATE_DEPS.txt"
 
 # Cria pasta de estado se não existir
-$stateDir = Split-Path -Parent $cargoStatePath
-if (-not (Test-Path $stateDir)) {
-    New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
+if (-not (Test-Path $targetDir)) {
+    New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
 }
 
 # 1. Copiar manifest para o estado
@@ -21,14 +24,15 @@ else {
 }
 
 # 2. Rodar cargo tree -d e gerar relatório de duplicatas
-Push-Location "src-tauri"
+$srcTauriDir = Join-Path $rootDir "src-tauri"
+Push-Location $srcTauriDir
 try {
     $duplicates = cargo tree -d 2>$null
     if ([string]::IsNullOrWhiteSpace($duplicates)) {
-        "Nenhuma dependência duplicada encontrada." | Out-File -FilePath "../$duplicateDepsPath" -Encoding utf8 -Force
+        "Nenhuma dependência duplicada encontrada." | Out-File -FilePath $duplicateDepsPath -Encoding utf8 -Force
     }
     else {
-        $duplicates | Out-File -FilePath "../$duplicateDepsPath" -Encoding utf8 -Force
+        $duplicates | Out-File -FilePath $duplicateDepsPath -Encoding utf8 -Force
     }
 }
 finally {
@@ -36,4 +40,5 @@ finally {
 }
 
 # 3. Output de sucesso
-Write-Host "[OK] Snapshot de dependências atualizado com sucesso."
+Write-Host "[OK] Snapshot de dependências atualizado com sucesso em $targetDir"
+
