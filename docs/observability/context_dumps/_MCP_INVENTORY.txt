@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-08-06 01:27:35
+_MCP_INVENTORY Gerado em: 2026-08-06 20:08:04
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -35,11 +35,6 @@ TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: compress
 DESCRIPTION: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
-TEST_STATUS: OK
-TEST_NOTE: Verificação automatizada concluída sem avisos.
----
-NAME: core_think
-DESCRIPTION: Scratchpad socratico (souls_thinking). Limite 5 (HITL 7). Tride Regular/Revision/Branching.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -209,7 +204,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: semantic_search
-DESCRIPTION: [Stub] Busca semantica (BM25+cosine), gated embeddings em roadmap.
+DESCRIPTION: Busca semântica local no LanceDB usando similaridade de cosseno e mmap de baixa latência na RAM.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -245,6 +240,11 @@ TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: sys_time
 DESCRIPTION: Retorna data/hora local, UTC e fuso atual via chrono nativo. Aliases: sys_time | souls_sys_time.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: thinking
+DESCRIPTION: Invoca o espaço de raciocínio socrático em múltiplos passos com auto-correção e ramificações de hipóteses.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

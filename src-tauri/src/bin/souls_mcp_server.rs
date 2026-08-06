@@ -31,6 +31,12 @@ use souls_mc_lib::core::epistemic_prober::{
     EpistemicProber, EpistemicRequest, LlamaCppEpistemicProber,
 };
 use souls_mc_lib::core::llama_logit_probing::LlamaLogitProber;
+// SOULS-CANIBALIZED Marco 4.10.0: Disjuntor Socrático via IPC Zero-Copy.
+use souls_mc_lib::core::socratic_event_bus::{
+    emit_socratic_interrupt, hitl_denied_error, SocraticInterrupt, RPC_HITL_DENIED_CODE,
+};
+// SOULS-CANIBALIZED Marco 4.10.0: Cohomologia de Feixes Socráticos (H¹).
+use souls_mc_lib::core::cohomology::apply_cohomology_boost;
 
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -2051,11 +2057,11 @@ async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, Rp
     // 5. Probe síncrono isolado em `spawn_blocking` (não bloqueia Tokio).
     //    O engine mock é construído dentro do closure para que a referência
     //    ao `LlamaLogitProber` tenha lifetime válido no escopo bloqueante.
+    //    Marco 4.10.0: usa o construtor canônico `LlamaCppEpistemicProber::new`
+    //    que infere o `VerbalizerMap` a partir de `vocab_size` do engine.
     let probe_result = tokio::task::spawn_blocking(move || {
         let engine = LlamaLogitProber::new();
-        let prober = LlamaCppEpistemicProber {
-            logit_engine: &engine,
-        };
+        let prober = LlamaCppEpistemicProber::new(&engine);
         prober.probe(&req)
     })
     .await
@@ -2072,17 +2078,64 @@ async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, Rp
         data: None,
     })?;
 
-    // 7. Disjuntor de segurança: abortar inferência se o prompt for vago
+    // 7. Marco 4.10.0 ETAPA 2: aplicar boost de cohomologia (H¹) sobre as
+    //    memórias STABLE antes de computar o disjuntor. Contradições lógicas
+    //    no grafo SQLite elevam `conflito_memoria` para > 0.85.
+    let mut scores = scores;
+    if let Ok(db_path) = std::env::var("SOULS_STATE_DB_PATH").or_else(|_| -> Result<String, &'static str> {
+        Ok(workspace_root().join(".souls_data").join("souls_state.db").to_string_lossy().to_string())
+    }) {
+        if let Ok(conn) = rusqlite::Connection::open_with_flags(
+            &db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ) {
+            let _ = apply_cohomology_boost(&conn, &mut scores);
+        }
+    }
+
+    // 8. Disjuntor de segurança: abortar inferência se o prompt for vago
     //    demais (amb > 0.80) ou com risco relacional elevado (risco > 0.70).
     //    Estes limiares estão alinhados com os testes TDD do Marco 4.9.4.
     let disjuntor_ativo = scores.ambiguidade > 0.80 || scores.risco_relacional > 0.70;
 
-    // 8. Payload canônico flat (4 campos obrigatórios do contrato MCP).
+    // 9. Marco 4.10.0 ETAPA 3: DIRETRIZ 3 (inegociável).
+    //    Quando o disjuntor é disparado:
+    //    a) Emit Tauri Event `socratic_interrupt` com payload completo.
+    //    b) Retornar erro JSON-RPC `-32001` (HitlDenied) com payload em `data`.
+    //    O frontend Svelte 5 escuta o evento e renderiza o sidecar inline.
+    if disjuntor_ativo {
+        let reason = if scores.ambiguidade > 0.80 {
+            format!("ambiguidade {:.2} > 0.80", scores.ambiguidade)
+        } else {
+            format!("risco_relacional {:.2} > 0.70", scores.risco_relacional)
+        };
+        let interrupt = SocraticInterrupt::new(
+            scores,
+            prompt,
+            session_id.to_string(),
+            reason,
+        );
+        // 9a. IPC Zero-Copy via Tauri Event (sink global configurado pelo runtime Tauri).
+        emit_socratic_interrupt(&interrupt);
+        // 9b. JSON-RPC error -32001 HitlDenied. Payload fica em `data.interrupt`
+        //     para que clientes MCP possam extrair sem precisar escutar o evento.
+        let err_value = hitl_denied_error(&interrupt);
+        return Err(RpcError {
+            code: RPC_HITL_DENIED_CODE as i64,
+            message: err_value["message"]
+                .as_str()
+                .unwrap_or("HitlDenied: disjuntor socrático ativo")
+                .to_string(),
+            data: err_value.get("data").cloned(),
+        });
+    }
+
+    // 10. Payload canônico flat (4 campos obrigatórios do contrato MCP).
     let payload = json!({
         "ambiguidade": scores.ambiguidade,
         "risco_relacional": scores.risco_relacional,
         "conflito_memoria": scores.conflito_memoria,
-        "disjuntor_ativo": disjuntor_ativo,
+        "disjuntor_ativo": false,
     });
 
     Ok(json!({
@@ -7006,20 +7059,38 @@ mod tests {
         serde_json::from_str(text).expect("text deve ser JSON válido")
     }
 
+    /// Spec Marco 4.9.5: prompt vago (vago/curto) deve disparar o disjuntor
+    /// socrático e propagar o erro tipado -32001 (HitlDenied) com o payload
+    /// do `SocraticInterrupt` em `error.data.interrupt`.
     #[tokio::test]
     async fn intent_handler_vague_prompt_yields_high_ambiguity() {
         let params = intent_params("edite o config", Some("sess-tdd-vago"), vec![]);
-        let resp = super::run_intent(&params)
+        // Marco 4.10.0 DIRETRIZ 3: disjuntor vago retorna Err(RpcError -32001).
+        let err = super::run_intent(&params)
             .await
-            .expect("handler nao deve retornar Err");
-        assert_eq!(resp["is_error"], Value::Bool(false));
-        let payload = extract_intent_payload(&resp);
-        // SOULS-CANIBALIZED Marco 4.9.4: schema flat com `disjuntor_ativo`.
-        assert_eq!(payload["disjuntor_ativo"], Value::Bool(true));
-        let amb = payload["ambiguidade"].as_f64().expect("f64 ambiguidade");
+            .expect_err("prompt vago deve disparar disjuntor socrático (-32001)");
+        assert_eq!(
+            err.code, -32001,
+            "código do erro deve ser HitlDenied (-32001), foi {}",
+            err.code
+        );
+        let data = err.data.expect("erro -32001 deve carregar data com interrupt");
+        assert_eq!(data["hitl_required"], Value::Bool(true));
+        // Payload do interrupt deve incluir scores e o prompt truncado.
+        let interrupt = &data["interrupt"];
+        let amb = interrupt["scores"]["ambiguidade"]
+            .as_f64()
+            .expect("scores.ambiguidade deve ser f64");
         assert!(
             amb > 0.75,
             "prompt vago deve dar ambiguidade > 0.75, foi {amb}"
+        );
+        let prompt_trunc = interrupt["prompt_truncated"]
+            .as_str()
+            .expect("prompt_truncated obrigatório");
+        assert!(
+            prompt_trunc.contains("edite o config"),
+            "prompt_truncated deve preservar o input, foi '{prompt_trunc}'"
         );
     }
 
@@ -7082,6 +7153,12 @@ mod tests {
     async fn intent_handler_dispatch_no_longer_stub() {
         // Garante que o dispatch MCP raiz roteia `intent` para o handler real
         // (nao para `stub_not_implemented_yet`). Invocação via tools/call JSON-RPC.
+        // Marco 4.10.0 DIRETRIZ 3: o prompt vago "edite o config" dispara o
+        // disjuntor socrático → a chamada retorna erro JSON-RPC -32001
+        // (HitlDenied) com o payload do SocraticInterrupt em data.interrupt.
+        // Isso prova que o dispatch está canibalizado no handler real
+        // (não no stub), porque o stub retornaria
+        // `stub_not_implemented_yet` (sem error.code = -32001).
         let req = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -7097,24 +7174,44 @@ mod tests {
         let resp = super::handle_mcp(req)
             .await
             .expect("handle_mcp nao deve retornar Err");
-        assert!(resp.get("error").is_none(), "tools/call intent nao deve dar erro: {resp}");
-        let payload = extract_intent_payload(&resp["result"]);
-        // SOULS-CANIBALIZED Marco 4.9.4: schema flat com `ambiguidade` direta.
-        assert!(payload["ambiguidade"].as_f64().unwrap() > 0.5);
+        // Marco 4.10.0: disjuntor → erro -32001 com payload socrático.
+        assert!(
+            resp.get("error").is_some(),
+            "dispatch deve rotear para handler real (disjuntor dispara erro): {resp}"
+        );
+        assert_eq!(
+            resp["error"]["code"],
+            Value::from(-32001),
+            "dispatch deve acionar disjuntor socrático (-32001)"
+        );
+        let interrupt = &resp["error"]["data"]["interrupt"];
+        assert_eq!(interrupt["session_id"], Value::from("sess-dispatch-test"));
+        let amb = interrupt["scores"]["ambiguidade"]
+            .as_f64()
+            .expect("scores.ambiguidade presente");
+        assert!(
+            amb > 0.5,
+            "handler real (não stub) deve produzir ambiguidade do prober > 0.5, foi {amb}"
+        );
     }
 
     // =========================================================================
-    // SOULS-CANIBALIZED Marco 4.9.4: TDD canônico do disjuntor de inferência.
-    // Spec DIRETRIZ 3: valida `disjuntor_ativo` (true|vago, false|cirúrgico)
-    // via chamada JSON-RPC completa `tools/call` ao MCP.
+    // SOULS-CANIBALIZED Marco 4.9.4 / 4.10.0: TDD canônico do disjuntor de inferência.
+    // Spec DIRETRIZ 3 (Marco 4.10.0): o disjuntor NÃO devolve mais um payload
+    // de sucesso com `disjuntor_ativo: true`. Ele interrompe a chamada
+    // JSON-RPC devolvendo o erro tipado `-32001` (HitlDenied) com o payload
+    // do `SocraticInterrupt` em `error.data.interrupt`, e o Tauri Event
+    // `socratic_interrupt` é emitido em paralelo para a WebView Svelte 5.
     // =========================================================================
 
     /// Spec DIRETRIZ 3: simulação JSON-RPC end-to-end do disjuntor de inferência.
-    /// Caso 1: prompt vago "edite o config" → disjuntor_ativo=true, ambiguidade elevada.
-    /// Caso 2: prompt cirúrgico (path + tipo + assinatura) → disjuntor_ativo=false.
+    /// Caso 1: prompt vago "edite o config" → erro -32001 (HitlDenied) com
+    ///         `error.data.interrupt` carregando scores e prompt_truncated.
+    /// Caso 2: prompt cirúrgico (path + tipo + assinatura) → sucesso com
+    ///         `disjuntor_ativo: false`.
     #[tokio::test]
     async fn test_mcp_intent_tool_evaluation() {
-        // ---------- Caso 1: prompt vago ----------
+        // ---------- Caso 1: prompt vago → erro -32001 ----------
         let req_vago = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -7123,40 +7220,57 @@ mod tests {
                 "name": "intent",
                 "arguments": {
                     "prompt": "edite o config",
-                    "session_id": "sess-marco-4.9.4-vago"
+                    "session_id": "sess-marco-4.10.0-vago"
                 }
             }
         });
         let resp_vago = super::handle_mcp(req_vago)
             .await
-            .expect("tools/call vago nao deve retornar Err");
+            .expect("handle_mcp deve retornar Some(...) mesmo em erro JSON-RPC");
+        let err_vago = &resp_vago["error"];
         assert!(
-            resp_vago.get("error").is_none(),
-            "tools/call intent vago nao deve retornar erro JSON-RPC: {resp_vago}"
+            err_vago.is_object(),
+            "resposta para prompt vago deve carregar bloco 'error' JSON-RPC: {resp_vago}"
         );
-        let payload_vago = extract_intent_payload(&resp_vago["result"]);
-        // Asserções canônicas (spec DIRETRIZ 2 e 3).
-        let amb_vago = payload_vago["ambiguidade"]
+        assert_eq!(
+            err_vago["code"],
+            Value::from(-32001),
+            "código do erro deve ser HitlDenied (-32001), foi {}",
+            err_vago["code"]
+        );
+        assert_eq!(
+            err_vago["data"]["hitl_required"],
+            Value::Bool(true),
+            "data.hitl_required deve ser true quando disjuntor dispara"
+        );
+        // Asserções canônicas sobre o payload do `SocraticInterrupt` (Marco 4.10.0 DIRETRIZ 3).
+        let interrupt = &err_vago["data"]["interrupt"];
+        let amb_vago = interrupt["scores"]["ambiguidade"]
             .as_f64()
-            .expect("ambiguidade deve ser f64");
+            .expect("scores.ambiguidade deve ser f64");
         assert!(
             amb_vago > 0.80,
             "prompt vago deve dar ambiguidade > 0.80, foi {amb_vago}"
         );
-        assert_eq!(
-            payload_vago["disjuntor_ativo"],
-            Value::Bool(true),
-            "disjuntor_ativo deve ser true para prompt vago (amb={amb_vago})"
-        );
-        // Contrato MCP: 4 campos obrigatórios.
-        for field in &["ambiguidade", "risco_relacional", "conflito_memoria", "disjuntor_ativo"] {
+        // 4 campos obrigatórios do payload do interrupt.
+        for field in &["scores", "prompt_truncated", "session_id", "reason"] {
             assert!(
-                payload_vago.get(*field).is_some(),
-                "payload vago deve conter campo obrigatório '{field}'"
+                interrupt.get(*field).is_some(),
+                "payload interrupt deve conter campo obrigatório '{field}'"
             );
         }
+        // Prompt truncado deve preservar a entrada.
+        let prompt_trunc = interrupt["prompt_truncated"]
+            .as_str()
+            .expect("prompt_truncated obrigatório");
+        assert!(
+            prompt_trunc.contains("edite o config"),
+            "prompt_truncated deve preservar o input, foi '{prompt_trunc}'"
+        );
+        // Session_id deve ser ecoado de volta no payload.
+        assert_eq!(interrupt["session_id"], Value::from("sess-marco-4.10.0-vago"));
 
-        // ---------- Caso 2: prompt cirúrgico ----------
+        // ---------- Caso 2: prompt cirúrgico → sucesso, disjuntor desarmado ----------
         let prompt_cirurgico = "Edite o arquivo src-tauri/src/core/llama_logit_probing.rs \
              adicionando o trait EpistemicProber síncrono com método probe(\
              &self, &EpistemicRequest) retornando EpistemicScores. \
@@ -7169,14 +7283,14 @@ mod tests {
                 "name": "intent",
                 "arguments": {
                     "prompt": prompt_cirurgico,
-                    "session_id": "sess-marco-4.9.4-cirurgico",
+                    "session_id": "sess-marco-4.10.0-cirurgico",
                     "memory_window": ["mem_a", "mem_b", "mem_c"]
                 }
             }
         });
         let resp_cirurgico = super::handle_mcp(req_cirurgico)
             .await
-            .expect("tools/call cirurgico nao deve retornar Err");
+            .expect("handle_mcp deve retornar Some(...)");
         assert!(
             resp_cirurgico.get("error").is_none(),
             "tools/call intent cirurgico nao deve retornar erro JSON-RPC: {resp_cirurgico}"

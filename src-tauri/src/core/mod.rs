@@ -20,6 +20,9 @@ pub mod v3_ignition_tests;
 // SOULS V4 — Topologia dos 8 motores de inferencia (stubs conformantes sob EphemeralInferEngine).
 pub mod llama_logit_probing;
 pub mod epistemic_prober; // SOULS-CANIBALIZED Marco 4.9.3: Avaliador Epistêmico (Hipocampo) - trait síncrono CPU/AVX2
+pub mod cohomology; // SOULS-CANIBALIZED Marco 4.10.0: Cohomologia de Feixes Socráticos (H¹ ≠ 0 → boost conflito_memoria)
+pub mod socratic_event_bus; // SOULS-CANIBALIZED Marco 4.10.0: Disjuntor Socrático via IPC Zero-Copy (Tauri event 'socratic_interrupt')
+pub mod l7_shield; // SOULS-CANIBALIZED Marco 4.10.0: L7 Shield (MPSC + oneshot para prober síncrono em thread dedicada)
 pub mod mistral_sidecar;
 pub mod bitnet_engine;
 pub mod pulp_matrix_engine;

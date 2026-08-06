@@ -9,6 +9,9 @@ use tokio::net::{TcpListener, TcpStream};
 use souls_mc_lib::core::headroom_engine::{
     calculate_headroom_budget, calculate_headroom_budget_for_model, CodeCompressor, SoulsCcrStore, hex_encode,
 };
+use souls_mc_lib::core::l7_shield::{
+    intercepted_to_jsonrpc, is_mutating_method, EpistemicShieldChannel, ShieldContext, ShieldDecision,
+};
 use souls_mc_lib::core::response_healing::heal_malformed_json;
 
 fn parse_cli_args() -> (SocketAddr, SocketAddr) {
@@ -353,6 +356,7 @@ async fn handle_l7_proxy(
     mut downstream: TcpStream,
     mut upstream: TcpStream,
     ccr_store: Arc<SoulsCcrStore>,
+    shield_channel: EpistemicShieldChannel,
 ) -> io::Result<()> {
     set_nodelay(&downstream);
     set_nodelay(&upstream);
@@ -399,6 +403,36 @@ async fn handle_l7_proxy(
                             body.extend_from_slice(&temp[..n]);
                         }
 
+                        // Marco 4.10.0 ETAPA 4 — DIRETRIZ 2 (inegociável):
+                        //   Para métodos mutantes (POST/PUT/DELETE/PATCH), submete
+                        //   o body ao L7 Shield via canal MPSC + oneshot. O prober
+                        //   síncrono roda em thread OS dedicada (`souls-l7-shield`),
+                        //   mantendo a thread de rede do Tokio livre de stalls.
+                        //   Read-only bypass garantido (regra 1 do evaluate_shield).
+                        if is_mutating_method(method) {
+                            let ctx = ShieldContext::new(
+                                format!("proxy-{}-{}", std::process::id(), read_bytes),
+                                method,
+                                path,
+                            );
+                            let decision_rx = shield_channel.submit(ctx, body.clone());
+                            // `await` apenas no oneshot — sem bloquear a thread de rede.
+                            let decision = match decision_rx.await {
+                                Ok(d) => d,
+                                Err(_) => ShieldDecision::Bypass {
+                                    reason: "shield channel closed; fail-soft bypass",
+                                },
+                            };
+                            if decision.is_intercepted() {
+                                tracing::warn!(
+                                    "L7 Shield interceptou requisição: {:?}",
+                                    decision
+                                );
+                                write_shield_http_response(&mut downstream, &decision).await?;
+                                return Ok(());
+                            }
+                        }
+
                         // Mutação in-place do JSON (Headroom & CodeCompressor)
                         let mut final_body = match mutate_json_payload(&body, &ccr_store) {
                             Ok(b) => b,
@@ -442,6 +476,25 @@ async fn handle_l7_proxy(
     Ok(())
 }
 
+/// Serializa a decisão do shield em uma resposta HTTP/1.1 200 OK
+/// com payload JSON-RPC `error.code = -32001` no corpo. O cliente
+/// (Svelte 5 ou outro consumidor MCP) lê o body como erro tipado.
+async fn write_shield_http_response<W>(downstream: &mut W, decision: &ShieldDecision) -> io::Result<()>
+where
+    W: AsyncWriteExt + Unpin,
+{
+    let jsonrpc = intercepted_to_jsonrpc(decision);
+    let pretty = serde_json::to_string_pretty(&jsonrpc).unwrap_or_else(|_| "{}".to_string());
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        pretty.len(),
+        pretty
+    );
+    downstream.write_all(response.as_bytes()).await?;
+    downstream.flush().await?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let _ = tracing_subscriber::fmt()
@@ -451,6 +504,14 @@ async fn main() -> io::Result<()> {
 
     let (listen, upstream) = parse_cli_args();
     let ccr_store = Arc::new(SoulsCcrStore::from_env());
+
+    // Marco 4.10.0 ETAPA 4 — DIRETRIZ 2 (inegociável):
+    //   O prober síncrono do L7 Shield é hospedado em uma thread OS dedicada
+    //   (`souls-l7-shield`). O canal MPSC + oneshot garante que a thread de
+    //   rede do Tokio nunca toque no tensor (zero stalls de latência).
+    //   O canal é `Clone` (múltiplos workers podem compartilhar via Arc).
+    let shield_channel = EpistemicShieldChannel::spawn_mock();
+
     let listener = TcpListener::bind(listen).await?;
 
     tracing::info!("Proxy L7 Zero-Copy escutando em {} -> upstream {}", listen, upstream);
@@ -463,8 +524,9 @@ async fn main() -> io::Result<()> {
         };
 
         let store_clone = Arc::clone(&ccr_store);
+        let shield_clone = shield_channel.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_l7_proxy(downstream, up, store_clone).await {
+            if let Err(e) = handle_l7_proxy(downstream, up, store_clone, shield_clone).await {
                 tracing::error!("Erro no man-in-the-middle L7 proxy: {}", e);
             }
         });
