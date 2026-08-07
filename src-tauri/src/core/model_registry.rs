@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -6,6 +7,84 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 use crate::core::engine_trait::{EngineCascade, EngineSupportLevel, TopologyFeatures, FileFormat, AttentionType, RopeScalingType};
+
+/// Profundidade máxima rígida de navegação (Marco 4.10.1 ETAPA 2).
+/// Limite de 4 níveis previne recursão acidental em árvores de modelo
+/// profundamente aninhadas e mantém a varredura O(n) sobre modelos reais.
+pub const MAX_MODEL_WALK_DEPTH: usize = 4;
+
+/// Iterator seguro para varredura de diretórios de modelos.
+///
+/// Impondo `max_depth(MAX_MODEL_WALK_DEPTH)` e detectando explicitamente
+/// symlinks circulares via `fs::canonicalize` + `HashSet` de paths canônicos
+/// visitados. Substitui o uso direto de `WalkDir::into_iter().flatten()`
+/// que silenciosamente dropa erros (incluindo loops de symlink).
+///
+/// Comportamento fail-soft: erros de I/O são logados e o item é pulado.
+pub struct SafeModelWalk {
+    inner: walkdir::IntoIter,
+    visited_canonical: HashSet<PathBuf>,
+    root_canonical: Option<PathBuf>,
+}
+
+impl SafeModelWalk {
+    pub fn new(root: &Path) -> Self {
+        // Tenta canocalizar a raiz; se falhar (path inexistente), usa o
+        // path absoluto como fallback.
+        let root_canonical = fs::canonicalize(root).ok();
+        Self {
+            inner: WalkDir::new(root)
+                .max_depth(MAX_MODEL_WALK_DEPTH)
+                .follow_links(false)
+                .into_iter(),
+            visited_canonical: HashSet::new(),
+            root_canonical,
+        }
+    }
+}
+
+impl Iterator for SafeModelWalk {
+    type Item = walkdir::DirEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let entry = match self.inner.next() {
+                Some(Ok(e)) => e,
+                Some(Err(e)) => {
+                    // Log explícito do erro (não silent drop) e continua.
+                    eprintln!("[SOULS-WALK] pulando entrada com erro: {e}");
+                    continue;
+                }
+                None => return None,
+            };
+            let path = entry.path();
+            // Detecção de symlink loop: canocaliza e checa se já visitamos.
+            // Em Windows, `fs::canonicalize` resolve o symlink e devolve o
+            // destino real. Se o destino for igual à raiz canônica ou a um
+            // path já visitado, é um loop → skip.
+            if path.is_symlink() {
+                if let Ok(canonical) = fs::canonicalize(path) {
+                    if let Some(ref root) = self.root_canonical {
+                        if canonical == *root {
+                            eprintln!("[SOULS-WALK] pulando symlink loop para raiz: {}", path.display());
+                            continue;
+                        }
+                    }
+                    if !self.visited_canonical.insert(canonical) {
+                        eprintln!("[SOULS-WALK] pulando symlink circular: {}", path.display());
+                        continue;
+                    }
+                }
+            }
+            return Some(entry);
+        }
+    }
+}
+
+/// Helper de conveniência: itera sobre entradas válidas de modelos.
+pub fn safe_walk_models(root: &Path) -> SafeModelWalk {
+    SafeModelWalk::new(root)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ModelArchitectureParams {
@@ -786,7 +865,7 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
     let mut scanned_paths = Vec::new();
     let cascade = EngineCascade::new();
 
-    for entry in WalkDir::new(models_dir).max_depth(5).into_iter().flatten() {
+    for entry in safe_walk_models(models_dir) {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
@@ -1000,7 +1079,7 @@ pub fn fetch_approved_tier1_models(conn: &Connection) -> Result<Vec<PathBuf>, St
 /// Coleta modelos locais RECURSIVAMENTE via WalkDir ignorando projetores multimodais (mmproj).
 pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    for entry in WalkDir::new(models_dir).max_depth(5).into_iter().flatten() {
+    for entry in safe_walk_models(models_dir) {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
@@ -1220,7 +1299,83 @@ fn capitalize_alphanumeric(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
+    #[test]
+    fn test_safe_walk_models_respects_max_depth_4() {
+        // Cria árvore: root/level1/level2/level3/level4/level5 (deep demais)
+        // e verifica que level5 (depth=5) NÃO é visitado.
+        let tmp = std::env::temp_dir().join(format!("souls_walk_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let deep = tmp.join("l1/l2/l3/l4/l5/deep.gguf");
+        fs::create_dir_all(deep.parent().unwrap()).unwrap();
+        fs::write(&deep, b"fake_gguf").unwrap();
+        // Cria também arquivo raso no nível 1 (deve ser encontrado).
+        let shallow = tmp.join("shallow.gguf");
+        fs::write(&shallow, b"fake_gguf_shallow").unwrap();
+
+        let mut found = Vec::new();
+        for entry in safe_walk_models(&tmp) {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) == Some("gguf") {
+                found.push(p.file_name().unwrap().to_owned());
+            }
+        }
+        let _ = fs::remove_dir_all(&tmp);
+
+        // Arquivo raso deve ser encontrado.
+        assert!(
+            found.iter().any(|n| n == "shallow.gguf"),
+            "shallow.gguf (depth=1) deve ser encontrado, encontrados: {found:?}"
+        );
+        // Arquivo profundo NÃO deve ser encontrado (depth=6).
+        assert!(
+            !found.iter().any(|n| n == "deep.gguf"),
+            "deep.gguf (depth=6) NÃO deve ser encontrado com max_depth=4, encontrados: {found:?}"
+        );
+    }
+
+    #[test]
+    fn test_safe_walk_models_handles_nonexistent_dir_without_panic() {
+        // Diretório inexistente → iterator vazio, sem panic.
+        let bogus = std::env::temp_dir().join("souls_walk_does_not_exist_xyz_12345");
+        let count = safe_walk_models(&bogus).count();
+        assert_eq!(count, 0, "diretório inexistente deve dar iterator vazio");
+    }
+
+    #[test]
+    fn test_safe_walk_models_skips_broken_symlink() {
+        // Cria symlink quebrado (aponta para path inexistente) e verifica
+        // que o walk não panica nem trava.
+        // Em Windows, criar symlink requer privilégio de admin (ERROR 1314);
+        // se a criação falhar por privilégio, pulamos o teste (não é
+        // defeito de produção: produção tipicamente tem Developer Mode ON
+        // ou roda como admin, mas ambiente de teste pode não ter).
+        let tmp = std::env::temp_dir().join(format!("souls_walk_broken_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let broken = tmp.join("broken_link.gguf");
+        let symlink_ok = {
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink("/nonexistent/target", &broken).is_ok()
+            }
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(r"C:\nonexistent\target.gguf", &broken).is_ok()
+            }
+        };
+        if !symlink_ok {
+            let _ = fs::remove_dir_all(&tmp);
+            eprintln!("[SKIP] symlink creation requires admin/developer mode; skipping broken-symlink test");
+            return;
+        }
+        let count = safe_walk_models(&tmp).count();
+        let _ = fs::remove_dir_all(&tmp);
+        // O walk não pode panicar. O symlink quebrado pode ou não aparecer
+        // dependendo do OS; o que importa é que o iterator termina.
+        assert!(count <= 1, "iterator deve terminar sem panic, count = {count}");
+    }
     #[test]
     fn test_format_model_canonical_name() {
         let input1 = "Phi-4-mini-instruct-unsloth-Q4_K_M.gguf";
@@ -1363,19 +1518,27 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = temp_dir.path();
 
-        // Profundidade 5: root / d1 / d2 / d3 / d4 / model_l5.gguf
-        let l5_dir = root.join("d1").join("d2").join("d3").join("d4");
+        // Marco 4.10.1 — ETAPA 2: max_depth=4 (não 5).
+        // Profundidade 4: root / d1 / d2 / d3 / model_l4.gguf
+        let l4_dir = root.join("d1").join("d2").join("d3");
+        std::fs::create_dir_all(&l4_dir).unwrap();
+        std::fs::write(l4_dir.join("model_l4.gguf"), b"GGUF").unwrap();
+
+        // Profundidade 5 (acima de max_depth 4): root / d1 / d2 / d3 / d4 / model_l5.gguf
+        let l5_dir = l4_dir.join("d4");
         std::fs::create_dir_all(&l5_dir).unwrap();
         std::fs::write(l5_dir.join("model_l5.gguf"), b"GGUF").unwrap();
 
-        // Profundidade 6 (acima de max_depth 5): root / d1 / d2 / d3 / d4 / d5 / model_l6.gguf
-        let l6_dir = l5_dir.join("d5");
-        std::fs::create_dir_all(&l6_dir).unwrap();
-        std::fs::write(l6_dir.join("model_l6.gguf"), b"GGUF").unwrap();
-
         let models = collect_local_models(root);
-        assert!(models.iter().any(|p| p.file_name().unwrap() == "model_l5.gguf"));
-        assert!(!models.iter().any(|p| p.file_name().unwrap() == "model_l6.gguf"));
+        assert!(
+            models.iter().any(|p| p.file_name().unwrap() == "model_l4.gguf"),
+            "model_l4.gguf (depth=4) deve ser encontrado, modelos: {:?}",
+            models
+        );
+        assert!(
+            !models.iter().any(|p| p.file_name().unwrap() == "model_l5.gguf"),
+            "model_l5.gguf (depth=5) NAO deve ser encontrado com max_depth=4"
+        );
     }
 }
 

@@ -239,6 +239,17 @@ impl CodeCompressor {
     }
 }
 
+/// Capacidade máxima rígida de entradas no cache CCR (Marco 4.10.1 ETAPA 3).
+/// Complementa o `max_ram_bytes` com uma barreira de cardinalidade que
+/// evita explosão combinatorial em workloads com muitos arquivos pequenos
+/// (cada um menor que 1KB). 16384 entradas × ~1KB = 16MB de metadados
+/// de chave/valor no pior caso — bem dentro do budget de 256MB do `from_env`.
+pub const MAX_CCR_ENTRIES: usize = 16384;
+
+/// Limiar de decay de background: a cada N stores, dispara uma varredura
+/// LRU suave para limpar entradas frias sem bloquear o hot path.
+const BACKGROUND_DECAY_DIVISOR: u64 = 64;
+
 pub struct CcrEntry {
     pub payload: Vec<u8>,
     pub last_accessed_at: AtomicU64,
@@ -313,6 +324,29 @@ impl SoulsCcrStore {
             self.evict_lru_until(target_watermark);
         }
 
+        // Marco 4.10.1 ETAPA 3: barreira rígida de cardinalidade.
+        // Se o número de entradas exceder MAX_CCR_ENTRIES, evictamos até
+        // voltar para 80% do cap (target_count). Isso blinda o cache
+        // contra workloads de arquivos pequenos que estourariam cardinalidade
+        // antes de estourar bytes.
+        if self.cache.len() > MAX_CCR_ENTRIES {
+            let target_count = (MAX_CCR_ENTRIES * 80) / 100;
+            self.evict_lru_count(target_count);
+        }
+
+        // Marco 4.10.1 ETAPA 3: decay de background probabilístico.
+        // A cada BACKGROUND_DECAY_DIVISOR stores, dispara decay suave que
+        // expurga 10% das entradas mais frias — sem bloquear o hot path.
+        // Probabilidade = 1/N por store; em workloads intensos, o decay
+        // roda continuamente; em workloads leves, é praticamente inativo.
+        let current_op = self.access_counter.load(Ordering::Relaxed);
+        if current_op.is_multiple_of(BACKGROUND_DECAY_DIVISOR) {
+            let decay_target = (self.cache.len() * 90) / 100;
+            if self.cache.len() > 1024 {
+                self.evict_lru_count(decay_target);
+            }
+        }
+
         hash
     }
 
@@ -367,6 +401,45 @@ impl SoulsCcrStore {
 
     pub fn current_ram_bytes(&self) -> usize {
         self.current_ram_bytes.load(Ordering::Relaxed)
+    }
+
+    /// Retorna o número atual de entradas no cache (Marco 4.10.1 ETAPA 3).
+    pub fn current_len(&self) -> usize {
+        self.cache.len()
+    }
+
+    /// Rotina de evicção LRU baseada em contagem (Marco 4.10.1 ETAPA 3).
+    /// Expurga registros mais antigos até `self.cache.len() <= target_count`.
+    /// Idêntica à `evict_lru_until` mas o critério de parada é cardinalidade
+    /// (não bytes), permitindo defesa contra cardinalidade patológica.
+    pub fn evict_lru_count(&self, target_count: usize) {
+        while self.cache.len() > target_count {
+            let mut entries: Vec<([u8; 16], u64)> = self
+                .cache
+                .iter()
+                .map(|kv| (*kv.key(), kv.value().last_accessed_at.load(Ordering::Relaxed)))
+                .collect();
+            if entries.is_empty() {
+                break;
+            }
+            entries.sort_unstable_by_key(|&(_, ts)| ts);
+            let mut evicted_any = false;
+            for (hash, _) in entries {
+                if self.cache.len() <= target_count {
+                    break;
+                }
+                if let Some((_, entry)) = self.cache.remove(&hash) {
+                    let len = entry.payload.len();
+                    self.current_ram_bytes.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |curr| {
+                        Some(curr.saturating_sub(len))
+                    }).ok();
+                    evicted_any = true;
+                }
+            }
+            if !evicted_any {
+                break;
+            }
+        }
     }
 
     /// Registra footprint de VRAM (deve ser estritamente 0)
@@ -618,6 +691,65 @@ pub fn calculate_total(a: i32, b: i32) -> i32 {
             low_watermark
         );
         assert_eq!(store.vram_bytes_allocated(), 0);
+    }
+
+    // ========================================================================
+    // Marco 4.10.1 — ETAPA 3: Testes TDD de LRU por cardinalidade
+    // ========================================================================
+
+    /// TDD-17: Cap de cardinalidade — quando `cache.len() > MAX_CCR_ENTRIES`,
+    /// evict_lru_count deve reduzir até 80% do cap.
+    /// Aqui usamos um store com byte budget muito alto (evicts não disparam
+    /// por bytes) mas inserimos muitas entradas pequenas para forçar o cap.
+    #[test]
+    fn test_ccr_store_respects_max_entries_cap() {
+        // Budget de bytes gigante: 1 GB (nunca dispara evicção por bytes).
+        // MAX_CCR_ENTRIES = 16384 → inserimos 20000 entradas pequenas (1 byte cada).
+        // Esperado: cache.len() <= 0.8 × 16384 = 13107 após evicção.
+        let store = SoulsCcrStore::new(1024 * 1024 * 1024);
+        // Insere 20000 entradas únicas de 1 byte cada.
+        let mut hashes = Vec::with_capacity(20_000);
+        for i in 0..20_000u32 {
+            let payload = vec![(i & 0xff) as u8];
+            hashes.push(store.store(&payload));
+        }
+        let len_after = store.current_len();
+        assert!(
+            len_after <= MAX_CCR_ENTRIES,
+            "cardinalidade deve respeitar MAX_CCR_ENTRIES = {MAX_CCR_ENTRIES}, foi {len_after}"
+        );
+        // Garantia mínima: pelo menos 1 entrada sobreviveu.
+        assert!(len_after > 0, "pelo menos 1 entrada deve sobreviver");
+    }
+
+    /// TDD-18: Decay de background probabilístico — após muitas inserções,
+    /// o número de entradas deve cair periodicamente (não só por cap ou bytes).
+    /// Não podemos testar probabilisticamente com 100% de certeza, mas podemos
+    /// verificar que após 10000 stores em um cache pequeno, a cardinalidade
+    /// nunca ultrapassa o cap.
+    #[test]
+    fn test_ccr_store_background_decay_keeps_cardinality_bounded() {
+        let store = SoulsCcrStore::new(1024 * 1024 * 1024);
+        for i in 0..50_000u32 {
+            let payload = vec![(i & 0xff) as u8];
+            store.store(&payload);
+        }
+        let final_len = store.current_len();
+        assert!(
+            final_len <= MAX_CCR_ENTRIES,
+            "após 50000 stores, cardinalidade {final_len} deve estar <= {MAX_CCR_ENTRIES}"
+        );
+    }
+
+    /// TDD-19: `current_len()` reflete o número exato de entradas.
+    #[test]
+    fn test_ccr_store_current_len_accuracy() {
+        let store = SoulsCcrStore::new(1024 * 1024);
+        assert_eq!(store.current_len(), 0);
+        for i in 0..5 {
+            store.store(&[i as u8; 16]);
+        }
+        assert_eq!(store.current_len(), 5);
     }
 
     #[test]

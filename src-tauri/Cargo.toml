@@ -119,6 +119,10 @@ tauri-app = ["dep:tauri", "dep:tauri-plugin-opener"]
 llama_backend = ["dep:llama-cpp-2", "llama-cpp-2/cuda", "dep:llguidance"]
 mistral_backend = ["dep:mistralrs"]
 grammar_backend = ["dep:llguidance"]
+# Marco 4.10.1 — ETAPA 5: gateway_ccr é um marker feature que gateia o
+# binário `agentgateway_tcp_proxy` (o único que depende do compressor
+# CCR + L7 Shield). A lib (souls_mc_lib) mantém a CCR API sempre
+# disponível, mas o proxy só compila com a flag ON.
 gateway_ccr = []
 
 [[bin]]
@@ -134,6 +138,19 @@ path = "src/bin/souls_mcp_server.rs"
 name = "souls_vanguard_worker"
 path = "src/bin/souls_vanguard_worker.rs"
 required-features = ["llama_backend"]
+
+# Marco 4.10.1 — ETAPA 5: binários CCR-gated. O proxy L7 + o stdio guard
+# só compilam com a feature `gateway_ccr` (não inflando binários de
+# produção que não precisam do compressor).
+[[bin]]
+name = "agentgateway_tcp_proxy"
+path = "src/bin/agentgateway_tcp_proxy.rs"
+required-features = ["gateway_ccr"]
+
+[[bin]]
+name = "mcp_stdio_guard"
+path = "src/bin/mcp_stdio_guard.rs"
+required-features = ["gateway_ccr"]
 
 # ---------- PROFILES (fix/cargo-finops-v1) ----------
 # Dev/test já estão definidos abaixo. Aqui entramos com [profile.release]:
