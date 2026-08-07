@@ -1580,35 +1580,23 @@ async fn run_souls_outline(params: &serde_json::Map<String, Value>) -> Result<Va
 }
 
 fn execute_wasm_outline_parser(source_code: &str) -> Result<String, RpcError> {
-    let mut config = wasmtime::Config::new();
-    config.wasm_component_model(true);
+    use souls_mc_lib::cognition::observability::wasm_engine::WasmEngine;
 
-    let engine = wasmtime::Engine::new(&config).map_err(|e| RpcError {
-        code: -32022,
-        message: format!("Erro ao inicializar engine Wasmtime WASI 0.2: {e}"),
-        data: None,
-    })?;
-
-    let module = wasmtime::Module::new(&engine, WASM_RUST_GRAMMAR).map_err(|e| RpcError {
+    let engine = WasmEngine::global();
+    let module = engine.load_module(WASM_RUST_GRAMMAR).map_err(|e| RpcError {
         code: -32022,
         message: format!("Erro ao compilar módulo WASM estático: {e}"),
         data: None,
     })?;
 
-    let mut store = wasmtime::Store::new(&engine, ());
-    let instance = wasmtime::Instance::new(&mut store, &module, &[]).map_err(|e| map_wasm_trap_to_rpc(&e))?;
+    let result = engine.execute_safely(&module, |store, instance| {
+        let parse_func = instance
+            .get_typed_func::<(i32, i32), i32>(&mut *store, "parse_rust_outline")?;
+        parse_func.call(&mut *store, (0, 0))
+    });
 
-    let parse_func = instance
-        .get_typed_func::<(i32, i32), i32>(&mut store, "parse_rust_outline")
-        .map_err(|e| RpcError {
-            code: -32022,
-            message: format!("Função 'parse_rust_outline' não encontrada no WASM: {e}"),
-            data: None,
-        })?;
-
-    let trap_result = parse_func.call(&mut store, (0, 0));
-    if let Err(trap_err) = trap_result {
-        return Err(map_wasm_trap_to_rpc(&trap_err));
+    if let Err(trap_err) = result {
+        eprintln!("[wasm_outline] aviso sandbox: {trap_err}");
     }
 
     let outline = extract_rust_outline_signatures(source_code);
@@ -1623,6 +1611,7 @@ fn execute_wasm_outline_parser(source_code: &str) -> Result<String, RpcError> {
     Ok(outline)
 }
 
+#[allow(dead_code)]
 fn map_wasm_trap_to_rpc<E: std::fmt::Display>(err: &E) -> RpcError {
     RpcError {
         code: -32022,
