@@ -1,8 +1,8 @@
-_IGNITION_SCRIPTS Gerado em: 2026-08-07 03:11:28
+_IGNITION_SCRIPTS Gerado em: 2026-08-07 19:03:49
 
 ### ====================================================================================================
 ARQUIVO: boot.ps1
-CAMINHO: z:\souls_mc\boot.ps1
+CAMINHO: Z:\souls_mc\boot.ps1
 ---
 # ============================================================================
 # SOULS CANON V5: BOOTSTRAP DO SOULS MC (SYSTEM TRAY DAEMON)
@@ -398,7 +398,7 @@ catch {
 
 ### ====================================================================================================
 ARQUIVO: souls_ETL_ignition.ps1
-CAMINHO: z:\souls_mc\docs\scripts\souls_ETL_ignition.ps1
+CAMINHO: Z:\souls_mc\docs\scripts\souls_ETL_ignition.ps1
 ---
 # ==============================================================================
 # SOULS ETL IGNITION MATRIX V5 - ORQUESTRADOR BARE-METAL (JANELA DE VIDRO)

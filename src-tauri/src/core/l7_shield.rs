@@ -14,7 +14,7 @@
 //   - `Bypass`           → request forwarded ao upstream sem modificação.
 //   - `Intercepted`      → request bloqueado, retorna JSON-RPC -32001.
 
-use std::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::mpsc;
 use std::thread;
 
 use serde::{Deserialize, Serialize};
@@ -154,10 +154,10 @@ pub fn evaluate_shield<P: EpistemicProber>(
     };
 
     if scores.risco_relacional > SHIELD_RISK_THRESHOLD
-        || scores.ambiguidade > 0.80
+        || scores.ambiguidade > 0.75
     {
-        let motivo = if scores.ambiguidade > 0.80 {
-            format!("ambiguidade {:.2} > 0.80", scores.ambiguidade)
+        let motivo = if scores.ambiguidade > 0.75 {
+            format!("ambiguidade {:.2} > 0.75", scores.ambiguidade)
         } else {
             format!("risco_relacional {:.2} > {:.2}", scores.risco_relacional, SHIELD_RISK_THRESHOLD)
         };
@@ -189,17 +189,15 @@ pub struct ShieldRequest {
 /// pode ser `await`-ado sem bloquear o event loop.
 #[derive(Clone)]
 pub struct EpistemicShieldChannel {
-    tx: Sender<ShieldRequest>,
+    tx: mpsc::Sender<ShieldRequest>,
 }
 
 impl EpistemicShieldChannel {
     /// Spawna a thread OS dedicada que executa o prober síncrono.
-    /// O prober é movido para dentro da thread (não pode ser 'static
-    /// por causa do lifetime em `LlamaCppEpistemicProber<'a>` — usamos
-    /// o `MockEpistemicProber` zero-dependência para a versão de produção
-    /// do shield, mantendo a interface idêntica).
+    /// O prober é movido para dentro da thread batizada como 'souls-l7-shield'.
+    /// A comunicação é governada por `tokio::sync::mpsc` com limite de 16 slots (backpressure).
     pub fn spawn<P: EpistemicProber + Send + 'static>(prober: P) -> Self {
-        let (tx, rx): (Sender<ShieldRequest>, Receiver<ShieldRequest>) = mpsc::channel();
+        let (tx, rx) = mpsc::channel::<ShieldRequest>(16);
         thread::Builder::new()
             .name("souls-l7-shield".to_string())
             .spawn(move || {
@@ -217,10 +215,9 @@ impl EpistemicShieldChannel {
     /// Despacha uma request ao shield de forma não-bloqueante.
     /// Retorna `oneshot::Receiver<ShieldDecision>` para `await` no Tokio.
     ///
-    /// Comportamento fail-soft: se a thread dedicada morreu (canal quebrado),
-    /// o `tx.send` falha; o `oneshot::Sender` mantido no `ShieldRequest`
-    /// é então dropado, o que faz o `Receiver::await` retornar `Err(_)`.
-    /// O caller em `handle_l7_proxy` trata esse `Err` como Bypass.
+    /// Comportamento fail-soft: se a fila de 16 slots encheu ou a thread morreu,
+    /// o `try_send` falha; o `oneshot::Sender` é então dropado e o `Receiver::await`
+    /// retorna `Err(_)`, que o handler trata como Bypass fail-soft.
     pub fn submit(&self, ctx: ShieldContext, body: Vec<u8>) -> tokio::sync::oneshot::Receiver<ShieldDecision> {
         let (otx, orx) = tokio::sync::oneshot::channel();
         let msg = ShieldRequest {
@@ -228,15 +225,13 @@ impl EpistemicShieldChannel {
             body,
             reply: otx,
         };
-        // Tenta enviar; se falhar, o `orx` será dropado (não lido) e o `await`
-        // do caller retornará `Err`, que o handler converte em Bypass fail-soft.
-        let _ = self.tx.send(msg);
+        let _ = self.tx.try_send(msg);
         orx
     }
 }
 
-fn run_shield_loop<P: EpistemicProber>(prober: P, rx: Receiver<ShieldRequest>) {
-    while let Ok(msg) = rx.recv() {
+fn run_shield_loop<P: EpistemicProber>(prober: P, mut rx: mpsc::Receiver<ShieldRequest>) {
+    while let Some(msg) = rx.blocking_recv() {
         let decision = evaluate_shield(&prober, &msg.ctx, &msg.body);
         // Falha no envio = receptor foi dropado (cliente desconectou).
         let _ = msg.reply.send(decision);

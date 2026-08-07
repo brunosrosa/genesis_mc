@@ -1,4 +1,4 @@
-_RULES_IN_IDEs Gerado em: 2026-08-07 03:11:28
+_RULES_IN_IDEs Gerado em: 2026-08-07 19:03:50
 
 ### ====================================================================================================
 ### SECTION 1: WORKSPACE CORE RULES (GEMINI.md / AGENTS.md)
@@ -6,7 +6,7 @@ _RULES_IN_IDEs Gerado em: 2026-08-07 03:11:28
 
 ### ====================================================================================================
 ARQUIVO: [WORKSPACE CORE] GEMINI.md
-CAMINHO: z:\souls_mc\GEMINI.md
+CAMINHO: Z:\souls_mc\GEMINI.md
 ---
 # SOULS MC (Mission Control) | [(EX-SODA) (Sovereign Operating Data Architecture)] | Core Context & Revelação Progressiva
 
@@ -92,7 +92,7 @@ Write, Delete, Glob → use normally. NEVER loop on Edit failures — switch to 
 
 ### ====================================================================================================
 ARQUIVO: [Trae Rules] project_rules.md
-CAMINHO: z:\souls_mc\.trae\rules\project_rules.md
+CAMINHO: Z:\souls_mc\.trae\rules\project_rules.md
 ---
 # SOULS MC (Mission Control) | [(EX-SODA) (Sovereign Operating Data Architecture)] | Core Context & Revelação Progressiva
 
@@ -139,7 +139,7 @@ O Agent Gateway exportado para clientes MCP chama-se **`souls_mcp`** (não `soul
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] AGENTS.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\AGENTS.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\AGENTS.md
 ---
 ###### CONSTITUIÇÃO SOULS (Genesis Mission Control)
 **Hardware Alvo:** Intel i9, 32GB RAM, GPU RTX 2060m (Teto rígido de 6GB VRAM).
@@ -208,7 +208,7 @@ NUNCA emita código sem planejamento. Aplique o Protocolo ARC (Analyze, Run, Con
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] DESIGN.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\DESIGN.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\DESIGN.md
 ---
 ---
 trigger: always_on
@@ -253,7 +253,7 @@ Nós deletados do DOM (Tombstones) NUNCA devem sumir instantaneamente causando s
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] GEMINI.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\GEMINI.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\GEMINI.md
 ---
 ##### CONSTITUIÇÃO GLOBAL DO AGENTE ORQUESTRADOR (ANTIGRAVITY IDE / GEMINI CLI)
 
@@ -342,7 +342,7 @@ Fallback only if a lean-ctx tool is unavailable: use native equivalents.
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] governance_bmad.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\governance_bmad.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\governance_bmad.md
 ---
 ---
 trigger: always_on
@@ -414,7 +414,7 @@ Qualquer futura CLI, sidecar ou ferramenta de análise estática criada sob o pr
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] memory_and_cognition.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\memory_and_cognition.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\memory_and_cognition.md
 ---
 ---
 trigger: always_on
@@ -458,7 +458,7 @@ O lixo semântico não é apagado abruptamente por temporizadores (TTL); ele sof
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] tech-stack.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\tech-stack.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\tech-stack.md
 ---
 ---
 trigger: always_on
@@ -521,7 +521,7 @@ Toda futura ferramenta de linha de comando, varredura estática ou sidecar de an
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] trae_project_rules.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\trae_project_rules.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\trae_project_rules.md
 ---
 ---
 trigger: always_on
@@ -716,7 +716,7 @@ Você atua sob o SOULS Canon V5. Você está TERMINANTEMENTE PROIBIDO de orquest
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] trae_user_rules.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\trae_user_rules.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\trae_user_rules.md
 ---
 ##### CONSTITUIÇÃO GLOBAL DO AGENTE ORQUESTRADOR (ANTIGRAVITY IDE / GEMINI CLI)
 
@@ -822,7 +822,7 @@ Injetados diretamente na constituição após validação prática:
 
 ### ====================================================================================================
 ARQUIVO: [ARCHIVED] user_global.md
-CAMINHO: z:\souls_mc\.archive\docs-rules\user_global.md
+CAMINHO: Z:\souls_mc\.archive\docs-rules\user_global.md
 ---
 ##### CONSTITUIÇÃO GLOBAL DO AGENTE ORQUESTRADOR (ANTIGRAVITY IDE / GEMINI CLI)
 

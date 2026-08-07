@@ -2083,18 +2083,18 @@ async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, Rp
     }
 
     // 8. Disjuntor de segurança: abortar inferência se o prompt for vago
-    //    demais (amb > 0.80) ou com risco relacional elevado (risco > 0.70).
-    //    Estes limiares estão alinhados com os testes TDD do Marco 4.9.4.
-    let disjuntor_ativo = scores.ambiguidade > 0.80 || scores.risco_relacional > 0.70;
+    //    demais (amb > 0.75) ou com risco relacional elevado (risco > 0.70).
+    //    Estes limiares estão alinhados com os testes TDD do MARCO 5.2.0.
+    let disjuntor_ativo = scores.ambiguidade > 0.75 || scores.risco_relacional > 0.70;
 
-    // 9. Marco 4.10.0 ETAPA 3: DIRETRIZ 3 (inegociável).
+    // 9. MARCO 5.2.0: DIRETRIZ 4 (inegociável).
     //    Quando o disjuntor é disparado:
     //    a) Emit Tauri Event `socratic_interrupt` com payload completo.
     //    b) Retornar erro JSON-RPC `-32001` (HitlDenied) com payload em `data`.
     //    O frontend Svelte 5 escuta o evento e renderiza o sidecar inline.
     if disjuntor_ativo {
-        let reason = if scores.ambiguidade > 0.80 {
-            format!("ambiguidade {:.2} > 0.80", scores.ambiguidade)
+        let reason = if scores.ambiguidade > 0.75 {
+            format!("ambiguidade {:.2} > 0.75", scores.ambiguidade)
         } else {
             format!("risco_relacional {:.2} > 0.70", scores.risco_relacional)
         };

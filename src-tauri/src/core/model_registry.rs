@@ -133,7 +133,7 @@ pub struct VramProfileEstimate {
     pub supports_flash_attention: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelMetadata {
     pub file_path: String,
     pub model_name: String,
@@ -327,59 +327,185 @@ impl<'a> ByteCursor<'a> {
     }
 }
 
-use std::collections::HashMap;
-use std::sync::{RwLock, LazyLock};
-use std::time::SystemTime;
+use dashmap::DashMap;
+use std::sync::LazyLock;
 
-/// Cache thread-safe de metadados GGUF O(1) para evitar mmap2 síncrono duplo (ADR-027 / Marco 4.2.8)
+/// Cache transiliente L1/L2/L3 de metadados GGUF O(1) para erradicar o Double-I/O Bug (ADR-010 / ADR-027 / Marco 5.1.0)
 pub struct GgufMetadataCache {
-    cache: RwLock<HashMap<PathBuf, (u64, SystemTime, ModelMetadata)>>,
+    cache: DashMap<String, ModelMetadata>,
 }
 
 impl GgufMetadataCache {
     pub fn new() -> Self {
         Self {
-            cache: RwLock::new(HashMap::new()),
+            cache: DashMap::new(),
         }
     }
 
+    /// Obtém metadados do modelo via fluxo em 3 níveis (L1 RAM -> L2 SQLite WAL -> L3 single mmap).
+    /// GARGALO ZERO DE SYSCALL: no L1 Hit, nenhuma chamada a `fs::metadata` ou `dunce::canonicalize` é realizada!
     pub fn get_or_parse(&self, file_path: &Path) -> Option<ModelMetadata> {
-        let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.to_path_buf());
-        let fs_meta = fs::metadata(&canonical_path).ok()?;
-        let file_size = fs_meta.len();
-        let mtime = fs_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        let raw_key = file_path.to_string_lossy().to_string();
 
-        if let Ok(guard) = self.cache.read() {
-            if let Some((cached_size, cached_mtime, cached_meta)) = guard.get(&canonical_path) {
-                if *cached_size == file_size && *cached_mtime == mtime {
-                    return Some(cached_meta.clone());
-                }
+        // 1. L1 RAM Hit (O(1) em RAM sem nenhuma Syscall de sistema de arquivos)
+        if let Some(entry) = self.cache.get(&raw_key) {
+            return Some(entry.value().clone());
+        }
+
+        let canon_key = dunce::canonicalize(file_path)
+            .map(|p| p.to_string_lossy().to_string())
+            .ok();
+
+        if let Some(ref ck) = canon_key {
+            if let Some(entry) = self.cache.get(ck) {
+                let meta = entry.value().clone();
+                self.cache.insert(raw_key, meta.clone());
+                return Some(meta);
             }
         }
 
-        let parsed = parse_gguf_metadata_zero_copy_uncached(&canonical_path)?;
-        if let Ok(mut guard) = self.cache.write() {
-            guard.insert(canonical_path, (file_size, mtime, parsed.clone()));
+        // 2. L2 SQLite Hit (souls_state.db WAL)
+        if let Some(meta) = self.load_from_sqlite_l2(&raw_key, canon_key.as_deref()) {
+            self.cache.insert(raw_key.clone(), meta.clone());
+            if let Some(ck) = canon_key {
+                if ck != raw_key {
+                    self.cache.insert(ck, meta.clone());
+                }
+            }
+            return Some(meta);
         }
+
+        // 3. L3 Miss: Single Zero-Copy mmap do cabeçalho GGUF v3 via memmap2
+        let parsed = parse_gguf_metadata_zero_copy_uncached(file_path)?;
+
+        // Persiste na base relacional souls_state.db (L2) e hidrata o DashMap L1 em RAM
+        self.persist_to_sqlite_l2(&parsed);
+        self.cache.insert(raw_key.clone(), parsed.clone());
+        if let Some(ck) = canon_key {
+            if ck != raw_key {
+                self.cache.insert(ck, parsed.clone());
+            }
+        }
+
         Some(parsed)
     }
 
-    pub fn clear(&self) {
-        if let Ok(mut guard) = self.cache.write() {
-            guard.clear();
+    fn load_from_sqlite_l2(&self, raw_key: &str, canon_key: Option<&str>) -> Option<ModelMetadata> {
+        let db_path = resolve_db_path();
+        if !db_path.exists() {
+            return None;
         }
+
+        let conn = rusqlite::Connection::open(&db_path).ok()?;
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(2));
+
+        let query_key = canon_key.unwrap_or(raw_key);
+
+        let mut stmt = conn.prepare(
+            "SELECT file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, topology_json
+             FROM model_registry
+             WHERE file_path = ?1 OR file_path = ?2"
+        ).ok()?;
+
+        let row = stmt.query_row(params![raw_key, query_key], |r| {
+            let file_path: String = r.get(0)?;
+            let model_name: String = r.get(1)?;
+            let family: String = r.get(2)?;
+            let parameters: String = r.get(3)?;
+            let context_length: u64 = r.get::<_, i64>(4)? as u64;
+            let quantization: String = r.get(5)?;
+            let caps_raw: String = r.get(6)?;
+            let file_size_bytes: u64 = r.get::<_, i64>(7)? as u64;
+            let is_active: bool = r.get::<_, i32>(8)? != 0;
+            let topology_raw: String = r.get(9)?;
+            Ok((file_path, model_name, family, parameters, context_length, quantization, caps_raw, file_size_bytes, is_active, topology_raw))
+        }).ok()?;
+
+        let capabilities: Vec<String> = serde_json::from_str(&row.6).unwrap_or_default();
+        let architecture: ModelArchitectureParams = if let Ok(tf) = serde_json::from_str::<TopologyFeatures>(&row.9) {
+            ModelArchitectureParams {
+                block_count: tf.block_count,
+                embedding_length: tf.embedding_length,
+                head_count: tf.head_count,
+                head_count_kv: tf.head_count_kv,
+                feed_forward_length: 0,
+                rope_scaling_attn_factor: if tf.rope_scaling == RopeScalingType::Linear { Some(1.0) } else { None },
+                chat_template: tf.chat_template.unwrap_or_default(),
+            }
+        } else {
+            ModelArchitectureParams::default()
+        };
+
+        Some(ModelMetadata {
+            file_path: row.0,
+            model_name: row.1,
+            family: row.2,
+            parameters: row.3,
+            context_length: row.4,
+            quantization: row.5,
+            capabilities,
+            file_size_bytes: row.7,
+            is_active: row.8,
+            tier1_passed: false,
+            success_rate_ema: 0.0,
+            ema_latency_ms: 0.0,
+            architecture,
+        })
+    }
+
+    fn persist_to_sqlite_l2(&self, meta: &ModelMetadata) {
+        let db_path = resolve_db_path();
+        let conn = match init_model_registry_db(&db_path) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+
+        let caps_json = serde_json::to_string(&meta.capabilities).unwrap_or_else(|_| "[]".to_string());
+        let tf = build_topology_features_from_meta(meta);
+        let topology_json = serde_json::to_string(&tf).unwrap_or_else(|_| "{}".to_string());
+        let actual_mod_type = infer_module_type(&meta.model_name, &meta.family);
+
+        let _ = conn.execute(
+            "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, topology_json, last_seen)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, DATETIME('now'))
+             ON CONFLICT(file_path) DO UPDATE SET
+                model_name=excluded.model_name,
+                family=excluded.family,
+                parameters=excluded.parameters,
+                context_length=excluded.context_length,
+                quantization=excluded.quantization,
+                capabilities=excluded.capabilities,
+                file_size_bytes=excluded.file_size_bytes,
+                is_active=excluded.is_active,
+                module_type=excluded.module_type,
+                topology_json=excluded.topology_json,
+                last_seen=DATETIME('now');",
+            params![
+                meta.file_path,
+                meta.model_name,
+                meta.family,
+                meta.parameters,
+                meta.context_length as i64,
+                meta.quantization,
+                caps_json,
+                meta.file_size_bytes as i64,
+                if meta.is_active { 1 } else { 0 },
+                actual_mod_type,
+                topology_json,
+            ],
+        );
+    }
+
+    pub fn clear(&self) {
+        self.cache.clear();
     }
 
     pub fn len(&self) -> usize {
-        if let Ok(guard) = self.cache.read() {
-            guard.len()
-        } else {
-            0
-        }
+        self.cache.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.cache.is_empty()
     }
 }
 
@@ -1108,6 +1234,56 @@ pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
     files
 }
 
+/// Resolve dinamicamente o caminho absoluto para o modelo GGUF do Avaliador Epistêmico
+/// (Gemma 4 E2B / Phi-4-mini) a partir da tabela `model_registry` no SQLite
+/// (`souls_state.db` / `souls_heuristic_vault.db`) ou por varredura local.
+pub fn resolve_epistemic_model_path() -> Option<PathBuf> {
+    let db_path = resolve_db_path();
+    if let Ok(conn) = Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) {
+        let stmt = conn.prepare(
+            "SELECT file_path FROM model_registry 
+             WHERE (family LIKE '%gemma%' OR family LIKE '%phi%' OR file_path LIKE '%gemma%' OR file_path LIKE '%phi%')
+               AND is_active = 1
+             ORDER BY tier1_passed DESC, file_path DESC LIMIT 1"
+        ).ok();
+        if let Some(mut s) = stmt {
+            if let Ok(mut rows) = s.query([]) {
+                if let Ok(Some(row)) = rows.next() {
+                    if let Ok(p_str) = row.get::<_, String>(0) {
+                        let path = PathBuf::from(p_str);
+                        if path.exists() {
+                            return Some(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Fallback: varredura em diretórios conhecidos de modelos
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = if cwd.ends_with("src-tauri") {
+        cwd.parent().unwrap_or(&cwd).to_path_buf()
+    } else {
+        cwd
+    };
+    let models_dirs = [
+        root.join(".souls_data").join("models"),
+        root.join("models"),
+    ];
+    for dir in &models_dirs {
+        if dir.exists() {
+            let files = collect_local_models(dir);
+            for f in files {
+                let name = f.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+                if name.contains("gemma") || name.contains("phi") || name.contains("e2b") {
+                    return Some(f);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Carrega modelos aprovados a partir do relatório fallback de texto Tier 1.
 pub fn load_approved_tier1_models(report_path: &Path) -> Vec<PathBuf> {
     let mut approved = Vec::new();
@@ -1539,6 +1715,52 @@ mod tests {
             !models.iter().any(|p| p.file_name().unwrap() == "model_l5.gguf"),
             "model_l5.gguf (depth=5) NAO deve ser encontrado com max_depth=4"
         );
+    }
+
+    #[test]
+    fn test_gguf_cached_metadata_reads() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let fake_gguf = temp_dir.path().join("stress_test_model.gguf");
+
+        // GGUF header mínimo válido (24 bytes): "GGUF" + version(3) + tensor_count(0) + kv_count(0)
+        let mut header = vec![b'G', b'G', b'U', b'F'];
+        header.extend_from_slice(&3u32.to_le_bytes());
+        header.extend_from_slice(&0u64.to_le_bytes());
+        header.extend_from_slice(&0u64.to_le_bytes());
+        std::fs::write(&fake_gguf, &header).unwrap();
+
+        // 1ª leitura: mmap/disk -> hidrata DashMap L1
+        let first = parse_gguf_metadata_zero_copy(&fake_gguf);
+        assert!(first.is_some(), "1ª leitura de metadados GGUF deve suceder via mmap");
+        let first_meta = first.unwrap();
+
+        let initial_cache_len = GLOBAL_GGUF_METADATA_CACHE.len();
+        assert!(initial_cache_len >= 1, "Cache L1 DashMap deve possuir ao menos 1 elemento");
+
+        // 9 leituras subsequentes: devem resolver em O(1) no DashMap L1 em RAM sem novos mmaps
+        for i in 2..=10 {
+            let subsequent = parse_gguf_metadata_zero_copy(&fake_gguf);
+            assert!(subsequent.is_some(), "Leitura {}/10 deve retornar resultado do cache L1", i);
+            assert_eq!(
+                subsequent.unwrap(),
+                first_meta,
+                "Leitura {}/10 deve ser idêntica ao metadado inicial",
+                i
+            );
+        }
+
+        // Deleta o arquivo físico em disco para PROVAR que as leituras 11..15 continuam resolvendo da RAM!
+        std::fs::remove_file(&fake_gguf).unwrap();
+
+        for i in 11..=15 {
+            let ram_hit = parse_gguf_metadata_zero_copy(&fake_gguf);
+            assert!(
+                ram_hit.is_some(),
+                "Leitura {}/15 (pós-remoção física do arquivo) DEVE resolver do L1 RAM DashMap",
+                i
+            );
+            assert_eq!(ram_hit.unwrap(), first_meta);
+        }
     }
 }
 

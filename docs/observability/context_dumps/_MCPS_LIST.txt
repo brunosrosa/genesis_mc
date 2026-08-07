@@ -1,5 +1,5 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
-GERADO EM: 2026-08-07 03:11:28
+GERADO EM: 2026-08-07 19:03:50
 TOTAL DE FERRAMENTAS: 48
 ----------------------------------------------------------------------------------------------------
 • analyze_session: Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.

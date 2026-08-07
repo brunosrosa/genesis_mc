@@ -15,11 +15,11 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
    * **Consumo de Fronteira:** Acesse o banco de dados/planilha e extraia a `acao_de_canibalizacao` e a `red_line`. Você está proibido de codificar o que violar a Linha Vermelha.
    * **Shadow Workspace:** Isole o ambiente usando ramificações temporárias e *Hard Links* (snapsafe) em tempo $\mathcal{O}(1)$ consumindo 0 bytes extras. Comando: `git checkout -b feat/<nome>`.
 2. **Fase 2: O Tratado ACONIC e Agnosticismo Hardware:**
-   * Escreva o `docs/design.md`. Além do diagrama Mermaid obrigatório, você DEVE mapear o padrão **Orchestrator-Worker**.
+   * Escreva o documento de design em `docs/work-units/active/<tipo>-<slug>/design.md` (conforme Zona 3 do `_WORKSPACE_MAP.md` v6.0). Além do diagrama Mermaid obrigatório, você DEVE mapear o padrão **Orchestrator-Worker**.
    * O design da lógica local DEVE garantir o **Agnosticismo de Hardware**. A solução não deve ser engessada para a RTX 2060m, mas sim estruturada de forma transmutável (preparada para ser recompilada via ecossistema CubeCL/Burn para Metal/Vulkan/NPU), usando a RTX 2060m exclusivamente como nosso "Treino de Gravidade" (piso de validação).
    * Pare e exija a autorização explícita do usuário: *"Arquiteto, o design e o roteamento agnóstico estão aprovados?"*
 3. **Fase 3: Desfragmentação e DoD (Tasks):**
-   * Quebre o design em passos atômicos dentro de `tasks.md`.
+   * Quebre o design em passos atômicos dentro de `docs/work-units/active/<tipo>-<slug>/tasks.md` (conforme Zona 3 do `_WORKSPACE_MAP.md` v6.0).
    * **Lei do Scaffold:** Cada tarefa deve ter uma *Definition of Done (DoD)* rigorosa, exigindo infraestrutura executável (testes vazios de falha) antes da lógica real.
 4. **Fase 4: Mutação Atômica e Delegação (Mutate):**
    * A escrita em disco é sagrada. Utilize **OBRIGATORIAMENTE** `atomic-write-file` ou edição por *offset* protegida por Mutex assíncrono do Tokio.

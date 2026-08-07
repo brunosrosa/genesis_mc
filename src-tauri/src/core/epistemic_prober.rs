@@ -350,19 +350,26 @@ impl<'a> EpistemicProber for LlamaCppEpistemicProber<'a> {
 /// densidade lexical. Determinística e O(n) sobre o tamanho do prompt.
 fn compute_specificity(prompt: &str) -> f32 {
     let len = prompt.len();
-    let has_path = prompt.contains('/') || prompt.contains(".rs");
-    let has_type = prompt.contains("tipo ") || prompt.contains("type ");
+    let lower = prompt.to_lowercase();
+    let has_path = prompt.contains('/') || prompt.contains('\\') || prompt.contains(".rs");
+    let has_type = lower.contains("tipo ") || lower.contains("type ");
     let has_signature = prompt.contains("EpistemicProber")
         || prompt.contains("trait ")
         || prompt.contains("fn ")
         || prompt.contains("struct ");
-    let has_arquivo = prompt.contains("arquivo ") || prompt.contains("file ");
-    let path_bonus = if has_path { 0.30 } else { 0.0 };
+    let has_arquivo = lower.contains("arquivo ") || lower.contains("file ");
+    let has_imperative = lower.contains("refatore")
+        || lower.contains("implemente")
+        || lower.contains("adicione")
+        || lower.contains("corrija")
+        || lower.contains("crie");
+    let path_bonus = if has_path { 0.35 } else { 0.0 };
     let type_bonus = if has_type { 0.20 } else { 0.0 };
-    let sig_bonus = if has_signature { 0.20 } else { 0.0 };
+    let sig_bonus = if has_signature { 0.25 } else { 0.0 };
     let arquivo_bonus = if has_arquivo { 0.10 } else { 0.0 };
+    let imperative_bonus = if has_imperative { 0.15 } else { 0.0 };
     let length_score = (len as f32 / 100.0).min(1.0);
-    (length_score + path_bonus + type_bonus + sig_bonus + arquivo_bonus).min(1.0)
+    (length_score + path_bonus + type_bonus + sig_bonus + arquivo_bonus + imperative_bonus).min(1.0)
 }
 
 /// Temperatura do softmax prompt-conditioned.
@@ -854,5 +861,35 @@ mod tests {
     ) -> (f32, f32) {
         // Apenas valida que os campos estão acessíveis.
         (prober.verbalizer_map.vocab_size as f32, 0.0)
+    }
+
+    // =========================================================================
+    // DIRETRIZ 5 — Suíte TDD de Baixo Nível (MARCO 5.2.0)
+    // =========================================================================
+
+    /// Teste de estresse: prompt ambíguo dispara disjuntor (entropia > 0.75)
+    #[test]
+    fn test_gemma_logit_probing_entropy() {
+        let prober = real_prober();
+        let req = sample_request("execute o script de ontem");
+        let scores = prober.probe(&req).expect("probe deve processar prompt ambíguo");
+        assert!(
+            scores.ambiguidade > 0.75,
+            "prompt ambíguo 'execute o script de ontem' deve ter ambiguidade > 0.75, foi {}",
+            scores.ambiguidade
+        );
+    }
+
+    /// Teste de estresse: prompt claro e imperativo ignora interceptação (ambiguidade < 0.40)
+    #[test]
+    fn test_clear_prompt_bypass() {
+        let prober = real_prober();
+        let req = sample_request("Refatore a struct Foo em src/foo.rs");
+        let scores = prober.probe(&req).expect("probe deve processar prompt claro");
+        assert!(
+            scores.ambiguidade < 0.40,
+            "prompt direto 'Refatore a struct Foo em src/foo.rs' deve ter ambiguidade < 0.40, foi {}",
+            scores.ambiguidade
+        );
     }
 }

@@ -1,8 +1,8 @@
-_WORKSPACE_MAP.txt Gerado em: 2026-08-07 03:11:28
+_WORKSPACE_MAP.txt Gerado em: 2026-08-07 19:03:50
 
 ### ====================================================================================================
 ARQUIVO: _WORKSPACE_MAP.md
-CAMINHO: z:\souls_mc\_WORKSPACE_MAP.md
+CAMINHO: Z:\souls_mc\_WORKSPACE_MAP.md
 ---
 ---
 version: 6.0

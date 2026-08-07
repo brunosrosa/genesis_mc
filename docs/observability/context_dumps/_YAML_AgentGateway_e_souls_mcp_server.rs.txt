@@ -1,8 +1,8 @@
-_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-07 03:11:28
+_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-07 19:03:50
 
 ### ====================================================================================================
 ARQUIVO: gateway-config.yaml
-CAMINHO: z:\souls_mc\gateway-config.yaml
+CAMINHO: Z:\souls_mc\gateway-config.yaml
 ---
 # yaml-language-server: $schema=https://agentgateway.dev/schema/config
 config: {}
@@ -50,7 +50,7 @@ CAMINHO: C:\Users\rosas\.gemini\config\mcp_config.json
 
 ### ====================================================================================================
 ARQUIVO: souls_mcp_server.rs
-CAMINHO: z:\souls_mc\src-tauri\src\bin\souls_mcp_server.rs
+CAMINHO: Z:\souls_mc\src-tauri\src\bin\souls_mcp_server.rs
 ---
 // Aumento do limite de recursão do macro `json!` (serde_json) para acomodar
 // o `tools/list` canônico do Marco 3.5 (50+ ferramentas, incluindo os 10

@@ -74,9 +74,9 @@ impl SocraticInterrupt {
 
     /// Serializa para o payload JSON do Tauri Event.
     pub fn to_emit_payload(&self) -> Value {
-        // disjuntor_ativo é derivado: amb > 0.80 ou risco > 0.70 (mesma regra de run_intent)
+        // disjuntor_ativo é derivado: amb > 0.75 ou risco > 0.70 (mesma regra de run_intent)
         let disjuntor_ativo =
-            self.scores.ambiguidade > 0.80 || self.scores.risco_relacional > 0.70;
+            self.scores.ambiguidade > 0.75 || self.scores.risco_relacional > 0.70;
         json!({
             "scores": {
                 "ambiguidade": self.scores.ambiguidade,

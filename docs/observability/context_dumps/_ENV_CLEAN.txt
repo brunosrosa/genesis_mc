@@ -1,8 +1,8 @@
-_ENV_CLEAN Gerado em: 2026-08-07 03:11:28
+_ENV_CLEAN Gerado em: 2026-08-07 19:03:49
 
 ### ====================================================================================================
 ARQUIVO: .env (masked)
-CAMINHO: z:\souls_mc\.env
+CAMINHO: Z:\souls_mc\.env
 ---
 # =========================================================
 # SOULS DEV ENVIRONMENT - SECURE KEYS & MODELS & VARIABLES

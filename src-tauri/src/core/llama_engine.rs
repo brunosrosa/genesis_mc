@@ -661,6 +661,54 @@ mod tests {
         assert_eq!(meta1.unwrap(), meta2.unwrap(), "Metadados cacheados devem ser idênticos");
     }
 
+    #[test]
+    fn test_gguf_cached_metadata_reads() {
+        use crate::core::model_registry::{parse_gguf_metadata_zero_copy, GLOBAL_GGUF_METADATA_CACHE};
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let fake_gguf = temp_dir.path().join("stress_test_model.gguf");
+
+        // GGUF header mínimo válido (24 bytes): "GGUF" + version(3) + tensor_count(0) + kv_count(0)
+        let mut header = vec![b'G', b'G', b'U', b'F'];
+        header.extend_from_slice(&3u32.to_le_bytes());
+        header.extend_from_slice(&0u64.to_le_bytes());
+        header.extend_from_slice(&0u64.to_le_bytes());
+        std::fs::write(&fake_gguf, &header).unwrap();
+
+        // 1ª leitura: mmap/disk -> hidrata DashMap L1
+        let first = parse_gguf_metadata_zero_copy(&fake_gguf);
+        assert!(first.is_some(), "1ª leitura de metadados GGUF deve suceder via mmap");
+        let first_meta = first.unwrap();
+
+        let initial_cache_len = GLOBAL_GGUF_METADATA_CACHE.len();
+        assert!(initial_cache_len >= 1, "Cache L1 DashMap deve possuir ao menos 1 elemento");
+
+        // 9 leituras subsequentes: devem resolver em O(1) no DashMap L1 em RAM sem novos mmaps
+        for i in 2..=10 {
+            let subsequent = parse_gguf_metadata_zero_copy(&fake_gguf);
+            assert!(subsequent.is_some(), "Leitura {}/10 deve retornar resultado do cache L1", i);
+            assert_eq!(
+                subsequent.unwrap(),
+                first_meta,
+                "Leitura {}/10 deve ser idêntica ao metadado inicial",
+                i
+            );
+        }
+
+        // Deleta o arquivo físico em disco para PROVAR que as leituras 11..15 continuam resolvendo da RAM!
+        std::fs::remove_file(&fake_gguf).unwrap();
+
+        for i in 11..=15 {
+            let ram_hit = parse_gguf_metadata_zero_copy(&fake_gguf);
+            assert!(
+                ram_hit.is_some(),
+                "Leitura {}/15 (pós-remoção física do arquivo) DEVE resolver do L1 RAM DashMap",
+                i
+            );
+            assert_eq!(ram_hit.unwrap(), first_meta);
+        }
+    }
+
     #[tokio::test]
     async fn test_dedicated_worker_mpsc_dispatch() {
         let worker = DedicatedInferenceWorker::new(4);
