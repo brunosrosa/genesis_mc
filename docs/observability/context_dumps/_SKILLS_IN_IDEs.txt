@@ -1,8 +1,8 @@
-_SKILLS_IN_IDEs Gerado em: 2026-08-06 20:08:04
+_SKILLS_IN_IDEs Gerado em: 2026-08-07 03:11:28
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-ast-master\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\mcp-ast-master\SKILL.md
 ---
 ---
 name: mcp-ast-master
@@ -51,7 +51,7 @@ Sempre que precisar ler código local, investigar a origem de um bug ou extrair 
 
 ### ====================================================================================================
 ARQUIVO: mcp-google-sheets-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-google-sheets-master\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\mcp-google-sheets-master\SKILL.md
 ---
 ---
 name: mcp-google-sheets-master
@@ -101,7 +101,7 @@ Sempre que for instruído a ler heurísticas, extrair ADRs ou atualizar o Bluepr
 
 ### ====================================================================================================
 ARQUIVO: mcp-memory-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-memory-master\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\mcp-memory-master\SKILL.md
 ---
 ---
 name: mcp-memory-master
@@ -242,7 +242,7 @@ Sempre que precisar consultar o histórico, regras de arquitetura antigas ou rel
 
 ### ====================================================================================================
 ARQUIVO: mcp-search-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-search-master\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\mcp-search-master\SKILL.md
 ---
 ---
 name: mcp-search-master
@@ -297,7 +297,7 @@ Sempre que uma pesquisa web, leitura de documentação ou "Deep Research" for so
 
 ### ====================================================================================================
 ARQUIVO: mcp-sequential-thinking/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-sequential-thinking\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\mcp-sequential-thinking\SKILL.md
 ---
 ---
 name: mcp-sequential-thinking
@@ -399,7 +399,7 @@ Sempre que se deparar com uma arquitetura nova, um bug complexo, ou for instruí
 
 ### ====================================================================================================
 ARQUIVO: mcp-sqlite-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-sqlite-master\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\mcp-sqlite-master\SKILL.md
 ---
 ---
 name: mcp-sqlite-master
@@ -456,7 +456,7 @@ Sempre que precisar acessar a memória relacional do SOULS, utilize exclusivamen
 
 ### ====================================================================================================
 ARQUIVO: mcp-time-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\mcp-time-master\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\mcp-time-master\SKILL.md
 ---
 ---
 name: mcp-time-master
@@ -508,7 +508,7 @@ Sempre que uma tarefa exigir marcação de tempo, registro de logs, inserções 
 
 ### ====================================================================================================
 ARQUIVO: notebooklm-context/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\notebooklm-context\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\notebooklm-context\SKILL.md
 ---
 ---
 name: notebooklm-context
@@ -557,7 +557,7 @@ Sempre que for invocado para pesquisar fundamentos da arquitetura ou atualizar a
 
 ### ====================================================================================================
 ARQUIVO: skill-creator/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\skill-creator\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\skill-creator\SKILL.md
 ---
 ---
 name: skill-creator
@@ -617,7 +617,7 @@ Sempre que for instruído a criar uma skill ou canibalizar uma solução, execut
 
 ### ====================================================================================================
 ARQUIVO: souls-archivist/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-archivist\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-archivist\SKILL.md
 ---
 ---
 name: souls-archivist
@@ -674,7 +674,7 @@ Sempre que o ciclo de uma tarefa findar, um *Ralph Loop* despejar lixo, ou você
 
 ### ====================================================================================================
 ARQUIVO: souls-brainstorm/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-brainstorm\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-brainstorm\SKILL.md
 ---
 ---
 name: souls-brainstorm
@@ -727,7 +727,7 @@ Ao receber uma nova intenção de produto ou arquitetura, execute OBRIGATORIAMEN
 
 ### ====================================================================================================
 ARQUIVO: souls-context-master/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-context-master\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-context-master\SKILL.md
 ---
 ---
 name: souls-context-master
@@ -816,7 +816,7 @@ Every token costs money and context space. Applies to input, output AND thinking
 
 ### ====================================================================================================
 ARQUIVO: souls-docs-hydrator/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-docs-hydrator\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-docs-hydrator\SKILL.md
 ---
 ---
 name: souls-docs-hydrator
@@ -868,7 +868,7 @@ Sempre que for solicitado a implementar uma funcionalidade usando os frameworks 
 
 ### ====================================================================================================
 ARQUIVO: souls-executive-coach/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-executive-coach\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-executive-coach\SKILL.md
 ---
 ---
 name: souls-executive-coach
@@ -923,7 +923,7 @@ Sempre que o usuário demonstrar sobrecarga operacional, dilemas de liderança, 
 
 ### ====================================================================================================
 ARQUIVO: souls-frontend-expert/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-frontend-expert\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-frontend-expert\SKILL.md
 ---
 ---
 name: souls-frontend-expert
@@ -978,7 +978,7 @@ Sempre que for gerar código frontend, OBRIGATORIAMENTE obedeça a esta máquina
 
 ### ====================================================================================================
 ARQUIVO: souls-gemini-worker/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-gemini-worker\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-gemini-worker\SKILL.md
 ---
 ---
 name: souls-gemini-worker
@@ -1034,7 +1034,7 @@ Sempre que for exigido analisar arquiteturas massivas, orquestrar refatorações
 
 ### ====================================================================================================
 ARQUIVO: souls-github-orchestrator/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-github-orchestrator\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-github-orchestrator\SKILL.md
 ---
 ---
 name: souls-github-orchestrator
@@ -1096,7 +1096,7 @@ Sempre que for invocado para planejar código, gerenciar fluxo de versionamento 
 
 ### ====================================================================================================
 ARQUIVO: souls-knowledge-curator/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-knowledge-curator\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-knowledge-curator\SKILL.md
 ---
 ---
 name: souls-knowledge-curator
@@ -1150,7 +1150,7 @@ Sempre que for instruído a realizar varreduras de contradição, arquivar ou re
 
 ### ====================================================================================================
 ARQUIVO: souls-life-coach/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-life-coach\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-life-coach\SKILL.md
 ---
 ---
 name: souls-life-coach
@@ -1206,7 +1206,7 @@ Sempre que o usuário entrar em uma zona de reflexão pessoal ou bloqueio emocio
 
 ### ====================================================================================================
 ARQUIVO: souls-ralph-loop/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-ralph-loop\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-ralph-loop\SKILL.md
 ---
 ---
 name: souls-ralph-loop
@@ -1267,7 +1267,7 @@ Sempre que finalizar a escrita de código, ou a compilação falhar, execute est
 
 ### ====================================================================================================
 ARQUIVO: souls-repo-analysis/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-repo-analysis\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-repo-analysis\SKILL.md
 ---
 ---
 name: souls-repo-analysis
@@ -1321,7 +1321,7 @@ Ao receber a ordem de analisar um repositório ou processar um lote, execute EXC
 
 ### ====================================================================================================
 ARQUIVO: souls-rust-expert/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-rust-expert\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-rust-expert\SKILL.md
 ---
 ---
 name: souls-rust-expert
@@ -1405,7 +1405,7 @@ Sempre que for gerar código, refatorar o backend ou interagir com hardware, OBR
 
 ### ====================================================================================================
 ARQUIVO: souls-sdd/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-sdd\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-sdd\SKILL.md
 ---
 ---
 name: souls-sdd
@@ -1472,7 +1472,7 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
 
 ### ====================================================================================================
 ARQUIVO: souls-subrepo-manager/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-subrepo-manager\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-subrepo-manager\SKILL.md
 ---
 ---
 name: souls-subrepo-manager
@@ -1530,7 +1530,7 @@ Sempre que for invocado para puxar dependências externas ou canibalizar reposit
 
 ### ====================================================================================================
 ARQUIVO: souls-territorial-compliance/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\souls-territorial-compliance\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\souls-territorial-compliance\SKILL.md
 ---
 ---
 name: souls-territorial-compliance
@@ -1675,7 +1675,7 @@ Modos avançados:
 
 ### ====================================================================================================
 ARQUIVO: weevolve/SKILL.md
-CAMINHO: Z:\souls_mc\.agents\skills\weevolve\SKILL.md
+CAMINHO: z:\souls_mc\.agents\skills\weevolve\SKILL.md
 ---
 ---
 name: weevolve

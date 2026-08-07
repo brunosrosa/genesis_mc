@@ -1,13 +1,13 @@
-_MCP_INVENTORY Gerado em: 2026-08-06 20:08:04
+_MCP_INVENTORY Gerado em: 2026-08-07 03:11:28
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
-CAMINHO: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
+CAMINHO: C:\Users\rosas/.gemini/antigravity-ide/mcp/souls
 ---
 === MCP SERVER INVENTORY + SMOKE TEST ===
 SERVER_NAME: souls
 LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt
-SOURCE_DIR: C:\Users\rosas\.gemini\antigravity-ide\mcp\souls
+SOURCE_DIR: C:\Users\rosas/.gemini/antigravity-ide/mcp/souls
 TOOL_COUNT: 48
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.
 
@@ -99,7 +99,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: intent
-DESCRIPTION: [Stub] Detector de intent do tool call (read/edit/search) em roadmap. Aliases: intent | souls_intent | ctx_intent.
+DESCRIPTION: Avalia a ambiguidade, risco relacional e consistência de memória de um prompt antes do disparo de inferência.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -204,7 +204,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: semantic_search
-DESCRIPTION: Busca semântica local no LanceDB usando similaridade de cosseno e mmap de baixa latência na RAM.
+DESCRIPTION: Busca híbrida local (FTS5 + LanceDB) usando fusão RRF de baixa latência na RAM.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

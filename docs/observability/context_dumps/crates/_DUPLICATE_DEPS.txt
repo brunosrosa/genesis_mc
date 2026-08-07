@@ -1,4 +1,4 @@
-﻿base64 v0.21.7
+base64 v0.21.7
 └── wasmtime-cache v29.0.0
     └── wasmtime v29.0.0
         ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
@@ -8,9 +8,288 @@
             └── wasmtime-wasi v29.0.0 (*)
 
 base64 v0.22.1
+├── arrow-cast v58.4.0
+│   ├── arrow v58.4.0
+│   │   ├── datafusion v53.1.0
+│   │   │   ├── lance v7.0.0
+│   │   │   │   ├── lance-namespace-impls v7.0.0
+│   │   │   │   │   └── lancedb v0.30.0
+│   │   │   │   │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   ├── lance-datafusion v7.0.0
+│   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   ├── lance-index v7.0.0
+│   │   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   └── lancedb v0.30.0 (*)
+│   │   ├── datafusion-catalog v53.1.0
+│   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   ├── datafusion-catalog-listing v53.1.0
+│   │   │   │   └── datafusion v53.1.0 (*)
+│   │   │   ├── datafusion-functions-table v53.1.0
+│   │   │   │   └── datafusion v53.1.0 (*)
+│   │   │   └── lancedb v0.30.0 (*)
+│   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   ├── datafusion-common v53.1.0
+│   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   ├── datafusion-datasource v53.1.0
+│   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-arrow v53.1.0
+│   │   │   │   │   └── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-csv v53.1.0
+│   │   │   │   │   └── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-json v53.1.0
+│   │   │   │   │   └── datafusion v53.1.0 (*)
+│   │   │   │   └── datafusion-pruning v53.1.0
+│   │   │   │       └── datafusion-physical-optimizer v53.1.0
+│   │   │   │           └── datafusion v53.1.0 (*)
+│   │   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   │   ├── datafusion-execution v53.1.0
+│   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions v53.1.0
+│   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-nested v53.1.0
+│   │   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   │   └── datafusion-sql v53.1.0
+│   │   │   │   │   │       ├── datafusion v53.1.0 (*)
+│   │   │   │   │   │       ├── lance-core v7.0.0
+│   │   │   │   │   │       │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │       │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   │   │   │       │   ├── lance-encoding v7.0.0
+│   │   │   │   │   │       │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-file v7.0.0
+│   │   │   │   │   │       │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │       │   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   │   │       │   │   │   ├── lance-table v7.0.0
+│   │   │   │   │   │       │   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │       │   │   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   │   │       │   │   │   │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │   │   │   │       │   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   │       │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   │   │       │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   │       │   ├── lance-file v7.0.0 (*)
+│   │   │   │   │   │       │   ├── lance-index v7.0.0 (*)
+│   │   │   │   │   │       │   ├── lance-io v7.0.0
+│   │   │   │   │   │       │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-file v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-table v7.0.0 (*)
+│   │   │   │   │   │       │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   │       │   ├── lance-linalg v7.0.0
+│   │   │   │   │   │       │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │   │   │   │       │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   │       │   ├── lance-namespace v7.0.0
+│   │   │   │   │   │       │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-io v7.0.0 (*)
+│   │   │   │   │   │       │   │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │   │   │   │       │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   │       │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │   │   │   │       │   ├── lance-table v7.0.0 (*)
+│   │   │   │   │   │       │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   │       └── lancedb v0.30.0 (*)
+│   │   │   │   │   ├── datafusion-physical-expr-adapter v53.1.0
+│   │   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   │   │   │   └── datafusion-datasource v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-plan v53.1.0
+│   │   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-functions-table v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-pruning v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-session v53.1.0
+│   │   │   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   │   │   │   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   │   │   │   │   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │   │   │   │   │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   │   │   │   │   │   └── datafusion-datasource-json v53.1.0 (*)
+│   │   │   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   ├── datafusion-functions-aggregate v53.1.0
+│   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   └── datafusion-functions-nested v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-plan v53.1.0 (*)
+│   │   │   │   ├── datafusion-session v53.1.0 (*)
+│   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   ├── datafusion-expr v53.1.0
+│   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   │   │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   │   │   ├── datafusion-execution v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions-table v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions-window v53.1.0
+│   │   │   │   │   └── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-optimizer v53.1.0
+│   │   │   │   │   └── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-expr v53.1.0
+│   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-window v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-optimizer v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-expr-adapter v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-plan v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-pruning v53.1.0 (*)
+│   │   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   ├── datafusion-physical-expr-adapter v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-plan v53.1.0 (*)
+│   │   │   │   ├── datafusion-session v53.1.0 (*)
+│   │   │   │   ├── datafusion-sql v53.1.0 (*)
+│   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   ├── datafusion-expr-common v53.1.0
+│   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   ├── datafusion-expr v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions-aggregate-common v53.1.0
+│   │   │   │   │   ├── datafusion-expr v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-expr v53.1.0 (*)
+│   │   │   │   │   └── datafusion-physical-plan v53.1.0 (*)
+│   │   │   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   │   │   ├── datafusion-optimizer v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-expr v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-expr-common v53.1.0
+│   │   │   │   │   ├── datafusion v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-catalog-listing v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-execution v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-expr v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-aggregate-common v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-window v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-functions-window-common v53.1.0
+│   │   │   │   │   │   ├── datafusion-expr v53.1.0 (*)
+│   │   │   │   │   │   ├── datafusion-functions-window v53.1.0 (*)
+│   │   │   │   │   │   └── datafusion-physical-plan v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-expr v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-expr-adapter v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   │   │   │   ├── datafusion-physical-plan v53.1.0 (*)
+│   │   │   │   │   └── datafusion-pruning v53.1.0 (*)
+│   │   │   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   │   │   └── datafusion-pruning v53.1.0 (*)
+│   │   │   ├── datafusion-functions v53.1.0 (*)
+│   │   │   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   │   │   ├── datafusion-functions-aggregate-common v53.1.0 (*)
+│   │   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   │   ├── datafusion-functions-table v53.1.0 (*)
+│   │   │   ├── datafusion-functions-window v53.1.0 (*)
+│   │   │   ├── datafusion-functions-window-common v53.1.0 (*)
+│   │   │   ├── datafusion-optimizer v53.1.0 (*)
+│   │   │   ├── datafusion-physical-expr v53.1.0 (*)
+│   │   │   ├── datafusion-physical-expr-adapter v53.1.0 (*)
+│   │   │   ├── datafusion-physical-expr-common v53.1.0 (*)
+│   │   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   │   ├── datafusion-physical-plan v53.1.0 (*)
+│   │   │   ├── datafusion-pruning v53.1.0 (*)
+│   │   │   ├── datafusion-session v53.1.0 (*)
+│   │   │   ├── datafusion-sql v53.1.0 (*)
+│   │   │   ├── lance-core v7.0.0 (*)
+│   │   │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   ├── lance-file v7.0.0 (*)
+│   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   └── lancedb v0.30.0 (*)
+│   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   ├── datafusion-execution v53.1.0 (*)
+│   │   ├── datafusion-expr v53.1.0 (*)
+│   │   ├── datafusion-expr-common v53.1.0 (*)
+│   │   ├── datafusion-functions v53.1.0 (*)
+│   │   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   │   ├── datafusion-functions-aggregate-common v53.1.0 (*)
+│   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   ├── datafusion-functions-table v53.1.0 (*)
+│   │   ├── datafusion-functions-window v53.1.0 (*)
+│   │   ├── datafusion-optimizer v53.1.0 (*)
+│   │   ├── datafusion-physical-expr v53.1.0 (*)
+│   │   ├── datafusion-physical-expr-adapter v53.1.0 (*)
+│   │   ├── datafusion-physical-expr-common v53.1.0 (*)
+│   │   ├── datafusion-physical-optimizer v53.1.0 (*)
+│   │   ├── datafusion-physical-plan v53.1.0 (*)
+│   │   ├── datafusion-pruning v53.1.0 (*)
+│   │   ├── datafusion-sql v53.1.0 (*)
+│   │   ├── lance v7.0.0 (*)
+│   │   ├── lance-datafusion v7.0.0 (*)
+│   │   ├── lance-datagen v7.0.0
+│   │   │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   └── lancedb v0.30.0 (*)
+│   │   ├── lance-index v7.0.0 (*)
+│   │   ├── lance-io v7.0.0 (*)
+│   │   ├── lance-namespace v7.0.0 (*)
+│   │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   ├── lance-table v7.0.0 (*)
+│   │   └── lancedb v0.30.0 (*)
+│   ├── arrow-csv v58.4.0
+│   │   └── arrow v58.4.0 (*)
+│   ├── arrow-json v58.4.0
+│   │   └── arrow v58.4.0 (*)
+│   ├── lance v7.0.0 (*)
+│   ├── lance-datafusion v7.0.0 (*)
+│   ├── lance-datagen v7.0.0 (*)
+│   ├── lance-encoding v7.0.0 (*)
+│   ├── lance-io v7.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+├── datafusion-functions v53.1.0 (*)
 ├── hyper-util v0.1.20
 │   ├── hyper-rustls v0.27.9
 │   │   └── reqwest v0.12.28
+│   │       ├── lance-namespace-reqwest-client v0.7.7
+│   │       │   └── lance-namespace v7.0.0 (*)
 │   │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   ├── mockito v1.7.2
 │   │   [dev-dependencies]
@@ -29,6 +308,13 @@ base64 v0.22.1
 └── tiktoken v3.5.1
     └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
+bitflags v1.3.2
+└── kanaria v0.2.0
+    └── lindera v3.0.7
+        └── lance-tokenizer v7.0.0
+            ├── lance v7.0.0 (*)
+            └── lance-index v7.0.0 (*)
+
 bitflags v2.13.0
 ├── selectors v0.36.1
 │   └── dom_query v0.27.0
@@ -41,6 +327,132 @@ bitflags v2.13.0
             └── wasmtime-component-macro v29.0.0 (proc-macro) (*)
 
 bitflags v2.13.0
+├── arrow-schema v58.4.0
+│   ├── arrow v58.4.0 (*)
+│   ├── arrow-arith v58.4.0
+│   │   ├── arrow v58.4.0 (*)
+│   │   ├── lance v7.0.0 (*)
+│   │   ├── lance-encoding v7.0.0 (*)
+│   │   ├── lance-file v7.0.0 (*)
+│   │   ├── lance-index v7.0.0 (*)
+│   │   └── lance-io v7.0.0 (*)
+│   ├── arrow-array v58.4.0
+│   │   ├── arrow v58.4.0 (*)
+│   │   ├── arrow-arith v58.4.0 (*)
+│   │   ├── arrow-cast v58.4.0 (*)
+│   │   ├── arrow-csv v58.4.0 (*)
+│   │   ├── arrow-ipc v58.4.0
+│   │   │   ├── arrow v58.4.0 (*)
+│   │   │   ├── datafusion-common v53.1.0 (*)
+│   │   │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │   ├── lance v7.0.0 (*)
+│   │   │   ├── lance-arrow v7.0.0
+│   │   │   │   ├── lance v7.0.0 (*)
+│   │   │   │   ├── lance-core v7.0.0 (*)
+│   │   │   │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   │   ├── lance-encoding v7.0.0 (*)
+│   │   │   │   ├── lance-file v7.0.0 (*)
+│   │   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   │   ├── lance-io v7.0.0 (*)
+│   │   │   │   ├── lance-linalg v7.0.0 (*)
+│   │   │   │   ├── lance-table v7.0.0 (*)
+│   │   │   │   ├── lance-testing v7.0.0
+│   │   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   │   └── lancedb v0.30.0 (*)
+│   │   │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │   ├── lance-table v7.0.0 (*)
+│   │   │   └── lancedb v0.30.0 (*)
+│   │   ├── arrow-json v58.4.0 (*)
+│   │   ├── arrow-ord v58.4.0
+│   │   │   ├── arrow v58.4.0 (*)
+│   │   │   ├── arrow-cast v58.4.0 (*)
+│   │   │   ├── arrow-json v58.4.0 (*)
+│   │   │   ├── datafusion-functions-nested v53.1.0 (*)
+│   │   │   ├── datafusion-physical-plan v53.1.0 (*)
+│   │   │   ├── lance v7.0.0 (*)
+│   │   │   ├── lance-arrow v7.0.0 (*)
+│   │   │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   └── lancedb v0.30.0 (*)
+│   │   ├── arrow-row v58.4.0
+│   │   │   ├── arrow v58.4.0 (*)
+│   │   │   ├── lance v7.0.0 (*)
+│   │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│   │   ├── arrow-select v58.4.0
+│   │   │   ├── arrow v58.4.0 (*)
+│   │   │   ├── arrow-cast v58.4.0 (*)
+│   │   │   ├── arrow-ipc v58.4.0 (*)
+│   │   │   ├── arrow-json v58.4.0 (*)
+│   │   │   ├── arrow-ord v58.4.0 (*)
+│   │   │   ├── arrow-string v58.4.0
+│   │   │   │   └── arrow v58.4.0 (*)
+│   │   │   ├── lance v7.0.0 (*)
+│   │   │   ├── lance-arrow v7.0.0 (*)
+│   │   │   ├── lance-datafusion v7.0.0 (*)
+│   │   │   ├── lance-encoding v7.0.0 (*)
+│   │   │   ├── lance-file v7.0.0 (*)
+│   │   │   ├── lance-index v7.0.0 (*)
+│   │   │   ├── lance-io v7.0.0 (*)
+│   │   │   └── lancedb v0.30.0 (*)
+│   │   ├── arrow-string v58.4.0 (*)
+│   │   ├── fsst v7.0.0
+│   │   │   └── lance-encoding v7.0.0 (*)
+│   │   ├── lance v7.0.0 (*)
+│   │   ├── lance-arrow v7.0.0 (*)
+│   │   ├── lance-core v7.0.0 (*)
+│   │   ├── lance-datafusion v7.0.0 (*)
+│   │   ├── lance-datagen v7.0.0 (*)
+│   │   ├── lance-encoding v7.0.0 (*)
+│   │   ├── lance-file v7.0.0 (*)
+│   │   ├── lance-index v7.0.0 (*)
+│   │   ├── lance-io v7.0.0 (*)
+│   │   ├── lance-linalg v7.0.0 (*)
+│   │   ├── lance-table v7.0.0 (*)
+│   │   ├── lance-testing v7.0.0 (*)
+│   │   ├── lancedb v0.30.0 (*)
+│   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│   ├── arrow-cast v58.4.0 (*)
+│   ├── arrow-csv v58.4.0 (*)
+│   ├── arrow-data v58.4.0
+│   │   ├── arrow v58.4.0 (*)
+│   │   ├── arrow-arith v58.4.0 (*)
+│   │   ├── arrow-array v58.4.0 (*)
+│   │   ├── arrow-cast v58.4.0 (*)
+│   │   ├── arrow-ipc v58.4.0 (*)
+│   │   ├── arrow-ord v58.4.0 (*)
+│   │   ├── arrow-row v58.4.0 (*)
+│   │   ├── arrow-select v58.4.0 (*)
+│   │   ├── arrow-string v58.4.0 (*)
+│   │   ├── lance-arrow v7.0.0 (*)
+│   │   ├── lance-encoding v7.0.0 (*)
+│   │   ├── lance-file v7.0.0 (*)
+│   │   ├── lance-io v7.0.0 (*)
+│   │   └── lancedb v0.30.0 (*)
+│   ├── arrow-ipc v58.4.0 (*)
+│   ├── arrow-json v58.4.0 (*)
+│   ├── arrow-ord v58.4.0 (*)
+│   ├── arrow-row v58.4.0 (*)
+│   ├── arrow-select v58.4.0 (*)
+│   ├── arrow-string v58.4.0 (*)
+│   ├── datafusion v53.1.0 (*)
+│   ├── datafusion-physical-plan v53.1.0 (*)
+│   ├── lance v7.0.0 (*)
+│   ├── lance-arrow v7.0.0 (*)
+│   ├── lance-core v7.0.0 (*)
+│   ├── lance-datafusion v7.0.0 (*)
+│   ├── lance-datagen v7.0.0 (*)
+│   ├── lance-encoding v7.0.0 (*)
+│   ├── lance-file v7.0.0 (*)
+│   ├── lance-index v7.0.0 (*)
+│   ├── lance-io v7.0.0 (*)
+│   ├── lance-linalg v7.0.0 (*)
+│   ├── lance-namespace-impls v7.0.0 (*)
+│   ├── lance-table v7.0.0 (*)
+│   ├── lance-testing v7.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+├── flatbuffers v25.12.19
+│   └── arrow-ipc v58.4.0 (*)
 ├── fxprof-processed-profile v0.6.0
 │   └── wasmtime v29.0.0 (*)
 ├── gix-config-value v0.18.1
@@ -198,13 +610,118 @@ bitflags v2.13.0
     ├── cap-time-ext v3.4.5 (*)
     └── system-interface v0.27.3 (*)
 
+cpufeatures v0.2.17
+├── curve25519-dalek v4.1.3
+│   └── ed25519-dalek v2.2.0
+│       └── jsonwebtoken v10.4.0 (*)
+├── sha1 v0.10.6
+│   └── sha1-checked v0.10.0
+│       └── gix-hash v0.25.1
+│           ├── gix v0.84.0 (*)
+│           ├── gix-blame v0.14.0 (*)
+│           ├── gix-commitgraph v0.37.1
+│           │   ├── gix v0.84.0 (*)
+│           │   ├── gix-blame v0.14.0 (*)
+│           │   ├── gix-negotiate v0.32.0 (*)
+│           │   ├── gix-revision v0.46.0 (*)
+│           │   ├── gix-revwalk v0.32.0
+│           │   │   ├── gix v0.84.0 (*)
+│           │   │   ├── gix-blame v0.14.0 (*)
+│           │   │   ├── gix-negotiate v0.32.0 (*)
+│           │   │   ├── gix-protocol v0.62.0 (*)
+│           │   │   ├── gix-revision v0.46.0 (*)
+│           │   │   └── gix-traverse v0.58.0 (*)
+│           │   └── gix-traverse v0.58.0 (*)
+│           ├── gix-diff v0.64.0 (*)
+│           ├── gix-filter v0.31.0 (*)
+│           ├── gix-hashtable v0.15.2
+│           │   ├── gix v0.84.0 (*)
+│           │   ├── gix-object v0.61.0
+│           │   │   ├── gix v0.84.0 (*)
+│           │   │   ├── gix-archive v0.33.0 (*)
+│           │   │   ├── gix-blame v0.14.0 (*)
+│           │   │   ├── gix-diff v0.64.0 (*)
+│           │   │   ├── gix-dir v0.26.0 (*)
+│           │   │   ├── gix-filter v0.31.0 (*)
+│           │   │   ├── gix-index v0.52.0 (*)
+│           │   │   ├── gix-negotiate v0.32.0 (*)
+│           │   │   ├── gix-odb v0.81.0
+│           │   │   │   └── gix v0.84.0 (*)
+│           │   │   ├── gix-pack v0.71.0
+│           │   │   │   ├── gix v0.84.0 (*)
+│           │   │   │   └── gix-odb v0.81.0 (*)
+│           │   │   ├── gix-protocol v0.62.0 (*)
+│           │   │   ├── gix-ref v0.64.0
+│           │   │   │   ├── gix v0.84.0 (*)
+│           │   │   │   ├── gix-config v0.57.0 (*)
+│           │   │   │   ├── gix-discover v0.52.0 (*)
+│           │   │   │   └── gix-protocol v0.62.0 (*)
+│           │   │   ├── gix-revision v0.46.0 (*)
+│           │   │   ├── gix-revwalk v0.32.0 (*)
+│           │   │   ├── gix-status v0.31.0 (*)
+│           │   │   ├── gix-traverse v0.58.0 (*)
+│           │   │   ├── gix-worktree v0.53.0 (*)
+│           │   │   ├── gix-worktree-state v0.31.0 (*)
+│           │   │   └── gix-worktree-stream v0.33.0 (*)
+│           │   ├── gix-odb v0.81.0 (*)
+│           │   ├── gix-pack v0.71.0 (*)
+│           │   ├── gix-revision v0.46.0 (*)
+│           │   ├── gix-revwalk v0.32.0 (*)
+│           │   └── gix-traverse v0.58.0 (*)
+│           ├── gix-index v0.52.0 (*)
+│           ├── gix-negotiate v0.32.0 (*)
+│           ├── gix-object v0.61.0 (*)
+│           ├── gix-odb v0.81.0 (*)
+│           ├── gix-pack v0.71.0 (*)
+│           ├── gix-protocol v0.62.0 (*)
+│           ├── gix-ref v0.64.0 (*)
+│           ├── gix-refspec v0.42.0 (*)
+│           ├── gix-revision v0.46.0 (*)
+│           ├── gix-revwalk v0.32.0 (*)
+│           ├── gix-shallow v0.12.1
+│           │   ├── gix v0.84.0 (*)
+│           │   └── gix-protocol v0.62.0 (*)
+│           ├── gix-status v0.31.0 (*)
+│           ├── gix-traverse v0.58.0 (*)
+│           ├── gix-worktree v0.53.0 (*)
+│           └── gix-worktree-stream v0.33.0 (*)
+└── sha2 v0.10.9
+    ├── datafusion-functions v53.1.0 (*)
+    ├── ed25519-dalek v2.2.0 (*)
+    ├── jsonwebtoken v10.4.0 (*)
+    ├── p256 v0.13.2
+    │   └── jsonwebtoken v10.4.0 (*)
+    ├── p384 v0.13.1
+    │   └── jsonwebtoken v10.4.0 (*)
+    ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+    └── wasmtime-cache v29.0.0 (*)
+
+cpufeatures v0.3.0
+├── blake3 v1.8.6
+│   └── datafusion-functions v53.1.0 (*)
+└── chacha20 v0.10.1
+    └── rand v0.10.2
+        └── twox-hash v2.1.3
+            ├── lance-index v7.0.0 (*)
+            ├── lz4_flex v0.13.1
+            │   └── arrow-ipc v58.4.0 (*)
+            └── ruzstd v0.8.3
+                └── tiktoken v3.5.1 (*)
+
 darling v0.20.11
+├── derive_builder_core v0.20.2
+│   └── derive_builder_macro v0.20.2 (proc-macro)
+│       └── derive_builder v0.20.2
+│           └── lindera-dictionary v3.0.7
+│               └── lindera v3.0.7 (*)
 └── wrapcenum-derive v0.4.1 (proc-macro)
     └── nvml-wrapper v0.10.0 (*)
 
 darling v0.23.0
 └── serde_with_macros v3.21.0 (proc-macro)
     └── serde_with v3.21.0
+        ├── lance-namespace-reqwest-client v0.7.7 (*)
+        ├── lancedb v0.30.0 (*)
         └── tauri-utils v2.9.3 (*)
 
 darling_core v0.20.11
@@ -228,6 +745,7 @@ dirs v4.0.0
             └── wiggle v29.0.0 (*)
 
 dirs v6.0.0
+├── lance-index v7.0.0 (*)
 └── tauri-build v2.6.3 (*)
 
 dirs-sys v0.3.7
@@ -235,178 +753,6 @@ dirs-sys v0.3.7
 
 dirs-sys v0.5.0
 └── dirs v6.0.0 (*)
-
-fastrand v2.4.1
-└── phf_generator v0.13.1
-    ├── phf_codegen v0.13.1
-    │   [build-dependencies]
-    │   ├── selectors v0.36.1 (*)
-    │   └── web_atoms v0.2.5
-    │       └── markup5ever v0.38.0
-    │           └── html5ever v0.38.0
-    │               └── dom_query v0.27.0 (*)
-    ├── phf_macros v0.13.1 (proc-macro)
-    │   └── phf v0.13.1
-    │       ├── cssparser v0.36.0
-    │       │   ├── dom_query v0.27.0 (*)
-    │       │   └── selectors v0.36.1 (*)
-    │       ├── oxc_ast_macros v0.120.0 (proc-macro)
-    │       │   ├── oxc_ast v0.120.0 (*)
-    │       │   ├── oxc_regular_expression v0.120.0 (*)
-    │       │   ├── oxc_span v0.120.0
-    │       │   │   ├── oxc v0.120.0 (*)
-    │       │   │   ├── oxc_ast v0.120.0 (*)
-    │       │   │   ├── oxc_ast_visit v0.120.0 (*)
-    │       │   │   ├── oxc_ecmascript v0.120.0 (*)
-    │       │   │   ├── oxc_parser v0.120.0 (*)
-    │       │   │   ├── oxc_regular_expression v0.120.0 (*)
-    │       │   │   └── oxc_syntax v0.120.0 (*)
-    │       │   └── oxc_syntax v0.120.0 (*)
-    │       ├── oxc_regular_expression v0.120.0 (*)
-    │       ├── oxc_syntax v0.120.0 (*)
-    │       ├── selectors v0.36.1 (*)
-    │       ├── tauri-utils v2.9.3 (*)
-    │       └── web_atoms v0.2.5 (*)
-    └── string_cache_codegen v0.6.1
-        [build-dependencies]
-        └── web_atoms v0.2.5 (*)
-
-fastrand v2.4.1
-├── gix-fs v0.21.2
-│   ├── gix v0.84.0 (*)
-│   ├── gix-diff v0.64.0 (*)
-│   ├── gix-dir v0.26.0 (*)
-│   ├── gix-discover v0.52.0 (*)
-│   ├── gix-index v0.52.0 (*)
-│   ├── gix-odb v0.81.0
-│   │   └── gix v0.84.0 (*)
-│   ├── gix-ref v0.64.0
-│   │   ├── gix v0.84.0 (*)
-│   │   ├── gix-config v0.57.0 (*)
-│   │   ├── gix-discover v0.52.0 (*)
-│   │   └── gix-protocol v0.62.0 (*)
-│   ├── gix-status v0.31.0 (*)
-│   ├── gix-tempfile v23.0.2
-│   │   ├── gix v0.84.0 (*)
-│   │   ├── gix-diff v0.64.0 (*)
-│   │   ├── gix-lock v23.0.1
-│   │   │   ├── gix v0.84.0 (*)
-│   │   │   ├── gix-index v0.52.0 (*)
-│   │   │   ├── gix-protocol v0.62.0 (*)
-│   │   │   ├── gix-ref v0.64.0 (*)
-│   │   │   └── gix-shallow v0.12.1
-│   │   │       ├── gix v0.84.0 (*)
-│   │   │       └── gix-protocol v0.62.0 (*)
-│   │   ├── gix-pack v0.71.0
-│   │   │   ├── gix v0.84.0 (*)
-│   │   │   └── gix-odb v0.81.0 (*)
-│   │   └── gix-ref v0.64.0 (*)
-│   ├── gix-worktree v0.53.0 (*)
-│   ├── gix-worktree-state v0.31.0 (*)
-│   └── gix-worktree-stream v0.33.0 (*)
-├── gix-utils v0.3.3
-│   ├── gix v0.84.0 (*)
-│   ├── gix-dir v0.26.0 (*)
-│   ├── gix-features v0.48.1
-│   │   ├── gix v0.84.0 (*)
-│   │   ├── gix-config v0.57.0 (*)
-│   │   ├── gix-fs v0.21.2 (*)
-│   │   ├── gix-glob v0.26.1 (*)
-│   │   ├── gix-hash v0.25.1
-│   │   │   ├── gix v0.84.0 (*)
-│   │   │   ├── gix-blame v0.14.0 (*)
-│   │   │   ├── gix-commitgraph v0.37.1
-│   │   │   │   ├── gix v0.84.0 (*)
-│   │   │   │   ├── gix-blame v0.14.0 (*)
-│   │   │   │   ├── gix-negotiate v0.32.0 (*)
-│   │   │   │   ├── gix-revision v0.46.0 (*)
-│   │   │   │   ├── gix-revwalk v0.32.0
-│   │   │   │   │   ├── gix v0.84.0 (*)
-│   │   │   │   │   ├── gix-blame v0.14.0 (*)
-│   │   │   │   │   ├── gix-negotiate v0.32.0 (*)
-│   │   │   │   │   ├── gix-protocol v0.62.0 (*)
-│   │   │   │   │   ├── gix-revision v0.46.0 (*)
-│   │   │   │   │   └── gix-traverse v0.58.0 (*)
-│   │   │   │   └── gix-traverse v0.58.0 (*)
-│   │   │   ├── gix-diff v0.64.0 (*)
-│   │   │   ├── gix-filter v0.31.0 (*)
-│   │   │   ├── gix-hashtable v0.15.2
-│   │   │   │   ├── gix v0.84.0 (*)
-│   │   │   │   ├── gix-object v0.61.0
-│   │   │   │   │   ├── gix v0.84.0 (*)
-│   │   │   │   │   ├── gix-archive v0.33.0 (*)
-│   │   │   │   │   ├── gix-blame v0.14.0 (*)
-│   │   │   │   │   ├── gix-diff v0.64.0 (*)
-│   │   │   │   │   ├── gix-dir v0.26.0 (*)
-│   │   │   │   │   ├── gix-filter v0.31.0 (*)
-│   │   │   │   │   ├── gix-index v0.52.0 (*)
-│   │   │   │   │   ├── gix-negotiate v0.32.0 (*)
-│   │   │   │   │   ├── gix-odb v0.81.0 (*)
-│   │   │   │   │   ├── gix-pack v0.71.0 (*)
-│   │   │   │   │   ├── gix-protocol v0.62.0 (*)
-│   │   │   │   │   ├── gix-ref v0.64.0 (*)
-│   │   │   │   │   ├── gix-revision v0.46.0 (*)
-│   │   │   │   │   ├── gix-revwalk v0.32.0 (*)
-│   │   │   │   │   ├── gix-status v0.31.0 (*)
-│   │   │   │   │   ├── gix-traverse v0.58.0 (*)
-│   │   │   │   │   ├── gix-worktree v0.53.0 (*)
-│   │   │   │   │   ├── gix-worktree-state v0.31.0 (*)
-│   │   │   │   │   └── gix-worktree-stream v0.33.0 (*)
-│   │   │   │   ├── gix-odb v0.81.0 (*)
-│   │   │   │   ├── gix-pack v0.71.0 (*)
-│   │   │   │   ├── gix-revision v0.46.0 (*)
-│   │   │   │   ├── gix-revwalk v0.32.0 (*)
-│   │   │   │   └── gix-traverse v0.58.0 (*)
-│   │   │   ├── gix-index v0.52.0 (*)
-│   │   │   ├── gix-negotiate v0.32.0 (*)
-│   │   │   ├── gix-object v0.61.0 (*)
-│   │   │   ├── gix-odb v0.81.0 (*)
-│   │   │   ├── gix-pack v0.71.0 (*)
-│   │   │   ├── gix-protocol v0.62.0 (*)
-│   │   │   ├── gix-ref v0.64.0 (*)
-│   │   │   ├── gix-refspec v0.42.0 (*)
-│   │   │   ├── gix-revision v0.46.0 (*)
-│   │   │   ├── gix-revwalk v0.32.0 (*)
-│   │   │   ├── gix-shallow v0.12.1 (*)
-│   │   │   ├── gix-status v0.31.0 (*)
-│   │   │   ├── gix-traverse v0.58.0 (*)
-│   │   │   ├── gix-worktree v0.53.0 (*)
-│   │   │   └── gix-worktree-stream v0.33.0 (*)
-│   │   ├── gix-index v0.52.0 (*)
-│   │   ├── gix-object v0.61.0 (*)
-│   │   ├── gix-odb v0.81.0 (*)
-│   │   ├── gix-pack v0.71.0 (*)
-│   │   ├── gix-protocol v0.62.0 (*)
-│   │   ├── gix-ref v0.64.0 (*)
-│   │   ├── gix-status v0.31.0 (*)
-│   │   ├── gix-transport v0.57.2 (*)
-│   │   ├── gix-worktree-state v0.31.0 (*)
-│   │   └── gix-worktree-stream v0.33.0 (*)
-│   ├── gix-filter v0.31.0 (*)
-│   ├── gix-fs v0.21.2 (*)
-│   ├── gix-index v0.52.0 (*)
-│   ├── gix-lock v23.0.1 (*)
-│   ├── gix-object v0.61.0 (*)
-│   ├── gix-protocol v0.62.0 (*)
-│   ├── gix-quote v0.7.2
-│   │   ├── gix-attributes v0.33.2 (*)
-│   │   ├── gix-command v0.9.1
-│   │   │   ├── gix v0.84.0 (*)
-│   │   │   ├── gix-credentials v0.38.1 (*)
-│   │   │   ├── gix-diff v0.64.0 (*)
-│   │   │   ├── gix-filter v0.31.0 (*)
-│   │   │   ├── gix-prompt v0.15.1 (*)
-│   │   │   └── gix-transport v0.57.2 (*)
-│   │   ├── gix-filter v0.31.0 (*)
-│   │   ├── gix-odb v0.81.0 (*)
-│   │   └── gix-transport v0.57.2 (*)
-│   └── gix-ref v0.64.0 (*)
-└── tempfile v3.27.0
-    ├── gix-odb v0.81.0 (*)
-    ├── gix-tempfile v23.0.2 (*)
-    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-    [dev-dependencies]
-    └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 foldhash v0.1.5
 └── hashbrown v0.15.5
@@ -416,6 +762,17 @@ foldhash v0.1.5
     │   ├── wasmtime-environ v29.0.0 (*)
     │   └── wasmtime-jit-debug v29.0.0
     │       └── wasmtime v29.0.0 (*)
+    ├── petgraph v0.8.3
+    │   └── datafusion-physical-expr v53.1.0 (*)
+    ├── petgraph v0.8.3
+    │   └── prost-build v0.14.4
+    │       [build-dependencies]
+    │       ├── lance v7.0.0 (*)
+    │       ├── lance-datafusion v7.0.0 (*)
+    │       ├── lance-encoding v7.0.0 (*)
+    │       ├── lance-file v7.0.0 (*)
+    │       ├── lance-index v7.0.0 (*)
+    │       └── lance-table v7.0.0 (*)
     └── regalloc2 v0.11.2
         └── cranelift-codegen v0.116.1
             ├── cranelift-frontend v0.116.1
@@ -428,6 +785,11 @@ foldhash v0.2.0
 ├── hashbrown v0.16.1
 │   ├── clru v0.6.3
 │   │   └── gix-pack v0.71.0 (*)
+│   ├── datafusion-common v53.1.0 (*)
+│   ├── datafusion-functions-nested v53.1.0 (*)
+│   ├── datafusion-physical-expr v53.1.0 (*)
+│   ├── datafusion-physical-expr-common v53.1.0 (*)
+│   ├── datafusion-physical-plan v53.1.0 (*)
 │   ├── hashlink v0.11.1
 │   │   └── rusqlite v0.39.0 (*)
 │   ├── oxc_allocator v0.120.0
@@ -437,57 +799,80 @@ foldhash v0.2.0
 │   │   ├── oxc_ecmascript v0.120.0 (*)
 │   │   ├── oxc_parser v0.120.0 (*)
 │   │   ├── oxc_regular_expression v0.120.0 (*)
-│   │   ├── oxc_span v0.120.0 (*)
+│   │   ├── oxc_span v0.120.0
+│   │   │   ├── oxc v0.120.0 (*)
+│   │   │   ├── oxc_ast v0.120.0 (*)
+│   │   │   ├── oxc_ast_visit v0.120.0 (*)
+│   │   │   ├── oxc_ecmascript v0.120.0 (*)
+│   │   │   ├── oxc_parser v0.120.0 (*)
+│   │   │   ├── oxc_regular_expression v0.120.0 (*)
+│   │   │   └── oxc_syntax v0.120.0 (*)
 │   │   ├── oxc_str v0.120.0
 │   │   │   └── oxc_span v0.120.0 (*)
 │   │   └── oxc_syntax v0.120.0 (*)
 │   └── oxc_str v0.120.0 (*)
 └── hashbrown v0.17.1
+    ├── arrow-array v58.4.0 (*)
     ├── gix-hashtable v0.15.2 (*)
     ├── gix-imara-diff v0.2.3
     │   └── gix-diff v0.64.0 (*)
     ├── gix-index v0.52.0 (*)
-    └── indexmap v2.14.0
-        ├── gimli v0.31.1
-        │   ├── addr2line v0.24.2
-        │   │   └── wasmtime v29.0.0 (*)
-        │   ├── cranelift-codegen v0.116.1 (*)
-        │   ├── wasmtime v29.0.0 (*)
-        │   ├── wasmtime-cranelift v29.0.0 (*)
-        │   └── wasmtime-environ v29.0.0 (*)
-        ├── h2 v0.4.15
-        │   ├── hyper v1.10.1
-        │   │   ├── hyper-rustls v0.27.9 (*)
-        │   │   ├── hyper-util v0.1.20 (*)
-        │   │   ├── mockito v1.7.2 (*)
-        │   │   └── reqwest v0.12.28 (*)
-        │   └── reqwest v0.12.28 (*)
-        ├── object v0.36.7 (*)
-        ├── plist v1.9.0 (*)
-        ├── serde_json v1.0.149
-        │   ├── cargo_metadata v0.19.2
-        │   │   └── tauri-utils v2.9.3 (*)
-        │   ├── json-patch v3.0.1
-        │   │   ├── tauri-build v2.6.3 (*)
-        │   │   └── tauri-utils v2.9.3 (*)
-        │   ├── jsonptr v0.6.3
-        │   │   └── json-patch v3.0.1 (*)
-        │   ├── schemars v0.8.22
-        │   │   ├── tauri-build v2.6.3 (*)
-        │   │   └── tauri-utils v2.9.3 (*)
-        │   ├── tauri-build v2.6.3 (*)
-        │   ├── tauri-utils v2.9.3 (*)
-        │   └── wit-parser v0.221.3 (*)
-        │   [build-dependencies]
-        │   └── tree-sitter v0.26.10
-        │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-        ├── toml_edit v0.22.27
-        │   └── toml v0.8.23
-        │       └── wasmtime-cache v29.0.0 (*)
-        ├── wasmtime v29.0.0 (*)
-        ├── wasmtime-environ v29.0.0 (*)
-        ├── wasmtime-wit-bindgen v29.0.0 (*)
-        └── wit-parser v0.221.3 (*)
+    ├── indexmap v2.14.0
+    │   ├── arrow-json v58.4.0 (*)
+    │   ├── datafusion-common v53.1.0 (*)
+    │   ├── datafusion-expr v53.1.0 (*)
+    │   ├── datafusion-expr-common v53.1.0 (*)
+    │   ├── datafusion-optimizer v53.1.0 (*)
+    │   ├── datafusion-physical-expr v53.1.0 (*)
+    │   ├── datafusion-physical-expr-common v53.1.0 (*)
+    │   ├── datafusion-physical-plan v53.1.0 (*)
+    │   ├── datafusion-sql v53.1.0 (*)
+    │   ├── gimli v0.31.1
+    │   │   ├── addr2line v0.24.2
+    │   │   │   └── wasmtime v29.0.0 (*)
+    │   │   ├── cranelift-codegen v0.116.1 (*)
+    │   │   ├── wasmtime v29.0.0 (*)
+    │   │   ├── wasmtime-cranelift v29.0.0 (*)
+    │   │   └── wasmtime-environ v29.0.0 (*)
+    │   ├── h2 v0.4.15
+    │   │   ├── hyper v1.10.1
+    │   │   │   ├── hyper-rustls v0.27.9 (*)
+    │   │   │   ├── hyper-util v0.1.20 (*)
+    │   │   │   ├── mockito v1.7.2 (*)
+    │   │   │   └── reqwest v0.12.28 (*)
+    │   │   └── reqwest v0.12.28 (*)
+    │   ├── object v0.36.7 (*)
+    │   ├── petgraph v0.8.3 (*)
+    │   ├── petgraph v0.8.3 (*)
+    │   ├── plist v1.9.0 (*)
+    │   ├── serde_json v1.0.149
+    │   │   ├── cargo_metadata v0.19.2
+    │   │   │   └── tauri-utils v2.9.3 (*)
+    │   │   ├── json-patch v3.0.1
+    │   │   │   ├── tauri-build v2.6.3 (*)
+    │   │   │   └── tauri-utils v2.9.3 (*)
+    │   │   ├── jsonptr v0.6.3
+    │   │   │   └── json-patch v3.0.1 (*)
+    │   │   ├── schemars v0.8.22
+    │   │   │   ├── tauri-build v2.6.3 (*)
+    │   │   │   └── tauri-utils v2.9.3 (*)
+    │   │   ├── tauri-build v2.6.3 (*)
+    │   │   ├── tauri-utils v2.9.3 (*)
+    │   │   └── wit-parser v0.221.3 (*)
+    │   │   [build-dependencies]
+    │   │   └── tree-sitter v0.26.10
+    │   │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+    │   ├── serde_yaml_ng v0.10.0
+    │   │   └── lindera v3.0.7 (*)
+    │   ├── toml_edit v0.22.27
+    │   │   └── toml v0.8.23
+    │   │       └── wasmtime-cache v29.0.0 (*)
+    │   ├── wasmtime v29.0.0 (*)
+    │   ├── wasmtime-environ v29.0.0 (*)
+    │   ├── wasmtime-wit-bindgen v29.0.0 (*)
+    │   └── wit-parser v0.221.3 (*)
+    └── rkyv v0.8.18
+        └── lindera-dictionary v3.0.7 (*)
 
 foldhash v0.2.0
 └── dom_query v0.27.0 (*)
@@ -497,6 +882,35 @@ form_urlencoded v1.2.2
 │   ├── mockito v1.7.2 (*)
 │   └── reqwest v0.12.28 (*)
 └── url v2.5.8
+    ├── datafusion v53.1.0 (*)
+    ├── datafusion-datasource v53.1.0 (*)
+    ├── datafusion-execution v53.1.0 (*)
+    ├── lance v7.0.0 (*)
+    ├── lance-core v7.0.0 (*)
+    ├── lance-io v7.0.0 (*)
+    ├── lance-namespace-impls v7.0.0 (*)
+    ├── lance-namespace-reqwest-client v0.7.7 (*)
+    ├── lance-table v7.0.0 (*)
+    ├── lancedb v0.30.0 (*)
+    ├── lindera v3.0.7 (*)
+    ├── object_store v0.13.2
+    │   ├── datafusion v53.1.0 (*)
+    │   ├── datafusion-catalog v53.1.0 (*)
+    │   ├── datafusion-catalog-listing v53.1.0 (*)
+    │   ├── datafusion-common v53.1.0 (*)
+    │   ├── datafusion-datasource v53.1.0 (*)
+    │   ├── datafusion-datasource-arrow v53.1.0 (*)
+    │   ├── datafusion-datasource-csv v53.1.0 (*)
+    │   ├── datafusion-datasource-json v53.1.0 (*)
+    │   ├── datafusion-execution v53.1.0 (*)
+    │   ├── lance v7.0.0 (*)
+    │   ├── lance-core v7.0.0 (*)
+    │   ├── lance-file v7.0.0 (*)
+    │   ├── lance-index v7.0.0 (*)
+    │   ├── lance-io v7.0.0 (*)
+    │   ├── lance-namespace-impls v7.0.0 (*)
+    │   ├── lance-table v7.0.0 (*)
+    │   └── lancedb v0.30.0 (*)
     ├── reqwest v0.12.28 (*)
     ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     ├── tower-http v0.6.11 (*)
@@ -514,10 +928,8 @@ getrandom v0.2.17
 │   ├── crypto-bigint v0.5.5
 │   │   └── elliptic-curve v0.13.8
 │   │       ├── ecdsa v0.16.9
-│   │       │   ├── p256 v0.13.2
-│   │       │   │   └── jsonwebtoken v10.4.0 (*)
-│   │       │   └── p384 v0.13.1
-│   │       │       └── jsonwebtoken v10.4.0 (*)
+│   │       │   ├── p256 v0.13.2 (*)
+│   │       │   └── p384 v0.13.1 (*)
 │   │       ├── p256 v0.13.2 (*)
 │   │       ├── p384 v0.13.1 (*)
 │   │       └── primeorder v0.13.6
@@ -542,8 +954,7 @@ getrandom v0.2.17
 │   └── signature v2.2.0
 │       ├── ecdsa v0.16.9 (*)
 │       ├── ed25519 v2.2.3
-│       │   └── ed25519-dalek v2.2.0
-│       │       └── jsonwebtoken v10.4.0 (*)
+│       │   └── ed25519-dalek v2.2.0 (*)
 │       ├── jsonwebtoken v10.4.0 (*)
 │       └── rsa v0.9.10 (*)
 └── ring v0.17.14
@@ -557,17 +968,53 @@ getrandom v0.2.17
         └── rustls v0.23.41 (*)
 
 getrandom v0.3.4
+├── ahash v0.8.12
+│   ├── arrow-array v58.4.0 (*)
+│   ├── arrow-select v58.4.0 (*)
+│   ├── datafusion-common v53.1.0 (*)
+│   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   ├── datafusion-functions-aggregate-common v53.1.0 (*)
+│   ├── datafusion-physical-expr v53.1.0 (*)
+│   ├── datafusion-physical-expr-common v53.1.0 (*)
+│   ├── datafusion-physical-plan v53.1.0 (*)
+│   ├── hashbrown v0.14.5
+│   │   ├── cranelift-codegen v0.116.1 (*)
+│   │   ├── dashmap v6.2.1
+│   │   │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │   ├── datafusion-execution v53.1.0 (*)
+│   │   │   ├── gix-tempfile v23.0.2
+│   │   │   │   ├── gix v0.84.0 (*)
+│   │   │   │   ├── gix-diff v0.64.0 (*)
+│   │   │   │   ├── gix-lock v23.0.1
+│   │   │   │   │   ├── gix v0.84.0 (*)
+│   │   │   │   │   ├── gix-index v0.52.0 (*)
+│   │   │   │   │   ├── gix-protocol v0.62.0 (*)
+│   │   │   │   │   ├── gix-ref v0.64.0 (*)
+│   │   │   │   │   └── gix-shallow v0.12.1 (*)
+│   │   │   │   ├── gix-pack v0.71.0 (*)
+│   │   │   │   └── gix-ref v0.64.0 (*)
+│   │   │   ├── lance v7.0.0 (*)
+│   │   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│   │   └── wasmtime v29.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   └── random_word v0.5.2
+│       └── lance-datagen v7.0.0 (*)
 ├── jobserver v0.1.34
 │   └── cc v1.2.65
 │       └── embed-resource v3.0.11
 │           └── tauri-winres v0.3.6
 │               └── tauri-build v2.6.3 (*)
 │       [build-dependencies]
+│       ├── blake3 v1.8.6 (*)
 │       ├── ittapi-sys v0.4.0
 │       │   └── ittapi v0.4.0
 │       │       └── wasmtime v29.0.0 (*)
+│       ├── lance-linalg v7.0.0 (*)
 │       ├── libsqlite3-sys v0.37.0
 │       │   └── rusqlite v0.39.0 (*)
+│       ├── lz4-sys v1.11.1+lz4-1.10.0
+│       │   └── lz4 v1.28.1
+│       │       └── lance-encoding v7.0.0 (*)
 │       ├── psm v0.1.31
 │       │   └── stacker v0.1.24
 │       │       └── recursive v0.1.1
@@ -589,31 +1036,78 @@ getrandom v0.3.4
 │       └── zstd-sys v2.0.16+zstd.1.5.7
 │           └── zstd-safe v7.2.4
 │               └── zstd v0.13.3
+│                   ├── arrow-ipc v58.4.0 (*)
+│                   ├── lance-encoding v7.0.0 (*)
 │                   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │                   └── wasmtime-cache v29.0.0 (*)
 └── rand_core v0.9.5
     ├── rand v0.9.4
-    │   └── mockito v1.7.2 (*)
-    └── rand_chacha v0.9.0
-        └── rand v0.9.4 (*)
+    │   ├── datafusion v53.1.0 (*)
+    │   ├── datafusion-datasource v53.1.0 (*)
+    │   ├── datafusion-execution v53.1.0 (*)
+    │   ├── datafusion-functions v53.1.0 (*)
+    │   ├── fsst v7.0.0 (*)
+    │   ├── jsonb v0.5.6
+    │   │   ├── lance-arrow v7.0.0 (*)
+    │   │   ├── lance-datafusion v7.0.0 (*)
+    │   │   └── lance-index v7.0.0 (*)
+    │   ├── lance v7.0.0 (*)
+    │   ├── lance-arrow v7.0.0 (*)
+    │   ├── lance-core v7.0.0 (*)
+    │   ├── lance-datagen v7.0.0 (*)
+    │   ├── lance-encoding v7.0.0 (*)
+    │   ├── lance-index v7.0.0 (*)
+    │   ├── lance-io v7.0.0 (*)
+    │   ├── lance-linalg v7.0.0 (*)
+    │   ├── lance-namespace-impls v7.0.0 (*)
+    │   ├── lance-table v7.0.0 (*)
+    │   ├── lance-testing v7.0.0 (*)
+    │   ├── lancedb v0.30.0 (*)
+    │   ├── mockito v1.7.2 (*)
+    │   ├── rand_distr v0.5.1
+    │   │   ├── lance-datagen v7.0.0 (*)
+    │   │   └── lance-index v7.0.0 (*)
+    │   └── random_word v0.5.2 (*)
+    ├── rand_chacha v0.9.0
+    │   └── rand v0.9.4 (*)
+    └── rand_xoshiro v0.7.0
+        └── lance-datagen v7.0.0 (*)
 
 getrandom v0.4.3
-├── tempfile v3.27.0 (*)
+├── rand v0.10.2 (*)
+├── tempfile v3.27.0
+│   ├── datafusion v53.1.0 (*)
+│   ├── datafusion-execution v53.1.0 (*)
+│   ├── gix-odb v0.81.0 (*)
+│   ├── gix-tempfile v23.0.2 (*)
+│   ├── lance-core v7.0.0 (*)
+│   ├── lance-index v7.0.0 (*)
+│   ├── lance-io v7.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│   [dev-dependencies]
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 └── uuid v1.23.4
+    ├── datafusion v53.1.0 (*)
+    ├── datafusion-functions v53.1.0 (*)
     ├── debugid v0.8.0
     │   └── fxprof-processed-profile v0.6.0 (*)
+    ├── lance v7.0.0 (*)
+    ├── lance-index v7.0.0 (*)
+    ├── lance-table v7.0.0 (*)
+    ├── lancedb v0.30.0 (*)
+    ├── moka v0.12.15
+    │   ├── lance v7.0.0 (*)
+    │   ├── lance-core v7.0.0 (*)
+    │   ├── lance-io v7.0.0 (*)
+    │   └── lancedb v0.30.0 (*)
     └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 
 hashbrown v0.12.3
 └── indexmap v1.9.3
     └── schemars v0.8.22 (*)
 
-hashbrown v0.14.5
-├── cranelift-codegen v0.116.1 (*)
-├── dashmap v6.2.1
-│   ├── gix-tempfile v23.0.2 (*)
-│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-└── wasmtime v29.0.0 (*)
+hashbrown v0.14.5 (*)
 
 hashbrown v0.15.5 (*)
 
@@ -625,9 +1119,61 @@ indexmap v1.9.3 (*)
 
 indexmap v2.14.0 (*)
 
+itertools v0.12.1
+└── wasmtime-cranelift v29.0.0 (*)
+
+itertools v0.13.0
+├── lance v7.0.0 (*)
+├── lance-core v7.0.0 (*)
+├── lance-encoding v7.0.0 (*)
+└── lance-index v7.0.0 (*)
+
+itertools v0.14.0
+├── datafusion v53.1.0 (*)
+├── datafusion-catalog v53.1.0 (*)
+├── datafusion-catalog-listing v53.1.0 (*)
+├── datafusion-common v53.1.0 (*)
+├── datafusion-datasource v53.1.0 (*)
+├── datafusion-datasource-arrow v53.1.0 (*)
+├── datafusion-expr v53.1.0 (*)
+├── datafusion-expr-common v53.1.0 (*)
+├── datafusion-functions v53.1.0 (*)
+├── datafusion-functions-nested v53.1.0 (*)
+├── datafusion-optimizer v53.1.0 (*)
+├── datafusion-physical-expr v53.1.0 (*)
+├── datafusion-physical-expr-adapter v53.1.0 (*)
+├── datafusion-physical-expr-common v53.1.0 (*)
+├── datafusion-physical-optimizer v53.1.0 (*)
+├── datafusion-physical-plan v53.1.0 (*)
+├── datafusion-pruning v53.1.0 (*)
+├── object_store v0.13.2 (*)
+├── prost-build v0.14.4 (*)
+└── prost-derive v0.14.4 (proc-macro)
+    ├── prost v0.14.4
+    │   ├── lance v7.0.0 (*)
+    │   ├── lance-core v7.0.0 (*)
+    │   ├── lance-datafusion v7.0.0 (*)
+    │   ├── lance-encoding v7.0.0 (*)
+    │   ├── lance-file v7.0.0 (*)
+    │   ├── lance-index v7.0.0 (*)
+    │   ├── lance-io v7.0.0 (*)
+    │   ├── lance-table v7.0.0 (*)
+    │   └── prost-types v0.14.4
+    │       ├── lance v7.0.0 (*)
+    │       ├── lance-file v7.0.0 (*)
+    │       ├── lance-index v7.0.0 (*)
+    │       └── lance-table v7.0.0 (*)
+    └── prost v0.14.4
+        ├── prost-build v0.14.4 (*)
+        └── prost-types v0.14.4
+            └── prost-build v0.14.4 (*)
+
 log v0.4.33
-├── html5ever v0.38.0 (*)
-├── markup5ever v0.38.0 (*)
+├── html5ever v0.38.0
+│   └── dom_query v0.27.0 (*)
+├── markup5ever v0.38.0
+│   └── html5ever v0.38.0 (*)
+├── prost-build v0.14.4 (*)
 ├── selectors v0.36.1 (*)
 ├── tauri-utils v2.9.3 (*)
 ├── wit-parser v0.221.3 (*)
@@ -637,14 +1183,53 @@ log v0.4.33
 log v0.4.33
 ├── cranelift-codegen v0.116.1 (*)
 ├── cranelift-frontend v0.116.1 (*)
+├── datafusion v53.1.0 (*)
+├── datafusion-catalog v53.1.0 (*)
+├── datafusion-catalog-listing v53.1.0 (*)
+├── datafusion-common v53.1.0 (*)
+├── datafusion-common-runtime v53.1.0
+│   ├── datafusion v53.1.0 (*)
+│   ├── datafusion-catalog v53.1.0 (*)
+│   ├── datafusion-datasource v53.1.0 (*)
+│   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   ├── datafusion-datasource-csv v53.1.0 (*)
+│   ├── datafusion-datasource-json v53.1.0 (*)
+│   └── datafusion-physical-plan v53.1.0 (*)
+├── datafusion-datasource v53.1.0 (*)
+├── datafusion-execution v53.1.0 (*)
+├── datafusion-functions v53.1.0 (*)
+├── datafusion-functions-aggregate v53.1.0 (*)
+├── datafusion-functions-nested v53.1.0 (*)
+├── datafusion-functions-window v53.1.0 (*)
+├── datafusion-optimizer v53.1.0 (*)
+├── datafusion-physical-plan v53.1.0 (*)
+├── datafusion-pruning v53.1.0 (*)
+├── datafusion-sql v53.1.0 (*)
 ├── globset v0.4.18
 │   └── ignore v0.4.25
 │       └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 ├── ignore v0.4.25 (*)
 ├── ittapi v0.4.0 (*)
+├── lance v7.0.0 (*)
+├── lance-core v7.0.0 (*)
+├── lance-datafusion v7.0.0 (*)
+├── lance-encoding v7.0.0 (*)
+├── lance-file v7.0.0 (*)
+├── lance-index v7.0.0 (*)
+├── lance-io v7.0.0 (*)
+├── lance-namespace-impls v7.0.0 (*)
+├── lance-table v7.0.0 (*)
+├── lancedb v0.30.0 (*)
+├── lindera v3.0.7 (*)
+├── lindera-dictionary v3.0.7 (*)
 ├── mockito v1.7.2 (*)
 ├── regalloc2 v0.11.2 (*)
 ├── reqwest v0.12.28 (*)
+├── sqlparser v0.61.0
+│   ├── datafusion v53.1.0 (*)
+│   ├── datafusion-common v53.1.0 (*)
+│   ├── datafusion-expr v53.1.0 (*)
+│   └── datafusion-sql v53.1.0 (*)
 ├── sqlparser v0.62.0 (*)
 ├── tracing-log v0.2.0
 │   └── tracing-subscriber v0.3.23
@@ -663,6 +1248,74 @@ object v0.37.3
     [build-dependencies]
     └── psm v0.1.31 (*)
 
+once_cell v1.21.4
+├── ahash v0.8.12 (*)
+├── cap-time-ext v3.4.5 (*)
+├── dashmap v6.2.1 (*)
+├── gix-features v0.48.1
+│   ├── gix v0.84.0 (*)
+│   ├── gix-config v0.57.0 (*)
+│   ├── gix-fs v0.21.2
+│   │   ├── gix v0.84.0 (*)
+│   │   ├── gix-diff v0.64.0 (*)
+│   │   ├── gix-dir v0.26.0 (*)
+│   │   ├── gix-discover v0.52.0 (*)
+│   │   ├── gix-index v0.52.0 (*)
+│   │   ├── gix-odb v0.81.0 (*)
+│   │   ├── gix-ref v0.64.0 (*)
+│   │   ├── gix-status v0.31.0 (*)
+│   │   ├── gix-tempfile v23.0.2 (*)
+│   │   ├── gix-worktree v0.53.0 (*)
+│   │   ├── gix-worktree-state v0.31.0 (*)
+│   │   └── gix-worktree-stream v0.33.0 (*)
+│   ├── gix-glob v0.26.1 (*)
+│   ├── gix-hash v0.25.1 (*)
+│   ├── gix-index v0.52.0 (*)
+│   ├── gix-object v0.61.0 (*)
+│   ├── gix-odb v0.81.0 (*)
+│   ├── gix-pack v0.71.0 (*)
+│   ├── gix-protocol v0.62.0 (*)
+│   ├── gix-ref v0.64.0 (*)
+│   ├── gix-status v0.31.0 (*)
+│   ├── gix-transport v0.57.2 (*)
+│   ├── gix-worktree-state v0.31.0 (*)
+│   └── gix-worktree-stream v0.33.0 (*)
+├── lindera v3.0.7 (*)
+├── lindera-dictionary v3.0.7 (*)
+├── matrixmultiply v0.3.11
+│   └── ndarray v0.16.1
+│       └── lance-index v7.0.0 (*)
+├── rustls v0.23.41 (*)
+├── sysinfo v0.30.13
+│   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+├── tempfile v3.27.0 (*)
+├── tracing-core v0.1.36
+│   ├── tracing v0.1.44
+│   │   ├── h2 v0.4.15 (*)
+│   │   ├── hyper-util v0.1.20 (*)
+│   │   ├── lance v7.0.0 (*)
+│   │   ├── lance-core v7.0.0 (*)
+│   │   ├── lance-datafusion v7.0.0 (*)
+│   │   ├── lance-encoding v7.0.0 (*)
+│   │   ├── lance-file v7.0.0 (*)
+│   │   ├── lance-index v7.0.0 (*)
+│   │   ├── lance-io v7.0.0 (*)
+│   │   ├── lance-table v7.0.0 (*)
+│   │   ├── object_store v0.13.2 (*)
+│   │   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│   │   ├── tracing-subscriber v0.3.23 (*)
+│   │   ├── wasmtime-wasi v29.0.0 (*)
+│   │   └── wiggle v29.0.0 (*)
+│   ├── tracing-log v0.2.0 (*)
+│   └── tracing-subscriber v0.3.23 (*)
+├── tracing-log v0.2.0 (*)
+├── tracing-subscriber v0.3.23 (*)
+└── wasmtime v29.0.0 (*)
+
+once_cell v1.21.4
+└── tempfile v3.27.0
+    └── prost-build v0.14.4 (*)
+
 percent-encoding v2.3.2
 ├── form_urlencoded v1.2.2 (*)
 ├── gix-url v0.36.1
@@ -671,6 +1324,8 @@ percent-encoding v2.3.2
 │   ├── gix-submodule v0.31.0 (*)
 │   └── gix-transport v0.57.2 (*)
 ├── hyper-util v0.1.20 (*)
+├── lindera v3.0.7 (*)
+├── object_store v0.13.2 (*)
 ├── oxc_diagnostics v0.120.0
 │   ├── oxc v0.120.0 (*)
 │   ├── oxc_ast v0.120.0 (*)
@@ -683,9 +1338,72 @@ percent-encoding v2.3.2
 ├── form_urlencoded v1.2.2 (*)
 └── url v2.5.8 (*)
 
+petgraph v0.8.3 (*)
+
+petgraph v0.8.3 (*)
+
+phf v0.12.1
+└── chrono-tz v0.10.4
+    ├── arrow-array v58.4.0 (*)
+    └── datafusion-functions v53.1.0 (*)
+
+phf v0.13.1
+├── cssparser v0.36.0
+│   ├── dom_query v0.27.0 (*)
+│   └── selectors v0.36.1 (*)
+├── jieba-rs v0.9.0
+│   ├── lance-index v7.0.0 (*)
+│   └── lance-tokenizer v7.0.0 (*)
+├── oxc_ast_macros v0.120.0 (proc-macro)
+│   ├── oxc_ast v0.120.0 (*)
+│   ├── oxc_regular_expression v0.120.0 (*)
+│   ├── oxc_span v0.120.0 (*)
+│   └── oxc_syntax v0.120.0 (*)
+├── oxc_regular_expression v0.120.0 (*)
+├── oxc_syntax v0.120.0 (*)
+├── selectors v0.36.1 (*)
+├── tauri-utils v2.9.3 (*)
+└── web_atoms v0.2.5
+    └── markup5ever v0.38.0 (*)
+
+phf_shared v0.12.1
+└── phf v0.12.1 (*)
+
+phf_shared v0.13.1
+├── phf_codegen v0.13.1
+│   └── jieba-macros v0.9.0 (proc-macro)
+│       └── jieba-rs v0.9.0 (*)
+│   [build-dependencies]
+│   ├── selectors v0.36.1 (*)
+│   └── web_atoms v0.2.5 (*)
+├── phf_generator v0.13.1
+│   ├── phf_codegen v0.13.1 (*)
+│   ├── phf_macros v0.13.1 (proc-macro)
+│   │   └── phf v0.13.1 (*)
+│   └── string_cache_codegen v0.6.1
+│       [build-dependencies]
+│       └── web_atoms v0.2.5 (*)
+├── phf_macros v0.13.1 (proc-macro) (*)
+├── string_cache v0.9.0
+│   └── web_atoms v0.2.5 (*)
+└── string_cache_codegen v0.6.1 (*)
+
+phf_shared v0.13.1
+└── phf v0.13.1 (*)
+
+prost v0.14.4 (*)
+
+prost v0.14.4 (*)
+
+prost-types v0.14.4 (*)
+
+prost-types v0.14.4 (*)
+
 rand v0.8.7 (*)
 
 rand v0.9.4 (*)
+
+rand v0.10.2 (*)
 
 rand_chacha v0.3.1 (*)
 
@@ -695,72 +1413,55 @@ rand_core v0.6.4 (*)
 
 rand_core v0.9.5 (*)
 
+rand_core v0.10.1
+├── chacha20 v0.10.1 (*)
+├── getrandom v0.4.3 (*)
+└── rand v0.10.2 (*)
+
 rustix v0.38.44 (*)
 
 rustix v1.1.4 (*)
 
-semver v1.0.28
-├── cargo_metadata v0.19.2 (*)
-├── rustc_version v0.4.1
-│   └── embed-resource v3.0.11 (*)
-│   [build-dependencies]
-│   ├── curve25519-dalek v4.1.3
-│   │   └── ed25519-dalek v2.2.0 (*)
-│   └── derive_more-impl v2.1.1 (proc-macro)
-│       └── derive_more v2.1.1
-│           └── selectors v0.36.1 (*)
-├── tauri-build v2.6.3 (*)
-├── tauri-utils v2.9.3 (*)
-├── wasmparser v0.221.3 (*)
-└── wit-parser v0.221.3 (*)
-
-semver v1.0.28
-├── wasmparser v0.221.3 (*)
-├── wasmtime v29.0.0 (*)
-└── wasmtime-environ v29.0.0 (*)
-
 serde_core v1.0.228
-├── camino v1.2.4
-│   └── cargo_metadata v0.19.2 (*)
-├── erased-serde v0.4.10
-│   └── serde-untagged v0.1.9
-│       └── tauri-utils v2.9.3 (*)
-├── semver v1.0.28 (*)
-├── serde-untagged v0.1.9 (*)
-├── serde_json v1.0.149 (*)
-├── serde_spanned v1.1.1
-│   ├── toml v0.9.12+spec-1.1.0
-│   │   ├── cargo_toml v0.22.3
-│   │   │   └── tauri-build v2.6.3 (*)
-│   │   └── tauri-utils v2.9.3 (*)
-│   └── toml v1.1.4+spec-1.1.0
-│       ├── embed-resource v3.0.11 (*)
-│       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-│       └── tauri-winres v0.3.6 (*)
-├── serde_with v3.21.0 (*)
-├── toml v0.9.12+spec-1.1.0 (*)
-├── toml v1.1.4+spec-1.1.0 (*)
-├── toml_datetime v0.7.5+spec-1.1.0
-│   └── toml v0.9.12+spec-1.1.0 (*)
-├── toml_datetime v1.1.1+spec-1.1.0
-│   └── toml v1.1.4+spec-1.1.0 (*)
-└── uuid v1.23.4
-    ├── cfb v0.7.3
-    │   └── infer v0.19.0
-    │       └── tauri-utils v2.9.3 (*)
-    ├── schemars v0.8.22 (*)
-    └── tauri-utils v2.9.3 (*)
-
-serde_core v1.0.228
+├── arrow-json v58.4.0 (*)
+├── arrow-schema v58.4.0 (*)
+├── csv v1.4.0
+│   ├── arrow-csv v58.4.0 (*)
+│   ├── lindera v3.0.7 (*)
+│   └── lindera-dictionary v3.0.7 (*)
 ├── indexmap v2.14.0 (*)
-├── semver v1.0.28 (*)
 ├── serde v1.0.228
 │   ├── assert-json-diff v2.0.2
 │   │   └── mockito v1.7.2 (*)
 │   ├── cargo-platform v0.1.9
 │   │   └── cargo_metadata v0.19.2 (*)
 │   ├── cargo_metadata v0.19.2 (*)
-│   ├── cargo_toml v0.22.3 (*)
+│   ├── cargo_toml v0.22.3
+│   │   └── tauri-build v2.6.3 (*)
+│   ├── chrono v0.4.44
+│   │   ├── arrow-arith v58.4.0 (*)
+│   │   ├── arrow-array v58.4.0 (*)
+│   │   ├── arrow-cast v58.4.0 (*)
+│   │   ├── arrow-csv v58.4.0 (*)
+│   │   ├── arrow-json v58.4.0 (*)
+│   │   ├── chrono-tz v0.10.4 (*)
+│   │   ├── datafusion v53.1.0 (*)
+│   │   ├── datafusion-common v53.1.0 (*)
+│   │   ├── datafusion-datasource v53.1.0 (*)
+│   │   ├── datafusion-execution v53.1.0 (*)
+│   │   ├── datafusion-expr v53.1.0 (*)
+│   │   ├── datafusion-functions v53.1.0 (*)
+│   │   ├── datafusion-optimizer v53.1.0 (*)
+│   │   ├── datafusion-physical-expr-common v53.1.0 (*)
+│   │   ├── datafusion-sql v53.1.0 (*)
+│   │   ├── lance v7.0.0 (*)
+│   │   ├── lance-datafusion v7.0.0 (*)
+│   │   ├── lance-datagen v7.0.0 (*)
+│   │   ├── lance-index v7.0.0 (*)
+│   │   ├── lance-io v7.0.0 (*)
+│   │   ├── lance-table v7.0.0 (*)
+│   │   ├── lancedb v0.30.0 (*)
+│   │   └── object_store v0.13.2 (*)
 │   ├── cranelift-bitset v0.116.1
 │   │   ├── cranelift-codegen v0.116.1 (*)
 │   │   ├── cranelift-entity v0.116.1
@@ -772,25 +1473,46 @@ serde_core v1.0.228
 │   │   └── wasmtime-environ v29.0.0 (*)
 │   ├── cranelift-entity v0.116.1 (*)
 │   ├── fxprof-processed-profile v0.6.0 (*)
+│   ├── hyperloglogplus v0.4.1
+│   │   └── lance-encoding v7.0.0 (*)
 │   ├── indexmap v1.9.3 (*)
 │   ├── json-patch v3.0.1 (*)
+│   ├── jsonb v0.5.6 (*)
 │   ├── jsonptr v0.6.3 (*)
+│   ├── jsonrepair v0.1.0
+│   │   └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   ├── jsonwebtoken v10.4.0 (*)
+│   ├── lance v7.0.0 (*)
+│   ├── lance-index v7.0.0 (*)
+│   ├── lance-io v7.0.0 (*)
+│   ├── lance-namespace-reqwest-client v0.7.7 (*)
+│   ├── lance-table v7.0.0 (*)
+│   ├── lance-tokenizer v7.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   ├── lindera v3.0.7 (*)
+│   ├── lindera-dictionary v3.0.7 (*)
 │   ├── oxc_index v4.1.0
 │   │   └── oxc_syntax v0.120.0 (*)
+│   ├── path_abs v0.5.1
+│   │   └── lance-io v7.0.0 (*)
 │   ├── plist v1.9.0 (*)
 │   ├── postcard v1.1.3
 │   │   ├── wasmtime v29.0.0 (*)
 │   │   ├── wasmtime-cache v29.0.0 (*)
 │   │   └── wasmtime-environ v29.0.0 (*)
 │   ├── reqwest v0.12.28 (*)
+│   ├── rust-stemmers v1.2.0
+│   │   └── lance-tokenizer v7.0.0 (*)
 │   ├── schemars v0.8.22 (*)
 │   ├── serde_spanned v0.6.9
 │   │   ├── toml v0.8.23 (*)
 │   │   └── toml_edit v0.22.27 (*)
 │   ├── serde_urlencoded v0.7.1 (*)
+│   ├── serde_yaml_ng v0.10.0 (*)
 │   ├── smallvec v1.15.2
 │   │   ├── cap-net-ext v3.4.5 (*)
+│   │   ├── cedarwood v0.4.6
+│   │   │   └── jieba-rs v0.9.0 (*)
 │   │   ├── cranelift-codegen v0.116.1 (*)
 │   │   ├── cranelift-frontend v0.116.1 (*)
 │   │   ├── gix v0.84.0 (*)
@@ -811,10 +1533,20 @@ serde_core v1.0.228
 │   │   │           ├── url v2.5.8 (*)
 │   │   │           └── url v2.5.8 (*)
 │   │   ├── idna v1.1.0 (*)
+│   │   ├── lance-index v7.0.0 (*)
+│   │   ├── moka v0.12.15 (*)
 │   │   ├── num-bigint-dig v0.8.6 (*)
 │   │   ├── parking_lot_core v0.9.12
 │   │   │   ├── dashmap v6.2.1 (*)
 │   │   │   └── parking_lot v0.12.5
+│   │   │       ├── datafusion v53.1.0 (*)
+│   │   │       ├── datafusion-catalog v53.1.0 (*)
+│   │   │       ├── datafusion-execution v53.1.0 (*)
+│   │   │       ├── datafusion-functions-table v53.1.0 (*)
+│   │   │       ├── datafusion-physical-expr v53.1.0 (*)
+│   │   │       ├── datafusion-physical-expr-common v53.1.0 (*)
+│   │   │       ├── datafusion-physical-plan v53.1.0 (*)
+│   │   │       ├── datafusion-session v53.1.0 (*)
 │   │   │       ├── gix v0.84.0 (*)
 │   │   │       ├── gix-features v0.48.1 (*)
 │   │   │       ├── gix-hashtable v0.15.2 (*)
@@ -822,24 +1554,58 @@ serde_core v1.0.228
 │   │   │       ├── gix-pack v0.71.0 (*)
 │   │   │       ├── gix-tempfile v23.0.2 (*)
 │   │   │       ├── gix-worktree-stream v0.33.0 (*)
+│   │   │       ├── moka v0.12.15 (*)
+│   │   │       ├── object_store v0.13.2 (*)
 │   │   │       ├── prodash v31.0.0
 │   │   │       │   └── gix-features v0.48.1 (*)
-│   │   │       ├── string_cache v0.9.0
-│   │   │       │   └── web_atoms v0.2.5 (*)
+│   │   │       ├── string_cache v0.9.0 (*)
 │   │   │       ├── tokio v1.51.1
+│   │   │       │   ├── async-compression v0.4.43
+│   │   │       │   │   └── tower-http v0.6.11 (*)
+│   │   │       │   ├── datafusion v53.1.0 (*)
+│   │   │       │   ├── datafusion-catalog v53.1.0 (*)
+│   │   │       │   ├── datafusion-common v53.1.0 (*)
+│   │   │       │   ├── datafusion-common-runtime v53.1.0 (*)
+│   │   │       │   ├── datafusion-datasource v53.1.0 (*)
+│   │   │       │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   │   │       │   ├── datafusion-datasource-csv v53.1.0 (*)
+│   │   │       │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   │       │   ├── datafusion-physical-expr v53.1.0 (*)
+│   │   │       │   ├── datafusion-physical-plan v53.1.0 (*)
 │   │   │       │   ├── h2 v0.4.15 (*)
 │   │   │       │   ├── hyper v1.10.1 (*)
 │   │   │       │   ├── hyper-rustls v0.27.9 (*)
 │   │   │       │   ├── hyper-util v0.1.20 (*)
+│   │   │       │   ├── lance v7.0.0 (*)
+│   │   │       │   ├── lance-core v7.0.0 (*)
+│   │   │       │   ├── lance-datafusion v7.0.0 (*)
+│   │   │       │   ├── lance-encoding v7.0.0 (*)
+│   │   │       │   ├── lance-file v7.0.0 (*)
+│   │   │       │   ├── lance-index v7.0.0 (*)
+│   │   │       │   ├── lance-io v7.0.0 (*)
+│   │   │       │   ├── lance-namespace-impls v7.0.0 (*)
+│   │   │       │   ├── lance-table v7.0.0 (*)
+│   │   │       │   ├── lancedb v0.30.0 (*)
 │   │   │       │   ├── mockito v1.7.2 (*)
+│   │   │       │   ├── object_store v0.13.2 (*)
 │   │   │       │   ├── reqwest v0.12.28 (*)
 │   │   │       │   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
 │   │   │       │   ├── tokio-rustls v0.26.4 (*)
+│   │   │       │   ├── tokio-stream v0.1.19
+│   │   │       │   │   ├── datafusion-datasource-json v53.1.0 (*)
+│   │   │       │   │   ├── lance v7.0.0 (*)
+│   │   │       │   │   └── lance-core v7.0.0 (*)
 │   │   │       │   ├── tokio-util v0.7.18
-│   │   │       │   │   └── h2 v0.4.15 (*)
+│   │   │       │   │   ├── h2 v0.4.15 (*)
+│   │   │       │   │   ├── lance v7.0.0 (*)
+│   │   │       │   │   ├── lance-core v7.0.0 (*)
+│   │   │       │   │   ├── reqwest v0.12.28 (*)
+│   │   │       │   │   ├── tokio-stream v0.1.19 (*)
+│   │   │       │   │   └── tower-http v0.6.11 (*)
 │   │   │       │   ├── tower v0.5.3
 │   │   │       │   │   ├── reqwest v0.12.28 (*)
 │   │   │       │   │   └── tower-http v0.6.11 (*)
+│   │   │       │   ├── tower-http v0.6.11 (*)
 │   │   │       │   └── wasmtime-wasi v29.0.0 (*)
 │   │   │       └── windows-projfs v0.1.8 (*)
 │   │   ├── regalloc2 v0.11.2 (*)
@@ -863,14 +1629,80 @@ serde_core v1.0.228
 │   ├── wasmtime-cache v29.0.0 (*)
 │   ├── wasmtime-environ v29.0.0 (*)
 │   └── wit-parser v0.221.3 (*)
-└── serde_json v1.0.149
-    ├── assert-json-diff v2.0.2 (*)
-    ├── fxprof-processed-profile v0.6.0 (*)
-    ├── jsonwebtoken v10.4.0 (*)
-    ├── mockito v1.7.2 (*)
-    ├── reqwest v0.12.28 (*)
-    ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-    └── wasmtime v29.0.0 (*)
+├── serde_json v1.0.149
+│   ├── arrow-json v58.4.0 (*)
+│   ├── arrow-schema v58.4.0 (*)
+│   ├── assert-json-diff v2.0.2 (*)
+│   ├── datafusion-datasource-json v53.1.0 (*)
+│   ├── datafusion-expr v53.1.0 (*)
+│   ├── fxprof-processed-profile v0.6.0 (*)
+│   ├── jsonb v0.5.6 (*)
+│   ├── jsonrepair v0.1.0 (*)
+│   ├── jsonwebtoken v10.4.0 (*)
+│   ├── lance v7.0.0 (*)
+│   ├── lance-core v7.0.0 (*)
+│   ├── lance-index v7.0.0 (*)
+│   ├── lance-namespace-impls v7.0.0 (*)
+│   ├── lance-namespace-reqwest-client v0.7.7 (*)
+│   ├── lance-table v7.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   ├── lindera v3.0.7 (*)
+│   ├── lindera-dictionary v3.0.7 (*)
+│   ├── mockito v1.7.2 (*)
+│   ├── reqwest v0.12.28 (*)
+│   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│   └── wasmtime v29.0.0 (*)
+├── serde_with v3.21.0 (*)
+└── uuid v1.23.4 (*)
+
+serde_core v1.0.228
+├── camino v1.2.4
+│   └── cargo_metadata v0.19.2 (*)
+├── erased-serde v0.4.10
+│   └── serde-untagged v0.1.9
+│       └── tauri-utils v2.9.3 (*)
+├── semver v1.0.28
+│   ├── cargo_metadata v0.19.2 (*)
+│   ├── lance v7.0.0 (*)
+│   ├── lance-table v7.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   ├── rustc_version v0.4.1
+│   │   └── embed-resource v3.0.11 (*)
+│   │   [build-dependencies]
+│   │   ├── curve25519-dalek v4.1.3 (*)
+│   │   ├── derive_more-impl v2.1.1 (proc-macro)
+│   │   │   └── derive_more v2.1.1
+│   │   │       └── selectors v0.36.1 (*)
+│   │   └── flatbuffers v25.12.19 (*)
+│   ├── tauri-build v2.6.3 (*)
+│   ├── tauri-utils v2.9.3 (*)
+│   ├── wasmparser v0.221.3 (*)
+│   ├── wasmparser v0.221.3 (*)
+│   ├── wasmtime v29.0.0 (*)
+│   ├── wasmtime-environ v29.0.0 (*)
+│   └── wit-parser v0.221.3 (*)
+├── serde-untagged v0.1.9 (*)
+├── serde_json v1.0.149 (*)
+├── serde_spanned v1.1.1
+│   ├── toml v0.9.12+spec-1.1.0
+│   │   └── cargo_toml v0.22.3 (*)
+│   └── toml v1.1.4+spec-1.1.0
+│       ├── embed-resource v3.0.11 (*)
+│       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│       ├── tauri-utils v2.9.3 (*)
+│       └── tauri-winres v0.3.6 (*)
+├── toml v0.9.12+spec-1.1.0 (*)
+├── toml v1.1.4+spec-1.1.0 (*)
+├── toml_datetime v0.7.5+spec-1.1.0
+│   └── toml v0.9.12+spec-1.1.0 (*)
+├── toml_datetime v1.1.1+spec-1.1.0
+│   └── toml v1.1.4+spec-1.1.0 (*)
+└── uuid v1.23.4
+    ├── cfb v0.7.3
+    │   └── infer v0.19.0
+    │       └── tauri-utils v2.9.3 (*)
+    ├── schemars v0.8.22 (*)
+    └── tauri-utils v2.9.3 (*)
 
 serde_json v1.0.149 (*)
 
@@ -885,6 +1717,25 @@ smallvec v1.15.2
 └── selectors v0.36.1 (*)
 
 smallvec v1.15.2 (*)
+
+snafu v0.8.9
+└── lancedb v0.30.0 (*)
+
+snafu v0.9.2
+├── lance v7.0.0 (*)
+├── lance-core v7.0.0 (*)
+├── lance-namespace v7.0.0 (*)
+└── lance-table v7.0.0 (*)
+
+snafu-derive v0.8.9 (proc-macro)
+└── snafu v0.8.9 (*)
+
+snafu-derive v0.9.2 (proc-macro)
+└── snafu v0.9.2 (*)
+
+sqlparser v0.61.0 (*)
+
+sqlparser v0.62.0 (*)
 
 stable_deref_trait v1.2.1
 ├── heapless v0.8.0
@@ -921,8 +1772,62 @@ stable_deref_trait v1.2.1
 └── servo_arc v0.4.3
     └── selectors v0.36.1 (*)
 
+strum v0.26.3
+└── lance-encoding v7.0.0 (*)
+
+strum v0.28.0
+├── lindera v3.0.7 (*)
+└── lindera-dictionary v3.0.7 (*)
+
+strum_macros v0.26.4 (proc-macro)
+└── strum v0.26.3 (*)
+
+strum_macros v0.28.0 (proc-macro)
+├── lindera v3.0.7 (*)
+├── lindera-dictionary v3.0.7 (*)
+└── strum v0.28.0 (*)
+
+syn v1.0.109
+└── deepsize_derive v0.1.2 (proc-macro)
+    └── deepsize v0.2.0
+        ├── lance v7.0.0 (*)
+        ├── lance-core v7.0.0 (*)
+        ├── lance-file v7.0.0 (*)
+        ├── lance-index v7.0.0 (*)
+        ├── lance-io v7.0.0 (*)
+        ├── lance-linalg v7.0.0 (*)
+        └── lance-table v7.0.0 (*)
+
 syn v2.0.118
+├── async-recursion v1.1.1 (proc-macro)
+│   ├── lance v7.0.0 (*)
+│   ├── lance-file v7.0.0 (*)
+│   ├── lance-index v7.0.0 (*)
+│   └── lance-io v7.0.0 (*)
 ├── async-trait v0.1.89 (proc-macro)
+│   ├── datafusion v53.1.0 (*)
+│   ├── datafusion-catalog v53.1.0 (*)
+│   ├── datafusion-catalog-listing v53.1.0 (*)
+│   ├── datafusion-datasource v53.1.0 (*)
+│   ├── datafusion-datasource-arrow v53.1.0 (*)
+│   ├── datafusion-datasource-csv v53.1.0 (*)
+│   ├── datafusion-datasource-json v53.1.0 (*)
+│   ├── datafusion-execution v53.1.0 (*)
+│   ├── datafusion-expr v53.1.0 (*)
+│   ├── datafusion-functions-table v53.1.0 (*)
+│   ├── datafusion-physical-plan v53.1.0 (*)
+│   ├── datafusion-session v53.1.0 (*)
+│   ├── lance v7.0.0 (*)
+│   ├── lance-core v7.0.0 (*)
+│   ├── lance-datafusion v7.0.0 (*)
+│   ├── lance-file v7.0.0 (*)
+│   ├── lance-index v7.0.0 (*)
+│   ├── lance-io v7.0.0 (*)
+│   ├── lance-namespace v7.0.0 (*)
+│   ├── lance-namespace-impls v7.0.0 (*)
+│   ├── lance-table v7.0.0 (*)
+│   ├── lancedb v0.30.0 (*)
+│   ├── object_store v0.13.2 (*)
 │   ├── wasmtime v29.0.0 (*)
 │   ├── wasmtime-wasi v29.0.0 (*)
 │   └── wiggle v29.0.0 (*)
@@ -934,6 +1839,13 @@ syn v2.0.118
 ├── darling_core v0.23.0 (*)
 ├── darling_macro v0.20.11 (proc-macro) (*)
 ├── darling_macro v0.23.0 (proc-macro) (*)
+├── datafusion-macros v53.1.0 (proc-macro)
+│   ├── datafusion-functions v53.1.0 (*)
+│   ├── datafusion-functions-aggregate v53.1.0 (*)
+│   ├── datafusion-functions-nested v53.1.0 (*)
+│   └── datafusion-functions-window v53.1.0 (*)
+├── derive_builder_core v0.20.2 (*)
+├── derive_builder_macro v0.20.2 (proc-macro) (*)
 ├── derive_more-impl v2.1.1 (proc-macro) (*)
 ├── displaydoc v0.2.6 (proc-macro)
 │   ├── icu_collections v2.2.0 (*)
@@ -941,14 +1853,63 @@ syn v2.0.118
 │   ├── icu_provider v2.2.0 (*)
 │   ├── tinystr v0.8.3 (*)
 │   └── zerotrie v0.2.4 (*)
+├── futures-macro v0.3.31 (proc-macro)
+│   └── futures-util v0.3.31
+│       ├── futures v0.3.31
+│       │   ├── datafusion v53.1.0 (*)
+│       │   ├── datafusion-catalog v53.1.0 (*)
+│       │   ├── datafusion-catalog-listing v53.1.0 (*)
+│       │   ├── datafusion-common-runtime v53.1.0 (*)
+│       │   ├── datafusion-datasource v53.1.0 (*)
+│       │   ├── datafusion-datasource-arrow v53.1.0 (*)
+│       │   ├── datafusion-datasource-csv v53.1.0 (*)
+│       │   ├── datafusion-datasource-json v53.1.0 (*)
+│       │   ├── datafusion-execution v53.1.0 (*)
+│       │   ├── datafusion-physical-plan v53.1.0 (*)
+│       │   ├── lance v7.0.0 (*)
+│       │   ├── lance-arrow v7.0.0 (*)
+│       │   ├── lance-core v7.0.0 (*)
+│       │   ├── lance-datafusion v7.0.0 (*)
+│       │   ├── lance-datagen v7.0.0 (*)
+│       │   ├── lance-encoding v7.0.0 (*)
+│       │   ├── lance-file v7.0.0 (*)
+│       │   ├── lance-index v7.0.0 (*)
+│       │   ├── lance-io v7.0.0 (*)
+│       │   ├── lance-namespace-impls v7.0.0 (*)
+│       │   ├── lance-table v7.0.0 (*)
+│       │   ├── lancedb v0.30.0 (*)
+│       │   └── wasmtime-wasi v29.0.0 (*)
+│       ├── futures-executor v0.3.31
+│       │   └── futures v0.3.31 (*)
+│       ├── hyper-util v0.1.20 (*)
+│       ├── moka v0.12.15 (*)
+│       ├── object_store v0.13.2 (*)
+│       ├── reqwest v0.12.28 (*)
+│       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+│       ├── tower v0.5.3 (*)
+│       └── tower-http v0.6.11 (*)
 ├── maybe-async v0.2.11 (proc-macro)
 │   └── gix-protocol v0.62.0 (*)
+├── munge_macro v0.4.7 (proc-macro)
+│   └── munge v0.4.7
+│       └── rkyv v0.8.18 (*)
 ├── oxc-miette-derive v2.7.1 (proc-macro)
 │   └── oxc-miette v2.7.1
 │       ├── oxc_diagnostics v0.120.0 (*)
 │       └── oxc_span v0.120.0 (*)
 ├── oxc_ast_macros v0.120.0 (proc-macro) (*)
 ├── phf_macros v0.13.1 (proc-macro) (*)
+├── pin-project-internal v1.1.13 (proc-macro)
+│   └── pin-project v1.1.13
+│       ├── lance v7.0.0 (*)
+│       ├── lance-core v7.0.0 (*)
+│       ├── lance-datafusion v7.0.0 (*)
+│       ├── lance-io v7.0.0 (*)
+│       └── lancedb v0.30.0 (*)
+├── prettyplease v0.2.37
+│   └── prost-build v0.14.4 (*)
+├── prost-build v0.14.4 (*)
+├── prost-derive v0.14.4 (proc-macro) (*)
 ├── recursive-proc-macro-impl v0.1.1 (proc-macro)
 │   └── recursive v0.1.1 (*)
 ├── schemars_derive v0.8.22 (proc-macro)
@@ -956,6 +1917,8 @@ syn v2.0.118
 ├── serde_derive v1.0.228 (proc-macro)
 │   ├── cranelift-bitset v0.116.1 (*)
 │   ├── cranelift-entity v0.116.1 (*)
+│   ├── path_abs v0.5.1 (*)
+│   ├── rust-stemmers v1.2.0 (*)
 │   ├── serde v1.0.228 (*)
 │   ├── url v2.5.8 (*)
 │   ├── wasmtime v29.0.0 (*)
@@ -964,7 +1927,15 @@ syn v2.0.118
 │   └── wit-parser v0.221.3 (*)
 ├── serde_derive_internals v0.29.1
 │   └── schemars_derive v0.8.22 (proc-macro) (*)
+├── serde_repr v0.1.20 (proc-macro)
+│   └── lance-namespace-reqwest-client v0.7.7 (*)
 ├── serde_with_macros v3.21.0 (proc-macro) (*)
+├── snafu-derive v0.8.9 (proc-macro) (*)
+├── snafu-derive v0.9.2 (proc-macro) (*)
+├── sqlparser_derive v0.5.0 (proc-macro)
+│   └── sqlparser v0.61.0 (*)
+├── strum_macros v0.26.4 (proc-macro) (*)
+├── strum_macros v0.28.0 (proc-macro) (*)
 ├── synstructure v0.13.2
 │   ├── yoke-derive v0.8.2 (proc-macro)
 │   │   └── yoke v0.8.3 (*)
@@ -986,13 +1957,7 @@ syn v2.0.118
 ├── tokio-macros v2.7.0 (proc-macro)
 │   └── tokio v1.51.1 (*)
 ├── tracing-attributes v0.1.31 (proc-macro)
-│   └── tracing v0.1.44
-│       ├── h2 v0.4.15 (*)
-│       ├── hyper-util v0.1.20 (*)
-│       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-│       ├── tracing-subscriber v0.3.23 (*)
-│       ├── wasmtime-wasi v29.0.0 (*)
-│       └── wiggle v29.0.0 (*)
+│   └── tracing v0.1.44 (*)
 ├── trait-variant v0.1.3 (proc-macro)
 │   ├── wasmtime v29.0.0 (*)
 │   └── wasmtime-wasi v29.0.0 (*)
@@ -1023,6 +1988,51 @@ syn v2.0.118
 │   └── windows-core v0.62.2 (*)
 ├── wrapcenum-derive v0.4.1 (proc-macro) (*)
 ├── yoke-derive v0.8.2 (proc-macro) (*)
+├── zerocopy-derive v0.8.52 (proc-macro)
+│   └── zerocopy v0.8.52
+│       ├── ahash v0.8.12 (*)
+│       ├── half v2.7.1
+│       │   ├── arrow-array v58.4.0 (*)
+│       │   ├── arrow-buffer v58.4.0
+│       │   │   ├── arrow v58.4.0 (*)
+│       │   │   ├── arrow-arith v58.4.0 (*)
+│       │   │   ├── arrow-array v58.4.0 (*)
+│       │   │   ├── arrow-cast v58.4.0 (*)
+│       │   │   ├── arrow-data v58.4.0 (*)
+│       │   │   ├── arrow-ipc v58.4.0 (*)
+│       │   │   ├── arrow-json v58.4.0 (*)
+│       │   │   ├── arrow-ord v58.4.0 (*)
+│       │   │   ├── arrow-row v58.4.0 (*)
+│       │   │   ├── arrow-select v58.4.0 (*)
+│       │   │   ├── arrow-string v58.4.0 (*)
+│       │   │   ├── datafusion-execution v53.1.0 (*)
+│       │   │   ├── datafusion-functions v53.1.0 (*)
+│       │   │   ├── lance v7.0.0 (*)
+│       │   │   ├── lance-arrow v7.0.0 (*)
+│       │   │   ├── lance-core v7.0.0 (*)
+│       │   │   ├── lance-datafusion v7.0.0 (*)
+│       │   │   ├── lance-encoding v7.0.0 (*)
+│       │   │   ├── lance-file v7.0.0 (*)
+│       │   │   ├── lance-io v7.0.0 (*)
+│       │   │   ├── lance-linalg v7.0.0 (*)
+│       │   │   └── lance-table v7.0.0 (*)
+│       │   ├── arrow-cast v58.4.0 (*)
+│       │   ├── arrow-data v58.4.0 (*)
+│       │   ├── arrow-json v58.4.0 (*)
+│       │   ├── arrow-row v58.4.0 (*)
+│       │   ├── datafusion-common v53.1.0 (*)
+│       │   ├── datafusion-functions-aggregate v53.1.0 (*)
+│       │   ├── datafusion-physical-expr v53.1.0 (*)
+│       │   ├── datafusion-physical-plan v53.1.0 (*)
+│       │   ├── lance v7.0.0 (*)
+│       │   ├── lance-arrow v7.0.0 (*)
+│       │   ├── lance-datagen v7.0.0 (*)
+│       │   ├── lance-index v7.0.0 (*)
+│       │   ├── lance-linalg v7.0.0 (*)
+│       │   └── lancedb v0.30.0 (*)
+│       └── ppv-lite86 v0.2.21
+│           ├── rand_chacha v0.3.1 (*)
+│           └── rand_chacha v0.9.0 (*)
 ├── zerofrom-derive v0.1.7 (proc-macro) (*)
 ├── zeroize_derive v1.5.0 (proc-macro)
 │   └── zeroize v1.9.0
@@ -1050,6 +2060,8 @@ syn v2.0.118
 │       ├── generic-array v0.14.9
 │       │   ├── block-buffer v0.10.4
 │       │   │   └── digest v0.10.7
+│       │   │       ├── blake2 v0.10.6
+│       │   │       │   └── datafusion-functions v53.1.0 (*)
 │       │   │       ├── curve25519-dalek v4.1.3 (*)
 │       │   │       ├── ecdsa v0.16.9 (*)
 │       │   │       ├── elliptic-curve v0.13.8 (*)
@@ -1059,18 +2071,12 @@ syn v2.0.118
 │       │   │       │   ├── jsonwebtoken v10.4.0 (*)
 │       │   │       │   └── rfc6979 v0.4.0
 │       │   │       │       └── ecdsa v0.16.9 (*)
+│       │   │       ├── md-5 v0.10.6
+│       │   │       │   └── datafusion-functions v53.1.0 (*)
 │       │   │       ├── rsa v0.9.10 (*)
-│       │   │       ├── sha1 v0.10.6
-│       │   │       │   └── sha1-checked v0.10.0
-│       │   │       │       └── gix-hash v0.25.1 (*)
+│       │   │       ├── sha1 v0.10.6 (*)
 │       │   │       ├── sha1-checked v0.10.0 (*)
-│       │   │       ├── sha2 v0.10.9
-│       │   │       │   ├── ed25519-dalek v2.2.0 (*)
-│       │   │       │   ├── jsonwebtoken v10.4.0 (*)
-│       │   │       │   ├── p256 v0.13.2 (*)
-│       │   │       │   ├── p384 v0.13.1 (*)
-│       │   │       │   ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
-│       │   │       │   └── wasmtime-cache v29.0.0 (*)
+│       │   │       ├── sha2 v0.10.9 (*)
 │       │   │       └── signature v2.2.0 (*)
 │       │   ├── crypto-bigint v0.5.5 (*)
 │       │   ├── crypto-common v0.1.6
@@ -1084,6 +2090,9 @@ syn v2.0.118
 │       ├── rustls-pki-types v1.15.0
 │       │   ├── reqwest v0.12.28 (*)
 │       │   ├── rustls v0.23.41 (*)
+│       │   ├── rustls-native-certs v0.8.4
+│       │   │   ├── hyper-rustls v0.27.9 (*)
+│       │   │   └── reqwest v0.12.28 (*)
 │       │   ├── rustls-webpki v0.103.13 (*)
 │       │   └── webpki-roots v1.0.8
 │       │       ├── hyper-rustls v0.27.9 (*)
@@ -1093,6 +2102,20 @@ syn v2.0.118
     └── zerovec v0.11.6 (*)
 
 syn v3.0.3
+├── bytecheck_derive v0.8.3 (proc-macro)
+│   └── bytecheck v0.8.3
+│       ├── rend v0.5.4
+│       │   └── rkyv v0.8.18 (*)
+│       └── rkyv v0.8.18 (*)
+├── ptr_meta_derive v0.3.2 (proc-macro)
+│   └── ptr_meta v0.3.2
+│       ├── bytecheck v0.8.3 (*)
+│       ├── rancor v0.1.3
+│       │   ├── bytecheck v0.8.3 (*)
+│       │   └── rkyv v0.8.18 (*)
+│       └── rkyv v0.8.18 (*)
+├── rkyv_derive v0.8.18 (proc-macro)
+│   └── rkyv v0.8.18 (*)
 └── thiserror-impl v2.0.19 (proc-macro)
     └── thiserror v2.0.19
         ├── cargo_metadata v0.19.2 (*)
@@ -1120,7 +2143,13 @@ syn v3.0.3
         ├── gix-path v0.12.1
         │   ├── gix v0.84.0 (*)
         │   ├── gix-attributes v0.33.2 (*)
-        │   ├── gix-command v0.9.1 (*)
+        │   ├── gix-command v0.9.1
+        │   │   ├── gix v0.84.0 (*)
+        │   │   ├── gix-credentials v0.38.1 (*)
+        │   │   ├── gix-diff v0.64.0 (*)
+        │   │   ├── gix-filter v0.31.0 (*)
+        │   │   ├── gix-prompt v0.15.1 (*)
+        │   │   └── gix-transport v0.57.2 (*)
         │   ├── gix-config v0.57.0 (*)
         │   ├── gix-config-value v0.18.1 (*)
         │   ├── gix-credentials v0.38.1 (*)
@@ -1156,12 +2185,19 @@ syn v3.0.3
         ├── gix-traverse v0.58.0 (*)
         ├── gix-url v0.36.1 (*)
         ├── gix-worktree-state v0.31.0 (*)
+        ├── jsonrepair v0.1.0 (*)
+        ├── lindera-dictionary v3.0.7 (*)
+        ├── object_store v0.13.2 (*)
         ├── oxc-miette v2.7.1 (*)
         ├── simple_asn1 v0.6.4
         │   └── jsonwebtoken v10.4.0 (*)
         ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
         ├── tauri-utils v2.9.3 (*)
         └── windows-projfs v0.1.8 (*)
+
+tempfile v3.27.0 (*)
+
+tempfile v3.27.0 (*)
 
 thiserror v1.0.69 (*)
 
@@ -1222,8 +2258,7 @@ winapi v0.3.9
 ├── io-close v0.3.7
 │   └── gix-worktree-state v0.31.0 (*)
 └── ntapi v0.4.3
-    └── sysinfo v0.30.13
-        └── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
+    └── sysinfo v0.30.13 (*)
 
 winapi v0.3.9
 └── dirs-sys v0.3.7 (*)
@@ -1271,6 +2306,7 @@ windows-sys v0.59.0
 windows-sys v0.61.2
 ├── colored v3.1.1
 │   └── mockito v1.7.2 (*)
+├── dirs-sys v0.5.0 (*)
 ├── errno v0.3.14
 │   ├── rustix v0.38.44 (*)
 │   ├── rustix v1.1.4 (*)
@@ -1288,6 +2324,8 @@ windows-sys v0.61.2
 ├── nu-ansi-term v0.50.3
 │   └── tracing-subscriber v0.3.23 (*)
 ├── rustix v1.1.4 (*)
+├── schannel v0.1.29
+│   └── rustls-native-certs v0.8.4 (*)
 ├── socket2 v0.6.4
 │   ├── hyper-util v0.1.20 (*)
 │   └── tokio v1.51.1 (*)
@@ -1302,6 +2340,7 @@ windows-sys v0.61.2
     │   └── walkdir v2.5.0
     │       ├── gix-features v0.48.1 (*)
     │       ├── ignore v0.4.25 (*)
+    │       ├── object_store v0.13.2 (*)
     │       ├── souls_mc v0.1.0 (Z:\souls_mc\src-tauri)
     │       ├── tauri-build v2.6.3 (*)
     │       └── tauri-utils v2.9.3 (*)
@@ -1310,7 +2349,7 @@ windows-sys v0.61.2
     └── walkdir v2.5.0 (*)
 
 windows-sys v0.61.2
-└── dirs-sys v0.5.0 (*)
+└── tempfile v3.27.0 (*)
 
 windows_x86_64_msvc v0.42.2
 └── windows-sys v0.42.0 (*)

@@ -1,5 +1,5 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
-GERADO EM: 2026-08-06 20:08:04
+GERADO EM: 2026-08-07 03:11:28
 TOTAL DE FERRAMENTAS: 48
 ----------------------------------------------------------------------------------------------------
 • analyze_session: Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.
@@ -18,7 +18,7 @@ TOTAL DE FERRAMENTAS: 48
 • handoff: Registra a transferência de contexto (handoff) entre subagentes no banco de estado L2 (souls_state.db).
 • headroom_retrieve: Recupera stub comprimido via CCR (intercept_loopback). Hash hex 16B/32ch. SSE Tokio < 1ms.
 • heatmap: Mapeia dinamicamente os caminhos quentes de acesso a arquivos locais na RAM Host usando Langevin decay.
-• intent: [Stub] Detector de intent do tool call (read/edit/search) em roadmap. Aliases: intent | souls_intent | ctx_intent.
+• intent: Avalia a ambiguidade, risco relacional e consistência de memória de um prompt antes do disparo de inferência.
 • knowledge: Armazena ou atualiza uma entrada de conhecimento no banco de estado L2 (souls_state.db).
 • mem_add_observations: Anexa observações a entidades existentes. Triggers FTS5 mantêm observations_fts em sincronia.
 • mem_create_entities: Cria entidades no grafo cognitivo (souls_graph). Idempotente (INSERT OR IGNORE). Persistencia MPSC.
@@ -39,7 +39,7 @@ TOTAL DE FERRAMENTAS: 48
 • repo_meta: Extrai metadados GitHub via octocrab para owner/repo. Aliases: repo_meta | souls_repo_meta.
 • routes: Mapeia os contratos de endpoints ativos e a reatividade de comunicacao entre Tauri Rust e Svelte 5.
 • search: Busca textual compacta via regex com formatação LEAN agrupada por arquivo. (souls_search)
-• semantic_search: Busca semântica local no LanceDB usando similaridade de cosseno e mmap de baixa latência na RAM.
+• semantic_search: Busca híbrida local (FTS5 + LanceDB) usando fusão RRF de baixa latência na RAM.
 • session: Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).
 • shell: Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.
 • smart_read: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)

@@ -29,6 +29,7 @@ httparse = "=1.10.1"
 jsonwebtoken = { version = "=10.4.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 regex = "=1.12.4"
 pulldown-cmark = "=0.13.4"
+jsonrepair = "=0.1.0"  # SOULS-CANIBALIZED Marco 4.9.2: parser recursivo estrutural para cura de JSON malformado (sem `.replace` cego que corromperia strings literais; ADR-030 Módulo 4 pin rígido)
 # SOULS-CANIBALIZED Fase 3: lean-ctx EXPURO do Cargo.toml.
 # Canibalização Tipo A: extraímos a "Alma Matemática" (dot-flattening, ANSI filter,
 # Myers diff) como código NATIVO em src-tauri/src/cognition/lean_vacuum/.
@@ -51,7 +52,15 @@ gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mu
 quick-xml = "=0.39.4"
 reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
 rusqlite = { version = "=0.39.0", features = ["bundled"] }  # SOULS-CANIBALIZED Fase 2.5: downgrade 0.40.1→0.39.0 (libsqlite3-sys 0.37.0, sem cfg_select! unstable em rustc 1.94.1)
+lancedb = { version = "0.30.0", default-features = false }
+arrow-array = "=58.4.0"
+arrow-schema = "=58.4.0"
+arrow-row = "=58.4.0"
+arrow-cast = "=58.4.0"
+
+futures-util = "=0.3.31"
 sqlparser = "=0.62.0"
+
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 tempfile = "=3.27.0"
 dotenvy = "=0.15.7"
@@ -110,6 +119,10 @@ tauri-app = ["dep:tauri", "dep:tauri-plugin-opener"]
 llama_backend = ["dep:llama-cpp-2", "llama-cpp-2/cuda", "dep:llguidance"]
 mistral_backend = ["dep:mistralrs"]
 grammar_backend = ["dep:llguidance"]
+# Marco 4.10.1 — ETAPA 5: gateway_ccr é um marker feature que gateia o
+# binário `agentgateway_tcp_proxy` (o único que depende do compressor
+# CCR + L7 Shield). A lib (souls_mc_lib) mantém a CCR API sempre
+# disponível, mas o proxy só compila com a flag ON.
 gateway_ccr = []
 
 [[bin]]
@@ -125,6 +138,19 @@ path = "src/bin/souls_mcp_server.rs"
 name = "souls_vanguard_worker"
 path = "src/bin/souls_vanguard_worker.rs"
 required-features = ["llama_backend"]
+
+# Marco 4.10.1 — ETAPA 5: binários CCR-gated. O proxy L7 + o stdio guard
+# só compilam com a feature `gateway_ccr` (não inflando binários de
+# produção que não precisam do compressor).
+[[bin]]
+name = "agentgateway_tcp_proxy"
+path = "src/bin/agentgateway_tcp_proxy.rs"
+required-features = ["gateway_ccr"]
+
+[[bin]]
+name = "mcp_stdio_guard"
+path = "src/bin/mcp_stdio_guard.rs"
+required-features = ["gateway_ccr"]
 
 # ---------- PROFILES (fix/cargo-finops-v1) ----------
 # Dev/test já estão definidos abaixo. Aqui entramos com [profile.release]:

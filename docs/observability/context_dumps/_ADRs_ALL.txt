@@ -1,8 +1,8 @@
-_ADRs_ALL Gerado em: 2026-08-05 17:05:42
+_ADRs_ALL Gerado em: 2026-08-07 03:11:28
 
 ### ====================================================================================================
 ARQUIVO: ADR-001-Core-Stack-Restrita.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-001-Core-Stack-Restrita.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-001-Core-Stack-Restrita.md
 ---
 ---
 id: "ADR-001"
@@ -38,7 +38,7 @@ Fica formalmente decidido que a arquitetura de produção do SOULS é estritamen
 
 ### ====================================================================================================
 ARQUIVO: ADR-002-Sandboxing-Hibrido.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-002-Sandboxing-Hibrido.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-002-Sandboxing-Hibrido.md
 ---
 ---
 id: "ADR-002"
@@ -99,7 +99,7 @@ Apesar da ponte de IPC via *Named Pipes* estar liberada com a DACL `ALL APPLICAT
 
 ### ====================================================================================================
 ARQUIVO: ADR-003-Zero-Copy-IPC.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-003-Zero-Copy-IPC.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-003-Zero-Copy-IPC.md
 ---
 ---
 id: "ADR-003"
@@ -149,7 +149,7 @@ Fica decretada a extinção da serialização JSON nas rotinas centrais de alta 
 
 ### ====================================================================================================
 ARQUIVO: ADR-004-Triade-de-Memoria.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-004-Triade-de-Memoria.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-004-Triade-de-Memoria.md
 ---
 ---
 id: "ADR-004"
@@ -197,7 +197,7 @@ Para combater o "Context Rot" e conter o inchaço desnecessário da janela de at
 
 ### ====================================================================================================
 ARQUIVO: ADR-005-RAG-Temporal.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-005-RAG-Temporal.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-005-RAG-Temporal.md
 ---
 ---
 id: "ADR-005"
@@ -248,7 +248,7 @@ Fica sumariamente proibido o uso de LLMs ou GraphRAGs pesados para indexação p
 
 ### ====================================================================================================
 ARQUIVO: ADR-006-SSOT-Sheets.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-006-SSOT-Sheets.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-006-SSOT-Sheets.md
 ---
 ---
 id: "ADR-006"
@@ -289,7 +289,7 @@ Fica formalmente decidido estabelecer uma planilha do **Google Sheets** estrutur
 
 ### ====================================================================================================
 ARQUIVO: ADR-007-Avaliador-Epistemico.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-007-Avaliador-Epistemico.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-007-Avaliador-Epistemico.md
 ---
 ---
 id: "ADR-007"
@@ -335,7 +335,7 @@ Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "A
 
 ### ====================================================================================================
 ARQUIVO: ADR-008-Roteamento-FinOps.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-008-Roteamento-FinOps.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-008-Roteamento-FinOps.md
 ---
 ---
 id: "ADR-008"
@@ -378,7 +378,7 @@ Fica decretado o uso da malha de roteamento dinâmico "Zero-Trust Sandwich" oper
 
 ### ====================================================================================================
 ARQUIVO: ADR-009-Decodificacao-Restrita.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-009-Decodificacao-Restrita.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-009-Decodificacao-Restrita.md
 ---
 ---
 id: "ADR-009"
@@ -399,7 +399,7 @@ Para ler as regras atuais em vigor sobre o Cercadinho do Determinismo, amostrage
 
 ### ====================================================================================================
 ARQUIVO: ADR-010-Spec-Driven-Development.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-010-Spec-Driven-Development.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-010-Spec-Driven-Development.md
 ---
 ---
 id: "ADR-010"
@@ -442,7 +442,7 @@ Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinad
 
 ### ====================================================================================================
 ARQUIVO: ADR-011-Governanca-HITL.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-011-Governanca-HITL.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-011-Governanca-HITL.md
 ---
 ---
 id: "ADR-011"
@@ -488,7 +488,7 @@ Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer 
 
 ### ====================================================================================================
 ARQUIVO: ADR-012-Guardiao-Idempotente.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-012-Guardiao-Idempotente.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-012-Guardiao-Idempotente.md
 ---
 ---
 id: "ADR-012"
@@ -526,7 +526,7 @@ Implementar a arquitetura do **Guardião Idempotente** como um módulo nativo de
 
 ### ====================================================================================================
 ARQUIVO: ADR-013-Cyber-Neuro-Synthesis.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-013-Cyber-Neuro-Synthesis.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-013-Cyber-Neuro-Synthesis.md
 ---
 ---
 id: "ADR-013"
@@ -578,7 +578,7 @@ Implementar rigidamente o paradigma visual **Cyber-Neuro Synthesis** sob a filos
 
 ### ====================================================================================================
 ARQUIVO: ADR-014-Friccao-Produtiva.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-014-Friccao-Produtiva.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-014-Friccao-Produtiva.md
 ---
 ---
 id: "ADR-014"
@@ -616,7 +616,7 @@ Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estrutur
 
 ### ====================================================================================================
 ARQUIVO: ADR-015-Motor-Generativo-Local.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-015-Motor-Generativo-Local.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-015-Motor-Generativo-Local.md
 ---
 ---
 id: "ADR-015"
@@ -637,7 +637,7 @@ Para ler as leis físicas e térmicas em vigor sobre a dualidade de motores (a a
 
 ### ====================================================================================================
 ARQUIVO: ADR-016-Zero-Config-Install.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-016-Zero-Config-Install.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-016-Zero-Config-Install.md
 ---
 ---
 id: "ADR-016"
@@ -683,7 +683,7 @@ Implementar um motor nativo de **Auto-Profiling de Hardware** em Rust, executado
 
 ### ====================================================================================================
 ARQUIVO: ADR-017-Sovereign-Sync.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-017-Sovereign-Sync.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-017-Sovereign-Sync.md
 ---
 ---
 id: "ADR-017"
@@ -724,7 +724,7 @@ Fica estabelecido que toda sincronização de dados e consistência de estado en
 
 ### ====================================================================================================
 ARQUIVO: ADR-018-Paradigma-NextPlaid.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-018-Paradigma-NextPlaid.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-018-Paradigma-NextPlaid.md
 ---
 ---
 id: "ADR-018"
@@ -767,7 +767,7 @@ Fica decretado o fim do fatiamento cego e a blindagem cirúrgica do *parsing* AS
 
 ### ====================================================================================================
 ARQUIVO: ADR-019-Maquina-de-Estados-ETL.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-019-Maquina-de-Estados-ETL.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-019-Maquina-de-Estados-ETL.md
 ---
 ---
 id: "ADR-019"
@@ -814,7 +814,7 @@ A governança da tabela principal obedece obrigatoriamente a:
 
 ### ====================================================================================================
 ARQUIVO: ADR-020-Enxame-Cognitivo-ELO.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-020-Enxame-Cognitivo-ELO.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-020-Enxame-Cognitivo-ELO.md
 ---
 ---
 id: "ADR-020"
@@ -857,7 +857,7 @@ Implementar a arquitetura de **Enxame Cognitivo Baseado em Reputação ELO** no 
 
 ### ====================================================================================================
 ARQUIVO: ADR-021-Chyros-Meta-Reviewer.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-021-Chyros-Meta-Reviewer.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-021-Chyros-Meta-Reviewer.md
 ---
 ---
 id: "ADR-021"
@@ -898,7 +898,7 @@ Estabelecer o **Chyros Daemon** como o **Meta-Reviewer e Consolidador de Memóri
 
 ### ====================================================================================================
 ARQUIVO: ADR-022-Identidade-Verbal-Voz-Vidro.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-022-Identidade-Verbal-Voz-Vidro.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-022-Identidade-Verbal-Voz-Vidro.md
 ---
 ---
 id: "ADR-022"
@@ -935,7 +935,7 @@ Implementar rigidamente a identidade verbal **Voz de Vidro** em todas as interfa
 
 ### ====================================================================================================
 ARQUIVO: ADR-023-Grafo-De-Proximidade.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-023-Grafo-De-Proximidade.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-023-Grafo-De-Proximidade.md
 ---
 ---
 id: "ADR-023"
@@ -973,7 +973,7 @@ Estabelecer o **LadybugDB** como a camada nativa de grafos local do SOULS, atuan
 
 ### ====================================================================================================
 ARQUIVO: ADR-024-Engenharia-Performance-SAST.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-024-Engenharia-Performance-SAST.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-024-Engenharia-Performance-SAST.md
 ---
 ---
 id: "ADR-024"
@@ -1022,7 +1022,7 @@ Ficam decretadas, para toda extração SAST e para qualquer futura ferramenta CL
 
 ### ====================================================================================================
 ARQUIVO: ADR-025-Consciencia-Monorepos-Qualidade.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-025-Consciencia-Monorepos-Qualidade.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-025-Consciencia-Monorepos-Qualidade.md
 ---
 ---
 id: "ADR-025"
@@ -1055,7 +1055,7 @@ Fica decretada a lei de **Qualidade 100/100** e a **Consciência Obrigatória de
 
 ### ====================================================================================================
 ARQUIVO: ADR-026-Nomenclatura-Semantica-Zero-Brand.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-026-Nomenclatura-Semantica-Zero-Brand.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-026-Nomenclatura-Semantica-Zero-Brand.md
 ---
 ---
 id: "ADR-026"
@@ -1104,7 +1104,7 @@ Fica decretada a **Lei da Nomenclatura Semântica e Zero-Brand** para todo o eco
 
 ### ====================================================================================================
 ARQUIVO: ADR-027-Motor-de-Inferência-Híbrido-Isolado-e-Termodinâmica-da-VRAM.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-027-Motor-de-Inferência-Híbrido-Isolado-e-Termodinâmica-da-VRAM.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-027-Motor-de-Inferência-Híbrido-Isolado-e-Termodinâmica-da-VRAM.md
 ---
 ---
 id: "ADR-027"
@@ -1236,7 +1236,7 @@ Fica terminantemente proibido inicializar qualquer modelo local de inteligência
 
 ### ====================================================================================================
 ARQUIVO: ADR-028-O-Cercadinho-do-Determinismo-e-Decodificação-Restrita.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-028-O-Cercadinho-do-Determinismo-e-Decodificação-Restrita.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-028-O-Cercadinho-do-Determinismo-e-Decodificação-Restrita.md
 ---
 ---
 id: "ADR-028"
@@ -1357,7 +1357,7 @@ O modelo hiper-quantizado operando em contexts longos ($30\text{k}$ tokens) sofr
 
 ### ====================================================================================================
 ARQUIVO: ADR-029-Visão-Cognitiva-O(1)-e-Navegação-Bare-Metal.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-029-Visão-Cognitiva-O(1)-e-Navegação-Bare-Metal.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-029-Visão-Cognitiva-O(1)-e-Navegação-Bare-Metal.md
 ---
 ---
 id: "ADR-029"
@@ -1491,7 +1491,7 @@ Caso o buffer de dados estruturados gerado na descompressão de uma página web 
 
 ### ====================================================================================================
 ARQUIVO: ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-030-Doutrina-de-Curadoria-de-Dependências-e-Higiene-de-Crates.md
 ---
 ---
 id: "ADR-030"
@@ -1562,7 +1562,7 @@ Para pinagem de threads críticas de CPU de inferência e workers sem dependênc
 
 ### ====================================================================================================
 ARQUIVO: ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-031-Harvester-Anatomia-11-Blobs-e-Leis-Inegociaveis.md
 ---
 ---
 id: "ADR-031"
@@ -1712,7 +1712,7 @@ A string `problems_and_diagnostics` é a **palavra-chave canônica** que identif
 
 ### ====================================================================================================
 ARQUIVO: ADR-032-Especulacao-N-Gram.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-032-Especulacao-N-Gram.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-032-Especulacao-N-Gram.md
 ---
 ---
 id: "ADR-032"
@@ -1812,7 +1812,7 @@ Se o profiling NVML ou a telemetria do motor Rust detectar qualquer tentativa de
 
 ### ====================================================================================================
 ARQUIVO: ADR-033-Isolamento-Termico-Micro-Sidecars.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-033-Isolamento-Termico-Micro-Sidecars.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-033-Isolamento-Termico-Micro-Sidecars.md
 ---
 ---
 id: "ADR-033"
@@ -1911,7 +1911,7 @@ Se o daemon do SOULS detectar que um micro-sidecar foi instanciado sem a máscar
 
 ### ====================================================================================================
 ARQUIVO: ADR-034-Engenharia-de-Representacao-RepE.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-034-Engenharia-de-Representacao-RepE.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-034-Engenharia-de-Representacao-RepE.md
 ---
 ---
 id: "ADR-034"
@@ -2001,7 +2001,7 @@ Se o callback `cb_eval` falhar ao aplicar o vetor ou se o fator $\alpha$ induzir
 
 ### ====================================================================================================
 ARQUIVO: ADR-035-Response-Healing-Zero-Token.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-035-Response-Healing-Zero-Token.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-035-Response-Healing-Zero-Token.md
 ---
 ---
 id: "ADR-035"
@@ -2094,7 +2094,7 @@ Se o motor `jsonrepair` em Rust não conseguir produzir um JSON válido e tipado
 
 ### ====================================================================================================
 ARQUIVO: ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-036-VRAM-Assimetrica-e-Ralph-Loop.md
 ---
 ---
 id: "ADR-036"
@@ -2191,7 +2191,7 @@ Se o Ralph Loop atingir a 3ª iteração sem obter aprovação do *Critic*, a ex
 
 ### ====================================================================================================
 ARQUIVO: ADR-037-Gestao-Dinamica-Contexto-CCR.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-037-Gestao-Dinamica-Contexto-CCR.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-037-Gestao-Dinamica-Contexto-CCR.md
 ---
 ---
 id: "ADR-037"
@@ -2400,7 +2400,7 @@ O Gateway Tokio injeta de forma transparente no payload da requisição a ferram
 
 ### ====================================================================================================
 ARQUIVO: ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
 ---
 ---
 id: "ADR-038"
@@ -2458,7 +2458,7 @@ A emissão descontrolada e bruta dessas saídas de terminal traz duas ameaças c
 
 ### ====================================================================================================
 ARQUIVO: ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-039-Auditoria-Cargo-FinOps-e-Build-Pipeline.md
 ---
 ---
 id: "ADR-039"
@@ -2608,7 +2608,7 @@ A auditoria realizada nas sessões 2026-07-31 → 2026-08-01 (documentada em [`.
 
 ### ====================================================================================================
 ARQUIVO: ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-040-Migracao-State-DB-v2-e-Disjuntor-Cognitivo.md
 ---
 ---
 id: "ADR-040"
@@ -2711,7 +2711,7 @@ docs/observability/state/SODA_CURRENT_STATE.md                                  
 
 ### ====================================================================================================
 ARQUIVO: ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md
 ---
 ---
 id: "ADR-041"
@@ -2777,7 +2777,7 @@ Fica **revogada parcialmente** a §1 da ADR-026 (que fixava o servername como `s
 
 ### ====================================================================================================
 ARQUIVO: ADR-042-Compressao-Reversivel-CCR-e-Conveyor-Belt-de-Contexto.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-042-Compressao-Reversivel-CCR-e-Conveyor-Belt-de-Contexto.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-042-Compressao-Reversivel-CCR-e-Conveyor-Belt-de-Contexto.md
 ---
 ---
 id: "ADR-042"
@@ -2974,7 +2974,7 @@ output: texto expandido (lossless)
 
 ### ====================================================================================================
 ARQUIVO: ADR-043-Observabilidade-Cognitiva-Sensorial.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-043-Observabilidade-Cognitiva-Sensorial.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-043-Observabilidade-Cognitiva-Sensorial.md
 ---
 ---
 id: "ADR-043"
@@ -3173,7 +3173,7 @@ A materialização do cânone acima no silício produziu o seguinte grafo de art
 
 ### ====================================================================================================
 ARQUIVO: ADR-044-Enjaulamento-Wasmtime-Tree-Sitter.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-044-Enjaulamento-Wasmtime-Tree-Sitter.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-044-Enjaulamento-Wasmtime-Tree-Sitter.md
 ---
 ---
 id: "ADR-044"
@@ -3349,7 +3349,7 @@ $$
 
 ### ====================================================================================================
 ARQUIVO: ADR-045-Persistencia-da-Alma-Socratica.md
-CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-045-Persistencia-da-Alma-Socratica.md
+CAMINHO: z:\souls_mc\docs\decisions\adrs\ADR-045-Persistencia-da-Alma-Socratica.md
 ---
 ---
 id: "ADR-045"
