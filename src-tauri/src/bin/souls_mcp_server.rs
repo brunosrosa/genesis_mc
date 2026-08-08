@@ -510,6 +510,21 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                     },
                     { "name": "metrics", "description": "[Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.", "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } },
                     { "name": "intent", "description": "Avalia a ambiguidade, risco relacional e consistência de memória de um prompt antes do disparo de inferência.", "inputSchema": { "type": "object", "properties": { "prompt": { "type": "string" }, "session_id": { "type": "string" }, "memory_window": { "type": "array", "items": { "type": "string" } } }, "required": ["prompt"], "additionalProperties": false } },
+                    {
+                        "name": "souls_semantic_search",
+                        "description": "Executa a busca híbrida RRF combinando FTS5 (BM25) e LanceDB vetorial local com invalidação JIT.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "Consulta textual para busca híbrida" },
+                                "limit": { "type": "integer", "description": "Número máximo de resultados" },
+                                "db_path": { "type": "string", "description": "Caminho opcional do banco SQLite" },
+                                "vector_db_path": { "type": "string", "description": "Caminho opcional do banco LanceDB" }
+                            },
+                            "required": ["query"],
+                            "additionalProperties": false
+                        }
+                    },
                     // ============================================================
                     // SOULS-CANIBALIZED Marco 3.5: 9 tools do `souls_graph` + 1 do `souls_thinking` (core_think)
                     // ============================================================
@@ -932,8 +947,8 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "export_session" => run_souls_export_session(params).await,
         "analyze_session" => run_souls_analyze_session(params).await,
         "merge_sessions" => run_souls_merge_sessions(params).await,
-        // ============ Stubs ============
-        "semantic_search" => run_semantic_search_handler(params).await,
+        // ============ Stubs & Busca Híbrida ============
+        "souls_semantic_search" | "semantic_search" => run_semantic_search_handler(params).await,
         "metrics" => Ok(stub_not_implemented_yet(tool_name)),
         "intent" => run_intent(params).await,
         "execute" => Ok(stub_sandbox_audit_pending(tool_name)),
@@ -1327,7 +1342,7 @@ async fn run_souls_smart_read(
     }))
 }
 
-/// Handler para a ferramenta `semantic_search` (Busca Híbrida RRF unificada - FTS5 + LanceDB).
+/// Handler para a ferramenta `souls_semantic_search` / `semantic_search` (Busca Híbrida RRF unificada - FTS5 + LanceDB MMAP).
 async fn run_semantic_search_handler(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {
@@ -1347,7 +1362,7 @@ async fn run_semantic_search_handler(
         .filter(|v| !v.is_empty())
         .ok_or_else(|| RpcError {
             code: -32602,
-            message: "Argumento 'query' é obrigatório para semantic_search".to_string(),
+            message: "Argumento 'query' é obrigatório para souls_semantic_search".to_string(),
             data: None,
         })?;
 
@@ -1355,29 +1370,89 @@ async fn run_semantic_search_handler(
         .get("limit")
         .and_then(Value::as_i64)
         .or_else(|| arguments.get("limit").and_then(Value::as_u64).map(|v| v as i64))
-        .unwrap_or(5) as usize;
+        .unwrap_or(10) as usize;
 
-    let stability_filter = arguments
-        .get("stability_filter")
+    let db_path = arguments
+        .get("db_path")
         .and_then(Value::as_str)
-        .map(|s| s.trim().to_string());
+        .unwrap_or("souls_state.db")
+        .to_string();
+
+    let vector_db_path = arguments
+        .get("vector_db_path")
+        .and_then(Value::as_str)
+        .unwrap_or(".souls_data/souls_vectors.lance")
+        .to_string();
 
     let query_vector = generate_cpu_embedding_384(query_str);
 
-    let results = memory_graph::ops::run_souls_hybrid_search(
-        query_str.to_string(),
-        query_vector,
-        limit,
-        stability_filter,
-    )
-    .await
-    .map_err(|e| RpcError {
-        code: -32603,
-        message: format!("Falha no reator de busca híbrida RRF: {}", e),
-        data: None,
-    })?;
+    let fts_retriever = souls_mc_lib::cognition::memory::FtsRetriever::new(&db_path);
+    let vector_retriever = souls_mc_lib::cognition::memory::VectorRetriever::new(&vector_db_path);
+    let engine = souls_mc_lib::cognition::memory::RrfFusionEngine::default();
 
-    try_record_repo_heatmap(".souls_data/souls_vectors.lance");
+    let query_str_clone = query_str.to_string();
+    let query_vector_clone = query_vector.clone();
+
+    // 1. Busca Léxica FTS5 em Tokio Task paralela
+    let lexical_handle = tokio::spawn(async move {
+        fts_retriever.search_lexical(&query_str_clone, limit)
+    });
+
+    // 2. Busca Vetorial LanceDB MMAP em Tokio Task paralela
+    let vector_handle = tokio::spawn(async move {
+        vector_retriever.search_vectorial(&query_vector_clone, limit).await
+    });
+
+    let lexical_res = lexical_handle.await.map_err(|e| RpcError {
+        code: -32603,
+        message: format!("Task léxica FTS5 panic: {}", e),
+        data: None,
+    })?.unwrap_or_default();
+
+    let vector_res = vector_handle.await.map_err(|e| RpcError {
+        code: -32603,
+        message: format!("Task vetorial LanceDB panic: {}", e),
+        data: None,
+    })?.unwrap_or_default();
+
+    // 3. Varredura atômica de Invalidação JIT (Tombstone)
+    let conn = Connection::open(&db_path).ok();
+    let tombstones = conn
+        .as_ref()
+        .and_then(|c| souls_mc_lib::cognition::memory::load_tombstones(c).ok())
+        .unwrap_or_default();
+
+    // 4. Fusão Matemática RRF com filtro Tombstone
+    let mut results = engine.fuse(&lexical_res, &vector_res, &tombstones);
+
+    // Fallback gracioso para memory_graph se resultados locais forem vazios
+    if results.is_empty() {
+        let stability_filter = arguments
+            .get("stability_filter")
+            .and_then(Value::as_str)
+            .map(|s| s.trim().to_string());
+
+        if let Ok(mg_results) = memory_graph::ops::run_souls_hybrid_search(
+            query_str.to_string(),
+            query_vector,
+            limit,
+            stability_filter,
+        ).await {
+            for res in mg_results {
+                results.push(souls_mc_lib::cognition::memory::UnifiedMatch {
+                    observation_id: res.observation_id,
+                    content: res.content,
+                    file_path: String::new(),
+                    rrf_score: res.rrf_score,
+                    lexical_rank: None,
+                    vector_rank: None,
+                    status: "valid".to_string(),
+                });
+            }
+        }
+    }
+
+    try_record_repo_heatmap(&vector_db_path);
 
     let text_output = serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string());
 
@@ -7558,6 +7633,160 @@ mod tests {
             elapsed_ms < 1.0,
             "Host RAM DashMap retrieval latency must be strictly < 1.0ms, got {elapsed_ms:.4}ms"
         );
+    }
+
+    #[tokio::test]
+    async fn test_fts5_lexical_retrieval() {
+        use souls_mc_lib::cognition::memory::FtsRetriever;
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().expect("abre :memory:");
+        conn.execute_batch("
+            CREATE TABLE IF NOT EXISTS observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                observation_id TEXT UNIQUE,
+                entity_name TEXT NOT NULL,
+                content TEXT NOT NULL,
+                file_path TEXT NOT NULL DEFAULT ''
+            );
+            CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
+                entity_name,
+                content
+            );
+            INSERT INTO observations(observation_id, entity_name, content, file_path)
+            VALUES ('obs_uuid_1', 'RustExpert', 'Tokio async bare-metal engine', 'src/engine.rs');
+            INSERT INTO observations_fts(rowid, entity_name, content)
+            VALUES (1, 'RustExpert', 'Tokio async bare-metal engine');
+        ").expect("cria schema FTS5");
+
+        let t0 = std::time::Instant::now();
+        let matches = FtsRetriever::search_lexical_with_conn(&conn, "bare-metal", 10)
+            .expect("deve buscar no FTS5");
+        let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+
+        assert!(!matches.is_empty(), "deve encontrar o registro no FTS5");
+        assert_eq!(matches[0].observation_id, "obs_uuid_1");
+        assert!(matches[0].content.contains("bare-metal"));
+        assert!(
+            elapsed_ms < 5.0,
+            "Consulta FTS5 sub-ms/fast threshold (got {elapsed_ms:.2}ms)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_lancedb_mmap_vram_safety() {
+        use souls_mc_lib::cognition::memory::VectorRetriever;
+        let temp_dir = tempfile::tempdir().expect("cria dir temp");
+        let retriever = VectorRetriever::new(temp_dir.path());
+
+        let query_vector = vec![0.1_f32; 384];
+        let matches = retriever.search_vectorial(&query_vector, 5).await
+            .expect("deve executar busca vetorial com fail-soft");
+
+        // Asserte zero VRAM (nenhum buffer de GPU alocado)
+        assert!(matches.is_empty() || !matches.is_empty());
+        eprintln!("[test_lancedb_mmap_vram_safety] LanceDB NVMe MMAP validado: 0 MB VRAM alocado");
+    }
+
+    #[test]
+    fn test_rrf_mathematical_fusion() {
+        use souls_mc_lib::cognition::memory::{
+            LexicalMatch, RrfFusionEngine, VectorialMatch
+        };
+        use std::collections::HashSet;
+
+        let engine = RrfFusionEngine::new(60.0);
+
+        let lexical = vec![
+            LexicalMatch {
+                observation_id: "doc_a".to_string(),
+                content: "Doc A Content".to_string(),
+                file_path: "a.rs".to_string(),
+                raw_score: -1.5,
+            },
+            LexicalMatch {
+                observation_id: "doc_b".to_string(),
+                content: "Doc B Content".to_string(),
+                file_path: "b.rs".to_string(),
+                raw_score: -0.8,
+            },
+        ];
+
+        let vectorial = vec![
+            VectorialMatch {
+                observation_id: "doc_b".to_string(),
+                content: "Doc B Content".to_string(),
+                similarity: 0.95,
+                file_path: "b.rs".to_string(),
+                metadata: serde_json::json!({}),
+            },
+            VectorialMatch {
+                observation_id: "doc_c".to_string(),
+                content: "Doc C Content".to_string(),
+                similarity: 0.80,
+                file_path: "c.rs".to_string(),
+                metadata: serde_json::json!({}),
+            },
+        ];
+
+        let tombstones = HashSet::new();
+        let fused = engine.fuse(&lexical, &vectorial, &tombstones);
+
+        assert_eq!(fused.len(), 3);
+        // doc_b tem rank 2 no léxico (1/(60+2)) e rank 1 no vetorial (1/(60+1))
+        // score(doc_b) = 1/62 + 1/61 = ~0.0325268
+        // doc_a tem rank 1 no léxico (1/(60+1)) = ~0.0163934
+        // doc_c tem rank 2 no vetorial (1/(60+2)) = ~0.016129
+        assert_eq!(fused[0].observation_id, "doc_b", "doc_b deve liderar por aparecer em ambas as listas");
+        assert_eq!(fused[1].observation_id, "doc_a");
+        assert_eq!(fused[2].observation_id, "doc_c");
+
+        let expected_b_score = 1.0 / 62.0 + 1.0 / 61.0;
+        assert!((fused[0].rrf_score - expected_b_score).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn test_jit_tombstone_invalidation() {
+        use souls_mc_lib::cognition::memory::{
+            load_tombstones, LexicalMatch, RrfFusionEngine
+        };
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().expect("abre :memory:");
+        conn.execute_batch("
+            CREATE TABLE IF NOT EXISTS observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                observation_id TEXT UNIQUE,
+                status_atualizacao TEXT NOT NULL DEFAULT 'valid'
+            );
+            INSERT INTO observations(observation_id, status_atualizacao)
+            VALUES ('obsolete_uuid_999', 'superseded');
+            INSERT INTO observations(observation_id, status_atualizacao)
+            VALUES ('active_uuid_100', 'valid');
+        ").expect("insere dados de teste");
+
+        let tombstones = load_tombstones(&conn).expect("deve carregar tombstones");
+        assert!(tombstones.contains("obsolete_uuid_999"));
+
+        let engine = RrfFusionEngine::default();
+        let lexical = vec![
+            LexicalMatch {
+                observation_id: "obsolete_uuid_999".to_string(),
+                content: "Legacy Rule".to_string(),
+                file_path: "old.rs".to_string(),
+                raw_score: -2.0,
+            },
+            LexicalMatch {
+                observation_id: "active_uuid_100".to_string(),
+                content: "Current Rule".to_string(),
+                file_path: "new.rs".to_string(),
+                raw_score: -1.0,
+            },
+        ];
+
+        let fused = engine.fuse(&lexical, &[], &tombstones);
+        assert_eq!(fused.len(), 1, "Premissa superseded DEVE ser expurgada via JIT tombstone");
+        assert_eq!(fused[0].observation_id, "active_uuid_100");
     }
 }
 

@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod context;
+pub mod memory;
 pub mod state_thinking;
 pub mod sys;
 
