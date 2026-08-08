@@ -3512,6 +3512,9 @@ name = "esaxx-rs"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d817e038c30374a4bcb22f94d0a8a0e216958d4c3dcde369b1439fec4bdda6e6"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "ethnum"
@@ -11218,6 +11221,7 @@ dependencies = [
  "thiserror 2.0.19",
  "tiktoken",
  "tinyrand",
+ "tokenizers 0.21.4",
  "tokio",
  "toml 1.1.4+spec-1.1.0",
  "tracing",
@@ -12376,10 +12380,12 @@ dependencies = [
  "esaxx-rs",
  "fancy-regex 0.14.0",
  "getrandom 0.3.4",
+ "indicatif 0.17.11",
  "itertools 0.14.0",
  "log",
  "macro_rules_attribute",
  "monostate",
+ "onig",
  "paste",
  "rand 0.9.4",
  "rayon",

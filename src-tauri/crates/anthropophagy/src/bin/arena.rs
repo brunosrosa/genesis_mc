@@ -411,6 +411,7 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
                 min_p: 0.05,
                 temperature: 0.1,
                 json_schema: prompt.json_schema.clone(),
+                input: None,
             };
 
             let start = Instant::now();
@@ -649,6 +650,7 @@ fn run_tier2_colosseum(bench_dir: &Path, approved_models_input: &[PathBuf]) {
                     min_p: 0.05,
                     temperature: 0.2,
                     json_schema: prompt.json_schema,
+                    input: None,
                 };
 
                 let start = Instant::now();

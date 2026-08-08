@@ -264,12 +264,26 @@ impl EphemeralInferEngine for LlamaCppEngine {
             InferenceError::GpuOom
         })?;
 
-        // 4. Concatenação estruturada Few-Shot & Tokenização do prompt final
-        let formatted_prompt = build_chat_prompt(&req.system_prompt, &req.few_shot_examples, &req.user_query);
+        // 4. Concatenação estruturada Few-Shot & Tokenização do prompt final (com suporte a Gigatoken Prefill Bypass)
+        use crate::core::inference_adapter::InferenceInput;
 
-        let prompt_tokens_vec = model.str_to_token(&formatted_prompt, llama_cpp_2::model::AddBos::Always).map_err(|e| {
-            InferenceError::ExecutionError(format!("Falha na tokenização do prompt: {}", e))
-        })?;
+        let prompt_tokens_vec: Vec<LlamaToken> = match req.input {
+            Some(InferenceInput::PreTokenized(ref token_ids)) => {
+                token_ids.iter().map(|&id| LlamaToken(id as i32)).collect()
+            }
+            Some(InferenceInput::RawText(ref text)) => {
+                let formatted_prompt = build_chat_prompt(&req.system_prompt, &req.few_shot_examples, text);
+                model.str_to_token(&formatted_prompt, llama_cpp_2::model::AddBos::Always).map_err(|e| {
+                    InferenceError::ExecutionError(format!("Falha na tokenização do prompt: {}", e))
+                })?
+            }
+            None => {
+                let formatted_prompt = build_chat_prompt(&req.system_prompt, &req.few_shot_examples, &req.user_query);
+                model.str_to_token(&formatted_prompt, llama_cpp_2::model::AddBos::Always).map_err(|e| {
+                    InferenceError::ExecutionError(format!("Falha na tokenização do prompt: {}", e))
+                })?
+            }
+        };
 
         let prompt_tokens_count = prompt_tokens_vec.len() as u32;
 
@@ -277,9 +291,10 @@ impl EphemeralInferEngine for LlamaCppEngine {
             return Err(InferenceError::ExecutionError("Prompt resultou em 0 tokens".to_string()));
         }
 
-        // 5. Alocação DINÂMICA do LlamaBatch
+        // 5. Alocação DINÂMICA e Sanitização do LlamaBatch (Prevenção de Logit Leak)
         let batch_capacity = (prompt_tokens_count + req.max_tokens).max(512) as usize;
         let mut batch = LlamaBatch::new(batch_capacity, 1);
+        batch.clear();
 
         let last_idx = prompt_tokens_vec.len() - 1;
         for (i, &token) in prompt_tokens_vec.iter().enumerate() {
@@ -626,6 +641,7 @@ mod tests {
             min_p: 0.05,
             temperature: 0.7,
             json_schema: None,
+            input: None,
         };
 
         let err = engine.run_inference(req_fake, None).unwrap_err();
@@ -721,6 +737,7 @@ mod tests {
             min_p: 0.05,
             temperature: 0.7,
             json_schema: None,
+            input: None,
         };
 
         let result = worker.run_async(req, None).await;

@@ -126,6 +126,7 @@ mod tests {
             min_p: 0.0,
             temperature: 0.0,
             json_schema: None,
+            input: None,
         };
 
         let resp = engine.run_inference(req, None).expect("mock nao deve falhar");

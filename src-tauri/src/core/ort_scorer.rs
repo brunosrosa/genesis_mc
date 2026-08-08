@@ -122,6 +122,7 @@ mod tests {
             min_p: 0.0,
             temperature: 0.0,
             json_schema: None,
+            input: None,
         };
         let resp = engine.run_inference(req, None).expect("mock nao deve falhar");
         assert!(resp.text.contains("ORT_SCORER_MOCK"));
@@ -140,6 +141,7 @@ mod tests {
             min_p: 0.0,
             temperature: 0.0,
             json_schema: None,
+            input: None,
         };
         match engine.run_inference(req, None) {
             Err(InferenceError::ModelNotFound(_)) => {}

@@ -184,6 +184,7 @@ mod tests {
             min_p: 0.05,
             temperature: 0.7,
             json_schema: None,
+            input: None,
         };
 
         // Sem tokio runtime: cai no fallback mock.

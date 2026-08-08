@@ -312,4 +312,62 @@ mod tests {
         let valid_score = res.iter().find(|(name, _)| name == "valid_intent").map(|(_, s)| *s).unwrap_or(0.0);
         assert!(valid_score > 0.50);
     }
+
+    /// Teste 5: 'test_gigatoken_prefill_bypass'
+    /// Valida que a tokenização em Vec<u32> via GigaTokenEncoder opera corretamente.
+    #[test]
+    fn test_gigatoken_prefill_bypass() {
+        let encoder = crate::core::gigatoken_encoder::GigaTokenEncoder::global();
+        let prompt = "pub fn souls_main() { println!(\"Gigatoken Prefill Bypass\"); }";
+        let tokens = encoder.tokenize_to_bin(prompt).expect("Tokenização Gigatoken não deve falhar");
+        assert!(!tokens.is_empty(), "Tokens não devem ser vazios");
+    }
+
+    /// Teste 6: 'test_gigatoken_vocab_self_healing'
+    /// Valida a escrita e criação do tokenizer_recovered.json em modo autocura.
+    #[test]
+    fn test_gigatoken_vocab_self_healing() {
+        let temp_dir = tempfile::tempdir().expect("Falha tempdir");
+        let target_path = temp_dir.path().join("tokenizer_recovered.json");
+        let mock_vocab = vec![("fn".to_string(), 1u32), ("main".to_string(), 2u32)];
+        let res = crate::core::gigatoken_encoder::GigaTokenEncoder::write_recovered_tokenizer_json(&mock_vocab, &target_path);
+        assert!(res.is_ok(), "Escrita de tokenizer_recovered.json deve ter sucesso");
+        assert!(target_path.exists(), "Arquivo tokenizer_recovered.json deve existir");
+    }
+
+    /// Teste 7: 'test_gigatoken_throughput_benchmark'
+    /// Valida latência de tokenização na CPU < 5ms para mock de 10KB.
+    #[test]
+    fn test_gigatoken_throughput_benchmark() {
+        let encoder = crate::core::gigatoken_encoder::GigaTokenEncoder::global();
+        let _ = encoder.tokenize_to_bin("warmup"); // Warmup estático do BPE
+
+        let mock_code = "fn mock_code() { let x = 42; }\n".repeat(350);
+        assert!(mock_code.len() >= 10000);
+        let start = std::time::Instant::now();
+        let tokens = encoder.tokenize_to_bin(&mock_code).expect("Tokenização throughput");
+        let elapsed = start.elapsed();
+
+        #[cfg(debug_assertions)]
+        let max_ms = 10;
+        #[cfg(not(debug_assertions))]
+        let max_ms = 5;
+
+        assert!(!tokens.is_empty());
+        assert!(
+            elapsed.as_millis() <= max_ms,
+            "Latência deve ser <= {}ms (alcançado {}ms)",
+            max_ms,
+            elapsed.as_millis()
+        );
+    }
+
+    /// Teste 8: 'test_vram_budget_math'
+    /// Valida limite matemático de VRAM (5.5 GB).
+    #[test]
+    fn test_vram_budget_math() {
+        let (total_mb, is_safe) = crate::core::gigatoken_encoder::calculate_vram_budget_math(16384, 36, 8, 128, 2800.0);
+        assert!(is_safe, "Orçamento de VRAM deve ser seguro");
+        assert!(total_mb < 5632.0, "Total de MB ({:.2}) deve ser < 5632 MB", total_mb);
+    }
 }

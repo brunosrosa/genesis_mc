@@ -18,6 +18,12 @@ pub enum InferenceError {
     ExecutionError(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum InferenceInput {
+    RawText(String),
+    PreTokenized(Vec<u32>),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SoulsInferenceRequest {
     pub model_path: String,
@@ -28,6 +34,7 @@ pub struct SoulsInferenceRequest {
     pub min_p: f32,
     pub temperature: f32,
     pub json_schema: Option<String>,
+    pub input: Option<InferenceInput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

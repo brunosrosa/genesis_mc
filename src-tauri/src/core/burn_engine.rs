@@ -97,6 +97,7 @@ mod tests {
             min_p: 0.0,
             temperature: 0.0,
             json_schema: None,
+            input: None,
         };
 
         match engine.run_inference(req, None) {

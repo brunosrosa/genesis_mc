@@ -46,6 +46,7 @@ url = "=2.5.8"
 sha2 = "=0.10.9"
 toml = "=1.1.4"  # SOULS-CANIBALIZED Marco 4.2.2: pin rígido v1.1.4 (alinhado com spec 1.1.0 e parsers toml_writer/toml_parser)
 tiktoken = "=3.5.1"
+tokenizers = "=0.21.4"
 oxc = { version = "=0.120.0", features = ["ast_visit"] }
 astral-tl = "=0.7.11"
 gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mutation"] }

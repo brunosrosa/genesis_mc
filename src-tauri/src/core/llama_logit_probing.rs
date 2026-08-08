@@ -133,6 +133,7 @@ mod tests {
             min_p: 0.05,
             temperature: 0.0,
             json_schema: None,
+            input: None,
         };
         let resp = prober.run_inference(req, None).expect("mock nao deve falhar");
         assert_eq!(resp.completion_tokens, 0, "Logit Probing NUNCA deve gerar completion tokens");
@@ -151,6 +152,7 @@ mod tests {
             min_p: 0.05,
             temperature: 0.0,
             json_schema: None,
+            input: None,
         };
         let err = prober.run_inference(req, None).unwrap_err();
         assert!(matches!(err, InferenceError::ModelNotFound(_)));
