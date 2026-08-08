@@ -320,11 +320,11 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         }
                     },
                     // ============================================================
-                    // SOULS-CANIBALIZED Marco 3.6: Conveyor Belt de Contexto (CCR Lossless)
+                    // SOULS-CANIBALIZED MARCO 5.5.0: Conveyor Belt de Contexto (CCR Lossless)
                     // ============================================================
                     {
                         "name": "multi_read",
-                        "description": "Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.",
+                        "description": "Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR lossless.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
@@ -344,9 +344,23 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "text": { "type": "string", "description": "Texto compactado contendo marcadores [SOULS-DEDUP: ...] a serem reidratados." }
+                                "text": { "type": "string", "description": "Texto compactado contendo marcadores de compressão CCR a serem reidratados." },
+                                "hash": { "type": "string", "description": "Hash hex de 64 bits para resgate direto do bloco na RAM." }
                             },
-                            "required": ["text"],
+                            "additionalProperties": false
+                        }
+                    },
+                    {
+                        "name": "stub_fill",
+                        "description": "Preenche stubs de código demarcados em arquivos locais substituindo-os pelo código fornecido.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string", "description": "Caminho do arquivo contendo o stub." },
+                                "stub_marker": { "type": "string", "description": "Marcador textual do stub a ser preenchido." },
+                                "code_payload": { "type": "string", "description": "Código substituto a ser inserido no arquivo." }
+                            },
+                            "required": ["path", "stub_marker", "code_payload"],
                             "additionalProperties": false
                         }
                     },
@@ -1208,6 +1222,21 @@ async fn run_souls_headroom_retrieve(
             message: "Parâmetro obrigatório 'hash' ausente".to_string(),
             data: None,
         })?;
+
+    // Tenta primeiro resgatar diretamente da RAM Host (DashMap O(1) < 1ms)
+    let clean_hex = hash.trim().trim_start_matches("0x");
+    if let Ok(hash_u64) = u64::from_str_radix(clean_hex, 16) {
+        if let Some(entry) = context_compression::ccr_cache().get(&hash_u64) {
+            return Ok(json!({
+                "content": [{
+                    "type": "text",
+                    "text": entry.value().clone()
+                }],
+                "structuredContent": { "retrieved": true, "engine": "CCR_HOST_RAM_CACHE" },
+                "isError": false
+            }));
+        }
+    }
 
     // Enquadra como `intercept_loopback` espera sem interpolação manual insegura.
     let tool_call_json = json!({
@@ -4091,7 +4120,7 @@ async fn run_souls_stub_fill(params: &serde_json::Map<String, Value>) -> Result<
 // =============================================================================
 
 /// `souls_multi_read` — Lê múltiplos arquivos em paralelo via tokio::fs
-/// e aplica compressão CCR (`context_compression::dedup`) em cada um.
+/// e aplica compressão CCR (`context_compression::compress`) em cada um.
 /// Retorna mapeamento JSON `Filepath -> CompactedContent`.
 #[allow(dead_code)] // Invocado indiretamente via match em handle_tool_call; clippy não rastreia.
 async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
@@ -4110,12 +4139,8 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
         });
     }
 
-    // Marco 3.7 Fase B: instrumentacao observability (filesystem spy em batch).
     for p in raw_paths.iter().filter_map(Value::as_str) {
         try_log_file_access(p, "multi_read");
-    }
-    // Marco 4.1.2 (R15): Interceptacao Cognitiva — alimenta repo_heatmap.
-    for p in raw_paths.iter().filter_map(Value::as_str) {
         try_record_repo_heatmap(p);
     }
 
@@ -4133,29 +4158,59 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
         });
     }
 
-    let compactions = context_compression::multi_read_concurrent(path_strs.iter().map(|s| s.as_str())).await;
+    let mut tasks = Vec::with_capacity(path_strs.len());
+    for p_str in path_strs {
+        tasks.push(tokio::spawn(async move {
+            let path = std::path::PathBuf::from(&p_str);
+            match tokio::fs::read_to_string(&path).await {
+                Ok(content) => {
+                    let orig_bytes = content.len();
+                    let compressed = context_compression::compress(&content);
+                    let comp_bytes = compressed.len();
+                    (p_str, Ok((compressed, orig_bytes, comp_bytes)))
+                }
+                Err(e) => (p_str, Err(e.to_string())),
+            }
+        }));
+    }
 
-    // Constrói o mapeamento JSON Filepath -> {compacted, original_bytes, compacted_bytes, error}
     let mut entries = serde_json::Map::new();
     let mut ok_count = 0usize;
     let mut err_count = 0usize;
     let mut total_original_bytes = 0usize;
     let mut total_compacted_bytes = 0usize;
-    for fc in compactions {
-        total_original_bytes += fc.original_bytes;
-        total_compacted_bytes += fc.compacted_bytes;
-        let entry = json!({
-            "compacted": fc.compacted,
-            "original_bytes": fc.original_bytes,
-            "compacted_bytes": fc.compacted_bytes,
-            "error": fc.error,
-        });
-        if fc.error.is_some() {
-            err_count += 1;
-        } else {
-            ok_count += 1;
+
+    for task in tasks {
+        if let Ok((filepath, res)) = task.await {
+            match res {
+                Ok((compacted, orig_bytes, comp_bytes)) => {
+                    ok_count += 1;
+                    total_original_bytes += orig_bytes;
+                    total_compacted_bytes += comp_bytes;
+                    entries.insert(
+                        filepath,
+                        json!({
+                            "compacted": compacted,
+                            "original_bytes": orig_bytes,
+                            "compacted_bytes": comp_bytes,
+                            "error": Value::Null,
+                        }),
+                    );
+                }
+                Err(err_msg) => {
+                    err_count += 1;
+                    entries.insert(
+                        filepath,
+                        json!({
+                            "compacted": "",
+                            "original_bytes": 0,
+                            "compacted_bytes": 0,
+                            "error": err_msg,
+                        }),
+                    );
+                }
+            }
         }
-        entries.insert(fc.filepath, entry);
     }
 
     let saved_pct = if total_original_bytes == 0 {
@@ -4169,8 +4224,7 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
         "content": [{
             "type": "text",
             "text": format!(
-                "Conveyor Belt: {ok_count} arquivos compactados, {err_count} erros. \
-                 {total_original_bytes}→{total_compacted_bytes} bytes ({saved_pct}% saved)."
+                "Conveyor Belt: {ok_count} arquivos compactados, {err_count} erros. {total_original_bytes}→{total_compacted_bytes} bytes ({saved_pct}% saved)."
             )
         }],
         "structuredContent": {
@@ -4182,74 +4236,47 @@ async fn run_souls_multi_read(params: &serde_json::Map<String, Value>) -> Result
                 "total_compacted_bytes": total_compacted_bytes,
                 "saved_percent": saved_pct,
             },
-            "engine": "context_compression.multi_read (Marco 3.6, CCR Lossless)"
+            "engine": "context_compression.multi_read (Marco 5.5.0, CCR Lossless)"
         },
         "isError": err_count > 0 && ok_count == 0
     }))
 }
 
-/// `souls_fill` (CCR rehydrator) — Localiza marcadores `[SOULS-DEDUP: Block Hash 0xHASH. ...]`
-/// no texto e os substitui pelos blocos originais armazenados no `DEDUP_CACHE` (Host RAM).
-/// Operação puramente O(N) com lookup O(1) por marcador no DashMap.
-/// Fail-soft: marcadores ausentes viram string vazia + warning estruturado (nunca aborta).
+/// `souls_fill` (CCR rehydrator) — Reidrata e expande marcadores de compressão CCR de volta para o texto original lossless na RAM do Host.
 #[allow(dead_code)] // Invocado indiretamente via match em handle_tool_call; clippy não rastreia.
 async fn run_souls_ccr_fill(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
+
+    // Resgate direto por parâmetro 'hash' (hex String)
+    if let Some(hash_str) = args.get("hash").and_then(Value::as_str) {
+        let clean_hex = hash_str.trim().trim_start_matches("0x");
+        if let Ok(hash_u64) = u64::from_str_radix(clean_hex, 16) {
+            if let Some(entry) = context_compression::ccr_cache().get(&hash_u64) {
+                let val = entry.value().clone();
+                return Ok(json!({
+                    "content": [{
+                        "type": "text",
+                        "text": val.clone()
+                    }],
+                    "structuredContent": {
+                        "expanded": val,
+                        "rehydrated_count": 1,
+                        "miss_count": 0,
+                        "engine": "context_compression.dedup.fill (Marco 5.5.0, CCR Lossless)"
+                    },
+                    "isError": false
+                }));
+            }
+        }
+    }
+
     let text = args.get("text").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
-        message: "Parâmetro obrigatório 'text' ausente".to_string(),
-        data: Some(json!({ "required": "text" })),
+        message: "Parâmetro obrigatório 'text' ou 'hash' ausente".to_string(),
+        data: Some(json!({ "required": ["text", "hash"] })),
     })?;
 
-    let cache = &context_compression::DEDUP_CACHE;
-    let mut expanded = String::with_capacity(text.len());
-    let mut cursor = 0usize;
-    let mut rehydrated = 0usize;
-    let mut misses: Vec<String> = Vec::new();
-    const HEX_LEN: usize = 16; // u64 = 64 bits = 16 hex chars canônicos.
-    const SUFFIX: &str = context_compression::dedup::MARKER_SUFFIX;
-
-    // Localiza o PRIMEIRO marcador a partir de `cursor`; itera até o fim.
-    // O marker é: `[SOULS-DEDUP: Block Hash 0x<16hex><MARKER_SUFFIX>`
-    // onde MARKER_SUFFIX = ". Use souls_fill para resgatar se necessário]".
-    while let Some(rel_idx) = text[cursor..].find(context_compression::dedup::MARKER_PREFIX) {
-        let abs_idx = cursor + rel_idx;
-        // Empurra tudo entre cursor e o início do marcador.
-        expanded.push_str(&text[cursor..abs_idx]);
-
-        let after_prefix = abs_idx + context_compression::dedup::MARKER_PREFIX.len();
-        // O marker válido tem: 16 chars hex + sufixo inteiro (46 chars incluindo ']').
-        if after_prefix + HEX_LEN + SUFFIX.len() > text.len() {
-            // Texto terminou antes do marker completo: mantém o resto como literal.
-            expanded.push_str(&text[abs_idx..]);
-            cursor = text.len();
-            break;
-        }
-        let hex = &text[after_prefix..after_prefix + HEX_LEN];
-        let suffix_start = after_prefix + HEX_LEN;
-        let candidate_suffix = &text[suffix_start..suffix_start + SUFFIX.len()];
-        if candidate_suffix != SUFFIX {
-            // Marker malformado (sufixo divergente): mantém como literal e avança
-            // apenas o prefixo, deixando o `find` relocalizar o próximo marker.
-            expanded.push_str(&text[abs_idx..suffix_start]);
-            cursor = suffix_start;
-            continue;
-        }
-        if let Ok(hash) = u64::from_str_radix(hex, 16) {
-            if let Some(entry) = cache.get(&hash) {
-                expanded.push_str(entry.value());
-                rehydrated += 1;
-            } else {
-                misses.push(hex.to_string());
-            }
-        } else {
-            // Hex inválido: mantém o marker como literal.
-            expanded.push_str(&text[abs_idx..suffix_start + SUFFIX.len()]);
-        }
-        cursor = suffix_start + SUFFIX.len();
-    }
-    // Empurra o restante do texto.
-    expanded.push_str(&text[cursor..]);
+    let expanded = context_compression::rehydrate_ccr(text);
 
     Ok(json!({
         "content": [{
@@ -4258,10 +4285,7 @@ async fn run_souls_ccr_fill(params: &serde_json::Map<String, Value>) -> Result<V
         }],
         "structuredContent": {
             "expanded": expanded,
-            "rehydrated_count": rehydrated,
-            "miss_count": misses.len(),
-            "misses": misses,
-            "engine": "context_compression.dedup.fill (Marco 3.6, CCR Lossless)"
+            "engine": "context_compression.dedup.fill (Marco 5.5.0, CCR Lossless)"
         },
         "isError": false
     }))
@@ -7448,6 +7472,91 @@ mod tests {
             payload_cirurgico["disjuntor_ativo"],
             Value::Bool(false),
             "disjuntor_ativo deve ser false para prompt cirurgico (amb={amb_cirurgico}, risco={risco_cirurgico})"
+        );
+    }
+
+    // =========================================================================
+    // MARCO 5.5.0 — TCEL DE CONTEXTO, ALINHAMENTO E REIDRATAÇÃO REVERSÍVEL CCR
+    // =========================================================================
+
+    #[test]
+    fn test_context_stitcher_alignment() {
+        use souls_mc_lib::cognition::context_compression::{ContextStitcher, count_tokens_gigatoken};
+
+        let z1 = "System prompt SODA Canon RAW - context test string for token padding boundary verification.".to_string();
+        let z2 = vec![
+            json!({"name": "web_search", "description": "Search duckduckgo"}),
+            json!({"name": "fetch_web", "description": "Fetch markdown"}),
+        ];
+        let z3 = "Materialized view of local state memory snapshot.".to_string();
+        let z4 = "Dynamic user prompt suffix.".to_string();
+
+        let stitcher = ContextStitcher::new(z1, z2, z3, z4);
+
+        let z1_pad = stitcher.z1_padded();
+        let z2_pad = stitcher.z2_padded();
+        let z3_pad = stitcher.z3_padded();
+
+        let c1 = count_tokens_gigatoken(&z1_pad);
+        let c2 = count_tokens_gigatoken(&z2_pad);
+        let c3 = count_tokens_gigatoken(&z3_pad);
+
+        assert_eq!(c1 % 64, 0, "Z1 token count {c1} must be a multiple of 64");
+        assert_eq!(c2 % 64, 0, "Z2 token count {c2} must be a multiple of 64");
+        assert_eq!(c3 % 64, 0, "Z3 token count {c3} must be a multiple of 64");
+
+        let full = stitcher.stitch();
+        assert!(full.contains(&z1_pad));
+        assert!(full.contains(&stitcher.z4_dynamic_suffix));
+    }
+
+    #[test]
+    fn test_dedup_5_lines_trigger_v550() {
+        use souls_mc_lib::cognition::context_compression::dedup::{compress, MARKER_PREFIX};
+
+        let short_text = "line1\nline2\nline3\nline4\nline5";
+        let out_short = compress(short_text);
+        assert_eq!(out_short, short_text, "5 lines or fewer must NOT be compressed");
+
+        let long_text = "line1\nline2\nline3\nline4\nline5\nline6";
+        let out_long = compress(long_text);
+        assert!(out_long.contains(MARKER_PREFIX), "More than 5 lines must trigger CCR compression");
+    }
+
+    #[test]
+    fn test_fill_rehydration_equivalence_v550() {
+        use souls_mc_lib::cognition::context_compression::dedup::{compress, rehydrate_ccr, clear_ccr_cache};
+
+        clear_ccr_cache();
+        let original_code = "fn calculate_fast_hash() {\n    let mut sum = 0;\n    for i in 0..100 {\n        sum += i;\n    }\n    println!(\"sum: {}\", sum);\n}\n";
+        let compressed = compress(original_code);
+        assert_ne!(compressed, original_code);
+
+        let rehydrated = rehydrate_ccr(&compressed);
+        assert_eq!(rehydrated, original_code, "Rehydration must yield 100% byte-for-byte lossless match");
+    }
+
+    #[test]
+    fn test_loopback_interception_latency() {
+        use souls_mc_lib::cognition::context_compression::dedup::{ccr_cache, clear_ccr_cache};
+        use std::time::Instant;
+
+        clear_ccr_cache();
+        let hash_u64: u64 = 0x123456789ABCDEF0;
+        let sample_payload = "fn benchmark_latency() { println!(\"Zero VRAM RAM retrieval\"); }".to_string();
+        ccr_cache().insert(hash_u64, sample_payload.clone());
+
+        let t0 = Instant::now();
+        let retrieved = ccr_cache().get(&hash_u64);
+        let elapsed = t0.elapsed();
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().value(), &sample_payload);
+
+        let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
+        assert!(
+            elapsed_ms < 1.0,
+            "Host RAM DashMap retrieval latency must be strictly < 1.0ms, got {elapsed_ms:.4}ms"
         );
     }
 }
