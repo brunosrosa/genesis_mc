@@ -41,6 +41,16 @@ if (Test-Path $vendorLlamaCmake) {
         Write-Host "[PATCH] vendor/llama-cpp-sys-2 GGML_CCACHE -> OFF (auto-fix CUDA+sccache)" -ForegroundColor DarkGreen
     }
 }
+# Patch idempotente vendor/esaxx-rs: desativa static_crt(true) para evitar conflitos MSVC (LNK2005/LNK1169)
+$vendorEsaxxBuild = Join-Path $PSScriptRoot "src-tauri\vendor\esaxx-rs\build.rs"
+if (Test-Path $vendorEsaxxBuild) {
+    $esaxxContent = Get-Content -LiteralPath $vendorEsaxxBuild -Raw -ErrorAction SilentlyContinue
+    if ($esaxxContent -and $esaxxContent -match '\.static_crt\(true\)') {
+        ($esaxxContent -replace '\.static_crt\(true\)', '.static_crt(false)') |
+            Set-Content -LiteralPath $vendorEsaxxBuild
+        Write-Host "[PATCH] vendor/esaxx-rs static_crt -> false (auto-fix MSVC runtime)" -ForegroundColor DarkGreen
+    }
+}
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 

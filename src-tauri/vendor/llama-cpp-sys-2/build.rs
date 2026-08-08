@@ -583,6 +583,7 @@ fn main() {
 
         if matches!(target_os, TargetOs::Windows(WindowsVariant::Msvc)) {
             common_wrapper_build.flag("/std:c++17");
+            common_wrapper_build.static_crt(false);
         }
 
         // When static-stdcxx is enabled on Android, suppress the cc crate's automatic
@@ -597,6 +598,10 @@ fn main() {
     // Build with Cmake
 
     let mut config = Config::new(&llama_src);
+    if matches!(target_os, TargetOs::Windows(WindowsVariant::Msvc)) {
+        config.static_crt(false);
+        config.define("CMAKE_MSVC_RUNTIME_LIBRARY", "MultiThreadedDLL");
+    }
 
     // Would require extra source files to pointlessly
     // be included in what's uploaded to and downloaded from
@@ -1015,6 +1020,7 @@ fn main() {
 
         if matches!(target_os, TargetOs::Windows(WindowsVariant::Msvc)) {
             mtmd_build.flag("/std:c++17");
+            mtmd_build.static_crt(false);
         }
 
         // When static-stdcxx is enabled on Android, suppress the cc crate's automatic
