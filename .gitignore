@@ -48,6 +48,7 @@ src-tauri/third_party/ultrafast-mcp-sequential-thinking/
 docs/observability/audits/blobs/inspect/
 docs/runtime/context_dumps/
 .agents/bin/
+src-tauri/models/
 
 # ==============================================================================
 # SOULS BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO

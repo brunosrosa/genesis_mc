@@ -28,9 +28,11 @@ pub mod bitnet_engine;
 pub mod pulp_matrix_engine;
 pub mod burn_engine;
 pub mod ort_scorer;
+pub mod gliclass_engine; // SOULS V6 MARCO 5.3.0: Sentinela de Borda Bare-Metal OrtScorerEngine (GLiClass Zero-Shot Triage)
 
 // Aliases de compatibilidade retroativa
 pub use burn_engine as burn_agnostic;
 pub use llama_logit_probing as llama_cpp4_logit;
 pub use pulp_matrix_engine as pulp_lele;
+
 
