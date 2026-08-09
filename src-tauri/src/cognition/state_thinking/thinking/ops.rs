@@ -129,6 +129,82 @@ CREATE TABLE IF NOT EXISTS repo_heatmap (
 /// Versão do schema pós Fase E. Idempotente em bancos já migrados.
 pub const TARGET_VERSION: i64 = 5;
 
+/// Versão do schema pós Marco 5.10.0 (v6). Idempotente em bancos já migrados.
+pub const TARGET_VERSION_V6: i64 = 6;
+
+/// DDL puro do schema V6 (Saneamento de Views e Subcomponentes).
+pub const V6_SCHEMA_DDL: &str = "
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS repositorios (
+    project_name TEXT PRIMARY KEY,
+    repo_url TEXT UNIQUE,
+    lote_id TEXT,
+    souls_universal_uuid TEXT UNIQUE,
+    status_processamento TEXT
+);
+
+CREATE TABLE IF NOT EXISTS repo_heuristics (
+    project_name TEXT PRIMARY KEY,
+    solution_id TEXT NOT NULL DEFAULT '',
+    status_atualizacao TEXT NOT NULL DEFAULT '',
+    status_fase TEXT NOT NULL DEFAULT '',
+    classificacao_terminal TEXT NOT NULL DEFAULT '',
+    risco_principal TEXT NOT NULL DEFAULT '',
+    risco_linha_vermelha TEXT NOT NULL DEFAULT '',
+    ouro_a_extrair TEXT NOT NULL DEFAULT '',
+    score_final REAL NOT NULL DEFAULT 0.0,
+    embargo_status INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS deep_components (
+    component_id TEXT PRIMARY KEY,
+    solution_id TEXT NOT NULL,
+    solution_name TEXT NOT NULL,
+    component_name TEXT NOT NULL,
+    component_group TEXT NOT NULL,
+    analysis_status TEXT NOT NULL,
+    analysis_date INTEGER NOT NULL,
+    analyst TEXT NOT NULL,
+    component_version_of_analysis TEXT NOT NULL,
+    FOREIGN KEY(solution_id) REFERENCES repositorios(repo_url) ON DELETE CASCADE
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_deep_comp_solution ON deep_components(solution_id);
+
+DROP VIEW IF EXISTS quarantine_radar;
+CREATE VIEW quarantine_radar AS
+SELECT 
+    r.project_name,
+    r.repo_url,
+    rh.status_atualizacao,
+    rh.status_fase,
+    rh.classificacao_terminal,
+    rh.risco_principal,
+    rh.risco_linha_vermelha
+FROM repositorios r
+JOIN repo_heuristics rh ON r.repo_url = rh.solution_id
+WHERE rh.embargo_status = 1 
+   OR rh.status_atualizacao = 'REJEITADO_DESCARTE'
+   OR rh.classificacao_terminal = 'REJECT';
+
+DROP VIEW IF EXISTS action_matrix;
+CREATE VIEW action_matrix AS
+SELECT 
+    r.project_name,
+    r.repo_url,
+    rh.classificacao_terminal,
+    rh.status_atualizacao,
+    rh.status_fase,
+    rh.ouro_a_extrair,
+    rh.score_final
+FROM repositorios r
+JOIN repo_heuristics rh ON r.repo_url = rh.solution_id
+WHERE rh.classificacao_terminal IN ('STACK_CORE_PLANO_A1', 'STACK_CORE_PLANO_A2', 'INTEGRATE_AS_COMPONENT', 'ABSORB_PARTIALLY')
+  AND rh.status_atualizacao != 'REJEITADO_DESCARTE'
+ORDER BY rh.score_final DESC;
+";
+
 /// Migra um banco v3 (ou v4) para v5 de forma atômica.
 ///
 /// Idempotente: se `user_version >= 5`, é no-op.
@@ -144,6 +220,23 @@ pub fn migrate_v3_to_v5(conn: &mut Connection) -> Result<(), CognitiveError> {
     tx.commit().map_err(CognitiveError::from)?;
     Ok(())
 }
+
+/// Migra um banco v5 (ou anterior) para v6 de forma atômica.
+///
+/// Idempotente: se `user_version >= 6`, é no-op.
+pub fn migrate_v5_to_v6(conn: &mut Connection) -> Result<(), CognitiveError> {
+    let current = read_user_version(conn).map_err(CognitiveError::from)?;
+    if current >= TARGET_VERSION_V6 {
+        return Ok(());
+    }
+    let tx = conn.transaction().map_err(CognitiveError::from)?;
+    tx.execute_batch(V6_SCHEMA_DDL)
+        .map_err(CognitiveError::from)?;
+    write_user_version(&tx, TARGET_VERSION_V6).map_err(CognitiveError::from)?;
+    tx.commit().map_err(CognitiveError::from)?;
+    Ok(())
+}
+
 
 /// Cria uma nova sessão socrática (idempotente em PK duplicada).
 ///

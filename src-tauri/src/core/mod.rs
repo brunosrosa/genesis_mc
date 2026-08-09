@@ -22,6 +22,7 @@ pub mod llama_logit_probing;
 pub mod epistemic_prober; // SOULS-CANIBALIZED Marco 4.9.3: Avaliador Epistêmico (Hipocampo) - trait síncrono CPU/AVX2
 pub mod cohomology; // SOULS-CANIBALIZED Marco 4.10.0: Cohomologia de Feixes Socráticos (H¹ ≠ 0 → boost conflito_memoria)
 pub mod socratic_event_bus; // SOULS-CANIBALIZED Marco 4.10.0: Disjuntor Socrático via IPC Zero-Copy (Tauri event 'socratic_interrupt')
+pub mod socratic_interrupt; // SOULS V6 MARCO 5.11.0: Canal de Interrupção Socrática CLI Híbrido
 pub mod l7_shield; // SOULS-CANIBALIZED Marco 4.10.0: L7 Shield (MPSC + oneshot para prober síncrono em thread dedicada)
 pub mod mistral_sidecar;
 pub mod bitnet_engine;

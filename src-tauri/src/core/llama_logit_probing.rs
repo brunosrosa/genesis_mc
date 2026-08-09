@@ -15,6 +15,7 @@ const MOCK_VOCAB_SIZE: usize = 128;
 
 pub struct LlamaLogitProber {
     mock_logits: Vec<f32>,
+    n_gpu_layers: u32,
 }
 
 pub type LlamaCpp4LogitEngine = LlamaLogitProber;
@@ -30,7 +31,15 @@ impl LlamaLogitProber {
         let mock_logits = (0..MOCK_VOCAB_SIZE)
             .map(|i| seed_logit(i, 0x5A5A_C0DE))
             .collect();
-        Self { mock_logits }
+        Self {
+            mock_logits,
+            n_gpu_layers: 0,
+        }
+    }
+
+    /// Retorna 0 indicando execução 100% isolada na CPU Host (AVX2), sem VRAM alocada.
+    pub fn n_gpu_layers(&self) -> u32 {
+        self.n_gpu_layers
     }
 
     /// Retorna os logits não normalizados do último token do prefill em O(1) tempo.
@@ -48,6 +57,24 @@ impl LlamaLogitProber {
         }
         Ok(self.mock_logits.clone())
     }
+}
+
+/// Computa a Softmax numericamente estável sobre os logits dos tokens "0" e "1",
+/// a Entropia de Shannon H(X), e determina se o disjuntor de incerteza foi ativado (H >= 0.75).
+pub fn compute_binary_shannon_entropy(logit_0: f32, logit_1: f32) -> (f32, f32, f32, bool) {
+    let max_logit = logit_0.max(logit_1);
+    let exp_0 = (logit_0 - max_logit).exp();
+    let exp_1 = (logit_1 - max_logit).exp();
+    let sum_exp = exp_0 + exp_1;
+    let p0 = if sum_exp > 0.0 { exp_0 / sum_exp } else { 0.5 };
+    let p1 = if sum_exp > 0.0 { exp_1 / sum_exp } else { 0.5 };
+
+    let h0 = if p0 > 0.0 { p0 * p0.log2() } else { 0.0 };
+    let h1 = if p1 > 0.0 { p1 * p1.log2() } else { 0.0 };
+    let entropy = -(h0 + h1);
+
+    let entropy_violated = entropy >= 0.75;
+    (p0, p1, entropy, entropy_violated)
 }
 
 /// FNV-1a hash normalizado em [-1.0, 1.0] — distribuição determinística e reprodutível.

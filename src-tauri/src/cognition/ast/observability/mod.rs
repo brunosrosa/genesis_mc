@@ -42,7 +42,7 @@ pub use call_graph::{
 pub use feedback::{TelemetryReport, aggregate_telemetry, e3_efficiency};
 pub use heatmap::{HeatmapEntry, compute_heatmap, langevin_score};
 pub use impact::{ImpactReport, blast_radius, build_import_graph, impact_report};
-pub use mpsc_telemetry::{events_dropped, init_telemetry_worker, try_emit_event, TelemetryEvent};
+pub use mpsc_telemetry::{events_dropped, init_telemetry_worker, report_mcp_progress, try_emit_event, TelemetryEvent};
 pub use ops::migrate_v2_to_v3;
 pub use ops::migrate_v3_to_v4;
 pub use routes::{RouteReport, scan_routes};

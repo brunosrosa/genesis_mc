@@ -49,6 +49,7 @@ docs/observability/audits/blobs/inspect/
 docs/runtime/context_dumps/
 .agents/bin/
 src-tauri/models/
+docs/observability/context_dumps/
 
 # ==============================================================================
 # SOULS BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO

@@ -51,6 +51,32 @@ static EVENTS_DROPPED: AtomicU64 = AtomicU64::new(0);
 /// Sender global do canal MPSC.
 static TELEMETRY_TX: OnceLock<mpsc::Sender<TelemetryEvent>> = OnceLock::new();
 
+/// Despacha uma notificação de progresso JSON-RPC 2.0 (MCP 1.0.0) para `stdout`
+/// e emite log sensorial rastreável no `stderr`.
+pub fn report_mcp_progress(token: &str, progress: f64, total: f64) {
+    let token_trimmed = token.trim();
+    if token_trimmed.is_empty() {
+        return;
+    }
+
+    eprintln!("[PROGRESS] {} => {:.1}% / {:.1}%", token_trimmed, progress, total);
+
+    let notification = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/progress",
+        "params": {
+            "progressToken": token_trimmed,
+            "progress": progress,
+            "total": total
+        }
+    });
+
+    if let Ok(serialized) = serde_json::to_string(&notification) {
+        println!("{}", serialized);
+    }
+}
+
+
 /// Inicializa o canal MPSC e dispara o worker dedicado.
 ///
 /// Idempotente: chamadas subsequentes são no-op. Retorna o `Sender`

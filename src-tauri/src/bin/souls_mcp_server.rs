@@ -37,6 +37,8 @@ use souls_mc_lib::core::socratic_event_bus::{
 };
 // SOULS-CANIBALIZED Marco 4.10.0: Cohomologia de Feixes Socráticos (H¹).
 use souls_mc_lib::core::cohomology::apply_cohomology_boost;
+// SOULS V6 MARCO 5.11.0: Canal de Interrupção Socrática CLI Híbrido.
+use souls_mc_lib::core::socratic_interrupt;
 // SOULS V6 MARCO 5.3.0: Sentinela de Borda Bare-Metal OrtScorerEngine (GLiClass Zero-Shot Triage).
 use souls_mc_lib::core::gliclass_engine::{ClassificationLabel, OrtScorerEngine, MAX_TRIAGE_CHARS};
 
@@ -910,9 +912,20 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
     }
 
 
+    // MARCO 5.10.0: Notificação de progresso via JSON-RPC se progressToken fornecido via _meta
+    let progress_token = params
+        .get("_meta")
+        .and_then(Value::as_object)
+        .and_then(|m| m.get("progressToken"))
+        .and_then(Value::as_str);
+
+    if let Some(token) = progress_token {
+        observability::report_mcp_progress(token, 0.0, 100.0);
+    }
+
     // SOULS-CANIBALIZED: higiene canônica com normalizador em O(1) (looping fatiado sem alocações).
     // Suporta a tríade de aliases (puro, souls_*, ctx_*) e o namespace souls_mcp.* para todas as ferramentas.
-    match tool_name {
+    let result = match tool_name {
         // ============ Cânone SOULS — tools de orquestração e IO ============
         "get_ast" | "repo_ast" => run_repo_ast(params).await,
         "fetch_web" | "web_fetch" => run_web_fetch(params).await,
@@ -975,7 +988,13 @@ async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
             message: "Ferramenta MCP desconhecida".to_string(),
             data: Some(json!({ "tool_name": other })),
         }),
+    };
+
+    if let Some(token) = progress_token {
+        observability::report_mcp_progress(token, 100.0, 100.0);
     }
+
+    result
 }
 
 // =============================================================================
@@ -1524,6 +1543,15 @@ async fn run_souls_search(
         .unwrap_or(5) as usize;
 
     let root_path = validate_and_canonicalize_path(search_path_str)?;
+
+    if let Some(token) = params
+        .get("_meta")
+        .and_then(Value::as_object)
+        .and_then(|m| m.get("progressToken"))
+        .and_then(Value::as_str)
+    {
+        observability::report_mcp_progress(token, 50.0, 100.0);
+    }
 
     let search_output = lean_vacuum::search_lean(&root_path, query_str, max_depth).map_err(|e| RpcError {
         code: -32025,
@@ -2200,6 +2228,11 @@ async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, Rp
     triage_prompt_security(prompt).await?;
 
 
+    let hitl_approved = args
+        .get("hitl_approved")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
     // 2. Extrair `session_id` (opcional; default "anonymous" para correlação).
     let session_id = args
         .get("session_id")
@@ -2264,15 +2297,11 @@ async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, Rp
     }
 
     // 8. Disjuntor de segurança: abortar inferência se o prompt for vago
-    //    demais (amb > 0.75) ou com risco relacional elevado (risco > 0.70).
-    //    Estes limiares estão alinhados com os testes TDD do MARCO 5.2.0.
-    let disjuntor_ativo = scores.ambiguidade > 0.75 || scores.risco_relacional > 0.70;
+    //    demais (amb > 0.75) ou com risco relacional elevado (risco > 0.70),
+    //    a menos que a aprovação HITL explícita (`hitl_approved: true`) tenha sido fornecida.
+    let disjuntor_ativo = (scores.ambiguidade > 0.75 || scores.risco_relacional > 0.70) && !hitl_approved;
 
-    // 9. MARCO 5.2.0: DIRETRIZ 4 (inegociável).
-    //    Quando o disjuntor é disparado:
-    //    a) Emit Tauri Event `socratic_interrupt` com payload completo.
-    //    b) Retornar erro JSON-RPC `-32001` (HitlDenied) com payload em `data`.
-    //    O frontend Svelte 5 escuta o evento e renderiza o sidecar inline.
+    // 9. MARCO 5.11.0: Interrupção Socrática CLI Híbrida.
     if disjuntor_ativo {
         let reason = if scores.ambiguidade > 0.75 {
             format!("ambiguidade {:.2} > 0.75", scores.ambiguidade)
@@ -2283,21 +2312,29 @@ async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, Rp
             scores,
             prompt,
             session_id.to_string(),
-            reason,
+            reason.clone(),
         );
-        // 9a. IPC Zero-Copy via Tauri Event (sink global configurado pelo runtime Tauri).
         emit_socratic_interrupt(&interrupt);
-        // 9b. JSON-RPC error -32001 HitlDenied. Payload fica em `data.interrupt`
-        //     para que clientes MCP possam extrair sem precisar escutar o evento.
+
+        let diff = socratic_interrupt::get_shadow_workspace_diff().unwrap_or_default();
+        let question = socratic_interrupt::generate_two_legged_socratic_question(&diff);
+
+        let cli_res = socratic_interrupt::trigger_socratic_cli_interrupt(&diff, &question).await;
+
         let err_value = hitl_denied_error(&interrupt);
-        return Err(RpcError {
-            code: RPC_HITL_DENIED_CODE as i64,
-            message: err_value["message"]
-                .as_str()
-                .unwrap_or("HitlDenied: disjuntor socrático ativo")
-                .to_string(),
-            data: err_value.get("data").cloned(),
-        });
+        if cli_res.is_err() {
+            let mut err_data = err_value.get("data").cloned().unwrap_or_else(|| json!({}));
+            if let Some(obj) = err_data.as_object_mut() {
+                obj.insert("diff".to_string(), Value::String(diff));
+                obj.insert("socratic_question".to_string(), Value::String(question));
+            }
+
+            return Err(RpcError {
+                code: RPC_HITL_DENIED_CODE as i64,
+                message: "Socratic Interrupt: Incerteza epistêmica violada. HITL exigido.".to_string(),
+                data: Some(err_data),
+            });
+        }
     }
 
     // 10. Payload canônico flat (4 campos obrigatórios do contrato MCP).
@@ -3503,6 +3540,13 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = thinking::ops::migrate_v3_to_v5(&mut conn) {
             eprintln!("[StateDbWorker] ALERTA: falha na migracao V3→V5: {e}");
         }
+
+        // Marco 5.10.0: migracao V5→V6 (Saneamento de Views e Subcomponentes).
+        // Idempotente: no-op em banco ja migrado.
+        if let Err(e) = thinking::ops::migrate_v5_to_v6(&mut conn) {
+            eprintln!("[StateDbWorker] ALERTA: falha na migracao V5→V6: {e}");
+        }
+
 
         while let Some(op) = rx.blocking_recv() {
             let now = std::time::SystemTime::now()
@@ -6575,6 +6619,14 @@ mod tests {
         conn_mut
     }
 
+    fn open_v6_in_memory() -> rusqlite::Connection {
+        let mut conn = open_v5_in_memory();
+        souls_mc_lib::cognition::thinking::ops::migrate_v5_to_v6(&mut conn)
+            .expect("migra para V6");
+        conn
+    }
+
+
     /// T1: Garante a migração idempotente v0→v5 e que a tabela
     /// `socratic_thoughts` REJEITA inserções órfãs por FK.
     #[test]
@@ -8052,5 +8104,249 @@ mod tests {
 
         assert_eq!(count, 1, "Tabela repo_heatmap deve existir e aceitar registros");
     }
+
+    // =============================================================================
+    // MARCO 5.10.0: Saneamento de Views SQLite (v6) e Progress Notifications MCP
+    // =============================================================================
+
+    #[test]
+    fn test_database_migration_v6_schema() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        souls_mc_lib::cognition::thinking::ops::migrate_v5_to_v6(&mut conn).expect("v5→v6");
+        let v6 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+            .unwrap();
+        assert_eq!(v6, 6, "após migração deve ser v6");
+
+        // Idempotência: re-invocar é no-op
+        souls_mc_lib::cognition::thinking::ops::migrate_v5_to_v6(&mut conn)
+            .expect("segunda migração v6 deve ser no-op");
+        let v6b = conn
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+            .unwrap();
+        assert_eq!(v6b, 6, "idempotente: v6 preservado");
+
+        let table_count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='deep_components'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 1, "tabela deep_components deve existir");
+
+        let index_count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='index' AND name='idx_deep_comp_solution'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_count, 1, "índice idx_deep_comp_solution deve existir");
+
+        let view_quarantine: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='view' AND name='quarantine_radar'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(view_quarantine, 1, "view quarantine_radar deve existir");
+
+        let view_action: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='view' AND name='action_matrix'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(view_action, 1, "view action_matrix deve existir");
+    }
+
+    #[test]
+    fn test_quarantine_radar_filtering() {
+        let conn = open_v6_in_memory();
+
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url) VALUES ('owner/repo1', 'https://github.com/owner/repo1')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url) VALUES ('owner/repo2', 'https://github.com/owner/repo2')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url) VALUES ('owner/repo3', 'https://github.com/owner/repo3')",
+            [],
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, status_atualizacao, status_fase, classificacao_terminal, embargo_status)
+             VALUES ('owner/repo1', 'https://github.com/owner/repo1', 'EMBARGADO', 'F1', 'PENDING', 1)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, status_atualizacao, status_fase, classificacao_terminal, embargo_status)
+             VALUES ('owner/repo2', 'https://github.com/owner/repo2', 'REJEITADO_DESCARTE', 'F1', 'REJECT', 0)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, status_atualizacao, status_fase, classificacao_terminal, embargo_status)
+             VALUES ('owner/repo3', 'https://github.com/owner/repo3', 'CONCLUIDO', 'F4', 'STACK_CORE_PLANO_A1', 0)",
+            [],
+        ).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT project_name FROM quarantine_radar ORDER BY project_name")
+            .unwrap();
+        let rows: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(rows.len(), 2, "quarantine_radar deve retornar exatamente 2 itens");
+        assert_eq!(rows[0], "owner/repo1");
+        assert_eq!(rows[1], "owner/repo2");
+    }
+
+    #[test]
+    fn test_action_matrix_ordering() {
+        let conn = open_v6_in_memory();
+
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url) VALUES ('owner/repo_low', 'https://github.com/owner/repo_low')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url) VALUES ('owner/repo_high', 'https://github.com/owner/repo_high')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url) VALUES ('owner/repo_mid', 'https://github.com/owner/repo_mid')",
+            [],
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, classificacao_terminal, status_atualizacao, score_final)
+             VALUES ('owner/repo_low', 'https://github.com/owner/repo_low', 'STACK_CORE_PLANO_A1', 'CONCLUIDO', 4.5)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, classificacao_terminal, status_atualizacao, score_final)
+             VALUES ('owner/repo_high', 'https://github.com/owner/repo_high', 'INTEGRATE_AS_COMPONENT', 'CONCLUIDO', 9.2)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, classificacao_terminal, status_atualizacao, score_final)
+             VALUES ('owner/repo_mid', 'https://github.com/owner/repo_mid', 'ABSORB_PARTIALLY', 'CONCLUIDO', 7.1)",
+            [],
+        ).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT project_name, score_final FROM action_matrix")
+            .unwrap();
+        let rows: Vec<(String, f64)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].0, "owner/repo_high");
+        assert_eq!(rows[0].1, 9.2);
+        assert_eq!(rows[1].0, "owner/repo_mid");
+        assert_eq!(rows[1].1, 7.1);
+        assert_eq!(rows[2].0, "owner/repo_low");
+        assert_eq!(rows[2].1, 4.5);
+    }
+
+    #[test]
+    fn test_mcp_progress_rpc_serialization() {
+        use souls_mc_lib::cognition::ast::observability::report_mcp_progress;
+
+        report_mcp_progress("", 0.0, 100.0);
+        report_mcp_progress("   ", 10.0, 100.0);
+
+        let token = "test_progress_token";
+        let progress = 45.0;
+        let total = 100.0;
+
+        let notification = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": token,
+                "progress": progress,
+                "total": total
+            }
+        });
+
+        let json_str = serde_json::to_string(&notification).unwrap();
+        assert!(json_str.contains(r#""jsonrpc":"2.0""#));
+        assert!(json_str.contains(r#""method":"notifications/progress""#));
+        assert!(json_str.contains(r#""progressToken":"test_progress_token""#));
+        assert!(json_str.contains(r#""progress":45.0"#));
+        assert!(json_str.contains(r#""total":100.0"#));
+    }
+
+    #[test]
+    fn test_logit_probing_entropy_calculation() {
+        use souls_mc_lib::core::llama_logit_probing::compute_binary_shannon_entropy;
+
+        // 1. Logits extremos (100.0 vs -100.0): P(0) ~ 1.0, P(1) ~ 0.0 -> Entropia == 0.0, sem NaNs
+        let (p0_ext, p1_ext, h_ext, violated_ext) = compute_binary_shannon_entropy(100.0, -100.0);
+        assert!(!h_ext.is_nan(), "Entropia não pode ser NaN");
+        assert!((h_ext - 0.0).abs() < 1e-4, "Logits totalmente determinados devem ter entropia 0.0, foi {h_ext}");
+        assert!(!violated_ext, "Entropia 0.0 não deve violar o disjuntor");
+        assert!(p0_ext > 0.999);
+        assert!(p1_ext < 0.001);
+
+        // 2. Logits idênticos (0.0 vs 0.0): P(0) = 0.5, P(1) = 0.5 -> Entropia máxima H == 1.0 >= 0.75 -> violated == true
+        let (p0_eq, p1_eq, h_eq, violated_eq) = compute_binary_shannon_entropy(0.0, 0.0);
+        assert!(!h_eq.is_nan(), "Entropia não pode ser NaN");
+        assert!((h_eq - 1.0).abs() < 1e-4, "Logits idênticos (50/50) devem ter entropia 1.0, foi {h_eq}");
+        assert!(violated_eq, "Entropia 1.0 DEVE violar o disjuntor (H >= 0.75)");
+        assert!((p0_eq - 0.5).abs() < 1e-4);
+        assert!((p1_eq - 0.5).abs() < 1e-4);
+    }
+
+    #[tokio::test]
+    async fn test_socratic_cli_block_and_approval() {
+        use souls_mc_lib::core::socratic_interrupt::trigger_socratic_cli_interrupt_with_io;
+
+        let diff = "  modified: src/bin/souls_mcp_server.rs\n";
+        let question = "O que estas alterações representam para o sistema, e como tratamos regressões?";
+
+        // Stream de entrada simulando usuário digitando 'approve\n'
+        let input_bytes = b"approve\n";
+        let mut reader = tokio::io::BufReader::new(&input_bytes[..]);
+        let mut writer = Vec::new();
+
+        let result = trigger_socratic_cli_interrupt_with_io(diff, question, &mut reader, &mut writer).await;
+        assert!(result.is_ok(), "Aprovação 'approve' deve autorizar a operação (Ok(()))");
+
+        // Stream de entrada simulando usuário digitando 'reject\n'
+        let reject_bytes = b"reject\n";
+        let mut reader_rej = tokio::io::BufReader::new(&reject_bytes[..]);
+        let mut writer_rej = Vec::new();
+
+        let result_rej = trigger_socratic_cli_interrupt_with_io(diff, question, &mut reader_rej, &mut writer_rej).await;
+        assert!(result_rej.is_err(), "Rejeição 'reject' deve abortar a operação (Err)");
+    }
+
+    #[test]
+    fn test_gemma_cpu_isolation() {
+        use souls_mc_lib::core::llama_logit_probing::LlamaCpp4LogitEngine;
+
+        let engine = LlamaCpp4LogitEngine::new();
+        assert_eq!(
+            engine.n_gpu_layers(),
+            0,
+            "Gemma E2B LlamaCpp4LogitEngine DEVE inicializar com n_gpu_layers == 0 para isolar 100% da VRAM da GPU"
+        );
+    }
 }
+
 
