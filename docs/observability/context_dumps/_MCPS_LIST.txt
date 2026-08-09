@@ -1,6 +1,6 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
-GERADO EM: 2026-08-08 21:06:09
-TOTAL DE FERRAMENTAS: 48
+GERADO EM: 2026-08-08 22:20:39
+TOTAL DE FERRAMENTAS: 50
 ----------------------------------------------------------------------------------------------------
 • analyze_session: Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.
 • callees: Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado.
@@ -31,7 +31,7 @@ TOTAL DE FERRAMENTAS: 48
 • mem_search: Busca FTS5 síncrona por MATCH em observations_fts. Retorna entidades distintas com metadata.
 • merge_sessions: Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual.
 • metrics: [Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.
-• multi_read: Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.
+• multi_read: Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR lossless.
 • outline: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline)
 • read: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
 • repo_heatmap: Calcula o ranking de calor (Frecency) dos arquivos do monorepo baseando-se em modificacoes e acessos.
@@ -43,7 +43,9 @@ TOTAL DE FERRAMENTAS: 48
 • session: Gerencia o ciclo de vida da sessão SOULS/MCP e executa a limpeza/vacina de cache de RAM (souls_session).
 • shell: Executa comandos de sistema assincronamente via Tokio com compressão e poda de logs de terminal.
 • smart_read: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k_base) e auto-shrink adaptativo. (souls_smart_read)
+• souls_semantic_search: Executa a busca híbrida RRF combinando FTS5 (BM25) e LanceDB vetorial local com invalidação JIT.
 • sqlite_query: Consulta SQLite read-only nos bancos nativos. Aliases: sqlite_query | souls_sqlite_query | db_query.
+• stub_fill: Preenche stubs de código demarcados em arquivos locais substituindo-os pelo código fornecido.
 • sub_agent: Registra ou atualiza o estado de um subagente no banco de estado L2 (souls_state.db).
 • symbol: Resolve localizacao fisica (file:line:col) via WalkDir+Regex+AST Wasmtime. (souls_symbol)
 • sys_time: Retorna data/hora local, UTC e fuso atual via chrono nativo. Aliases: sys_time | souls_sys_time.

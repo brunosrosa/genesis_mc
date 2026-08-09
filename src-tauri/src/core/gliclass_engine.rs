@@ -64,10 +64,7 @@ impl OrtScorerEngine {
 
     /// Inicializa a instância singleton procurando os artefatos físicos.
     fn init_singleton() -> Self {
-        let models_dir = std::env::var("SOULS_MODELS_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("src-tauri/models"));
-
+        let models_dir = crate::core::gigatoken_encoder::GigaTokenEncoder::resolve_models_dir();
         let onnx_path = models_dir.join("gliclass_multilang.onnx");
         let tokenizer_path = models_dir.join("tokenizer.json");
 

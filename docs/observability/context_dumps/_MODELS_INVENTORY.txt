@@ -1,5 +1,5 @@
 === SOULS LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===
-GERADO EM: 2026-08-08 21:06:09
+GERADO EM: 2026-08-08 22:20:39
 FONTE DE ESTADO SQLITE: Z:\souls_mc\.souls_data\souls_heuristic_vault.db (VIEW NATIVA: vw_finops_routing)
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 TOTAL DE ARQUIVOS FÍSICOS DE MODELOS NO DISCO: 46 | ESPAÇO TOTAL EM DISCO: 106.26 GB

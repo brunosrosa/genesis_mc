@@ -128,6 +128,7 @@ fn main() {
             let icon = app.default_window_icon().cloned().unwrap();
             tauri::tray::TrayIconBuilder::new()
                 .icon(icon)
+                .tooltip("Souls MC • Online")
                 .menu(&menu)
                 .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id().as_ref() {
                     "toggle_overlay" => toggle_overlay_window(app),

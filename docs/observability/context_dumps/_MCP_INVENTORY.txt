@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-08-08 21:06:08
+_MCP_INVENTORY Gerado em: 2026-08-08 22:20:39
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -8,11 +8,11 @@ CAMINHO: C:\Users\rosas/.gemini/antigravity-ide/mcp/souls
 SERVER_NAME: souls
 LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt
 SOURCE_DIR: C:\Users\rosas/.gemini/antigravity-ide/mcp/souls
-TOOL_COUNT: 48
+TOOL_COUNT: 50
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.
 
 === SUMMARY ===
-OK_COUNT: 48
+OK_COUNT: 50
 WARN_COUNT: 0
 FAIL_COUNT: 0
 OVERALL_STATUS: HEALTHY
@@ -164,7 +164,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: multi_read
-DESCRIPTION: Lê múltiplos arquivos concorrentemente na RAM Host aplicando compressão de contexto CCR lossless.
+DESCRIPTION: Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR lossless.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -223,8 +223,18 @@ DESCRIPTION: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
+NAME: souls_semantic_search
+DESCRIPTION: Executa a busca híbrida RRF combinando FTS5 (BM25) e LanceDB vetorial local com invalidação JIT.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
 NAME: sqlite_query
 DESCRIPTION: Consulta SQLite read-only nos bancos nativos. Aliases: sqlite_query | souls_sqlite_query | db_query.
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: stub_fill
+DESCRIPTION: Preenche stubs de código demarcados em arquivos locais substituindo-os pelo código fornecido.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

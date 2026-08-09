@@ -1,4 +1,4 @@
-_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-08 21:06:09
+_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-08 22:20:39
 
 ### ====================================================================================================
 ARQUIVO: gateway-config.yaml
@@ -3445,6 +3445,7 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
     )?;
     conn.busy_timeout(std::time::Duration::from_millis(5000))?;
+    souls_mc_lib::cognition::memory::init_memory_schema(&conn)?;
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA foreign_keys = ON;
@@ -4605,7 +4606,7 @@ fn try_log_file_access(file_path: &str, tool: &str) {
 // para absorver contencao transitoria de outros writers (ex: `run_repo_heatmap`).
 // Se o banco nao estiver disponivel (cold start, race no boot), ignora silenciosamente.
 fn try_record_repo_heatmap(file_path: &str) {
-    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::record_access;
+    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::{ensure_heatmap_table, record_access};
     let Ok(mut conn) = Connection::open_with_flags(
         workspace_root().join(".souls_data").join("souls_state.db"),
         OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -4614,6 +4615,7 @@ fn try_record_repo_heatmap(file_path: &str) {
     };
     // busy_timeout(5s) absorve SQLITE_BUSY de outros writers concorrentes.
     let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+    let _ = ensure_heatmap_table(&conn);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -7841,6 +7843,268 @@ mod tests {
         let fused = engine.fuse(&lexical, &[], &tombstones);
         assert_eq!(fused.len(), 1, "Premissa superseded DEVE ser expurgada via JIT tombstone");
         assert_eq!(fused[0].observation_id, "active_uuid_100");
+    }
+
+    #[tokio::test]
+    async fn test_chyros_daemon_idle_trigger() {
+        use souls_mc_lib::cognition::memory::{init_memory_schema, ChyrosDaemon};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        let daemon = ChyrosDaemon::new(":memory:", 1).with_tick_interval_ms(50);
+        assert!(!daemon.is_idle());
+
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        assert!(daemon.is_idle());
+
+        daemon.record_activity();
+        let result = daemon.run_consolidation_cycle(&conn);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Aborted"), "Daemon deve abortar em <100ms ao acionar atividade");
+    }
+
+    #[test]
+    fn test_langevin_decay_convergence() {
+        use souls_mc_lib::cognition::memory::{apply_langevin_decay, init_memory_schema, proj_poincare};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('ev_1', 'Ephemeral Cold Memory', 'EVOLVING', 1.0, 0.88, 0.0, 1000)",
+            [],
+        ).unwrap();
+
+        for _ in 0..50 {
+            let _ = apply_langevin_decay(&conn, 0.01, 0.1, 1.0);
+        }
+
+        let (status, px, py): (String, f64, f64) = conn.query_row(
+            "SELECT stability_status, poincare_x, poincare_y FROM souls_memory_nodes WHERE memory_id = 'ev_1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ).unwrap();
+
+        let norm = (px * px + py * py).sqrt();
+        assert!(norm < 1.0, "Proteção Poincaré: Norma nunca pode exceder ou igualar 1.0 (obtido: {})", norm);
+
+        let (overflow_x, overflow_y) = proj_poincare((1.5, 2.0));
+        let overflow_norm = (overflow_x * overflow_x + overflow_y * overflow_y).sqrt();
+        assert!(overflow_norm <= 0.9999, "proj_poincare deve limitar estritamente a 0.9999");
+        assert!(status == "SUPERSEDED" || norm >= 0.95 || status == "EVOLVING");
+    }
+
+    #[tokio::test]
+    async fn test_jit_factual_consolidation() {
+        use souls_mc_lib::cognition::memory::{init_memory_schema, ChyrosDaemon};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('premise_old', 'User prefers dark mode', 'STABLE', 1.0, 0.0, 0.0, 1000)",
+            [],
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_raw_events_l0 (event_type, payload, processed, created_at)
+             VALUES ('PREFERENCE_UPDATE', '{\"memory_id\": \"premise_new\", \"content\": \"User prefers light mode\", \"contradicts_id\": \"premise_old\", \"status\": \"STABLE\"}', 0, 2000)",
+            [],
+        ).unwrap();
+
+        let daemon = ChyrosDaemon::new(":memory:", 100);
+        let report = daemon.run_consolidation_cycle(&conn).expect("Consolidação deve rodar com sucesso na CPU");
+
+        assert_eq!(report.l0_events_processed, 1);
+
+        let old_status: String = conn.query_row(
+            "SELECT stability_status FROM souls_memory_nodes WHERE memory_id = 'premise_old'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+
+        assert_eq!(old_status, "SUPERSEDED", "Premissa contradita DEVE ser marcada como SUPERSEDED");
+
+        let new_status: String = conn.query_row(
+            "SELECT stability_status FROM souls_memory_nodes WHERE memory_id = 'premise_new'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+
+        assert_eq!(new_status, "STABLE", "Nova premissa DEVE estar gravada como STABLE");
+    }
+
+    #[tokio::test]
+    async fn test_mmv_prefix_cache_rate() {
+        use souls_mc_lib::cognition::memory::{init_memory_schema, ChyrosDaemon};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('m1', 'Arquitetura Bare-Metal Rust SODA V6', 'STABLE', 1.0, 0.0, 0.0, 1000)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('m2', 'ChyrosDaemon AutoDream Langevin Decay Poincaré', 'EVOLVING', 1.0, 0.1, 0.1, 1001)",
+            [],
+        ).unwrap();
+
+        let daemon = ChyrosDaemon::new(":memory:", 100);
+        let report = daemon.run_consolidation_cycle(&conn).expect("Consolidação MMV deve rodar com sucesso");
+
+        assert!(report.mmv_token_count > 0, "Snapshot de MMV deve conter tokens");
+        assert!(
+            report.is_aligned_64,
+            "Snapshot de MMV DEVE estar perfeitamente alinhado a um múltiplo de 64 tokens (count: {})",
+            report.mmv_token_count
+        );
+        assert!(
+            report.mmv_token_count.is_multiple_of(64),
+            "Prefix Caching Rate: Token count % 64 DEVE ser exatamente 0"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_weevolve_implicit_feedback_rollback() {
+        use souls_mc_lib::cognition::learning::WeEvolveEngine;
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        souls_mc_lib::cognition::memory::init_memory_schema(&conn).unwrap();
+        let engine = WeEvolveEngine::new_with_conn(conn);
+
+        let target = "model:qwen-4b";
+        let (initial_elo, initial_ema) = engine.get_rating(target);
+        assert_eq!(initial_elo, 1200.0);
+        assert_eq!(initial_ema, 1.0);
+
+        let res = engine.record_implicit_signal(target, "git_rollback", Ok(()));
+        assert!(res.is_ok());
+
+        engine.wait_for_flush();
+
+        let (new_elo, new_ema) = engine.get_rating(target);
+        assert!(new_elo < 1200.0, "ELO deve cair após sinal de rollback: {new_elo}");
+        assert!((new_elo - 1189.84).abs() < 0.5, "Cálculo de ELO pós rollback fora da margem: {new_elo}");
+        assert!(new_ema < 1.0, "EMA deve cair após rollback");
+    }
+
+    #[test]
+    fn test_bradley_terry_elo_update_math() {
+        use souls_mc_lib::cognition::learning::ratings::{calculate_bradley_terry_elo, update_ema};
+
+        // Test Win (+1.2)
+        let (r_win, s_win) = calculate_bradley_terry_elo(1200.0, 1200.0, 32.0, 1.2);
+        assert!(s_win > 0.5 && s_win < 1.0);
+        assert!(r_win > 1200.0);
+        let ema_win = update_ema(1.0, s_win, 0.15);
+        assert!(ema_win < 1.0 && ema_win > 0.9);
+
+        // Test Loss (-1.0)
+        let (r_loss, s_loss) = calculate_bradley_terry_elo(1200.0, 1200.0, 32.0, -1.0);
+        assert!(s_loss < 0.5 && s_loss > 0.0);
+        assert!(r_loss < 1200.0);
+        let ema_loss = update_ema(1.0, s_loss, 0.15);
+        assert!(ema_loss < 1.0 && ema_loss > 0.8);
+
+        // Exact math checks
+        assert!((r_win - 1208.59).abs() < 0.2);
+        assert!((r_loss - 1192.61).abs() < 0.2);
+    }
+
+    #[test]
+    fn test_paretobandit_dynamic_pacing_escalation() {
+        use souls_mc_lib::finops::pareto_bandit::{ParetoBanditRouter, RoutingTier};
+        use souls_mc_lib::core::hardware_profiler::{CpuInstructionSet, SystemTopology};
+
+        let router = ParetoBanditRouter::new(0.01);
+        let topo = SystemTopology {
+            gpu_name: "RTX 2060m".to_string(),
+            vram_total_bytes: 6 * 1024 * 1024 * 1024,
+            ram_total_bytes: 32 * 1024 * 1024 * 1024,
+            is_dedicated_gpu: true,
+            primary_simd_extension: CpuInstructionSet::Avx2,
+            is_nvme_ssd: true,
+            pcie_bandwidth_estimated_gbps: Some(35.0),
+        };
+
+        // Baseline ELO 1200.0 -> Tier1 (Local)
+        let route_normal = router.select_route_with_pacing(0.5, 1000, &topo, 1200.0, 1.0);
+        assert_eq!(route_normal, RoutingTier::Tier1);
+
+        // ELO reduzido artificialmente para 1000 (< 1150) -> Tier2 (Nuvem)
+        let route_degraded = router.select_route_with_pacing(0.5, 1000, &topo, 1000.0, 1.0);
+        assert_eq!(route_degraded, RoutingTier::Tier2);
+
+        // ELO restaurado para 1200 -> Tier1 (Local)
+        let route_restored = router.select_route_with_pacing(0.5, 1000, &topo, 1200.0, 1.0);
+        assert_eq!(route_restored, RoutingTier::Tier1);
+    }
+
+    #[tokio::test]
+    async fn test_weevolve_concurrency_mpsc() {
+        use souls_mc_lib::cognition::learning::WeEvolveEngine;
+        use rusqlite::Connection;
+        use std::sync::Arc;
+
+        let conn = Connection::open_in_memory().unwrap();
+        souls_mc_lib::cognition::memory::init_memory_schema(&conn).unwrap();
+        let engine = Arc::new(WeEvolveEngine::new_with_conn(conn));
+
+        let target = "model:qwen-4b";
+
+        let mut handles = vec![];
+        for i in 0..100 {
+            let eng = Arc::clone(&engine);
+            let action = if i % 2 == 0 { "test_success" } else { "compilation_failure" };
+            handles.push(tokio::spawn(async move {
+                eng.record_implicit_signal(target, action, Ok(())).unwrap();
+            }));
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        engine.wait_for_flush();
+
+        let (elo, ema) = engine.get_rating(target);
+        assert!(elo > 0.0);
+        assert!(ema > 0.0 && ema <= 1.0);
+    }
+
+    #[test]
+    fn test_repo_heatmap_schema_and_access() {
+        use souls_mc_lib::cognition::memory::init_memory_schema;
+        use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::record_access;
+        use rusqlite::Connection;
+
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        // Verify table exists by recording access
+        record_access(&mut conn, "src/lib.rs", 1000);
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM repo_heatmap WHERE file_path = 'src/lib.rs'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(count, 1, "Tabela repo_heatmap deve existir e aceitar registros");
     }
 }
 

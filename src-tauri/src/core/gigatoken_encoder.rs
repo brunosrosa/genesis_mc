@@ -33,11 +33,27 @@ impl GigaTokenEncoder {
         GLOBAL_GIGATOKEN_ENCODER.get_or_init(Self::init_singleton)
     }
 
+    /// Resolve o diretório de modelos (`src-tauri/models`), respeitando `SOULS_MODELS_DIR`
+    /// e ajustando o caminho relativo caso a execução ocorra dentro ou fora da pasta `src-tauri`.
+    pub fn resolve_models_dir() -> PathBuf {
+        if let Ok(dir) = std::env::var("SOULS_MODELS_DIR") {
+            return PathBuf::from(dir);
+        }
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        if cwd.ends_with("src-tauri") {
+            cwd.join("models")
+        } else if cwd.join("src-tauri").exists() {
+            cwd.join("src-tauri").join("models")
+        } else if cwd.join("models").exists() {
+            cwd.join("models")
+        } else {
+            cwd.join("src-tauri").join("models")
+        }
+    }
+
     /// Inicializa a instância singleton procurando o `qwen_tokenizer.json` ou disparando a autocura GGUF.
     fn init_singleton() -> Self {
-        let models_dir = std::env::var("SOULS_MODELS_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("src-tauri/models"));
+        let models_dir = Self::resolve_models_dir();
 
         let qwen_tokenizer_path = models_dir.join("qwen_tokenizer.json");
         let recovered_path = models_dir.join("tokenizer_recovered.json");
@@ -319,5 +335,12 @@ mod tests {
         let prompt = "fn main() { println!(\"Hello SOULS\"); }";
         let tokens = encoder.tokenize_to_bin(prompt).expect("Tokenização deve funcionar");
         assert!(!tokens.is_empty());
+    }
+
+    #[test]
+    fn test_resolve_models_dir() {
+        let path = GigaTokenEncoder::resolve_models_dir();
+        assert!(path.ends_with("models"), "Caminho resolvido de models deve terminar com 'models', obtido: {:?}", path);
+        assert!(!path.to_string_lossy().contains("src-tauri\\src-tauri"), "Não deve haver duplicação de src-tauri, obtido: {:?}", path);
     }
 }
