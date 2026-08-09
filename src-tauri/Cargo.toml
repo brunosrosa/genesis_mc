@@ -133,7 +133,7 @@ required-features = ["tauri-app"]
 
 [[bin]]
 name = "souls_mcp_server"
-path = "src/bin/souls_mcp_server.rs"
+path = "src/bin/souls_mcp_server/main.rs"
 
 [[bin]]
 name = "souls_vanguard_worker"
