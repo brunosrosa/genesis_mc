@@ -8347,6 +8347,103 @@ mod tests {
             "Gemma E2B LlamaCpp4LogitEngine DEVE inicializar com n_gpu_layers == 0 para isolar 100% da VRAM da GPU"
         );
     }
+
+    #[test]
+    fn test_vram_scheduler_budget_calculation() {
+        use souls_mc_lib::core::llama_logit_probing::calculate_expected_vram_footprint;
+
+        // 1. Modelo de 8B denso com GQA (context=4096, layers=32, kv_heads=8, head_dim=128, precision=2 bytes FP16)
+        // M_kv = (2 * 1 * 4096 * 32 * 8 * 128 * 2) / (1024 * 1024) = 512 MB
+        // M_total = 4500 + 512 + 512 = 5524 MB
+        let expected = calculate_expected_vram_footprint(4500, 4096, 32, 8, 128, 2);
+        assert_eq!(expected, 5524, "Cálculo de KV Cache e VRAM footprint deve ser exato");
+
+        // 2. Validação da Vacina contra Overflow em contexto extremo de 32.768 tokens (MARCO 5.12.0)
+        // M_kv = (2 * 1 * 32768 * 32 * 8 * 128 * 2) / (1024 * 1024) = 4096 MB
+        // M_total = 4500 + 4096 + 512 = 9108 MB
+        let extreme_budget = calculate_expected_vram_footprint(4500, 32768, 32, 8, 128, 2);
+        assert_eq!(
+            extreme_budget, 9108,
+            "Cálculo com contexto de 32k tokens DEVE ser imune a estouro de inteiro de 32-bits (u64 intermediate)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_lru_eviction_under_pressure() {
+        use souls_mc_lib::core::vram_scheduler::{ModelState, VramScheduler};
+
+        let scheduler = VramScheduler::new(5000);
+
+        // Carrega sequencialmente Modelo 1 (2000 MB) e Modelo 2 (2000 MB) -> Uso total: 4000 MB <= 5000 MB
+        scheduler
+            .load_model_with_lru_gate("model_alpha_2000mb", 2000, 5000)
+            .await
+            .expect("Carga do modelo Alpha deve suceder");
+        scheduler
+            .load_model_with_lru_gate("model_beta_2000mb", 2000, 5000)
+            .await
+            .expect("Carga do modelo Beta deve suceder");
+
+        assert_eq!(scheduler.current_vram_usage_mb(), 4000);
+
+        // Tenta carregar Modelo 3 (2000 MB) -> 4000 + 2000 = 6000 > 5000 MB limit
+        // Deve acionar evicção LRU do modelo Alpha (mais antigo)
+        scheduler
+            .load_model_with_lru_gate("model_gamma_2000mb", 2000, 5000)
+            .await
+            .expect("Carga do modelo Gamma deve suceder via evicção LRU");
+
+        let alloc_alpha = scheduler
+            .get_model_allocation("model_alpha_2000mb")
+            .expect("Alpha deve constar no registro");
+        assert_eq!(
+            alloc_alpha.state,
+            ModelState::Standby,
+            "Modelo Alpha (LRU) DEVE ter sido ejetado para Standby"
+        );
+
+        let alloc_beta = scheduler
+            .get_model_allocation("model_beta_2000mb")
+            .expect("Beta deve constar no registro");
+        assert_eq!(alloc_beta.state, ModelState::Active);
+
+        let alloc_gamma = scheduler
+            .get_model_allocation("model_gamma_2000mb")
+            .expect("Gamma deve constar no registro");
+        assert_eq!(alloc_gamma.state, ModelState::Active);
+
+        assert!(
+            scheduler.current_vram_usage_mb() <= 5000,
+            "Uso final de VRAM deve permanecer dentro do limite de 5000 MB"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_vram_concurrency_tokio_blocking() {
+        use souls_mc_lib::core::vram_scheduler::VramScheduler;
+        use std::sync::Arc;
+
+        let scheduler = Arc::new(VramScheduler::new(5632));
+        let mut handles = vec![];
+
+        for i in 0..5 {
+            let sched = scheduler.clone();
+            let model_id = format!("concurrent_model_{i}");
+            handles.push(tokio::spawn(async move {
+                sched.load_model_with_lru_gate(&model_id, 1000, 5632).await
+            }));
+        }
+
+        for h in handles {
+            let res = h.await.expect("Task tokio deve finalizar sem panic");
+            assert!(res.is_ok(), "Carregamento concorrente deve ter sucesso: {:?}", res);
+        }
+
+        assert!(
+            scheduler.current_vram_usage_mb() <= 5632,
+            "Uso concorrente de VRAM deve respeitar o teto máximo de 5632 MB"
+        );
+    }
 }
 
 

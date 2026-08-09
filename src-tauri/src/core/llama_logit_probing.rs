@@ -57,6 +57,47 @@ impl LlamaLogitProber {
         }
         Ok(self.mock_logits.clone())
     }
+
+    /// Cálculo estático de KV Cache e orçamento de VRAM total em MB.
+    pub fn calculate_expected_vram_footprint(
+        model_size_mb: u32,
+        context_size: u32,
+        layers: u32,
+        kv_heads: u32,
+        head_dim: u32,
+        precision_bytes: u32,
+    ) -> u32 {
+        calculate_expected_vram_footprint(
+            model_size_mb,
+            context_size,
+            layers,
+            kv_heads,
+            head_dim,
+            precision_bytes,
+        )
+    }
+}
+
+/// Cálculo estático de KV Cache e orçamento de memória VRAM total em Megabytes.
+/// Aplica estritamente coerção para u64 na multiplicação intermediária para blindagem
+/// contra estouro de registrador de 32-bits (Overflow Vaccine — MARCO 5.12.0).
+pub fn calculate_expected_vram_footprint(
+    model_size_mb: u32,
+    context_size: u32,
+    layers: u32,
+    kv_heads: u32,
+    head_dim: u32,
+    precision_bytes: u32,
+) -> u32 {
+    // Fórmula KV Cache: 2 * b (b=1) * context_size * layers * kv_heads * head_dim * precision_bytes
+    let kv_bytes = 2_u64
+        * (context_size as u64)
+        * (layers as u64)
+        * (kv_heads as u64)
+        * (head_dim as u64)
+        * (precision_bytes as u64);
+    let m_kv = (kv_bytes / (1024 * 1024)) as u32;
+    model_size_mb + m_kv + 512
 }
 
 /// Computa a Softmax numericamente estável sobre os logits dos tokens "0" e "1",
