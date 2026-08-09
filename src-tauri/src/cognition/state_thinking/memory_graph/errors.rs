@@ -26,6 +26,9 @@ pub enum CognitiveError {
 
     #[error("Operação negada pelo HITL: {0}")]
     HitlDenied(String),
+
+    #[error("Execução não confiável bloqueada: {0}")]
+    UntrustedExecutionBlocked(String),
 }
 
 impl From<rusqlite::Error> for CognitiveError {

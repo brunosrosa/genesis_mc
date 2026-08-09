@@ -8368,6 +8368,97 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_sandbox_lpac_creation() {
+        use souls_mc_lib::core::sandbox::{cleanup_lpac_profile, create_lpac_sandbox_process};
+
+        let container_name = format!("souls_lpac_test_{}", uuid::Uuid::new_v4());
+        let temp_dir = tempfile::tempdir().expect("Deve criar diretório temporário para o teste LPAC");
+        let workspace_path = temp_dir.path().to_str().unwrap();
+
+        let res = create_lpac_sandbox_process(&container_name, workspace_path, "cmd.exe", &["/c", "exit", "0"]);
+        assert!(
+            res.is_ok(),
+            "Criação de perfil LPAC ou acionamento do Bypass Gracioso deve retornar Ok(PID) sem pânicos: {:?}",
+            res
+        );
+
+        cleanup_lpac_profile(&container_name);
+    }
+
+    #[test]
+    fn test_sandbox_restricted_write() {
+        use souls_mc_lib::core::sandbox::{cleanup_lpac_profile, create_lpac_sandbox_process};
+
+        let container_name = format!("souls_lpac_write_{}", uuid::Uuid::new_v4());
+        let temp_dir = tempfile::tempdir().expect("Deve criar diretório temporário para workspace LPAC");
+        let workspace_path = temp_dir.path().to_str().unwrap();
+
+        let test_file_in_workspace = temp_dir.path().join("sandbox_allowed.txt");
+        let write_cmd = format!("echo hello > \"{}\"", test_file_in_workspace.display());
+
+        let res_ok = create_lpac_sandbox_process(
+            &container_name,
+            workspace_path,
+            "cmd.exe",
+            &["/c", &write_cmd],
+        );
+        assert!(
+            res_ok.is_ok(),
+            "Instanciação de processo sob a sandbox LPAC deve retornar PID com sucesso: {:?}",
+            res_ok
+        );
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        let forbidden_cmd = "echo forbidden > C:\\Windows\\System32\\souls_forbidden.txt";
+        let res_forbidden = create_lpac_sandbox_process(
+            &container_name,
+            workspace_path,
+            "cmd.exe",
+            &["/c", forbidden_cmd],
+        );
+
+        assert!(
+            res_forbidden.is_ok(),
+            "Processo enjaulado inicia com sucesso para tentar gravar em pasta proibida"
+        );
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert!(
+            !std::path::Path::new("C:\\Windows\\System32\\souls_forbidden.txt").exists(),
+            "Processo enjaulado sob LPAC NUNCA deve conseguir gravar arquivos na pasta System32 do Host"
+        );
+
+        cleanup_lpac_profile(&container_name);
+    }
+
+    #[test]
+    fn test_sandbox_network_isolation() {
+        use souls_mc_lib::core::sandbox::{cleanup_lpac_profile, create_lpac_sandbox_process};
+
+        let container_name = format!("souls_lpac_net_{}", uuid::Uuid::new_v4());
+        let temp_dir = tempfile::tempdir().expect("Deve criar diretório temporário para o teste de rede");
+        let workspace_path = temp_dir.path().to_str().unwrap();
+
+        let net_cmd = "$client = New-Object System.Net.Sockets.TcpClient; try { $client.Connect('127.0.0.1', 3001); exit 0 } catch { exit 1 }";
+
+        let res = create_lpac_sandbox_process(
+            &container_name,
+            workspace_path,
+            "powershell.exe",
+            &["-NoProfile", "-NonInteractive", "-Command", net_cmd],
+        );
+
+        assert!(
+            res.is_ok(),
+            "Instanciação do teste de rede sob LPAC deve ser inicializada sem panics: {:?}",
+            res
+        );
+
+        cleanup_lpac_profile(&container_name);
+    }
+
     #[tokio::test]
     async fn test_lru_eviction_under_pressure() {
         use souls_mc_lib::core::vram_scheduler::{ModelState, VramScheduler};
