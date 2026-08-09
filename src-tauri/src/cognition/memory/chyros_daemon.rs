@@ -265,7 +265,7 @@ impl ChyrosDaemon {
             return Ok((raw_mmv, 0));
         }
 
-        if token_count % 64 == 0 {
+        if token_count.is_multiple_of(64) {
             return Ok((raw_mmv, token_count));
         }
 
@@ -275,7 +275,7 @@ impl ChyrosDaemon {
         while attempts < 1000 {
             let tokens = encoder.tokenize_to_bin(&candidate).unwrap_or_default();
             let len = tokens.len();
-            if len > 0 && len % 64 == 0 {
+            if len.is_multiple_of(64) {
                 return Ok((candidate, len));
             }
             candidate.push_str(" x");

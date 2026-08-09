@@ -33,6 +33,33 @@ pub fn init_memory_schema(conn: &rusqlite::Connection) -> Result<(), rusqlite::E
              payload TEXT NOT NULL,
              processed INTEGER NOT NULL DEFAULT 0,
              created_at INTEGER NOT NULL
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS repo_heatmap (
+             file_path TEXT PRIMARY KEY,
+             frecency_score REAL NOT NULL,
+             last_modified_epoch INTEGER NOT NULL,
+             modification_count INTEGER NOT NULL
+         ) STRICT;
+         CREATE INDEX IF NOT EXISTS idx_heatmap_score ON repo_heatmap(frecency_score DESC);
+
+         CREATE TABLE IF NOT EXISTS weevolve_ratings (
+             target_id TEXT PRIMARY KEY,
+             rating_type TEXT NOT NULL CHECK(rating_type IN ('MODEL', 'TOOL', 'PROMPT')),
+             elo_rating REAL NOT NULL DEFAULT 1200.0,
+             ema_score REAL NOT NULL DEFAULT 1.0,
+             total_matches INTEGER NOT NULL DEFAULT 0,
+             updated_at INTEGER NOT NULL
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS weevolve_feedbacks (
+             feedback_id TEXT PRIMARY KEY,
+             target_id TEXT NOT NULL,
+             feedback_type TEXT NOT NULL CHECK(feedback_type IN ('EXPLICIT_POSITIVE', 'EXPLICIT_NEGATIVE', 'IMPLICIT_POSITIVE', 'IMPLICIT_NEGATIVE')),
+             source_action TEXT NOT NULL,
+             reward_value REAL NOT NULL,
+             created_at INTEGER NOT NULL,
+             FOREIGN KEY(target_id) REFERENCES weevolve_ratings(target_id) ON DELETE CASCADE
          ) STRICT;"
     )?;
     Ok(())

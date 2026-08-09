@@ -3,6 +3,7 @@ pub mod context;
 pub mod memory;
 pub mod state_thinking;
 pub mod sys;
+pub mod learning;
 
 pub use ast::observability;
 pub mod context_compression;

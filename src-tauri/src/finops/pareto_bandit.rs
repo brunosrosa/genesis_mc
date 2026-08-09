@@ -175,6 +175,46 @@ impl ParetoBanditRouter {
         select_optimal_route(task_complexity, token_count, topology)
     }
 
+    /// Calculates quality deviation and adjusts lambda cost parameter if local model degrades
+    pub fn get_adjusted_lambda(&self, elo_rating: f64, ema_score: f64) -> f32 {
+        if elo_rating < 1150.0 || ema_score < 0.7 {
+            let factor = 1.0 + (1200.0 - elo_rating) / 100.0;
+            self.daily_budget_lambda * (factor as f32)
+        } else {
+            self.daily_budget_lambda
+        }
+    }
+
+    /// Selects route with dynamic pacing based on local model ELO rating and EMA score
+    pub fn select_route_with_pacing(
+        &self,
+        task_complexity: f32,
+        token_count: u32,
+        topology: &SystemTopology,
+        elo_rating: f64,
+        ema_score: f64,
+    ) -> RoutingTier {
+        if elo_rating < 1150.0 || ema_score < 0.7 {
+            // Escalation pacing: force route to Tier 2 (Cloud) to preserve focus flow
+            RoutingTier::Tier2
+        } else {
+            self.select_route(task_complexity, token_count, topology)
+        }
+    }
+
+    /// Bootstraps route selection reading local model ratings directly from WeEvolveEngine
+    pub fn select_route_with_weevolve(
+        &self,
+        task_complexity: f32,
+        token_count: u32,
+        topology: &SystemTopology,
+        local_model_id: &str,
+    ) -> RoutingTier {
+        let engine = crate::cognition::learning::WeEvolveEngine::global();
+        let (elo, ema) = engine.get_rating(local_model_id);
+        self.select_route_with_pacing(task_complexity, token_count, topology, elo, ema)
+    }
+
     pub fn score_candidate(&self, candidate: &ModelCandidate, beta: f32) -> f32 {
         candidate.calculate_utility(self.daily_budget_lambda, beta)
     }

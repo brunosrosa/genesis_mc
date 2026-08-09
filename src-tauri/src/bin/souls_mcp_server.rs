@@ -4552,7 +4552,7 @@ fn try_log_file_access(file_path: &str, tool: &str) {
 // para absorver contencao transitoria de outros writers (ex: `run_repo_heatmap`).
 // Se o banco nao estiver disponivel (cold start, race no boot), ignora silenciosamente.
 fn try_record_repo_heatmap(file_path: &str) {
-    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::record_access;
+    use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::{ensure_heatmap_table, record_access};
     let Ok(mut conn) = Connection::open_with_flags(
         workspace_root().join(".souls_data").join("souls_state.db"),
         OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -4561,6 +4561,7 @@ fn try_record_repo_heatmap(file_path: &str) {
     };
     // busy_timeout(5s) absorve SQLITE_BUSY de outros writers concorrentes.
     let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+    let _ = ensure_heatmap_table(&conn);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -7918,6 +7919,138 @@ mod tests {
             report.mmv_token_count.is_multiple_of(64),
             "Prefix Caching Rate: Token count % 64 DEVE ser exatamente 0"
         );
+    }
+
+    #[tokio::test]
+    async fn test_weevolve_implicit_feedback_rollback() {
+        use souls_mc_lib::cognition::learning::WeEvolveEngine;
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        souls_mc_lib::cognition::memory::init_memory_schema(&conn).unwrap();
+        let engine = WeEvolveEngine::new_with_conn(conn);
+
+        let target = "model:qwen-4b";
+        let (initial_elo, initial_ema) = engine.get_rating(target);
+        assert_eq!(initial_elo, 1200.0);
+        assert_eq!(initial_ema, 1.0);
+
+        let res = engine.record_implicit_signal(target, "git_rollback", Ok(()));
+        assert!(res.is_ok());
+
+        engine.wait_for_flush();
+
+        let (new_elo, new_ema) = engine.get_rating(target);
+        assert!(new_elo < 1200.0, "ELO deve cair após sinal de rollback: {new_elo}");
+        assert!((new_elo - 1189.84).abs() < 0.5, "Cálculo de ELO pós rollback fora da margem: {new_elo}");
+        assert!(new_ema < 1.0, "EMA deve cair após rollback");
+    }
+
+    #[test]
+    fn test_bradley_terry_elo_update_math() {
+        use souls_mc_lib::cognition::learning::ratings::{calculate_bradley_terry_elo, update_ema};
+
+        // Test Win (+1.2)
+        let (r_win, s_win) = calculate_bradley_terry_elo(1200.0, 1200.0, 32.0, 1.2);
+        assert!(s_win > 0.5 && s_win < 1.0);
+        assert!(r_win > 1200.0);
+        let ema_win = update_ema(1.0, s_win, 0.15);
+        assert!(ema_win < 1.0 && ema_win > 0.9);
+
+        // Test Loss (-1.0)
+        let (r_loss, s_loss) = calculate_bradley_terry_elo(1200.0, 1200.0, 32.0, -1.0);
+        assert!(s_loss < 0.5 && s_loss > 0.0);
+        assert!(r_loss < 1200.0);
+        let ema_loss = update_ema(1.0, s_loss, 0.15);
+        assert!(ema_loss < 1.0 && ema_loss > 0.8);
+
+        // Exact math checks
+        assert!((r_win - 1208.59).abs() < 0.2);
+        assert!((r_loss - 1192.61).abs() < 0.2);
+    }
+
+    #[test]
+    fn test_paretobandit_dynamic_pacing_escalation() {
+        use souls_mc_lib::finops::pareto_bandit::{ParetoBanditRouter, RoutingTier};
+        use souls_mc_lib::core::hardware_profiler::{CpuInstructionSet, SystemTopology};
+
+        let router = ParetoBanditRouter::new(0.01);
+        let topo = SystemTopology {
+            gpu_name: "RTX 2060m".to_string(),
+            vram_total_bytes: 6 * 1024 * 1024 * 1024,
+            ram_total_bytes: 32 * 1024 * 1024 * 1024,
+            is_dedicated_gpu: true,
+            primary_simd_extension: CpuInstructionSet::Avx2,
+            is_nvme_ssd: true,
+            pcie_bandwidth_estimated_gbps: Some(35.0),
+        };
+
+        // Baseline ELO 1200.0 -> Tier1 (Local)
+        let route_normal = router.select_route_with_pacing(0.5, 1000, &topo, 1200.0, 1.0);
+        assert_eq!(route_normal, RoutingTier::Tier1);
+
+        // ELO reduzido artificialmente para 1000 (< 1150) -> Tier2 (Nuvem)
+        let route_degraded = router.select_route_with_pacing(0.5, 1000, &topo, 1000.0, 1.0);
+        assert_eq!(route_degraded, RoutingTier::Tier2);
+
+        // ELO restaurado para 1200 -> Tier1 (Local)
+        let route_restored = router.select_route_with_pacing(0.5, 1000, &topo, 1200.0, 1.0);
+        assert_eq!(route_restored, RoutingTier::Tier1);
+    }
+
+    #[tokio::test]
+    async fn test_weevolve_concurrency_mpsc() {
+        use souls_mc_lib::cognition::learning::WeEvolveEngine;
+        use rusqlite::Connection;
+        use std::sync::Arc;
+
+        let conn = Connection::open_in_memory().unwrap();
+        souls_mc_lib::cognition::memory::init_memory_schema(&conn).unwrap();
+        let engine = Arc::new(WeEvolveEngine::new_with_conn(conn));
+
+        let target = "model:qwen-4b";
+
+        let mut handles = vec![];
+        for i in 0..100 {
+            let eng = Arc::clone(&engine);
+            let action = if i % 2 == 0 { "test_success" } else { "compilation_failure" };
+            handles.push(tokio::spawn(async move {
+                eng.record_implicit_signal(target, action, Ok(())).unwrap();
+            }));
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        engine.wait_for_flush();
+
+        let (elo, ema) = engine.get_rating(target);
+        assert!(elo > 0.0);
+        assert!(ema > 0.0 && ema <= 1.0);
+    }
+
+    #[test]
+    fn test_repo_heatmap_schema_and_access() {
+        use souls_mc_lib::cognition::memory::init_memory_schema;
+        use souls_mc_lib::cognition::lean_vacuum::repo_heatmap::record_access;
+        use rusqlite::Connection;
+
+        let mut conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        // Verify table exists by recording access
+        record_access(&mut conn, "src/lib.rs", 1000);
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM repo_heatmap WHERE file_path = 'src/lib.rs'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(count, 1, "Tabela repo_heatmap deve existir e aceitar registros");
     }
 }
 
