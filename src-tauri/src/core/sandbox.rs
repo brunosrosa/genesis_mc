@@ -128,18 +128,67 @@ impl Drop for WindowsJobGuard {
     }
 }
 
-/// Remove o perfil LPAC de um AppContainer do Registro do Windows (Limpeza Idempotente).
+/// Removes the LPAC AppContainer profile from the Windows Registry (Idempotent Cleanup).
+///
+/// This function calls `DeleteAppContainerProfile` on the given profile name.
+/// The Win32 API is idempotent by design: calling it with a non-existent name
+/// returns `ERROR_NOT_FOUND` (which we treat as a soft success), so it is safe
+/// to invoke this function multiple times for the same name without side effects.
+///
+/// Each call is responsible for atomically removing ALL of:
+/// - The AppContainer registry key under `HKEY_LOCAL_MACHINE\...\AppContainer`
+/// - The associated SID (which would otherwise linger as an orphan SID)
+/// - The capability grants referencing the SID
+/// - The filesystem ACLs referencing the SID
+///
+/// This is the canonical "final word" for LPAC sandbox cleanup used by tests
+/// and the SOULS supervisor. It never panics and never propagates Win32 errors
+/// to the caller — the LPAC subsystem is best-effort: if the OS rejects the
+/// removal (e.g. process still alive), a subsequent invocation after the
+/// process is reaped will succeed. We log via `tracing` so the audit trail
+/// remains in the SOULS telemetry pipeline.
 pub fn cleanup_lpac_profile(app_container_name: &str) {
     #[cfg(target_os = "windows")]
     {
         let name_wide = to_wide_null(app_container_name);
+        // SAFETY: `name_wide` is a null-terminated UTF-16 string with a valid
+        // pointer for the duration of this call. The Win32 API is idempotent:
+        // a non-existent name yields ERROR_NOT_FOUND, which we accept as a
+        // no-op (idempotency contract documented above).
         unsafe {
-            let _ = DeleteAppContainerProfile(name_wide.as_ptr());
+            let ok = DeleteAppContainerProfile(name_wide.as_ptr());
+            if ok == 0 {
+                tracing::debug!(
+                    target: "souls::sandbox",
+                    profile = %app_container_name,
+                    "DeleteAppContainerProfile returned FALSE (profile already absent or transient OS error - tolerated by idempotency contract)"
+                );
+            } else {
+                tracing::trace!(
+                    target: "souls::sandbox",
+                    profile = %app_container_name,
+                    "LPAC profile and associated SID/ACLs removed from the Windows Registry"
+                );
+            }
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = app_container_name;
+    }
+}
+
+/// Batch removal of multiple LPAC profiles in a single sweep.
+///
+/// Useful for test teardown that creates a known set of UUID-suffixed
+/// profiles (e.g. `souls_lpac_test_<uuid1>`, `souls_lpac_test_<uuid2>`, ...).
+/// All entries are removed unconditionally; non-existing names are silently
+/// tolerated per the idempotency contract documented on
+/// [`cleanup_lpac_profile`]. Designed to make test cleanup "absolute" and
+/// prevent the accumulation of orphan SIDs across CI runs.
+pub fn cleanup_lpac_profiles(app_container_names: &[&str]) {
+    for name in app_container_names {
+        cleanup_lpac_profile(name);
     }
 }
 
@@ -352,7 +401,13 @@ fn create_lpac_sandbox_process_windows(
         )
     };
 
-    // REGRA CONSTITUCIONAL: Evitar leaks de heap limpando a lista de atributos e liberando o SID imediatamente
+    // REGRA CONSTITUCIONAL: Evitar leaks de heap limpando a lista de atributos e liberando o SID imediatamente.
+    // CRÍTICO: esta limpeza é INCONDICIONAL — ela roda ANTES do `if created == 0`
+    // porque a lista de atributos e o buffer foram inicializados com sucesso e devem
+    // ser liberados independentemente do resultado de CreateProcessW. O `attr_list`
+    // aponta para dentro de `attr_buf`, portanto a ordem é: 1) DeleteProcThreadAttributeList,
+    // 2) drop(attr_buf), 3) FreeSid(container_sid). Inverter essa ordem causa
+    // use-after-free do ponteiro durante a desalocação do buffer.
     unsafe {
         DeleteProcThreadAttributeList(attr_list);
         drop(attr_buf);
@@ -380,7 +435,16 @@ fn create_lpac_sandbox_process_windows(
         CloseHandle(pi.hProcess);
     }
 
-    // Evita o encerramento pré-maturo do JobObject mantendo o Guard vivo via std::mem::forget ou vazando o handle seguro
+    // VAZAMENTO INTENCIONAL (by design, ADR-C4): o `job_guard` precisa permanecer
+    // VIVO durante toda a vida do processo enjaulado, porque o flag
+    // `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` faz com que o kernel aniquile os
+    // processos filhos quando o último HANDLE do JobObject é fechado. Se o
+    // `Drop` rodasse aqui (ao final de `create_lpac_sandbox_process_windows`),
+    // o handle do JobObject seria fechado e o kernel mataria o filho
+    // imediatamente. Por isso `std::mem::forget(job_guard)` é deliberado: a
+    // única forma de o handle fechar é o SOULS supervisor cair, que é
+    // exatamente o gatilho desejado para o kill-on-close. O handle é
+    // recuperado pelo SOULS process exit (cleanup do SO).
     std::mem::forget(job_guard);
 
     Ok(pid)

@@ -176,18 +176,27 @@ dependencies = [
 name = "anthropophagy"
 version = "0.1.0"
 dependencies = [
+ "arrow-array",
+ "arrow-cast",
+ "arrow-row",
+ "arrow-schema",
  "astral-tl",
  "bumpalo",
  "dashmap",
  "dotenvy",
  "dunce",
  "enable-ansi-support",
+ "futures-util",
  "gix",
+ "httparse",
  "ignore",
+ "jsonrepair",
+ "jsonwebtoken",
  "memmap2",
  "mockito",
  "oxc",
  "quick-xml",
+ "quote",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
@@ -195,6 +204,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "similar",
  "souls_mc",
  "sqlparser 0.62.0",
  "sysinfo 0.30.13",
@@ -213,6 +223,7 @@ dependencies = [
  "uuid 1.23.4",
  "walkdir",
  "wasmtime",
+ "wasmtime-wasi",
  "which",
  "windows-projfs",
  "windows-sys 0.61.2",
@@ -1924,6 +1935,8 @@ dependencies = [
 [[package]]
 name = "crc32fast"
 version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
 ]
@@ -7254,7 +7267,9 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llama-cpp-2"
-version = "0.1.152"
+version = "0.1.154"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4397360a0bd81be29929a55ad2f49eba27a744a6578f3271894d6f41d86bd15b"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -7266,7 +7281,9 @@ dependencies = [
 
 [[package]]
 name = "llama-cpp-sys-2"
-version = "0.1.152"
+version = "0.1.154"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13a9ea2ce0cdc20bcb1870534022e340b391663f8fe09133951e2fe37fbc29cf"
 dependencies = [
  "bindgen",
  "cc",

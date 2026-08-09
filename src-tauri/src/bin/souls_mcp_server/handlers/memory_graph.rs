@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
-use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
+use souls_mc_lib::cognition::memory_graph::types::Entity;
 use crate::{
     extract_arguments, memgraph_request, parse_observation_inputs, parse_relations, RpcError,
 };

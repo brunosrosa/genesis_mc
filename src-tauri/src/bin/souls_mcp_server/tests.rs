@@ -1,11 +1,10 @@
 use super::{
-    fetch_duckduckgo_search_results, format_duckduckgo_results_markdown, format_github_meta_markdown,
-    format_time_markdown, normalize_duckduckgo_result_url, parse_duckduckgo_results,
-    validate_and_canonicalize_path, validate_repo_path, validate_sqlite_query, workspace_root,
+    normalize_duckduckgo_result_url, parse_duckduckgo_results, validate_sqlite_query,
+    workspace_root,
 };
 use super::router::normalize_tool_name;
-use super::thinking::persistence::ThoughtType;
-use serde_json::{json, Value};
+use souls_mc_lib::cognition::thinking::persistence::ThoughtType;
+use serde_json::json;
 
 #[test]
 fn sqlite_query_rejects_multi_statement_payload() {

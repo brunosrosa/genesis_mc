@@ -23,19 +23,13 @@ use sqlparser::parser::Parser;
 use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
-use souls_mc_lib::cognition::{context, lean_vacuum};
-use souls_mc_lib::cognition::context_compression;
 use souls_mc_lib::cognition::memory_graph;
 use souls_mc_lib::cognition::memory_graph::mpsc_bridge::MemGraphOp;
 use souls_mc_lib::cognition::memory_graph::types::{Entity, ObservationInput, Relation};
-use souls_mc_lib::cognition::observability;
-use souls_mc_lib::cognition::thinking;
 use souls_mc_lib::cognition::thinking::socratic_bridge::{
     spawn_socratic_write_worker, SocraticWriteHandle,
 };
-use souls_mc_lib::cognition::thinking::types::{ThoughtData, ThinkingResponse};
 use souls_mc_lib::cognition::thinking::ThinkingEngine;
-use souls_mc_lib::harvester::{ast_parser, community, github_tracker, repo_radar, web_scraper};
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 const SQLITE_MAX_ROWS: usize = 200;

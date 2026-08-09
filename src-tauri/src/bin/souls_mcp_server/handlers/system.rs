@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
-use souls_mc_lib::cognition::{context, lean_vacuum};
+use souls_mc_lib::cognition::lean_vacuum;
 use souls_mc_lib::harvester::{ast_parser, github_tracker, web_scraper};
 #[cfg(feature = "llama_backend")]
 use souls_mc_lib::core::epistemic_prober::{
@@ -12,10 +12,9 @@ use souls_mc_lib::core::epistemic_prober::{
 use souls_mc_lib::core::llama_logit_probing::LlamaLogitProber;
 
 use crate::{
-    extract_arguments, generate_cpu_embedding_384, stub_not_implemented_yet,
-    stub_sandbox_audit_pending, try_log_file_access, try_log_telemetry, try_record_repo_heatmap,
-    validate_and_canonicalize_path, validate_repo_path, workspace_root, RpcError, STATE_DB_TX,
-    StateDbOp,
+    extract_arguments, generate_cpu_embedding_384, stub_sandbox_audit_pending,
+    try_log_file_access, try_record_repo_heatmap, validate_and_canonicalize_path,
+    validate_repo_path, RpcError, STATE_DB_TX, StateDbOp,
 };
 
 pub async fn run_repo_ast(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
@@ -458,7 +457,7 @@ pub async fn run_callers(params: &serde_json::Map<String, Value>) -> Result<Valu
         ("b", vec!["a"]),
         ("c", vec!["a"]),
     ].into_iter().collect();
-    let callers = mock_graph.get(&*target_name).cloned().unwrap_or_default();
+    let callers = mock_graph.get(target_name).cloned().unwrap_or_default();
     Ok(json!({
         "content": [{
             "type": "text",
@@ -480,7 +479,7 @@ pub async fn run_callees(params: &serde_json::Map<String, Value>) -> Result<Valu
         ("c", vec!["d"]),
         ("d", vec!["e"]),
     ].into_iter().collect();
-    let callees = mock_graph.get(&*target_name).cloned().unwrap_or_default();
+    let callees = mock_graph.get(target_name).cloned().unwrap_or_default();
     Ok(json!({
         "content": [{
             "type": "text",
@@ -652,7 +651,7 @@ pub async fn run_semantic_search_handler(
             }
         });
         if let Ok(graph_res) = crate::handlers::memory_graph::run_mem_search(fallback_params.as_object().unwrap()).await {
-            if let Some(text) = graph_res.get("content").and_then(Value::as_array).and_then(|a| a.get(0)).and_then(|o| o.get("text")).and_then(Value::as_str) {
+            if let Some(text) = graph_res.get("content").and_then(Value::as_array).and_then(|a| a.first()).and_then(|o| o.get("text")).and_then(Value::as_str) {
                 results.push(souls_mc_lib::cognition::memory::rrf_fusion::UnifiedMatch {
                     observation_id: "memory_graph_fallback".to_string(),
                     content: text.to_string(),
