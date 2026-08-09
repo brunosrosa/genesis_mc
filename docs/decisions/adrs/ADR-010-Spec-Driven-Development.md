@@ -1,38 +1,51 @@
 ---
 id: "ADR-010"
 title: "ADR-010-Spec-Driven-Development"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Impõe o SDD e TDD como metodologia de desenvolvimento, bloqueando novas lógicas sem plano arquitetural aprovado."
+description: "Impõe o SDD e TDD como metodologia constitucional, exigindo a cascata documental atômica de 4 vias (REQUIREMENTS.md, DESIGN.md, TASKS.md, TEST_SPECS.md) e a trava Fail-Closed do Ralph Loop no Shadow Workspace (snapsafe)."
 ---
 
-# ADR-010-Spec-Driven-Development
+# ADR-010: Pipeline Spec-Driven Development (SDD), Cascata 4-Vias e Ralph Loop
 
 ## Status
-Aceito (Ativo e Inegociável)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V6)
 
-## Contexto
-A prática irresponsável de engenharia estocástica de IA baseada em intuição rápida ("Vibe Coding") introduz códigos poluídos, dependências incoerentes e regressões catastróficas em repositórios complexos. IAs tendem a tentar corrigir erros gerando mais códigos falhos ("slop"), provocando loops de compilação infinitos e exaustão de contexto do modelo. No desenvolvimento de software Bare-Metal (Rust), a validação estrita do compilador e de testes de estresse deve preceder a escrita de qualquer lógica de negócios.
+## Contexto Técnico e a Erradicação do Vibe Coding
+A prática estocástica de engenharia de software baseada em intuição rápida ("Vibe Coding") introduz débito de código ("slop"), regressões silenciosas e desalinhamento de intenção em sistemas complexos. Agentes de IA sem amarras tendem a corrigir falhas gerando mutações cegas e redundantes, provocando exaustão de contexto e loops infinitos de compilação.
+No ecossistema SOULS Bare-Metal (Rust), a especificação declarativa estrita e a validação por testes automatizados devem obrigatoriamente preceder a escrita de qualquer linha de lógica funcional.
 
-## Decisão
-Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinada a **TDD Forçado** em todo o ciclo de vida de mutação de código do SOULS:
-1. **O Plano Precede o Código:** Fica expressamente proibida a mutação direta de código-fonte sem a prévia especificação do design arquitetural (`docs/design.md`) em disco contendo diagramas Mermaid e definição do padrão Orchestrator-Worker. O Arquiteto Humano deve validar o design antes de prosseguir.
-2. **Definição de Done e Scaffold (Tasks):** As tarefas são desfragmentadas de forma atômica no checklist `tasks.md`. Cada tarefa exige uma Definition of Done (DoD) com scaffold executável (testes unitários que falham primeiro - Red) antes de escrever a lógica funcional em Rust/TypeScript.
-3. **Ciclo de TDD Atômico:** O desenvolvimento segue o fluxo clássico:
-   - *Red:* Teste falho.
-   - *Green:* Implementação mínima para passar no teste com Exit Code 0.
-   - *Refactor:* Limpeza de avisos do compilador (`cargo clippy`) e melhorias estéticas.
-4. **O Corretor Ralph Loop (Teto de 3 Tentativas):** Se o compilador ou os testes falharem, o core dispara automaticamente o Ralph Loop para auto-correção sob o teto rígido de no máximo **3 tentativas de compilação consecutivas**.
-5. **Bloqueio Fail-Closed:** Se a falha persistir na 3ª tentativa, o agente de IA é compulsoriamente forçado a parar. O card correspondente é movido para a coluna "Bloqueado" no Kanban, a anomalia é gravada na telemetria e o controle é devolvido ao usuário.
+## Decisão Arquitetural (Macro-Pipeline Declarativo e Micro-TDD)
+Fica decretado a obrigatoriedade do **Spec-Driven Development (SDD)** unificado ao **Test-Driven Development (TDD)** através dos seguintes pilares constitucionais:
 
-## Consequências
-- **Higiene e Qualidade de Código:** Erradicação total de lixo tecnológico e redução drástica de regressões lógicas no backend.
-- **Raciocínio Estruturado:** O design do código é robusto e documentado de forma clara no próprio repositório antes mesmo de sua implementação real.
-- **Resiliência contra Loops Infinitos:** Prevenção confiável de gastos inflacionados de API decorrentes de IAs que tentam corrigir repetidamente erros de compilação de forma redundante.
+### 1. Cascata Documental Atômica de 4 Vias (SPEC-014)
+É terminantemente proibida qualquer mutação de código-fonte sem que a cascata documental de 4 vias esteja gerada, validada e versionada fisicamente em disco na pasta de trabalho ativa:
+1.  **`REQUIREMENTS.md` (HITL Gate #1):** Documento de requisitos, escopo, regras de negócio e não-objetivos. Atua como o Portão nº 1 de validação e assinatura do Operador Humano antes de avançar para a arquitetura técnica.
+2.  **`DESIGN.md`:** Especificação técnica detalhada, diagramas Mermaid, structs/enums Rust, schemas de banco e contratos de API. Auditado por Peer-Review em sessão isolada.
+3.  **`TASKS.md`:** Matriz de tarefas atômicas e independentes organizadas como Grafo Acíclico Dirigido (DAG). Cada tarefa possui Definition of Done (DoD) com scaffold executável.
+4.  **`TEST_SPECS.md`:** Especificação exata dos cenários de teste, entradas, saídas esperadas e critérios de aceite funcional.
+
+### 2. Isolamento Físico em Shadow Workspace (`snapsafe`)
+*   Toda execução de mutação e compilação de código ocorre em um **Shadow Workspace** isolado.
+*   A instanciação é realizada em tempo constante $\mathcal{O}(1)$ via links físicos rígidos (*snapsafe*), consumindo 0 bytes adicionais do disco host e garantindo a preservação da branch principal até a aprovação final.
+
+### 3. Ciclo Micro-TDD Atômico (Red-Green-Refactor)
+*   **Fase RED:** O Worker escreve primeiramente o teste especificado em `TEST_SPECS.md`, comprovando a falha inicial no compilador/runner.
+*   **Fase GREEN:** Escreve a lógica funcional mínima necessária para obter aprovação com Exit Code 0 no terminal.
+*   **Fase REFACTOR:** Limpa avisos do compilador e conformidade com `cargo clippy --all-targets --all-features -- -D warnings`.
+
+### 4. O Corretor Autônomo Ralph Loop (Teto de 3 Tentativas e Fail-Closed)
+*   Se o compilador Rust ou a suíte de testes falhar durante a fase GREEN/REFACTOR, a engine aciona autonomamente o **Ralph Loop**.
+*   O erro do terminal é reinjetado no prompt do Worker para auto-correção sob o limite rígido e imutável de **no máximo 3 tentativas síncronas consecutivas de compilação**.
+*   **Status FAIL-CLOSED:** Se a falha persistir na 3ª tentativa, o ciclo é paralisado imediatamente. As alterações na branch do Shadow Workspace são travadas no git, a anomalia é gravada no log de telemetria e o controle é devolvido compulsoriamente ao operador humano sem aplicar rebase no disco físico principal.
+
+## Consequências Operacionais e Defesa contra o Slop
+- **Higiene e Rigor:** Erradicação total de lixo tecnológico no backend e garantia de que todo código em produção atende a uma especificação formal pré-aprovada.
+- **Eficiência FinOps:** A trava Fail-Closed na 3ª tentativa impede desperdício de tokens de API e evita picos de aquecimento da GPU causados por loops de correção redundantes.
+- **Rastrabilidade Total:** O ciclo documental de 4 vias em disco fornece auditoria completa da evolução arquitetural do sistema.
 
 ## Restrições Bare-Metal
-- **Teto do Ralph Loop:** Limite rígido e imutável de **3 tentativas autônomas** consecutivas de correção.
-- **Conformidade Clippy:** Todo código integrado deve passar compulsoriamente no linter nativo do Rust:
-  `cargo clippy --all-targets --all-features -- -D warnings`
-- **Validação de Testes:** Sucesso exige "exit code zero" em testes unitários locais.
+- **Cascata Obrigatória:** `REQUIREMENTS.md` (HITL Gate #1) -> `DESIGN.md` -> `TASKS.md` -> `TEST_SPECS.md`.
+- **Trava do Ralph Loop:** Máximo de 3 retentativas locais síncronas antes do status FAIL-CLOSED.
+- **Conformidade Clippy:** Requer Exit Code 0 estrito em `cargo clippy --all-targets --all-features -- -D warnings`.
