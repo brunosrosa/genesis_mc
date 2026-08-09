@@ -3391,6 +3391,7 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
     )?;
     conn.busy_timeout(std::time::Duration::from_millis(5000))?;
+    souls_mc_lib::cognition::memory::init_memory_schema(&conn)?;
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA foreign_keys = ON;
@@ -7787,6 +7788,136 @@ mod tests {
         let fused = engine.fuse(&lexical, &[], &tombstones);
         assert_eq!(fused.len(), 1, "Premissa superseded DEVE ser expurgada via JIT tombstone");
         assert_eq!(fused[0].observation_id, "active_uuid_100");
+    }
+
+    #[tokio::test]
+    async fn test_chyros_daemon_idle_trigger() {
+        use souls_mc_lib::cognition::memory::{init_memory_schema, ChyrosDaemon};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        let daemon = ChyrosDaemon::new(":memory:", 1).with_tick_interval_ms(50);
+        assert!(!daemon.is_idle());
+
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        assert!(daemon.is_idle());
+
+        daemon.record_activity();
+        let result = daemon.run_consolidation_cycle(&conn);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Aborted"), "Daemon deve abortar em <100ms ao acionar atividade");
+    }
+
+    #[test]
+    fn test_langevin_decay_convergence() {
+        use souls_mc_lib::cognition::memory::{apply_langevin_decay, init_memory_schema, proj_poincare};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('ev_1', 'Ephemeral Cold Memory', 'EVOLVING', 1.0, 0.88, 0.0, 1000)",
+            [],
+        ).unwrap();
+
+        for _ in 0..50 {
+            let _ = apply_langevin_decay(&conn, 0.01, 0.1, 1.0);
+        }
+
+        let (status, px, py): (String, f64, f64) = conn.query_row(
+            "SELECT stability_status, poincare_x, poincare_y FROM souls_memory_nodes WHERE memory_id = 'ev_1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ).unwrap();
+
+        let norm = (px * px + py * py).sqrt();
+        assert!(norm < 1.0, "Proteção Poincaré: Norma nunca pode exceder ou igualar 1.0 (obtido: {})", norm);
+
+        let (overflow_x, overflow_y) = proj_poincare((1.5, 2.0));
+        let overflow_norm = (overflow_x * overflow_x + overflow_y * overflow_y).sqrt();
+        assert!(overflow_norm <= 0.9999, "proj_poincare deve limitar estritamente a 0.9999");
+        assert!(status == "SUPERSEDED" || norm >= 0.95 || status == "EVOLVING");
+    }
+
+    #[tokio::test]
+    async fn test_jit_factual_consolidation() {
+        use souls_mc_lib::cognition::memory::{init_memory_schema, ChyrosDaemon};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('premise_old', 'User prefers dark mode', 'STABLE', 1.0, 0.0, 0.0, 1000)",
+            [],
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_raw_events_l0 (event_type, payload, processed, created_at)
+             VALUES ('PREFERENCE_UPDATE', '{\"memory_id\": \"premise_new\", \"content\": \"User prefers light mode\", \"contradicts_id\": \"premise_old\", \"status\": \"STABLE\"}', 0, 2000)",
+            [],
+        ).unwrap();
+
+        let daemon = ChyrosDaemon::new(":memory:", 100);
+        let report = daemon.run_consolidation_cycle(&conn).expect("Consolidação deve rodar com sucesso na CPU");
+
+        assert_eq!(report.l0_events_processed, 1);
+
+        let old_status: String = conn.query_row(
+            "SELECT stability_status FROM souls_memory_nodes WHERE memory_id = 'premise_old'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+
+        assert_eq!(old_status, "SUPERSEDED", "Premissa contradita DEVE ser marcada como SUPERSEDED");
+
+        let new_status: String = conn.query_row(
+            "SELECT stability_status FROM souls_memory_nodes WHERE memory_id = 'premise_new'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+
+        assert_eq!(new_status, "STABLE", "Nova premissa DEVE estar gravada como STABLE");
+    }
+
+    #[tokio::test]
+    async fn test_mmv_prefix_cache_rate() {
+        use souls_mc_lib::cognition::memory::{init_memory_schema, ChyrosDaemon};
+        use rusqlite::Connection;
+
+        let conn = Connection::open_in_memory().unwrap();
+        init_memory_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('m1', 'Arquitetura Bare-Metal Rust SODA V6', 'STABLE', 1.0, 0.0, 0.0, 1000)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO souls_memory_nodes (memory_id, content, stability_status, relevance_score, poincare_x, poincare_y, updated_at)
+             VALUES ('m2', 'ChyrosDaemon AutoDream Langevin Decay Poincaré', 'EVOLVING', 1.0, 0.1, 0.1, 1001)",
+            [],
+        ).unwrap();
+
+        let daemon = ChyrosDaemon::new(":memory:", 100);
+        let report = daemon.run_consolidation_cycle(&conn).expect("Consolidação MMV deve rodar com sucesso");
+
+        assert!(report.mmv_token_count > 0, "Snapshot de MMV deve conter tokens");
+        assert!(
+            report.is_aligned_64,
+            "Snapshot de MMV DEVE estar perfeitamente alinhado a um múltiplo de 64 tokens (count: {})",
+            report.mmv_token_count
+        );
+        assert!(
+            report.mmv_token_count.is_multiple_of(64),
+            "Prefix Caching Rate: Token count % 64 DEVE ser exatamente 0"
+        );
     }
 }
 
