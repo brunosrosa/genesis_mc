@@ -593,3 +593,27 @@ pub fn now_brt_rfc3339() -> String {
     format_brt_rfc3339(now_epoch_secs())
 }
 
+/// Sondagem de conectividade de rede ultrarrápida e não-bloqueante via UDP.
+///
+/// Tenta abrir um soquete UDP local ('0.0.0.0:0') e conectar temporariamente ao IP público
+/// "1.1.1.1:53" (DNS Cloudflare) com timeout estrito de 200ms.
+/// Retorna `true` se houver rota ativa; retorne `false` silenciosamente com log em `stderr`.
+pub async fn is_internet_active() -> bool {
+    let socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("[DRIFT_SENTINEL] Sistema offline ou restrito. Olheiro em repouso tático.");
+            return false;
+        }
+    };
+    let timeout = std::time::Duration::from_millis(200);
+    match tokio::time::timeout(timeout, socket.connect("1.1.1.1:53")).await {
+        Ok(Ok(_)) => true,
+        _ => {
+            eprintln!("[DRIFT_SENTINEL] Sistema offline ou restrito. Olheiro em repouso tático.");
+            false
+        }
+    }
+}
+
+

@@ -3,6 +3,7 @@
 // novos tools mem_* + core_think com inputSchemas profundos).
 #![recursion_limit = "1024"]
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use std::sync::OnceLock;
 use tokio::sync::{mpsc, oneshot};
 use souls_mc_lib::cognition::{context, lean_vacuum};
@@ -20,7 +21,7 @@ use souls_mc_lib::cognition::thinking::ThinkingEngine;
 use souls_mc_lib::harvester::{ast_parser, community, github_tracker, repo_radar, web_scraper};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlparser::ast::Statement as SqlStatement;
 use sqlparser::dialect::SQLiteDialect;
@@ -3335,7 +3336,14 @@ fn jsonrpc_error(
 // STATE DB (souls_state.db) L2 WORKER & AUTOMATIC MIGRATIONS
 // =============================================================================
 
-enum StateDbOp {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoDriftCandidate {
+    pub repo_url: String,
+    pub repo_version: String,
+    pub ultima_versao_online: Option<String>,
+}
+
+pub(crate) enum StateDbOp {
     SubAgent {
         agent_id: String,
         task_name: String,
@@ -3375,6 +3383,15 @@ enum StateDbOp {
         duration_ms: i64,
         /// Marco 3.8 Fase C.1: acuracia sintatica REAL 0.0-1.0.
         accuracy_score: f64,
+        reply: oneshot::Sender<Result<Value, RpcError>>,
+    },
+    // Marco 5.14.0: Batedor Reativo de Drift da Fase -1
+    GetRepositoriesForDriftCheck {
+        reply: oneshot::Sender<Result<Vec<RepoDriftCandidate>, RpcError>>,
+    },
+    UpdateRepositoryDrift {
+        repo_url: String,
+        online_version: String,
         reply: oneshot::Sender<Result<Value, RpcError>>,
     },
 }
@@ -3680,6 +3697,76 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     let _ = reply.send(response);
                 }
+                StateDbOp::GetRepositoriesForDriftCheck { reply } => {
+                    let cutoff_seconds = now - 86400;
+                    let query_res = conn.prepare(
+                        "SELECT r.repo_url, rh.repo_version, rh.ultima_versao_online \
+                         FROM repositorios r \
+                         JOIN repo_heuristics rh ON (r.repo_url = rh.solution_id OR r.project_name = rh.project_name) \
+                         WHERE (r.status_processamento IN ('PENDENTE', 'F0_OK') OR rh.status_atualizacao IN ('PENDENTE', 'F0_OK', 'CONCLUIDO')) \
+                           AND (rh.data_ultima_analise IS NULL OR rh.data_ultima_analise = 0 OR rh.data_ultima_analise < ?1)",
+                    );
+
+                    let response = match query_res {
+                        Ok(mut stmt) => {
+                            let rows = stmt.query_map(rusqlite::params![cutoff_seconds], |row| {
+                                Ok(RepoDriftCandidate {
+                                    repo_url: row.get(0)?,
+                                    repo_version: row.get(1)?,
+                                    ultima_versao_online: row.get(2)?,
+                                })
+                            });
+                            match rows {
+                                Ok(mapped) => {
+                                    let list: Vec<RepoDriftCandidate> = mapped.filter_map(|r| r.ok()).collect();
+                                    Ok(list)
+                                }
+                                Err(e) => Err(RpcError {
+                                    code: -32000,
+                                    message: format!("Error mapping drift candidates: {e}"),
+                                    data: None,
+                                }),
+                            }
+                        }
+                        Err(e) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Error preparing drift candidates query: {e}"),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
+                StateDbOp::UpdateRepositoryDrift { repo_url, online_version, reply } => {
+                    let update_rh = conn.execute(
+                        "UPDATE repo_heuristics SET \
+                            ultima_versao_online = ?1, \
+                            status_atualizacao = 'PENDENTE_FASE_0', \
+                            data_ultima_analise = ?2 \
+                         WHERE solution_id = ?3 OR project_name = (SELECT project_name FROM repositorios WHERE repo_url = ?3 OR project_name = ?3)",
+                        rusqlite::params![online_version, now, repo_url],
+                    );
+                    let update_r = conn.execute(
+                        "UPDATE repositorios SET \
+                            status_processamento = 'PENDENTE' \
+                         WHERE repo_url = ?1 OR project_name = ?1",
+                        rusqlite::params![repo_url],
+                    );
+
+                    let response = match (update_rh, update_r) {
+                        (Ok(_), Ok(_)) => Ok(json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Drift updated for '{}' to version '{}'.", repo_url, online_version)
+                            }]
+                        })),
+                        (Err(e), _) | (_, Err(e)) => Err(RpcError {
+                            code: -32000,
+                            message: format!("Error updating repository drift: {e}"),
+                            data: None,
+                        }),
+                    };
+                    let _ = reply.send(response);
+                }
             }
         }
     });
@@ -3711,7 +3798,105 @@ fn init_state_db_and_worker() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Marco 5.14.0: spawn do `start_reactive_drift_checker`
+    if let Some(tx) = STATE_DB_TX.get().cloned() {
+        tokio::spawn(start_reactive_drift_checker(tx));
+    }
+
     Ok(())
+}
+
+/// Marco 5.14.0 — Trabalhador Reativo de Drift da Fase -1
+///
+/// Executa em segundo plano com um temporizador de 3600s (1 hora).
+/// Verifica conectividade via UDP não-bloqueante (`is_internet_active`).
+/// Se houver rota ativa, consulta repositórios defasados e executa HTTP GET em `reqwest` com 5s timeout.
+/// Havendo divergência entre `repo_version` e `online_version`, envia `UpdateRepositoryDrift` via MPSC.
+pub(crate) async fn start_reactive_drift_checker(state_db_tx: tokio::sync::mpsc::Sender<StateDbOp>) {
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .user_agent("souls-mcp-server");
+
+    let github_token = std::env::var("GITHUB_TOKEN")
+        .or_else(|_| std::env::var("SOULS_GITHUB_TOKEN"))
+        .ok();
+
+    if let Some(token) = github_token {
+        let mut headers = reqwest::header::HeaderMap::new();
+        let auth_val = format!("token {}", token);
+        if let Ok(hdr) = reqwest::header::HeaderValue::from_str(&auth_val) {
+            headers.insert(reqwest::header::AUTHORIZATION, hdr);
+        }
+        client_builder = client_builder.default_headers(headers);
+    }
+
+    let client = match client_builder.build() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[DRIFT_SENTINEL] Erro ao construir cliente HTTP reqwest: {e}");
+            return;
+        }
+    };
+
+    let mut interval = tokio::time::interval(Duration::from_secs(3600));
+    loop {
+        interval.tick().await;
+
+        if !souls_mc_lib::telemetry::is_internet_active().await {
+            eprintln!("[DRIFT_SENTINEL] Sistema offline ou restrito. Olheiro em repouso tático.");
+            continue;
+        }
+
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if state_db_tx
+            .send(StateDbOp::GetRepositoriesForDriftCheck { reply: reply_tx })
+            .await
+            .is_err()
+        {
+            eprintln!("[DRIFT_SENTINEL] Canal STATE_DB_TX encerrado. Interrompendo olheiro.");
+            break;
+        }
+
+        let candidates = match reply_rx.await {
+            Ok(Ok(list)) => list,
+            _ => continue,
+        };
+
+        for candidate in candidates {
+            let url = if candidate.repo_url.starts_with("http") {
+                format!("{}/releases/latest", candidate.repo_url.trim_end_matches('/'))
+            } else {
+                format!("https://github.com/{}/releases/latest", candidate.repo_url.trim_end_matches('/'))
+            };
+
+            let response = match client.get(&url).send().await {
+                Ok(resp) => resp,
+                Err(_) => continue,
+            };
+
+            let online_version = if let Some(last_segment) = response.url().path_segments().and_then(|mut s| s.next_back()) {
+                if !last_segment.is_empty() && last_segment != "latest" {
+                    last_segment.to_string()
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            };
+
+            if candidate.repo_version != online_version {
+                let (upd_tx, upd_rx) = oneshot::channel();
+                let _ = state_db_tx
+                    .send(StateDbOp::UpdateRepositoryDrift {
+                        repo_url: candidate.repo_url,
+                        online_version,
+                        reply: upd_tx,
+                    })
+                    .await;
+                let _ = upd_rx.await;
+            }
+        }
+    }
 }
 
 async fn run_souls_sub_agent(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
@@ -8534,6 +8719,163 @@ mod tests {
             scheduler.current_vram_usage_mb() <= 5632,
             "Uso concorrente de VRAM deve respeitar o teto máximo de 5632 MB"
         );
+    }
+
+    #[tokio::test]
+    async fn test_drift_sentinel_offline_bypass() {
+        let start = std::time::Instant::now();
+        let active = souls_mc_lib::telemetry::is_internet_active().await;
+        let elapsed = start.elapsed();
+
+        assert!(elapsed.as_millis() < 500, "is_internet_active must resolve fast (< 500ms)");
+        let _ = active;
+    }
+
+    #[tokio::test]
+    async fn test_drift_calculation_and_state_transition() {
+        let conn = rusqlite::Connection::open_in_memory().expect("open memory db");
+        conn.execute_batch(
+            "CREATE TABLE repositorios (
+                project_name TEXT PRIMARY KEY NOT NULL,
+                repo_url TEXT NOT NULL UNIQUE,
+                status_processamento TEXT NOT NULL
+            );
+            CREATE TABLE repo_heuristics (
+                project_name TEXT PRIMARY KEY NOT NULL,
+                solution_id TEXT NOT NULL,
+                repo_version TEXT NOT NULL,
+                ultima_versao_online TEXT,
+                status_atualizacao TEXT NOT NULL,
+                data_ultima_analise INTEGER
+            );",
+        ).expect("create tables");
+
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url, status_processamento) VALUES ('owner/repo1', 'https://github.com/owner/repo1', 'F0_OK')",
+            [],
+        ).expect("insert repo");
+
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, repo_version, status_atualizacao, data_ultima_analise) VALUES ('owner/repo1', 'https://github.com/owner/repo1', 'v1.2.0', 'CONCLUIDO', 0)",
+            [],
+        ).expect("insert heuristic");
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        let repo_url = "https://github.com/owner/repo1";
+        let online_version = "v1.3.0";
+
+        conn.execute(
+            "UPDATE repo_heuristics SET \
+                ultima_versao_online = ?1, \
+                status_atualizacao = 'PENDENTE_FASE_0', \
+                data_ultima_analise = ?2 \
+             WHERE solution_id = ?3 OR project_name = (SELECT project_name FROM repositorios WHERE repo_url = ?3 OR project_name = ?3)",
+            rusqlite::params![online_version, now, repo_url],
+        ).expect("update repo_heuristics");
+
+        conn.execute(
+            "UPDATE repositorios SET \
+                status_processamento = 'PENDENTE' \
+             WHERE repo_url = ?1 OR project_name = ?1",
+            rusqlite::params![repo_url],
+        ).expect("update repositorios");
+
+        let status_at: String = conn.query_row(
+            "SELECT status_atualizacao FROM repo_heuristics WHERE solution_id = ?1",
+            [repo_url],
+            |r| r.get(0),
+        ).expect("query status_atualizacao");
+
+        let status_proc: String = conn.query_row(
+            "SELECT status_processamento FROM repositorios WHERE repo_url = ?1",
+            [repo_url],
+            |r| r.get(0),
+        ).expect("query status_processamento");
+
+        let versao_online: String = conn.query_row(
+            "SELECT ultima_versao_online FROM repo_heuristics WHERE solution_id = ?1",
+            [repo_url],
+            |r| r.get(0),
+        ).expect("query ultima_versao_online");
+
+        let last_analise: i64 = conn.query_row(
+            "SELECT data_ultima_analise FROM repo_heuristics WHERE solution_id = ?1",
+            [repo_url],
+            |r| r.get(0),
+        ).expect("query data_ultima_analise");
+
+        assert_eq!(status_at, "PENDENTE_FASE_0");
+        assert_eq!(status_proc, "PENDENTE");
+        assert_eq!(versao_online, "v1.3.0");
+        assert!(last_analise > 0);
+    }
+
+    #[tokio::test]
+    async fn test_drift_time_cooldown_gate() {
+        let conn = rusqlite::Connection::open_in_memory().expect("open memory db");
+        conn.execute_batch(
+            "CREATE TABLE repositorios (
+                project_name TEXT PRIMARY KEY NOT NULL,
+                repo_url TEXT NOT NULL UNIQUE,
+                status_processamento TEXT NOT NULL
+            );
+            CREATE TABLE repo_heuristics (
+                project_name TEXT PRIMARY KEY NOT NULL,
+                solution_id TEXT NOT NULL,
+                repo_version TEXT NOT NULL,
+                ultima_versao_online TEXT,
+                status_atualizacao TEXT NOT NULL,
+                data_ultima_analise INTEGER
+            );",
+        ).expect("create tables");
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        let recent_time = now - 3600;
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url, status_processamento) VALUES ('owner/repo_recent', 'https://github.com/owner/repo_recent', 'F0_OK')",
+            [],
+        ).expect("insert recent repo");
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, repo_version, status_atualizacao, data_ultima_analise) VALUES ('owner/repo_recent', 'https://github.com/owner/repo_recent', 'v1.0.0', 'CONCLUIDO', ?1)",
+            [recent_time],
+        ).expect("insert recent heuristic");
+
+        let old_time = now - 90000;
+        conn.execute(
+            "INSERT INTO repositorios (project_name, repo_url, status_processamento) VALUES ('owner/repo_outdated', 'https://github.com/owner/repo_outdated', 'F0_OK')",
+            [],
+        ).expect("insert outdated repo");
+        conn.execute(
+            "INSERT INTO repo_heuristics (project_name, solution_id, repo_version, status_atualizacao, data_ultima_analise) VALUES ('owner/repo_outdated', 'https://github.com/owner/repo_outdated', 'v1.0.0', 'CONCLUIDO', ?1)",
+            [old_time],
+        ).expect("insert outdated heuristic");
+
+        let cutoff_seconds = now - 86400;
+        let mut stmt = conn.prepare(
+            "SELECT r.repo_url, rh.repo_version, rh.ultima_versao_online \
+             FROM repositorios r \
+             JOIN repo_heuristics rh ON (r.repo_url = rh.solution_id OR r.project_name = rh.project_name) \
+             WHERE (r.status_processamento IN ('PENDENTE', 'F0_OK') OR rh.status_atualizacao IN ('PENDENTE', 'F0_OK', 'CONCLUIDO')) \
+               AND (rh.data_ultima_analise IS NULL OR rh.data_ultima_analise = 0 OR rh.data_ultima_analise < ?1)",
+        ).expect("prepare stmt");
+
+        let rows = stmt.query_map([cutoff_seconds], |row| {
+            let url: String = row.get(0)?;
+            Ok(url)
+        }).expect("query map");
+
+        let candidates: Vec<String> = rows.filter_map(|r| r.ok()).collect();
+
+        assert_eq!(candidates.len(), 1, "Only 1 repo should exceed the 24h cooldown gate");
+        assert_eq!(candidates[0], "https://github.com/owner/repo_outdated");
     }
 }
 
