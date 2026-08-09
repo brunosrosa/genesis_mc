@@ -1,4 +1,4 @@
-_IGNITION_SCRIPTS Gerado em: 2026-08-07 19:03:49
+_IGNITION_SCRIPTS Gerado em: 2026-08-08 21:06:08
 
 ### ====================================================================================================
 ARQUIVO: boot.ps1
@@ -45,6 +45,16 @@ if (Test-Path $vendorLlamaCmake) {
             'option(GGML_CCACHE "ggml: use ccache if available"                   OFF)' |
             Set-Content -LiteralPath $vendorLlamaCmake
         Write-Host "[PATCH] vendor/llama-cpp-sys-2 GGML_CCACHE -> OFF (auto-fix CUDA+sccache)" -ForegroundColor DarkGreen
+    }
+}
+# Patch idempotente vendor/esaxx-rs: desativa static_crt(true) para evitar conflitos MSVC (LNK2005/LNK1169)
+$vendorEsaxxBuild = Join-Path $PSScriptRoot "src-tauri\vendor\esaxx-rs\build.rs"
+if (Test-Path $vendorEsaxxBuild) {
+    $esaxxContent = Get-Content -LiteralPath $vendorEsaxxBuild -Raw -ErrorAction SilentlyContinue
+    if ($esaxxContent -and $esaxxContent -match '\.static_crt\(true\)') {
+        ($esaxxContent -replace '\.static_crt\(true\)', '.static_crt(false)') |
+            Set-Content -LiteralPath $vendorEsaxxBuild
+        Write-Host "[PATCH] vendor/esaxx-rs static_crt -> false (auto-fix MSVC runtime)" -ForegroundColor DarkGreen
     }
 }
 $ErrorActionPreference = "Stop"
@@ -201,7 +211,7 @@ try {
             -Arguments @(
                 "build",
                 "--message-format", "short",
-                "--features", "tauri-app,gateway_ccr,llama_backend",
+                "--features", "tauri-app,gateway_ccr",
                 "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
@@ -301,7 +311,7 @@ try {
             -Arguments @(
                 "build",
                 "--message-format", "short",
-                "--features", "tauri-app,gateway_ccr,llama_backend",
+                "--features", "tauri-app,gateway_ccr",
                 "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",

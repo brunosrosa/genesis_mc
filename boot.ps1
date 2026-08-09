@@ -205,7 +205,7 @@ try {
             -Arguments @(
                 "build",
                 "--message-format", "short",
-                "--features", "tauri-app,gateway_ccr,llama_backend",
+                "--features", "tauri-app,gateway_ccr",
                 "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
@@ -305,7 +305,7 @@ try {
             -Arguments @(
                 "build",
                 "--message-format", "short",
-                "--features", "tauri-app,gateway_ccr,llama_backend",
+                "--features", "tauri-app,gateway_ccr",
                 "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",

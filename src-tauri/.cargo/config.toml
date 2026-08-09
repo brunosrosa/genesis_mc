@@ -12,8 +12,6 @@ SCCACHE_CACHE_SIZE = "8G"
 # O sistema usará o link.exe nativo do MSVC, que é 100% homologado pela NVIDIA.
 rustflags = [
   "-C", "link-arg=/Brepro",
-  "-C", "link-arg=/NODEFAULTLIB:LIBCMT",
-  "-C", "link-arg=/NODEFAULTLIB:libcpmt.lib",
 ]
 
 [build]

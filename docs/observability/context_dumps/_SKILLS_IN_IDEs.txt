@@ -1,4 +1,4 @@
-_SKILLS_IN_IDEs Gerado em: 2026-08-07 19:03:50
+_SKILLS_IN_IDEs Gerado em: 2026-08-08 21:06:09
 
 ### ====================================================================================================
 ARQUIVO: mcp-ast-master/SKILL.md
@@ -1424,11 +1424,11 @@ Sempre que for solicitada a codificação de uma nova funcionalidade, refatoraç
    * **Consumo de Fronteira:** Acesse o banco de dados/planilha e extraia a `acao_de_canibalizacao` e a `red_line`. Você está proibido de codificar o que violar a Linha Vermelha.
    * **Shadow Workspace:** Isole o ambiente usando ramificações temporárias e *Hard Links* (snapsafe) em tempo $\mathcal{O}(1)$ consumindo 0 bytes extras. Comando: `git checkout -b feat/<nome>`.
 2. **Fase 2: O Tratado ACONIC e Agnosticismo Hardware:**
-   * Escreva o `docs/design.md`. Além do diagrama Mermaid obrigatório, você DEVE mapear o padrão **Orchestrator-Worker**.
+   * Escreva o documento de design em `docs/work-units/active/<tipo>-<slug>/design.md` (conforme Zona 3 do `_WORKSPACE_MAP.md` v6.0). Além do diagrama Mermaid obrigatório, você DEVE mapear o padrão **Orchestrator-Worker**.
    * O design da lógica local DEVE garantir o **Agnosticismo de Hardware**. A solução não deve ser engessada para a RTX 2060m, mas sim estruturada de forma transmutável (preparada para ser recompilada via ecossistema CubeCL/Burn para Metal/Vulkan/NPU), usando a RTX 2060m exclusivamente como nosso "Treino de Gravidade" (piso de validação).
    * Pare e exija a autorização explícita do usuário: *"Arquiteto, o design e o roteamento agnóstico estão aprovados?"*
 3. **Fase 3: Desfragmentação e DoD (Tasks):**
-   * Quebre o design em passos atômicos dentro de `tasks.md`.
+   * Quebre o design em passos atômicos dentro de `docs/work-units/active/<tipo>-<slug>/tasks.md` (conforme Zona 3 do `_WORKSPACE_MAP.md` v6.0).
    * **Lei do Scaffold:** Cada tarefa deve ter uma *Definition of Done (DoD)* rigorosa, exigindo infraestrutura executável (testes vazios de falha) antes da lógica real.
 4. **Fase 4: Mutação Atômica e Delegação (Mutate):**
    * A escrita em disco é sagrada. Utilize **OBRIGATORIAMENTE** `atomic-write-file` ou edição por *offset* protegida por Mutex assíncrono do Tokio.
@@ -1557,7 +1557,7 @@ Antes de começar qualquer trabalho, **carregue o mapa territorial** lendo:
 cat _WORKSPACE_MAP.md
 
 # 2. Rodar o auditor para confirmar baseline limpo
-python docs/runtime/scripts/audit_workspace_compliance.py --quiet
+python docs/scripts/audit_workspace_compliance.py --quiet
 ```
 
 Se a saída do auditor mostrar **0 findings** → workspace OK, prossiga.
@@ -1635,7 +1635,7 @@ Se mostrar findings → **NÃO PROSSIGA** até reportar ao Arquiteto Humano.
 Sempre que terminar uma sequência de mudanças territoriais, rode:
 
 ```bash
-python docs/runtime/scripts/audit_workspace_compliance.py
+python docs/scripts/audit_workspace_compliance.py
 ```
 
 Saídas:
@@ -1667,7 +1667,7 @@ Modos avançados:
 ## 8. REFERÊNCIAS
 
 - **Mapa canônico:** `_WORKSPACE_MAP.md` (v6.0)
-- **Auditor:** `docs/runtime/scripts/audit_workspace_compliance.py`
+- **Auditor:** `docs/scripts/audit_workspace_compliance.py`
 - **Manifesto:** `docs/SOULS_CANON_MANIFEST.md`
 - **Marco:** Marco 3.10 — Reorganização Territorial do Workspace
 
