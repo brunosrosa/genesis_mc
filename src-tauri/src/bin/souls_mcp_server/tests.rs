@@ -3047,3 +3047,245 @@ async fn test_drift_cooldown_gate_24h() {
     assert_eq!(candidates.len(), 1, "Only 1 repo should exceed the 24h cooldown gate");
     assert_eq!(candidates[0], "https://github.com/owner/repo_outdated");
 }
+
+// ============================================================================
+// MARCO 5.16.0 — SDD CASCADE ORCHESTRATOR (sdd.rs)
+// ============================================================================
+// Estes 3 testes de estresse blindam as 3 Leis da cascata documental:
+//   • LEI I  — Assinatura humana obrigatória em REQUIREMENTS.md
+//   • LEI II — Invalidação de hash SHA-256 em cascata
+//   • LEI III — Cross-match de cobertura TDD (TASKS ↔ TEST_SPECS)
+// ============================================================================
+
+/// Helper: cria um workspace sintético com 4 documentos SDD em estado
+/// "aprovado" (assinatura humana presente, hashes canônicos, cobertura
+/// TDD íntegra). Os hashes iniciais são registrados manualmente para
+/// simular uma execução anterior bem-sucedida.
+fn seed_approved_sdd_workspace(root: &std::path::Path) {
+    use std::fs;
+    fs::write(
+        root.join("REQUIREMENTS.md"),
+        b"# REQUIREMENTS\n[APPROVED_BY_HUMAN: 2026-08-09]\n",
+    )
+    .expect("seed REQUIREMENTS");
+    fs::write(root.join("DESIGN.md"), b"# DESIGN\nv1.0 stable\n").expect("seed DESIGN");
+    fs::write(
+        root.join("TASKS.md"),
+        b"# TASKS\nTask 140: requirements gate\nTask 141: cascade invalidation\n",
+    )
+    .expect("seed TASKS");
+    fs::write(
+        root.join("TEST_SPECS.md"),
+        b"# TEST_SPECS\nfn test_sdd_140_requirements_approved_gate() {}\nfn test_sdd_141_cascade_invalidation() {}\n",
+    )
+    .expect("seed TEST_SPECS");
+}
+
+/// LEI I: o validador bloqueia a execução se a tag `APPROVED_BY_HUMAN`
+/// estiver ausente e libera para `is_approved = 1` após a injeção correta.
+#[tokio::test]
+async fn test_sdd_requirements_approved_gate() {
+    use rusqlite::OpenFlags;
+    use souls_mc_lib::cognition::state_thinking::memory_graph::errors::CognitiveError;
+    use souls_mc_lib::core::sdd::{
+        resolve_sdd_db_path, SddValidationEngine, SDD_DOCUMENT_STATES_DDL,
+    };
+    use std::fs;
+
+    let dir = tempfile::tempdir().expect("tempdir para LEI I");
+    let root = dir.path();
+    fs::write(root.join("REQUIREMENTS.md"), b"# REQUIREMENTS (sem assinatura)\n")
+        .expect("escreve REQUIREMENTS sem tag");
+    fs::write(root.join("DESIGN.md"), b"# DESIGN\n").expect("escreve DESIGN");
+    fs::write(root.join("TASKS.md"), b"# TASKS\nTask 140: gate\n").expect("escreve TASKS");
+    fs::write(
+        root.join("TEST_SPECS.md"),
+        b"# TEST_SPECS\nfn test_sdd_140_x() {}\n",
+    )
+    .expect("escreve TEST_SPECS");
+
+    // Pré-condição: o DB deve existir (e o schema SDD deve estar materializado).
+    // Forçamos a abertura via a função pública do módulo para garantir que
+    // a migração idempotente seja executada antes do assert abaixo.
+    let _ = SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap())
+        .await
+        .expect_err("LEI I deve falhar sem assinatura humana");
+
+    // Verifica via SQL que o documento foi marcado como não aprovado.
+    let db_path = resolve_sdd_db_path(root.to_str().unwrap());
+    let conn = rusqlite::Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("abre DB read-only");
+    conn.execute_batch(SDD_DOCUMENT_STATES_DDL)
+        .expect("tabela sdd_document_states deve existir (migração V6)");
+    let approved: i64 = conn
+        .query_row(
+            "SELECT is_approved FROM sdd_document_states WHERE document_path = 'REQUIREMENTS.md'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("linha de REQUIREMENTS.md deve existir");
+    assert_eq!(approved, 0, "REQUIREMENTS sem tag deve ficar is_approved = 0");
+
+    // Injeta a tag correta: a validação deve passar e marcar is_approved = 1.
+    fs::write(
+        root.join("REQUIREMENTS.md"),
+        b"# REQUIREMENTS\n[APPROVED_BY_HUMAN: 2026-08-09]\n",
+    )
+    .expect("injeta tag de aprovação");
+    let result = SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap())
+        .await
+        .expect("LEI I deve liberar após injeção da tag");
+    assert!(result, "validação deve retornar Ok(true) com cobertura TDD íntegra");
+
+    let conn2 = rusqlite::Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("reabre DB read-only");
+    let approved_after: i64 = conn2
+        .query_row(
+            "SELECT is_approved FROM sdd_document_states WHERE document_path = 'REQUIREMENTS.md'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("linha de REQUIREMENTS.md deve existir");
+    assert_eq!(approved_after, 1, "REQUIREMENTS com tag deve ficar is_approved = 1");
+
+    // Bônus: o caminho de erro deve ser tipado como `CognitiveError::HitlDenied`
+    // (verificação de contrato da enum canônica do motor cognitivo).
+    fs::write(root.join("REQUIREMENTS.md"), b"# sem tag\n").expect("remove tag");
+    match SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap()).await {
+        Err(CognitiveError::HitlDenied(msg)) => {
+            assert!(
+                msg.contains("APPROVED_BY_HUMAN"),
+                "HitlDenied deve referenciar a tag faltante: {msg}"
+            );
+        }
+        other => panic!("esperava Err(CognitiveError::HitlDenied), recebeu: {other:?}"),
+    }
+}
+
+/// LEI II: alteração do conteúdo de REQUIREMENTS.md deve disparar a
+/// invalidação atômica de todos os documentos downstream (DESIGN/TASKS/TEST_SPECS).
+#[tokio::test]
+async fn test_sdd_cascade_hash_invalidation() {
+    use rusqlite::OpenFlags;
+    use souls_mc_lib::cognition::state_thinking::memory_graph::errors::CognitiveError;
+    use souls_mc_lib::core::sdd::{resolve_sdd_db_path, SddValidationEngine};
+    use std::fs;
+
+    let dir = tempfile::tempdir().expect("tempdir para LEI II");
+    let root = dir.path();
+    seed_approved_sdd_workspace(root);
+
+    // 1ª passada: cascata verde — todos os 4 documentos aprovados.
+    let first = SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap())
+        .await
+        .expect("1ª passada deve liberar");
+    assert!(first, "1ª passada deve retornar Ok(true)");
+
+    let db_path = resolve_sdd_db_path(root.to_str().unwrap());
+    let conn = rusqlite::Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("abre DB read-only");
+    let mut all_approved = true;
+    for doc in ["REQUIREMENTS.md", "DESIGN.md", "TASKS.md", "TEST_SPECS.md"] {
+        let v: i64 = conn
+            .query_row(
+                "SELECT is_approved FROM sdd_document_states WHERE document_path = ?1",
+                [doc],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if v != 1 {
+            all_approved = false;
+        }
+    }
+    assert!(all_approved, "após 1ª passada, todos os 4 docs devem estar is_approved = 1");
+
+    // 2ª passada: alteração NO MARRA do conteúdo de REQUIREMENTS.md.
+    fs::write(
+        root.join("REQUIREMENTS.md"),
+        b"# REQUIREMENTS MUTATED\n[APPROVED_BY_HUMAN: 2026-08-09]\n# new section X\n",
+    )
+    .expect("muta REQUIREMENTS na marra");
+
+    let err = SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap())
+        .await
+        .expect_err("2ª passada deve falhar com SddCascadeViolation");
+    match err {
+        CognitiveError::SddCascadeViolation(n) => {
+            assert_eq!(n, 3, "3 documentos downstream devem ser rebaixados")
+        }
+        other => panic!("esperava SddCascadeViolation, recebeu: {other:?}"),
+    }
+
+    // Verificação SQL: REQUIREMENTS.md E os 3 downstream devem estar em 0.
+    let conn2 = rusqlite::Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("reabre DB read-only");
+    for doc in ["REQUIREMENTS.md", "DESIGN.md", "TASKS.md", "TEST_SPECS.md"] {
+        let v: i64 = conn2
+            .query_row(
+                "SELECT is_approved FROM sdd_document_states WHERE document_path = ?1",
+                [doc],
+                |row| row.get(0),
+            )
+            .expect("linha deve existir após cascade");
+        assert_eq!(v, 0, "documento {doc} deve estar is_approved = 0 após cascade");
+    }
+}
+
+/// LEI III: tarefa órfã em TASKS.md sem contrapartida em TEST_SPECS.md
+/// deve ser bloqueada pelo validador com `UntrustedExecutionBlocked`.
+#[tokio::test]
+async fn test_sdd_tdd_coverage_check() {
+    use souls_mc_lib::cognition::state_thinking::memory_graph::errors::CognitiveError;
+    use souls_mc_lib::core::sdd::SddValidationEngine;
+    use std::fs;
+
+    let dir = tempfile::tempdir().expect("tempdir para LEI III");
+    let root = dir.path();
+
+    // Estado base: REQUIREMENTS assinada, sem nenhuma Task declarada ainda.
+    fs::write(
+        root.join("REQUIREMENTS.md"),
+        b"# REQUIREMENTS\n[APPROVED_BY_HUMAN: 2026-08-09]\n",
+    )
+    .expect("escreve REQUIREMENTS assinada");
+    fs::write(root.join("DESIGN.md"), b"# DESIGN\n").expect("escreve DESIGN");
+    fs::write(root.join("TASKS.md"), b"# TASKS (vazio)\n").expect("escreve TASKS vazio");
+    fs::write(root.join("TEST_SPECS.md"), b"# TEST_SPECS (vazio)\n").expect("escreve TEST_SPECS vazio");
+
+    // Caminho verde sem tasks (zero tasks = zero órfãs).
+    let ok = SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap())
+        .await
+        .expect("zero tasks deve passar");
+    assert!(ok, "zero tasks deve retornar Ok(true)");
+
+    // Injeta uma task órfã (Task 999) sem test signature correspondente.
+    fs::write(
+        root.join("TASKS.md"),
+        b"# TASKS\nTask 999: feature experimental sem cobertura\n",
+    )
+    .expect("injeta Task 999 órfã");
+
+    let err = SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap())
+        .await
+        .expect_err("Task 999 órfã deve falhar com UntrustedExecutionBlocked");
+    match err {
+        CognitiveError::UntrustedExecutionBlocked(msg) => {
+            assert!(
+                msg.contains("999"),
+                "mensagem deve referenciar a task 999 órfã: {msg}"
+            );
+        }
+        other => panic!("esperava UntrustedExecutionBlocked, recebeu: {other:?}"),
+    }
+
+    // Correção sintática: injeta test_999 em TEST_SPECS.md → caminho verde.
+    fs::write(
+        root.join("TEST_SPECS.md"),
+        b"# TEST_SPECS\nfn test_sdd_999_experimental_feature() {}\n",
+    )
+    .expect("injeta test_999");
+    let ok2 = SddValidationEngine::validate_sdd_cascade_state(root.to_str().unwrap())
+        .await
+        .expect("após correção sintática deve passar");
+    assert!(ok2, "após cobertura injetada, validação deve retornar Ok(true)");
+}
