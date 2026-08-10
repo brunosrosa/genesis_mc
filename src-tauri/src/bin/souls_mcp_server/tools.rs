@@ -145,13 +145,29 @@ pub fn list_tools() -> Value {
             },
             {
                 "name": "edit",
-                "description": "Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).",
+                "description": "Aplica edições cirúrgicas baseadas em casamento exato de blocos (Search and Replace) com proteção de travamento.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "path": { "type": "string", "description": "Caminho do arquivo a ser editado." },
-                        "old_string": { "type": "string", "description": "Trecho exato a ser substituído." },
-                        "new_string": { "type": "string", "description": "Novo conteúdo de substituição." }
+                        "old_string": { "type": "string", "description": "Bloco exato a ser procurado (match exato e contextual)." },
+                        "new_string": { "type": "string", "description": "Novo bloco de substituição." },
+                        "verify_ast": { "type": "boolean", "description": "Se true, ativa a Válvula de Recusa Sintática (Wasmtime WASI 0.2) com rollback atômico." }
+                    },
+                    "required": ["path", "old_string", "new_string"],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "replace",
+                "description": "Substitui blocos textuais extensos sob verificação sintática e com rollback atômico em caso de falha de TDD.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Caminho do arquivo a ser modificado." },
+                        "old_string": { "type": "string", "description": "Bloco exato a ser procurado (match exato e contextual)." },
+                        "new_string": { "type": "string", "description": "Novo bloco de substituição." },
+                        "verify_ast": { "type": "boolean", "description": "Se true (default para replace), ativa a Válvula de Recusa Sintática." }
                     },
                     "required": ["path", "old_string", "new_string"],
                     "additionalProperties": false

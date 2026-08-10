@@ -942,6 +942,38 @@ pub async fn run_souls_knowledge(params: &serde_json::Map<String, Value>) -> Res
 }
 
 pub async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    run_surgical_edit(params, "edit", false).await
+}
+
+pub async fn run_souls_replace(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    // `replace` força o `verify_ast` por default (semanticamente é uma substituição
+    // "extensa sob verificação sintática" como exige a ADR-041). O caller ainda pode
+    // passar `verify_ast: false` para desativar.
+    run_surgical_edit(params, "replace", true).await
+}
+
+/// Motor único das garras `edit` e `replace` (MARCO 6.1.0).
+///
+/// Aplica a sequência canônica exigida pela ADR-010 sob o contrato `souls_mcp`:
+///   1. Validação semântica dos parâmetros e canonização do `path` via `dunce`.
+///   2. Aquisição do lock assíncrono por `PathBuf` (PathLockManager) — serializa
+///      todas as escritas concorrentes no mesmo arquivo.
+///   3. Snapsafe via hard-link (O(1) em NTFS/ReFS) para rollback atômico.
+///   4. Match exato da `old_string` (Fail-Closed em 0 ou >1 ocorrências).
+///   5. Swap atômico (`tmpfile + rename`).
+///   6. Se `verify_ast` estiver ativo, submete o resultado à
+///      `WasmTimeTreeSitterValidator` (Wasmtime WASI 0.2) — em falha, executa
+///      `snapsafe_restore` e devolve `UntrustedExecutionBlocked`.
+async fn run_surgical_edit(
+    params: &serde_json::Map<String, Value>,
+    tool_name: &'static str,
+    default_verify_ast: bool,
+) -> Result<Value, RpcError> {
+    use souls_mc_lib::core::file_locker::{
+        acquire_file_lock, atomic_write_file, snapsafe_create_hardlink, snapsafe_restore,
+        WasmTimeTreeSitterValidator,
+    };
+
     let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
     let path_str = args.get("path").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
@@ -949,7 +981,7 @@ pub async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<V
         data: None,
     })?;
 
-    try_log_file_access(path_str, "edit");
+    try_log_file_access(path_str, tool_name);
     try_record_repo_heatmap(path_str);
 
     let old_string = args.get("old_string").and_then(Value::as_str).ok_or_else(|| RpcError {
@@ -962,6 +994,10 @@ pub async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<V
         message: "Parâmetro obrigatório 'new_string' ausente".to_string(),
         data: None,
     })?;
+    let verify_ast = args
+        .get("verify_ast")
+        .and_then(Value::as_bool)
+        .unwrap_or(default_verify_ast);
 
     let canonical_path = validate_and_canonicalize_path(path_str)?;
 
@@ -973,7 +1009,7 @@ pub async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<V
         });
     }
 
-    let lock = souls_mc_lib::core::file_locker::acquire_file_lock(&canonical_path);
+    let lock = acquire_file_lock(&canonical_path);
     let _guard = lock.lock().await;
 
     let raw_content = tokio::fs::read_to_string(&canonical_path).await.map_err(|e| RpcError {
@@ -982,7 +1018,12 @@ pub async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<V
         data: Some(json!({ "path": canonical_path.display().to_string() })),
     })?;
 
-    let occurrences = raw_content.matches(old_string).count();
+    // `match_indices` produz o conjunto exato de (offset, matched_slice) — é
+    // semanticamente equivalente a `matches().count()` mas itera a string uma
+    // única vez, capturando a posição de cada ocorrência para o relatório de
+    // erro Fail-Closed. Garante que a `old_string` ocorra exatamente UMA vez.
+    let matches: Vec<(usize, &str)> = raw_content.match_indices(old_string).collect();
+    let occurrences = matches.len();
     if occurrences == 0 {
         return Err(RpcError {
             code: -32001,
@@ -993,26 +1034,103 @@ pub async fn run_souls_edit(params: &serde_json::Map<String, Value>) -> Result<V
     if occurrences > 1 {
         return Err(RpcError {
             code: -32001,
-            message: format!("old_string ambígua; encontrada {} vezes no arquivo. Edição cancelada (Fail-Closed).", occurrences),
-            data: Some(json!({ "occurrences": occurrences, "old_string": old_string })),
+            message: format!(
+                "old_string ambígua; encontrada {} vezes no arquivo nas posições {:?}. Edição cancelada (Fail-Closed).",
+                occurrences,
+                matches.iter().map(|(offset, _)| offset).collect::<Vec<_>>()
+            ),
+            data: Some(json!({ "occurrences": occurrences, "old_string": old_string, "positions": matches.iter().map(|(o,_)| o).collect::<Vec<_>>() })),
         });
     }
 
     let updated_content = raw_content.replacen(old_string, new_string, 1);
 
-    souls_mc_lib::core::file_locker::atomic_write_file(&canonical_path, &updated_content)
-        .await
-        .map_err(|e| RpcError {
+    // Snapsafe O(1) antes da mutação física: garante rollback atômico em
+    // caso de falha de validação sintática via Wasmtime.
+    let snapshot_path = match snapsafe_create_hardlink(&canonical_path) {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(RpcError {
+                code: -32013,
+                message: format!(
+                    "Falha ao criar snapshot snapsafe antes da mutação: {e}"
+                ),
+                data: Some(json!({ "path": canonical_path.display().to_string() })),
+            });
+        }
+    };
+
+    if let Err(e) = atomic_write_file(&canonical_path, &updated_content).await {
+        let _ = tokio::fs::remove_file(&snapshot_path).await;
+        return Err(RpcError {
             code: -32014,
             message: format!("Falha no swap atômico de arquivo: {e}"),
             data: Some(json!({ "path": canonical_path.display().to_string() })),
-        })?;
+        });
+    }
+
+    if verify_ast {
+        let accepted = WasmTimeTreeSitterValidator::validate_path(&canonical_path, &updated_content)
+            .unwrap_or(true);
+        if !accepted {
+            // Rollback atômico via snapsafe.
+            if let Err(restore_err) = snapsafe_restore(&snapshot_path, &canonical_path).await {
+                let _ = tokio::fs::remove_file(&snapshot_path).await;
+                return Err(RpcError {
+                    code: -32002,
+                    message: format!(
+                        "UntrustedExecutionBlocked: parser WASM rejeitou a sintaxe do novo conteúdo e o rollback também falhou ({restore_err})"
+                    ),
+                    data: Some(json!({
+                        "path": canonical_path.display().to_string(),
+                        "reason": "syntax_validation_failed",
+                    })),
+                });
+            }
+            return Err(RpcError {
+                code: -32002,
+                message:
+                    "UntrustedExecutionBlocked: parser WASM detectou delimitadores órfãos. Rollback atômico executado via snapsafe."
+                        .to_string(),
+                data: Some(json!({
+                    "path": canonical_path.display().to_string(),
+                    "reason": "syntax_validation_failed",
+                    "rolled_back": true,
+                })),
+            });
+        }
+    }
+
+    // Snapshot já não é mais necessário.
+    let _ = tokio::fs::remove_file(&snapshot_path).await;
+
+    let success_msg = if verify_ast {
+        format!(
+            "Arquivo '{}' editado com sucesso (substituição cirúrgica + verify_ast OK via tool '{}').",
+            canonical_path.display(),
+            tool_name
+        )
+    } else {
+        format!(
+            "Arquivo '{}' editado com sucesso (substituição cirúrgica concluída via tool '{}').",
+            canonical_path.display(),
+            tool_name
+        )
+    };
 
     Ok(json!({
         "content": [{
             "type": "text",
-            "text": format!("Arquivo '{}' editado com sucesso (substituição cirúrgica concluída).", canonical_path.display())
-        }]
+            "text": success_msg
+        }],
+        "structuredContent": {
+            "tool": tool_name,
+            "path": canonical_path.display().to_string(),
+            "verify_ast": verify_ast,
+            "old_string_len": old_string.len(),
+            "new_string_len": new_string.len(),
+        },
+        "isError": false
     }))
 }
 

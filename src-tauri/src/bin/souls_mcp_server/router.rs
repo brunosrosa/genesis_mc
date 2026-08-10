@@ -127,6 +127,7 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "handoff" => handlers::system::run_souls_handoff(params).await,
         "knowledge" => handlers::system::run_souls_knowledge(params).await,
         "edit" => handlers::system::run_souls_edit(params).await,
+        "replace" => handlers::system::run_souls_replace(params).await,
         "fill" | "ccr_fill" => handlers::context::run_souls_fill(params).await,
         "stub_fill" => handlers::context::run_souls_stub_fill(params).await,
         "read" => handlers::context::run_souls_read(params).await,
