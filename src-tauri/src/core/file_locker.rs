@@ -131,14 +131,25 @@ pub async fn atomic_write_file(path: &Path, content: &str) -> Result<(), std::io
 /// Assinatura: `validate(ptr: i32, len: i32) -> i32`
 ///   - Lê `len` bytes a partir do offset `ptr` na memória linear.
 ///   - Mantém 3 contadores: `p_diff` = `(` - `)`, `b_diff` = `{` - `}`, `a_diff` = `[` - `]`.
-///   - Retorna `1` se TODOS os contadores forem zero no final, `0` caso contrário.
+///   - **Rastreia estado de string literal** (`$in_string` + `$quote_char` + `$escaped`)
+///     para NÃO contar delimitadores que apareçam dentro de aspas, onde são texto
+///     literal e não sintaxe. Suporta tanto aspas duplas (`"`, 0x22) quanto simples
+///     (`'`, 0x27 — Rust `char` literals), e respeita a barra invertida (`\`, 0x5C)
+///     como mecanismo de escape, marcando o próximo byte como "consumido".
+///   - Retorna `1` se TODOS os contadores forem zero no final **E** o arquivo terminou
+///     fora de uma string literal, `0` caso contrário.
 ///
 /// O cálculo de cada incremento/decremento explora o fato de que `i32.eq` em WAT
 /// produz `1` (verdadeiro) ou `0` (falso), permitindo aritmética sem `if`:
-///   `c = c + (byte == '(')`   e   `c = c - (byte == ')')`
+///   `c = c + (byte == '(') * (1 - in_string)`   e   `c = c - (byte == ')') * (1 - in_string)`
+///
+/// A seleção condicional do novo `$quote_char` usa a instrução `select` nativa do
+/// WebAssembly (suportada por Wasmtime 29).
 ///
 /// Detecta o vetor de ataque do "delimitador órfão":
 /// `fn main() {` (chave aberta sem fechamento), `if (x {` (parêntese sem fecha), etc.
+/// E CORRIGE o falso-positivo do delimitador dentro de string:
+/// `let s = "fn main() {";` (delimitadores balanceados quando ignorada a string).
 const WAT_BRACKET_VALIDATOR: &str = r#"
     (module
         (memory (export "memory") 1)
@@ -148,37 +159,90 @@ const WAT_BRACKET_VALIDATOR: &str = r#"
             (local $b_diff i32)
             (local $a_diff i32)
             (local $byte i32)
+            (local $in_string i32)
+            (local $quote_char i32)
+            (local $escaped i32)
+            (local $is_opening i32)
+            (local $is_closing i32)
+            (local $is_backslash i32)
+            (local $not_in_string i32)
             (local.set $i (i32.const 0))
+            (local.set $in_string (i32.const 0))
+            (local.set $quote_char (i32.const 0))
+            (local.set $escaped (i32.const 0))
             (block $exit
                 (loop $loop
                     (br_if $exit (i32.ge_s (local.get $i) (local.get $len)))
                     (local.set $byte
                         (i32.load8_u
                             (i32.add (local.get $ptr) (local.get $i))))
+                    (local.set $not_in_string
+                        (i32.sub (i32.const 1) (local.get $in_string)))
+                    (local.set $is_backslash
+                        (i32.eq (local.get $byte) (i32.const 0x5C)))
+                    (local.set $is_opening
+                        (i32.mul
+                            (local.get $not_in_string)
+                            (i32.or
+                                (i32.eq (local.get $byte) (i32.const 0x22))
+                                (i32.eq (local.get $byte) (i32.const 0x27)))))
+                    (local.set $is_closing
+                        (i32.mul
+                            (local.get $in_string)
+                            (i32.mul
+                                (i32.eq (local.get $byte) (local.get $quote_char))
+                                (i32.sub (i32.const 1) (local.get $escaped)))))
+                    (local.set $in_string
+                        (i32.sub
+                            (i32.add (local.get $in_string) (local.get $is_opening))
+                            (local.get $is_closing)))
+                    (local.set $quote_char
+                        (select
+                            (local.get $byte)
+                            (local.get $quote_char)
+                            (local.get $is_opening)))
+                    (local.set $escaped
+                        (i32.mul
+                            (local.get $is_backslash)
+                            (i32.mul
+                                (local.get $in_string)
+                                (i32.sub (i32.const 1) (local.get $escaped)))))
                     (local.set $p_diff
                         (i32.add
                             (local.get $p_diff)
-                            (i32.eq (local.get $byte) (i32.const 0x28))))
+                            (i32.mul
+                                (local.get $not_in_string)
+                                (i32.eq (local.get $byte) (i32.const 0x28)))))
                     (local.set $p_diff
                         (i32.sub
                             (local.get $p_diff)
-                            (i32.eq (local.get $byte) (i32.const 0x29))))
+                            (i32.mul
+                                (local.get $not_in_string)
+                                (i32.eq (local.get $byte) (i32.const 0x29)))))
                     (local.set $b_diff
                         (i32.add
                             (local.get $b_diff)
-                            (i32.eq (local.get $byte) (i32.const 0x7B))))
+                            (i32.mul
+                                (local.get $not_in_string)
+                                (i32.eq (local.get $byte) (i32.const 0x7B)))))
                     (local.set $b_diff
                         (i32.sub
                             (local.get $b_diff)
-                            (i32.eq (local.get $byte) (i32.const 0x7D))))
+                            (i32.mul
+                                (local.get $not_in_string)
+                                (i32.eq (local.get $byte) (i32.const 0x7D)))))
                     (local.set $a_diff
                         (i32.add
                             (local.get $a_diff)
-                            (i32.eq (local.get $byte) (i32.const 0x5B))))
+                            (i32.mul
+                                (local.get $not_in_string)
+                                (i32.eq (local.get $byte) (i32.const 0x5B)))))
                     (local.set $a_diff
                         (i32.sub
                             (local.get $a_diff)
-                            (i32.eq (local.get $byte) (i32.const 0x5D))))
+                            (i32.mul
+                                (local.get $not_in_string)
+                                (i32.eq (local.get $byte) (i32.const 0x5D)))))
                     (local.set $i
                         (i32.add (local.get $i) (i32.const 1)))
                     (br $loop)))
@@ -186,7 +250,9 @@ const WAT_BRACKET_VALIDATOR: &str = r#"
                 (i32.eq (i32.const 0) (local.get $p_diff))
                 (i32.and
                     (i32.eq (i32.const 0) (local.get $b_diff))
-                    (i32.eq (i32.const 0) (local.get $a_diff))))))
+                    (i32.and
+                        (i32.eq (i32.const 0) (local.get $a_diff))
+                        (i32.eq (i32.const 0) (local.get $in_string)))))))
 "#;
 
 /// Válvula de Recusa Sintática do MARCO 6.1.0.
@@ -325,5 +391,79 @@ mod tests {
         let res = WasmTimeTreeSitterValidator::validate_source(unbalanced)
             .expect("validate_source nao deve panic");
         assert!(!res, "delimitador orfao deve ser rejeitado pela valvula");
+    }
+
+    /// Marcadores desbalanceados dentro de uma string literal devem ser IGNORADOS
+    /// (não contam como sintaxe), permitindo que código válido passe pela válvula.
+    #[test]
+    fn test_wat_bracket_validator_string_with_unbalanced_delimiters_passes() {
+        let source = r#"let s = "fn main() { if (x { y }"; let _ = ();"#;
+        let res = WasmTimeTreeSitterValidator::validate_source(source)
+            .expect("validate_source nao deve panic");
+        assert!(
+            res,
+            "delimitadores dentro de string literal NAO devem ser contados como sintaxe"
+        );
+    }
+
+    /// `\"` (aspa dupla escapada com barra invertida) deve ser tratada como conteúdo
+    /// literal, NÃO como fechamento de string. Caso contrário, o escape `\"` em uma
+    /// string seria confundido com término prematuro, desbalanceando o estado.
+    #[test]
+    fn test_wat_bracket_validator_escape_quote_inside_string_passes() {
+        let source = r#"let s = "say \"hi\""; let _ = ();"#;
+        let res = WasmTimeTreeSitterValidator::validate_source(source)
+            .expect("validate_source nao deve panic");
+        assert!(res, "aspas escapadas com \\ nao devem fechar a string");
+    }
+
+    /// String NUNCA fechada (faltou o `"` final) deve ser rejeitada: o arquivo
+    /// terminou com `in_string=1`, indicando literal aberto, sintaticamente inválido.
+    #[test]
+    fn test_wat_bracket_validator_unclosed_string_rejected() {
+        let source = r#"let s = "abc"#;
+        let res = WasmTimeTreeSitterValidator::validate_source(source)
+            .expect("validate_source nao deve panic");
+        assert!(!res, "string literal nao fechada deve ser rejeitada");
+    }
+
+    /// Aspas simples (`'`, 0x27) também devem acionar o estado de string — Rust
+    /// usa-as em `char` literals (`'a'`, `'\n'`, etc.) e em lifetimes (`'a`).
+    /// O validador deve tratar uma chave `{` dentro de `'{'` como literal.
+    #[test]
+    fn test_wat_bracket_validator_single_quote_char_literal_passes() {
+        let source = r#"let c = '{'; let _ = ();"#;
+        let res = WasmTimeTreeSitterValidator::validate_source(source)
+            .expect("validate_source nao deve panic");
+        assert!(res, "delimitadores dentro de char literal devem ser ignorados");
+    }
+
+    /// Code realista Rust com strings, escapes e múltiplos delimitadores balanceados.
+    /// Validação holística para garantir que a nova lógica não introduz regressões
+    /// em casos do mundo real.
+    #[test]
+    fn test_wat_bracket_validator_realistic_rust_source_passes() {
+        let source = r#"
+            fn main() {
+                let msg = "Hello, \"world\"!";
+                let escaped = "path\\to\\file";
+                let n = if (x > 0) { x } else { 0 };
+                println!("{}", msg);
+            }
+        "#;
+        let res = WasmTimeTreeSitterValidator::validate_source(source)
+            .expect("validate_source nao deve panic");
+        assert!(res, "codigo Rust real balanceado deve passar pela valvula");
+    }
+
+    /// Edge case: aspas duplas consecutivas vazias + chave desbalanceada FORA.
+    /// `""` é uma string vazia legítima, deve fechar imediatamente e a chave
+    /// externa deve ser contada normalmente.
+    #[test]
+    fn test_wat_bracket_validator_empty_string_then_brace_counted() {
+        let source = r#"let s = ""; if (x {"#;
+        let res = WasmTimeTreeSitterValidator::validate_source(source)
+            .expect("validate_source nao deve panic");
+        assert!(!res, "chave orfa fora de string deve ser rejeitada mesmo apos string vazia");
     }
 }
