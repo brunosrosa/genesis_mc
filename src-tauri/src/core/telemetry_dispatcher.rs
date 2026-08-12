@@ -127,26 +127,34 @@ impl TelemetrySender {
     }
 
     /// Helper para eventos de latência (TTFT + PeakEWMA).
-    pub fn dispatch_latency(
-        &self,
-        tool: &str,
-        ttft_ms: f64,
-        peak_ewma_ms: f64,
-        tokens_in: i64,
-        tokens_out: i64,
-        cost_usd: f64,
-        session_id: Option<String>,
-    ) {
-        let mut ev = TelemetryEvent::new(tool);
-        ev.tokens_in = tokens_in;
-        ev.tokens_out = tokens_out;
-        ev.cost_usd = cost_usd;
-        ev.duration_ms = ttft_ms as i64;
-        ev.peak_ewma_ms = Some(peak_ewma_ms);
-        ev.ttft_ms = Some(ttft_ms);
-        ev.session_id = session_id;
+    /// ADR-025: aceita `LatencyPayload` para sanar `clippy::too_many_arguments`
+    /// (a função original tinha 8 args com &self, acima do limite de 7).
+    pub fn dispatch_latency(&self, payload: LatencyPayload) {
+        let mut ev = TelemetryEvent::new(payload.tool);
+        ev.tokens_in = payload.tokens_in;
+        ev.tokens_out = payload.tokens_out;
+        ev.cost_usd = payload.cost_usd;
+        ev.duration_ms = payload.ttft_ms as i64;
+        ev.peak_ewma_ms = Some(payload.peak_ewma_ms);
+        ev.ttft_ms = Some(payload.ttft_ms);
+        ev.session_id = payload.session_id;
         self.dispatch(ev);
     }
+}
+
+/// Payload para eventos de latência (TTFT + PeakEWMA).
+/// ADR-025: agrupamento dos 7 parâmetros de `dispatch_latency` para sanar
+/// `clippy::too_many_arguments` (limite = 7, função tinha 8 com `&self`).
+/// Owned types para zero lifetimes explícitos (ADR-025, needless_lifetimes).
+#[derive(Debug, Clone)]
+pub struct LatencyPayload {
+    pub tool: String,
+    pub ttft_ms: f64,
+    pub peak_ewma_ms: f64,
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+    pub cost_usd: f64,
+    pub session_id: Option<String>,
 }
 
 /// Estado global do dispatcher. `OnceLock` garante inicialização única.
@@ -565,15 +573,15 @@ mod tests {
         let path = unique_db_path();
         // Usa dispatcher privado (isolado) para evitar race com init global de outros testes.
         let sender = init_telemetry_dispatcher_private(&path).unwrap();
-        sender.dispatch_latency(
-            "agentgateway_ttft",
-            180.5,
-            245.7,
-            1000,
-            500,
-            0.015,
-            Some("sess-test".to_string()),
-        );
+        sender.dispatch_latency(LatencyPayload {
+            tool: "agentgateway_ttft".to_string(),
+            ttft_ms: 180.5,
+            peak_ewma_ms: 245.7,
+            tokens_in: 1000,
+            tokens_out: 500,
+            cost_usd: 0.015,
+            session_id: Some("sess-test".to_string()),
+        });
         // Aguarda flush do batch.
         std::thread::sleep(Duration::from_millis(50));
         let total = sum_today_cost_usd(&path).unwrap();

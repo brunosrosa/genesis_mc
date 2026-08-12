@@ -51,6 +51,41 @@ if (Test-Path $vendorEsaxxBuild) {
         Write-Host "[PATCH] vendor/esaxx-rs static_crt -> false (auto-fix MSVC runtime)" -ForegroundColor DarkGreen
     }
 }
+# ADR-039 / Battle 2 — Cura CUDA "fatbinary fatal" (defesa em profundidade)
+# O patch vendor acima conserta a CMakeLists.txt, mas a build do `ik-llama-cpp-sys`
+# (Marco III — fork ikawrakow) é regenerada por bindgen em runtime e re-aplica
+# o default GGML_CCACHE=ON. Por isso, esta 2a linha de defesa injeta as env
+# vars no ambiente ANTES de qualquer invocação `cargo build`:
+#   - GGML_CCACHE=OFF: desativa o wrapper ccache/sccache para CUDA.
+#   - CMAKE_CUDA_COMPILER_LAUNCHER="": string vazia = sem launcher (nvcc direto).
+#   - CUDA_CACHE_DISABLE=1: desabilita cache de compilação CUDA do toolkit.
+# sccache permanece ATIVO para rustc puro via .cargo/config.toml (rustc-wrapper).
+# Idempotente: re-rodar boot.ps1 é no-op.
+$env:GGML_CCACHE = "OFF"
+$env:CMAKE_CUDA_COMPILER_LAUNCHER = ""
+$env:CUDA_CACHE_DISABLE = "1"
+Write-Host "[CUDA] GGML_CCACHE=OFF + CMAKE_CUDA_COMPILER_LAUNCHER='' injetados (defesa em profundidade)" -ForegroundColor DarkGreen
+
+# Patch idempotente ik-llama-cpp-sys: CMake `execute_process(COMMAND git rev-parse ...)`
+# em `ik_llama.cpp/common/CMakeLists.txt:30` falha quando o crate é descompactado
+# de um `.crate` (sem `.git`). `git init` mínimo satisfaz o rev-parse.
+$ikLlamaCrateRoot = Join-Path $env:USERPROFILE ".cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ik-llama-cpp-sys-*"
+$ikLlamaDir = Get-Item -Path $ikLlamaCrateRoot -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($ikLlamaDir) {
+    $gitDir = Join-Path $ikLlamaDir.FullName "ik_llama.cpp\.git"
+    if (-not (Test-Path $gitDir)) {
+        Push-Location $ikLlamaDir.FullName\ik_llama.cpp
+        try {
+            git init -q
+            git -c user.email=souls@souls_mc -c user.name=SOULS commit --allow-empty -m "souls-mc placeholder" -q 2>$null
+            Write-Host "[PATCH] ik-llama-cpp-sys/ik_llama.cpp git init aplicado (auto-fix git rev-parse)" -ForegroundColor DarkGreen
+        } catch {
+            Write-Host "[PATCH-SKIP] git init falhou: $_" -ForegroundColor DarkYellow
+        } finally {
+            Pop-Location
+        }
+    }
+}
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 

@@ -142,7 +142,10 @@ impl<const N: usize> PeakEwma<N> {
         let n_filled = write_idx.min(N);
         let mut samples = Vec::with_capacity(n_filled);
         // Iterar do slot mais antigo (write_idx - n_filled) ao mais recente.
-        let start = if write_idx >= N { write_idx - N } else { 0 };
+        // ADR-025: `saturating_sub` substitui o padrão `if x >= N { x - N } else { 0 }`
+        // — clippy::implicit_saturating_sub. Como `n_filled = write_idx.min(N)`,
+        // sabemos que `write_idx <= 2N` ou `write_idx < N`; saturating é seguro.
+        let start = write_idx.saturating_sub(N);
         for i in 0..n_filled {
             let slot = (start + i) % N;
             let raw = self.ring[slot].load(Ordering::Acquire);

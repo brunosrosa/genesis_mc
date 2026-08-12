@@ -154,7 +154,7 @@ impl PiiRedactor {
     ///
     /// **Alocação:** O(k) onde k = número de matches. Zero alocação se
     /// nenhum match for encontrado.
-    pub fn redact<'a>(&self, body: &'a [u8]) -> Vec<u8> {
+    pub fn redact(&self, body: &[u8]) -> Vec<u8> {
         if !self.enabled {
             return body.to_vec();
         }

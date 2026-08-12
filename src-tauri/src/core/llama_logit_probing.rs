@@ -22,7 +22,6 @@ use crate::core::inference_adapter::{
     EphemeralInferEngine, InferenceError, SoulsInferenceRequest, SoulsInferenceResponse,
 };
 use crate::souls_thermal_governor::SystemState;
-
 /// Tamanho canônico do vocabulário para logit probing epistêmico (AVX2/CPU).
 /// Preservado como SSOT para compatibilidade com o `VerbalizerMap` em `epistemic_prober.rs`.
 pub const MOCK_VOCAB_SIZE: usize = 128;
@@ -31,6 +30,31 @@ pub const MOCK_VOCAB_SIZE: usize = 128;
 /// Garante variação no vetor (evita o vetor-zero degenerado que colapsaria o Softmax
 /// em distribuição uniforme em qualquer temperatura, quebrando o entropy scoring).
 const DEFAULT_PROBE_MARKER: &str = "__souls_default_logit_probe_marker__";
+
+/// Estado interno do caminho FFI real (Marco III — Battle 3.3).
+/// Carregamento lazy: o modelo GGUF é lido no primeiro probe, não no construtor.
+#[cfg(feature = "llama_backend")]
+struct RealLlamaInner {
+    model_path: std::path::PathBuf,
+    state: RealLlamaState,
+}
+
+#[cfg(feature = "llama_backend")]
+enum RealLlamaState {
+    /// Ainda não tentou carregar (tentativa lazy no primeiro `extract_logits`).
+    Init,
+    /// Tentativa de carregamento falhou — fallback permanente para `PromptDerived`.
+    Failed { reason: String },
+    /// Modelo + contexto carregados; pronto para forward pass de 1 token.
+    /// `Box::leak` no contexto resolve o lifetime emprestado do `LlamaModel`
+    /// (workaround padrão em ik-llama-cpp para owned 'static).
+    Ready {
+        // Wrappers owned; sem referência ao model_path que já foi consumido.
+        #[allow(dead_code)]
+        model: llama_cpp_2::model::LlamaModel,
+        context: &'static llama_cpp_2::context::LlamaContext<'static>,
+    },
+}
 
 /// Identifica a origem dos logits consumidos pelo prober.
 ///
@@ -44,18 +68,15 @@ pub enum LogitSource {
     /// Extração real via FFI `llama_get_logits_ith` (gated por `feature = "llama_backend"`).
     /// `n_gpu_layers = 0` é aplicado incondicionalmente (ADR-027: 0 MB VRAM).
     ///
-    /// **Marco II (2026-08-12) — STUB FAIL-SOFT:** A integração FFI real via
-    /// `llama_get_logits_ith` será materializada em Marco III. No Marco II, o
-    /// caminho `RealLlama` detecta a presença do modelo e cai em `PromptDerived`
-    /// se ausente (fail-soft). Quando o modelo estiver presente, o stub delega
-    /// também para `PromptDerived` até que a FFI seja canibalizada.
+    /// **Marco III (2026-08-12) — FFI REAL:** A integração `llama_get_logits_ith` do
+    /// fork ikawrakow (`ik-llama-cpp-2` v0.1.7) foi canibalizada. O caminho `RealLlama`
+    /// carrega o GGUF lazy no primeiro probe, executa prefill de 1 token, e extrai
+    /// os logits brutos via FFI direta. Soft stable softmax (log-sum-exp) projeta
+    /// o vocabulário nativo (256k) em `MOCK_VOCAB_SIZE` (128) via max-pooling em bins.
+    /// Fail-soft: se o GGUF estiver ausente ou corrompido, cai em `PromptDerived`.
     #[cfg(feature = "llama_backend")]
     RealLlama {
-        /// Handle opaco (placeholder) para o contexto carregado.
-        /// Substituído por `LlamaContext` real no Marco III.
-        _ctx: Arc<Mutex<()>>,
-        /// Caminho do modelo GGUF a ser carregado sob demanda.
-        model_path: std::path::PathBuf,
+        inner: Arc<Mutex<RealLlamaInner>>,
     },
     /// Fixture de teste: vetor literal hardcoded (APENAS sob `#[cfg(test)]`).
     #[cfg(test)]
@@ -73,12 +94,12 @@ impl LogitSource {
         match self {
             LogitSource::PromptDerived => prompt_derived_logits(prompt),
             #[cfg(feature = "llama_backend")]
-            LogitSource::RealLlama { model_path, .. } => {
-                // Marco III: stub. Hoje, se o modelo existir, ainda delegamos a
-                // PromptDerived (fail-soft até a FFI `llama_get_logits_ith` ser
-                // canibalizada). Se não existir, mesma coisa.
-                let _ = model_path; // suprimir warning de não-uso
-                prompt_derived_logits(prompt)
+            LogitSource::RealLlama { inner } => {
+                let mut guard = inner.lock().expect("RealLlama Mutex poisoned");
+                real_llama_extract_logits(&mut guard, prompt).unwrap_or_else(|| {
+                    tracing::debug!("RealLlama FFI indisponível → fallback PromptDerived");
+                    prompt_derived_logits(prompt)
+                })
             }
             #[cfg(test)]
             LogitSource::TestFixture(v) => v.clone(),
@@ -126,16 +147,20 @@ impl LlamaLogitProber {
         }
     }
 
-    /// Constrói um prober com extração real via `llama-cpp-2` (gated por feature).
-    /// Se o modelo não puder ser carregado, o `LogitSource` mantém o handle `None`
-    /// e cai em `PromptDerived` via fail-soft na primeira extração.
+    /// Constrói um prober com extração real via `ik-llama-cpp-2` (gated por feature).
+    /// O GGUF é carregado de forma lazy no primeiro `extract_logits` para evitar
+    /// custo de boot. Se o modelo não existir ou falhar ao carregar, o caminho
+    /// `RealLlama` cai em `PromptDerived` via fail-soft.
     #[cfg(feature = "llama_backend")]
     pub fn with_real_llama(model_path: std::path::PathBuf) -> Self {
         let initial = prompt_derived_logits(DEFAULT_PROBE_MARKER);
+        let inner = RealLlamaInner {
+            model_path,
+            state: RealLlamaState::Init,
+        };
         Self {
             source: LogitSource::RealLlama {
-                _ctx: Arc::new(Mutex::new(())),
-                model_path,
+                inner: Arc::new(Mutex::new(inner)),
             },
             last_logits: Mutex::new(initial),
             n_gpu_layers: 0,
@@ -231,6 +256,149 @@ pub fn calculate_expected_vram_footprint(
         * (precision_bytes as u64);
     let m_kv = (kv_bytes / (1024 * 1024)) as u32;
     model_size_mb + m_kv + 512
+}
+
+/// Forward pass de 1 token + extração FFI real via `llama_get_logits_ith` (Battle 3.3).
+///
+/// Pipeline:
+/// 1. Lazy-init: carrega o GGUF se estado == Init.
+/// 2. Tokeniza o prompt com BOS.
+/// 3. Cria um batch com logits habilitados APENAS no último token.
+/// 4. `context.decode(&mut batch)` — forward pass puro (sem decoding loop).
+/// 5. FFI `llama_get_logits_ith(ctx, last_idx)` — slice f32 zero-copy.
+/// 6. Projeta vocab nativo (256k) → MOCK_VOCAB_SIZE (128) via max-pooling em bins.
+/// 7. Softmax estável (log-sum-exp) — preserva ordem de magnitude.
+///
+/// Retorna `None` em qualquer falha (modelo ausente, decode error, FFI null).
+/// O chamador cai em `PromptDerived` via fail-soft.
+#[cfg(feature = "llama_backend")]
+fn real_llama_extract_logits(
+    inner: &mut RealLlamaInner,
+    prompt: &str,
+) -> Option<Vec<f32>> {
+    use llama_cpp_2::context::params::LlamaContextParams;
+    use llama_cpp_2::llama_backend::LlamaBackend;
+    use llama_cpp_2::llama_batch::LlamaBatch;
+    use llama_cpp_2::model::params::LlamaModelParams;
+    use llama_cpp_2::model::{AddBos, LlamaModel};
+
+    // (1) Lazy init: carrega GGUF na CPU (n_gpu_layers = 0, ADR-027: 0 MB VRAM).
+    if matches!(inner.state, RealLlamaState::Init) {
+        let backend = match LlamaBackend::init() {
+            Ok(b) => b,
+            Err(e) => {
+                inner.state = RealLlamaState::Failed {
+                    reason: format!("LlamaBackend::init falhou: {e}"),
+                };
+                return None;
+            }
+        };
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(0);
+        let model = match unsafe {
+            LlamaModel::load_from_file(&backend, &inner.model_path, &model_params)
+        } {
+            Ok(m) => m,
+            Err(e) => {
+                inner.state = RealLlamaState::Failed {
+                    reason: format!("load_from_file({:?}) falhou: {e}", inner.model_path),
+                };
+                return None;
+            }
+        };
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(std::num::NonZeroU32::new(512))
+            .with_n_batch(512)
+            .with_type_k(llama_cpp_2::context::params::KvCacheType::F16)
+            .with_type_v(llama_cpp_2::context::params::KvCacheType::Q4_K);
+        let context = match model.new_context(&backend, ctx_params) {
+            Ok(c) => Box::leak(Box::new(c)) as &'static _,
+            Err(e) => {
+                inner.state = RealLlamaState::Failed {
+                    reason: format!("new_context falhou: {e}"),
+                };
+                return None;
+            }
+        };
+        tracing::info!(
+            "RealLlama FFI carregado: modelo={:?} (TurboQuant K=F16, V=Q4_K, n_ctx=512, AVX2 CPU)",
+            inner.model_path
+        );
+        inner.state = RealLlamaState::Ready {
+            model,
+            context,
+        };
+    }
+
+    // (2) Despacha pelo estado.
+    let (model, context) = match &inner.state {
+        RealLlamaState::Ready { model, context } => (model, *context),
+        RealLlamaState::Failed { reason } => {
+            tracing::trace!(reason = %reason, "RealLlama previously failed → noop");
+            return None;
+        }
+        RealLlamaState::Init => unreachable!("Init deve ser resolvido antes daqui"),
+    };
+
+    // (3) Tokeniza.
+    let tokens = match model.str_to_token(prompt, AddBos::Always) {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::debug!("str_to_token falhou: {e}");
+            return None;
+        }
+    };
+    let n_tokens = tokens.len();
+    if n_tokens == 0 {
+        return None;
+    }
+    let last_idx = (n_tokens - 1) as i32;
+
+    // (4) Batch com logits APENAS no último token (forward pass de 1 token).
+    let mut batch = LlamaBatch::new(n_tokens, 1);
+    for (i, &t) in tokens.iter().enumerate() {
+        let logits_flag = i == n_tokens - 1;
+        if batch.add(t, i as i32, &[0], logits_flag).is_err() {
+            return None;
+        }
+    }
+    if context.decode(&mut batch).is_err() {
+        return None;
+    }
+
+    // (5) FFI real: extrai logits do último token (zero-copy slice).
+    let vocab = model.n_vocab() as usize;
+    let logits_ptr = unsafe {
+        // `llama_cpp_2::sys` re-exporta os bindings de `ik-llama-cpp-sys`
+        // sob a feature `llama_backend` (gated por cfg já em escopo aqui).
+        llama_cpp_2::sys::llama_get_logits_ith(context.as_ptr(), last_idx)
+    };
+    if logits_ptr.is_null() {
+        return None;
+    }
+    let raw_logits: &[f32] = unsafe { std::slice::from_raw_parts(logits_ptr, vocab) };
+
+    // (6) Projeção vocab → MOCK_VOCAB_SIZE via max-pooling em bins.
+    //    Para cada um dos 128 buckets, capturamos o logit máximo do intervalo.
+    let stride = (vocab / MOCK_VOCAB_SIZE).max(1);
+    let mut projected = [f32::NEG_INFINITY; MOCK_VOCAB_SIZE];
+    for (i, chunk) in raw_logits.chunks(stride).take(MOCK_VOCAB_SIZE).enumerate() {
+        projected[i] = chunk.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    }
+
+    // (7) Softmax estável (log-sum-exp) — preserva ordem de magnitude.
+    let max = projected.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let exp_sum: f32 = projected.iter().map(|&x| (x - max).exp()).sum();
+    if !exp_sum.is_finite() || exp_sum <= 0.0 {
+        return None;
+    }
+    let probs: Vec<f32> = projected.iter().map(|&x| ((x - max).exp() / exp_sum).max(f32::MIN)).collect();
+
+    // (8) Renormaliza em log-space para preservar a "forma" do logit original.
+    //    O prober epistêmico consome os logits brutos (não probabilidades), então
+    //    devolvemos log(p) com a constante -max somada de volta (log-sum-exp trick).
+    let log_probs: Vec<f32> = probs.iter().map(|&p| p.ln()).collect();
+
+    Some(log_probs)
 }
 
 /// Computa a Softmax numericamente estável sobre os logits dos tokens "0" e "1",

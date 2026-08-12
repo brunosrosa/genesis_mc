@@ -25,7 +25,7 @@ use souls_mc_lib::core::pii_redactor::PiiRedactor;
 use souls_mc_lib::core::sticky_router::{prepend_header, RoutePin, StickyRouter};
 use souls_mc_lib::core::subprocess_guard::{SubprocessConfig, SubprocessGuard};
 use souls_mc_lib::core::telemetry_dispatcher::{
-    init_telemetry_dispatcher, telemetry_sender,
+    init_telemetry_dispatcher, telemetry_sender, LatencyPayload,
 };
 use souls_mc_lib::finops::iron_cost::{IronCostBreaker, ModelTier};
 use souls_mc_lib::finops::pareto_bandit::{
@@ -846,15 +846,15 @@ fn finalize_telemetry(
         let peak_ewma = global_peak_ewma().ewma_ms();
         // Custo estimado: usa cost_per_1m do JSONC (Premium $15/1M default).
         let cost_usd = (tokens_out_estimate as f64 / 1_000_000.0) * 15.0;
-        sender.dispatch_latency(
-            "agentgateway_v6",
+        sender.dispatch_latency(LatencyPayload {
+            tool: "agentgateway_v6".to_string(),
             ttft_ms,
-            peak_ewma,
+            peak_ewma_ms: peak_ewma,
             tokens_in,
-            tokens_out_estimate,
+            tokens_out: tokens_out_estimate,
             cost_usd,
             session_id,
-        );
+        });
     }
 }
 
@@ -978,8 +978,7 @@ async fn main() -> io::Result<()> {
     //
     // Sem `--upstream` TCP: o loopback suicida (3001→3001) foi ERRADICADO.
     let mcp_guard = spawn_souls_mcp_server().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::Other,
+        io::Error::other(
             "Falha crítica: souls_mcp_server não pode ser spawned (SubprocessGuard). \
              Verifique SOULS_MCP_BIN e o JSONC."
         )
@@ -987,16 +986,16 @@ async fn main() -> io::Result<()> {
 
     let mut child = mcp_guard
         .into_child()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "SubprocessGuard cedeu o child"))?;
+        .ok_or_else(|| io::Error::other("SubprocessGuard cedeu o child"))?;
 
     let mcp_stdin = child
         .stdin
         .take()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "stdin do MCP não capturado (Stdio::piped() falhou)"))?;
+        .ok_or_else(|| io::Error::other("stdin do MCP não capturado (Stdio::piped() falhou)"))?;
     let mcp_stdout = child
         .stdout
         .take()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "stdout do MCP não capturado (Stdio::piped() falhou)"))?;
+        .ok_or_else(|| io::Error::other("stdout do MCP não capturado (Stdio::piped() falhou)"))?;
 
     let mcp_stdin = Arc::new(Mutex::new(mcp_stdin));
     let mcp_stdout = Arc::new(Mutex::new(mcp_stdout));

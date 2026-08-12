@@ -130,6 +130,18 @@ tauri-build = { version = "=2.6.3" }
 windows-projfs = "=0.1.8"
 
 # --- ML Inference (pinned; flag `optional` é adicionada nos consumidores). ---
+# NOTA (Battle 3 - Sprint Alfa): O transplante para `ik-llama-cpp-2` v0.1.7
+# (fork ikawrakow) está BLOCKED AMBIENTALMENTE: a versão v0.1.7 é Linux-only
+# (linha 13 do build.rs: "Linux (CPU + CUDA) focused for v1"). O `ext_ok` é
+# hardcoded para `.a`/`.so` e não suporta `.lib` do Windows MSVC. O workaround
+# testado (`ik-llama-cpp-sys` com `git init` para o `git rev-parse` do CMake)
+# chegou até a produção dos `.lib` em `out/lib/`, mas a fase de link falha em
+# `link_built` com "could not find libllama.* under out/build".
+# Pelo ADR-030 (Canibalização Cirúrgica), mantemos `llama-cpp-2` upstream
+# até que o fork ikawrakow publique uma versão com suporte Windows MSVC
+# (provavelmente v0.2.0+). O TurboQuant (K=F16, V=Q4_K) já está aplicado
+# no `llama_engine.rs` (Battle 3.2) — é drop-in via `KvCacheType` enum,
+# idêntico entre ik e upstream.
 llama-cpp-2 = { version = "0.1", features = ["cuda"] }
 mistralrs = "0.8"
 llguidance = "1.7"

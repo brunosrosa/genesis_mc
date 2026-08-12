@@ -333,7 +333,7 @@ pub fn evaluate_route_decision(
     }
 
     // (2) Eco-Hybrid guard: tasks proibidas nunca vão para free/cheap routes.
-    if task_kind.is_eco_hybrid_forbidden(&cfg) {
+    if task_kind.is_eco_hybrid_forbidden(cfg) {
         reasons.push(format!(
             "task {:?} proibida para rotas Eco-Hybrid (eco_hybrid_forbidden)",
             task_kind
