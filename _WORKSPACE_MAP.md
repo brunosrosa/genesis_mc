@@ -25,6 +25,7 @@ description: SOULS Workspace Map & Territorial Governance (Canon v6.0 - Marco 3.
 
 ### [ZONA 2: ESTADO DA MÁQUINA E CACHE] *(Ignorados no Git Principal)*
 - `.souls_data/` -> [L2/L3 Memory] SQLite transacional (`souls_state.db` / `souls_heuristic_vault.db`) e LanceDB vetorial. **Nota Marco 3.9.2:** `souls_heuristic_vault.db` é **auto-curativo** — `Connection::open` (rusqlite) recria o arquivo se ausente, e `ensure_repo_heuristics_schema` materializa a tabela `repo_heuristics` (84 colunas) on first use. Tabelas `kanban_tasks` e `weevolve_learnings` foram migradas para `souls_state.db` V5 (PRD `souls-mc-rebranding-and-state-prd.md`).
+- `.souls/config/` -> [Marco I · v6.1] Configuração soberana do usuário (BYOK, rotas, FinOps). **SSO canônico:** `.souls/config/souls-gateway.jsonc` (JSONC, parser em `src-tauri/src/core/gateway_config.rs`). Variáveis `${VAR}` expandidas via `std::env::var` no parse-time. `gitignored` (não versionado).
 - `.souls_cache/` -> Chunks temporários, hashes de arquivos e tokens.
 - `.souls_sandbox/` -> Sandboxing para execução segura de módulos externos.
 - `.souls_scratchpad/` -> **5 zonas efêmeras (Marco 3.10):**
@@ -73,6 +74,7 @@ description: SOULS Workspace Map & Territorial Governance (Canon v6.0 - Marco 3.
 ### [ZONA 4: O PRODUTO - BACKEND BARE-METAL RUST]
 - `src-tauri/Cargo.toml` -> Manifesto principal do backend Tauri/SOULS.
 - `src-tauri/src/` -> Código-fonte do core Rust.
+- `src-tauri/resources/specs/` -> [Marco I · v6.1] Specs canônicas empacotadas no binário (ex: `agentgateway.yaml`, schema de rotas AgentGateway). Movido de raiz para garantir inclusão em builds release via `tauri.conf.json` -> `bundle.resources`.
 - `src-tauri/src/bin/` -> CLIs utilitários executáveis das fases (harvester_cli, etc.).
 - `src-tauri/src/cognition/` -> Orquestração de SLMs locais e gerenciamento de contexto.
 - `src-tauri/src/finops/` -> Roteadores em cascata e controle orçamentário (Iron Cost).

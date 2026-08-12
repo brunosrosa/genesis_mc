@@ -1,0 +1,161 @@
+// =============================================================================
+// SOULS MC — Marco I · Agnostic L7 Gateway Configuration (SSO Canônico)
+// =============================================================================
+// Arquivo:    .souls/config/souls-gateway.jsonc
+// Schema:     JSONC (JSON with Comments) — comentários `//` e `/* */` permitidos
+//             trailing commas permitidas. Parser canônico em
+//             `src-tauri/src/core/gateway_config.rs` (strip_comments + serde_json
+//             com `preserve_order` ativo).
+// Auditoria:  .souls_scratchpad/reports/_audit_gateway_v6_triage.md (2026-08-10)
+// ADR ref:    ADR-001 (Gateway), ADR-010 (Escrita atômica), ADR-030 (Higiene de
+//             dependências), ADR-041 (tooling ≤ 32 chars, descrição ≤ 120 chars).
+// =============================================================================
+
+{
+  // Versão do schema. Toda mutação incompatível exige bump major.
+  "version": "1.0.0",
+
+  // ---------------------------------------------------------------------------
+  // BYOK — Bring Your Own Key (resolução lazy a partir de env vars do host)
+  // ---------------------------------------------------------------------------
+  // Variáveis no formato `${VAR_NAME}` são expandidas no parse-time do JSONC
+  // via `std::env::var`. Strings literais são usadas como fallback.
+  // Nunca commite chaves reais. Use `.env` (gitignored) + `dotenvy`.
+  "byok": {
+    "openai": {
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "enabled": false
+    },
+    "anthropic": {
+      "api_key": "${ANTHROPIC_API_KEY}",
+      "base_url": "https://api.anthropic.com/v1",
+      "enabled": false
+    },
+    "openrouter": {
+      "api_key": "${OPENROUTER_API_KEY}",
+      "base_url": "https://openrouter.ai/api/v1",
+      "enabled": true
+    },
+    "gemini": {
+      "api_key": "${GEMINI_API_KEY}",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "enabled": false
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Whitelists / Blacklists de modelos (Válvula L7 — Marco I)
+  // ---------------------------------------------------------------------------
+  // Aplicadas antes de qualquer roteamento. Modelos em blacklist geram
+  // JSON-RPC -32001 (HitlDenied) com motivo explícito.
+  "models": {
+    "whitelist": [
+      "qwen/qwen-2.5-coder-32b-instruct:free",
+      "qwen/qwen-3.5-coder-4b",
+      "anthropic/claude-3.5-sonnet",
+      "anthropic/claude-3-5-haiku",
+      "deepseek/deepseek-r1",
+      "google/gemini-2.0-flash-exp"
+    ],
+    "blacklist": [
+      "gpt-3.5-turbo-instruct",
+      "text-davinci-003"
+    ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // Endpoints virtuais de contingência (Pareto Bandit hot-path)
+  // ---------------------------------------------------------------------------
+  // O `ParetoBandit` resolve entre estas rotas baseado em U = q - (λ·c) - (β·l)
+  // calculado a cada inbound prompt. `fast_worker` = tarefas factuais rasas;
+  // `heavy_brain` = tarefas de complexidade >= 0.3 ou escrita de código.
+  "routes": {
+    "fast_worker_endpoint": {
+      "provider": "openrouter",
+      "model": "qwen/qwen-3.5-coder-4b",
+      "fallback_model": "google/gemini-2.0-flash-exp",
+      "estimated_cost_per_1m_usd": 0.50,
+      "max_complexity": 0.3,
+      "is_local": true
+    },
+    "heavy_brain_endpoint": {
+      "provider": "openrouter",
+      "model": "anthropic/claude-3.5-sonnet",
+      "fallback_model": "deepseek/deepseek-r1",
+      "estimated_cost_per_1m_usd": 15.00,
+      "max_complexity": 1.0,
+      "is_local": false
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // FinOps — Controle orçamentário (Iron Cost Breaker)
+  // ---------------------------------------------------------------------------
+  // `daily_budget_usd` é o teto diário fictício do usuário. Toda chamada ao
+  // `IronCostBreaker::calculate_and_route` consulta `SELECT SUM(cost_usd) FROM
+  // telemetry_logs WHERE created_at >= start_of_day` antes de aprovar.
+  "finops": {
+    "daily_budget_usd": 5.00,
+    "iron_cost_breaker": {
+      "premium_per_1m_usd": 15.00,
+      "flash_per_1m_usd": 0.50,
+      "vram_token_limit": 16384
+    },
+    "eco_hybrid_allowed": ["factual", "classification", "summarization"],
+    "eco_hybrid_forbidden": ["code_write", "refactor", "architecture"],
+    "force_local_on_budget_exceeded": true
+  },
+
+  // ---------------------------------------------------------------------------
+  // Telemetria — PeakEWMA & TTFT
+  // ---------------------------------------------------------------------------
+  // `peak_ewma_alpha` = fator de suavização (Lei Marco 5.4). O ring buffer
+  // armazena as últimas N amostras de TTFT em lock-free AtomicU64 slots.
+  "telemetry": {
+    "peak_ewma_alpha": 0.3,
+    "ring_buffer_size": 64,
+    "ttft_sample_window_ms": 60000,
+    "sqlite_path": "${SOULS_STATE_DB_PATH}"
+  },
+
+  // ---------------------------------------------------------------------------
+  // L7 Shield — Sticky Routing, PII Redaction, Response Healing
+  // ---------------------------------------------------------------------------
+  // `pii_redaction_enabled` é DESABILITADO por default (PII redaction é
+  // opt-in). Quando ativado, aplica `aho-corasick` em CPU sobre o body
+  // inbound antes do upstream, mapeando matches para tokens opacos
+  // reversíveis mantidos em RAM (`DashMap<u64, String>`).
+  "l7_shield": {
+    "sticky_routing_enabled": true,
+    "sticky_session_ttl_secs": 3600,
+    "pii_redaction_enabled": false,
+    "pii_patterns": [
+      "windows_path",
+      "unix_path",
+      "api_key_value",
+      "bearer_token",
+      "email_address"
+    ],
+    "response_healing_enabled": true
+  },
+
+  // ---------------------------------------------------------------------------
+  // MCP Server — Subprocesso local (gerenciado pelo proxy L7)
+  // ---------------------------------------------------------------------------
+  // O `agentgateway_tcp_proxy` é o **dono absoluto** do ciclo de vida do
+  // `souls_mcp_server`. O binário é spawnado no boot do proxy, encapsulado
+  // em um `SubprocessGuard` (RAII) que envia SIGKILL atômico no shutdown.
+  //
+  // `executable_path` aceita `${SOULS_MCP_BIN}` para override via env var.
+  // Em produção, o path é resolvido relativo a `target/{profile}/`.
+  // `kill_on_drop = true` é OBRIGATÓRIO (elimina fantasmas `agentgateway.exe`
+  // que vazam RAM Host).
+  "mcp_server": {
+    "executable_path": "${SOULS_MCP_BIN}",
+    "args": ["--transport", "stdio"],
+    "working_dir": "",
+    "kill_on_drop": true,
+    "handshake_timeout_ms": 5000
+  }
+}

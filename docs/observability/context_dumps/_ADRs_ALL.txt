@@ -1,4 +1,4 @@
-_ADRs_ALL Gerado em: 2026-08-08 22:20:38
+_ADRs_ALL Gerado em: 2026-08-11 21:52:09
 
 ### ====================================================================================================
 ARQUIVO: ADR-001-Core-Stack-Restrita.md
@@ -297,41 +297,50 @@ title: "ADR-007-Avaliador-Epistemico"
 version: 2.0
 status: Ativo_Inegociavel
 epic: "Cognição"
-description: "Formaliza o Hipocampo Epistêmico via Logit Probing em Forward Pass. SLMs na CPU (AVX2) avaliam risco e ambiguidade em <150ms sem gerar texto."
+description: "Formaliza o Hipocampo Epistêmico via Logit Probing em Forward Pass e decodificação restrita via llguidance em CPU (AVX2). Estabelece a Mesa de Triagem de SLMs, amostragem Min-P e Few-Shot Rígido."
 ---
 
-### ADR-007: Avaliador Epistêmico, Logit Probing e o Hipocampo na CPU
+### ADR-007: Avaliador Epistêmico, Logit Probing, Decodificação Restrita e Hipocampo CPU
 
 #### Status
-Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V4)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V6)
 
-#### Contexto Técnico e o Gargalo do Raciocínio Reflexivo
-Em sistemas agênticos, antes de delegar uma execução (ex: mutação de código, leitura pesada) ao modelo principal, a máquina precisa avaliar o "Risco Relacional", a "Ambiguidade" e a probabilidade da ação ser destrutiva [5].
-Realizar essa triagem invocando o LLM primário na placa de vídeo gera um gargalo duplo letal:
-1. Força a geração autorregressiva de texto (ex: forçar a IA a responder "SIM" ou "NÃO" passo a passo), o que drena recursos e tempo calculando a decodificação sequencial de *tokens* [4].
-2. Concorre diretamente pela VRAM crítica (6GB) da dGPU RTX 2060m e asfixia o barramento PCIe, criando um severo "Flow-Debt" termodinâmico [1].
+#### Contexto Técnico e a Falência da Decodificação Livre na Triagem
+Em sistemas agênticos de alta performance, delegar triagem, verificação de risco ou extração sintática diretamente ao modelo principal na GPU via geração de texto livre é uma falha arquitetural grave. Essa prática induz a dois gargalos letais:
+1. **Flow-Debt e Entropia de Tokens:** Forçar o modelo a decodificar tokens autorregressivos (ex.: gerar prosas para responder "SIM" ou "NÃO") consome ciclos computacionais valiosos e introduz alucinações sintáticas inevitáveis.
+2. **Asfixia de VRAM e PCIe:** Concorre diretamente pelos 6GB de VRAM da dGPU RTX 2060m e congestiona o barramento PCIe, elevando a latência e correndo risco de estouro térmico ou OOM.
 
-#### Decisão Arquitetural (O Hipocampo Híbrido O(1))
-Fica decretada a separação física e matemática entre a "Ação" (GPU) e a "Avaliação Rápida" (CPU). O SOULS institui a figura do "Hipocampo Epistêmico", operando sob as seguintes leis imutáveis:
+#### Decisão Arquitetural (O Hipocampo Epistêmico O(1) e a Mesa de Triagem)
+Fica decretada a separação física, espacial e matemática entre a Ação (GPU) e a Avaliação Epistêmica (CPU Host). O SOULS estabelece o Hipocampo Epistêmico governado pelas seguintes leis constitucionais imutáveis:
 
-**Módulo 1: O Fim da Geração Autorregressiva para Triagem**
-*   É sumariamente proibido usar ciclos de decodificação para classificar se um comando inicial é seguro, ambíguo ou necessita de intervenção [4].
-*   O motor de avaliação de risco deve interromper a sua operação de forma compulsória no exato nanossegundo em que a fase de *prefill* (leitura em bloco do *prompt*) é concluída [4].
+##### 1. Taxonomia Unificada de Modelos e Mesa de Triagem (SPEC-013)
+A infraestrutura de inferência classifica e isola os modelos em 4 camadas de capacidades estritas:
+*   **Encoders / Micro-Models (< 500M):** Executados estritamente na CPU Host (AVX2). Destinados a extração $O(1)$, NLU, NER e classificação inicial de risco (ex.: GliClass). Latência alvo $< 5\text{ms}$.
+*   **Small Language Models - SLM (1B a 8B):** Hospedados na GPU Local (4-8GB VRAM) ou RAM. Responsáveis por Live Chat, REPL local, chamadas de ferramentas e raciocínio de borda.
+*   **Intermediate LLM - Mid-LLM (14B a 70B):** Alocados em workstations de memória unificada para processamento local denso e análise profunda offline.
+*   **Frontier / Massive LLMs (100B a 2.3T+):** Oráculos externos na nuvem acessados estritamente por exceção (Spill-over FinOps) para destilação sintética e resolução de impasses epistêmicos.
 
-**Módulo 2: Extração Numérica via Logit Probing (Forward Pass)**
-*   O sistema implementará o paradigma *ProbeLogits* [4].
-*   No final do *Forward Pass* único, o núcleo Rust lerá diretamente a matriz de distribuição de *logits* residindo na memória RAM [4].
-*   Medindo o delta da probabilidade estrita de *tokens* âncora (ex: calculando a diferença angular/matemática de ativação entre os *logits* mapeados para risco vs. segurança), o SOULS extrai a certeza da IA de forma determinística, sem nunca decodificar uma string.
+##### 2. Decodificação Restrita Assíncrona via `llguidance` em CPU (AVX2)
+*   Todo processamento de triagem e extração de dados estruturados na CPU (Intel i9) utiliza **Constrained Decoding** via engine `llguidance` alocada no núcleo Rust.
+*   A engine intercepta e mascara a matriz de logits em hardware, impedindo fisicamente a emissão de qualquer token fora da gramática estrita (JSON Schema / Notação LEAN).
+*   A latência de decodificação restrita por token é limitada deterministicamente ao teto de **50 microssegundos por token (50 µs/token)**.
 
-**Módulo 3: Isolamento Físico na CPU (AVX2)**
-*   Este motor validador será suportado por SLMs ultra-quantizados (ex: Phi-4-mini ou famílias hiper-leves). Eles estão terminantemente proibidos de tocar na placa de vídeo [6].
-*   A execução dessas matrizes matemáticas ocorrerá unicamente na CPU (Intel i9) utilizando o poder intrínseco das instruções vetoriais **AVX2** [2, 3].
-*   Para prover acesso direto aos ponteiros da memória de *logits*, o SOULS fará o uso cirurgicamente algemado de bibliotecas focadas em *prefill* (ex: via injeção C-FFI de `llama-cpp-4` contida ou suporte especializado), assegurando extrações atômicas [2, 6, 7].
-*   O limite máximo de latência orçamentado para esse "reflexo epistêmico" é estritamente **< 150ms** [2, 6].
+##### 3. Amostragem Estatística Min-P Inegociável
+*   Na esteira de inferência do `LlamaCpp4LogitEngine` (Tier 0.5 na CPU), fica imposta a obrigatoriedade do amostrador estatístico **Min-P** ($\text{Min-P} \ge 0.05$).
+*   O Min-P atua como barreira inegociável para cortar a cauda longa de probabilidade e mitigar o achatamento de distribuição gerado pela quantização IQ3_M do modelo local, garantindo que apenas tokens com massa de probabilidade relativa real sejam considerados no mascaramento de logits.
 
-#### Consequências Operacionais e Defesa contra o Slop (Trade-offs)
-*   **Impacto Positivo:** Desoneração de 100% da dGPU (RTX 2060m) durante os processos de triagem e *guardrails* [1]. A resposta do sistema perante intenções hostis ou ambíguas adquire latência sobre-humana, abortando ciclos inúteis de processamento longo em menos de 150 milissegundos e protegendo o motor de inferência massiva [2, 5].
-*   **Impacto Negativo (Complexidade C-FFI e Dados):** A manipulação direta de tensores de saída introduz o risco do gerenciamento C-FFI (`llama-cpp-4`) no Rust, obrigando contenção paranoica contra *segfaults* para não contaminar o Tokio [7]. Adicionalmente, este módulo exigirá no futuro a aplicação do Epic 7.1, demandando o preparo artesanal de *Golden Datasets* e *Fine-Tuning* de adaptadores LoRA direcionados estritamente ao comportamento dessas respostas matemáticas de probabilidade [8, 9].
+##### 4. Regra do Few-Shot Rígido (2 Exemplos Limpos)
+*   É proibido submeter prompts de extração ou classificação zeroshot estocásticos.
+*   Toda requisição ao Hipocampo Epistêmico deve obrigatoriamente injetar **exatamente 2 exemplos limpos (Few-Shot Rígido)** no prompt de grounded extraction, alinhando a atenção do modelo e erradicando desvios comportamentais.
+
+##### 5. Extração Numérica via Logit Probing (Forward Pass)
+*   Para verificações de risco binário, o sistema adota o paradigma *ProbeLogits*.
+*   O motor interrompe a decodificação no final do *Forward Pass* inicial (fase de *prefill*).
+*   O núcleo Rust lê o delta da distribuição angular de logits dos tokens âncora diretamente na RAM Host, calculando a certeza matemática em $< 150\text{ms}$ sem decodificar prosas.
+
+#### Consequências Operacionais e Trade-offs
+*   **Impacto Positivo:** Desoneração de 100% da dGPU (RTX 2060m) durante processos de triagem e guardrails. Eliminação de alucinações sintáticas via `llguidance` (50 µs/token) e blindagem de cauda via Min-P.
+*   **Impacto Negativo:** Exige manutenção paranoica dos bindings C-FFI do `llama-cpp-4` no Tokio para evitar segfaults na RAM Host, além de manter o dataset de 2 exemplos Few-Shot rigorosamente higienizado.
 
 ### ====================================================================================================
 ARQUIVO: ADR-008-Roteamento-FinOps.md
@@ -404,41 +413,54 @@ CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-010-Spec-Driven-Development.md
 ---
 id: "ADR-010"
 title: "ADR-010-Spec-Driven-Development"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Impõe o SDD e TDD como metodologia de desenvolvimento, bloqueando novas lógicas sem plano arquitetural aprovado."
+description: "Impõe o SDD e TDD como metodologia constitucional, exigindo a cascata documental atômica de 4 vias (REQUIREMENTS.md, DESIGN.md, TASKS.md, TEST_SPECS.md) e a trava Fail-Closed do Ralph Loop no Shadow Workspace (snapsafe)."
 ---
 
-# ADR-010-Spec-Driven-Development
+# ADR-010: Pipeline Spec-Driven Development (SDD), Cascata 4-Vias e Ralph Loop
 
 ## Status
-Aceito (Ativo e Inegociável)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V6)
 
-## Contexto
-A prática irresponsável de engenharia estocástica de IA baseada em intuição rápida ("Vibe Coding") introduz códigos poluídos, dependências incoerentes e regressões catastróficas em repositórios complexos. IAs tendem a tentar corrigir erros gerando mais códigos falhos ("slop"), provocando loops de compilação infinitos e exaustão de contexto do modelo. No desenvolvimento de software Bare-Metal (Rust), a validação estrita do compilador e de testes de estresse deve preceder a escrita de qualquer lógica de negócios.
+## Contexto Técnico e a Erradicação do Vibe Coding
+A prática estocástica de engenharia de software baseada em intuição rápida ("Vibe Coding") introduz débito de código ("slop"), regressões silenciosas e desalinhamento de intenção em sistemas complexos. Agentes de IA sem amarras tendem a corrigir falhas gerando mutações cegas e redundantes, provocando exaustão de contexto e loops infinitos de compilação.
+No ecossistema SOULS Bare-Metal (Rust), a especificação declarativa estrita e a validação por testes automatizados devem obrigatoriamente preceder a escrita de qualquer linha de lógica funcional.
 
-## Decisão
-Implementar rigidamente a metodologia **Spec-Driven Development (SDD)** combinada a **TDD Forçado** em todo o ciclo de vida de mutação de código do SOULS:
-1. **O Plano Precede o Código:** Fica expressamente proibida a mutação direta de código-fonte sem a prévia especificação do design arquitetural (`docs/design.md`) em disco contendo diagramas Mermaid e definição do padrão Orchestrator-Worker. O Arquiteto Humano deve validar o design antes de prosseguir.
-2. **Definição de Done e Scaffold (Tasks):** As tarefas são desfragmentadas de forma atômica no checklist `tasks.md`. Cada tarefa exige uma Definition of Done (DoD) com scaffold executável (testes unitários que falham primeiro - Red) antes de escrever a lógica funcional em Rust/TypeScript.
-3. **Ciclo de TDD Atômico:** O desenvolvimento segue o fluxo clássico:
-   - *Red:* Teste falho.
-   - *Green:* Implementação mínima para passar no teste com Exit Code 0.
-   - *Refactor:* Limpeza de avisos do compilador (`cargo clippy`) e melhorias estéticas.
-4. **O Corretor Ralph Loop (Teto de 3 Tentativas):** Se o compilador ou os testes falharem, o core dispara automaticamente o Ralph Loop para auto-correção sob o teto rígido de no máximo **3 tentativas de compilação consecutivas**.
-5. **Bloqueio Fail-Closed:** Se a falha persistir na 3ª tentativa, o agente de IA é compulsoriamente forçado a parar. O card correspondente é movido para a coluna "Bloqueado" no Kanban, a anomalia é gravada na telemetria e o controle é devolvido ao usuário.
+## Decisão Arquitetural (Macro-Pipeline Declarativo e Micro-TDD)
+Fica decretado a obrigatoriedade do **Spec-Driven Development (SDD)** unificado ao **Test-Driven Development (TDD)** através dos seguintes pilares constitucionais:
 
-## Consequências
-- **Higiene e Qualidade de Código:** Erradicação total de lixo tecnológico e redução drástica de regressões lógicas no backend.
-- **Raciocínio Estruturado:** O design do código é robusto e documentado de forma clara no próprio repositório antes mesmo de sua implementação real.
-- **Resiliência contra Loops Infinitos:** Prevenção confiável de gastos inflacionados de API decorrentes de IAs que tentam corrigir repetidamente erros de compilação de forma redundante.
+### 1. Cascata Documental Atômica de 4 Vias (SPEC-014)
+É terminantemente proibida qualquer mutação de código-fonte sem que a cascata documental de 4 vias esteja gerada, validada e versionada fisicamente em disco na pasta de trabalho ativa:
+1.  **`REQUIREMENTS.md` (HITL Gate #1):** Documento de requisitos, escopo, regras de negócio e não-objetivos. Atua como o Portão nº 1 de validação e assinatura do Operador Humano antes de avançar para a arquitetura técnica.
+2.  **`DESIGN.md`:** Especificação técnica detalhada, diagramas Mermaid, structs/enums Rust, schemas de banco e contratos de API. Auditado por Peer-Review em sessão isolada.
+3.  **`TASKS.md`:** Matriz de tarefas atômicas e independentes organizadas como Grafo Acíclico Dirigido (DAG). Cada tarefa possui Definition of Done (DoD) com scaffold executável.
+4.  **`TEST_SPECS.md`:** Especificação exata dos cenários de teste, entradas, saídas esperadas e critérios de aceite funcional.
+
+### 2. Isolamento Físico em Shadow Workspace (`snapsafe`)
+*   Toda execução de mutação e compilação de código ocorre em um **Shadow Workspace** isolado.
+*   A instanciação é realizada em tempo constante $\mathcal{O}(1)$ via links físicos rígidos (*snapsafe*), consumindo 0 bytes adicionais do disco host e garantindo a preservação da branch principal até a aprovação final.
+
+### 3. Ciclo Micro-TDD Atômico (Red-Green-Refactor)
+*   **Fase RED:** O Worker escreve primeiramente o teste especificado em `TEST_SPECS.md`, comprovando a falha inicial no compilador/runner.
+*   **Fase GREEN:** Escreve a lógica funcional mínima necessária para obter aprovação com Exit Code 0 no terminal.
+*   **Fase REFACTOR:** Limpa avisos do compilador e conformidade com `cargo clippy --all-targets --all-features -- -D warnings`.
+
+### 4. O Corretor Autônomo Ralph Loop (Teto de 3 Tentativas e Fail-Closed)
+*   Se o compilador Rust ou a suíte de testes falhar durante a fase GREEN/REFACTOR, a engine aciona autonomamente o **Ralph Loop**.
+*   O erro do terminal é reinjetado no prompt do Worker para auto-correção sob o limite rígido e imutável de **no máximo 3 tentativas síncronas consecutivas de compilação**.
+*   **Status FAIL-CLOSED:** Se a falha persistir na 3ª tentativa, o ciclo é paralisado imediatamente. As alterações na branch do Shadow Workspace são travadas no git, a anomalia é gravada no log de telemetria e o controle é devolvido compulsoriamente ao operador humano sem aplicar rebase no disco físico principal.
+
+## Consequências Operacionais e Defesa contra o Slop
+- **Higiene e Rigor:** Erradicação total de lixo tecnológico no backend e garantia de que todo código em produção atende a uma especificação formal pré-aprovada.
+- **Eficiência FinOps:** A trava Fail-Closed na 3ª tentativa impede desperdício de tokens de API e evita picos de aquecimento da GPU causados por loops de correção redundantes.
+- **Rastrabilidade Total:** O ciclo documental de 4 vias em disco fornece auditoria completa da evolução arquitetural do sistema.
 
 ## Restrições Bare-Metal
-- **Teto do Ralph Loop:** Limite rígido e imutável de **3 tentativas autônomas** consecutivas de correção.
-- **Conformidade Clippy:** Todo código integrado deve passar compulsoriamente no linter nativo do Rust:
-  `cargo clippy --all-targets --all-features -- -D warnings`
-- **Validação de Testes:** Sucesso exige "exit code zero" em testes unitários locais.
+- **Cascata Obrigatória:** `REQUIREMENTS.md` (HITL Gate #1) -> `DESIGN.md` -> `TASKS.md` -> `TEST_SPECS.md`.
+- **Trava do Ralph Loop:** Máximo de 3 retentativas locais síncronas antes do status FAIL-CLOSED.
+- **Conformidade Clippy:** Requer Exit Code 0 estrito em `cargo clippy --all-targets --all-features -- -D warnings`.
 
 ### ====================================================================================================
 ARQUIVO: ADR-011-Governanca-HITL.md
@@ -447,44 +469,50 @@ CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-011-Governanca-HITL.md
 ---
 id: "ADR-011"
 title: "ADR-011-Governanca-HITL"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Requer a aprovação humana (Human-In-The-Loop) para operações destrutivas ou com alto Blast Radius."
+description: "Requer a aprovação humana (Human-In-The-Loop) interativa em sessão ativa via chat/CLI, aplicando a Regra de Pragmatismo de Interface para contornar UIs gráficas enquanto a Milestone 4 estiver inativa."
 ---
 
-# ADR-011-Governanca-HITL
+# ADR-011: Governança Human-In-The-Loop (HITL) Interativa e Pragmatismo de Interface
 
 ## Status
-Aceito (Ativo e Inegociável)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V6)
 
-## Contexto
-Permitir que agentes autônomos de IA mutem arquivos diretamente no disco principal de desenvolvimento ou realizem commits automáticos sem supervisão na branch principal (`main`) gera corrupção silenciosa de dados (SDC) e desorientação espacial do usuário. Além disso, mutações agressivas e inesperadas no código forçam reflows térmicos e confusão cognitiva imediata no usuário final, que perde o senso de controle de sua própria máquina.
+## Contexto Técnico e a Necessidade de Controle Soberano
+Permitir que agentes autônomos de IA alterem arquivos diretamente no disco de desenvolvimento ou realizem commits sem supervisão na branch principal gera corrupção silenciosa de dados (SDC) e perda de alinhamento de intenção. 
+Contudo, depender de interfaces gráficas complexas (Agent Inbox e Blast Radius Canvas) antes do amadurecimento do frontend (Milestone 4) paralisa o fluxo de entrega e impõe fricção inútil. É necessário garantir o controle humano absoluto sem criar bloqueios de infraestrutura visual inexistente.
 
-## Decisão
-Impor o protocolo **BMAD (Branch, Mutate, Approve, Diff)** para toda e qualquer alteração de código ou de dados na base principal do SOULS:
-1. **B - Branch (Isolamento Físico):** Qualquer mutação é iniciada isolando a tarefa em um **Shadow Workspace** atômico criado em tempo constante $\mathcal{O}(1)$ utilizando links físicos rígidos (*snapsafe*), consumindo zero bytes adicionais do disco hospedeiro.
-2. **M - Mutate (Escrita Atômica Protegida):** O código é alterado por meio de escritas atômicas baseadas em Mutex concorrentes em Rust. As alterações passam pela alfândega de compilação obtendo obrigatoriamente Exit Code 0.
-3. **A - Approve (A Agent Inbox):** O agente consolida o **Blast Radius** (arquivos tocados e impactos previsíveis) e o envia como sugestão passiva para a **Agent Inbox** na interface Svelte 5. O sistema aguarda a aprovação explícita do usuário em modo **Human-In-The-Loop (HITL)**. A aprovação dispara a transição estética **Glow Revelation Transition** (brilho térmico suave nas bordas da janela sem reflow).
-4. **D - Diff (Rebase Semântico):** Uma vez aprovado pelo humano, o core em Rust realiza um **Rebase Semântico** direto e atômico em direção à branch de produção, eliminando a ramificação temporária. Fica expressamente proibido o uso de commits de mesclagem convencionais (*Merge Commits*) que poluem a árvore histórica do projeto.
+## Decisão Arquitetural (O Protocolo BMAD e o Pragmatismo HITL via Chat/CLI)
+Fica estabelecido o protocolo **BMAD (Branch, Mutate, Approve, Diff)** com a **Regra de Pragmatismo de Interface**:
+
+### 1. Regra de Pragmatismo de Interface (Interrupção via Chat / Sem UI Gráfica)
+*   Enquanto a Milestone 4 (Frontend Canvas) não estiver ativa em produção, o SOULS contorna compulsoriamente a dependência de elementos visuais gráficos como "Agent Inbox" e "Blast Radius Canvas".
+*   Toda e qualquer aprovação HITL ou interrogação epistêmica de ambiguidade DEVE ocorrer **INTERATIVAMENTE EM SESSÃO ATIVA**.
+*   O daemon Rust e as garras MCP devem pausar assincronamente a execução do Tokio, imprimir o diff do código no chat/stdout e interrogar o usuário em modo CLI de perguntas poderosas (Rapport Socrático sem "Por que").
+*   O agente aguardará passivamente o input textual do operador humano na própria thread de chat ativo antes de aplicar alterações ou rebase no disco físico.
+
+### 2. Estágios do Protocolo BMAD
+1.  **B - Branch (Isolamento Físico):** Qualquer mutação é iniciada isolando a tarefa em um **Shadow Workspace** atômico criado em tempo constante $\mathcal{O}(1)$ utilizando links físicos rígidos (*snapsafe*), consumindo zero bytes adicionais do disco hospedeiro.
+2.  **M - Mutate (Escrita Atômica Protegida):** O código é alterado por meio de escritas atômicas baseadas em Mutex concorrentes em Rust (`file_locker.rs`). As alterações passam pela alfândega de compilação obtendo obrigatoriamente Exit Code 0.
+3.  **A - Approve (Interrupção Socrática no Chat):** O agente consolida o Blast Radius (arquivos tocados e diff formatado), imprime o payload na janela de chat ativa e realiza a pausa síncrona/assíncrona da runtime Tokio, aguardando a resposta afirmativa do operador na CLI.
+4.  **D - Diff (Rebase Semântico):** Uma vez aprovado pelo operador no chat, o core em Rust realiza um **Rebase Semântico** direto e atômico em direção à branch de produção via `gitoxide`, eliminando a ramificação temporária. Fica expressamente proibido o uso de *Merge Commits* poluentes.
 
 ## Prevenção de Colisões Concorrentes de Escrita
-
 - **Gerenciador de Travas `file_locker.rs`:** Torna-se obrigatório o uso do gerenciador centralizado de travas `file_locker.rs` para toda operação de Mutate.
-- **Sequenciamento de Escrita Concorrente:** Toda escrita concorrente iniciada por múltiplos subagentes agindo no background do Souls MC deve ser estritamente sequenciada por um `Mutex` assíncrono do Tokio indexado ao caminho físico do arquivo e gerenciado estaticamente em um `OnceLock` contendo um `DashMap`.
-- **Higiene de RAM Host e Limpeza de Chaves Órfãs:** Para evitar vazamentos de memória monotônicos na RAM do host devido ao acúmulo de chaves de arquivos analisados ao longo de execuções contínuas, o `file_locker.rs` deve varrer o `DashMap` e limpar chaves órfãs cuja contagem de referências fortes do `Arc` seja igual a 1 (`Arc::strong_count(&lock) == 1`) antes de liberar o escopo de execução.
+- **Sequenciamento Concorrente:** Toda escrita concorrente iniciada por subagentes no background deve ser estritamente sequenciada por um `Mutex` assíncrono do Tokio indexado ao caminho físico do arquivo e gerenciado estaticamente em um `OnceLock` contendo um `DashMap`.
+- **Higiene de RAM Host e Limpeza de Chaves Órfãs:** Para evitar vazamentos de memória na RAM host, o `file_locker.rs` deve varrer o `DashMap` e limpar chaves órfãs cuja contagem de referências fortes do `Arc` seja igual a 1 (`Arc::strong_count(&lock) == 1`) antes de liberar o escopo de execução.
 - **Mitigação de Silent Data Corruption (SDC):** Toda modificação de arquivo deve obrigatoriamente passar por swap temporário e escrita atômica via `atomic-write-file` para erradicar corrupção silenciosa de dados durante picos de I/O ou desligamentos repentinos.
 
-## Consequências
-- **Soberania do Usuário:** O humano retém o controle absoluto sobre o silício e o repositório físico da aplicação.
-- **Erradicação do SDC:** Mutações indesejadas de IA são sumariamente barradas antes de tocar nos caminhos cruciais de produção.
-- **Transparência de Impacto:** O Blast Radius fornece uma visualização imediata do alcance das modificações propostas no sistema, mitigando a fadiga de auditoria.
+## Consequências Operacionais
+- **Soberania e Agilidade:** O humano retém o controle absoluto sobre as mutações em disco através do chat/CLI ativo, com zero dependência de componentes visuais gráficos pendentes de implementação.
+- **Erradicação do SDC:** Mutações indesejadas são barradas antes de tocar nos caminhos cruciais de produção.
 
 ## Restrições Bare-Metal
-- **Blast Radius Trigger:** Modificações de middlewares de segurança ou banco de dados principal exigem HITL obrigatório incondicional.
-- **Glow Revelation Transition Performance:** A animação de aprovação na UI Svelte 5 deve rodar com taxa estável de **60 FPS** atrelada a transformações por GPU (iGPU), com duração máxima de **1500ms**.
+- **Blast Radius Trigger:** Modificações de middlewares de segurança ou banco de dados principal exigem aprovação HITL explícita no chat.
 - **Isolamento de Shadow Workspace:** O tempo constante de instanciação do snapsafe via links físicos no host deve ser de no máximo **50ms**.
-- **I/O e Criptografia fora do Event Loop:** Operações do **gitoxide** (Rebase Semântico, snapshots, verificação de drift) e cálculos criptográficos pesados (**SHA-256**) são proibidos na thread principal do Tokio; devem ser descarregados para `tokio::task::spawn_blocking` ou *background workers* dedicados comunicando-se via **MPSC**, prevenindo starvation do Event Loop.
+- **I/O fora do Event Loop:** Operações do **gitoxide** (Rebase Semântico, snapshots, verificação de drift) são proibidas na thread principal do Tokio; devem ser descarregadas para `tokio::task::spawn_blocking` ou *background workers* comunicando-se via **MPSC**.
 
 ### ====================================================================================================
 ARQUIVO: ADR-012-Guardiao-Idempotente.md
@@ -583,36 +611,39 @@ CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-014-Friccao-Produtiva.md
 ---
 id: "ADR-014"
 title: "ADR-014-Friccao-Produtiva"
-version: 1.0
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Cognição"
-description: "Introduz atrasos deliberados e feedbacks sutis na UI para evitar submissão cognitiva às sugestões da IA."
+description: "Introduz a Fricção Cognitiva Estruturada e a interrupção socrática em sessão ativa (chat/CLI) para erradicar o viés de automação e o aceite impulsivo de código, contornando a UI gráfica enquanto a Milestone 4 estiver inativa."
 ---
 
-# ADR-014-Friccao-Produtiva
+# ADR-014: Fricção Produtiva, Rapport Socrático e Pragmatismo HITL em Chat
 
 ## Status
-Aceito (Ativo e Inegociável)
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V6)
 
-## Contexto
-O Viés de Automação (*Automation Bias*) induz seres humanos a aceitar de forma rápida e irrefletida propostas complexas geradas por sistemas de inteligência artificial. Em ambientes de desenvolvimento agêntico rápidos, se o agente de IA propõe e injeta modificações extensas de código em milissegundos na tela, o usuário tende a clicar impulsivamente em "aprovar" para economizar esforço mental imediato. Esse hábito impulsivo sabota a integridade do código ("slop") e anula o rigor analítico do Spec-Driven Development, gerando bugs graves.
+## Contexto Técnico e o Perigo do Viés de Automação
+O Viés de Automação (*Automation Bias*) induz seres humanos a aceitar de forma impulsiva e irrefletida propostas complexas geradas por sistemas agênticos. Se o agente de IA injeta modificações extensas de código em milissegundos sem forçar uma pausa reflexiva, o operador tende a aprovar a alteração para economizar esforço mental imediato. Esse hábito sabota o Spec-Driven Development e introduz código degradado ("slop") no repositório.
 
-## Decisão
-Implementar a arquitetura de **Fricção Produtiva (Fricção Cognitiva Estruturada)** nas vias de interação visual e agêntica do SOULS:
-1. **Divergência de Resposta:** O tempo de reação da interface gráfica do SOULS divide-se intencionalmente baseando-se na origem da ação:
-   - *Ação Mecânica Direta (Humano):* Deve responder de forma tátil e instantânea em menos de **50ms a 150ms**.
-   - *Ação Agêntica Autônoma (IA):* Tarefas complexas de alto Blast Radius geradas de forma autônoma pela IA (ex: planos de refatoração, mutações atômicas de arquivos ou rebases semânticos) exigem a inserção compulsória de um **Atraso Sintético de 800ms a 1500ms**.
-2. **Exibição de Telemetria de Progresso:** Durante o decurso do atraso sintético, a interface gráfica bloqueia interações rápidas impulsivas do usuário e exibe logs monoespaçados estáticos monoespaçados na Bottom Bar de telemetria (ex: `-> Computando Blast Radius -> Validando compilador -> Pronto`).
-3. **Ancoragem Consciente do Neocórtex:** A lentidão intencional e controlada obriga a atenção do usuário a focar na análise das implicações reais documentadas no Blast Radius Canvas antes de conceder a autorização tátil final.
+## Decisão Arquitetural (Fricção Cognitiva Estruturada e Rapport Socrático em CLI)
+Fica estabelecida a obrigatoriedade da **Fricção Produtiva** adaptada à **Regra de Pragmatismo de Interface**:
 
-## Consequências
-- **Erradicação do Slop Impulsivo:** O usuário audita conscientemente as modificações de IA com rigor, detectando incoerências lógicas de inferência antes de fundi-las à branch principal.
-- **Redução do Context Rot Mental:** O atraso estruturado fornece respiro mental para o programador, mitigando o cansaço mental e a ansiedade visual associados ao desenvolvimento acelerado.
-- **Rigor Metodológico:** A esteira de engenharia mantém alto nível de conformidade técnica com o Spec-Driven Development.
+### 1. Interrupção Socrática em Sessão Ativa (Chat/CLI)
+*   Como a Milestone 4 (Frontend Canvas) não está ativa, toda verificação de ambiguidade e aprovação de Blast Radius ocorre **na própria thread de chat ativo**.
+*   A runtime Rust/Tokio pausa assincronamente a execução e exibe o diff/resumo no stdout/chat.
+*   O agente formula perguntas socráticas direcionadas e objetivas (**Rapport Socrático sem "Por que"**), forçando o operador a engajar o neocórtex e validar o alinhamento da intenção antes de digitar a confirmação.
+
+### 2. Divergência de Resposta e Telemetria
+*   **Comandos Mecânicos Diretos (Humano):** Resposta instantânea tátil em menos de **50ms a 150ms**.
+*   **Ações Agênticas Autônomas (IA):** Modificações de alto Blast Radius exigem a inserção de um **Atraso Sintético de 800ms a 1500ms** na transmissão de eventos para estabilização de contexto e exibição de telemetria monoespaçada (ex.: `-> Gerando diff -> Validando AST -> Pausado para aprovação HITL`).
+
+## Consequências Operacionais
+- **Erradicação do Slop Impulsivo:** A interrupção no chat obriga o operador a ler e autorizar conscientemente as alterações propostas.
+- **Transparência e Respiro Mental:** Mitigação da ansiedade visual e prevenção do *Context Rot* do operador durante refatorações extensas.
 
 ## Restrições Bare-Metal
-- **Atraso Sintético Rígido:** Atraso artificial parametrizado obrigatoriamente entre **800ms e 1500ms** para ações cognitivas de agentes de IA na interface.
-- **Latência Humana:** Interações que partam de comandos puramente manuais do usuário do SOULS ignoram o atraso, respondendo em menos de **150ms** para manter o feedback físico de controle de máquina.
+- **Atraso Sintético:** Parametrizado entre **800ms e 1500ms** para eventos agênticos de alto impacto.
+- **Rapport Socrático Rígido:** Perguntas de esclarecimento devem ser estritamente objetivas e diretas, sendo banido o uso do advérbio acusatório "Por que".
 
 ### ====================================================================================================
 ARQUIVO: ADR-015-Motor-Generativo-Local.md
@@ -2196,207 +2227,52 @@ CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-037-Gestao-Dinamica-Contexto-CCR.md
 ---
 id: "ADR-037"
 title: "ADR-037-Gestao-Dinamica-Contexto-CCR"
-version: 1.1
+version: 2.0
 status: Ativo_Inegociavel
 epic: "Infraestrutura"
-description: "Mitigação de Context Rot e OOM no Gateway Rust via Gestão Dinâmica de Orçamento de Contexto, Poda Semântica Determinística em Rust (tree-sitter/AST), Desidratação Semântica Ativa (souls_compress_memory, souls_dedup, souls_fill) e Compressão Reversível CCR (DashMap Zero-VRAM)."
+description: "Governança de contexto via REPL/RLM e Prensa Elástica CCR. Impõe janela curta (4-8 turnos), Context Slicing, desidratação AST (lean_vacuum), DashMap Zero-VRAM e a Barreira de Domínio contra compressores estatísticos em código-fonte."
 ---
 
-# ADR-037: Gestão Dinâmica de Contexto e Compressão Reversível (CCR)
+# ADR-037: Gestão Dinâmica de Contexto, Motor REPL/RLM e Prensa Elástica CCR
 
 ## Status
+Aceito (Ativo, Inegociável e Fundacional para Arquitetura SOULS V6)
 
-Aceito (Ativo, Inegociável e Fundacional para SOULS V4)
+## Contexto Técnico e o Colapso de Atenção (Context Rot)
+Durante a execução de fluxos agênticos complexos, a acumulação desordenada de logs, saídas JSON de ferramentas e arquivos de código induz ao *Context Rot* (deterioração da atenção do modelo) e arrisca estouro de VRAM na RTX 2060m (6GB). 
+Além disso, aplicar compressores estatísticos não-determinísticos (como `LLMLingua-2` ou PyTorch/ModernBERT) sobre código-fonte mutila identidades de variáveis, caminhos de arquivos e sintaxe de linguagem, corrompendo a lógica do sistema.
 
-## Contexto Técnico e Gargalo de Context Rot / OOM
+## Decisão Arquitetural (Motor REPL/RLM, Prensa CCR e Barreira de Domínio)
+Fica estabelecida a governança dinâmica de contexto baseada em **4 Pilares Constitucionais**:
 
-Durante a execução de fluxos de alta intensidade cognitiva — como *RAG Temporal*, *Deep Research* e *Enxames Agênticos* —, o Gateway Rust do ecossistema SOULS lida com payloads massivos no histórico de conversa ($T_{\text{hist}}$). O acúmulo desordenado de logs, saídas JSON de ferramentas, diffs de código e prospecções textuais longas induz a dois vetores críticos de falha no sistema:
+### 1. Arquitetura do Motor REPL/RLM e Janela Curta (SPEC-012)
+*   **Single-Session Master:** O agente Master opera em sessão contínua mantendo um prompt enxuto e delegando investigações pesadas para sub-sessões RLM efêmeras enjauladas em Wasmtime.
+*   **Context Slicing:** As sub-sessões RLM recebem apenas o recorte atômico estritamente necessário para sua sub-tarefa, retornando um *Reduce Sintético* em Notação LEAN.
+*   **Janela Ativa Recente ($T_{\text{live\_diff}}$):** A janela de conversa ativa mantida no prompt é rigorosamente delimitada a um buffer curto de **4 a 8 turnos de texto puro ($N = 4 \text{ a } 8$)**. Interações antigas são desidratadas e consolidadas de forma assíncrona pela Tríade de Memória (L2 FrankenSQLite / L3 LanceDB).
 
-1. **Context Rot (Degradação Semântica):** A diluição da atenção do modelo de linguagem primário em janelas extensas (> 32k-128k tokens), degradando a capacidade de raciocínio e aderência às instruções do *System Prompt*.
-2. **Exaustão de VRAM e Latência (OOM Risk):** Na infraestrutura bare-metal delimitada à dGPU NVIDIA RTX 2060m ($6.0 \text{ GB}$ VRAM), contextos excessivamente longos causam explosão no tamanho das matrizes da *KV Cache*, arriscando acionamentos de OOM (*Out of Memory*) ou forçando paginação PCIe para a RAM com perda drástica de *throughput* (tokens/segundo).
+### 2. Prensa Elástica CCR e Desidratação AST (`lean_vacuum`)
+*   **Threshold Deslizante:** Qualquer bloco de dados, logs ou código que ultrapasse o limiar deslizante de **5 linhas** no pipeline de entrada é submetido à prensa elástica CCR.
+*   **Poda Sintática Lossless (`lean_vacuum`):** A CPU Host (AVX2) executa a desidratação sintática lossless via `tree-sitter`, removendo ruídos e comentários mortos, mas preservando intactas assinaturas de tipos e declarações.
+*   **Armazenamento RAM Host (`DashMap` Zero-VRAM):** Os corpos brutos originais omitidos são salvos 100% na memória RAM principal do computador em um `dashmap::DashMap<[u8; 16], Bytes>`, indexados por um hash hexadecimal minúsculo (Blake3/MD5). Consumo de VRAM adicional: **0.00 MB**.
+*   **Injeção de Stubs de Resgate:** No prompt do modelo entra apenas o stub compacto contendo o token de resgate:
+    `[SOULS CCR: bloco comprimido. Para reidratar os dados integrais, invoque headroom_retrieve(hash="a1b2c3d4e5f6")]`
 
-O projeto open-source `headroomlabs-ai/headroom` demonstrou uma abordagem promissora para mitigação dinâmica desse problema. No entanto, a implementação original baseia-se em rackeries Python 3.10+, inferência de redes neurais via PyTorch/ModernBERT (`Kompress-v2-base`), bindings PyO3 e persistência SQLite/HNSW. Essa stack introduz **disputa de VRAM** (de 500 MB a 2.5 GB alocados pelo PyTorch/CUDA pool na dGPU), overhead de Garbage Collection (GC/GIL) e latências não determinísticas ($15 \text{ ms}$ a $316 \text{ ms}$ por pedido).
+### 3. Barreira de Domínio Inegociável (Proibição do LLMLingua-2)
+*   Fica **TERMINANTEMENTE PROIBIDO** o uso de `LLMLingua-2`, compressores neurais/estatísticos ou chamadas a runtimes Python sobre caminhos de arquivos, nomes de símbolos ou blocos de código-fonte de qualquer linguagem de programação.
+*   A compressão de código e caminhos de arquivos DEVE ser 100% determinística, orientada por AST e desidratação sintática em Rust.
 
-Para garantir os princípios da **Lei de Ferro SOULS Bare-Metal** (**Zero VRAM extra**, **Zero-Runtime Python/Node em produção** e latência sub-milissegundo), a heurística de orçamentação e triagem do Headroom deve ser transmutada para algoritmos determinísticos $O(N)$ nativos em Rust executados estritamente na RAM do Host.
+### 4. Interceção Tool Loopback em $< 1\text{ms}$ no Tokio Proxy
+*   Se a SLM solicitar a reidratação via `headroom_retrieve(hash="...")`, o Gateway Tokio intercepta a chamada na camada de proxy HTTP em $< 100\mu\text{s}$, busca o payload original no `DashMap` Host RAM e re-injeta o bloco no histórico sem queimar ciclos de GPU ou acionar IO de disco.
 
-## Declaração do Problema
-
-Como realizar a gestão dinâmica e contínua da janela de contexto no Gateway Tokio do SOULS — comprimindo e podando histórico redundante de ferramentas, logs e código sem perda irreversível de informação — mantendo **Zero consumo de VRAM adicional na GPU**, latência de triagem $< 1.0 \text{ ms}$ e operando com interceção *loopback* local ultrarrápida?
-
-## Decisão Arquitetural
-
-Fica estabelecido o padrão **Gestão Dinâmica de Contexto e Compressão Reversível (CCR)**, incorporado nativamente ao Gateway Tokio Rust do SOULS. O motor opera sob **4 Leis Inegociáveis**:
-
-```
-+-----------------------------------------------------------------------------------+
-|                              GATEWAY TOKIO (RUST)                                 |
-|                                                                                   |
-|  [ INCOMING REQUEST ]                                                             |
-|           |                                                                       |
-|           v                                                                       |
-|  +-----------------------------------------------------------------------------+  |
-|  | LEI 1: Medição de Orçamento & Triggering ($H_{in} = C_{max} - B_{out} - \delta$)|  |
-|  +-----------------------------------------------------------------------------+  |
-|           |                                                                       |
-|     (Trigger Active?)                                                             |
-|     /           \                                                                 |
-|   (Sim)        (Não)                                                              |
-|   /               \                                                               |
-|  v                 v                                                              |
-|  +------------------------------+     +----------------------------------------+  |
-|  | LEI 2: Poda Semântica        |     | Bypass Direct (Zero Overhead)          |  |
-|  | Determinística (souls-router) |     +----------------------------------------+  |
-|  | - SmartCrusher (serded/simd) |                         |                       |
-|  | - CodeCompressor (tree-sitter|                         |                       |
-|  | - LogCompressor (heuristics) |                         |                       |
-|  +------------------------------+                         |                       |
-|           |                                               |                       |
-|           v                                               |                       |
-|  +----------------------------------------------------+   |                       |
-|  | LEI 3: Paradigma CCR (Compress-Cache-Retrieve)     |   |                       |
-|  | - Grava Payload Bruto no `DashMap` (Host RAM)      |   |                       |
-|  | - Injeta Marcador `[hash=X]` e Tool `headroom_ret` |   |                       |
-|  +----------------------------------------------------+   |                       |
-|           |                                               |                       |
-|           +-----------------------+-----------------------+                       |
-|                                   |                                               |
-|                                   v                                               |
-|               [ DESPACHO LLM (KV Cache Aligned) ]                                 |
-|                                   |                                               |
-|                   (LLM chama `headroom_retrieve`)                                 |
-|                                   |                                               |
-|                                   v                                               |
-|  +-----------------------------------------------------------------------------+  |
-|  | LEI 4: Interceção Tool Loopback (< 1ms / Zero-VRAM / Host RAM Lookup)       |  |
-|  +-----------------------------------------------------------------------------+  |
-+-----------------------------------------------------------------------------------+
-```
-
----
-
-### Lei 1: A Matemática do Orçamento de Contexto
-
-A capacidade total da janela do modelo alvo é delimitada por $C_{\text{max}}$. O orçamento máximo de entrada permitido para a carga de mensagens ($H_{\text{in}}$ - Headroom de Entrada) é calculado deterministicamente pela equação:
-
-$$H_{\text{in}} = C_{\text{max}} - B_{\text{out}} - \delta_{\text{safe}}$$
-
-Onde:
-- $B_{\text{out}}$ é a reserva mandatória para a geração da resposta do LLM (`output_buffer_tokens`), com piso fixado entre $4.000$ e $8.000$ tokens.
-- $\delta_{\text{safe}}$ é a margem de segurança determinística (fixada em $512$ tokens) destinada a absorver flutuações de contagem no tokenizador.
-
-O volume total de tokens $T_{\text{total}}$ é particionado em 4 zonas operacionais estritas:
-
-$$T_{\text{total}} = T_{\text{sys}} + T_{\text{tools}} + T_{\text{hist}} + T_{\text{live}}$$
-
-#### Matriz de Preservação e Prioridades de Zona:
-
-| Zona | Componente | Diretiva de Preservação | Regra de Poda |
-| :--- | :--- | :--- | :--- |
-| $T_{\text{sys}}$ | System Prompt & Instruções Globais | **Proteção Absoluta (Imutável)** | Poda proibida. Apenas estabilização via `CacheAligner`. |
-| $T_{\text{tools}}$| Schemas de Ferramentas (Tool Declarations) | **Proteção Estrutural** | Poda proibida. Apenas deduplicação de schemas redundantes. |
-| $T_{\text{live}}$ | Janela Ativa Recente ($k$ turnos, ex: $k=3$) | **Preservação de Curto Prazo** | Isento de compressão para garantir coerência no turno atual. |
-| $T_{\text{hist}}$ | Histórico de Ferramentas, Logs e Mensagens Antigas | **Alvo Primário de Compressão** | Poda determinística agressiva até satisfazer a meta $\Delta R$. |
-
-A decisão booleana de acionamento do pipeline de poda é calculada a cada chamada HTTP do Gateway:
-
-$$\text{Trigger} = \begin{cases} 1, & \text{se } T_{\text{total}} > H_{\text{in}} \text{ ou modo } \text{optimize} = \text{true} \\ 0, & \text{caso contrário} \end{cases}$$
-
-Se $\text{Trigger} = 1$, a meta exata de redução de tokens $\Delta R$ a ser eliminada da zona $T_{\text{hist}}$ é:
-
-$$\Delta R = T_{\text{total}} - H_{\text{in}}$$
-
----
-
-### Lei 2: Poda Semântica Determinística em Rust e Garras de Desidratação Ativa
-
-É terminantemente **PROIBIDO** o uso de modelos baseados em redes neurais (PyTorch, ONNX, ModernBERT, HuggingFace) ou chamadas de runtime Python para classificação e poda de texto no Gateway.
-
-A compressão de $T_{\text{hist}}$ é realizada por motores determinísticos $O(N)$ em memória RAM Host, reforçada pelas **Garras de Desidratação Semântica Ativa**:
-
-1. **'souls_compress_memory':** Algoritmo de poda semântica que desidrata manuais e arquivos de regras (`.cursorrules` / `CLAUDE.md`) reduzindo a prosa a linguagem telegráfica, preservando intactos caminhos de arquivo, tipos e blocos de código.
-2. **'souls_dedup':** Motor de varredura que analisa referências cruzadas e deduplica trechos compartilhados entre múltiplos arquivos antes de enviá-los ao contexto do LLM, economizando até 40% de massa textual.
-3. **'souls_fill':** Mecanismo de preenchimento dinâmico de contexto que ajusta cirurgicamente a taxa de compressão de cada arquivo de forma individual com base nas restrições físicas de VRAM e no orçamento de tokens de API.
-4. **Roteamento de Conteúdo por SWAR/AVX2 (`souls-router`):** Inspeção rápida dos primeiros 64 bytes do buffer usando instruções SIMD/AVX2 para categorizar o payload sem parsing integral:
-   - JSON (`[` ou `{`) $\rightarrow$ Rota `SmartCrusher`.
-   - Logs/ANSI (`[ERROR]`, `WARN`, `stacktrace`) $\rightarrow$ Rota `LogCompressor`.
-   - Código Fonte (`fn`, `pub struct`, `def`, `class`, `import`) $\rightarrow$ Rota `CodeCompressor` (AST).
-   - Prosa/Texto Livre $\rightarrow$ Rota `Pruning` Determinístico por Frases/Parágrafos.
-5. **Poda Sintática de Código (`CodeCompressor` via `tree-sitter`):**
-   - Utilização nativa do crate Rust `tree-sitter`.
-   - Nó da AST correspondentes a declarações (`FunctionDeclarations`, `ImportDeclarations`, `StructDefinitions`) são preservados.
-   - Blocos de implementação interna (`body`, `block`) têm os limites de bytes substituídos em tempo de varredura por stubs estáticos (`/* ... corpo omitido via CCR ... */`).
-6. **Poda Estrutural JSON (`SmartCrusher` via `simd-json` / `serde_json`):**
-   - Estratégia de divisão em 3 zonas ($K$-Split): preserva o cabeçalho ($K_{\text{head}}$), o rodapé ($K_{\text{tail}}$) e condensa elementos intermediários de baixa variância em um nó estatístico explicativo.
-7. **Alocação Arena e Zero-Copy (`bumpalo` + `Cow<'a, str>`):**
-   - Estruturas de mensagem reutilizam ponteiros da camada de transporte (`&'a str`). Fatias modificadas utilizam alocação em Arena de vida curta (`bumpalo`), garantindo desalocação em tempo constante $O(1)$ ao término do despacho.
-
----
-
-### Lei 3: Paradigma CCR (Compress-Cache-Retrieve) 100% Host RAM (`DashMap` Zero-VRAM)
-
-Para erradicar o risco de perda irreversível de contexto técnico, a poda aplica o protocolo **CCR**:
-
-1. **Hash e Armazenamento no Host:** Quando um segmento de $T_{\text{hist}}$ de tamanho $S_{\text{orig}}$ é comprimido para $S_{\text{comp}}$, o buffer original é persistido no Host RAM em um mapa concorrente `dashmap::DashMap<[u8; 16], Bytes>`, indexado pelo hash MD5/BLAKE3 ($16$ bytes) do conteúdo original.
-2. **Zero-VRAM Guarantee:** A cache reside 100% na memória RAM principal do computador (CPU Host). Nenhuma página de memória é reservada ou alocada na VRAM da GPU.
-3. **Política de Despejo LRU:** A cache opera sob limite configurável de RAM (ex: 256 MB) com política de despejo LRU (*Least Recently Used*). Sem banco de dados em disco (Zero-SQLite overhead no caminho crítico).
-4. **Injeção de Marcadores Semânticos:** O texto comprimido inserido no prompt do LLM contém o marcador de resgate:
-   
-   `[SOULS CCR: 150 linhas comprimidas. Para recuperar os dados integrais brutos, invoque a ferramenta headroom_retrieve(hash="a1b2c3d4e5f6")]`
-
----
-
-### Lei 4: Tool Loopback Interceptado Localmente em < 1ms pelo Gateway Tokio
-
-O Gateway Tokio injeta de forma transparente no payload da requisição a ferramenta padrão do sistema:
-
-```json
-{
-  "name": "headroom_retrieve",
-  "description": "Recupera o bloco original de código, logs ou JSON comprimido pelo Gateway SOULS CCR.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "hash": { "type": "string", "description": "Hash de 16-bytes do bloco a ser restaurado" }
-    },
-    "required": ["hash"]
-  }
-}
-```
-
-#### Regra de Interceção Loopback:
-
-1. Se o modelo de linguagem responder emitindo uma chamada à ferramenta `headroom_retrieve(hash="...")`, o Gateway Tokio **NÃO** repassa essa chamada para a aplicação nem para o cliente.
-2. O Gateway intercepta a chamada na camada HTTP proxy, busca a chave correspondente no `DashMap` em RAM Host em $< 100 \ \mu\text{s}$ (microssegundos), injeta o payload original no histórico e re-despacha a chamada imediatamente para o LLM.
-3. Todo o ciclo de interceção e resposta de loopback é concluído em latência total **$< 1.0 \text{ ms}$**, sem intervenção de IO de disco ou consumo de ciclos de GPU.
-
----
-
-## Consequências e Trade-offs
-
-### Impactos Positivos:
-
-- **Imunidade a OOM na VRAM:** Garantia matemática de $0 \text{ MB}$ de VRAM consumidos pelo motor de compressão, deixando 100% da dGPU RTX 2060m disponível para tensores do modelo primário.
-- **Erradicação do Context Rot:** Históricos massivos de chamadas de ferramentas e logs são condensados em stubs de alta densidade informativa, preservando a atenção do LLM nas instruções críticas.
-- **KV Cache Alignment (Economia de Custo/Latência):** O módulo `CacheAligner` em Rust estabiliza os prefixos dinâmicos do System Prompt (ex: timestamps), aumentando a taxa de *KV Cache Hit* no provedor de inferência para até $> 90\%$.
-- **Desempenho Bare-Metal:** Latência de triagem $< 1.0 \text{ ms}$ (vs. $15\text{ms}-316\text{ms}$ no Headroom Python original).
-
-### Riscos e Mitigações:
-
-- **Risco:** Consumo de RAM no Host com acúmulo de chaves no `DashMap`.
-  - *Mitigação:* Limite rígido de alocação de memória (ex: cap de 256MB) com despejo atômico LRU gerido em tempo de execução.
-- **Risco:** Loops de chamadas excessivas à ferramenta `headroom_retrieve` pelo LLM se a compressão for agressiva demais.
-  - *Mitigação:* Preservação mandatória da zona $T_{\text{live}}$ ($k=3$ a $5$ turnos) e calibração fina da meta de redução $\Delta R$.
-
----
-
-## Compliance com a Lei de Ferro SOULS
-
+## Compliance com a Doutrina Bare-Metal SOULS
 | Diretiva SOULS | Estado do ADR-037 | Garantia de Implementação |
 | :--- | :--- | :--- |
-| **Zero VRAM Extra** | **CONFORME** | 100% alocado na RAM Host via `DashMap` concorrente. |
-| **No Python/Node Runtime** | **CONFORME** | Transmutado inteiramente para Rust nativo (`tree-sitter`, `simd-json`, `bumpalo`). |
+| **Zero VRAM Extra** | **CONFORME** | 100% alocado em `DashMap` na RAM Host. Zero tensores na GPU. |
+| **Barreira de Domínio** | **CONFORME** | `LLMLingua-2` sumariamente banido de código e filepaths. |
+| **Janela Curta Chat** | **CONFORME** | Buffer $T_{\text{live\_diff}}$ travado entre 4 e 8 turnos ($N=4..8$). |
+| **Prensa Lossless** | **CONFORME** | Limiar de 5 linhas com desidratação AST `lean_vacuum` e Hash Blake3. |
 | **SDD / Spec-Driven** | **CONFORME** | Este ADR oficializa a física de gestão de contexto antes de qualquer código/PRD. |
-| **Latência Sub-milissegundo**| **CONFORME** | Interceção loopback $< 100 \ \mu\text{s}$ no Tokio, total $< 1.0 \text{ ms}$. |
+| **Latência Sub-ms** | **CONFORME** | Interceção loopback $< 100 \ \mu\text{s}$ no Tokio, total $< 1.0 \text{ ms}$. |
 
 ### ====================================================================================================
 ARQUIVO: ADR-038-Execucao-Elastica-e-Compressao-de-Logs-do-Compilador.md
@@ -3354,26 +3230,26 @@ CAMINHO: Z:\souls_mc\docs\decisions\adrs\ADR-045-Persistencia-da-Alma-Socratica.
 ---
 id: "ADR-045"
 title: "ADR-045-Persistencia-da-Alma-Socratica"
-version: 1.0
+version: 2.0
 status: Aprovado
 epic: "Cognicao / Persistencia Socratica + Souls State V5"
-amends: ["ADR-029", "ADR-040", "ADR-041", "ADR-043", "ADR-044"]
-description: "Marco 3.9 Fase E: institui a persistencia relacional do ThinkingEngine socratico no SQLite WAL STRICT, quita a amnésia de raciocínio do gateway souls_mcp e adiciona as 3 tools canônicas export_session/analyze_session/merge_sessions sob o teto 32/120."
+amends: ["ADR-029", "ADR-040", "ADR-041", "ADR-043", "ADR-044", "ADR-011", "ADR-014"]
+description: "Marco 3.9 Fase E (Emendado Marco 5.9): institui a persistência relacional do ThinkingEngine socrático no SQLite WAL STRICT e formaliza a auditoria HITL via interrupção socrática no chat/CLI em conformidade com o Pragmatismo de Interface."
 mathematical_anchors: ["O(1)_adjacency_reconstruction", "ON_DELETE_CASCADE_subgraph_purge", "last_write_wins_merge"]
 physical_paths: ["src-tauri\\src\\cognition\\thinking\\persistence.rs", "src-tauri\\src\\cognition\\thinking\\ops.rs", "src-tauri\\src\\cognition\\thinking\\analytics.rs", "src-tauri\\src\\bin\\souls_mcp_server.rs", ".souls_data\\souls_state.db"]
 pr: "https://github.com/brunosrosa/souls_mc/pull/21 (commits cumulativos)"
 test_coverage: "39/39 verdes em <0.2s (Fast Pass Marcha Rapida)"
 ---
 
-# ADR-045: Persistência da Alma Socrática e Quitação da Amnésia de Raciocínio
+# ADR-045: Persistência da Alma Socrática e Auditoria HITL via Chat/CLI
 
 ## Status
 
-**Aprovado (Marco 3.9 Fase E).** Emenda cumulativa das ADRs 029 (Visão Cognitiva O(1)), 040 (Souls State), 041 (Servername Soberano `souls_mcp`), 043 (Observabilidade Sensorial) e 044 (Enjaulamento Wasmtime). Quita o **déficit de memória de raciocínio** do `ThinkingEngine` (até então in-RAM-only) instituindo a **persistência relacional SQLite WAL STRICT** de árvores socráticas, e expõe 3 tools MCP canônicas para reconstrução, análise e fusão atômica.
+**Aprovado (Versão 2.0 / Marco 5.9).** Emenda cumulativa das ADRs 011 (HITL), 014 (Fricção Produtiva), 029 (Visão Cognitiva O(1)), 040 (Souls State), 041 (Servername Soberano `souls_mcp`), 043 (Observabilidade Sensorial) e 044 (Enjaulamento Wasmtime). Quita a amnésia de raciocínio do `ThinkingEngine` via SQLite WAL STRICT e estabelece a auditoria socrática interativa no chat/CLI ativo sob a Regra de Pragmatismo de Interface.
 
 ## Contexto Técnico e Desafio Operacional
 
-O `ThinkingEngine` (PRD-032 §3) canibalizou o `ultrafast-mcp-sequential-thinking` com sucesso mas opera **estritamente in-RAM**:
+O `ThinkingEngine` (PRD-032 §3) canibalizou o `ultrafast-mcp-sequential-thinking` com sucesso mas operava **estritamente in-RAM**:
 
 ```rust
 pub struct ThinkingEngine {
@@ -3387,7 +3263,7 @@ pub struct ThinkingEngine {
 
 Esta escolha arquitetural previa que o estado era **descartável** (sessão = subagente; teardown = heap freed). Porém, o gateway `souls_mcp` evoluiu para hospedar 3 ferramentas canônicas que **exigem** o histórico da sessão:
 
-1. **`export_session`** — Reconstruir a árvore relacional para auditoria humana (HITL) ou para apresentação a outro agente.
+1. **`export_session`** — Reconstruir a árvore relacional para auditoria humana socrática (HITL via CLI/Chat) ou para apresentação a outro agente.
 2. **`analyze_session`** — Computar métricas comportamentais (taxa de revisão, fan-out médio, latência média) para FinOps cognitivo.
 3. **`merge_sessions`** — Fundir dois fluxos de raciocínio concorrentes sob consistência eventual, especialmente em workflows multi-agente onde o `swarm_dispatcher` paraleliza pensamentos e precisa reconciliar divergências.
 
@@ -3395,9 +3271,14 @@ Sem persistência, estas 3 tools só podem operar enquanto o `ThinkingEngine` es
 
 ## Decisões de Engenharia e Arquitetura
 
-### 1. Souls State V5 — Schema Relacional Socrático
+### 1. Governança Humana e Auditabilidade HITL Interativa (Pragmatismo de Interface)
+*   **Regra de Pragmatismo de Interface:** Em concordância com as ADRs 011 e 014, a auditoria de sessões socráticas contorna telas visuais e telas gráficas enquanto a Milestone 4 (Frontend Canvas) estiver inativa.
+*   **Interrupção no Chat Active:** Toda revisão de hipóteses socráticas de alto risco dispara a exportação da árvore via `export_session(format="markdown")` diretamente na janela de chat/stdout ativo.
+*   A runtime Rust/Tokio realiza a pausa assíncrona da execução, interroga o operador em modo CLI socrático e aguarda a autorização textual humana antes de aplicar o rebase no disco físico.
 
-A migração **V3 → V5** (pulamos V4 intencionalmente; o número 4 é reservado para o Marco 4.x do swarm reativo) é **idempotente** sob o padrão já estabelecido em `observability::ops::migrate_v2_to_v3`:
+### 2. Souls State V5 — Schema Relacional Socrático
+
+A migração **V3 → V5** é **idempotente** sob o padrão já estabelecido em `observability::ops::migrate_v2_to_v3`:
 
 ```sql
 -- socratic_sessions: aggregate root de cada sessão de raciocínio.
@@ -3437,27 +3318,13 @@ CREATE INDEX IF NOT EXISTS idx_thoughts_session_step
 
 **Lei de Idempotência:** `migrate_v3_to_v5` testa `PRAGMA user_version < 5`; se já é 5, retorna `Ok(())` sem alocar transação.
 
-**Lei do STRICT:** todas as 11 colunas do novo schema declaram `STRICT` para que o SQLite rejeite coercion silenciosa de tipo (princípio do Pessimismo da Razão do `user_profile`).
+**Lei do STRICT:** todas as colunas declaram `STRICT` para que o SQLite rejeite coercion silenciosa de tipo (Pessimismo da Razão).
 
-### 2. Reconstrução de Árvore O(1) na RAM Host (não BFS no SQLite)
+### 3. Reconstrução de Árvore O(1) na RAM Host (não BFS no SQLite)
 
-O `export_session` lê **uma única query** que devolve TODAS as linhas de uma sessão ordenadas por `(branch_id, step_number)`, e reconstrói a árvore de adjacência em **HashMap<ThoughtId, NodeIndex>** na RAM. A justificativa é tripla:
+O `export_session` lê **uma única query** que devolve TODAS as linhas de uma sessão ordenadas por `(branch_id, step_number)`, e reconstrói a árvore de adjacência em **HashMap<ThoughtId, NodeIndex>** na RAM em tempo $O(N)$.
 
-1. **Latência:** Para uma sessão típica de ≤ 7 pensamentos (5 padrão + 2 HITL), a query retorna ≤ 7 linhas; o overhead de múltiplas queries round-trip seria pior.
-2. **Previsibilidade:** O loop de reconstrução é puro, sem side effects; falha não corrompe estado.
-3. **Determinismo:** A estrutura de adjacência reconstruída é canônica (mesma entrada → mesma árvore), o que é uma propriedade essencial para o test `test_export_session_formatting`.
-
-A query canônica é:
-
-```sql
-SELECT thought_id, branch_id, parent_thought_id, thought_type, content,
-       step_number, duration_ms
-FROM socratic_thoughts
-WHERE session_id = ?1
-ORDER BY branch_id, step_number ASC;
-```
-
-### 3. Análise Comportamental — Fórmulas Fechadas
+### 4. Análise Comportamental — Fórmulas Fechadas
 
 `analyze_session` computa três métricas que resumem o **FinOps cognitivo** de uma sessão:
 
@@ -3473,20 +3340,11 @@ $$
 \text{latency\_mean\_ms} = \frac{1}{|T|} \sum_{t \in T} t.\text{duration\_ms}
 $$
 
-A **taxa de revisão** indica o quanto o agente se autocorrige (sinal de qualidade); o **fator de ramificação** indica exploração (sinal de profundidade); a **latência média** indica custo (sinal FinOps direto).
+### 5. Merge Atômico Last-Write-Wins (Consistência Eventual)
 
-### 4. Merge Atômico Last-Write-Wins (Consistência Eventual)
+`merge_sessions(source_session_id, target_session_id)` opera sob o **padrão CRDT simplificado** com transação `BEGIN EXCLUSIVE` no `souls_state.db`.
 
-`merge_sessions(source_session_id, target_session_id)` opera sob o **padrão CRDT simplificado**:
-
-1. **Transação BEGIN EXCLUSIVE** no `souls_state.db` (write lock global).
-2. Para cada pensamento de `source`: INSERT OR IGNORE em `target` com `thought_id` regenerado (evita colisão de PK). Se já existe, **last-write-wins** baseado em `created_at`.
-3. **Remap de `parent_thought_id`:** se o pai de um pensamento movido estava em `source`, reescreve para apontar para o equivalente em `target` (busca por `(step_number, branch_id)`).
-4. **COMMIT atômico.** Falha em qualquer ponto = ROLLBACK automático.
-
-A garantia é **eventual consistency** sob a hipótese de que os `created_at` dos pensamentos são monotonicamente ordenados (garantido pelo relógio do Tokio).
-
-### 5. Três Tools Canônicas sob o Teto 32/120 (ADR-041)
+### 6. Três Tools Canônicas sob o Teto 32/120 (ADR-041)
 
 | Tool | Nome | Descrição (≤120 chars) |
 |------|------|------------------------|
@@ -3494,53 +3352,13 @@ A garantia é **eventual consistency** sob a hipótese de que os `created_at` do
 | Análise | `analyze_session` | "Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM." |
 | Fusão | `merge_sessions` | "Executa a fusão atômica de ramificações e fluxos de raciocínio concorrentes sob consistência eventual." |
 
-Cada tool aceita os 3 aliases canônicos (`name | souls_name | ctx_name`) no dispatcher, mantendo compatibilidade de transição.
-
-## Equações de Validação
-
-### Footprint de Memória
-
-$$
-\text{Memória}_{V5} \approx |T| \times 256 \text{ bytes} + \text{overhead SQLite WAL}
-$$
-
-Para 7 pensamentos, $\approx 1.8\text{ KB}$. Cabe em L1 do CPU.
-
-### Custo de Reconstrução
-
-$$
-T_{\text{reconstruct}}(n) = \mathcal{O}(n), \quad n = \text{|T|}
-$$
-
-O loop de adjacência é linear; não há BFS, não há recursão profunda (depth ≤ 5 por causa do disjuntor cognitivo).
-
-## Testes de Homologação (TDD Fast Pass < 0.2s)
-
-| # | Teste | Validação |
-|---|-------|-----------|
-| 1 | `test_database_migration_v5` | Migração idempotente; FK rejeita inserção inválida. |
-| 2 | `test_export_session_formatting` | Tese→Antítese→Síntese; JSON e Markdown respeitam indentação. |
-| 3 | `test_analyze_session_metrics` | Taxa de revisão, fan-out, latência média calculados corretamente. |
-| 4 | `test_merge_sessions_atomic_last_write_wins` | 2 branches concorrentes fundidas; ponteiros reconciliados. |
-
 ## Consequências
 
 ### Positivas
-
 * **Amnésia de raciocínio eliminada.** Sessões persistem em `.souls_data/souls_state.db`; crash do gateway não perde contexto socrático.
-* **Auditoria HITL viável.** `export_session` em Markdown é legível para o Arquiteto revisar antes de merge.
+* **Auditoria HITL pragmática via Chat.** `export_session` em Markdown é ejetado no chat ativo para o Arquiteto revisar e aprovar interativamente via CLI.
 * **FinOps Cognitivo mensurável.** `analyze_session` expõe métricas que alimentam o ParetoBandit.
-* **Merge multi-agente funcional.** O `swarm_dispatcher` pode paralelizar pensamentos e reconciliar divergências.
 
 ### Negativas (Aceitas sob Pessimismo da Razão)
-
 * **Custo de I/O por pensamento.** ~50µs por INSERT sob WAL. Aceitável (pensamentos são infrequentes).
-* **Esquema precisa de migração manual** se uma coluna for adicionada no futuro. Mitigado por `IF NOT EXISTS` em todas as DDLs.
-* **`last-write-wins` pode perder edições em sessões paralelas.** Aceitável sob consistência eventual; para ACID estrito seria necessário um CRDT mais sofisticado (Marco 4.x).
-
-## Referências Cruzadas
-
-- **ADR-029** (Visão Cognitiva O(1)) — A reconstrução O(n) em RAM é justificada por n ≤ 7.
-- **ADR-040** (Souls State) — `migrate_v3_to_v5` segue o mesmo padrão de `migrate_v2_to_v3`.
-- **ADR-041** (Servername Soberano) — Teto 32/120 respeitado.
-- **PRD-032** §3 (Socratic Disjuntor) — `ThinkingEngine` é a fonte da verdade para o disjuntor; persistência é projeção.
+* **`last-write-wins` pode perder edições em sessões paralelas.** Aceitável sob consistência eventual.

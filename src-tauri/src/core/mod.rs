@@ -7,6 +7,14 @@ pub mod model_manager;
 pub mod headroom_engine;
 pub mod mcp_transport; // SOULS-CANIBALIZED: trait McpTransport + LeanVacuum
 
+// Marco I · v6.1 — Agnostic L7 Gateway (componentes canibalizados)
+pub mod gateway_config; // SOULS-CANIBALIZED Marco I: JSONC parser + GatewayConfig SSOT
+pub mod peak_ewma; // SOULS-CANIBALIZED Marco I: PeakEWMA α=0.3 + lock-free ring buffer
+pub mod sticky_router; // SOULS-CANIBALIZED Marco I: Sticky routing por session_id (Prefix Cache)
+pub mod pii_redactor; // SOULS-CANIBALIZED Marco I: Aho-Corasick PII redaction (default disabled)
+pub mod telemetry_dispatcher; // SOULS-CANIBALIZED Marco I: MPSC → SQLite WAL V5 (worker thread dedicada)
+pub mod subprocess_guard; // SOULS-CANIBALIZED Marco I: SubprocessGuard RAII com kill_on_drop
+
 #[cfg(feature = "llama_backend")]
 pub mod llama_engine;
 
@@ -31,6 +39,9 @@ pub mod burn_engine;
 pub mod ort_scorer;
 pub mod gliclass_engine; // SOULS V6 MARCO 5.3.0: Sentinela de Borda Bare-Metal OrtScorerEngine (GLiClass Zero-Shot Triage)
 pub mod gigatoken_encoder; // SOULS V6 MARCO 5.4.0: GigaTokenEncoder Auto-Curativo & Prefill Bypass
+pub mod vram_scheduler; // SOULS V6 MARCO 5.12.0: VRAM Scheduler Dinâmico e Gerenciador de Evicção LRU
+pub mod sandbox; // SOULS V6 MARCO 5.13.0: Isolamento LPAC Nativo e Bypass Gracioso (Windows 11)
+pub mod sdd; // SOULS V6 MARCO 5.16.0: Orquestrador de Cascata Documental SDD (SddValidationEngine + State V6)
 
 // Aliases de compatibilidade retroativa
 pub use burn_engine as burn_agnostic;

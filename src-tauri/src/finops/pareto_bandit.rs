@@ -236,6 +236,144 @@ impl ParetoBanditRouter {
     }
 }
 
+// ============================================================================
+// Marco I · v6.1 — Route Decision canônico (FinOps-aware + Eco-Hybrid guard)
+// ============================================================================
+
+use crate::core::gateway_config::{GatewayConfig, RouteEndpoint};
+
+/// Categoria semântica da tarefa. Eco-Hybrid (rotas gratuitas / free) é
+/// vetado para categorias em `eco_hybrid_forbidden` do `GatewayConfig`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TaskKind {
+    Factual,
+    Classification,
+    Summarization,
+    CodeWrite,
+    Refactor,
+    Architecture,
+    Other,
+}
+
+impl TaskKind {
+    /// Heurística de classificação: presença de keywords no prompt.
+    /// Ordem importa — primeiro match vence.
+    pub fn classify_from_prompt(prompt: &str) -> Self {
+        let lower = prompt.to_ascii_lowercase();
+        if lower.contains("refactor") || lower.contains("reorganiz") || lower.contains("renomear") {
+            TaskKind::Refactor
+        } else if lower.contains("fn ") || lower.contains("function ") || lower.contains("def ")
+            || lower.contains("implement") || lower.contains("code ") || lower.contains("código")
+        {
+            TaskKind::CodeWrite
+        } else if lower.contains("arquitetura") || lower.contains("architecture") || lower.contains("design system") {
+            TaskKind::Architecture
+        } else if lower.contains("resum") || lower.contains("summariz") || lower.contains("tl;dr") {
+            TaskKind::Summarization
+        } else if lower.contains("classif") || lower.contains("categoriz") || lower.contains("rotul") {
+            TaskKind::Classification
+        } else if lower.contains("?") || lower.contains("quem") || lower.contains("quando")
+            || lower.contains("onde") || lower.contains("what") || lower.contains("when") {
+            TaskKind::Factual
+        } else {
+            TaskKind::Other
+        }
+    }
+
+    pub fn is_eco_hybrid_forbidden(&self, cfg: &GatewayConfig) -> bool {
+        let s = match self {
+            TaskKind::CodeWrite => "code_write",
+            TaskKind::Refactor => "refactor",
+            TaskKind::Architecture => "architecture",
+            TaskKind::Factual => "factual",
+            TaskKind::Classification => "classification",
+            TaskKind::Summarization => "summarization",
+            TaskKind::Other => "other",
+        };
+        cfg.finops.eco_hybrid_forbidden.iter().any(|p| p == s)
+    }
+}
+
+/// Decisão concreta retornada pelo `evaluate_route_decision`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RouteDecision {
+    pub endpoint: RouteEndpoint,
+    pub task_kind: TaskKind,
+    /// Razões estruturadas (auditáveis). Cada veto vira um item.
+    pub reasons: Vec<String>,
+    /// Bloqueio total (true) ou apenas sugestão de rota alternativa (false).
+    pub hard_block: bool,
+}
+
+/// Avalia qual endpoint deve atender a requisição. Considera:
+/// 1. Whitelist/blacklist de modelos.
+/// 2. Eco-Hybrid guard (tasks `code_write`/`refactor`/`architecture` NUNCA vão para rotas gratuitas).
+/// 3. Complexity score (calculado de `task_complexity`).
+/// 4. Daily budget (consultado externamente via `IronCostBreaker`).
+pub fn evaluate_route_decision(
+    task_kind: TaskKind,
+    task_complexity: f32,
+    requested_model: &str,
+) -> RouteDecision {
+    let cfg = GatewayConfig::global();
+    let mut reasons = Vec::new();
+
+    // (1) Whitelist/blacklist check.
+    if cfg.models.blacklist.iter().any(|m| m == requested_model) {
+        return RouteDecision {
+            endpoint: cfg.routes.heavy_brain_endpoint.clone(),
+            task_kind,
+            reasons: vec![format!("modelo '{}' em blacklist", requested_model)],
+            hard_block: true,
+        };
+    }
+    let in_whitelist = cfg.models.whitelist.iter().any(|m| m == requested_model);
+    if !in_whitelist && !requested_model.is_empty() {
+        reasons.push(format!("modelo '{}' não está na whitelist", requested_model));
+    }
+
+    // (2) Eco-Hybrid guard: tasks proibidas nunca vão para free/cheap routes.
+    if task_kind.is_eco_hybrid_forbidden(&cfg) {
+        reasons.push(format!(
+            "task {:?} proibida para rotas Eco-Hybrid (eco_hybrid_forbidden)",
+            task_kind
+        ));
+        // Força heavy_brain_endpoint.
+        return RouteDecision {
+            endpoint: cfg.routes.heavy_brain_endpoint.clone(),
+            task_kind,
+            reasons,
+            hard_block: false, // Não bloqueia; só redireciona
+        };
+    }
+
+    // (3) Complexity-based routing.
+    if task_complexity <= cfg.routes.fast_worker_endpoint.max_complexity {
+        reasons.push(format!(
+            "complexity {:.2} <= {:.2} (fast_worker)",
+            task_complexity, cfg.routes.fast_worker_endpoint.max_complexity
+        ));
+        return RouteDecision {
+            endpoint: cfg.routes.fast_worker_endpoint.clone(),
+            task_kind,
+            reasons,
+            hard_block: false,
+        };
+    }
+
+    // Default: heavy_brain.
+    reasons.push(format!(
+        "complexity {:.2} > {:.2} (heavy_brain)",
+        task_complexity, cfg.routes.fast_worker_endpoint.max_complexity
+    ));
+    RouteDecision {
+        endpoint: cfg.routes.heavy_brain_endpoint.clone(),
+        task_kind,
+        reasons,
+        hard_block: false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +437,69 @@ mod tests {
         let topo = mock_topology(Some(64.0), 16.0);
         let tier = select_optimal_route(0.9, 500, &topo);
         assert_eq!(tier, RoutingTier::Tier2);
+    }
+
+    // ========================================================================
+    // Marco I · v6.1 — Testes do novo evaluate_route_decision
+    // ========================================================================
+
+    #[test]
+    fn test_classify_code_write_task() {
+        assert_eq!(
+            TaskKind::classify_from_prompt("Please implement a function to parse JSON"),
+            TaskKind::CodeWrite
+        );
+    }
+
+    #[test]
+    fn test_classify_factual_task() {
+        assert_eq!(
+            TaskKind::classify_from_prompt("What is the capital of France?"),
+            TaskKind::Factual
+        );
+    }
+
+    #[test]
+    fn test_classify_refactor_task() {
+        assert_eq!(
+            TaskKind::classify_from_prompt("Refactor this module to use async/await"),
+            TaskKind::Refactor
+        );
+    }
+
+    #[test]
+    fn test_classify_summarization_task() {
+        assert_eq!(
+            TaskKind::classify_from_prompt("Summarize this paper in 200 words"),
+            TaskKind::Summarization
+        );
+    }
+
+    #[test]
+    fn test_route_decision_redirects_code_write_to_heavy_brain() {
+        // Sem depender do JSONC: usa safe_default (forbidden inclui code_write).
+        let decision = evaluate_route_decision(TaskKind::CodeWrite, 0.5, "anthropic/claude-3-5-haiku");
+        assert!(
+            decision.reasons.iter().any(|r| r.contains("proibida para rotas Eco-Hybrid")),
+            "code_write deve ser bloqueado para eco-hybrid: {:?}", decision.reasons
+        );
+    }
+
+    #[test]
+    fn test_route_decision_blocks_blacklisted_model() {
+        // O safe_default coloca "gpt-3.5-turbo-instruct" na blacklist.
+        let decision = evaluate_route_decision(TaskKind::Factual, 0.1, "gpt-3.5-turbo-instruct");
+        assert!(decision.hard_block, "blacklist deve gerar hard_block");
+        assert!(decision.reasons[0].contains("blacklist"));
+    }
+
+    #[test]
+    fn test_route_decision_simple_task_uses_fast_worker() {
+        let decision = evaluate_route_decision(TaskKind::Factual, 0.1, "anthropic/claude-3-5-haiku");
+        assert!(
+            decision.endpoint.model.contains("haiku")
+                || decision.endpoint.estimated_cost_per_1m_usd <= 1.0,
+            "factual simples deve cair em fast_worker: {}", decision.endpoint.model
+        );
     }
 }

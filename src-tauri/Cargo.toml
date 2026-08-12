@@ -10,71 +10,92 @@ members = ["crates/anthropophagy"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "souls_mc_lib"
-crate-type = ["rlib"]
-
-[build-dependencies]
-tauri-build = { version = "=2.6.3", features = [] }
-
-[dependencies]
-tauri = { version = "=2.11.5", features = ["tray-icon"], optional = true }
-tauri-plugin-opener = { version = "=2.5.4", optional = true }
+# =============================================================================
+# ADR-030 (Módulo 4): Workspace Dependency Pinning Rígido
+# =============================================================================
+# Todas as deps comuns são pinadas com '=' aqui (SSOT do workspace), garantindo:
+# 1. Árvore de resolução unificada entre `souls_mc` e `crates/anthropophagy`.
+# 2. Redução de duplicação transitória no L3 da CPU Host (cache de artefatos).
+# 3. Build incremental mais rápido (cargo reusa o mesmo rmeta por crate).
+# 4. Defesa em profundidade contra drift silencioso de versões.
+# Membros do workspace DEVEM referenciar via `{ workspace = true }` ao invés
+# de duplicar specs. Deps platform-specific/optional ficam inline no manifest
+# do crate que as consome.
+# =============================================================================
+[workspace.dependencies]
+# --- Core / Sync primitives ---
 serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.149"  # SOULS-CANIBALIZED Fase 2.5: alinhar com pin do lean-ctx
+# ADR-030 + Marco I · v6.1: `preserve_order` garante que a ordem das chaves no
+# JSONC canônico (`.souls/config/souls-gateway.jsonc`) seja preservada no parse
+# — necessário para garantir que Z1 (System Prompt) e Z2 (Tool Schemas) sejam
+# serializados na mesma ordem byte-a-byte em chamadas consecutivas, honrando
+# o contrato de Prefix Caching dos provedores upstream.
+serde_json = { version = "=1.0.149", features = ["preserve_order"] }
+regex = "=1.12.4"
+url = "=2.5.8"
+toml = "=1.1.4"
+dunce = "=1.0.5"
+rustc-hash = "=2.1.3"
+tinyrand = "=0.5.0"
+uuid = { version = "=1.23.4", features = ["v4"] }
+sha2 = "=0.10.9"
+walkdir = "=2.5.0"
+dashmap = "6.1.0"
+dotenvy = "=0.15.7"
+enable-ansi-support = "=0.2.1"
+ignore = "=0.4.25"
+
+# --- Async runtime / networking ---
+tokio = { version = "=1.51.1", features = ["full"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
+
+# --- Observability / logging ---
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+thiserror = { version = "=2.0.19", default-features = false }
+sysinfo = "=0.30.13"
+
+# --- Persistence / SQL / Vectors ---
+rusqlite = { version = "=0.39.0", features = ["bundled"] }
+sqlparser = "=0.62.0"
+tempfile = "=3.27.0"
+zstd = "=0.13.3"
+
+# --- Git / VCS ---
+gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
+
+# --- Parsing / Encoding ---
+oxc = { version = "=0.120.0", features = ["ast_visit"] }
+quick-xml = "=0.39.4"
+astral-tl = "=0.7.11"
+bumpalo = { version = "=3.20.3", features = ["collections"] }
+memmap2 = "=0.9.11"
+pulldown-cmark = "=0.13.4"
+jsonrepair = "=0.1.0"
 httparse = "=1.10.1"
 jsonwebtoken = { version = "=10.4.0", default-features = false, features = ["use_pem", "rust_crypto"] }
-regex = "=1.12.4"
-pulldown-cmark = "=0.13.4"
-jsonrepair = "=0.1.0"  # SOULS-CANIBALIZED Marco 4.9.2: parser recursivo estrutural para cura de JSON malformado (sem `.replace` cego que corromperia strings literais; ADR-030 Módulo 4 pin rígido)
-# SOULS-CANIBALIZED Fase 3: lean-ctx EXPURO do Cargo.toml.
-# Canibalização Tipo A: extraímos a "Alma Matemática" (dot-flattening, ANSI filter,
-# Myers diff) como código NATIVO em src-tauri/src/cognition/lean_vacuum/.
-# A pasta third_party/lean-ctx/ permanece como cadáver READ-ONLY apenas para consulta.
-# (Não usar `path = "third_party/lean-ctx"` — SOULS dita as regras.)
-tinyrand = "=0.5.0"
-tokio = { version = "=1.51.1", features = ["full"] }  # SOULS-CANIBALIZED Fase 2.5: downgrade para pin do lean-ctx (1.52.3 quebrou path dep)
-sysinfo = "=0.30.13"
-thiserror = { version = "=2.0.19", default-features = false }  # SOULS-CANIBALIZED Marco 4.2.2: pin rígido v2.0.19 (unifica thiserror v2 no workspace; evita regressões de std/no_std)
-ignore = "=0.4.25"  # SOULS-CANIBALIZED Fase 2.5: alinhar com pin do lean-ctx
-dunce = "=1.0.5"
-tracing = "=0.1.44"
-url = "=2.5.8"
-sha2 = "=0.10.9"
-toml = "=1.1.4"  # SOULS-CANIBALIZED Marco 4.2.2: pin rígido v1.1.4 (alinhado com spec 1.1.0 e parsers toml_writer/toml_parser)
+# --- Marco I · v6.1: Aho-Corasick para PII redaction determinística linear ---
+# Exceção ADR-030 (canibalização > dependência) justificada por requisito
+# explícito do Marco I: algoritmo deterministicamente linear na CPU para
+# mapear PII (caminhos, chaves, credenciais) em tokens opacos reversíveis.
+# `aho-corasick = 1.1` é a referência canônica em Rust (BurntSushi).
+aho-corasick = "=1.1.4"
+
+# --- Tokenizers / NLP ---
 tiktoken = "=3.5.1"
 tokenizers = "=0.21.4"
-oxc = { version = "=0.120.0", features = ["ast_visit"] }
-astral-tl = "=0.7.11"
-gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
-quick-xml = "=0.39.4"
-reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
-rusqlite = { version = "=0.39.0", features = ["bundled"] }  # SOULS-CANIBALIZED Fase 2.5: downgrade 0.40.1→0.39.0 (libsqlite3-sys 0.37.0, sem cfg_select! unstable em rustc 1.94.1)
-lancedb = { version = "0.30.0", default-features = false }
-arrow-array = "=58.4.0"
-arrow-schema = "=58.4.0"
-arrow-row = "=58.4.0"
-arrow-cast = "=58.4.0"
 
-futures-util = "=0.3.31"
-sqlparser = "=0.62.0"
+# --- WASM Sandbox ---
+wasmtime = { version = "=29.0.0", features = ["wat"] }
+wasmtime-wasi = "=29.0.0"
 
-tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
-tempfile = "=3.27.0"
-dotenvy = "=0.15.7"
-quote = "=1.0.46"
+# --- Tree-sitter ---
 tree-sitter = "=0.26.10"
 tree-sitter-c-sharp = "=0.23.5"
 tree-sitter-yaml = "=0.7.2"
-bumpalo = { version = "=3.20.3", features = ["collections"] }
-memmap2 = "=0.9.11"
-# html-to-markdown-rs removido — extração de texto via astral-tl zero-copy
-enable-ansi-support = "=0.2.1"
-uuid = { version = "=1.23.4", features = ["v4"] }
-windows-sys = { version = "=0.61.2", features = [  # SOULS-CANIBALIZED Marco 4.2.2: unificação rígida v0.61.2 (alinhado com tokio 1.51, gix, tempfile e which; erradica duplicação em RAM - ADR-030)
+
+# --- Windows API (unified v0.61.2 - ADR-030) ---
+windows-sys = { version = "=0.61.2", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Authorization",
@@ -88,31 +109,121 @@ windows-sys = { version = "=0.61.2", features = [  # SOULS-CANIBALIZED Marco 4.2
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_SystemInformation",
 ] }
-nvml-wrapper = "0.10.0"
-rustc-hash = "=2.1.3"
+
+# --- Arrow (vector / LanceDB stack) ---
+arrow-array = "=58.4.0"
+arrow-schema = "=58.4.0"
+arrow-row = "=58.4.0"
+arrow-cast = "=58.4.0"
+
+# --- Misc utilities ---
+futures-util = "=0.3.31"
+similar = "=2.7.0"
 which = "=6.0.3"
-zstd = "=0.13.3"
-walkdir = "=2.5.0"
-dashmap = "6.1.0"
-similar = "=2.7.0"  # SOULS-CANIBALIZED Fase 3: Myers diff nativo (homologada; antes vinha como dep transitiva do lean-ctx)
-wasmtime = { version = "=29.0.0", features = ["wat"] }
-wasmtime-wasi = "=29.0.0"
+quote = "=1.0.46"
+nvml-wrapper = "0.10.0"
 
-llama-cpp-2 = { version = "0.1", optional = true, features = ["cuda"] }
-mistralrs = { version = "0.8", optional = true }
-llguidance = { version = "1.7", optional = true }
-
-[target.'cfg(windows)'.dependencies]
+# --- Tauri (only consumed by `souls_mc`; flag `optional` é adicionada no consumidor). ---
+tauri = { version = "=2.11.5", features = ["tray-icon"] }
+tauri-plugin-opener = { version = "=2.5.4" }
+tauri-build = { version = "=2.6.3" }
 windows-projfs = "=0.1.8"
 
-[patch.crates-io]
-crc32fast = { path = "vendor/crc32fast" }
-llama-cpp-2 = { path = "vendor/llama-cpp-2" }
-llama-cpp-sys-2 = { path = "vendor/llama-cpp-sys-2" }
+# --- ML Inference (pinned; flag `optional` é adicionada nos consumidores). ---
+llama-cpp-2 = { version = "0.1", features = ["cuda"] }
+mistralrs = "0.8"
+llguidance = "1.7"
+
+# --- Test-only ---
+mockito = "=1.7.2"
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "souls_mc_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+# Resolve tudo via workspace SSOT (= pinning).
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+url = { workspace = true }
+toml = { workspace = true }
+dunce = { workspace = true }
+rustc-hash = { workspace = true }
+tinyrand = { workspace = true }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+walkdir = { workspace = true }
+dashmap = { workspace = true }
+dotenvy = { workspace = true }
+enable-ansi-support = { workspace = true }
+ignore = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+sysinfo = { workspace = true }
+rusqlite = { workspace = true }
+sqlparser = { workspace = true }
+tempfile = { workspace = true }
+zstd = { workspace = true }
+gix = { workspace = true }
+oxc = { workspace = true }
+quick-xml = { workspace = true }
+astral-tl = { workspace = true }
+bumpalo = { workspace = true }
+memmap2 = { workspace = true }
+pulldown-cmark = { workspace = true }
+jsonrepair = { workspace = true }
+httparse = { workspace = true }
+jsonwebtoken = { workspace = true }
+aho-corasick = { workspace = true }
+tiktoken = { workspace = true }
+tokenizers = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-c-sharp = { workspace = true }
+tree-sitter-yaml = { workspace = true }
+windows-sys = { workspace = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+arrow-row = { workspace = true }
+arrow-cast = { workspace = true }
+futures-util = { workspace = true }
+similar = { workspace = true }
+which = { workspace = true }
+quote = { workspace = true }
+nvml-wrapper = { workspace = true }
+# lancedb não está no workspace (mantido inline com version pinado).
+lancedb = { version = "0.30.0", default-features = false }
+# tauri (optional) e plurais específicos do crate principal.
+tauri = { workspace = true, optional = true }
+tauri-plugin-opener = { workspace = true, optional = true }
+# ML inference backends (gated por features; workspace pin impõe versão rígida).
+llama-cpp-2 = { workspace = true, optional = true }
+mistralrs = { workspace = true, optional = true }
+llguidance = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-projfs = { workspace = true }
+
+# [patch.crates-io] removido (C5/Marco 4.10.1): os paths `vendor/crc32fast`,
+# `vendor/llama-cpp-2` e `vendor/llama-cpp-sys-2` não existem mais na arvore
+# (deps do vendor foram canibalizadas/canonizadas). O resolver do cargo agora
+# busca `crc32fast` e o stack `llama-cpp-*` diretamente do crates.io, sob
+# os pins `=` do workspace.
 
 [dev-dependencies]
-mockito = "=1.7.2"
-tempfile = "=3.27.0"
+mockito = { workspace = true }
+tempfile = { workspace = true }
 
 [features]
 default = []
@@ -133,7 +244,7 @@ required-features = ["tauri-app"]
 
 [[bin]]
 name = "souls_mcp_server"
-path = "src/bin/souls_mcp_server.rs"
+path = "src/bin/souls_mcp_server/main.rs"
 
 [[bin]]
 name = "souls_vanguard_worker"
@@ -173,4 +284,3 @@ codegen-units = 1
 strip = "symbols"
 opt-level = 3
 incremental = false
-

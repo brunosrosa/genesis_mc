@@ -26,6 +26,15 @@ pub enum CognitiveError {
 
     #[error("Operação negada pelo HITL: {0}")]
     HitlDenied(String),
+
+    #[error("Execução não confiável bloqueada: {0}")]
+    UntrustedExecutionBlocked(String),
+
+    // SOULS V6 MARCO 5.16.0: SDD Cascade Orchestrator (sdd.rs)
+    // Emite quando a divergência de hash SHA-256 em REQUIREMENTS.md
+    // dispara a invalidação atômica dos documentos downstream.
+    #[error("Violação da cascata documental SDD: {0} documento(s) downstream rebaixado(s)")]
+    SddCascadeViolation(usize),
 }
 
 impl From<rusqlite::Error> for CognitiveError {
@@ -37,5 +46,20 @@ impl From<rusqlite::Error> for CognitiveError {
 impl From<serde_json::Error> for CognitiveError {
     fn from(e: serde_json::Error) -> Self {
         CognitiveError::InvalidPayload(e.to_string())
+    }
+}
+
+// SOULS V6 MARCO 5.16.0: canibalização dos mapeamentos de I/O do FS
+// e de regex para o catálogo canônico de CognitiveError. Permite que o
+// `?` operator funcione transparente em todo o módulo sdd.rs.
+impl From<std::io::Error> for CognitiveError {
+    fn from(e: std::io::Error) -> Self {
+        CognitiveError::GraphError(format!("I/O do FS: {e}"))
+    }
+}
+
+impl From<regex::Error> for CognitiveError {
+    fn from(e: regex::Error) -> Self {
+        CognitiveError::InvalidPayload(format!("regex interna: {e}"))
     }
 }
