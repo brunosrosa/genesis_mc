@@ -349,7 +349,7 @@ impl<'a> EpistemicProber for LlamaCppEpistemicProber<'a> {
         let temperature = compute_temperature(&req.prompt);
 
         // 5. Softmax numericamente estável (subtrai max antes de exp).
-        let probs = numerically_stable_softmax(raw_logits, temperature)?;
+        let probs = numerically_stable_softmax(&raw_logits, temperature)?;
 
         // 6. Entropia de Shannon sobre Top-K normalizada por log2(K).
         let ambiguidade = shannon_top_k_normalized(&probs, EPISTEMIC_TOP_K);

@@ -362,4 +362,84 @@ mod tests {
         assert_eq!(engine_critical.max_search_depth(), 7);
         assert!(engine_critical.is_hitl_authorized());
     }
+
+    // ============================================================================
+    // TDD Marco II (2026-08-12): test_thinking_hitl_extension_to_7
+    // Cobre a CURA DO DISJUNTOR COGNITIVO. Garante que `hitl_authorized: Some(true)`
+    // no payload estica o teto de 5 → 7 pensamentos sem disparar
+    // `OverthinkingThresholdBreached` no 6º e 7º pensamentos. O 8º pensamento,
+    // mesmo sob HITL, deve ser abortado pelo disjuntor (teto rígido ADR-028).
+    // ============================================================================
+
+    /// Construtor explícito para o teste HITL (precisa do flag `hitl_authorized`).
+    fn regular_with_hitl(n: u32, last: bool, hitl: Option<bool>) -> ThoughtData {
+        ThoughtData {
+            thought: format!("pensamento socrático #{n}"),
+            thought_number: n,
+            total_thoughts: HITL_EXTENDED_LIMIT, // 7
+            next_thought_needed: !last,
+            is_revision: None,
+            revises_thought: None,
+            branch_from_thought: None,
+            branch_id: None,
+            needs_more_thoughts: None,
+            hitl_authorized: hitl,
+        }
+    }
+
+    #[test]
+    fn test_thinking_hitl_extension_to_7() {
+        // Setup: teto default = 5, sem HITL.
+        let mut engine = ThinkingEngine::new();
+        assert_eq!(engine.current_limit(), DEFAULT_HARD_LIMIT);
+        assert_eq!(engine.current_limit(), 5);
+        assert!(!engine.is_hitl_authorized());
+
+        // 1) Empurrar 5 pensamentos regulares dentro do teto default.
+        for i in 1..=DEFAULT_HARD_LIMIT {
+            let r = engine.push_thought(regular_with_hitl(i, i == DEFAULT_HARD_LIMIT, None));
+            assert!(
+                r.is_ok(),
+                "pensamento #{i} deve ser aceito dentro do teto default {DEFAULT_HARD_LIMIT}"
+            );
+        }
+        assert_eq!(engine.thought_count(), 5);
+        assert_eq!(engine.current_limit(), 5);
+        assert!(!engine.is_hitl_authorized());
+
+        // 2) 6º pensamento COM `hitl_authorized: Some(true)` DEVE ser aceito
+        //    e esticar o teto para 7 (HITL late-binding em `push_thought`).
+        let t6 = regular_with_hitl(6, false, Some(true));
+        let r6 = engine.push_thought(t6);
+        assert!(
+            r6.is_ok(),
+            "6º pensamento com HITL DEVE ser aceito sem disparar disjuntor"
+        );
+        assert_eq!(engine.thought_count(), 6);
+        assert_eq!(engine.current_limit(), HITL_EXTENDED_LIMIT);
+        assert_eq!(engine.current_limit(), 7);
+        assert!(engine.is_hitl_authorized(), "HITL flag deve estar ativo após 6º thought");
+
+        // 3) 7º pensamento (sem flag explícito) também DEVE ser aceito.
+        let t7 = regular_with_hitl(7, true, None);
+        let r7 = engine.push_thought(t7);
+        assert!(
+            r7.is_ok(),
+            "7º pensamento DEVE ser aceito sob teto estendido HITL"
+        );
+        assert_eq!(engine.thought_count(), 7);
+
+        // 4) 8º pensamento DEVE ser abortado pelo disjuntor (teto rígido 7).
+        let t8 = regular_with_hitl(8, true, None);
+        let r8 = engine.push_thought(t8);
+        assert!(
+            r8.is_err(),
+            "8º pensamento DEVE disparar OverthinkingThresholdBreached"
+        );
+        let err = r8.unwrap_err();
+        assert!(
+            matches!(err, CognitiveError::OverthinkingThresholdBreached { actual: 8, max: 7 }),
+            "esperado OverthinkingThresholdBreached {{ actual: 8, max: 7 }}, obteve: {err:?}"
+        );
+    }
 }
