@@ -521,8 +521,8 @@ const FIREWALL_BLOCKED_EXACT: &[&str] = &[
     "passwd",
 ];
 const FIREWALL_BLOCKED_SUFFIXES: &[&str] = &[
-    ".db", ".sqlite", ".sqlite3", ".key", ".pem", ".crt", ".cer", ".pfx", ".p12", ".keystore",
-    ".der", ".asc", ".gpg", ".pgp", ".sig", ".secret",
+    ".env", ".db", ".sqlite", ".sqlite3", ".key", ".pem", ".crt", ".cer", ".pfx", ".p12",
+    ".keystore", ".der", ".asc", ".gpg", ".pgp", ".sig", ".secret",
 ];
 pub fn validate_and_canonicalize_path(raw: &str) -> Result<PathBuf, RpcError> {
     let trimmed = raw.trim();

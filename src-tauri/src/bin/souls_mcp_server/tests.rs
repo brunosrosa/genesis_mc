@@ -364,7 +364,7 @@ async fn test_firewall_directory_traversal() {
         }
     });
     let resp = super::handle_mcp(env_req).await.expect("deve retornar erro");
-    assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32015);
+    assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32602);
 
     let db_req = json!({
         "jsonrpc": "2.0",
@@ -380,7 +380,7 @@ async fn test_firewall_directory_traversal() {
         }
     });
     let resp = super::handle_mcp(db_req).await.expect("deve retornar erro");
-    assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32015);
+    assert_eq!(resp["error"]["code"].as_i64().unwrap(), -32602);
 }
 
 #[tokio::test]
@@ -3740,7 +3740,9 @@ async fn test_atomic_souls_edit_concurrency() {
 #[tokio::test]
 async fn test_firewall_directory_traversal_protection() {
     use super::validate_and_canonicalize_path;
-    // 1) Directory traversal explícito.
+    // 1) Directory traversal explícito. O novo Firewall MARCO III checa TODOS
+    //    os componentes, então `passwd` pode ser pego pelo blocklist exato
+    //    ANTES do check de `..`. Ambos os motivos sao aceitaveis para bloqueio.
     let traversal_err = validate_and_canonicalize_path("../../etc/passwd")
         .expect_err("directory traversal deve ser bloqueado");
     assert_eq!(
@@ -3749,8 +3751,22 @@ async fn test_firewall_directory_traversal_protection() {
     );
     assert!(
         traversal_err.message.contains("Traversal")
-            || traversal_err.message.contains("traversal"),
-        "mensagem deve mencionar o bloqueio de traversal: {traversal_err:?}"
+            || traversal_err.message.contains("traversal")
+            || traversal_err.message.contains("sensivel")
+            || traversal_err.message.contains("blocklist"),
+        "mensagem deve mencionar bloqueio (traversal OU blocklist sensivel): {traversal_err:?}"
+    );
+    // 1.b) Directory traversal SEM componente sensivel — deve cair no check
+    //      de `..` puro. Usamos `safe/dir/../../evil` mas precisamos de um
+    //      caminho que NAO passe pela canonizacao. Como `..` é bloqueado em
+    //      qualquer posicao, validamos via raw string com `..` em qualquer ponto.
+    let traversal_plain = validate_and_canonicalize_path("../../safe/file.txt")
+        .expect_err("traversal com dir seguro deve ser bloqueado por '..'");
+    assert_eq!(traversal_plain.code, -32602);
+    assert!(
+        traversal_plain.message.contains("Traversal")
+            || traversal_plain.message.contains("traversal"),
+        "traversal puro deve mencionar 'Traversal': {traversal_plain:?}"
     );
     // 2) Variante Windows de traversal.
     let win_traversal = validate_and_canonicalize_path("..\\..\\Windows\\System32\\config\\SAM")
