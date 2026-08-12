@@ -25,7 +25,12 @@ members = ["crates/anthropophagy"]
 [workspace.dependencies]
 # --- Core / Sync primitives ---
 serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.149"
+# ADR-030 + Marco I · v6.1: `preserve_order` garante que a ordem das chaves no
+# JSONC canônico (`.souls/config/souls-gateway.jsonc`) seja preservada no parse
+# — necessário para garantir que Z1 (System Prompt) e Z2 (Tool Schemas) sejam
+# serializados na mesma ordem byte-a-byte em chamadas consecutivas, honrando
+# o contrato de Prefix Caching dos provedores upstream.
+serde_json = { version = "=1.0.149", features = ["preserve_order"] }
 regex = "=1.12.4"
 url = "=2.5.8"
 toml = "=1.1.4"
@@ -69,6 +74,12 @@ pulldown-cmark = "=0.13.4"
 jsonrepair = "=0.1.0"
 httparse = "=1.10.1"
 jsonwebtoken = { version = "=10.4.0", default-features = false, features = ["use_pem", "rust_crypto"] }
+# --- Marco I · v6.1: Aho-Corasick para PII redaction determinística linear ---
+# Exceção ADR-030 (canibalização > dependência) justificada por requisito
+# explícito do Marco I: algoritmo deterministicamente linear na CPU para
+# mapear PII (caminhos, chaves, credenciais) em tokens opacos reversíveis.
+# `aho-corasick = 1.1` é a referência canônica em Rust (BurntSushi).
+aho-corasick = "=1.1.4"
 
 # --- Tokenizers / NLP ---
 tiktoken = "=3.5.1"
@@ -173,6 +184,7 @@ pulldown-cmark = { workspace = true }
 jsonrepair = { workspace = true }
 httparse = { workspace = true }
 jsonwebtoken = { workspace = true }
+aho-corasick = { workspace = true }
 tiktoken = { workspace = true }
 tokenizers = { workspace = true }
 wasmtime = { workspace = true }

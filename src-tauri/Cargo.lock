@@ -11194,6 +11194,7 @@ dependencies = [
 name = "souls_mc"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "arrow-array",
  "arrow-cast",
  "arrow-row",

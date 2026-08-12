@@ -7,6 +7,13 @@ pub mod model_manager;
 pub mod headroom_engine;
 pub mod mcp_transport; // SOULS-CANIBALIZED: trait McpTransport + LeanVacuum
 
+// Marco I · v6.1 — Agnostic L7 Gateway (componentes canibalizados)
+pub mod gateway_config; // SOULS-CANIBALIZED Marco I: JSONC parser + GatewayConfig SSOT
+pub mod peak_ewma; // SOULS-CANIBALIZED Marco I: PeakEWMA α=0.3 + lock-free ring buffer
+pub mod sticky_router; // SOULS-CANIBALIZED Marco I: Sticky routing por session_id (Prefix Cache)
+pub mod pii_redactor; // SOULS-CANIBALIZED Marco I: Aho-Corasick PII redaction (default disabled)
+pub mod telemetry_dispatcher; // SOULS-CANIBALIZED Marco I: MPSC → SQLite WAL V5 (worker thread dedicada)
+
 #[cfg(feature = "llama_backend")]
 pub mod llama_engine;
 
