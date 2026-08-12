@@ -36,6 +36,7 @@ pub struct GatewayConfig {
     pub finops: FinOpsConfig,
     pub telemetry: TelemetryConfig,
     pub l7_shield: L7ShieldConfig,
+    pub mcp_server: McpServerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,6 +107,25 @@ pub struct L7ShieldConfig {
     pub pii_redaction_enabled: bool,
     pub pii_patterns: Vec<String>,
     pub response_healing_enabled: bool,
+}
+
+/// Configuração do subprocesso MCP local (`souls_mcp_server`).
+/// O proxy é o dono do ciclo de vida do filho: spawn no boot, SIGKILL no drop.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    /// Caminho do executável (relativo a `src-tauri/target/debug/` ou absoluto).
+    /// Aceita `${SOULS_MCP_BIN}` como env var para override.
+    pub executable_path: String,
+    /// Argumentos CLI passados ao subprocesso (ex: `["--transport", "stdio"]`).
+    pub args: Vec<String>,
+    /// Working directory do subprocesso. Vazio = herda do proxy.
+    pub working_dir: String,
+    /// Se `true`, o proxy envia SIGKILL atômico ao filho no shutdown/drop,
+    /// eliminando processos zumbis na RAM Host.
+    pub kill_on_drop: bool,
+    /// Timeout (ms) para considerar o filho "lido" (handshake inicial).
+    /// Se 0, sem timeout — proxy confia no subprocesso acordar sozinho.
+    pub handshake_timeout_ms: u64,
 }
 
 // ============================================================================
@@ -245,6 +265,15 @@ impl GatewayConfig {
                 ],
                 response_healing_enabled: true,
             },
+            mcp_server: McpServerConfig {
+                // Default seguro: spawn desabilitado até o JSONC real ser carregado.
+                // Path vazio = proxy aborta o spawn com erro explícito.
+                executable_path: String::new(),
+                args: vec!["--transport".to_string(), "stdio".to_string()],
+                working_dir: String::new(),
+                kill_on_drop: true,
+                handshake_timeout_ms: 5_000,
+            },
         }
     }
 
@@ -257,6 +286,10 @@ impl GatewayConfig {
         expand_env_in_provider(&mut self.byok.gemini);
         self.telemetry.sqlite_path =
             expand_env_var(&self.telemetry.sqlite_path.clone());
+        self.mcp_server.executable_path =
+            expand_env_var(&self.mcp_server.executable_path.clone());
+        self.mcp_server.working_dir =
+            expand_env_var(&self.mcp_server.working_dir.clone());
     }
 
     fn validate(&self) -> Result<(), String> {
@@ -290,20 +323,57 @@ fn expand_env_in_provider(p: &mut ProviderKey) {
     p.base_url = expand_env_var(&p.base_url);
 }
 
+/// Expande **todas** as ocorrências de `${VAR}` em `input` usando `std::env::var`.
+///
+/// Itera o `find` em loop até esgotar todas as substituições, suportando
+/// strings compostas como `"${VAR1} ${VAR2}"` onde múltiplas vars aparecem
+/// na mesma string. Se uma var não estiver definida no ambiente, mantém
+/// o literal `${VAR}` inalterado (fail-soft: não aborta o boot).
+///
+/// Custo: O(n·k) onde n = comprimento da string, k = número de vars.
+/// Strings sem `${` retornam `Cow::Borrowed` (zero alocação).
 fn expand_env_var(input: &str) -> String {
-    if let Some(start) = input.find("${") {
-        if let Some(end) = input[start..].find('}') {
-            let var_name = &input[start + 2..start + end];
-            if let Ok(val) = std::env::var(var_name) {
-                let mut out = String::with_capacity(input.len() + val.len());
-                out.push_str(&input[..start]);
+    // Fast-path: sem `${` → zero alocação.
+    if !input.contains("${") {
+        return input.to_string();
+    }
+
+    let mut out = String::with_capacity(input.len());
+    let mut cursor = 0;
+
+    while cursor < input.len() {
+        // Procura o próximo `${` a partir de `cursor`.
+        let rest = &input[cursor..];
+        let Some(rel_start) = rest.find("${") else {
+            // Sem mais `${` → copia o resto verbatim e sai.
+            out.push_str(rest);
+            break;
+        };
+        let abs_start = cursor + rel_start;
+        // Copia tudo antes do `${` para `out`.
+        out.push_str(&input[cursor..abs_start]);
+
+        // Procura o `}` correspondente.
+        let after_dollar = &input[abs_start + 2..];
+        let Some(rel_end) = after_dollar.find('}') else {
+            // `${` sem `}` de fechamento — copia verbatim e sai.
+            out.push_str(&input[abs_start..]);
+            break;
+        };
+
+        let var_name = &after_dollar[..rel_end];
+        match std::env::var(var_name) {
+            Ok(val) => {
                 out.push_str(&val);
-                out.push_str(&input[start + end + 1..]);
-                return out;
+            }
+            Err(_) => {
+                // Fail-soft: var indefinida → mantém `${VAR}` literal.
+                out.push_str(&input[abs_start..abs_start + 2 + rel_end + 1]);
             }
         }
+        cursor = abs_start + 2 + rel_end + 1;
     }
-    input.to_string()
+    out
 }
 
 fn default_config_path() -> PathBuf {
@@ -428,17 +498,64 @@ fn strip_trailing_commas(input: &str) -> String {
 // Hot-reload (ADR-010 — escrita atômica via tmp + rename)
 // ============================================================================
 
-/// Recarrega o config do disco. Chamado em `SIGHUP` ou em hot-reload
-/// explícito. Usa `atomic-write-file` (tmp + rename) para garantir
-/// que readers concorrentes nunca vejam estado parcial.
+/// Recarrega o `GatewayConfig` do disco e valida sua integridade.
+///
+/// ## ⚠️ RESTRIÇÃO ARQUITETURAL CRÍTICA (Marco I v6.1.0)
+///
+/// O `GATEWAY_CONFIG` é um **`OnceLock<GatewayConfig>`** imutável após o
+/// primeiro `set()`. Portanto, **esta função NÃO aplica o novo config ao
+/// processo em execução**. A nova config é validada, seu conteúdo é logado
+/// (incluindo o `version`), mas ela permanece inerte até o próximo boot.
+///
+/// Em produção, **recarregar config exige reinício completo do binário
+/// `agentgateway_tcp_proxy.exe`** (fail-closed por design — evita que
+/// partes do runtime operem com config antiga enquanto outras já viram
+/// a nova, o que poderia invalidar invariantes do Sticky Router, FinOps
+/// e IronCostBreaker).
+///
+/// ## Por que NÃO usar `RwLock<GatewayConfig>` (decisão registrada)
+///
+/// Alternativa considerada: trocar o `OnceLock` por um `RwLock` para
+/// hot-reload. **Rejeitada** pelos seguintes motivos:
+///
+/// 1. **Blast radius:** 9 call sites em 6 módulos
+///    ([`pareto_bandit`], [`iron_cost`], [`telemetry_dispatcher`],
+///    [`subprocess_guard`], [`sticky_router`], [`pii_redactor`],
+///    [`agentgateway_tcp_proxy`]) seriam refatorados para usar
+///    `read().unwrap()` — risco SDC alto.
+/// 2. **Inconsistência de leitura:** Sticky Router, IronCostBreaker e
+///    FinOps fariam reads sob lock durante o hot-path de cada request,
+///    adicionando contenção de `RwLock` ao Tokio. O P99 de latência
+///    sofre mesmo em leituras (cache line bouncing).
+/// 3. **Atomicidade de boot:** O `OnceLock` garante que toda thread vê
+///    a mesma config. Com `RwLock`, um reload em T1 poderia fazer T2
+///    observar config parcialmente inicializada.
+///
+/// ## Workaround para Dev/Staging
+///
+/// Para validar mudanças de config sem reiniciar o binário:
+/// - Use `validate_jsonc_file(path)` (puro: parse + validate, sem apply).
+/// - Aplique mudanças via deploy (restart supervisionado por
+///   `boot.ps1`).
+///
+/// ## Returns
+///
+/// - `Ok(())` se o arquivo foi parseado e validado com sucesso.
+/// - `Err(msg)` se o JSONC tem erro de sintaxe, vars indefinidas ou
+///   invariantes violados (ex: `peak_ewma_alpha` fora de `[0.0, 1.0]`).
+///
+/// **Nota:** mesmo em caso de `Ok(())`, o config ativo no `global()` é o
+/// carregado no boot original. Use esta função apenas como teste de
+/// "dry-run" da config.
 pub fn reload() -> Result<(), String> {
     let path = default_config_path();
     let new_cfg = GatewayConfig::load_from_path(&path)?;
-    // Não há setter thread-safe no `OnceLock` → reinicialização só funciona
-    // se o `OnceLock` ainda não foi tocado. Em produção, recarregar exige
-    // reinício do binário (fail-closed por design — Marco I v6.1.0).
+    // Validação já foi executada em `load_from_path` — logamos o resumo
+    // da nova config para o operador auditar antes do próximo restart.
     tracing::warn!(
-        "GatewayConfig recarregado de {} (versão {}). Reinicialize o proxy para aplicar.",
+        target: "gateway_config",
+        "GatewayConfig::reload: NOVA config VALIDADA de {} (versão {}). \
+         ATENÇÃO: ela NÃO está ativa. Reinicie o agentgateway para aplicar.",
         path.display(),
         new_cfg.version
     );
@@ -510,6 +627,49 @@ mod tests {
     fn test_expand_env_var_keeps_literal_for_unknown() {
         let out = expand_env_var("${SOULS_UNDEFINED_VAR_99999}");
         assert_eq!(out, "${SOULS_UNDEFINED_VAR_99999}");
+    }
+
+    /// TDD — Issue 1: `expand_env_var` deve resolver **todas** as ocorrências
+    /// de `${VAR}` em uma única string, não apenas a primeira. Antes do fix,
+    /// `"${A} ${B}"` resolvia só `${A}`, deixando `${B}` literal.
+    #[test]
+    fn test_expand_env_var_resolves_multiple_vars() {
+        std::env::set_var("SOULS_TEST_A", "alpha_val");
+        std::env::set_var("SOULS_TEST_B", "beta_val");
+        let out = expand_env_var("${SOULS_TEST_A} ${SOULS_TEST_B}");
+        assert_eq!(out, "alpha_val beta_val");
+        std::env::remove_var("SOULS_TEST_A");
+        std::env::remove_var("SOULS_TEST_B");
+    }
+
+    /// TDD — Edge case: 3+ vars adjacentes, sem espaço entre elas.
+    #[test]
+    fn test_expand_env_var_resolves_three_consecutive_vars() {
+        std::env::set_var("SOULS_TEST_X", "X");
+        std::env::set_var("SOULS_TEST_Y", "Y");
+        std::env::set_var("SOULS_TEST_Z", "Z");
+        let out = expand_env_var("${SOULS_TEST_X}${SOULS_TEST_Y}${SOULS_TEST_Z}");
+        assert_eq!(out, "XYZ");
+        std::env::remove_var("SOULS_TEST_X");
+        std::env::remove_var("SOULS_TEST_Y");
+        std::env::remove_var("SOULS_TEST_Z");
+    }
+
+    /// TDD — Mixed: var resolvida + var indefinida + texto.
+    /// A var indefinida deve permanecer literal; as outras devem expandir.
+    #[test]
+    fn test_expand_env_var_mixed_known_and_unknown() {
+        std::env::set_var("SOULS_TEST_KNOWN", "KNOWN_VAL");
+        let out = expand_env_var("[${SOULS_TEST_KNOWN}][${SOULS_UNKNOWN_XYZ_999}][end]");
+        assert_eq!(out, "[KNOWN_VAL][${SOULS_UNKNOWN_XYZ_999}][end]");
+        std::env::remove_var("SOULS_TEST_KNOWN");
+    }
+
+    /// TDD — `${` sem `}` de fechamento deve ser preservado literal (fail-soft).
+    #[test]
+    fn test_expand_env_var_unterminated_brace_preserved() {
+        let out = expand_env_var("path/${SOULS_UNCLOSED");
+        assert_eq!(out, "path/${SOULS_UNCLOSED");
     }
 
     #[test]

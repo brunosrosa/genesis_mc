@@ -138,5 +138,24 @@
       "email_address"
     ],
     "response_healing_enabled": true
+  },
+
+  // ---------------------------------------------------------------------------
+  // MCP Server — Subprocesso local (gerenciado pelo proxy L7)
+  // ---------------------------------------------------------------------------
+  // O `agentgateway_tcp_proxy` é o **dono absoluto** do ciclo de vida do
+  // `souls_mcp_server`. O binário é spawnado no boot do proxy, encapsulado
+  // em um `SubprocessGuard` (RAII) que envia SIGKILL atômico no shutdown.
+  //
+  // `executable_path` aceita `${SOULS_MCP_BIN}` para override via env var.
+  // Em produção, o path é resolvido relativo a `target/{profile}/`.
+  // `kill_on_drop = true` é OBRIGATÓRIO (elimina fantasmas `agentgateway.exe`
+  // que vazam RAM Host).
+  "mcp_server": {
+    "executable_path": "${SOULS_MCP_BIN}",
+    "args": ["--transport", "stdio"],
+    "working_dir": "",
+    "kill_on_drop": true,
+    "handshake_timeout_ms": 5000
   }
 }

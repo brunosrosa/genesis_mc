@@ -21,6 +21,7 @@ use souls_mc_lib::core::gateway_config::GatewayConfig;
 use souls_mc_lib::core::peak_ewma::global_peak_ewma;
 use souls_mc_lib::core::pii_redactor::PiiRedactor;
 use souls_mc_lib::core::sticky_router::{prepend_header, RoutePin, StickyRouter};
+use souls_mc_lib::core::subprocess_guard::{SubprocessConfig, SubprocessGuard};
 use souls_mc_lib::core::telemetry_dispatcher::{
     init_telemetry_dispatcher, telemetry_sender,
 };
@@ -184,6 +185,31 @@ pub async fn spawn_mcp_subprocess(command_path: &str, args: &[&str]) -> io::Resu
             format!("Falha ao executar subprocesso em '{}': {e}", command_path),
         )
     })
+}
+
+/// Spawna o `souls_mcp_server` (ou binário configurado no JSONC) sob
+/// ownership do `SubprocessGuard` (RAII kill_on_drop). Esta é a função
+/// canônica de boot do subprocesso MCP — o proxy detém o ciclo de vida.
+///
+/// Falha de spawn é **logged e não-fatal**: o proxy continua atendendo
+/// requisições HTTP mesmo sem o subprocesso MCP (fail-soft, Marco 4.10.0).
+pub fn spawn_souls_mcp_server() -> Option<SubprocessGuard> {
+    let cfg = SubprocessConfig::from_gateway_config();
+    match SubprocessGuard::spawn(&cfg) {
+        Ok(guard) => {
+            tracing::info!(
+                "souls_mcp_server spawned sob SubprocessGuard: pid={:?}",
+                guard.pid()
+            );
+            Some(guard)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Falha ao spawnar souls_mcp_server (continuando sem subprocesso MCP): {e}"
+            );
+            None
+        }
+    }
 }
 
 fn find_sse_frame_delimiter(buf: &[u8]) -> Option<(usize, usize)> {
@@ -711,6 +737,12 @@ async fn main() -> io::Result<()> {
 
     tracing::info!("Proxy L7 Zero-Copy escutando em {} -> upstream {}", listen, upstream);
 
+    // Marco I · v6.1 — Boot do subprocesso MCP sob SubprocessGuard.
+    // O guard vive até o final do `main()`. Quando o proxy é desligado
+    // (Ctrl+C, panic, shutdown), o `Drop` envia SIGKILL atômico ao filho,
+    // eliminando o fantasma `agentgateway.exe` global.
+    let _mcp_subprocess_guard = spawn_souls_mcp_server();
+
     loop {
         let (downstream, _) = listener.accept().await?;
         let Ok(up) = TcpStream::connect(upstream).await else {
@@ -955,6 +987,7 @@ fn process_heavy_data(input: &str) -> String {
     use souls_mc_lib::core::peak_ewma::PeakEwma;
     use souls_mc_lib::core::sticky_router::{build_cached_header, StickyRouter, RoutePin};
     use souls_mc_lib::core::response_healing::heal_malformed_json;
+    use souls_mc_lib::core::subprocess_guard::{SubprocessConfig, SubprocessGuard, SubprocessState};
 
     /// TAREFA 5.1: `test_prefix_cache_byte_stability`
     /// Prova que mutações consecutivas de turnos de chat mantêm as
@@ -1061,5 +1094,168 @@ fn process_heavy_data(input: &str) -> String {
         let payload = cured_str.trim_start_matches("data: ").trim();
         let _: serde_json::Value = serde_json::from_str(payload)
             .expect("SSE curado deve ser JSON parseável por serde_json");
+    }
+
+    // ========================================================================
+    // Marco I · v6.1 — Auditoria: ciclo de vida do subprocesso MCP
+    // ========================================================================
+
+    /// Verifica se um PID está vivo na tabela de processos do SO.
+    /// Usa `tasklist` no Windows (sempre disponível) — implementação
+    /// deliberadamente externalizada (sem crate extra, ADR-030).
+    /// Retorna `true` se o PID existe E não é zombie.
+    ///
+    /// Saída real do tasklist (PT-BR Windows 10/11):
+    ///   - PID inexistente:
+    ///       "INFORMAÇÕES: nenhuma tarefa em execução correspondente..."
+    ///   - PID existente:
+    ///       cabeçalho + linha com o PID (ex: "cmd.exe  12345  Console  1  ...")
+    ///
+    /// O Windows **não suporta** `/NH` (no header) com `/FI` —
+    /// sempre imprime o cabeçalho. A detecção correta é por exclusão:
+    /// se NÃO contém a string de "nenhuma tarefa" E contém o PID numérico.
+    fn is_pid_alive_windows(pid: u32) -> bool {
+        let output = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}")])
+            .output();
+        match output {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let lower = stdout.to_lowercase();
+                // Se tasklist reportou "nenhuma tarefa" → morto.
+                // Strings em PT-BR ("nenhuma tarefa") e EN ("no tasks").
+                if lower.contains("nenhuma tarefa") || lower.contains("no tasks") {
+                    return false;
+                }
+                // Senão, exige que o número do PID apareça na saída
+                // (caso típico: "cmd.exe   31764   Console   1   ...").
+                stdout.contains(&pid.to_string())
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// TAREFA — Auditoria: `test_native_mcp_subprocess_spawn_and_kill`
+    ///
+    /// Prova o ciclo de vida completo do subprocesso MCP sob
+    /// `SubprocessGuard`:
+    ///   1. Cria config com binário `cmd.exe` (sempre presente no Windows).
+    ///   2. Spawn → captura PID.
+    ///   3. Verifica via `tasklist` que o PID está vivo.
+    ///   4. Drop o guard → SIGKILL atômico.
+    ///   5. Re-verifica que o PID NÃO está mais na tabela de processos.
+    ///
+    /// Elimina o fantasma `agentgateway.exe` global: o proxy é o
+    /// **dono absoluto** do ciclo de vida do filho.
+    #[test]
+    fn test_native_mcp_subprocess_spawn_and_kill() {
+        // Resolve o caminho ABSOLUTO do cmd.exe via env (sem PATH lookup).
+        // ADR-030: zero deps novas; só stdlib.
+        let cmd_path = resolve_cmd_path();
+        eprintln!("[TDD] cmd.exe path: {}", cmd_path);
+
+        // (a) Ambiente temporário simulando leitura do JSONC.
+        // Usamos `cmd.exe /K rem sleeping` que mantém o processo VIVO
+        // indefinidamente (sem input, sem timeout). O guard detém o PID
+        // até o drop.
+        let cfg = SubprocessConfig {
+            executable_path: cmd_path,
+            args: vec!["/K".to_string(), "rem".to_string(), "souls_subprocess_guard_test".to_string()],
+            working_dir: String::new(),
+            kill_on_drop: true,
+        };
+
+        // (b) Inicializar o proxy (SubprocessGuard::spawn) e disparar o spawn.
+        let mut guard = SubprocessGuard::spawn(&cfg)
+            .expect("spawn de cmd.exe /K rem deve ter sucesso");
+
+        let pid = guard
+            .pid()
+            .expect("Child deve ter PID imediatamente após spawn");
+
+        // Sanity: o PID deve ser > 0 (sentinel de PIDs do Windows).
+        assert!(pid > 0, "PID inválido: {pid}");
+
+        // (c) Verificar ativamente se o PID do filho está ativo na tabela de processos.
+        // Damos 300ms para o OS registrar o processo na tasklist.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // Debug: dump da saída do tasklist para diagnóstico.
+        let tasklist_out = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}")])
+            .output();
+        if let Ok(out) = &tasklist_out {
+            eprintln!(
+                "[TDD] tasklist /FI \"PID eq {pid}\":\n{}",
+                String::from_utf8_lossy(&out.stdout)
+            );
+        }
+
+        let alive_before = is_pid_alive_windows(pid);
+        assert!(
+            alive_before,
+            "PID {pid} deveria estar VIVO após spawn (tasklist não encontrou)"
+        );
+
+        // Validação extra via probe_state.
+        match guard.probe_state() {
+            SubprocessState::Alive => {
+                // Estado esperado.
+            }
+            other => panic!("Após spawn, probe_state deveria ser Alive, got: {other:?}"),
+        }
+
+        // (d) Forçar o encerramento (drop) do proxy e asseverar que o filho foi finalizado.
+        // O Drop do SubprocessGuard chama child.start_kill() (SIGKILL/TerminateProcess).
+        drop(guard);
+
+        // Damos 500ms para o OS reapar o processo.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let alive_after = is_pid_alive_windows(pid);
+        assert!(
+            !alive_after,
+            "PID {pid} deveria estar MORTO após drop do SubprocessGuard (kill_on_drop=true) — fantasma detectado!"
+        );
+    }
+
+    /// TAREFA — Auditoria: kill explícito assíncrono também funciona.
+    #[tokio::test]
+    async fn test_native_mcp_subprocess_explicit_kill_async() {
+        let cmd_path = resolve_cmd_path();
+        let cfg = SubprocessConfig {
+            executable_path: cmd_path,
+            args: vec!["/K".to_string(), "rem".to_string(), "souls_subprocess_guard_test".to_string()],
+            working_dir: String::new(),
+            kill_on_drop: true,
+        };
+
+        let guard = SubprocessGuard::spawn(&cfg).expect("spawn OK");
+        let pid = guard.pid().expect("PID presente");
+
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(is_pid_alive_windows(pid), "PID {pid} deve estar vivo pré-kill");
+
+        // Kill assíncrono explícito.
+        guard.kill().await.expect("kill().await deve ter sucesso");
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert!(
+            !is_pid_alive_windows(pid),
+            "PID {pid} deve estar MORTO após kill().await"
+        );
+    }
+
+    /// Resolve o path ABSOLUTO do `cmd.exe` no Windows sem lookup de PATH.
+    /// Ordem de precedência: $ComSpec → $SystemRoot\System32\cmd.exe → fallback C:\Windows\System32\cmd.exe.
+    fn resolve_cmd_path() -> String {
+        if let Ok(comspec) = std::env::var("ComSpec") {
+            if !comspec.is_empty() {
+                return comspec;
+            }
+        }
+        if let Ok(system_root) = std::env::var("SystemRoot") {
+            return format!("{system_root}\\System32\\cmd.exe");
+        }
+        "C:\\Windows\\System32\\cmd.exe".to_string()
     }
 }

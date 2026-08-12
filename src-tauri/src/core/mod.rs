@@ -13,6 +13,7 @@ pub mod peak_ewma; // SOULS-CANIBALIZED Marco I: PeakEWMA α=0.3 + lock-free rin
 pub mod sticky_router; // SOULS-CANIBALIZED Marco I: Sticky routing por session_id (Prefix Cache)
 pub mod pii_redactor; // SOULS-CANIBALIZED Marco I: Aho-Corasick PII redaction (default disabled)
 pub mod telemetry_dispatcher; // SOULS-CANIBALIZED Marco I: MPSC → SQLite WAL V5 (worker thread dedicada)
+pub mod subprocess_guard; // SOULS-CANIBALIZED Marco I: SubprocessGuard RAII com kill_on_drop
 
 #[cfg(feature = "llama_backend")]
 pub mod llama_engine;
