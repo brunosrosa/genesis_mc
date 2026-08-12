@@ -125,9 +125,20 @@ pub async fn atomic_write_file(path: &Path, content: &str) -> Result<(), std::io
         if let Err(rename_err) = std::fs::rename(&tmp_path, &path_buf) {
             // Fallback de kernel: copy + delete (não-atômico, mas recupera caso
             // o rename falhe por motivo raro de ACL/lock em SMB share).
-            std::fs::copy(&tmp_path, &path_buf)?;
+            // Se o copy completar com sucesso, o conteúdo está gravado no
+            // destino — reportamos `Ok(())` (a semântica de "atomic_write_file"
+            // é "conteúdo durável no target path"). Apenas propagamos erro se
+            // AMBOS (rename E copy) falharem.
+            if let Err(copy_err) = std::fs::copy(&tmp_path, &path_buf) {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(std::io::Error::new(
+                    copy_err.kind(),
+                    format!(
+                        "atomic_write_file: rename falhou ({rename_err}) e copy de fallback tambem falhou ({copy_err})"
+                    ),
+                ));
+            }
             let _ = std::fs::remove_file(&tmp_path);
-            return Err(rename_err);
         }
         Ok(())
     })

@@ -534,27 +534,55 @@ pub fn validate_and_canonicalize_path(raw: &str) -> Result<PathBuf, RpcError> {
         });
     }
     let p = Path::new(trimmed);
-    let name_str = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-    let name_lower = name_str.to_ascii_lowercase();
-    // Firewall de Caminhos (MARCO III): bloqueio sumário de qualquer mutação em
-    // arquivos sensíveis, antes da aquisição de lock e antes do canonicalize.
-    if FIREWALL_BLOCKED_EXACT.iter().any(|x| name_lower == *x) {
-        return Err(RpcError {
-            code: -32602,
-            message: format!(
-                "Firewall de Caminhos: arquivo sensivel '{name_str}' bloqueado para edicao (L7)"
-            ),
-            data: Some(json!({ "path": raw, "firewall": "exact_blocklist" })),
-        });
-    }
-    if FIREWALL_BLOCKED_SUFFIXES.iter().any(|suf| name_lower.ends_with(suf)) {
-        return Err(RpcError {
-            code: -32602,
-            message: format!(
-                "Firewall de Caminhos: extensao sensivel em '{name_str}' bloqueada para edicao (L7)"
-            ),
-            data: Some(json!({ "path": raw, "firewall": "suffix_blocklist" })),
-        });
+    // Firewall de Caminhos (MARCO III): percorre TODOS os componentes do
+    // caminho (ancestrais e folha) contra o blocklist. Isto impede exfiltração
+    // via mutação de arquivos DENTRO de diretórios sensíveis como
+    // `.env/credentials`, `keys.db/inner`, `dir.pem/leak`, etc.
+    // Componentes `CurDir` (`.`) e `ParentDir` (`..`) são ignorados nesta
+    // varredura (tratados separadamente pelo `raw.contains("..")` abaixo).
+    for component in p.components() {
+        use std::path::Component;
+        // RootDir/Prefix (ex: "C:\\", "/") nao sao alvos do blocklist — apenas
+        // segmentos Normal representam diretorios/arquivos reais do caminho.
+        let comp_name = match component {
+            Component::Normal(os) => match os.to_str() {
+                Some(s) => s,
+                None => {
+                    return Err(RpcError {
+                        code: -32602,
+                        message: format!(
+                            "Firewall de Caminhos: componente nao-UTF8 em '{raw}' bloqueado (L7)"
+                        ),
+                        data: Some(json!({ "path": raw, "firewall": "non_utf8_path" })),
+                    });
+                }
+            },
+            Component::CurDir | Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                continue;
+            }
+        };
+        if comp_name.is_empty() {
+            continue;
+        }
+        let comp_lower = comp_name.to_ascii_lowercase();
+        if FIREWALL_BLOCKED_EXACT.iter().any(|x| comp_lower == *x) {
+            return Err(RpcError {
+                code: -32602,
+                message: format!(
+                    "Firewall de Caminhos: segmento sensivel '{comp_name}' no caminho bloqueado para edicao (L7)"
+                ),
+                data: Some(json!({ "path": raw, "firewall": "exact_blocklist_in_path" })),
+            });
+        }
+        if FIREWALL_BLOCKED_SUFFIXES.iter().any(|suf| comp_lower.ends_with(suf)) {
+            return Err(RpcError {
+                code: -32602,
+                message: format!(
+                    "Firewall de Caminhos: extensao sensivel em '{comp_name}' (em qualquer nivel do caminho) bloqueada para edicao (L7)"
+                ),
+                data: Some(json!({ "path": raw, "firewall": "suffix_blocklist_in_path" })),
+            });
+        }
     }
     if raw.contains("..") {
         return Err(RpcError {

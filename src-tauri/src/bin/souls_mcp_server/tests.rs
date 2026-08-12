@@ -3782,6 +3782,37 @@ async fn test_firewall_directory_traversal_protection() {
         ok_path.is_ok(),
         "caminho legitimo dentro do workspace deve passar pelo Firewall: {ok_path:?}"
     );
+    // 6) MARCO III hardening: bloqueio de arquivos DENTRO de diretorios sensiveis
+    //    (nao apenas o nome do arquivo final). Casos que o firewall legado
+    //    permitia por checar apenas `p.file_name()`.
+    let ancestor_violations = [
+        ".env/credentials.txt",        // dentro de .env
+        "prod.env/leak.json",          // dentro de prod.env
+        "keys.db/inner/file.txt",       // dentro de keys.db
+        "somedir.key/leak",             // dentro de dir com extensao .key
+        "tls.pem/secrets",              // dentro de dir com extensao .pem
+        "vault.pfx/inner",              // dentro de dir com extensao .pfx
+        "config/id_rsa/inner",          // dentro de dir id_rsa
+        "secrets/authorized_keys/x",    // dentro de dir authorized_keys
+    ];
+    for viol in ancestor_violations {
+        let res = validate_and_canonicalize_path(viol);
+        assert!(
+            res.is_err(),
+            "caminho com ancestral sensivel '{viol}' deve ser bloqueado pelo Firewall MARCO III"
+        );
+        let err = res.unwrap_err();
+        assert_eq!(
+            err.code, -32602,
+            "bloqueio de '{viol}' deve usar -32602, recebeu: {err:?}"
+        );
+    }
+    // 7) Caminho legítimo com múltiplos ancestrais não-sensiveis ainda passa.
+    let deep_ok = validate_and_canonicalize_path("src-tauri/src/bin/souls_mcp_server/main.rs");
+    assert!(
+        deep_ok.is_ok(),
+        "caminho profundo sem segmento sensivel deve passar: {deep_ok:?}"
+    );
 }
 
 /// MARCO III — Teste 3: Safe-Fallback Guardrail. Simula a morte do worker
