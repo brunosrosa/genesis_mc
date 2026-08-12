@@ -7,11 +7,15 @@ SCCACHE_DIR = "Z:\\.sccache"
 SCCACHE_CACHE_SIZE = "8G"
 
 [target.x86_64-pc-windows-msvc]
-# REMOVIDO "rust-lld.exe" como linker global para evitar que o LLD pode seções 
+# REMOVIDO "rust-lld.exe" como linker global para evitar que o LLD pode seções
 # críticas de registro de kernels CUDA do llama-cpp-sys-2 (__cudaRegisterFatBinary).
 # O sistema usará o link.exe nativo do MSVC, que é 100% homologado pela NVIDIA.
+# ADR-039 / Battle 2: ggml-cuda e ggml-base compartilham símbolos no link
+# (ex.: ggml_cuda_* vs ggml_* já exportados). /FORCE:MULTIPLE permite a
+# coexistência sem LNK4006/LNK1169. Custo: binário ligeiramente maior.
 rustflags = [
   "-C", "link-arg=/Brepro",
+  "-C", "link-arg=/FORCE:MULTIPLE",
 ]
 
 [build]

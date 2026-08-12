@@ -2,13 +2,13 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::sync::Arc;
 
-use ik_use llama_cpp_2::llama_backend::LlamaBackend;
-use ik_use llama_cpp_2::context::params::{LlamaContextParams, KvCacheType};
-use ik_use llama_cpp_2::model::params::LlamaModelParams;
-use ik_use llama_cpp_2::model::LlamaModel;
-use ik_use llama_cpp_2::token::LlamaToken;
-use ik_use llama_cpp_2::llama_batch::LlamaBatch;
-use ik_use llama_cpp_2::sampling::LlamaSampler;
+use ik_llama_cpp_2::llama_backend::LlamaBackend;
+use ik_llama_cpp_2::context::params::{LlamaContextParams, KvCacheType};
+use ik_llama_cpp_2::model::params::LlamaModelParams;
+use ik_llama_cpp_2::model::LlamaModel;
+use ik_llama_cpp_2::token::LlamaToken;
+use ik_llama_cpp_2::llama_batch::LlamaBatch;
+use ik_llama_cpp_2::sampling::LlamaSampler;
 use llguidance::{Constraint, ParserFactory, api::{TopLevelGrammar, GrammarWithLexer}};
 use llguidance::toktrie::{TokTrie, TokRxInfo, ApproximateTokEnv, TokEnv};
 use crate::core::inference_adapter::{
@@ -178,12 +178,12 @@ pub fn build_context_params_with_fallback(
         params = params
             .with_rope_freq_scale(factor)
             .with_yarn_attn_factor(factor)
-            .with_rope_scaling_type(use llama_cpp_2::context::params::RopeScalingType::Linear);
+            .with_rope_scaling_type(ik_llama_cpp_2::context::params::RopeScalingType::Linear);
     } else if lower_fam.contains("phi") || lower_fam.contains("phi3") || lower_fam.contains("phi4") {
         params = params
             .with_rope_freq_scale(1.190238)
             .with_yarn_attn_factor(1.190238)
-            .with_rope_scaling_type(use llama_cpp_2::context::params::RopeScalingType::Linear);
+            .with_rope_scaling_type(ik_llama_cpp_2::context::params::RopeScalingType::Linear);
     }
 
     params
@@ -280,13 +280,13 @@ impl EphemeralInferEngine for LlamaCppEngine {
             }
             Some(InferenceInput::RawText(ref text)) => {
                 let formatted_prompt = build_chat_prompt(&req.system_prompt, &req.few_shot_examples, text);
-                model.str_to_token(&formatted_prompt, use llama_cpp_2::model::AddBos::Always).map_err(|e| {
+                model.str_to_token(&formatted_prompt, ik_llama_cpp_2::model::AddBos::Always).map_err(|e| {
                     InferenceError::ExecutionError(format!("Falha na tokenização do prompt: {}", e))
                 })?
             }
             None => {
                 let formatted_prompt = build_chat_prompt(&req.system_prompt, &req.few_shot_examples, &req.user_query);
-                model.str_to_token(&formatted_prompt, use llama_cpp_2::model::AddBos::Always).map_err(|e| {
+                model.str_to_token(&formatted_prompt, ik_llama_cpp_2::model::AddBos::Always).map_err(|e| {
                     InferenceError::ExecutionError(format!("Falha na tokenização do prompt: {}", e))
                 })?
             }
@@ -448,7 +448,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
             }
 
             #[allow(deprecated)]
-            let token_str = model.token_to_str(token, use llama_cpp_2::model::Special::Tokenize).map_err(|e| {
+            let token_str = model.token_to_str(token, ik_llama_cpp_2::model::Special::Tokenize).map_err(|e| {
                 InferenceError::ExecutionError(format!("Falha ao decodificar token para texto: {}", e))
             })?;
             generated_text.push_str(&token_str);

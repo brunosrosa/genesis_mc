@@ -123,7 +123,7 @@ impl VerbalizerMap {
 
     /// Resolve os IDs de verbalizadores em runtime a partir do tokenizador real do `LlamaModel`.
     #[cfg(feature = "llama_backend")]
-    pub fn from_llama_model(model: &llama_cpp_2::model::LlamaModel) -> Self {
+    pub fn from_llama_model(model: &ik_llama_cpp_2::model::LlamaModel) -> Self {
         let vocab_size = model.n_vocab() as usize;
         let mut risco_neg = Vec::new(); // Unsafe / 1 / true
         let mut risco_pos = Vec::new(); // Safe / 0 / false
@@ -132,7 +132,7 @@ impl VerbalizerMap {
 
         let safe_labels = ["0", "false", "safe", "no", "não"];
         for label in &safe_labels {
-            if let Ok(toks) = model.str_to_token(label, llama_cpp_2::model::AddBos::Never) {
+            if let Ok(toks) = model.str_to_token(label, ik_llama_cpp_2::model::AddBos::Never) {
                 for t in toks {
                     risco_pos.push(t.0 as u32);
                     conflito_pos.push(t.0 as u32);
@@ -142,7 +142,7 @@ impl VerbalizerMap {
 
         let unsafe_labels = ["1", "true", "unsafe", "yes", "sim"];
         for label in &unsafe_labels {
-            if let Ok(toks) = model.str_to_token(label, llama_cpp_2::model::AddBos::Never) {
+            if let Ok(toks) = model.str_to_token(label, ik_llama_cpp_2::model::AddBos::Never) {
                 for t in toks {
                     risco_neg.push(t.0 as u32);
                     conflito_neg.push(t.0 as u32);
@@ -983,12 +983,12 @@ mod tests {
     #[cfg(feature = "llama_backend")]
     fn test_gemma_physical_tensor_execution() {
         use sysinfo::System;
-        use llama_cpp_2::llama_backend::LlamaBackend;
-        use llama_cpp_2::model::params::LlamaModelParams;
-        use llama_cpp_2::model::LlamaModel;
-        use llama_cpp_2::context::params::LlamaContextParams;
-        use llama_cpp_2::llama_batch::LlamaBatch;
-        use llama_cpp_2::model::AddBos;
+        use ik_llama_cpp_2::llama_backend::LlamaBackend;
+        use ik_llama_cpp_2::model::params::LlamaModelParams;
+        use ik_llama_cpp_2::model::LlamaModel;
+        use ik_llama_cpp_2::context::params::LlamaContextParams;
+        use ik_llama_cpp_2::llama_batch::LlamaBatch;
+        use ik_llama_cpp_2::model::AddBos;
 
         // DIRETRIZ 1: Resolução de Pesos GGUF Reais (Panic se ausente em C:\Users\rosas\.lmstudio\models\)
         let gguf_path = resolve_physical_gguf_for_test();

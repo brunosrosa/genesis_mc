@@ -1,0 +1,49 @@
+[package]
+name = "ik-llama-cpp-2"
+version = "0.1.7"
+edition = "2021"
+description = "ik_llama.cpp bindings for Rust (SOTA quants + MTP) — SOULS MC vendored with Windows MSVC shims (KvCacheType, RopeScalingType, Special)"
+readme = "README.md"
+keywords = [
+    "llama",
+    "llm",
+    "ai",
+    "ffi",
+    "quantization",
+]
+categories = [
+    "external-ffi-bindings",
+    "science",
+]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/replikeit/ik-llama-cpp-rs"
+
+[features]
+_smoke = []
+common = ["ik-llama-cpp-sys/common"]
+cuda = ["ik-llama-cpp-sys/cuda"]
+cuda-no-vmm = [
+    "cuda",
+    "ik-llama-cpp-sys/cuda-no-vmm",
+]
+default = []
+dynamic-link = ["ik-llama-cpp-sys/dynamic-link"]
+metal = ["ik-llama-cpp-sys/metal"]
+mtmd = ["ik-llama-cpp-sys/mtmd"]
+native = ["ik-llama-cpp-sys/native"]
+openmp = ["ik-llama-cpp-sys/openmp"]
+shared-stdcxx = ["ik-llama-cpp-sys/shared-stdcxx"]
+static-openmp = ["ik-llama-cpp-sys/static-openmp"]
+static-stdcxx = ["ik-llama-cpp-sys/static-stdcxx"]
+vulkan = ["ik-llama-cpp-sys/vulkan"]
+
+[lib]
+name = "ik_llama_cpp_2"
+path = "src/lib.rs"
+
+[dependencies]
+# SOULS MC: pinned to local vendored fork (Marco IV) with Windows MSVC port.
+ik-llama-cpp-sys = { path = "../ik-llama-cpp-sys", version = "0.1.7" }
+encoding_rs = "0.8"
+thiserror = "2"
+tracing = "0.1"

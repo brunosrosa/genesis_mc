@@ -64,7 +64,18 @@ if (Test-Path $vendorEsaxxBuild) {
 $env:GGML_CCACHE = "OFF"
 $env:CMAKE_CUDA_COMPILER_LAUNCHER = ""
 $env:CUDA_CACHE_DISABLE = "1"
-Write-Host "[CUDA] GGML_CCACHE=OFF + CMAKE_CUDA_COMPILER_LAUNCHER='' injetados (defesa em profundidade)" -ForegroundColor DarkGreen
+# ADR-039 / Battle 2 (defesa em profundidade): NVCC 13.3 em MSVC 19.51 emite
+# "The following operands of the same type cannot both be passed to a
+# function-style cast" (Toolkit 13.3 vs MSVC 19.51 mismatch de STL).
+# - `-allow-unsupported-compiler`: aceita MSVC 19.51 (não listado nos "verified").
+# - `-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH`: silencia o assert interno do MSVC.
+# Idempotente.
+$env:CUDAFLAGS = "-allow-unsupported-compiler -Xcompiler -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH"
+# Força o Ninja (estrutura plana de .lib em out/lib, não out/Release|out/Debug).
+# Em .cargo/config.toml[env] CMAKE_GENERATOR=Ninja também é injetado para o
+# CMake crate. Defesa em profundidade: ambos os pontos de injeção.
+$env:CMAKE_GENERATOR = "Ninja"
+Write-Host "[CUDA] GGML_CCACHE=OFF + CMAKE_CUDA_COMPILER_LAUNCHER='' + CUDAFLAGS injetados (defesa em profundidade)" -ForegroundColor DarkGreen
 
 # Patch idempotente ik-llama-cpp-sys: CMake `execute_process(COMMAND git rev-parse ...)`
 # em `ik_llama.cpp/common/CMakeLists.txt:30` falha quando o crate é descompactado

@@ -51,8 +51,8 @@ enum RealLlamaState {
     Ready {
         // Wrappers owned; sem referência ao model_path que já foi consumido.
         #[allow(dead_code)]
-        model: llama_cpp_2::model::LlamaModel,
-        context: &'static llama_cpp_2::context::LlamaContext<'static>,
+        model: ik_llama_cpp_2::model::LlamaModel,
+        context: &'static ik_llama_cpp_2::context::LlamaContext<'static>,
     },
 }
 
@@ -276,11 +276,11 @@ fn real_llama_extract_logits(
     inner: &mut RealLlamaInner,
     prompt: &str,
 ) -> Option<Vec<f32>> {
-    use llama_cpp_2::context::params::LlamaContextParams;
-    use llama_cpp_2::llama_backend::LlamaBackend;
-    use llama_cpp_2::llama_batch::LlamaBatch;
-    use llama_cpp_2::model::params::LlamaModelParams;
-    use llama_cpp_2::model::{AddBos, LlamaModel};
+    use ik_llama_cpp_2::context::params::LlamaContextParams;
+    use ik_llama_cpp_2::llama_backend::LlamaBackend;
+    use ik_llama_cpp_2::llama_batch::LlamaBatch;
+    use ik_llama_cpp_2::model::params::LlamaModelParams;
+    use ik_llama_cpp_2::model::{AddBos, LlamaModel};
 
     // (1) Lazy init: carrega GGUF na CPU (n_gpu_layers = 0, ADR-027: 0 MB VRAM).
     if matches!(inner.state, RealLlamaState::Init) {
@@ -308,8 +308,8 @@ fn real_llama_extract_logits(
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(std::num::NonZeroU32::new(512))
             .with_n_batch(512)
-            .with_type_k(llama_cpp_2::context::params::KvCacheType::F16)
-            .with_type_v(llama_cpp_2::context::params::KvCacheType::Q4_K);
+            .with_type_k(ik_llama_cpp_2::context::params::KvCacheType::F16)
+            .with_type_v(ik_llama_cpp_2::context::params::KvCacheType::Q4_K);
         let context = match model.new_context(&backend, ctx_params) {
             Ok(c) => Box::leak(Box::new(c)) as &'static _,
             Err(e) => {
@@ -368,9 +368,9 @@ fn real_llama_extract_logits(
     // (5) FFI real: extrai logits do último token (zero-copy slice).
     let vocab = model.n_vocab() as usize;
     let logits_ptr = unsafe {
-        // `llama_cpp_2::sys` re-exporta os bindings de `ik-llama-cpp-sys`
+        // `ik_llama_cpp_2::sys` re-exporta os bindings de `ik-llama-cpp-sys`
         // sob a feature `llama_backend` (gated por cfg já em escopo aqui).
-        llama_cpp_2::sys::llama_get_logits_ith(context.as_ptr(), last_idx)
+        ik_llama_cpp_2::sys::llama_get_logits_ith(context.as_ptr(), last_idx)
     };
     if logits_ptr.is_null() {
         return None;
