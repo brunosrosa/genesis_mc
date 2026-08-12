@@ -190,3 +190,281 @@ impl VramScheduler {
         Ok(())
     }
 }
+
+// =============================================================================
+// MARCO IV — KvCacheSwapController (ADR-027 / Marco IV)
+// =============================================================================
+// Complementa o VramScheduler (LRU de modelos) com proteção contra estouro de
+// VRAM **dentro de uma janela de inferência ativa**. O Controller consome o
+// `WATCHDOG_STATE` (publicado pela thread nativa S.O.) e dispara swap-out do
+// KV Cache quantizado Q4_K (GPU→Host RAM) ou swap-in de retorno, com histerese
+// anti-flap (2 amostras consecutivas) e isolamento de syscalls em
+// `tokio::task::spawn_blocking`.
+// =============================================================================
+
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::AtomicU32;
+
+use crate::core::hardware_watchdog;
+
+/// Ação determinada pelo sink de pressão de VRAM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VramAction {
+    /// Mantém estado atual (sem pressão suficiente).
+    Hold,
+    /// Pressão alta sustentada → swap-out do KV Cache GPU→Host RAM.
+    SwapOut,
+    /// Após swap-out, headroom recuperado → swap-in de retorno.
+    SwapIn,
+}
+
+/// Estado físico do KV Cache (atomicamente consistente).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum KvCacheLocation {
+    /// Residente na VRAM da dGPU (estado de execução).
+    Gpu = 0,
+    /// Evacuado para Host RAM (após swap-out).
+    HostRam = 1,
+}
+
+impl KvCacheLocation {
+    fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::HostRam,
+            _ => Self::Gpu,
+        }
+    }
+}
+
+/// Trait abstrato para sinks de pressão de VRAM.
+/// Agnóstico ao backend: hoje consumimos `WATCHDOG_STATE`, amanhã pode ser
+/// NVML direto, ROCm, Metal, ou um mock de teste.
+pub trait VramPressureSink: Send + Sync {
+    /// Retorna a porcentagem atual de uso de VRAM (0.0 .. 100.0).
+    fn current_vram_pct(&self) -> f32;
+}
+
+/// Sink de produção: lê do `WATCHDOG_STATE` global, dividindo pelo total físico
+/// da RTX 2060m (6.144 MB). Fallback: se NVML ausente, retorna 0.0 (sem pressão).
+pub struct WatchdogSink {
+    pub vram_total_mb: u32,
+}
+
+impl Default for WatchdogSink {
+    fn default() -> Self {
+        Self {
+            vram_total_mb: crate::core::hardware_watchdog::RTX_2060M_VRAM_TOTAL_MB,
+        }
+    }
+}
+
+impl VramPressureSink for WatchdogSink {
+    fn current_vram_pct(&self) -> f32 {
+        let Some(state) = hardware_watchdog::get_state() else {
+            return 0.0;
+        };
+        let packed = state.load(std::sync::atomic::Ordering::Acquire);
+        let vram_mb = hardware_watchdog::decode_vram_mb(packed);
+        if self.vram_total_mb == 0 {
+            0.0
+        } else {
+            (vram_mb as f32 / self.vram_total_mb as f32) * 100.0
+        }
+    }
+}
+
+/// Controlador de swap do KV Cache com histerese anti-flap.
+/// Padrão: high=90.0%, low=80.0%, exige 2 amostras consecutivas para transicionar.
+pub struct KvCacheSwapController {
+    threshold_high_pct: f32,
+    threshold_low_pct: f32,
+    required_samples: u32,
+    consecutive_samples: AtomicU32,
+    current_state: AtomicU8,
+}
+
+impl Default for KvCacheSwapController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KvCacheSwapController {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_thresholds(90.0, 80.0, 2)
+    }
+
+    #[must_use]
+    pub fn with_thresholds(high_pct: f32, low_pct: f32, required_samples: u32) -> Self {
+        let required_samples = if required_samples == 0 { 1 } else { required_samples };
+        Self {
+            threshold_high_pct: high_pct,
+            threshold_low_pct: low_pct,
+            required_samples,
+            consecutive_samples: AtomicU32::new(0),
+            current_state: AtomicU8::new(KvCacheLocation::Gpu as u8),
+        }
+    }
+
+    /// Avalia a pressão atual e retorna a ação a tomar.
+    /// Histerese: precisa de `required_samples` leituras consecutivas além do limiar.
+    pub fn evaluate(&self, sink: &dyn VramPressureSink) -> VramAction {
+        let pct = sink.current_vram_pct();
+        let loc = KvCacheLocation::from_u8(self.current_state.load(std::sync::atomic::Ordering::Acquire));
+
+        match loc {
+            KvCacheLocation::Gpu => {
+                if pct >= self.threshold_high_pct {
+                    let prev = self
+                        .consecutive_samples
+                        .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                    if prev + 1 >= self.required_samples {
+                        self.consecutive_samples
+                            .store(0, std::sync::atomic::Ordering::Release);
+                        VramAction::SwapOut
+                    } else {
+                        VramAction::Hold
+                    }
+                } else {
+                    self.consecutive_samples
+                        .store(0, std::sync::atomic::Ordering::Release);
+                    VramAction::Hold
+                }
+            }
+            KvCacheLocation::HostRam => {
+                if pct < self.threshold_low_pct {
+                    let prev = self
+                        .consecutive_samples
+                        .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                    if prev + 1 >= self.required_samples {
+                        self.consecutive_samples
+                            .store(0, std::sync::atomic::Ordering::Release);
+                        VramAction::SwapIn
+                    } else {
+                        VramAction::Hold
+                    }
+                } else {
+                    self.consecutive_samples
+                        .store(0, std::sync::atomic::Ordering::Release);
+                    VramAction::Hold
+                }
+            }
+        }
+    }
+
+    /// Marca o KV Cache como evacuado para Host RAM.
+    pub fn mark_swapped_out(&self) {
+        self.current_state
+            .store(KvCacheLocation::HostRam as u8, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Marca o KV Cache como residente na VRAM.
+    pub fn mark_swapped_in(&self) {
+        self.current_state
+            .store(KvCacheLocation::Gpu as u8, std::sync::atomic::Ordering::Release);
+    }
+
+    pub fn is_swapped_out(&self) -> bool {
+        KvCacheLocation::from_u8(self.current_state.load(std::sync::atomic::Ordering::Acquire))
+            == KvCacheLocation::HostRam
+    }
+
+    /// Dispara swap-out do KV Cache Q4_K para Host RAM.
+    /// Syscalls DMA isoladas em `spawn_blocking` para não contaminar o reactor Tokio.
+    pub async fn swap_out_kv_cache_q4k(&self) -> Result<(), String> {
+        tokio::task::spawn_blocking(|| {
+            // Em produção, este ponto invocaria ik_llama.cpp via FFI
+            // (llama_state_save_file + cudaMemcpy para Host pinned memory).
+            // Para MARCO IV, a materialização física é simulada de forma
+            // determinística: o registro do estado atômico garante a
+            // transição observável pelo Gateway.
+            tracing::info!(
+                target: "souls::vram",
+                "MARCO IV: swap-out Q4_K GPU→Host RAM acionado"
+            );
+        })
+        .await
+        .map_err(|e| format!("swap_out_kv_cache_q4k falhou: {e}"))?;
+        self.mark_swapped_out();
+        Ok(())
+    }
+
+    /// Dispara swap-in do KV Cache Q4_K de Host RAM para VRAM.
+    pub async fn swap_in_kv_cache_q4k(&self) -> Result<(), String> {
+        tokio::task::spawn_blocking(|| {
+            tracing::info!(
+                target: "souls::vram",
+                "MARCO IV: swap-in Q4_K Host RAM→GPU acionado"
+            );
+        })
+        .await
+        .map_err(|e| format!("swap_in_kv_cache_q4k falhou: {e}"))?;
+        self.mark_swapped_in();
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicU32;
+
+    /// Sink de teste que retorna uma porcentagem programável.
+    struct MockSink {
+        pct: AtomicU32, // armazenado como bits de f32
+    }
+
+    impl MockSink {
+        fn new(pct: f32) -> Self {
+            Self {
+                pct: AtomicU32::new(pct.to_bits()),
+            }
+        }
+        fn set(&self, pct: f32) {
+            self.pct.store(pct.to_bits(), std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    impl VramPressureSink for MockSink {
+        fn current_vram_pct(&self) -> f32 {
+            f32::from_bits(self.pct.load(std::sync::atomic::Ordering::Acquire))
+        }
+    }
+
+    #[test]
+    fn test_kv_swap_controller_hysteresis() {
+        let ctrl = KvCacheSwapController::with_thresholds(90.0, 80.0, 2);
+        let sink = MockSink::new(50.0);
+
+        // 50% → Hold
+        assert_eq!(ctrl.evaluate(&sink), VramAction::Hold);
+
+        // Sobe para 92% → 1ª amostra, ainda Hold (histerese)
+        sink.set(92.0);
+        assert_eq!(ctrl.evaluate(&sink), VramAction::Hold);
+        // 2ª amostra consecutiva → SwapOut
+        assert_eq!(ctrl.evaluate(&sink), VramAction::SwapOut);
+        ctrl.mark_swapped_out();
+
+        // Ainda em 92% → Hold (não swap-in)
+        assert_eq!(ctrl.evaluate(&sink), VramAction::Hold);
+
+        // Cai para 75% (< 80%) → 1ª Hold, depois SwapIn
+        sink.set(75.0);
+        assert_eq!(ctrl.evaluate(&sink), VramAction::Hold);
+        assert_eq!(ctrl.evaluate(&sink), VramAction::SwapIn);
+        ctrl.mark_swapped_in();
+    }
+
+    #[test]
+    fn test_kv_swap_controller_idempotent_state() {
+        let ctrl = KvCacheSwapController::new();
+        assert!(!ctrl.is_swapped_out());
+        ctrl.mark_swapped_out();
+        assert!(ctrl.is_swapped_out());
+        ctrl.mark_swapped_in();
+        assert!(!ctrl.is_swapped_out());
+    }
+}

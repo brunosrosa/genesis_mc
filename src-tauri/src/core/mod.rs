@@ -40,8 +40,12 @@ pub mod ort_scorer;
 pub mod gliclass_engine; // SOULS V6 MARCO 5.3.0: Sentinela de Borda Bare-Metal OrtScorerEngine (GLiClass Zero-Shot Triage)
 pub mod gigatoken_encoder; // SOULS V6 MARCO 5.4.0: GigaTokenEncoder Auto-Curativo & Prefill Bypass
 pub mod vram_scheduler; // SOULS V6 MARCO 5.12.0: VRAM Scheduler Dinâmico e Gerenciador de Evicção LRU
+pub mod hardware_watchdog; // SOULS V6 MARCO 5.12.0/IV: Watchdog Térmico + WATCHDOG_STATE lock-free
 pub mod sandbox; // SOULS V6 MARCO 5.13.0: Isolamento LPAC Nativo e Bypass Gracioso (Windows 11)
 pub mod sdd; // SOULS V6 MARCO 5.16.0: Orquestrador de Cascata Documental SDD (SddValidationEngine + State V6)
+
+#[cfg(feature = "lora_adapter")]
+pub mod llama_lora_adapter; // SOULS V6 MARCO IV: Hot-swap de adaptadores LoRA (ik_llama.cpp FFI)
 
 // Aliases de compatibilidade retroativa
 pub use burn_engine as burn_agnostic;
