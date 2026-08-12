@@ -106,23 +106,34 @@ pub async fn snapsafe_restore(snapshot: &Path, target: &Path) -> Result<(), std:
 /// no workspace root) violaria este invariante para arquivos em outros volumes
 /// (ex.: `Z:\ReFS\` vs `C:\NTFS\`). O nome do tmp é prefixado com `.tmp_` para
 /// ficar invisível em listagens de diretório padrão.
+///
+/// **MARCO III (ADR-010):** O bloco de I/O físico (`std::fs::write` + `std::fs::rename`)
+/// é encapsulado em `tokio::task::spawn_blocking` para impedir que syscalls
+/// bloqueantes do NTFS/ACL saturam o reactor do Tokio. O caminho síncrono
+/// `tokio::fs::*` é banido por garantir preempção inadequada no event loop.
 pub async fn atomic_write_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    if !parent.exists() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
+    let parent = path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+    let path_buf = path.to_path_buf();
+    let content_bytes = content.as_bytes().to_vec();
     let tmp_name = format!(".tmp_{}", Uuid::new_v4().simple());
     let tmp_path = parent.join(tmp_name);
-    tokio::fs::write(&tmp_path, content.as_bytes()).await?;
-    if let Err(e) = tokio::fs::rename(&tmp_path, path).await {
-        if tokio::fs::copy(&tmp_path, path).await.is_ok() {
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-        } else {
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Err(e);
+    let join_result = tokio::task::spawn_blocking(move || -> Result<(), std::io::Error> {
+        if !parent.exists() {
+            std::fs::create_dir_all(&parent)?;
         }
-    }
-    Ok(())
+        std::fs::write(&tmp_path, &content_bytes)?;
+        if let Err(rename_err) = std::fs::rename(&tmp_path, &path_buf) {
+            // Fallback de kernel: copy + delete (não-atômico, mas recupera caso
+            // o rename falhe por motivo raro de ACL/lock em SMB share).
+            std::fs::copy(&tmp_path, &path_buf)?;
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(rename_err);
+        }
+        Ok(())
+    })
+    .await
+    .map_err(std::io::Error::other)?;
+    join_result
 }
 
 /// Bytecode WAT (WebAssembly Text Format) embarcado em compile-time que implementa

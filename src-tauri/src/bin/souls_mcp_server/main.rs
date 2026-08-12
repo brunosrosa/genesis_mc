@@ -497,6 +497,33 @@ pub fn workspace_root() -> PathBuf {
     PathBuf::from(".")
 }
 
+/// Lista canônica de extensões e prefixos sensíveis bloqueados pelo Firewall de Caminhos
+/// (MARCO III, ADR-010). Qualquer arquivo cujo `file_name` case com algum destes
+/// padrões tem a mutação sumariamente negada pela `validate_and_canonicalize_path`.
+///
+/// Justificativa bare-metal: expor `.env`, `.db` ou material criptográfico
+/// (`.key`/`.pem`/`.crt`/`.pfx`) via edição assistida por LLM é um vetor de
+/// exfiltração de credenciais. O disjuntor é aplicado **antes** da aquisição
+/// de qualquer lock, antes de qualquer I/O físico e antes de qualquer
+/// canonização, para falhar cedo (Fail-Closed L7).
+const FIREWALL_BLOCKED_EXACT: &[&str] = &[
+    ".env",
+    ".envrc",
+    ".env.local",
+    ".env.production",
+    ".env.development",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "authorized_keys",
+    "shadow",
+    "passwd",
+];
+const FIREWALL_BLOCKED_SUFFIXES: &[&str] = &[
+    ".db", ".sqlite", ".sqlite3", ".key", ".pem", ".crt", ".cer", ".pfx", ".p12", ".keystore",
+    ".der", ".asc", ".gpg", ".pgp", ".sig", ".secret",
+];
 pub fn validate_and_canonicalize_path(raw: &str) -> Result<PathBuf, RpcError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -508,27 +535,45 @@ pub fn validate_and_canonicalize_path(raw: &str) -> Result<PathBuf, RpcError> {
     }
     let p = Path::new(trimmed);
     let name_str = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-    if name_str.starts_with(".env") || name_str.ends_with(".db") || raw.contains("..") {
+    let name_lower = name_str.to_ascii_lowercase();
+    // Firewall de Caminhos (MARCO III): bloqueio sumário de qualquer mutação em
+    // arquivos sensíveis, antes da aquisição de lock e antes do canonicalize.
+    if FIREWALL_BLOCKED_EXACT.iter().any(|x| name_lower == *x) {
         return Err(RpcError {
-            code: -32015,
-            message: format!("Acesso a arquivo sensível negado pelo Firewall: {raw}"),
-            data: Some(json!({ "path": raw })),
+            code: -32602,
+            message: format!(
+                "Firewall de Caminhos: arquivo sensivel '{name_str}' bloqueado para edicao (L7)"
+            ),
+            data: Some(json!({ "path": raw, "firewall": "exact_blocklist" })),
         });
     }
-
+    if FIREWALL_BLOCKED_SUFFIXES.iter().any(|suf| name_lower.ends_with(suf)) {
+        return Err(RpcError {
+            code: -32602,
+            message: format!(
+                "Firewall de Caminhos: extensao sensivel em '{name_str}' bloqueada para edicao (L7)"
+            ),
+            data: Some(json!({ "path": raw, "firewall": "suffix_blocklist" })),
+        });
+    }
+    if raw.contains("..") {
+        return Err(RpcError {
+            code: -32602,
+            message: format!("Directory traversal bloqueado pelo Firewall: {raw}"),
+            data: Some(json!({ "path": raw, "firewall": "directory_traversal" })),
+        });
+    }
     let resolved = if p.is_absolute() {
         p.to_path_buf()
     } else {
         workspace_root().join(p)
     };
-
     let root = workspace_root();
     let root_canon = root.canonicalize().unwrap_or_else(|_| root.clone());
     let res_canon = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
-
     if !res_canon.starts_with(&root_canon) && !res_canon.starts_with(&root) {
         return Err(RpcError {
-            code: -32015,
+            code: -32602,
             message: format!(
                 "Traversal negado: caminho fora da raiz do workspace: {}",
                 resolved.display()

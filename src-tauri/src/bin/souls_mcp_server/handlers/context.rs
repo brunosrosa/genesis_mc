@@ -422,12 +422,21 @@ pub async fn run_souls_fill(
 }
 
 static STUB_FILL_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-/// `stub_fill` — Preenche stubs de código demarcados em arquivos locais.
+/// `stub_fill` — Preenche stubs de código demarcados em arquivos locais sob
+/// Lock Concorrente de Caminho (MARCO III).
+///
+/// Contrato Fail-Closed (ADR-010):
+///   1. Validação de Firewall + canonização via `validate_and_canonicalize_path`.
+///   2. Aquisição do `Arc<tokio::sync::Mutex<()>>` por PathBuf (PATH_LOCKS).
+///   3. Leitura síncrona do arquivo na RAM (via spawn_blocking).
+///   4. Match EXATO do `stub_marker` — 0 ocorrências ou >1 = abortar (Fail-Closed).
+///   5. Swap atômico via `atomic_write_file` (tmp + rename, I/O em spawn_blocking).
+///   6. Em caso de mismatch, o buffer de atualização é descartado imediatamente.
 pub async fn run_souls_stub_fill(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {
-    let _guard = STUB_FILL_MUTEX.lock().await;
+    use souls_mc_lib::core::file_locker::{acquire_file_lock, atomic_write_file};
+    let _global_guard = STUB_FILL_MUTEX.lock().await;
     let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
     let path_str = args
         .get("file_path")
@@ -448,35 +457,67 @@ pub async fn run_souls_stub_fill(
         message: "Parâmetro obrigatório 'code_payload' ausente".to_string(),
         data: None,
     })?;
-
     let abs_path = validate_and_canonicalize_path(path_str)?;
-    let content = tokio::fs::read_to_string(&abs_path).await.map_err(|e| RpcError {
-        code: -32012,
-        message: format!("Falha ao ler arquivo: {e}"),
-        data: None,
-    })?;
-
-    if !content.contains(stub_marker) {
+    let lock = acquire_file_lock(&abs_path);
+    let _path_guard = lock.lock().await;
+    let abs_path_for_read = abs_path.clone();
+    let content = tokio::task::spawn_blocking(move || std::fs::read_to_string(&abs_path_for_read))
+        .await
+        .map_err(|e| RpcError {
+            code: -32012,
+            message: format!("Falha ao aguardar leitura do arquivo: {e}"),
+            data: None,
+        })?
+        .map_err(|e| RpcError {
+            code: -32012,
+            message: format!("Falha ao ler arquivo: {e}"),
+            data: None,
+        })?;
+    let occurrences: Vec<(usize, &str)> = content.match_indices(stub_marker).collect();
+    let occ_count = occurrences.len();
+    if occ_count == 0 {
         return Err(RpcError {
             code: -32001,
-            message: format!("Marcador '{stub_marker}' não encontrado em {path_str}"),
-            data: None,
+            message: format!(
+                "Fail-Closed: stub_marker nao encontrado em {path_str} (0 correspondencias). Edicao cancelada."
+            ),
+            data: Some(json!({ "path": path_str, "occurrences": 0 })),
         });
     }
-
-    let updated = content.replace(stub_marker, code_payload);
-    tokio::fs::write(&abs_path, updated).await.map_err(|e| RpcError {
-        code: -32000,
-        message: format!("Falha ao gravar alterações: {e}"),
-        data: None,
-    })?;
-
+    if occ_count > 1 {
+        return Err(RpcError {
+            code: -32001,
+            message: format!(
+                "Fail-Closed: stub_marker ambiguo em {path_str} ({occ_count} ocorrencias nas posicoes {:?}). Edicao cancelada.",
+                occurrences.iter().map(|(o, _)| *o).collect::<Vec<_>>()
+            ),
+            data: Some(json!({
+                "path": path_str,
+                "occurrences": occ_count,
+                "positions": occurrences.iter().map(|(o, _)| *o).collect::<Vec<_>>()
+            })),
+        });
+    }
+    let updated = content.replacen(stub_marker, code_payload, 1);
+    let _ = updated.len();
+    atomic_write_file(&abs_path, &updated)
+        .await
+        .map_err(|e| RpcError {
+            code: -32000,
+            message: format!("Falha no swap atomico de stub_fill: {e}"),
+            data: Some(json!({ "path": path_str })),
+        })?;
     Ok(json!({
         "content": [{
             "type": "text",
-            "text": format!("Stub '{stub_marker}' preenchido com sucesso em '{path_str}'.")
+            "text": format!("Stub '{stub_marker}' preenchido com sucesso em '{path_str}' (MARCO III atomic swap).")
         }],
-        "structuredContent": { "path": path_str, "status": "filled" },
+        "structuredContent": {
+            "path": path_str,
+            "status": "filled",
+            "occurrences_replaced": 1,
+            "engine": "file_locker.atomic_write_file"
+        },
         "isError": false
     }))
 }

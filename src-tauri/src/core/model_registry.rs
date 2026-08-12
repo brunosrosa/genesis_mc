@@ -882,6 +882,11 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN tpot_ms REAL DEFAULT 0.0", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN vram_peak_mb REAL DEFAULT 0.0", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN e3_score REAL DEFAULT 0.0", []);
+    // MARCO III — Disjuntor de saúde contra crash FFI do Vanguard Worker
+    // (ADR-010). Colunas preenchidas por `disable_model_in_sqlite` quando o
+    // subprocesso C++ do llama-cpp quebra (exit !=0, broken pipe, std::terminate).
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN deactivated_at INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN deactivation_reason TEXT DEFAULT NULL", []);
 
     // Criação da tabela de telemetria da arena se não existir
     conn.execute(

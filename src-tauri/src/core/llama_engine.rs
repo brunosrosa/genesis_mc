@@ -575,15 +575,71 @@ impl EphemeralInferEngine for LlamaVanguardEngine {
     }
 }
 
+/// **MARCO III — Blindagem contra Crash de FFI C++ (ADR-010 / ADR-027):**
+///
+/// Desativa o modelo GGUF defeituoso no SQLite após crash nativo do worker
+/// Vanguard (ex: `invalid vector subscript C++`, `std::terminate`, broken pipe).
+///
+/// **Conformidades obrigatórias:**
+///   1. `busy_timeout = 5000ms` — defesa contra `SQLITE_BUSY` quando o StateDB
+///      Worker thread está escrevendo em paralelo (canal MPSC saturado).
+///   2. `PRAGMA journal_mode=WAL` — concorrência MVCC sem lock de escritor
+///      global; permite leituras simultâneas durante a escrita de desativação.
+///   3. **Banimento absoluto de fallback in-process síncrono para a FFI do
+///      `LlamaCppEngine` hospedeiro** — se a chamada retornar `err`, o pai
+///      Tokio recebe `InferenceError` tipado em Rust, sem reabrir o tensor
+///      GGUF no mesmo processo (que poderia reproduzir o crash).
+///   4. A operação é fire-and-forget intencional: este é um disjuntor de
+///      saúde do catálogo. Falha de I/O no SQLite NÃO propaga para o caller
+///      da inferência (que já está em estado de erro).
 pub fn disable_model_in_sqlite(model_path: &str) {
     let db_path = crate::core::model_registry::resolve_db_path();
-    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
-        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
-        let _ = conn.execute_batch("PRAGMA journal_mode=WAL;");
-        let _ = conn.execute(
-            "UPDATE model_registry SET is_active = 0 WHERE file_path = ?1 OR model_id = ?1",
-            [model_path],
+    let Ok(conn) = rusqlite::Connection::open_with_flags(
+        &db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_CREATE,
+    ) else {
+        tracing::error!(
+            target: "souls_mcp::llama_engine",
+            "disable_model_in_sqlite: falha ao abrir {db_path:?}; modelo nao sera desativado"
         );
+        return;
+    };
+    // Ordem importa: WAL primeiro (MVCC), busy_timeout depois (espera ocupada).
+    if let Err(e) = conn.execute_batch("PRAGMA journal_mode=WAL;") {
+        tracing::warn!(
+            target: "souls_mcp::llama_engine",
+            "PRAGMA journal_mode=WAL indisponivel (fail-soft): {e}"
+        );
+    }
+    conn.busy_timeout(std::time::Duration::from_millis(5000))
+        .expect("busy_timeout é trivial e nao pode falhar em SQLite bundled");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    match conn.execute(
+        "UPDATE model_registry SET is_active = 0, deactivated_at = ?2, deactivation_reason = 'ffi_crash'
+         WHERE (file_path = ?1 OR model_id = ?1) AND is_active != 0",
+        rusqlite::params![model_path, now],
+    ) {
+        Ok(0) => {
+            tracing::info!(
+                target: "souls_mcp::llama_engine",
+                "disable_model_in_sqlite: modelo '{model_path}' ja estava desativado ou nao existe no catalogo"
+            );
+        }
+        Ok(updated) => {
+            tracing::warn!(
+                target: "souls_mcp::llama_engine",
+                "MARCO III: modelo '{model_path}' DESATIVADO no catalogo apos crash FFI ({updated} rows)"
+            );
+        }
+        Err(e) => {
+            tracing::error!(
+                target: "souls_mcp::llama_engine",
+                "disable_model_in_sqlite: falha ao desativar '{model_path}': {e}"
+            );
+        }
     }
 }
 
