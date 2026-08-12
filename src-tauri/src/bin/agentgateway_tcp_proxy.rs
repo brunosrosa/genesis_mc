@@ -354,6 +354,7 @@ async fn handle_l7_proxy_v6(
     mut downstream: TcpStream,
     mcp_stdin: Arc<Mutex<ChildStdin>>,
     mcp_stdout: Arc<Mutex<ChildStdout>>,
+    request_serial_lock: Arc<Mutex<()>>,
     ccr_store: Arc<SoulsCcrStore>,
     shield_channel: EpistemicShieldChannel,
     sticky: Arc<StickyRouter>,
@@ -499,8 +500,18 @@ async fn handle_l7_proxy_v6(
                         // HTTP upstream, sem loopback TCP — o subprocesso
                         // consome line-delimited JSON via `BufReader::lines`.
                         //
-                        // Locks serializam requests concorrentes (Mutex de
-                        // tokio é fair, await-safe).
+                        // **Serial lock global (Marco I · v6.4)**: requests
+                        // HTTP concorrentes (1+ clients do `mcp-remote`)
+                        // disputam o mesmo `ChildStdin`/`ChildStdout`. Sem
+                        // este lock, task A pode ler a response da task B
+                        // (race condition), causando timeout 60s do client
+                        // esperando response que nunca chega. O lock
+                        // global serializa o ciclo stdin-write → stdout-read.
+                        //
+                        // O `_serial_guard` permanece vivo durante o
+                        // `handle_mcp_stdout_response` (é dropado no final
+                        // desta função, APÓS o `.await` da response).
+                        let _serial_guard = request_serial_lock.lock().await;
                         {
                             let mut stdin_guard = mcp_stdin.lock().await;
                             stdin_guard.write_all(&final_body).await?;
@@ -545,11 +556,17 @@ async fn handle_l7_proxy_v6(
             .unwrap_or(0);
         let body = &buf[body_start..read_bytes];
         if !body.is_empty() {
-            let mut stdin_guard = mcp_stdin.lock().await;
-            stdin_guard.write_all(body).await?;
-            stdin_guard.write_all(b"\n").await?;
-            stdin_guard.flush().await?;
-            drop(stdin_guard);
+            // Marco I · v6.4: serial lock global — ver comentário no caminho
+            // principal. Garante que a response desta request caia no
+            // PRÓPRIO client (não na task concorrente).
+            let _serial_guard = request_serial_lock.lock().await;
+            {
+                let mut stdin_guard = mcp_stdin.lock().await;
+                stdin_guard.write_all(body).await?;
+                stdin_guard.write_all(b"\n").await?;
+                stdin_guard.flush().await?;
+                drop(stdin_guard);
+            }
             return handle_mcp_stdout_response(
                 downstream,
                 mcp_stdout,
@@ -605,6 +622,42 @@ async fn write_json_response_headers(
     stream.write_all(HTTP_CORS_HEADERS).await?;
     let cl = format!("Content-Length: {}\r\n\r\n", body_len);
     stream.write_all(cl.as_bytes()).await?;
+    stream.flush().await
+}
+
+/// Emite `HTTP/1.1 202 Accepted` com `Content-Type: application/json`,
+/// `Content-Length: 0` e sem body — resposta canônica para JSON-RPC
+/// **notifications** (`notifications/initialized`, etc.) no StreamableHTTP
+/// transport (MCP spec 2025-03-26 §"Sending Messages to the Server").
+///
+/// **Por que 202 e NÃO 200 com notification/ack**:
+/// - Spec 2025-03-26 §"Sending Messages": "If the input is a JSON-RPC
+///   response or notification: the server **MUST** return HTTP status
+///   code 202 Accepted with no body."
+/// - 200 com body JSON-RPC faz o `mcp-remote` correlacionar a notification
+///   como se fosse a response de uma request (bug no Zod correlation
+///   logic que vimos — `notifications/ack` quebrava o matching por id).
+///
+/// **Por que `Content-Length: 0` e Content-Type explícito**:
+/// - O `mcp-remote` (undici H1 parser) chama `ResponseEnded` quando o
+///   body termina antes do `Content-Length` declarar. Sem o header, fecha
+///   prematuro.
+/// - O `mcp-remote` (StreamableHTTP) valida `Content-Type` em TODA response
+///   HTTP. Sem o header, dispara `Unexpected content type: null`.
+///
+/// **Status code 202**: semanticamente "Accepted, no further action"
+/// (perfeito para fire-and-forget notifications) e **reservado** para
+/// responses sem body no StreamableHTTP.
+const HTTP_202_EMPTY_HEADERS: &[u8] = b"HTTP/1.1 202 Accepted\r\n\
+Content-Type: application/json\r\n\
+Content-Length: 0\r\n\
+Connection: close\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Headers: Content-Type, Authorization, MCP-Protocol-Version\r\n\
+Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\r\n";
+
+async fn write_202_accepted_empty(stream: &mut TcpStream) -> io::Result<()> {
+    stream.write_all(HTTP_202_EMPTY_HEADERS).await?;
     stream.flush().await
 }
 
@@ -738,24 +791,27 @@ async fn handle_mcp_stdout_response(
     }
     drop(stdout_guard);
 
-    // Se nenhuma linha chegou (ex.: `notifications/initialized` que não
-    // gera response), envia um JSON-RPC `result: {}` vazio com id=0 para
-    // satisfazer o cliente HTTP e fechar a conexão limpa.
-    let body_owned: String = if let Some(first) = first_json_line {
-        first
-    } else {
-        tracing::debug!(
-            "handle_mcp_stdout_response: 0 linhas lidas, respondendo JSON-RPC vazio (notification)"
+    // Se nenhuma linha chegou (ex.: `notifications/initialized` que é
+    // fire-and-forget no JSON-RPC), respondemos `202 Accepted` com body
+    // vazio — canônico para StreamableHTTP (MCP spec 2025-03-26 §Sending).
+    if first_json_line.is_none() {
+        tracing::info!(
+            "handle_mcp_stdout_response: 0 linhas lidas → 202 Accepted (notification)"
         );
-        // MCP `notifications/*` não exigem response. Mas o `mcp-remote`
-        // (StreamableHTTP) ainda espera um HTTP response com body. Devolvemos
-        // um JSON-RPC ack vazio para evitar hang no client.
-        "{\"jsonrpc\":\"2.0\",\"id\":null,\"result\":{}}".to_string()
-    };
+        write_202_accepted_empty(&mut downstream).await?;
+        finalize_telemetry(
+            request_started_at,
+            model,
+            tokens_in,
+            tokens_out_estimate,
+            session_id,
+        );
+        return Ok(());
+    }
 
     // Marco I · v6.2 — Envelope HTTP/1.1 + JSON puro (sem SSE wrapping,
     // sem `data: [DONE]`). Content-Length dinâmico.
-    let body_bytes = body_owned.into_bytes();
+    let body_bytes = body_buffer.into_bytes();
     write_json_response_headers(&mut downstream, body_bytes.len()).await?;
     downstream.write_all(&body_bytes).await?;
     downstream.flush().await?;
@@ -945,6 +1001,13 @@ async fn main() -> io::Result<()> {
     let mcp_stdin = Arc::new(Mutex::new(mcp_stdin));
     let mcp_stdout = Arc::new(Mutex::new(mcp_stdout));
 
+    // Marco I · v6.4 — Serial lock global. Tasks HTTP concorrentes
+    // disputam o mesmo ChildStdin/ChildStdout do subprocesso MCP. Sem
+    // este lock, task A pode consumir a response da task B (race
+    // condition), causando timeout 60s do client. O lock serializa o
+    // ciclo stdin-write → stdout-read em UMA task por vez.
+    let request_serial_lock = Arc::new(Mutex::new(()));
+
     // Reap task: aguarda o child sair. Se o proxy cair antes, o `Drop`
     // do guard já não existe (tomamos via `into_child`), então a task
     // de reap apenas observa. O kill explícito fica por conta do signal
@@ -976,11 +1039,13 @@ async fn main() -> io::Result<()> {
         let pii_clone = Arc::clone(&pii);
         let stdin_clone = Arc::clone(&mcp_stdin);
         let stdout_clone = Arc::clone(&mcp_stdout);
+        let serial_clone = Arc::clone(&request_serial_lock);
         tokio::spawn(async move {
             if let Err(e) = handle_l7_proxy_v6(
                 downstream,
                 stdin_clone,
                 stdout_clone,
+                serial_clone,
                 store_clone,
                 shield_clone,
                 sticky_clone,
