@@ -1,14 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::env;
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
 use tauri::Manager;
 
 #[tauri::command]
@@ -62,7 +54,6 @@ async fn socratic_merge_sessions(
     .map_err(|e| format!("merge_sessions falhou: {e}"))
 }
 
-#[allow(clippy::zombie_processes)]
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -73,43 +64,15 @@ fn main() {
             socratic_merge_sessions,
         ])
         .setup(|app| {
-            let fallback_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("target")
-                .join("debug");
-
-            let bin_dir = match resolve_running_bin_dir() {
-                Ok(dir) => dir,
-                Err(e) => {
-                    eprintln!("Falha ao resolver diretório do supervisor: {e}");
-                    fallback_dir
-                }
-            };
-
-            let project_root = resolve_project_root();
-            let agentgateway_spec = ProgramSpec::global("agentgateway.exe");
-            ensure_program_path_exists(&agentgateway_spec)?;
-            let agentgateway = spawn_supervised(
-                agentgateway_spec,
-                vec!["-f".to_string(), "gateway-config.yaml".to_string()],
-                project_root.clone(),
-            );
-
-            let tcp_proxy_spec = ProgramSpec::path(resolve_tcp_proxy_path(&bin_dir));
-            ensure_program_path_exists(&tcp_proxy_spec)?;
-            let tcp_proxy = spawn_supervised(
-                tcp_proxy_spec,
-                vec![
-                    "--listen".to_string(),
-                    "127.0.0.1:3000".to_string(),
-                    "--upstream".to_string(),
-                    "127.0.0.1:3001".to_string(),
-                ],
-                project_root,
-            );
-
-            app.manage(Supervisor {
-                processes: vec![agentgateway, tcp_proxy],
-            });
+            // souls_mc é puramente um tray daemon (Tauri TrayIconBuilder).
+            // O ciclo de vida do proxy L7 é de responsabilidade do `boot.ps1`
+            // (orquestrador central), que já o inicia com guarda de expurgo
+            // no step 1 + spawn soberano no step 6. **NÃO** spawnar nenhum
+            // binário aqui — qualquer tentativa de supervisão interna
+            // reintroduziria o fantasma `agentgateway.exe` (zumbi eliminado
+            // no Marco I em favor do `agentgateway_tcp_proxy.exe`).
+            //
+            // ADR-005: zero lógica de negócios no frontend (Tauri é passivo).
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
@@ -132,10 +95,7 @@ fn main() {
                 .menu(&menu)
                 .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id().as_ref() {
                     "toggle_overlay" => toggle_overlay_window(app),
-                    "quit" => {
-                        app.state::<Supervisor>().shutdown();
-                        app.exit(0);
-                    }
+                    "quit" => app.exit(0),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event: tauri::tray::TrayIconEvent| {
@@ -173,342 +133,70 @@ fn toggle_overlay_window(app: &tauri::AppHandle) {
     }
 }
 
-fn resolve_running_bin_dir() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("current_exe falhou: {e}"))?;
-    let dir = exe
-        .parent()
-        .ok_or_else(|| "current_exe sem parent()".to_string())?;
-    Ok(dir.to_path_buf())
-}
-
-/// Marco 4.1.2 + 4.1.3.5: Resolve o caminho do `agentgateway_tcp_proxy.exe`
-/// seguindo a cerca perimetrica **Fábrica/Produto**.
-///
-/// Ordem de precedência (PDR — Produto antes de Fábrica):
-/// 1. **`<project_root>/.agents/bin/agentgateway_tcp_proxy.exe`** (Produto:
-///    runtime desacoplado transplantado pelo `boot.ps1` step 1.5/5).
-/// 2. `<bin_dir>/agentgateway_tcp_proxy.exe` (Fábrica: `target/debug/`,
-///    onde o supervisor `souls_mc.exe` foi compilado).
-///
-/// Se nenhum dos dois existir, retorna o caminho do Produto (que é o
-/// que será reportado como `not found` pelo `ensure_program_path_exists`).
-pub fn resolve_tcp_proxy_path(bin_dir: &Path) -> PathBuf {
-    // Encontra o project_root subindo a arvore a partir de `bin_dir`.
-    // Estrategia: subir diretorios ate achar `gateway-config.yaml` ou
-    // `.agents/`. Limite de 5 niveis para evitar loops infinitos.
-    let mut candidate = bin_dir.to_path_buf();
-    for _ in 0..5 {
-        let produto = candidate.join(".agents").join("bin").join("agentgateway_tcp_proxy.exe");
-        if produto.exists() {
-            return produto;
-        }
-        // Sobe um nivel (sobe alem de "target/debug/" ate a raiz do projeto).
-        if !candidate.pop() {
-            break;
-        }
-    }
-    // Fallback: caminho da Fabrica (target/debug/).
-    bin_dir.join("agentgateway_tcp_proxy.exe")
-}
-
-#[derive(Clone)]
-struct ProgramSpec {
-    command: OsString,
-    label: String,
-    required_path: Option<PathBuf>,
-}
-
-impl ProgramSpec {
-    fn path(path: PathBuf) -> Self {
-        Self {
-            command: path.clone().into_os_string(),
-            label: path.display().to_string(),
-            required_path: Some(path),
-        }
-    }
-
-    fn global(name: &str) -> Self {
-        Self {
-            command: OsString::from(name),
-            label: name.to_string(),
-            required_path: None,
-        }
-    }
-}
-
-fn ensure_program_path_exists(program: &ProgramSpec) -> Result<(), std::io::Error> {
-    let Some(path) = program.required_path.as_deref() else {
-        return Ok(());
-    };
-
-    if path.is_file() {
-        return Ok(());
-    }
-
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!(
-            "Binário supervisionado ausente: {}. Verifique a build em `{}` antes de iniciar a UI.",
-            program.label,
-            path.parent().unwrap_or(Path::new(".")).display()
-        ),
-    ))
-}
-
-#[derive(Clone)]
-struct Supervisor {
-    processes: Vec<SupervisedProcess>,
-}
-
-impl Supervisor {
-    fn shutdown(&self) {
-        for process in &self.processes {
-            process.shutdown();
-        }
-    }
-}
-
-#[derive(Clone)]
-struct SupervisedProcess {
-    stop: Arc<AtomicBool>,
-    child: Arc<Mutex<Option<Child>>>,
-}
-
-impl SupervisedProcess {
-    fn shutdown(&self) {
-        self.stop.store(true, Ordering::SeqCst);
-        if let Ok(mut guard) = self.child.lock() {
-            if let Some(mut child) = guard.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-        }
-    }
-}
-
-fn resolve_project_root() -> PathBuf {
-    let cwd = std::env::current_dir().expect("Falha ao obter CWD");
-    let mut project_root = cwd.clone();
-    if project_root
-        .file_name()
-        .and_then(|s| s.to_str())
-        .map(|s| s.eq_ignore_ascii_case("src-tauri"))
-        .unwrap_or(false)
-    {
-        project_root = project_root
-            .parent()
-            .unwrap_or(&project_root)
-            .to_path_buf();
-    }
-    if !project_root.join("gateway-config.yaml").is_file() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        if let Some(parent) = manifest_dir.parent() {
-            project_root = parent.to_path_buf();
-        }
-    }
-
-    project_root
-}
-
-fn spawn_supervised(program: ProgramSpec, args: Vec<String>, project_root: PathBuf) -> SupervisedProcess {
-    let stop = Arc::new(AtomicBool::new(false));
-    let child = Arc::new(Mutex::new(None));
-
-    let stop_thread = stop.clone();
-    let child_thread = child.clone();
-    std::thread::spawn(move || {
-        let mut consecutive_fast_failures: u32 = 0;
-        loop {
-            if stop_thread.load(Ordering::SeqCst) {
-                break;
-            }
-
-            let started = Instant::now();
-            let mut cmd = Command::new(&program.command);
-            cmd.args(&args)
-                .env("PATH", build_dynamic_path())
-                .current_dir(&project_root);
-
-            let spawned = match cmd.spawn() {
-                Ok(child) => child,
-                Err(e) => {
-                    consecutive_fast_failures = consecutive_fast_failures.saturating_add(1);
-                    eprintln!("Falha ao spawnar {}: {}", program.label, e);
-                    if consecutive_fast_failures >= 3 {
-                        panic!("Falha crítica persistente no processo {}", program.label);
-                    }
-                    std::thread::sleep(Duration::from_millis(500));
-                    continue;
-                }
-            };
-
-            if let Ok(mut guard) = child_thread.lock() {
-                *guard = Some(spawned);
-            }
-
-            loop {
-                if stop_thread.load(Ordering::SeqCst) {
-                    if let Ok(mut guard) = child_thread.lock() {
-                        if let Some(mut child) = guard.take() {
-                            let _ = child.kill();
-                            let _ = child.wait();
-                        }
-                    }
-                    return;
-                }
-
-                let status = {
-                    let mut guard = match child_thread.lock() {
-                        Ok(g) => g,
-                        Err(_) => {
-                            std::thread::sleep(Duration::from_millis(200));
-                            continue;
-                        }
-                    };
-
-                    match guard.as_mut() {
-                        Some(child) => match child.try_wait() {
-                            Ok(Some(status)) => {
-                                let _ = guard.take();
-                                Some(status)
-                            }
-                            Ok(None) => None,
-                            Err(_) => None,
-                        },
-                        None => None,
-                    }
-                };
-
-                if let Some(status) = status {
-                    let lived = started.elapsed();
-                    if lived < Duration::from_secs(2) {
-                        consecutive_fast_failures = consecutive_fast_failures.saturating_add(1);
-                        eprintln!(
-                            "Falha rápida no processo {} ({}). lived_ms={} status={:?}",
-                            program.label,
-                            consecutive_fast_failures,
-                            lived.as_millis(),
-                            status
-                        );
-                        if consecutive_fast_failures >= 3 {
-                            panic!("Falha crítica persistente no processo {}", program.label);
-                        }
-                    } else if lived > Duration::from_secs(5) {
-                        consecutive_fast_failures = 0;
-                    }
-                    break;
-                }
-
-                std::thread::sleep(Duration::from_millis(200));
-            }
-
-            std::thread::sleep(Duration::from_millis(500));
-        }
-    });
-
-    SupervisedProcess { stop, child }
-}
-
-/// Descobre onde os gerenciadores de pacote instalam os binários no Windows
-fn get_souls_essential_paths() -> Vec<PathBuf> {
-    let mut paths = Vec::new();
-    if let Some(user_profile) = env::var_os("USERPROFILE") {
-        let base = PathBuf::from(user_profile);
-        paths.push(base.join(".cargo").join("bin")); // Para ferramentas Rust (mcp-server-time)
-        paths.push(
-            base.join("AppData")
-                .join("Roaming")
-                .join("uv")
-                .join("tools"),
-        ); // Para ferramentas uv
-        paths.push(base.join("AppData").join("Roaming").join("npm")); // Para ferramentas Node (se usar npx no futuro)
-    }
-
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    paths.push(manifest_dir.join("target").join("debug"));
-    paths.push(manifest_dir.join("target").join("release"));
-
-    paths
-}
-
-/// Cria a nova variável PATH fundindo o sistema atual com os caminhos do SOULS
-fn build_dynamic_path() -> String {
-    let current_path = env::var_os("PATH").unwrap_or_default();
-    let mut dynamic_paths = env::split_paths(&current_path).collect::<Vec<_>>();
-
-    for essential_path in get_souls_essential_paths() {
-        if essential_path.exists() && !dynamic_paths.contains(&essential_path) {
-            dynamic_paths.insert(0, essential_path); // Injeta no início para ter prioridade
-        }
-    }
-
-    env::join_paths(dynamic_paths)
-        .unwrap()
-        .into_string()
-        .unwrap()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
-    use tempfile::TempDir;
 
-    /// Marco 4.1.2 + 4.1.3.5: PDR — Produto (`.agents/bin/`) tem
-    /// precedência sobre Fábrica (`target/debug/`).
+    /// TDD anti-regressão: o `souls_mc` (tray daemon) **NUNCA** deve tentar
+    /// spawnar o binário zumbi `agentgateway.exe` (eliminado no Marco I em
+    /// favor do `agentgateway_tcp_proxy.exe`). O ciclo de vida do proxy é
+    /// de responsabilidade exclusiva do `boot.ps1` (orquestrador central).
+    ///
+    /// Qualquer regressão aqui reintroduziria o panic em
+    /// `src\main.rs:338:25` que vimos no log:
+    ///   `Falha crítica persistente no processo agentgateway.exe`
     #[test]
-    fn resolve_tcp_proxy_path_prefers_agents_bin_over_target_debug() {
-        let tmp = TempDir::new().expect("cria tempdir");
-        let project_root = tmp.path();
-        let target_debug = project_root.join("src-tauri").join("target").join("debug");
-        let agents_bin = project_root.join(".agents").join("bin");
-
-        // Cria AMBOS os .exe (Fabrica + Produto).
-        fs::create_dir_all(&target_debug).expect("cria target/debug/");
-        fs::create_dir_all(&agents_bin).expect("cria .agents/bin/");
-        fs::write(target_debug.join("agentgateway_tcp_proxy.exe"), b"OLD").expect("Fabrica");
-        fs::write(agents_bin.join("agentgateway_tcp_proxy.exe"), b"NEW").expect("Produto");
-
-        // A funcao deve preferir o Produto.
-        let resolved = resolve_tcp_proxy_path(&target_debug);
-        assert_eq!(
-            resolved,
-            agents_bin.join("agentgateway_tcp_proxy.exe"),
-            "PDR: Produto (.agents/bin/) tem precedencia sobre Fabrica (target/debug/)"
+    fn main_rs_does_not_reference_agentgateway_phantom() {
+        let source = fs::read_to_string(file!()).expect("lê o próprio main.rs");
+        assert!(
+            !source.contains("agentgateway.exe"),
+            "REGRESSÃO: `agentgateway.exe` (fantasma) foi reintroduzido no main.rs. \
+             O ciclo de vida do proxy L7 é exclusivo do `boot.ps1` (Marco I)."
+        );
+        assert!(
+            !source.contains("ProgramSpec::global(\"agentgateway.exe\")"),
+            "REGRESSÃO: spawn supervisionado do fantasma `agentgateway.exe` reintroduzido."
         );
     }
 
-    /// Quando o Produto nao existe, fallback para a Fabrica.
+    /// TDD anti-regressão: o `souls_mc` **NUNCA** deve tentar spawnar o
+    /// `agentgateway_tcp_proxy.exe` internamente (o `boot.ps1` step 6 já
+    /// é o dono soberano do spawn do proxy em :3000).
     #[test]
-    fn resolve_tcp_proxy_path_falls_back_to_target_debug() {
-        let tmp = TempDir::new().expect("cria tempdir");
-        let target_debug = tmp.path().join("target").join("debug");
-        fs::create_dir_all(&target_debug).expect("cria target/debug/");
-        fs::write(target_debug.join("agentgateway_tcp_proxy.exe"), b"FABRICA").expect("Fabrica");
-
-        // NENHUM .agents/bin/ — fallback para Fabrica.
-        let resolved = resolve_tcp_proxy_path(&target_debug);
-        assert_eq!(
-            resolved,
-            target_debug.join("agentgateway_tcp_proxy.exe"),
-            "Fallback: quando Produto nao existe, usa Fabrica (target/debug/)"
+    fn main_rs_does_not_spawn_tcp_proxy() {
+        let source = fs::read_to_string(file!()).expect("lê o próprio main.rs");
+        assert!(
+            !source.contains("spawn_supervised"),
+            "REGRESSÃO: `spawn_supervised` foi reintroduzido. O `souls_mc` é \
+             puramente um tray daemon; a orquestração é 100% do `boot.ps1`."
+        );
+        assert!(
+            !source.contains("agentgateway_tcp_proxy.exe"),
+            "REGRESSÃO: spawn interno do `agentgateway_tcp_proxy.exe` reintroduzido. \
+             Use `boot.ps1` step 6 em vez disso."
         );
     }
 
-    /// Quando NEM Produto NEM Fabrica existem, retorna o caminho da Fabrica
-    /// (que sera reportado como not-found pelo `ensure_program_path_exists`).
+    /// TDD anti-regressão: as structs mortas (`ProgramSpec`, `Supervisor`,
+    /// `SupervisedProcess`) não devem voltar. Sua presença é um marcador
+    /// de que alguém tentou reintroduzir supervisão interna.
     #[test]
-    fn resolve_tcp_proxy_path_returns_target_debug_when_neither_exists() {
-        let tmp = TempDir::new().expect("cria tempdir");
-        let target_debug = tmp.path().join("target").join("debug");
-        // Cria so o diretorio, sem o .exe.
-        fs::create_dir_all(&target_debug).expect("cria target/debug/");
-
-        let resolved = resolve_tcp_proxy_path(&target_debug);
-        assert_eq!(
-            resolved,
-            target_debug.join("agentgateway_tcp_proxy.exe"),
-            "Sem Produto nem Fabrica: retorna caminho da Fabrica (consistente)"
-        );
+    fn main_rs_does_not_contain_dead_supervisor_infra() {
+        let source = fs::read_to_string(file!()).expect("lê o próprio main.rs");
+        for dead_symbol in [
+            "struct ProgramSpec",
+            "struct Supervisor",
+            "struct SupervisedProcess",
+            "fn ensure_program_path_exists",
+            "fn build_dynamic_path",
+            "fn get_souls_essential_paths",
+            "fn resolve_tcp_proxy_path",
+        ] {
+            assert!(
+                !source.contains(dead_symbol),
+                "REGRESSÃO: símbolo morto `{dead_symbol}` reintroduzido. \
+                 A supervisão foi externalizada para `boot.ps1` (Marco I)."
+            );
+        }
     }
 }

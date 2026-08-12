@@ -253,8 +253,24 @@ try {
     Write-Host "`n[2/5] Validando premissas da sessao..." -ForegroundColor Yellow
     Write-BootWarn "O cache do npx sera preservado para nao rebaixar o bootstrap do mcp-remote."
     Assert-CommandAvailable -Command "cargo"
-    Assert-CommandAvailable -Command "agentgateway.exe"
-    Write-BootOk "Dependencias essenciais resolvidas (cargo, agentgateway.exe)."
+
+    # 2.1 ASSERCAO NATIVA DO PROXY COMPILADO (Marco I · v6.1)
+    # Verifica fisicamente que o proxy L7 existe em .agents/bin/.
+    # O fantasma `agentgateway.exe` global foi ERRADICADO — o proxy é o
+    # daemon de primeira classe agora, com seu ciclo de vida auto-gerenciado
+    # via `SubprocessGuard` (RAII kill_on_drop) dentro de
+    # `agentgateway_tcp_proxy.rs`.
+    Write-Host "`n[2.1/5] Verificando presenca do proxy L7 compilado..." -ForegroundColor Yellow
+    $proxyPath = Join-Path $PSScriptRoot ".agents\bin\agentgateway_tcp_proxy.exe"
+    if (Test-Path $proxyPath) {
+        $proxyInfo = Get-Item -LiteralPath $proxyPath
+        Write-BootOk ("Proxy L7 encontrado: {0} ({1:N0} bytes)" -f $proxyPath, $proxyInfo.Length)
+    } else {
+        Write-BootWarn "Proxy L7 NAO encontrado em: $proxyPath"
+        Write-BootWarn "  -> Execute a build primeiro (cargo build --features gateway_ccr --bin agentgateway_tcp_proxy)."
+        Write-BootWarn "  -> O transplante (step 1.5) deveria ter copiado o binario. Verifique logs acima."
+    }
+    Write-BootOk "Dependencias essenciais resolvidas (cargo + proxy L7 local em .agents/bin/)."
 
     # 3. INJEÇÃO EFÊMERA DE AMBIENTE (Parser Robusto Anti-Quebra)
     Write-Host "`n[3/5] Injetando chaves do .env na RAM da sessao..." -ForegroundColor Yellow
@@ -346,14 +362,16 @@ try {
             Write-BootWarn "Script souls_context_dumps_compiler.py nao encontrado em $dumpsCompilerScript"
         }
 
-        # 5. IGNIÇÃO DO DAEMON SUPERVISOR COMPILADO (souls_mc)
-        Write-Host "`n[5/5] Iniciando o daemon supervisor compilado (souls_mc)..." -ForegroundColor Yellow
+        # 5. IGNIÇÃO DO DAEMON SUPERVISOR (tray systray + IPC para o proxy)
+        # O `souls_mc.exe` é o daemon de tray (Tauri TrayIconBuilder).
+        # Ele se conecta ao proxy L7 via IPC. **DEVE** rodar antes do proxy
+        # para que o ícone apareça e o cliente MCP consiga se conectar.
+        Write-Host "`n[5/5] Iniciando o daemon de tray (souls_mc.exe)..." -ForegroundColor Yellow
         $daemonPath = Join-Path $srcTauriDir "target\debug\souls_mc.exe"
         if (-not (Test-Path $daemonPath)) {
-            throw "Binario esperado nao encontrado apos a build: $daemonPath"
+            throw "Binario souls_mc.exe nao encontrado em: $daemonPath — execute a build antes."
         }
-
-        Write-BootOk "Build finalizada. Daemon (supervisor do agentgateway + proxy) sera iniciado."
+        Write-BootOk "souls_mc (tray systray) sera iniciado."
         $daemonProc = Start-Process -FilePath $daemonPath -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru
         Write-Host ("[DAEMON] souls_mc iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
         Start-Sleep -Seconds 2
@@ -364,31 +382,75 @@ try {
             Write-Host ("[DAEMON] souls_mc estavel (PID: {0}, WorkingSet: {1:N1} MB)" -f $daemonProc.Id, ($stillAlive.WorkingSet64 / 1MB)) -ForegroundColor Green
         }
 
-        # 7. TRAVA DE PRONTIDÃO (Probe TCP na Porta 3000)
-        Write-Host "`n[PROBE] Testando estabilidade do gateway MCP em http://127.0.0.1:3000/..." -ForegroundColor Yellow
-        $ready = $false
+        # 6. DISPARO SOBERANO DO PROXY L7 (Marco I · v6.1) — APÓS O DAEMON
+        # O proxy é o **único** binário de primeira classe do gateway. O
+        # `SubprocessGuard` interno (no `agentgateway_tcp_proxy.rs`) gerencia
+        # o ciclo de vida do `souls_mcp_server` (RAII kill_on_drop),
+        # eliminando a dependencia do binário zumbi `agentgateway.exe` global.
+        #
+        # Arquitetura (Opção A — boot.ps1 é o único orquestrador):
+        #   - `souls_mc` (tray daemon) **NAO** spawna nada internamente.
+        #     É puramente um tray icon + IPC bridge para o frontend Svelte 5.
+        #   - O `boot.ps1` (este script) é o dono soberano do spawn do proxy.
+        #
+        # Endereços (porta unificada 3001, conforme Marco I):
+        #   - listen: 127.0.0.1:3001  (única porta — cliente MCP conecta aqui)
+        #   - SEM --upstream: o proxy recebe HTTP/SSE e escreve direto no
+        #     stdin do `souls_mcp_server` (SubprocessGuard RAII), lendo o
+        #     stdout do filho para retornar a resposta. Loopback suicida
+        #     (3001→3001) foi ERRADICADO.
+        Write-Host "`n[6/6] Disparando proxy L7 soberano (agentgateway_tcp_proxy.exe :3001)..." -ForegroundColor Yellow
+        $proxyBootPath = Join-Path $PSScriptRoot ".agents\bin\agentgateway_tcp_proxy.exe"
+        if (-not (Test-Path $proxyBootPath)) {
+            throw "Proxy L7 NAO encontrado em $proxyBootPath — execute o build antes de bootar."
+        }
+
+        Write-BootOk "Proxy L7 sera iniciado em :3001 (sem dependencia do fantasma global, sem loopback)."
+        $proxyProc = Start-Process `
+            -FilePath $proxyBootPath `
+            -ArgumentList @("--listen", "127.0.0.1:3001") `
+            -WorkingDirectory $PSScriptRoot `
+            -NoNewWindow `
+            -PassThru
+        Write-Host ("[PROXY] agentgateway_tcp_proxy iniciado (PID: {0})" -f $proxyProc.Id) -ForegroundColor DarkCyan
+        Start-Sleep -Seconds 2
+        $stillAlive = Get-Process -Id $proxyProc.Id -ErrorAction SilentlyContinue
+        if ($null -eq $stillAlive) {
+            throw "agentgateway_tcp_proxy (PID $($proxyProc.Id)) morreu em menos de 2s apos o start. Verifique logs do proxy."
+        } else {
+            Write-Host ("[PROXY] agentgateway_tcp_proxy estavel (PID: {0}, WorkingSet: {1:N1} MB)" -f $proxyProc.Id, ($stillAlive.WorkingSet64 / 1MB)) -ForegroundColor Green
+        }
+
+        # 7. TRAVA DE PRONTIDÃO (Probe TCP em ambas as portas — daemon + proxy)
+        Write-Host "`n[PROBE] Testando portas 3000 (daemon) e 3001 (proxy)..." -ForegroundColor Yellow
+        $port3000 = $false
+        $port3001 = $false
         $attempts = 0
-        while (-not $ready -and $attempts -lt 15) {
+        while (($port3000 -eq $false -or $port3001 -eq $false) -and $attempts -lt 15) {
             $attempts++
-            try {
-                $tcp = New-Object System.Net.Sockets.TcpClient
-                $tcp.Connect("127.0.0.1", 3000)
-                if ($tcp.Connected) {
-                    $tcp.Close()
-                    $ready = $true
-                }
-            } catch {
+            foreach ($port in @(3000, 3001)) {
+                try {
+                    $tcp = New-Object System.Net.Sockets.TcpClient
+                    $tcp.Connect("127.0.0.1", $port)
+                    if ($tcp.Connected) {
+                        $tcp.Close()
+                        if ($port -eq 3000) { $port3000 = $true }
+                        if ($port -eq 3001) { $port3001 = $true }
+                    }
+                } catch { }
+            }
+            if ($port3000 -eq $false -or $port3001 -eq $false) {
                 Start-Sleep -Milliseconds 500
             }
         }
 
-        if ($ready) {
+        if ($port3001) {
             Write-Host "`n=======================================================" -ForegroundColor Green
-            Write-Host " 🚀 SOULS MC ONLINE & PRONTO! (Porta 3000 -> OK)" -ForegroundColor Green
+            Write-Host " 🚀 SOULS MC ONLINE & PRONTO! (Tray:3000 OK | Proxy:3001 OK)" -ForegroundColor Green
             Write-Host " Pode dar o reload no client MCP da IDE agora!" -ForegroundColor Cyan
             Write-Host "=======================================================\n" -ForegroundColor Green
         } else {
-            Write-BootWarn "O daemon iniciou, mas a porta 3000 demorou a responder ao probe."
+            Write-BootWarn "O proxy L7 iniciou, mas a porta 3001 demorou a responder ao probe."
         }
     }
     finally {

@@ -411,9 +411,37 @@ pub fn sum_today_cost_usd(db_path: &Path) -> Result<f64, String> {
 
 /// Inicializa o dispatcher usando o path configurado em `GatewayConfig`
 /// (resolve `${SOULS_STATE_DB_PATH}` no parse-time). Idempotente.
+///
+/// ## Defesa em profundidade (Issue: literal `${SOULS_STATE_DB_PATH}` no FS)
+///
+/// Se o path do JSONC contiver um placeholder NÃO-expandido (ex: o
+/// `GatewayConfig::global()` foi setado com `${SOULS_STATE_DB_PATH}`
+/// literal porque a env var não estava setada no momento do load), este
+/// helper **intercepta** o placeholder e cai no `resolve_state_db_path()`,
+/// que faz fallback inteligente para `.souls_data/souls_state.db`.
+///
+/// Isso evita o bug histórico onde o SQLite era aberto em
+/// `z:\souls_mc\${SOULS_STATE_DB_PATH}` (path literal) criando arquivos
+/// fantasma no filesystem.
 pub fn init_from_gateway_config() -> Result<&'static TelemetrySender, String> {
     let cfg = crate::core::gateway_config::GatewayConfig::global();
-    let path = PathBuf::from(&cfg.telemetry.sqlite_path);
+    let raw_path = &cfg.telemetry.sqlite_path;
+
+    // Detecta placeholder literal não-expandido.
+    let is_unexpanded_placeholder = raw_path.contains("${") || raw_path.trim().is_empty();
+
+    let path = if is_unexpanded_placeholder {
+        tracing::warn!(
+            target: "telemetry_dispatcher",
+            "GatewayConfig::global().telemetry.sqlite_path contém placeholder literal ('{}'). \
+             Caindo no resolve_state_db_path() (fallback inteligente).",
+            raw_path
+        );
+        resolve_state_db_path()
+    } else {
+        PathBuf::from(raw_path)
+    };
+
     init_telemetry_dispatcher(&path)
 }
 
@@ -472,6 +500,28 @@ mod tests {
         // Nenhum panic; nenhum bloqueio síncrono.
         std::thread::sleep(Duration::from_millis(50));
         std::fs::remove_file(&path).ok();
+    }
+
+    /// TDD — Issue: literal `${SOULS_STATE_DB_PATH}` no filesystem.
+    /// Garante que `resolve_state_db_path()` NUNCA retorna um path
+    /// com placeholder literal não-expandido, mesmo quando a env var
+    /// está unsetada. Defens em profundidade contra o bug histórico.
+    #[test]
+    fn test_resolve_state_db_path_never_returns_literal_placeholder() {
+        // Garante que SOULS_STATE_DB_PATH não está setada no test.
+        std::env::remove_var("SOULS_STATE_DB_PATH");
+        let resolved = resolve_state_db_path();
+        let resolved_str = resolved.to_string_lossy();
+        assert!(
+            !resolved_str.contains("${"),
+            "resolve_state_db_path() NUNCA deve conter placeholder literal ${{}}: {}",
+            resolved_str
+        );
+        assert!(
+            !resolved_str.is_empty(),
+            "resolve_state_db_path() deve retornar path não-vazio: {}",
+            resolved_str
+        );
     }
 
     #[test]

@@ -1,11 +1,13 @@
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, copy_bidirectional};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::process::{ChildStdin, ChildStdout};
+use tokio::sync::Mutex;
 
 use souls_mc_lib::core::gigatoken_encoder::GigaTokenEncoder;
 use souls_mc_lib::core::headroom_engine::{
@@ -30,12 +32,16 @@ use souls_mc_lib::finops::pareto_bandit::{
     evaluate_route_decision, TaskKind,
 };
 
-fn parse_cli_args() -> (SocketAddr, SocketAddr) {
+/// Parse do único argumento CLI relevante: `--listen`.
+/// Default: `127.0.0.1:3001` (porta unificada do Marco I).
+///
+/// **Sem `--upstream`**: o proxy escreve JSON-RPC no stdin do `SubprocessGuard`
+/// (`souls_mcp_server`) e lê a resposta do stdout. Não há loopback TCP.
+fn parse_listen_arg() -> SocketAddr {
     let mut args = std::env::args();
-    args.next();
+    let _ = args.next(); // próprio binário
 
-    let mut listen = "127.0.0.1:3000".to_string();
-    let mut upstream = "127.0.0.1:3001".to_string();
+    let mut listen = "127.0.0.1:3001".to_string();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -44,18 +50,24 @@ fn parse_cli_args() -> (SocketAddr, SocketAddr) {
                     listen = v;
                 }
             }
+            // `--upstream` é aceito apenas como no-op silencioso (legado),
+            // para não quebrar scripts que ainda o passam. O loopback
+            // suicida (3001→3001) foi ERRADICADO.
             "--upstream" => {
                 if let Some(v) = args.next() {
-                    upstream = v;
+                    tracing::warn!(
+                        "Argumento legado '--upstream {v}' ignorado: o proxy agora \
+                         escreve direto no stdin do souls_mcp_server (SubprocessGuard)."
+                    );
                 }
             }
             _ => {}
         }
     }
 
-    let listen = listen.parse().unwrap_or_else(|_| "127.0.0.1:3000".parse().unwrap());
-    let upstream = upstream.parse().unwrap_or_else(|_| "127.0.0.1:3001".parse().unwrap());
-    (listen, upstream)
+    listen
+        .parse()
+        .unwrap_or_else(|_| "127.0.0.1:3001".parse().unwrap())
 }
 
 fn set_nodelay(stream: &TcpStream) {
@@ -340,14 +352,14 @@ pub fn cure_sse_data_line(frame: &[u8]) -> Vec<u8> {
 #[allow(clippy::too_many_arguments)]
 async fn handle_l7_proxy_v6(
     mut downstream: TcpStream,
-    mut upstream: TcpStream,
+    mcp_stdin: Arc<Mutex<ChildStdin>>,
+    mcp_stdout: Arc<Mutex<ChildStdout>>,
     ccr_store: Arc<SoulsCcrStore>,
     shield_channel: EpistemicShieldChannel,
     sticky: Arc<StickyRouter>,
     pii: Arc<PiiRedactor>,
 ) -> io::Result<()> {
     set_nodelay(&downstream);
-    set_nodelay(&upstream);
 
     let mut buf = vec![0u8; 16384];
     let mut read_bytes = 0;
@@ -482,23 +494,25 @@ async fn handle_l7_proxy_v6(
                             final_body = prepend_header(&final_body, &h);
                         }
 
-                        let req_header = format!(
-                            "POST {} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\nX-Souls-Session: {}\r\nX-Souls-Model: {}\r\n\r\n",
-                            path,
-                            final_body.len(),
-                            session_id,
-                            effective_pin.model
-                        );
-                        let mut full_req = req_header.into_bytes();
-                        full_req.append(&mut final_body);
+                        // Marco I · v6.1: pipe JSON-RPC direto no stdin do
+                        // `SubprocessGuard` (souls_mcp_server). Sem header
+                        // HTTP upstream, sem loopback TCP — o subprocesso
+                        // consome line-delimited JSON via `BufReader::lines`.
+                        //
+                        // Locks serializam requests concorrentes (Mutex de
+                        // tokio é fair, await-safe).
+                        {
+                            let mut stdin_guard = mcp_stdin.lock().await;
+                            stdin_guard.write_all(&final_body).await?;
+                            stdin_guard.write_all(b"\n").await?;
+                            stdin_guard.flush().await?;
+                        }
 
-                        upstream.write_all(&full_req).await?;
-                        upstream.flush().await?;
-
-                        // (7) Upstream response com TTFT tracking.
-                        return handle_upstream_response_v6(
+                        // (7) Response do stdout do subprocesso (JSON-RPC
+                        // line-delimited → envelopado em SSE para o cliente).
+                        return handle_mcp_stdout_response(
                             downstream,
-                            upstream,
+                            mcp_stdout,
                             ccr_store,
                             request_started_at,
                             &effective_pin.model,
@@ -520,77 +534,257 @@ async fn handle_l7_proxy_v6(
         }
     }
 
-    // Fallback Fail-Soft: repassar bytes brutos e copiar de forma bidirecional.
+    // Fallback Fail-Soft: para requests não-POST/chat, passa o body cru
+    // para o subprocesso (1 linha JSON) e envelopa a resposta em SSE.
     if read_bytes > 0 {
-        upstream.write_all(&buf[..read_bytes]).await?;
+        // Tenta extrair o body HTTP (após o header \r\n\r\n).
+        let body_start = buf[..read_bytes]
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .map(|p| p + 4)
+            .unwrap_or(0);
+        let body = &buf[body_start..read_bytes];
+        if !body.is_empty() {
+            let mut stdin_guard = mcp_stdin.lock().await;
+            stdin_guard.write_all(body).await?;
+            stdin_guard.write_all(b"\n").await?;
+            stdin_guard.flush().await?;
+            drop(stdin_guard);
+            return handle_mcp_stdout_response(
+                downstream,
+                mcp_stdout,
+                ccr_store,
+                request_started_at,
+                "passthrough",
+                0,
+                None,
+            )
+            .await;
+        }
     }
-    let _ = copy_bidirectional(&mut downstream, &mut upstream).await;
     Ok(())
 }
 
-/// `handle_upstream_response` versão Marco I · v6.1:
+/// Envelope HTTP/1.1 canônico que o proxy envia **antes** do body JSON-RPC.
+///
+/// **Por que é obrigatório**: o `mcp-remote` (Node + undici H1 parser) usa
+/// `fetch()` HTTP/1.1 contra `http://127.0.0.1:3001/`. O parser do undici
+/// exige uma *response line* (`HTTP/1.1 200 OK`) seguida de headers e do
+/// `\r\n\r\n` separador. Sem isso, o parser dispara
+/// `HTTPParserError: Response does not match the HTTP/1.1 protocol`.
+///
+/// **Content-Type `application/json` (NÃO SSE)**: o transporte MCP
+/// StreamableHTTP (padrão do `mcp-remote`) parseia o body como **JSON
+/// puro** quando o content-type é `application/json`. SSE (`text/event-stream`)
+/// exige parsing de `data: ...\n\n` que o `mcp-remote` NÃO faz — qualquer
+/// suffixo como `data: [DONE]\n\n` causa `SyntaxError: Unexpected token 'D'`.
+///
+/// **Content-Length dinâmico**: o proxy sintetiza o envelope porque o
+/// `souls_mcp_server` é stdio-only. Como o body pode ter tamanho variável,
+/// montamos o header `Content-Length` por request no helper
+/// `write_json_response_headers`. Status é sempre 200 (erros viram JSON-RPC
+/// `error`, não HTTP 4xx/5xx).
+const HTTP_STATUS_LINE: &[u8] = b"HTTP/1.1 200 OK\r\n";
+const HTTP_CORS_HEADERS: &[u8] = b"\
+Content-Type: application/json\r\n\
+Connection: close\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Headers: Content-Type, Authorization, MCP-Protocol-Version\r\n\
+Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+
+/// Emite o envelope HTTP/1.1 completo (status + headers fixos + Content-Length
+/// dinâmico) **antes** do body JSON. Falha de I/O propaga imediatamente.
+///
+/// Aceita `&Vec<u8>` por compatibilidade com `String::into_bytes()` no caller
+/// — preferimos `&[u8]` no path de hot loop para evitar 1 alocação.
+async fn write_json_response_headers(
+    stream: &mut TcpStream,
+    body_len: usize,
+) -> io::Result<()> {
+    stream.write_all(HTTP_STATUS_LINE).await?;
+    stream.write_all(HTTP_CORS_HEADERS).await?;
+    let cl = format!("Content-Length: {}\r\n\r\n", body_len);
+    stream.write_all(cl.as_bytes()).await?;
+    stream.flush().await
+}
+
+/// `handle_mcp_stdout_response` (Marco I · v6.2) — Lê JSON-RPC line-delimited
+/// do stdout do `SubprocessGuard` (souls_mcp_server), concatena em um único
+/// buffer JSON e envia a resposta ao cliente HTTP da IDE como
+/// `application/json` puro (NÃO SSE).
+///
+/// **Por que `application/json` e NÃO `text/event-stream`**: o transporte
+/// MCP StreamableHTTP usado pelo `mcp-remote` parseia o body como **JSON
+/// puro** quando o content-type é `application/json`. SSE exige parsing
+/// de frames `data: ...\n\n` que o `mcp-remote` não implementa — qualquer
+/// trailer como `data: [DONE]\n\n` causa `SyntaxError: Unexpected token 'D'`.
+/// O MCP `souls_mcp_server` escreve **1 linha JSON por request**, então
+/// concatenar em 1 buffer é 1:1 com o protocolo esperado.
+///
+/// **Envelope HTTP/1.1**: o `mcp-remote` (undici H1 parser) exige status
+/// line + headers antes do body. Sem isso, dispara `HTTPParserError`.
+///
+/// **Crítico**: usa `tokio::time::timeout` (200ms) no `read_line` porque
+/// o `souls_mcp_server` escreve EXATAMENTE 1 linha por request e fica
+/// bloqueado esperando o próximo stdin. Sem timeout, o `read_line` trava
+/// para sempre e o `mcp_stdout` lock é sequestrado, causando timeout
+/// em todos os requests subsequentes (incluindo `notifications/initialized`
+/// que não recebem resposta alguma).
+///
 /// Mede o **Time-To-First-Token** (TTFT) do primeiro byte de resposta,
 /// atualiza o `PeakEWMA` global e despacha telemetria via MPSC.
-async fn handle_upstream_response_v6<D, U>(
-    mut downstream: D,
-    mut upstream: U,
+async fn handle_mcp_stdout_response(
+    mut downstream: TcpStream,
+    mcp_stdout: Arc<Mutex<ChildStdout>>,
     ccr_store: Arc<SoulsCcrStore>,
     request_started_at: Instant,
     model: &str,
     tokens_in: i64,
     session_id: Option<String>,
-) -> io::Result<()>
-where
-    D: AsyncWriteExt + Unpin,
-    U: AsyncReadExt + Unpin,
-{
-    let mut read_buf = vec![0u8; 8192];
-    let mut acc = SseFrameAccumulator::new();
+) -> io::Result<()> {
+    use tokio::io::AsyncBufReadExt;
+
+    const READ_TIMEOUT: Duration = Duration::from_millis(200);
+
+    let mut stdout_guard = mcp_stdout.lock().await;
+    let mut reader = tokio::io::BufReader::new(&mut *stdout_guard);
+    let mut line = String::new();
     let mut ttft_recorded = false;
     let mut tokens_out_estimate: i64 = 0;
+    let mut lines_read: u32 = 0;
+    // Buffer acumulado: o subprocesso pode emitir 1+ linhas (resultado +
+    // notificações parciais). Concatenamos para enviar 1 JSON-RPC response.
+    let mut body_buffer = String::new();
+    let mut first_json_line: Option<String> = None;
 
     loop {
-        let n = upstream.read(&mut read_buf).await?;
+        line.clear();
+        // TIMEOUT obrigatório: o subprocesso escreve 1 linha e BLOQUEIA
+        // esperando o próximo stdin. Sem timeout, deadlock permanente.
+        let n = match tokio::time::timeout(READ_TIMEOUT, reader.read_line(&mut line)).await {
+            Ok(Ok(n)) => n,
+            Ok(Err(e)) => return Err(e),
+            Err(_elapsed) => {
+                // Timeout: subprocesso não respondeu (notification ou fim).
+                tracing::debug!(
+                    "handle_mcp_stdout_response: read_line timeout após {READ_TIMEOUT:?} \
+                     (subprocesso aguardando próximo stdin — {lines_read} linhas já lidas)"
+                );
+                break;
+            }
+        };
         if n == 0 {
+            // EOF: subprocesso fechou stdout.
             break;
         }
-        // Marco I · v6.1: TTFT = tempo do primeiro byte de resposta.
+        // Strip trailing newline.
+        let trimmed = line.trim_end_matches(['\n', '\r']);
+        if trimmed.is_empty() {
+            continue;
+        }
+        lines_read += 1;
+
+        // TTFT: primeiro byte (ou primeira linha) recebida do subprocesso.
         if !ttft_recorded {
             let ttft_ms = request_started_at.elapsed().as_secs_f64() * 1000.0;
             global_peak_ewma().record(ttft_ms);
             ttft_recorded = true;
-            tracing::info!("TTFT={:.2}ms model={} tokens_in={}", ttft_ms, model, tokens_in);
+            tracing::info!(
+                "TTFT={:.2}ms model={} tokens_in={} (mcp_stdout)",
+                ttft_ms, model, tokens_in
+            );
         }
-        let frames = acc.push_chunk(&read_buf[..n]);
 
-        for frame_bytes in frames {
-            // Marco 4.9.2 — Gate de cura sintática (jsonrepair, < 1ms).
-            let cured_bytes = cure_sse_data_line(&frame_bytes);
-            let frame_str = String::from_utf8_lossy(&cured_bytes);
+        // Marco I — estimativa de tokens_out (BPE).
+        tokens_out_estimate += count_real_tokens(trimmed);
 
-            // Marco I — estimativa de tokens_out (BPE).
-            tokens_out_estimate += count_real_tokens(&frame_str);
-
-            // Sequestro do Loopback SSE (existente).
-            if frame_str.contains("headroom_retrieve") {
-                if let Some(hydrated) = ccr_store.intercept_loopback(&frame_str) {
-                    tracing::info!("Sequestro de Loopback SSE acionado em < 1ms! Contexto hidratado.");
-                    let sse_event = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: {}\n\ndata: [DONE]\n\n",
-                        hydrated
-                    );
-                    downstream.write_all(sse_event.as_bytes()).await?;
-                    downstream.flush().await?;
-                    return Ok(());
-                }
+        // Sequestro do Loopback (existente): se a resposta do MCP
+        // referencia headroom_retrieve, hidrata o código stubbed aqui
+        // mesmo (em vez de SSE upstream). Mantém latência < 1ms.
+        if trimmed.contains("headroom_retrieve") {
+            if let Some(hydrated) = ccr_store.intercept_loopback(trimmed) {
+                tracing::info!(
+                    "Sequestro de Loopback acionado em < 1ms (via mcp_stdout)."
+                );
+                // Marco I · v6.2 — JSON puro com Content-Length, NÃO SSE.
+                let hydrated_bytes = hydrated.into_bytes();
+                write_json_response_headers(&mut downstream, hydrated_bytes.len()).await?;
+                downstream.write_all(&hydrated_bytes).await?;
+                downstream.flush().await?;
+                drop(stdout_guard);
+                finalize_telemetry(
+                    request_started_at,
+                    model,
+                    tokens_in,
+                    tokens_out_estimate,
+                    session_id,
+                );
+                return Ok(());
             }
+        }
 
-            downstream.write_all(&cured_bytes).await?;
-            downstream.flush().await?;
+        // Acumula a primeira linha JSON-RPC como body principal. O
+        // `mcp-remote` espera 1 response JSON por request; linhas
+        // subsequentes (se houver) viram logs/telemetria mas não
+        // fazem parte do body HTTP.
+        if first_json_line.is_none() {
+            first_json_line = Some(trimmed.to_string());
+            body_buffer.push_str(trimmed);
+        } else {
+            tracing::debug!(
+                "handle_mcp_stdout_response: linha extra ignorada (linha 1 já capturada)"
+            );
         }
     }
+    drop(stdout_guard);
 
-    // Marco I · v6.1: despacho final de telemetria (TTFT + tokens + custo).
+    // Se nenhuma linha chegou (ex.: `notifications/initialized` que não
+    // gera response), envia um JSON-RPC `result: {}` vazio com id=0 para
+    // satisfazer o cliente HTTP e fechar a conexão limpa.
+    let body_owned: String = if let Some(first) = first_json_line {
+        first
+    } else {
+        tracing::debug!(
+            "handle_mcp_stdout_response: 0 linhas lidas, respondendo JSON-RPC vazio (notification)"
+        );
+        // MCP `notifications/*` não exigem response. Mas o `mcp-remote`
+        // (StreamableHTTP) ainda espera um HTTP response com body. Devolvemos
+        // um JSON-RPC ack vazio para evitar hang no client.
+        "{\"jsonrpc\":\"2.0\",\"id\":null,\"result\":{}}".to_string()
+    };
+
+    // Marco I · v6.2 — Envelope HTTP/1.1 + JSON puro (sem SSE wrapping,
+    // sem `data: [DONE]`). Content-Length dinâmico.
+    let body_bytes = body_owned.into_bytes();
+    write_json_response_headers(&mut downstream, body_bytes.len()).await?;
+    downstream.write_all(&body_bytes).await?;
+    downstream.flush().await?;
+
+    finalize_telemetry(
+        request_started_at,
+        model,
+        tokens_in,
+        tokens_out_estimate,
+        session_id,
+    );
+    tracing::debug!(
+        "handle_mcp_stdout_response: {lines_read} linhas lidas, tokens_out≈{tokens_out_estimate}, body={}B",
+        body_bytes.len()
+    );
+    Ok(())
+}
+
+/// Despacho final de telemetria (TTFT + tokens + custo).
+/// Extraído para reuso entre o path de loopback (early-return) e o path
+/// normal (EOF). Fail-soft: log se o canal estiver fechado.
+fn finalize_telemetry(
+    request_started_at: Instant,
+    model: &str,
+    tokens_in: i64,
+    tokens_out_estimate: i64,
+    session_id: Option<String>,
+) {
+    let _ = model; // Telemetria recebe via dispatch_latency (já carrega model).
     if let Some(sender) = telemetry_sender() {
         let ttft_ms = request_started_at.elapsed().as_secs_f64() * 1000.0;
         let peak_ewma = global_peak_ewma().ewma_ms();
@@ -606,26 +800,6 @@ where
             session_id,
         );
     }
-
-    // Processar residual final.
-    if let Some(remaining) = acc.flush_remaining() {
-        let cured_remaining = cure_sse_data_line(&remaining);
-        let frame_str = String::from_utf8_lossy(&cured_remaining);
-        if frame_str.contains("headroom_retrieve") {
-            if let Some(hydrated) = ccr_store.intercept_loopback(&frame_str) {
-                let sse_event = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: {}\n\ndata: [DONE]\n\n",
-                    hydrated
-                );
-                downstream.write_all(sse_event.as_bytes()).await?;
-                downstream.flush().await?;
-                return Ok(());
-            }
-        }
-        downstream.write_all(&cured_remaining).await?;
-        downstream.flush().await?;
-    }
-    Ok(())
 }
 
 /// Serializa a decisão do shield em uma resposta HTTP/1.1 200 OK
@@ -704,13 +878,17 @@ async fn main() -> io::Result<()> {
         .with_writer(std::io::stderr)
         .try_init();
 
-    let (listen, upstream) = parse_cli_args();
+    let listen = parse_listen_arg();
     let ccr_store = Arc::new(SoulsCcrStore::from_env());
 
     // Marco I · v6.1 — Boot do subsistema de telemetria e config.
+    // Usa `resolve_state_db_path()` (resolver inteligente) ao invés do
+    // path cru do JSONC: garante fallback para `.souls_data/souls_state.db`
+    // se a env var `SOULS_STATE_DB_PATH` não estiver setada — evita
+    // criar arquivos com path literal `${...}` no filesystem.
     // Falha de bootstrap do dispatcher é logged e ignorada (fail-soft):
     // o proxy ainda funciona, apenas sem telemetria.
-    let db_path = std::path::PathBuf::from(&GatewayConfig::global().telemetry.sqlite_path);
+    let db_path = souls_mc_lib::core::telemetry_dispatcher::resolve_state_db_path();
     if let Err(e) = init_telemetry_dispatcher(&db_path) {
         tracing::warn!("TelemetryDispatcher não inicializou: {e}. Telemetria desabilitada.");
     }
@@ -733,31 +911,76 @@ async fn main() -> io::Result<()> {
         global_peak_ewma().alpha()
     );
 
+    // Marco I · v6.1 — Boot do subprocesso MCP sob SubprocessGuard.
+    // O proxy é o **dono absoluto** do ciclo de vida do `souls_mcp_server`:
+    //  1. spawna o subprocesso
+    //  2. extrai stdin/stdout (piped)
+    //  3. toma o `Child` para reaping manual
+    //  4. wrappa stdin/stdout em `Arc<Mutex<...>>` para serializar acesso
+    //     entre tasks de clientes MCP concorrentes
+    //  5. spawna uma task de reaping que mata o child se o proxy cair
+    //
+    // Sem `--upstream` TCP: o loopback suicida (3001→3001) foi ERRADICADO.
+    let mcp_guard = spawn_souls_mcp_server().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            "Falha crítica: souls_mcp_server não pode ser spawned (SubprocessGuard). \
+             Verifique SOULS_MCP_BIN e o JSONC."
+        )
+    })?;
+
+    let mut child = mcp_guard
+        .into_child()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "SubprocessGuard cedeu o child"))?;
+
+    let mcp_stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "stdin do MCP não capturado (Stdio::piped() falhou)"))?;
+    let mcp_stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "stdout do MCP não capturado (Stdio::piped() falhou)"))?;
+
+    let mcp_stdin = Arc::new(Mutex::new(mcp_stdin));
+    let mcp_stdout = Arc::new(Mutex::new(mcp_stdout));
+
+    // Reap task: aguarda o child sair. Se o proxy cair antes, o `Drop`
+    // do guard já não existe (tomamos via `into_child`), então a task
+    // de reap apenas observa. O kill explícito fica por conta do signal
+    // handler (Ctrl+C → shutdown do main loop).
+    tokio::spawn(async move {
+        match child.wait().await {
+            Ok(status) => {
+                tracing::warn!("souls_mcp_server saiu inesperadamente: {status}");
+            }
+            Err(e) => {
+                tracing::error!("Reap do souls_mcp_server falhou: {e}");
+            }
+        }
+    });
+
     let listener = TcpListener::bind(listen).await?;
 
-    tracing::info!("Proxy L7 Zero-Copy escutando em {} -> upstream {}", listen, upstream);
-
-    // Marco I · v6.1 — Boot do subprocesso MCP sob SubprocessGuard.
-    // O guard vive até o final do `main()`. Quando o proxy é desligado
-    // (Ctrl+C, panic, shutdown), o `Drop` envia SIGKILL atômico ao filho,
-    // eliminando o fantasma `agentgateway.exe` global.
-    let _mcp_subprocess_guard = spawn_souls_mcp_server();
+    tracing::info!(
+        "Proxy L7 Zero-Copy escutando em {} (MCP server subordinado via SubprocessGuard)",
+        listen
+    );
 
     loop {
         let (downstream, _) = listener.accept().await?;
-        let Ok(up) = TcpStream::connect(upstream).await else {
-            tracing::warn!("Falha ao conectar com o upstream LLM em {}", upstream);
-            continue;
-        };
 
         let store_clone = Arc::clone(&ccr_store);
         let shield_clone = shield_channel.clone();
         let sticky_clone = Arc::clone(&sticky);
         let pii_clone = Arc::clone(&pii);
+        let stdin_clone = Arc::clone(&mcp_stdin);
+        let stdout_clone = Arc::clone(&mcp_stdout);
         tokio::spawn(async move {
             if let Err(e) = handle_l7_proxy_v6(
                 downstream,
-                up,
+                stdin_clone,
+                stdout_clone,
                 store_clone,
                 shield_clone,
                 sticky_clone,
@@ -765,7 +988,7 @@ async fn main() -> io::Result<()> {
             )
             .await
             {
-                tracing::error!("Erro no man-in-the-middle L7 proxy (v6.1): {}", e);
+                tracing::error!("Erro no L7 proxy (v6.1 stdio bridge): {}", e);
             }
         });
     }

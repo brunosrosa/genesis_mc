@@ -22,7 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
 *.venv
 .env
 */tmp/*
@@ -32,24 +31,19 @@ dist-ssr
 # sao artefatos de build (NAO fonte). Proibido comitar binarios de 100+MB.
 .agents/bin/
 
-.souls_data/
+# Outros arquivos e diretórios
 .souls_data/
 .archive/
 .souls_cache/
 .souls_sandbox/
 .souls_scratchpad/
-.jcodemunch_index/
 .souls_semgrep/
 .pytest_cache/
-.lean-ctx/
 __pycache__/
 *.pyc
-src-tauri/third_party/ultrafast-mcp-sequential-thinking/
-docs/observability/audits/blobs/inspect/
-docs/runtime/context_dumps/
-.agents/bin/
 src-tauri/models/
-docs/observability/context_dumps/*.txt
+docs/observability/audits/
+docs/observability/context_dumps/
 
 # ==============================================================================
 # SOULS BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO
