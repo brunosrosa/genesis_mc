@@ -80,6 +80,15 @@ $env:CMAKE_GENERATOR = "Ninja"
 # O conflito vaza em LNK1319: 321 mismatches + LNK4098 defaultlib 'LIBCMT'.
 # Forçamos CRT unificado dinâmico no ik-llama-cpp-sys via CMake var.
 $env:CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDebugDLL"
+# Marco IV (hotfix LNK1319 — esaxx-rs /MT vs ik_llama /MD):
+# O crate `esaxx-rs` (tokenização suffix array, usado por ik-llama-cpp-sys)
+# compila o `esaxx.c` via `cc-rs` com `/MT` por default no Windows MSVC.
+# Esse `.o` é então linkado dentro do `libik_llama_cpp_sys.rlib`, criando
+# mismatch `MT_StaticRelease` vs `MD_DynamicRelease` em 326 símbolos. Fix:
+# injetar `/MD` em CFLAGS/CXXFLAGS para que `cc-rs` alinhe com o resto.
+# Idempotente: `cc-rs` lê essas env vars a cada invocação de cl.exe.
+$env:CFLAGS = "/MD"
+$env:CXXFLAGS = "/MD"
 # Marco IV (FINTECH / cold-start): a GPU alvo do SOULS MC é a RTX 2060m (sm_75,
 # Turing). Compilar 6 archs CUDA (75+80+86+89+90+120) custa ~4-5h de cold e
 # ~40min de warm. Reduzimos a apenas sm_75 — build cai para ~25min cold e

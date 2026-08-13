@@ -6,7 +6,7 @@ use souls_mc_lib::cognition::lean_vacuum;
 use souls_mc_lib::harvester::{ast_parser, github_tracker, web_scraper};
 #[cfg(feature = "llama_backend")]
 use souls_mc_lib::core::epistemic_prober::{
-    EpistemicProber, EpistemicRequest, LlamaCppEpistemicProber,
+    EpistemicProber, EpistemicRequest, EpistemicScores, LlamaCppEpistemicProber,
 };
 #[cfg(feature = "llama_backend")]
 use souls_mc_lib::core::llama_logit_probing::LlamaLogitProber;
@@ -1360,33 +1360,30 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
         })
         .unwrap_or_default();
 
-    // SOULS MC Marco IV: bind the prober with an owned `LlamaLogitProber`
-    // so the `&'a` reference can name a local with a non-`'static` lifetime
-    // (the previous `::default()` call had no way to produce the borrow).
+    // SOULS MC Marco IV: `LlamaCppEpistemicProber` borrows `&LlamaLogitProber`
+    // with a non-`'static` lifetime, so the borrow must be constructed
+    // INSIDE the `spawn_blocking` closure (where the owned engine now lives).
+    // Building it outside (with a local `&logit_engine`) would force the
+    // borrow to be `'static`, which the local engine cannot satisfy.
     let logit_engine = LlamaLogitProber::default();
-    let prober = LlamaCppEpistemicProber::new(&logit_engine);
     let req = EpistemicRequest {
         prompt: prompt.to_string(),
         session_id: session_id.to_string(),
         memory_window,
     };
 
-    // `move` captures both `prober` and `logit_engine` so the borrow
-    // outlives the spawned task. (Marco III hit an issue where only
-    // `prober` was moved; the engine was dropped and the borrow
-    // dangled — we are being explicit about the bound now.)
+    // `move` captures `logit_engine` (owned) and `req` (owned) so the
+    // spawned task has full ownership. The `prober` is constructed
+    // inside, holding a borrow into the local `logit_engine` that lives
+    // exactly as long as the closure body.
     //
-    // The `let _ = logit_engine;` inside the closure is load-bearing: it
-    // forces `move` to capture `logit_engine` by value, keeping it alive
-    // for the full duration of the blocking task. Without it, Rust only
-    // captures variables that appear *syntactically* in the closure body,
-    // so `logit_engine` would be dropped at the end of `run_intent` while
-    // `prober` still holds `&logit_engine` inside the spawned task — a
-    // classic use-after-free waiting to fire if the await ever
-    // desynchronises.
-    let eval: Result<EpistemicScores, _> = tokio::task::spawn_blocking(move || {
-        let _ = &logit_engine;
-        prober.evaluate(&req)
+    // Double-`?` chain:
+    //   spawn_blocking  → Result<Result<EpistemicScores, EpistemicError>, JoinError>
+    //   .await + first  ?  → Result<EpistemicScores, EpistemicError>
+    //   .map_err + second ? → EpistemicScores
+    let eval: EpistemicScores = tokio::task::spawn_blocking(move || {
+        let prober = LlamaCppEpistemicProber::new(&logit_engine);
+        prober.probe(&req)
     })
     .await
     .map_err(|e| RpcError {

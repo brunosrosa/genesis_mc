@@ -6,6 +6,13 @@ CMAKE_GENERATOR = "Ninja"
 # (which is /MD, dynamic MSVCP140.dll). Without this, link fails with
 # LNK1319: 321 mismatches + LNK4098 defaultlib 'LIBCMT' conflict.
 CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDebugDLL"
+# Marco IV hotfix: `esaxx-rs` (suffix-array tokenizador dentro de
+# ik-llama-cpp-sys) compila o `esaxx.c` via `cc-rs`. cc-rs no Windows MSVC
+# default é /MT (estático), mas o restante do workspace usa /MD. Sem estes
+# flags, o `esaxx.o` vaza com `MT_StaticRelease` e conflita no link com
+# `MD_DynamicRelease` (326 mismatches). Forçamos /MD aqui.
+CFLAGS = "/MD"
+CXXFLAGS = "/MD"
 # Injeção canônica global: blinda sccache contra bypass silencioso no disco C:
 SCCACHE_DIR = "Z:\\.sccache"
 SCCACHE_CACHE_SIZE = "8G"

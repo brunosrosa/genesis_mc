@@ -36,8 +36,12 @@ const DEFAULT_PROBE_MARKER: &str = "__souls_default_logit_probe_marker__";
 
 /// Estado interno do caminho FFI real (Marco III — Battle 3.3).
 /// Carregamento lazy: o modelo GGUF é lido no primeiro probe, não no construtor.
+///
+/// SOULS MC Marco IV: `pub` (gated by `#[cfg(feature = "llama_backend")]`)
+/// to satisfy `private_interfaces` — the `LogitSource::RealLlama` field
+/// inherits the visibility of the parent `pub enum`, and so must its type.
 #[cfg(feature = "llama_backend")]
-struct RealLlamaInner {
+pub struct RealLlamaInner {
     model_path: std::path::PathBuf,
     state: RealLlamaState,
 }
@@ -94,6 +98,11 @@ pub enum LogitSource {
     /// Fail-soft: se o GGUF estiver ausente ou corrompido, cai em `PromptDerived`.
     #[cfg(feature = "llama_backend")]
     RealLlama {
+        // SOULS MC Marco IV: `RealLlamaInner` (defined below) is `pub` so
+        // that this field — which inherits the visibility of the parent
+        // `pub enum LogitSource` — is well-typed. The struct itself is
+        // gated by the same `#[cfg(feature = "llama_backend")]` so it
+        // cannot leak into non-LLAMA builds.
         inner: Arc<Mutex<RealLlamaInner>>,
     },
     /// Fixture de teste: vetor literal hardcoded (APENAS sob `#[cfg(test)]`).
