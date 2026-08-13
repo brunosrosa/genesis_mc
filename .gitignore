@@ -80,3 +80,4 @@ docs/observability/context_dumps/_SKILLS_IN_IDEs.txt
 docs/observability/context_dumps/_WOKSPACE_MAP.txt
 docs/observability/context_dumps/_WORKSPACE_MAP.txt
 docs/observability/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt
+src-tauri/vendor/ik-llama-cpp-sys/ik_llama.cpp
