@@ -1375,7 +1375,17 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
     // outlives the spawned task. (Marco III hit an issue where only
     // `prober` was moved; the engine was dropped and the borrow
     // dangled — we are being explicit about the bound now.)
+    //
+    // The `let _ = logit_engine;` inside the closure is load-bearing: it
+    // forces `move` to capture `logit_engine` by value, keeping it alive
+    // for the full duration of the blocking task. Without it, Rust only
+    // captures variables that appear *syntactically* in the closure body,
+    // so `logit_engine` would be dropped at the end of `run_intent` while
+    // `prober` still holds `&logit_engine` inside the spawned task — a
+    // classic use-after-free waiting to fire if the await ever
+    // desynchronises.
     let eval: Result<EpistemicScores, _> = tokio::task::spawn_blocking(move || {
+        let _ = &logit_engine;
         prober.evaluate(&req)
     })
     .await
