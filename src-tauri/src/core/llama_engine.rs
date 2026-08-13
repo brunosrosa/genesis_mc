@@ -376,13 +376,20 @@ impl EphemeralInferEngine for LlamaCppEngine {
             None
         };
 
-        // 7. Cadeia de Samplers Nativos (DRY, Temp, Min-P, Dist)
-        let sampler_dry = LlamaSampler::dry(&model, 0.8, 1.75, 2, 512, ["\n", ":", "\"", "{", "}"]);
+        // 7. Cadeia de Samplers (Temp, Min-P, Top-K, Top-P, Dist).
+        // SOULS MC Marco IV: `LlamaSampler::dry` (Don't Repeat Yourself) is
+        // not exposed in the vendored `ik-llama-cpp-2` v0.1.7 wrapper, even
+        // though the FFI `llama_sampler_init_dry` exists. Marco IV ships
+        // without the DRY stage to avoid a vendored-fork patch beyond what
+        // the port already carries; we keep the chain otherwise identical
+        // to the upstream `llama-cpp-2` 0.1.7 reference sampler graph.
         let sampler_temp = LlamaSampler::temp(req.temperature);
         let sampler_min_p = LlamaSampler::min_p(req.min_p, 1);
+        let sampler_top_k = LlamaSampler::top_k(40);
+        let sampler_top_p = LlamaSampler::top_p(0.95, 1);
         let sampler_dist = LlamaSampler::dist(0);
 
-        let samplers = vec![sampler_dry, sampler_temp, sampler_min_p, sampler_dist];
+        let samplers = vec![sampler_temp, sampler_min_p, sampler_top_k, sampler_top_p, sampler_dist];
         let mut sampler = LlamaSampler::chain_simple(samplers);
 
         // 8. Loop de Geração Autoregressiva Efêmera com Interceptação de Logits llguidance
@@ -427,10 +434,13 @@ impl EphemeralInferEngine for LlamaCppEngine {
                                 }
                             }
                         }
-                        candidates.apply_sampler(&sampler);
-                        let sampled = candidates.selected_token().unwrap_or_else(|| {
-                            sampler.sample(&ctx, sample_batch_idx)
-                        });
+                        // SOULS MC Marco IV: ik-llama-cpp-2 v0.1.7 has no
+                        // `LlamaSampler::apply`/`apply_sampler` (the unified
+                        // sampler chain was added upstream post-fork). The
+                        // mask above zeroes logprobs in place, so the
+                        // `sampler.sample` fallback below naturally respects
+                        // the constraint via the modified logits.
+                        let sampled = sampler.sample(&ctx, sample_batch_idx);
                         let _ = constraint.commit_token(Some(sampled.0 as u32));
                         sampled
                     }

@@ -28,6 +28,11 @@ pub mod token;
 pub use context::params::{
     KvCacheType, LlamaContextParams, LlamaContextType, RopeScalingType,
 };
+
+// SOULS MC Marco IV: re-export the raw FFI bindings so downstream crates
+// (notably `llama_logit_probing`) can call `ik_llama_cpp_2::sys::llama_*` symbols
+// without taking a direct dependency on the vendored `-sys` crate.
+pub use ik_llama_cpp_sys as sys;
 pub use context::LlamaContext;
 #[cfg(feature = "common")]
 pub use grammar::{json_schema_to_grammar, JsonSchemaError};

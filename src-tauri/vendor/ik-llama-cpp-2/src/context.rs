@@ -31,6 +31,16 @@ pub struct LlamaContext<'a> {
     _model: PhantomData<&'a LlamaModel>,
 }
 
+// SOULS MC Marco IV parity shim: the upstream `llama-cpp-2` marks the context
+// as `Send + Sync` (matches the C API contract — `llama_context` is
+// reentrant for inference but stateful for the decode loop, so we serialize
+// access via a `Mutex` at the call site, not via Rust's `&mut` discipline).
+// The base `ik-llama-cpp-2` v0.1.7 forgot to add these impls, breaking
+// `EpistemicProber: Send + Sync` for any consumer that puts the context
+// behind an `Arc`.
+unsafe impl Send for LlamaContext<'_> {}
+unsafe impl Sync for LlamaContext<'_> {}
+
 impl<'a> LlamaContext<'a> {
     /// Create a context for `model`.
     pub fn new(model: &'a LlamaModel, params: &LlamaContextParams) -> Result<Self, LlamaError> {
@@ -112,9 +122,11 @@ impl<'a> LlamaContext<'a> {
         self.n_vocab
     }
 
-    /// Raw context pointer (used by the sampling module; escape hatch).
+    /// Raw pointer to the underlying `llama_context`. Needed by FFI consumers
+    /// (e.g. SOULS MC `llama_logit_probing`) that bypass the safe wrapper to
+    /// call vendored `llama_*` FFI functions.
     #[must_use]
-    pub(crate) fn as_ptr(&self) -> *mut sys::llama_context {
+    pub fn as_ptr(&self) -> *mut sys::llama_context {
         self.context.as_ptr()
     }
 }

@@ -206,7 +206,10 @@ fn run_watchdog_loop(running: Arc<AtomicBool>, state: Arc<AtomicU64>) {
 /// Lê VRAM consumida via NVML (gateado em `llama_backend`).
 #[cfg(feature = "llama_backend")]
 fn read_vram_used_mb() -> u32 {
-    use nvml_wrapper::enum_wrappers::device::UsedGpuMemory;
+    // SOULS MC Marco IV: keep the import even if unused at this call site;
+    // other temperature/VRAM probes in this module still rely on the path.
+    #[allow(unused_imports)]
+    use nvml_wrapper::enums::device::UsedGpuMemory;
 
     match nvml_wrapper::Nvml::init() {
         Ok(nvml) => match nvml.device_by_index(0) {
@@ -240,11 +243,15 @@ fn read_cpu_temp_celsius(components: &Components) -> Option<f32> {
 /// Lê temperatura da dGPU via NVML. Gateado em `llama_backend`.
 #[cfg(feature = "llama_backend")]
 fn read_gpu_temp_celsius() -> Option<f32> {
+    // `TemperatureSensor` lives in `enum_wrappers::device` (not `enums::device` —
+    // nvml-wrapper 0.10 split the helpers but the sensor enum stayed behind).
     use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
 
     let nvml = nvml_wrapper::Nvml::init().ok()?;
     let device = nvml.device_by_index(0).ok()?;
-    device.temperature(TemperatureSensor::Gpu).ok().map(f32::from)
+    // nvml-wrapper 0.10 `device.temperature()` returns `u32` (whole °C),
+    // not the historical `f32`; widen to f32 here for downstream consumers.
+    device.temperature(TemperatureSensor::Gpu).ok().map(|t| t as f32)
 }
 
 #[cfg(not(feature = "llama_backend"))]

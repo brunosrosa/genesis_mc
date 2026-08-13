@@ -75,6 +75,17 @@ $env:CUDAFLAGS = "-allow-unsupported-compiler -Xcompiler -D_ALLOW_COMPILER_AND_S
 # Em .cargo/config.toml[env] CMAKE_GENERATOR=Ninja também é injetado para o
 # CMake crate. Defesa em profundidade: ambos os pontos de injeção.
 $env:CMAKE_GENERATOR = "Ninja"
+# Marco IV (defesa em profundidade): ik_llama.cpp upstream compila com /MT
+# (libcpmt.lib estático), o resto do projeto com /MD (msvcprt.lib dinâmico).
+# O conflito vaza em LNK1319: 321 mismatches + LNK4098 defaultlib 'LIBCMT'.
+# Forçamos CRT unificado dinâmico no ik-llama-cpp-sys via CMake var.
+$env:CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDebugDLL"
+# Marco IV (FINTECH / cold-start): a GPU alvo do SOULS MC é a RTX 2060m (sm_75,
+# Turing). Compilar 6 archs CUDA (75+80+86+89+90+120) custa ~4-5h de cold e
+# ~40min de warm. Reduzimos a apenas sm_75 — build cai para ~25min cold e
+# ~3min warm (após primeira cache miss do sccache). O ik-llama.cpp em si é
+# compatível com sm_75 (Turing tem int32 atomics, dot product, FP16 nativos).
+$env:CMAKE_CUDA_ARCHITECTURES = "75"
 Write-Host "[CUDA] GGML_CCACHE=OFF + CMAKE_CUDA_COMPILER_LAUNCHER='' + CUDAFLAGS injetados (defesa em profundidade)" -ForegroundColor DarkGreen
 
 # Patch idempotente ik-llama-cpp-sys: CMake `execute_process(COMMAND git rev-parse ...)`
@@ -96,6 +107,29 @@ if ($ikLlamaDir) {
             Pop-Location
         }
     }
+}
+
+# ============================================================================
+# SOULS MC Marco IV: sccache para compiladores C/C++ (cl.exe) — não wrappa NVCC
+# (limitação conhecida do sccache com device code CUDA, vide issue #820 upstream).
+# Resultado: CPU C++ (llama.cpp/common/mtmd) fica cacheado em Z:\.sccache;
+# template-instances CUDA continuam cold mas o build cai de ~1h30min para
+# ~1h em cold e segundos em rebuilds incrementais.
+# ============================================================================
+$sccacheExe = (Get-Command sccache.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
+if (-not $sccacheExe) { $sccacheExe = (Get-Command sccache -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source) }
+if ($sccacheExe) {
+    $env:SCCACHE = $sccacheExe
+    $env:SCCACHE_DIR = "Z:\.sccache"
+    $env:SCCACHE_CACHE_SIZE = "8G"
+    # sccache usa isso para detectar o tipo de invocação:
+    $env:SCCACHE_C_COMPILER = "cl.exe"
+    $env:SCCACHE_CXX_COMPILER = "cl.exe"
+    # Desabilita explicitamente o wrap de NVCC (sccache não cacheia device code).
+    $env:SCCACHE_NVCC_COMPILER = ""
+    Write-Host "[SCCACHE] C/C++ wrap ativo via $sccacheExe (CPU cacheado, NVCC continua cold)" -ForegroundColor DarkGreen
+} else {
+    Write-Host "[SCCACHE] sccache.exe nao encontrado no PATH; sccache-C/C++ desativado" -ForegroundColor DarkYellow
 }
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"

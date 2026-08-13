@@ -46,6 +46,26 @@ impl LlamaBatch {
         self.batch.n_tokens
     }
 
+    /// Mark (or unmark) the token at `idx` for which logits should be computed.
+    ///
+    /// SOULS MC Marco IV parity shim: matches the `llama-cpp-2` API used by
+    /// `llama_engine.rs` / `epistemic_prober.rs`. The base `ik-llama-cpp-2`
+    /// only exposes `add(..., logits: bool, ...)`, so we expose the equivalent
+    /// mutator for callers that want to flip the flag after-the-fact (e.g.
+    /// prefill with `logits=false` and then turn on the last token for the
+    /// decode that produces the probed logits).
+    pub fn set_logits(&mut self, idx: usize, logits: bool) {
+        debug_assert!(
+            idx < self.batch.n_tokens as usize,
+            "LlamaBatch::set_logits index {idx} out of range (n_tokens={})",
+            self.batch.n_tokens
+        );
+        // SAFETY: `idx < n_tokens <= capacity`, allocated by llama_batch_init.
+        unsafe {
+            *self.batch.logits.add(idx) = i8::from(logits);
+        }
+    }
+
     /// Add one token at position `pos` for the given sequence ids; `logits` marks
     /// whether logits should be computed for it.
     pub fn add(

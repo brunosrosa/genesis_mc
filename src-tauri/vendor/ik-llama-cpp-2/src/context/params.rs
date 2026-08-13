@@ -194,6 +194,7 @@ impl LlamaContextParams {
 /// The TurboQuant pair used by SOULS MC is K=[`KvCacheType::F16`] (preserves
 /// RoPE precision) + V=[`KvCacheType::Q4_K`] (compresses 4x). For 32k ctx on
 /// the RTX 2060m this lands around ~800MB VRAM, vs ~1.6GB at F16/F16.
+#[allow(non_camel_case_types)] // ggml uses `Q4_K`; we mirror the C identifier.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum KvCacheType {
     /// F16 (default; K-half for TurboQuant).
@@ -218,13 +219,13 @@ impl KvCacheType {
     #[must_use]
     pub const fn as_ggml_type(self) -> sys::ggml_type {
         match self {
-            Self::F16 => sys::ggml_type_GGML_TYPE_F16,
-            Self::F32 => sys::ggml_type_GGML_TYPE_F32,
-            Self::Q4_0 => sys::ggml_type_GGML_TYPE_Q4_0,
-            Self::Q4_K => sys::ggml_type_GGML_TYPE_Q4_K,
-            Self::Q5_0 => sys::ggml_type_GGML_TYPE_Q5_0,
-            Self::Q5_1 => sys::ggml_type_GGML_TYPE_Q5_1,
-            Self::Q8_0 => sys::ggml_type_GGML_TYPE_Q8_0,
+            Self::F16 => sys::GGML_TYPE_F16,
+            Self::F32 => sys::GGML_TYPE_F32,
+            Self::Q4_0 => sys::GGML_TYPE_Q4_0,
+            Self::Q4_K => sys::GGML_TYPE_Q4_K,
+            Self::Q5_0 => sys::GGML_TYPE_Q5_0,
+            Self::Q5_1 => sys::GGML_TYPE_Q5_1,
+            Self::Q8_0 => sys::GGML_TYPE_Q8_0,
         }
     }
 }
@@ -261,13 +262,13 @@ impl RopeScalingType {
     #[must_use]
     pub const fn as_sys(self) -> sys::llama_rope_scaling_type {
         match self {
-            Self::None => sys::llama_rope_scaling_type_LLAMA_ROPE_SCALING_TYPE_NONE,
-            Self::Linear => sys::llama_rope_scaling_type_LLAMA_ROPE_SCALING_TYPE_LINEAR,
-            Self::Yarn => sys::llama_rope_scaling_type_LLAMA_ROPE_SCALING_TYPE_YARN,
-            // ik's bindgen emits the enum as `_llama_rope_scaling_type`; we
-            // also keep the `LLAMA_ROPE_SCALING_TYPE_MAX` fallback in case the
-            // upstream adds more variants before ik catches up.
-            Self::Unspecified => sys::llama_rope_scaling_type_LLAMA_ROPE_SCALING_TYPE_NONE,
+            Self::None => sys::LLAMA_ROPE_SCALING_TYPE_NONE,
+            Self::Linear => sys::LLAMA_ROPE_SCALING_TYPE_LINEAR,
+            Self::Yarn => sys::LLAMA_ROPE_SCALING_TYPE_YARN,
+            // ik's bindgen emits `_UNSPECIFIED = -1` (see `llama.h:251`), so we
+            // forward to that variant rather than collapsing to `NONE`. Keeps
+            // forward-compat with upstream additions like `MaxPos`.
+            Self::Unspecified => sys::LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED,
         }
     }
 }

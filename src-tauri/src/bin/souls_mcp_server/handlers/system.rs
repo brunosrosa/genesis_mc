@@ -1360,25 +1360,35 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
         })
         .unwrap_or_default();
 
-    let prober = LlamaCppEpistemicProber::default();
+    // SOULS MC Marco IV: bind the prober with an owned `LlamaLogitProber`
+    // so the `&'a` reference can name a local with a non-`'static` lifetime
+    // (the previous `::default()` call had no way to produce the borrow).
+    let logit_engine = LlamaLogitProber::default();
+    let prober = LlamaCppEpistemicProber::new(&logit_engine);
     let req = EpistemicRequest {
         prompt: prompt.to_string(),
         session_id: session_id.to_string(),
         memory_window,
     };
 
-    let eval = tokio::task::spawn_blocking(move || prober.evaluate(&req))
-        .await
-        .map_err(|e| RpcError {
-            code: -32000,
-            message: format!("Task spawn_blocking do prober epistêmico falhou: {e}"),
-            data: None,
-        })?
-        .map_err(|e| RpcError {
-            code: -32000,
-            message: format!("Avaliador Epistêmico falhou: {e}"),
-            data: None,
-        })?;
+    // `move` captures both `prober` and `logit_engine` so the borrow
+    // outlives the spawned task. (Marco III hit an issue where only
+    // `prober` was moved; the engine was dropped and the borrow
+    // dangled — we are being explicit about the bound now.)
+    let eval: Result<EpistemicScores, _> = tokio::task::spawn_blocking(move || {
+        prober.evaluate(&req)
+    })
+    .await
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Task spawn_blocking do prober epistêmico falhou: {e}"),
+        data: None,
+    })?
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Avaliador Epistêmico falhou: {e}"),
+        data: None,
+    })?;
 
     let eval_val = serde_json::to_value(&eval).unwrap_or_default();
     let text = serde_json::to_string_pretty(&eval).unwrap_or_default();

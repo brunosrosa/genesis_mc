@@ -22,6 +22,9 @@ use crate::core::inference_adapter::{
     EphemeralInferEngine, InferenceError, SoulsInferenceRequest, SoulsInferenceResponse,
 };
 use crate::souls_thermal_governor::SystemState;
+
+#[cfg(feature = "llama_backend")]
+use ik_llama_cpp_2::context::LlamaContext;
 /// Tamanho canônico do vocabulário para logit probing epistêmico (AVX2/CPU).
 /// Preservado como SSOT para compatibilidade com o `VerbalizerMap` em `epistemic_prober.rs`.
 pub const MOCK_VOCAB_SIZE: usize = 128;
@@ -39,6 +42,19 @@ struct RealLlamaInner {
     state: RealLlamaState,
 }
 
+// SOULS MC Marco IV: manual `Debug` because the inner `LlamaModel` /
+// `LlamaContext` wrappers don't (and shouldn't) derive it — they own raw FFI
+// pointers. The path is enough for diagnostics; the model/context are redacted.
+#[cfg(feature = "llama_backend")]
+impl std::fmt::Debug for RealLlamaInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RealLlamaInner")
+            .field("model_path", &self.model_path)
+            .field("state", &"<redacted>")
+            .finish()
+    }
+}
+
 #[cfg(feature = "llama_backend")]
 enum RealLlamaState {
     /// Ainda não tentou carregar (tentativa lazy no primeiro `extract_logits`).
@@ -46,13 +62,15 @@ enum RealLlamaState {
     /// Tentativa de carregamento falhou — fallback permanente para `PromptDerived`.
     Failed { reason: String },
     /// Modelo + contexto carregados; pronto para forward pass de 1 token.
-    /// `Box::leak` no contexto resolve o lifetime emprestado do `LlamaModel`
-    /// (workaround padrão em ik-llama-cpp para owned 'static).
+    /// `Box::leak` on both gives `&'static mut`, which is the only sound way
+    /// to hold a `llama_context` alive across threads without violating
+    /// the Rust aliasing rules (the `Mutex<RealLlamaInner>` at the caller
+    /// serializes the mutable access; the leaked `&'static mut` just
+    /// pins the pointer for the lifetime of the program).
     Ready {
-        // Wrappers owned; sem referência ao model_path que já foi consumido.
         #[allow(dead_code)]
-        model: ik_llama_cpp_2::model::LlamaModel,
-        context: &'static ik_llama_cpp_2::context::LlamaContext<'static>,
+        model: &'static ik_llama_cpp_2::model::LlamaModel,
+        context: &'static mut ik_llama_cpp_2::context::LlamaContext<'static>,
     },
 }
 
@@ -294,9 +312,7 @@ fn real_llama_extract_logits(
             }
         };
         let model_params = LlamaModelParams::default().with_n_gpu_layers(0);
-        let model = match unsafe {
-            LlamaModel::load_from_file(&backend, &inner.model_path, &model_params)
-        } {
+        let model = match LlamaModel::load_from_file(&backend, &inner.model_path, &model_params) {
             Ok(m) => m,
             Err(e) => {
                 inner.state = RealLlamaState::Failed {
@@ -310,8 +326,16 @@ fn real_llama_extract_logits(
             .with_n_batch(512)
             .with_type_k(ik_llama_cpp_2::context::params::KvCacheType::F16)
             .with_type_v(ik_llama_cpp_2::context::params::KvCacheType::Q4_K);
-        let context = match model.new_context(&backend, ctx_params) {
-            Ok(c) => Box::leak(Box::new(c)) as &'static _,
+        // SOULS MC Marco IV — fix for ik-llama-cpp-2 v0.1.7: the model loader
+        // returns a `LlamaModel<'a>` tied to the path's lifetime, and the
+        // context must borrow from the model. To make both `'static` (so the
+        // `Box::leak` below is sound and the borrow checker is happy), we
+        // first leak the model, then build the context from the leaked
+        // `&'static LlamaModel`. This is the same pattern the upstream
+        // `llama-cpp-2` examples use for `once_cell` / `lazy_static` setups.
+        let model_static: &'static LlamaModel = Box::leak(Box::new(model));
+        let context_boxed: Box<LlamaContext<'static>> = match model_static.new_context(&backend, ctx_params) {
+            Ok(c) => Box::new(c),
             Err(e) => {
                 inner.state = RealLlamaState::Failed {
                     reason: format!("new_context falhou: {e}"),
@@ -319,19 +343,41 @@ fn real_llama_extract_logits(
                 return None;
             }
         };
+        // SOULS MC Marco IV: `Box::leak` returns `&'static mut T` by design
+        // (the only way to sink a `Box` into a static lifetime). Keeping it
+        // as `&'static mut` at the state layer avoids the `&T → &mut T`
+        // reinterpret-cast UB that the borrow checker denies later.
+        let context: &'static mut LlamaContext<'static> = Box::leak(context_boxed);
         tracing::info!(
             "RealLlama FFI carregado: modelo={:?} (TurboQuant K=F16, V=Q4_K, n_ctx=512, AVX2 CPU)",
             inner.model_path
         );
         inner.state = RealLlamaState::Ready {
-            model,
+            model: model_static,
             context,
         };
     }
 
-    // (2) Despacha pelo estado.
-    let (model, context) = match &inner.state {
-        RealLlamaState::Ready { model, context } => (model, *context),
+    // (2) Despacha pelo estado. `context` is already `&'static mut` in the
+    // state (see `ensure_loaded`); we just re-bind as `&mut` to satisfy
+    // the `decode(&mut batch)` signature. The `Mutex<RealLlamaInner>`
+    // at the caller serializes access, so the aliasing is sound.
+    //
+    // The `&mut RealLlamaInner` we hold (lifetime `'1`) cannot directly
+    // expose `&'static` references borrowed from its fields — the borrow
+    // checker doesn't know the inner pointers outlive `'1`. We know it
+    // (the model and context were `Box::leak`'d to `'static`); so we
+    // re-cast the inner pointers explicitly with `unsafe`. SAFETY: see
+    // the `Box::leak` calls in `ensure_loaded` — both pointers are
+    // guaranteed to live for the program's duration.
+    let (model, context): (&'static ik_llama_cpp_2::model::LlamaModel, &'static mut ik_llama_cpp_2::context::LlamaContext<'static>) = match &mut inner.state {
+        RealLlamaState::Ready { model, context } => {
+            let model: &'static ik_llama_cpp_2::model::LlamaModel =
+                unsafe { &*(*model as *const _) };
+            let context: &'static mut ik_llama_cpp_2::context::LlamaContext<'static> =
+                unsafe { &mut *(*context as *mut _) };
+            (model, context)
+        }
         RealLlamaState::Failed { reason } => {
             tracing::trace!(reason = %reason, "RealLlama previously failed → noop");
             return None;

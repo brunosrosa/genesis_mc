@@ -334,6 +334,13 @@ pub struct LlamaSampler {
     history: Vec<LlamaToken>,
 }
 
+// SOULS MC Marco IV parity shim: same rationale as `LlamaContext` (see
+// `context.rs`). The base `ik-llama-cpp-2` v0.1.7 again forgot the
+// `Send + Sync` impls; the underlying C `llama_sampler` chain is stateful
+// (token history) but reentrant for `apply()` from one thread at a time.
+unsafe impl Send for LlamaSampler {}
+unsafe impl Sync for LlamaSampler {}
+
 impl LlamaSampler {
     fn single(stage: Stage) -> Self {
         Self {
