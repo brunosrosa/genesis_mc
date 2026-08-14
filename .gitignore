@@ -53,6 +53,8 @@ src-tauri/vendor/**/target/
 src-tauri/vendor/**/build/
 src-tauri/vendor/**/bin/
 src-tauri/vendor/**/out/
+target/
+src-tauri/target/
 
 # Ignora arquivos binários e objetos intermediários do compilador C++ (MSVC/NVCC)
 src-tauri/vendor/**/*.o
