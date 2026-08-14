@@ -112,23 +112,40 @@ impl SubprocessConfig {
 /// 2. Se `exec` é apenas um nome → testa `cwd` primeiro, depois $PATH.
 /// 3. No Windows, sufixo `.exe` é tentado se o original não existir.
 fn resolve_executable(exec: &str, cwd: &Path) -> Option<PathBuf> {
-    let has_separator = exec.contains('/') || exec.contains('\\');
-    let is_absolute = Path::new(exec).is_absolute();
+    let exec_clean = if exec.starts_with("${") && exec.ends_with('}') {
+        "souls_mcp_server"
+    } else {
+        exec
+    };
 
-    if has_separator || is_absolute {
-        // Path explícito: testa direto (com fallback .exe no Windows).
-        return try_with_exe_extension(Path::new(exec));
+    let has_separator = exec_clean.contains('/') || exec_clean.contains('\\');
+    let is_absolute = Path::new(exec_clean).is_absolute();
+
+    if is_absolute {
+        return try_with_exe_extension(Path::new(exec_clean));
+    }
+
+    if has_separator {
+        if let Some(found) = try_with_exe_extension(&cwd.join(exec_clean)) {
+            return Some(found);
+        }
+        return try_with_exe_extension(Path::new(exec_clean));
     }
 
     // Apenas nome: busca em CWD primeiro (compat com `Command::new`).
-    if let Some(found) = try_with_exe_extension(&cwd.join(exec)) {
+    if let Some(found) = try_with_exe_extension(&cwd.join(exec_clean)) {
+        return Some(found);
+    }
+
+    // Fallback: busca em .agents/bin/<nome>
+    if let Some(found) = try_with_exe_extension(&cwd.join(".agents").join("bin").join(exec_clean)) {
         return Some(found);
     }
 
     // Cada entrada de $PATH.
     if let Ok(path_env) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path_env) {
-            if let Some(found) = try_with_exe_extension(&dir.join(exec)) {
+            if let Some(found) = try_with_exe_extension(&dir.join(exec_clean)) {
                 return Some(found);
             }
         }

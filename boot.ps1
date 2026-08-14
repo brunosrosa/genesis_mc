@@ -131,7 +131,7 @@ $webviewDataDirs = @(
     (Join-Path $env:LOCALAPPDATA "souls-mc\EBWebView"),
     (Join-Path $PSScriptRoot "src-tauri\target\release\EBWebView")
 )
-if ($CleanWebview -or $Build) {
+if ($CleanWebview -or $Build -or (-not $Dev)) {
     foreach ($dir in $webviewDataDirs) {
         if (Test-Path $dir) {
             try {
