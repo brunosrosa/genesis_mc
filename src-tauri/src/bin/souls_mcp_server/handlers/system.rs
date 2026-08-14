@@ -776,6 +776,7 @@ pub async fn run_souls_sub_agent(params: &serde_json::Map<String, Value>) -> Res
             &db_path,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         ) {
+            let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
             let _ = conn.execute(
                 "INSERT INTO souls_sub_agents (agent_id, task_name, status, context_data, updated_at)
                  VALUES (?1, ?2, ?3, ?4, unixepoch())
@@ -852,6 +853,7 @@ pub async fn run_souls_handoff(params: &serde_json::Map<String, Value>) -> Resul
             &db_path,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         ) {
+            let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
             let _ = conn.execute(
                 "INSERT INTO souls_handoffs (handoff_id, from_agent, to_agent, payload, created_at)
                  VALUES (?1, ?2, ?3, ?4, unixepoch())
@@ -921,6 +923,7 @@ pub async fn run_souls_knowledge(params: &serde_json::Map<String, Value>) -> Res
             &db_path,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         ) {
+            let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
             let _ = conn.execute(
                 "INSERT INTO souls_knowledge (key, category, content, confidence, updated_at)
                  VALUES (?1, ?2, ?3, ?4, unixepoch())
@@ -1142,10 +1145,13 @@ async fn run_surgical_edit(
 /// servidor MCP. Toda a captura é feita na RAM.
 ///
 /// Banido: `std::thread::spawn` para execução de terminal. O ciclo de vida
-/// do subprocesso é gerenciado exclusivamente por `tokio::process::Child`,
-/// sob o runtime do Tokio. O timeout de 60s protege contra deadlocks de I/O.
-const SHELL_TIMEOUT_SECS: u64 = 60;
-const SHELL_MAX_OUTPUT_BYTES: usize = 256 * 1024;
+/// `souls_shell` — Execução elástica de terminal assíncrona delegada para thread nativa (MARCO III / ADR-003).
+///
+/// Conformidade ADR-003: os pipes do subprocesso filho são redirecionados
+/// explicitamente para `Stdio::piped()`, garantindo que nenhum byte bruto de
+/// progresso do compilador (cargo, rustc, etc.) vaze para o stdout do
+/// servidor MCP. Toda a captura é feita na RAM em thread nativa dedicada (std::thread::spawn)
+/// prevenindo starvation do pool Tokio.
 pub async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = params.get("arguments").and_then(Value::as_object).unwrap_or(params);
     let command = args
@@ -1158,7 +1164,8 @@ pub async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<
             code: -32602,
             message: "Argumento 'command' (string não-vazia) é obrigatório para souls_shell".to_string(),
             data: None,
-        })?;
+        })?
+        .to_string();
     let cwd_str = args
         .get("cwd")
         .or_else(|| args.get("working_dir"))
@@ -1172,137 +1179,88 @@ pub async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<
             data: Some(json!({ "cwd": cwd_str })),
         });
     }
-    // Conformidade ADR-003: pipes piped(), jamais herdar stdio do servidor MCP.
-    let mut cmd = tokio::process::Command::new("cmd.exe");
-    cmd.arg("/C")
-        .arg(command)
-        .current_dir(&cwd)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-    #[cfg(windows)]
-    {
-        // CREATE_NO_WINDOW (0x08000000): impede popup de console no Windows.
-        // `tokio::process::Command` reexporta `CommandExt` (creation_flags) do
-        // std internamente — não é necessário `use std::os::windows::process::CommandExt`.
-        cmd.creation_flags(0x0800_0000);
-    }
-    let mut child = cmd.spawn().map_err(|e| RpcError {
-        code: -32050,
-        message: format!("Falha ao spawnar subprocesso para shell: {e}"),
-        data: Some(json!({ "command": command })),
-    })?;
-    let stdout_handle = child
-        .stdout
-        .take()
-        .ok_or_else(|| RpcError {
-            code: -32051,
-            message: "stdout pipe nao disponivel no subprocesso".to_string(),
-            data: None,
-        })?;
-    let stderr_handle = child
-        .stderr
-        .take()
-        .ok_or_else(|| RpcError {
-            code: -32051,
-            message: "stderr pipe nao disponivel no subprocesso".to_string(),
-            data: None,
-        })?;
-    let stdout_task = tokio::spawn(async move {
-        use tokio::io::AsyncReadExt;
-        let mut buf = Vec::with_capacity(SHELL_MAX_OUTPUT_BYTES);
-        let mut tmp = [0u8; 8192];
-        let mut handle = stdout_handle;
-        loop {
-            match handle.read(&mut tmp).await {
-                Ok(0) => break,
-                Ok(n) => {
-                    if buf.len() + n > SHELL_MAX_OUTPUT_BYTES {
-                        let remaining = SHELL_MAX_OUTPUT_BYTES.saturating_sub(buf.len());
-                        buf.extend_from_slice(&tmp[..remaining]);
-                        break;
-                    }
-                    buf.extend_from_slice(&tmp[..n]);
-                }
-                Err(_) => break,
+
+    let timeout_secs = args.get("timeout_secs").and_then(Value::as_u64);
+    let cwd_path = cwd.clone();
+    let command_str = command.clone();
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    // Despacha para thread nativa do S.O. (std::thread::spawn) para isolar completamente do reactor Tokio
+    std::thread::spawn(move || {
+        let mut cmd = std::process::Command::new("cmd.exe");
+        cmd.arg("/C")
+            .arg(&command_str)
+            .current_dir(&cwd_path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+
+        let output = cmd.output();
+        let _ = tx.send(output);
+    });
+
+    let output_result = if let Some(secs) = timeout_secs {
+        match tokio::time::timeout(std::time::Duration::from_secs(secs), rx).await {
+            Ok(res) => res.map_err(|_| "Canal de thread nativa fechado".to_string()),
+            Err(_) => {
+                return Ok(json!({
+                    "content": [{
+                        "type": "text",
+                        "text": format!("### Shell Execution (Timeout de {secs}s atingido)\n\n- **Command:** `{command}`\n")
+                    }],
+                    "structuredContent": {
+                        "command": command,
+                        "cwd": cwd.display().to_string(),
+                        "timed_out": true,
+                    },
+                    "isError": true,
+                }));
             }
         }
-        buf
-    });
-    let stderr_task = tokio::spawn(async move {
-        use tokio::io::AsyncReadExt;
-        let mut buf = Vec::with_capacity(SHELL_MAX_OUTPUT_BYTES);
-        let mut tmp = [0u8; 8192];
-        let mut handle = stderr_handle;
-        loop {
-            match handle.read(&mut tmp).await {
-                Ok(0) => break,
-                Ok(n) => {
-                    if buf.len() + n > SHELL_MAX_OUTPUT_BYTES {
-                        let remaining = SHELL_MAX_OUTPUT_BYTES.saturating_sub(buf.len());
-                        buf.extend_from_slice(&tmp[..remaining]);
-                        break;
-                    }
-                    buf.extend_from_slice(&tmp[..n]);
-                }
-                Err(_) => break,
-            }
-        }
-        buf
-    });
-    let timeout = tokio::time::Duration::from_secs(SHELL_TIMEOUT_SECS);
-    let wait_result = tokio::time::timeout(timeout, child.wait()).await;
-    let (exit_code, timed_out) = match wait_result {
-        Ok(Ok(status)) => (status.code(), false),
-        Ok(Err(e)) => {
-            return Err(RpcError {
-                code: -32052,
-                message: format!("Falha ao aguardar termino do subprocesso: {e}"),
-                data: None,
-            });
-        }
-        Err(_) => {
-            // Timeout: SIGKILL atômico via kill_on_drop do Tokio.
-            let _ = child.kill().await;
-            (None, true)
-        }
+    } else {
+        rx.await.map_err(|_| "Canal de thread nativa fechado".to_string())
     };
-    let stdout_bytes = stdout_task.await.map_err(|e| RpcError {
-        code: -32053,
-        message: format!("Falha ao drenar stdout: {e}"),
-        data: None,
-    })?;
-    let stderr_bytes = stderr_task.await.map_err(|e| RpcError {
-        code: -32053,
-        message: format!("Falha ao drenar stderr: {e}"),
-        data: None,
-    })?;
-    let stdout_str = String::from_utf8_lossy(&stdout_bytes).into_owned();
-    let stderr_str = String::from_utf8_lossy(&stderr_bytes).into_owned();
-    // Desidratação de logs do compilador: remove 90% de ruído cosmético,
-    // preserva assinaturas de erro estruturais (error[E...], FAILED, panicked at).
+
+    let output = output_result
+        .map_err(|e| RpcError {
+            code: -32052,
+            message: format!("Falha ao aguardar término do processo: {e}"),
+            data: None,
+        })?
+        .map_err(|e| RpcError {
+            code: -32050,
+            message: format!("Falha ao executar comando: {e}"),
+            data: Some(json!({ "command": command })),
+        })?;
+
+    let exit_code = output.status.code();
+    let stdout_str = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
+
     let compressed_stdout = compress_cmd_logs(&stdout_str);
     let compressed_stderr = compress_cmd_logs(&stderr_str);
-    let stdout_dry = String::from_utf8_lossy(&stdout_bytes);
-    let stderr_dry = String::from_utf8_lossy(&stderr_bytes);
-    let stdout_truncated = stdout_dry.len() > SHELL_MAX_OUTPUT_BYTES;
-    let stderr_truncated = stderr_dry.len() > SHELL_MAX_OUTPUT_BYTES;
+
     Ok(json!({
         "content": [{
             "type": "text",
             "text": format!(
-                "### Shell Execution (MARCO III async)\n\n\
+                "### Shell Execution (Native Thread Elastic)\n\n\
                  - **Command:** `{}`\n\
                  - **CWD:** `{}`\n\
                  - **Exit code:** {}\n\
-                 - **Timed out:** {}\n\
+                 - **Timed out:** false\n\
                  - **Stdout (desidratado):**\n```\n{}\n```\n\n\
                  - **Stderr (desidratado):**\n```\n{}\n```\n",
                 command,
                 cwd.display(),
                 exit_code.map(|c| c.to_string()).unwrap_or_else(|| "killed".to_string()),
-                timed_out,
                 compressed_stdout,
                 compressed_stderr,
             )
@@ -1311,14 +1269,12 @@ pub async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<
             "command": command,
             "cwd": cwd.display().to_string(),
             "exit_code": exit_code,
-            "timed_out": timed_out,
-            "stdout_raw_bytes": stdout_bytes.len(),
-            "stderr_raw_bytes": stderr_bytes.len(),
-            "stdout_truncated": stdout_truncated,
-            "stderr_truncated": stderr_truncated,
+            "timed_out": false,
+            "stdout_raw_bytes": output.stdout.len(),
+            "stderr_raw_bytes": output.stderr.len(),
             "stdout_compressed": compressed_stdout,
             "stderr_compressed": compressed_stderr,
-            "engine": "tokio::process.Command (ADR-003 compliant)"
+            "engine": "std::thread::spawn (Native OS Thread ADR-003)"
         },
         "isError": exit_code.map(|c| c != 0).unwrap_or(true),
     }))

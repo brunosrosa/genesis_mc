@@ -118,7 +118,7 @@ arrow-cast = "=58.4.0"
 
 # --- Misc utilities ---
 futures-util = "=0.3.31"
-similar = "=2.7.0"
+similar = "=2.6.0"
 which = "=6.0.3"
 quote = "=1.0.46"
 nvml-wrapper = "0.10.0"

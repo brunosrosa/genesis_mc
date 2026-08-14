@@ -1,0 +1,132 @@
+================================================================================
+OPERAÇÃO RAIO-X 360º: RELATÓRIO DE RECONHECIMENTO BARE-METAL (SOULS MC V6.0)
+================================================================================
+Autor: Engenheiro de Sistemas Bare-Metal & Auditor de Segurança
+Data: 2026-08-13
+Status: AUDITORIA CONCLUÍDA
+
+================================================================================
+SEÇÃO 1: O RAIO-X DAS DEPENDÊNCIAS E HIGIENE DO WORKSPACE (Cargo, CRT, sccache)
+================================================================================
+1. Análise do Cargo.toml do workspace e sub-crates:
+   - A governança de dependências do workspace é centralizada em `[workspace.dependencies]` no Cargo.toml raiz, garantindo resolução de versão estável.
+   - Não há lixo de duplicidade de versão ativo nas dependências declaradas das sub-crates principais (souls_mc e crates/anthropophagy) porque ambas herdam via `{ workspace = true }`.
+   - Versões duplicadas são resolvidas em tempo de compilação pelo Cargo para os pacotes transitivos, e o workspace não possui crates redundantes conflitantes declaradas.
+
+2. Verificação de Version Pinning (operador '='):
+   - O version pinning está ativamente aplicado para as crates críticas no bloco de dependências do workspace.
+   - Exemplo de declarações fixadas: `serde = "=1.0.228"`, `serde_json = "=1.0.149"`, `tokio = "=1.51.1"`, `rusqlite = "=0.39.0"`, `reqwest = "=0.12.28"`, `wasmtime = "=29.0.0"`, `tree-sitter = "=0.26.10"`, `windows-sys = "=0.61.2"`.
+
+3. Consolidação do C-Runtime (CRT) e correção da `esaxx-rs`:
+   - A consolidação do CRT para link dinâmico (/MD / MultiThreadedDebugDLL) está consistente no workspace.
+   - A crate `esaxx-rs` (usada pelo compilador de tokenizadores suffix array) compila código C/C++ por padrão com CRT estático (/MT).
+   - A cura foi implementada em duas camadas:
+     - No script de bootstrap `boot.ps1`, um patch idempotente reescreve o `build.rs` de `esaxx-rs` para aplicar `.static_crt(false)`.
+     - Variáveis de ambiente `$env:CFLAGS = "/MD"`, `$env:CXXFLAGS = "/MD"`, e `$env:CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreadedDebugDLL"` são exportadas no bootstrap e definidas em `.cargo/config.toml`.
+     - Isso eliminou conflitos do linker MSVC LNK2005, LNK1169 e LNK1319 (mais de 300 símbolos conflitantes entre LIBCMT e MSVCRT).
+
+4. Eficiência e Isolamento do sccache no Windows:
+   - O diretório de cache reside em `Z:\.sccache` (`SCCACHE_DIR`), com tamanho máximo limitado a `8G` (`SCCACHE_CACHE_SIZE`).
+   - O compilador CUDA (NVCC) foi corretamente isolado para compilações locais diretas (sem cache sccache que frequentemente falha sob Windows), utilizando:
+     - `GGML_CCACHE = "OFF"`
+     - `CMAKE_CUDA_COMPILER_LAUNCHER = ""`
+     - `CUDA_CACHE_DISABLE = "1"`
+   - A compilação da GPU RTX 2060m está pinada no toolkit CUDA para `sm_75` via `CMAKE_CUDA_ARCHITECTURES = "75"`, reduzindo o tempo de compilação a frio de 4 horas para 25 minutos. sccache continua ativo para compilações Rust normais da CPU.
+
+================================================================================
+SEÇÃO 2: ANATOMIA DA PASTA vendor/ E SUBMÓDULOS
+================================================================================
+1. Varredura da pasta `src-tauri/vendor/`:
+   - A pasta contém 1.133 subdiretórios de crates locais, garantindo isolamento total da internet para builds offline e reprodutíveis em produção.
+
+2. Pegada física das dependências de build:
+   - Tamanho em disco do diretório vendor: **1.400,24 MB** (1,40 GB).
+   - O footprint alto reflete o empacotamento completo de todas as dependências transitivas necessárias para suportar compilações complexas do backend.
+
+3. Estado do submódulo git `ik_llama.cpp/`:
+   - O diretório `src-tauri/vendor/ik-llama-cpp-sys/ik_llama.cpp` está apontado no arquivo `.gitmodules`.
+   - O gitlink aponta para o commit `981e5ea0d7579b4803c86afbb09a7cd7d7bf3bb8`, o qual contém a correção off-by-one do seed draft `c46ffaa5` em seu histórico de revisões.
+   - O `Cargo.toml` da sub-crate sys filtra arquivos não essenciais (testes, benchmarks, exemplos) de `ik_llama.cpp` através do campo `include`, limpando o escopo de compilação.
+
+4. Análise de referências externas órfãs/mortas na pasta vendor:
+   - Não há pastas órfãs de pacotes não utilizados na pasta `vendor/` porque ela é regenerada de forma atômica por meio de `cargo vendor`. Quaisquer dependências mortas seriam limpas expurgando-as primeiro do Cargo.toml do workspace raiz.
+
+================================================================================
+SEÇÃO 3: ESTADO DA ARTE DOS MOTORES DE INFERÊNCIA E PROBING (Tiers 0 a 2)
+================================================================================
+1. TurboQuant assimétrico no `LlamaCppEngine`:
+   - Confirmado. O inicializador de contexto em `llama_engine.rs` configura chaves de atenção (`type_k`) em `F16` para manter a precisão de scaling RoPE e valores (`type_v`) em `Q4_K` com base na largura da cabeça de atenção (`n_embd_head_v`), com fallback silencioso para `Q8_0` ou `F16`.
+
+2. Auditoria da FFI real de `llama_logit_probing.rs` (RealLlamaInner):
+   - A leitura do arquivo GGUF ocorre via mapeamento de memória zero-copy (`memmap2`) na função `parse_gguf_metadata_zero_copy` e os metadados são salvos no cache global `GLOBAL_GGUF_METADATA_CACHE`.
+   - A decodificação de logit do token ocorre via chamada de FFI nativa para `llama_get_logits_ith` durante a prefill.
+   - A Softmax estável usa o método log-sum-exp implementada na CPU via AVX2 e responde em menos de 150ms.
+
+3. ONNX Runtime, Sandbox WASM e Tree-Sitter:
+   - **OrtScorerEngine (ort_scorer.rs):** É um STUB simulado. Ele não instancia a biblioteca ONNX Runtime (`ort`), calculando apenas um mock de score estático com base no tamanho da string.
+   - **WasmtimeTreeSitterEngine (ast_parser.rs):** É um STUB funcional parcial. Instancia e compila o módulo WASM da gramática, mas ignora a execução real do guest desviando diretamente para um fallback via regex (`extract_with_regex_fallback`).
+   - **Vazamentos de RAM em WASM:** `wasm_engine.rs` está livre de vazamentos de RAM porque consome o `Store` e limpa as instâncias na destruição do escopo da execução em `execute_safely`.
+
+================================================================================
+SEÇÃO 4: FUNCIONALIDADES CORE E SONDA DE CONCORRÊNCIA ATIVA
+================================================================================
+1. Análise do `file_locker.rs` e escrita atômica:
+   - `PATH_LOCKS` é um `OnceLock<DashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>` thread-safe.
+   - O mecanismo de prune limpa chaves órfãs deletando-as do map quando `Arc::strong_count == 1`.
+   - A gravação de arquivo atômica é garantida gravando os dados em arquivo temporário com prefixo `.tmp_` e executando `std::fs::rename` via `tokio::task::spawn_blocking`. Isso previne Corrupções Silenciosas de Dados (SDC) sob cortes abruptos de energia.
+
+2. Watchdog de Hardware (`hardware_watchdog.rs`):
+   - A thread dedicada de S.O. `souls-hardware-watchdog` coleta telemetria via NVML e `sysinfo` a cada 1.000ms.
+   - O estado é compactado e armazenado em um único `AtomicU64` (`WATCHDOG_STATE`) usando bit-masking de 16 bits para RAM, VRAM e Temperatura da GPU e CPU, prevenindo alocações.
+
+3. Histerese e Evacuação no `KvCacheSwapController`:
+   - O controlador implementa uma janela de histerese anti-flap que aguarda 2 amostras consecutivas fora dos limites (VRAM >= 90% para swap-out e VRAM < 80% para swap-in) para transicionar o KV Cache, prevenindo thrashing.
+   - **Aviso de Stub:** As funções de transferência de KV cache via DMA PCIe (`swap_out_kv_cache_q4k` e `swap_in_kv_cache_q4k`) são STUBS de simulação. Elas apenas emitem logs de rastreamento no terminal em `spawn_blocking`, sem interagir com as APIs de baixo nível de DMA do hardware.
+
+4. Banco de dados e migrações SQLite STRICT:
+   - As tabelas de persistência socrática (`socratic_sessions`, `socratic_thoughts`) utilizam a declaração de tipos STRICT do SQLite.
+   - A migração é selada e idempotente, governada pelas funções `migrate_v3_to_v5` e `migrate_v5_to_v6` que conferem o `PRAGMA user_version`.
+   - O banco de dados opera sob o modo WAL (`PRAGMA journal_mode = WAL;`) garantindo alta concorrência por MVCC.
+
+================================================================================
+SEÇÃO 5: DIAGNÓSTICO DO MCP SERVER E GARGALOS DE TRAVAMENTO DE CANAL
+================================================================================
+1. Ferramentas expostas e Firewall de Caminhos (L7):
+   - As ferramentas expostas estão listadas em `tools.rs` (como `get_ast`, `fetch_web`, `sqlite_query`, `edit`, `replace`, etc.).
+   - O Firewall de Caminhos em `validate_and_canonicalize_path` bloqueia mutações de arquivos de sistema baseando-se em:
+     - Nome exato do arquivo: `.env`, `.envrc`, `id_rsa`, `shadow`, `passwd`, etc.
+     - Extensões bloqueadas: `.db`, `.sqlite`, `.key`, `.pem`, `.crt`, `.secret`, etc.
+     - Bloqueio explícito de caminhos contendo `..` e validação de que o caminho final canonicalizado inicia com o `workspace_root()`.
+
+2. Pânico no hot-path de handlers e stdio do servidor:
+   - Em todo o diretório de handlers há apenas um `.unwrap()` no arquivo `handlers/system.rs` (linha 653) e nenhum `.expect()`.
+   - No entanto, o loop de entrada/saída de stdio do MCP em `main.rs` não possui proteção `catch_unwind` na execução do despacho das ferramentas. Qualquer pânico não tratado causará crash imediato do processo, derrubando silenciosamente o canal stdio JSON-RPC no cliente MCP.
+
+3. Redirecionamento de Logs para stderr:
+   - 100% dos logs e mensagens do `tracing` e dependências externas estão configurados para gravação em `stderr` (`tracing_subscriber::fmt().with_writer(std::io::stderr)`).
+   - O stdout é reservado estritamente para o protocolo de transporte de mensagens JSON-RPC, blindando o canal de mensagens.
+
+4. Mecanismo de timeout/guilhotina no despacho:
+   - Não há um timeout geral para o despacho de ferramentas no MCP server. Se um manipulador sofrer deadlock ou loop infinito, o loop do servidor stdio congelará indefinidamente.
+   - Ferramentas específicas implementam timeouts locais, como `shell` (60 segundos) e requisições HTTP do DuckDuckGo (12 segundos).
+
+================================================================================
+SEÇÃO 6: O VEREDITO DE DÍVIDA TÉCNICA (O Inventário das Feridas)
+================================================================================
+1. Warnings do Clippy nas crates:
+   - Atualmente, as crates `pareto_bandit`, `peak_ewma`, `pii_redactor` e `telemetry_dispatcher` possuem **0** warnings de compilação.
+   - O único warning ativo detectado em alvos de teste do workspace é `clippy::assertions_on_constants` no arquivo `src/bin/souls_mcp_server/tests.rs:3902` (`assert!(true)`).
+   - Plano tático: remover asserções redundantes nos testes e manter o uso estrito de `-D warnings` nos perfis de build CI/CD.
+
+2. Inventário de Stubs ("Falsas Vitórias"):
+   - `OrtScorerEngine` (`ort_scorer.rs`): cálculo simulado de score de similaridade sintática.
+   - `WasmtimeTreeSitterEngine` (`ast_parser.rs`): desvio silencioso de execução do WASM para expressões regulares tradicionais.
+   - `KvCacheSwapController` (`vram_scheduler.rs`): swap de KV cache simulado no console, sem transferência PCIe DMA para RAM do host.
+
+3. Veredito do Pessimismo da Razão:
+   A infraestrutura de concorrência, persistência em WAL SQLite STRICT, controle de lock atômico de arquivos e compilação unificada dinamicamente (/MD) demonstram excelente qualidade de engenharia de software e disciplina arquitetural. As salvaguardas de isolamento térmico de CPU e limitação de threads de build garantem integridade operacional do host físico.
+
+   Contudo, a persistência de stubs simulados em módulos vitais de inferência local (ONNX Scorer, parser AST WASM e scheduler de swap de VRAM) mascara a real maturidade do sistema. O sistema simula robustez operacional, mas falhará em escalar sua latência e vazão física sob cargas massivas de processamento real.
+
+   Para viabilizar a decolagem estável do Marco V, é imperativo substituir os stubs por lógica bare-metal nativa, implementar um tratador de pânico `catch_unwind` e impor um timeout guilhotina de 30 segundos no despachante do servidor MCP para evitar travamentos de canal e congelamento silencioso da IDE.
+================================================================================

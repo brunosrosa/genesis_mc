@@ -158,12 +158,10 @@ pub fn build_context_params_with_fallback(
     let n_ctx = cap_context_length_for_family(family, declared_n_ctx);
 
     // TurboQuant (Battle 3 / ADR-027): K=F16 preserva precisão de RoPE,
-    // V=Q4_K comprime 4x. Para 32k ctx na RTX 2060m: ~800MB VRAM (vs 1.6GB com F16).
-    // NOTA: o alvo ideal era o fork ikawrakow (ik-llama-cpp-2 v0.1.7), mas a versão
-    // atual é Linux-only (link_built só aceita .a/.so). Mantemos llama-cpp-2 upstream
-    // com TurboQuant idêntico via `KvCacheType` (drop-in entre os dois bindings).
+    // V=Q4_K comprime 4x (ou TQ1/TQ2 para compressão extrema). Para 32k ctx na RTX 2060m: ~800MB VRAM.
+    // Compilação exclusiva via fork ikawrakow vendorado (ik-llama-cpp-2 / vendor).
     tracing::info!(
-        "TurboQuant ativado (llama-cpp-2 upstream): K=F16, V={:?}, n_embd_head_v={}, ctx={} → ~800MB VRAM",
+        "TurboQuant ativado (ik-llama-cpp-2 vendor): K=F16, V={:?}, n_embd_head_v={}, ctx={} → ~800MB VRAM",
         type_v, n_embd_head_v, n_ctx
     );
 

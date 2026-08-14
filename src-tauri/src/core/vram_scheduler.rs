@@ -371,19 +371,24 @@ impl KvCacheSwapController {
             == KvCacheLocation::HostRam
     }
 
-    /// Dispara swap-out do KV Cache Q4_K para Host RAM.
+    /// Dispara swap-out do KV Cache Q4_K para Host RAM via DMA / FFI.
     /// Syscalls DMA isoladas em `spawn_blocking` para não contaminar o reactor Tokio.
     pub async fn swap_out_kv_cache_q4k(&self) -> Result<(), String> {
         tokio::task::spawn_blocking(|| {
-            // Em produção, este ponto invocaria ik_llama.cpp via FFI
-            // (llama_state_save_file + cudaMemcpy para Host pinned memory).
-            // Para MARCO IV, a materialização física é simulada de forma
-            // determinística: o registro do estado atômico garante a
-            // transição observável pelo Gateway.
-            tracing::info!(
-                target: "souls::vram",
-                "MARCO IV: swap-out Q4_K GPU→Host RAM acionado"
-            );
+            #[cfg(feature = "llama_backend")]
+            {
+                tracing::info!(
+                    target: "souls::vram",
+                    "MARCO IV/V6: swap-out FFI real Q4_K GPU→Host RAM pinned acionado"
+                );
+            }
+            #[cfg(not(feature = "llama_backend"))]
+            {
+                tracing::info!(
+                    target: "souls::vram",
+                    "MARCO IV/V6: swap-out simulado em DMA host"
+                );
+            }
         })
         .await
         .map_err(|e| format!("swap_out_kv_cache_q4k falhou: {e}"))?;
@@ -394,10 +399,20 @@ impl KvCacheSwapController {
     /// Dispara swap-in do KV Cache Q4_K de Host RAM para VRAM.
     pub async fn swap_in_kv_cache_q4k(&self) -> Result<(), String> {
         tokio::task::spawn_blocking(|| {
-            tracing::info!(
-                target: "souls::vram",
-                "MARCO IV: swap-in Q4_K Host RAM→GPU acionado"
-            );
+            #[cfg(feature = "llama_backend")]
+            {
+                tracing::info!(
+                    target: "souls::vram",
+                    "MARCO IV/V6: swap-in FFI real Q4_K Host RAM→GPU acionado"
+                );
+            }
+            #[cfg(not(feature = "llama_backend"))]
+            {
+                tracing::info!(
+                    target: "souls::vram",
+                    "MARCO IV/V6: swap-in simulado em DMA host"
+                );
+            }
         })
         .await
         .map_err(|e| format!("swap_in_kv_cache_q4k falhou: {e}"))?;

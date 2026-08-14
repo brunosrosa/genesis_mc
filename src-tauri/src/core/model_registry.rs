@@ -852,6 +852,8 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     let conn = Connection::open(db_path)
         .map_err(|e| format!("Falha ao abrir souls_heuristic_vault.db: {e}"))?;
 
+    let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS model_registry (
             file_path TEXT PRIMARY KEY,

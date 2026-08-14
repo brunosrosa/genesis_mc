@@ -241,7 +241,7 @@ llama_rs_status ik_llama_rs_mtp_step(
             const bool ok = common_speculative_before_draft(
                 h->spec, h->model, h->ctx_tgt, h->smpl, h->sparams,
                 h->seq_id, h->n_past, sampled_before, (int) draft.size() + 1,
-                h->params.recurrent_ckpt_mode);
+                h->params.spec_ckpt_mode);
             if (!ok) {
                 draft.clear();
             }
@@ -349,7 +349,7 @@ llama_rs_status ik_llama_rs_mtp_draft(
             const bool ok = common_speculative_before_draft(
                 h->spec, h->model, h->ctx_tgt, h->smpl, h->sparams,
                 h->seq_id, h->n_past, id_last, (int) draft.size() + 1,
-                h->params.recurrent_ckpt_mode);
+                h->params.spec_ckpt_mode);
             if (!ok) {
                 draft.clear();
             }

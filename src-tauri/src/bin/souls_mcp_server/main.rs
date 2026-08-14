@@ -117,6 +117,8 @@ pub fn init_state_db_and_worker() -> Result<(), String> {
             return;
         };
 
+        let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+
         if let Err(e) = souls_mc_lib::cognition::memory::init_memory_schema(&conn) {
             eprintln!("[StateDbWorker] ERRO ao migrar schema de memória: {e}");
         }
@@ -265,6 +267,7 @@ pub fn start_reactive_drift_checker() {
                 ) else {
                     continue;
                 };
+                let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
 
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -305,6 +308,7 @@ pub fn start_reactive_drift_checker() {
                         &db_path,
                         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
                     ) {
+                        let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
                         if latest != candidate.repo_version {
                             eprintln!(
                                 "[DriftSentinel] Drift detectado em {}: versão local {} != online {}",

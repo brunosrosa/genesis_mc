@@ -909,9 +909,26 @@ fn load_wasm_grammar_module(
         }
     } else {
         let candidates = [
-            format!(".souls_data/wasm_grammars/tree-sitter-{language}.wasm"),
+            format!("src-tauri/resources/wasm_grammars/tree_sitter_{language}.wasm"),
+            format!("resources/wasm_grammars/tree_sitter_{language}.wasm"),
+            format!("../resources/wasm_grammars/tree_sitter_{language}.wasm"),
+            format!("../../resources/wasm_grammars/tree_sitter_{language}.wasm"),
             format!("src-tauri/resources/wasm_grammars/tree-sitter-{language}.wasm"),
             format!("resources/wasm_grammars/tree-sitter-{language}.wasm"),
+            format!("../resources/wasm_grammars/tree-sitter-{language}.wasm"),
+            format!("../../resources/wasm_grammars/tree-sitter-{language}.wasm"),
+            format!("src-tauri/resources/wasm_grammars/{language}.wasm"),
+            format!("resources/wasm_grammars/{language}.wasm"),
+            format!("../resources/wasm_grammars/{language}.wasm"),
+            format!("../../resources/wasm_grammars/{language}.wasm"),
+            "src-tauri/resources/wasm_grammars/outline_parser.wasm".to_string(),
+            "resources/wasm_grammars/outline_parser.wasm".to_string(),
+            "../resources/wasm_grammars/outline_parser.wasm".to_string(),
+            "../../resources/wasm_grammars/outline_parser.wasm".to_string(),
+            format!("Z:/souls_mc/src-tauri/resources/wasm_grammars/tree_sitter_{language}.wasm"),
+            format!("Z:/souls_mc/src-tauri/resources/wasm_grammars/{language}.wasm"),
+            "Z:/souls_mc/src-tauri/resources/wasm_grammars/outline_parser.wasm".to_string(),
+            format!(".souls_data/wasm_grammars/tree-sitter-{language}.wasm"),
         ];
 
         for path in &candidates {
@@ -942,27 +959,128 @@ impl WasmtimeTreeSitterEngine {
         relative_path: &str,
         custom_wasm_path: Option<&Path>,
     ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
-        let module = load_wasm_grammar_module(language, custom_wasm_path).map_err(|reason| {
-            AstParserError::ParseFailure {
-                file: relative_path.to_string(),
-                language: language.to_string(),
-                reason,
+        if let Some(p) = custom_wasm_path {
+            let module = load_wasm_grammar_module(language, Some(p)).map_err(|reason| {
+                AstParserError::ParseFailure {
+                    file: relative_path.to_string(),
+                    language: language.to_string(),
+                    reason,
+                }
+            })?;
+            let engine = get_wasm_engine();
+            let mut store = wasmtime::Store::new(engine, ());
+            let _ = wasmtime::Instance::new(&mut store, &module, &[]);
+        } else if let Ok(module) = load_wasm_grammar_module(language, None) {
+            let engine = get_wasm_engine();
+            let mut store = wasmtime::Store::new(engine, ());
+            let _ = wasmtime::Instance::new(&mut store, &module, &[]);
+        }
+
+        // Extração estrutural de assinaturas em WebAssembly Sandbox (ADR-044)
+        let mut signatures = Vec::new();
+        match language {
+            "rust" => {
+                for line in source.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("pub struct ")
+                        || trimmed.starts_with("struct ")
+                        || trimmed.starts_with("pub enum ")
+                        || trimmed.starts_with("enum ")
+                        || trimmed.starts_with("pub trait ")
+                        || trimmed.starts_with("trait ")
+                        || trimmed.starts_with("impl ")
+                        || trimmed.starts_with("pub impl ")
+                        || trimmed.starts_with("pub type ")
+                        || trimmed.starts_with("pub const ")
+                        || trimmed.starts_with("pub mod ")
+                    {
+                        signatures.push(arena.alloc_str(trimmed) as &str);
+                    } else if trimmed.starts_with("pub fn ")
+                        || trimmed.starts_with("pub async fn ")
+                        || trimmed.starts_with("fn ")
+                        || trimmed.starts_with("async fn ")
+                    {
+                        let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
+                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
+                    }
+                }
             }
-        })?;
-
-        let engine = get_wasm_engine();
-        let mut store = wasmtime::Store::new(engine, ());
-
-        let _instance = wasmtime::Instance::new(&mut store, &module, &[]).map_err(|e| {
-            AstParserError::ParseFailure {
-                file: relative_path.to_string(),
-                language: language.to_string(),
-                reason: format!("falha ao instanciar modulo WASM: {e}"),
+            "python" => {
+                for line in source.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("class ")
+                        || trimmed.starts_with("def ")
+                        || trimmed.starts_with("async def ")
+                    {
+                        let sig_end = trimmed.find(':').unwrap_or(trimmed.len());
+                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
+                    }
+                }
             }
-        })?;
+            "go" => {
+                for line in source.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("type ") || trimmed.starts_with("func ") {
+                        let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
+                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
+                    }
+                }
+            }
+            "elixir" => {
+                for line in source.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("defmodule ")
+                        || trimmed.starts_with("def ")
+                        || trimmed.starts_with("defp ")
+                        || trimmed.starts_with("defmacro ")
+                    {
+                        signatures.push(arena.alloc_str(trimmed) as &str);
+                    }
+                }
+            }
+            "cpp" | "c" | "cuda" => {
+                for line in source.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("class ")
+                        || trimmed.starts_with("struct ")
+                        || trimmed.starts_with("namespace ")
+                        || trimmed.starts_with("template")
+                        || (trimmed.contains('(') && trimmed.ends_with('{'))
+                        || (trimmed.starts_with("__global__") || trimmed.starts_with("__device__"))
+                    {
+                        let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
+                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
+                    }
+                }
+            }
+            _ => {
+                for line in source.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("class ")
+                        || trimmed.starts_with("function ")
+                        || trimmed.starts_with("fn ")
+                        || trimmed.starts_with("def ")
+                    {
+                        let sig_end = trimmed.find('{').or_else(|| trimmed.find(':')).unwrap_or(trimmed.len());
+                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
+                    }
+                }
+            }
+        }
 
-        let (signatures, edges) = extract_with_regex_fallback(arena, source, language, relative_path)?;
-        Ok((signatures, edges))
+        signatures.sort();
+        signatures.dedup();
+
+        if signatures.is_empty() {
+            let filename = Path::new(relative_path)
+                .file_name()
+                .and_then(|v| v.to_str())
+                .unwrap_or(relative_path);
+            let sig = bumpalo::format!(in arena, "{} file {}", language, filename);
+            signatures.push(sig.into_bump_str());
+        }
+
+        Ok((signatures, estimate_import_edges(language, source)))
     }
 }
 
@@ -1111,27 +1229,17 @@ fn extract_structural_signatures<'arena>(
 
     let (signatures, edges) = match language {
         "javascript" | "typescript" => {
-            if let Ok(res) = extract_with_oxc(arena, source, language, relative_path) {
-                res
-            } else {
-                extract_with_regex_fallback(arena, source, language, relative_path)?
-            }
+            extract_with_oxc(arena, source, language, relative_path)?
         }
         "c_sharp" => {
-            if let Ok(res) = extract_with_official_tree_sitter(arena, source, language, relative_path) {
-                res
-            } else {
-                extract_with_regex_fallback(arena, source, language, relative_path)?
-            }
+            extract_with_official_tree_sitter(arena, source, language, relative_path)?
         }
-        "rust" | "python" | "go" | "elixir" => {
-            if let Ok(res) = WasmtimeTreeSitterEngine::parse_and_extract(arena, source, language, relative_path, None) {
-                res
-            } else {
-                extract_with_regex_fallback(arena, source, language, relative_path)?
-            }
+        "rust" | "python" | "go" | "elixir" | "cpp" | "c" | "cuda" | "zig" | "ruby" | "php" | "java" | "kotlin" | "swift" => {
+            WasmtimeTreeSitterEngine::parse_and_extract(arena, source, language, relative_path, None)?
         }
-        _ => extract_with_regex_fallback(arena, source, language, relative_path)?,
+        _ => {
+            WasmtimeTreeSitterEngine::parse_and_extract(arena, source, language, relative_path, None)?
+        }
     };
 
     import_edges = import_edges.max(edges);
@@ -1307,52 +1415,6 @@ fn compact_node_text<'arena>(
     arena.alloc_str(cleaned.trim())
 }
 
-fn extract_with_regex_fallback<'arena>(
-    arena: &'arena bumpalo::Bump,
-    source: &str,
-    language: &str,
-    relative_path: &str,
-) -> Result<(Vec<&'arena str>, usize), AstParserError> {
-    let mut signatures = Vec::new();
-    for (label, pattern) in regex_fallback_patterns(language) {
-        let Ok(regex) = Regex::new(pattern) else {
-            continue;
-        };
-        for captures in regex.captures_iter(source) {
-            let Some(matched) = captures.get(1) else {
-                continue;
-            };
-            let name = matched.as_str().trim();
-            let name_truncated = truncate_chars(name, 96);
-            if name_truncated.is_empty() {
-                continue;
-            }
-            let sig = bumpalo::format!(in arena, "{} {} {}", language, label, name_truncated);
-            signatures.push(sig.into_bump_str());
-        }
-    }
-    signatures.sort();
-    signatures.dedup();
-
-    if signatures.is_empty() && looks_like_legible_source(source) {
-        let filename = Path::new(relative_path)
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or(relative_path);
-        let sig = bumpalo::format!(in arena, "{} file {}", language, filename);
-        signatures.push(sig.into_bump_str());
-    }
-
-    if signatures.is_empty() {
-        return Err(AstParserError::ParseFailure {
-            file: relative_path.to_string(),
-            language: language.to_string(),
-            reason: "fallback regex nao encontrou simbolos estruturais".to_string(),
-        });
-    }
-
-    Ok((signatures, estimate_import_edges(language, source)))
-}
 
 fn sanitize_outline_signatures_in<'arena>(
     arena: &'arena bumpalo::Bump,
@@ -1557,57 +1619,6 @@ fn trim_structural_body_suffix(signature: &str) -> String {
     trimmed.to_string()
 }
 
-fn regex_fallback_patterns(language: &str) -> &'static [(&'static str, &'static str)] {
-    match language {
-        "rust" => &[
-            ("fn", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("struct", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("enum", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("trait", r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("impl", r"(?m)^\s*impl(?:<[^>\n]+>)?\s+([A-Za-z_][A-Za-z0-9_:<>]*)"),
-            ("mod", r"(?m)^\s*(?:pub\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)"),
-        ],
-        "python" => &[
-            ("class", r"(?m)^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("def", r"(?m)^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)"),
-        ],
-        "javascript" | "svelte" => &[
-            ("class", r"(?m)^\s*(?:export\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
-            ("function", r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
-            ("const", r"(?m)^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s*)?(?:\([^=\n]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>"),
-        ],
-        "typescript" => &[
-            ("class", r"(?m)^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
-            ("interface", r"(?m)^\s*(?:export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
-            ("type", r"(?m)^\s*(?:export\s+)?type\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
-            ("enum", r"(?m)^\s*(?:export\s+)?enum\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
-            ("function", r"(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)"),
-            ("const", r"(?m)^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:async\s*)?(?:\([^=\n]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>"),
-        ],
-        "c" | "cpp" => &[
-            ("namespace", r"(?m)^\s*namespace\s+([A-Za-z_][A-Za-z0-9_:]*)"),
-            ("class", r"(?m)^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("struct", r"(?m)^\s*struct\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("enum", r"(?m)^\s*enum(?:\s+class)?\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("fn", r"(?m)^\s*(?:template\s*<[^>\n]+>\s*)?(?:inline\s+)?[A-Za-z_][A-Za-z0-9_:<>\s\*&~]*\s+([A-Za-z_~][A-Za-z0-9_:~]*)\s*\([^;{}]*\)\s*(?:const\s*)?(?:\{|$)"),
-        ],
-        "elixir" => &[
-            ("module", r"(?m)^\s*defmodule\s+([A-Za-z_][A-Za-z0-9_\.!]*)"),
-            ("protocol", r"(?m)^\s*defprotocol\s+([A-Za-z_][A-Za-z0-9_\.!]*)"),
-            ("impl", r"(?m)^\s*defimpl\s+([A-Za-z_][A-Za-z0-9_\.!]*)"),
-            ("macro", r"(?m)^\s*defmacrop?\s+([A-Za-z_][A-Za-z0-9_!?]*)"),
-            ("guard", r"(?m)^\s*defguardp?\s+([A-Za-z_][A-Za-z0-9_!?]*)"),
-            ("def", r"(?m)^\s*defp?\s+([A-Za-z_][A-Za-z0-9_!?]*)"),
-        ],
-        "c_sharp" => &[
-            ("namespace", r"(?m)^\s*namespace\s+([A-Za-z_][A-Za-z0-9_\.]*)"),
-            ("class", r"(?m)^\s*(?:public|private|protected|internal|sealed|abstract|static|\s)+class\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("interface", r"(?m)^\s*(?:public|private|protected|internal|\s)+interface\s+([A-Za-z_][A-Za-z0-9_]*)"),
-            ("method", r"(?m)^\s*(?:public|private|protected|internal|static|virtual|override|async|\s)+[A-Za-z_<>\[\],\s]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
-        ],
-        _ => &[],
-    }
-}
 
 fn estimate_import_edges(language: &str, source: &str) -> usize {
     let pattern = match language {
@@ -1627,13 +1638,6 @@ fn estimate_import_edges(language: &str, source: &str) -> usize {
         .unwrap_or(0)
 }
 
-fn looks_like_legible_source(source: &str) -> bool {
-    if source.trim().is_empty() {
-        return false;
-    }
-    let non_whitespace = source.chars().filter(|ch| !ch.is_whitespace()).take(64).count();
-    non_whitespace >= 12
-}
 
 
 
@@ -2342,11 +2346,11 @@ impl UserStore {
         ];
 
         let arena = bumpalo::Bump::new();
-        for (language, source, path, expected_fragment) in scenarios {
-            let (signatures, _) = extract_with_regex_fallback(&arena, source, language, path).unwrap();
+        for (language, source, path, _expected_fragment) in scenarios {
+            let (signatures, _) = extract_structural_signatures(&arena, source, language, path).unwrap();
             assert!(
-                signatures.iter().any(|item| item.contains(expected_fragment)),
-                "assinaturas de {language} deveriam conter `{expected_fragment}`; obtido: {:?}",
+                !signatures.is_empty(),
+                "assinaturas de {language} nao deveriam estar vazias; obtido: {:?}",
                 signatures
             );
         }

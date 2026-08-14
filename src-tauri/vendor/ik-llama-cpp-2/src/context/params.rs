@@ -195,9 +195,10 @@ impl LlamaContextParams {
 /// RoPE precision) + V=[`KvCacheType::Q4_K`] (compresses 4x). For 32k ctx on
 /// the RTX 2060m this lands around ~800MB VRAM, vs ~1.6GB at F16/F16.
 #[allow(non_camel_case_types)] // ggml uses `Q4_K`; we mirror the C identifier.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum KvCacheType {
     /// F16 (default; K-half for TurboQuant).
+    #[default]
     F16,
     /// F32 (full precision, debug only).
     F32,
@@ -212,6 +213,10 @@ pub enum KvCacheType {
     /// Q8_0 (8-bit, 32-element block; SOULS MC fallback for non-256-aligned
     /// `n_embd_head_v` to avoid panics in the C-FFI).
     Q8_0,
+    /// TQ1 (3-bits TurboQuant com imatrix para V-Cache ultra-compacto).
+    TQ1,
+    /// TQ2 (2-bits TurboQuant para compressão extrema de VRAM).
+    TQ2,
 }
 
 impl KvCacheType {
@@ -226,13 +231,9 @@ impl KvCacheType {
             Self::Q5_0 => sys::GGML_TYPE_Q5_0,
             Self::Q5_1 => sys::GGML_TYPE_Q5_1,
             Self::Q8_0 => sys::GGML_TYPE_Q8_0,
+            Self::TQ1 => sys::GGML_TYPE_IQ3_XXS,
+            Self::TQ2 => sys::GGML_TYPE_IQ2_XXS,
         }
-    }
-}
-
-impl Default for KvCacheType {
-    fn default() -> Self {
-        Self::F16
     }
 }
 
@@ -243,9 +244,10 @@ impl Default for KvCacheType {
 /// RoPE scaling strategy. Maps onto `enum llama_rope_scaling_type`.
 ///
 /// See `llama.h` line 250-256 for the canonical enum (NONE=0, LINEAR=1, YARN=2).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum RopeScalingType {
     /// No RoPE scaling (default).
+    #[default]
     None,
     /// Linear interpolation (compresses position range linearly).
     Linear,
@@ -270,11 +272,5 @@ impl RopeScalingType {
             // forward-compat with upstream additions like `MaxPos`.
             Self::Unspecified => sys::LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED,
         }
-    }
-}
-
-impl Default for RopeScalingType {
-    fn default() -> Self {
-        Self::None
     }
 }

@@ -3898,6 +3898,5 @@ async fn test_safe_fallback_guardrail() {
         !exit_status.success(),
         "subprocesso intencional deve terminar com crash (non-zero exit code)"
     );
-    // Pai Tokio continua de pé.
-    assert!(true, "pai Tokio sobreviveu a crash FFI simulado (modo sem llama_backend)");
+    // Pai Tokio continua de pé (modo sem llama_backend validado).
 }

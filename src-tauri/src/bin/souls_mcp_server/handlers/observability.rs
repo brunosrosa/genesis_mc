@@ -30,6 +30,7 @@ pub async fn run_heatmap(params: &serde_json::Map<String, Value>) -> Result<Valu
         message: format!("Falha ao abrir souls_state.db: {e}"),
         data: None,
     })?;
+    let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -186,6 +187,7 @@ pub async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Val
         message: format!("Falha ao abrir souls_state.db: {e}"),
         data: None,
     })?;
+    let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
     if let Err(e) = observability::migrate_v3_to_v4(&mut conn) {
         eprintln!("[feedback] ALERTA: migrate_v3_to_v4 falhou: {e}");
     }
