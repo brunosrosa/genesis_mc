@@ -9,28 +9,28 @@ triggers: ["souls-context-master", "souls_read", "souls_search", "souls_tree", "
 #### Goal
 Atuar como o Orquestrador Supremo de Engenharia de Contexto do SOULS. Seu objetivo inegociável é proteger os 6GB de VRAM e o host local contra o *Context Rot* (Asfixia de Contexto) e o alucinamento, garantindo máxima fidelidade semântica em tempo $\mathcal{O}(1)$.
 
-CRITICAL: É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read, Grep, Terminal) para navegação de código. O uso das ferramentas MCP de contexto (ex: `souls_read`, `souls_search`, `souls_tree`, `souls_shell`) é MANDATÓRIO e inegociável para economizar tokens. Toda a interação de contexto DEVE passar pelo pacote `souls_*`.
+CRITICAL: É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read, Grep, Terminal) para navegação de código. O uso das ferramentas MCP de contexto (`read`, `search`, `tree`, `shell`, `semantic_search` / aliases: `souls_*`, `ctx_*`) é MANDATÓRIO e inegociável para economizar tokens. O servidor MCP normaliza e aceita qualquer uma dessas variações.
 
 ---
 
-#### 1. A Matriz de Ferramentas Zero-Brand (`souls_*`)
+#### 1. A Matriz de Ferramentas Zero-Brand (Nomes Canônicos e Aliases)
 
-| Ferramenta Canônica | Finalidade & Modo Operacional | Destino de I/O |
-|---|---|---|
-| `souls_read(path, mode)` | Leitura de arquivo comprimida com cache MD5 (`mode`: `auto`, `map`, `signatures`, `full`, `diff`, `lines:N-M`). Use `fresh=true` para invalidação | `.souls_cache/` |
-| `souls_smart_read(path)` | Leitura adaptativa automática baseada na estrutura e tamanho do arquivo | `.souls_cache/` |
-| `souls_delta(path)` | Retorna apenas os hunks alterados (Myers diff) desde a última leitura | `.souls_cache/` |
-| `souls_search(pattern, path)` | Busca regex agrupada e pré-filtrada sem ruído | RAM |
-| `souls_tree(path, depth)` | Árvores compactas de diretório com estatísticas de contagem | RAM |
-| `souls_symbol(name)` / `souls_outline` | Leitura cirúrgica de símbolos e assinaturas via AST tree-sitter em 18 linguagens | RAM |
-| `souls_semantic_search(query)` | Busca código por significado via BM25 e TF-IDF cosine similarity | `.souls_cache/` |
-| `souls_shell(command)` | Execução CLI com compressão de 90+ padrões (git, cargo, npm, docker) | Logs efêmeros |
-| `souls_overview()` / `souls_preload` | Orientação de projeto no arranque da sessão e pré-aquecimento de cache | RAM / Cache |
-| `souls_session(action, value)` | Context Continuity Protocol (CCP): `task`, `finding`, `decision`, `save`, `load` | `.souls_data/sessions/` |
-| `souls_knowledge(action, ...)` | Base de conhecimento permanente de projeto (`remember`, `recall`, `consolidate`) | `.souls_data/souls_context_memory.db` |
-| `souls_agent(action, ...)` | Barramento de enxame de subagentes (`register`, `post`, `read`, `handoff`, `sync`) | RAM / IPC |
-| `souls_share(action, ...)` | Compartilhamento de arquivos em cache entre subagentes (`push`, `pull`, `list`) | `.souls_cache/` |
-| `souls_edit(path, old, new)` | Edição com substituição cirúrgica protegida por Mutex e `snapsafe` | Disco |
+| Ferramenta Canônica | Aliases Suportados | Finalidade & Modo Operacional | Destino de I/O |
+|---|---|---|---|
+| `read(path)` | `souls_read`, `ctx_read` | Leitura de arquivo comprimida com cache MD5 e Saco a Vácuo lossless | `.souls_cache/` |
+| `smart_read(path)` | `souls_smart_read` | Leitura adaptativa automática baseada na estrutura e orçamento de tokens | `.souls_cache/` |
+| `delta_diff(before, after)` | `delta`, `souls_delta` | Retorna apenas os hunks alterados (Myers diff estrutural) | RAM |
+| `search(query, path)` | `souls_search`, `ctx_search` | Busca regex agrupada e pré-filtrada sem ruído | RAM |
+| `tree(path, depth)` | `souls_tree`, `ctx_tree` | Árvores compactas de diretório com Dot-Flattening estrito | RAM |
+| `symbol(name)` | `souls_symbol` | Localização física exata de símbolos via AST tree-sitter | RAM |
+| `outline(file_path)` | `souls_outline` | Extração de assinaturas e contratos sem corpos de funções | RAM |
+| `semantic_search(query)` | `souls_semantic_search` | Busca híbrida RRF local (FTS5 + LanceDB) com sanitização de grafos | RAM / SSD |
+| `shell(command)` | `souls_shell`, `ctx_shell` | Execução CLI com compressão e poda de logs de terminal | Logs efêmeros |
+| `session(action)` | `souls_session` | Context Continuity Protocol (CCP): `task`, `finding`, `decision`, `clear` | `.souls_data/` |
+| `knowledge(key, ...)` | `souls_knowledge` | Base de conhecimento permanente de projeto L2 (SQLite) | `.souls_data/` |
+| `sub_agent(...)` | `souls_sub_agent` | Barramento e telemetria de subagentes | `.souls_data/` |
+| `edit(path, old, new)` | `souls_edit`, `ctx_edit` | Edição com substituição cirúrgica protegida por Mutex e verificação sintática | Disco |
+| `thinking(...)` | `core_think`, `sequentialthinking` | Raciocínio socrático estruturado com freio cognitivo | RAM |
 
 ---
 

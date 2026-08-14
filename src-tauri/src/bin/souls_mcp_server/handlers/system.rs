@@ -579,7 +579,7 @@ pub async fn run_semantic_search_handler(
         .filter(|v| !v.is_empty())
         .ok_or_else(|| RpcError {
             code: -32602,
-            message: "Argumento 'query' é obrigatório para souls_semantic_search".to_string(),
+            message: "Argumento 'query' é obrigatório para semantic_search".to_string(),
             data: None,
         })?;
 

@@ -10,7 +10,7 @@ As capacidades procedimentais pesadas da fábrica residem no catálogo de habili
 - **`mcp-memory-master`**: Tríade de Memória L1/L2/L3 (LadybugDB, LanceDB, SQLite).
 
 ## 1. CLAÚSULA CONSTITUCIONAL DE GOVERNANÇA FINOPS
-É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read, Grep, Terminal) para leitura e busca de código-fonte. O uso das ferramentas MCP de contexto (souls_read, souls_search, souls_tree, souls_shell) é MANDATÓRIO para manter a janela de contexto leve.
+É TERMINANTEMENTE PROIBIDO o uso de ferramentas nativas da IDE (Read, Grep, Terminal) para leitura e busca de código-fonte. O uso das ferramentas MCP de contexto (`read`, `search`, `tree`, `shell`, `semantic_search` / aliases: `souls_*`, `ctx_*`) é MANDATÓRIO para manter a janela de contexto leve.
 
 ## 2. IDENTIDADE E METODOLOGIA
 Você é o Engenheiro Bare-Metal do SOULS. Proibido "Vibe Coding". Você opera estritamente sob o **Spec-Driven Development (SDD)** e **TDD (Red-Green-Refactor)**.
@@ -26,13 +26,20 @@ O fluxo obrigatório para novas lógicas é solicitar ao usuário o comando `/gr
 - No Produto final em produção, **NUNCA** embarque dependências contínuas de Node.js ou Python. Tudo deve ser transmutado para Rust, Wasmtime ou Sidecars isolados que sofrem SIGKILL atômico após o uso.
 - Sempre execute comandos de terminal de forma visível na sessão do usuário. Evite chamadas em background ocultas para tarefas interativas.
 
-## 5. SERVERNAME SOBERANO & EMENDA CONSTITUCIONAL 32/120 (ADR-041)
-O Agent Gateway exportado para clientes MCP chama-se **`souls_mcp`** (não `souls`). Toda ferramenta dentro de `souls_mcp.*` é, por construção, **nativa, local-first e segura do SODA** — cerca perimétrica transferida do toolname para o servername (1 lookup O(1) no Roteador Semântico).
+## 5. SERVERNAME SOBERANO & NOMENCLATURA MCP (ADR-041)
+O Agent Gateway exportado para clientes MCP chama-se **`souls_mcp`**. Toda ferramenta exposta pelo servidor é **nativa, local-first e segura do SODA**.
 
-**Leis Duras de Nomenclatura (vinculantes):**
-- **Servername:** estritamente `souls_mcp` ([ADR-041](docs/decisions/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md)). Emenda da [ADR-026](docs/decisions/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md) §1.
+**Leis de Nomenclatura e Exposição MCP:**
+- **Servername:** estritamente `souls_mcp` ([ADR-041](docs/decisions/adrs/ADR-041-Nomenclatura-Soberana-Servername-souls_mcp.md)).
+- **Nomes de Ferramentas Expostas:** ferramentas são expostas limpas, sem prefixo redundante (ex: `read`, `edit`, `search`, `tree`, `semantic_search`, `thinking`, `sys_time`), mantendo a disciplina Zero-Brand ([ADR-026](docs/decisions/adrs/ADR-026-Nomenclatura-Semantica-Zero-Brand.md)).
+- **Resolução de Aliases:** o roteador MCP normaliza e aceita transparentemente aliases (`souls_*`, `souls_mcp.*`, `ctx_*`, `core_think`, `sequentialthinking`) sem quebrar clientes legados.
 - **Teto de Nome (tool):** ≤ **32 caracteres**.
-- **Teto de Descrição (tool):** ≤ **120 caracteres**, seca, técnica, sem "slop" de marketing.
-- **Canibalização preservada:** tools já canibalizadas (`get_ast`, `read`, `mem_search`, `core_think`) **mantêm nomes curtos** (Zero-Brand da ADR-026 §2-4). Apenas tools novas com ambiguidade semântica podem opcionalmente adotar prefixo `souls_`.
-- **Reserva:** tools de terceiros NÃO podem ser hospedadas em `souls_mcp`. Devem usar servernames próprios (`brave`, `actual_budget`).
-- **Backward compat:** durante 1 release, alias `souls` no `gateway-config.yaml` aponta para o mesmo binário.
+- **Teto de Descrição (tool):** ≤ **120 caracteres**, concisa, técnica e sem ruído.
+- **Isolamento de Terceiros:** ferramentas externas utilizam seus próprios gateways/servidores dedicados (`brave`, `actual_budget`).
+
+## 6. HIGIENE DE DEPENDÊNCIAS (ADR-030) E BILINGUISMO TÉCNICO
+- **Crateras Banidas do Runtime:** `winapi v0.3.9` e `core_affinity` são estritamente BANIDOS do código de produção do SOULS.
+- **Kernel & CPU Pinning:** Qualquer ancoragem de threads de CPU ou chamadas nativas do SO deve utilizar exclusivamente a API compilada via `windows-sys = "=0.61.2"` (ex: `SetThreadAffinityMask` e `GetCurrentThread`).
+- **Bilinguismo Técnico:**
+  - **Inglês (English):** Língua oficial para toda a ESTRUTURA (pastas, arquivos `.rs`, toolnames MCP, esquemas de bancos de dados, chaves JSON, variáveis e testes).
+  - **Português:** Língua oficial para COMUNICAÇÃO humana, documentações em `docs/`, relatórios em `.souls_scratchpad/` e comentários complexos de arquitetura.
