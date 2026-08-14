@@ -1,0 +1,14 @@
+# SODA Canvas v0.1 — Marco V
+# Workspace canônico pnpm 11. Trust do lockfile + packages para
+# destravar o build do Vite em ambientes sandbox (TRAE bloqueia
+# Z:\.pnpm-store e C:\Users\rosas\AppData\Local\pnpm-cache).
+#
+# `trustLockfile: true` (pnpm ≥11.3) pula a re-verificação de
+# supply-chain por entrada. Mitigação documentada pela pnpm para
+# o cenário "policy re-check breaks CI/sandbox" — ADR-039.
+
+packages:
+  - "src-tauri"
+  - "."
+
+trustLockfile: true

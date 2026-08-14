@@ -4,6 +4,19 @@
 // de broken. Marco 4.0.2: silencia o lint pre-existente.
 #![allow(clippy::items_after_test_module)]
 
+// Marco V: sub-módulos IPC (ADR-003 + ADR-014). Canais binários e bridge
+// de eventos de controle. Vivem em arquivos irmãos para preservar o
+// layout Rust 2018+ (`telemetry.rs` raiz + `telemetry/<sub>.rs`).
+//
+// Gated por `feature = "tauri-app"` porque dependem do crate `tauri`
+// (opcional). O LSP do rust-analyzer deve ser instruído a habilitar
+// a feature via `.vscode/settings.json` (chave `rust-analyzer.cargo.features`),
+// caso contrário reporta falsos positivos de "unresolved import tauri".
+#[cfg(feature = "tauri-app")]
+pub mod blast_bridge;
+#[cfg(feature = "tauri-app")]
+pub mod watchdog_ipc;
+
 use std::fmt::{self, Write as _};
 use std::fs::OpenOptions;
 use std::io::{self, IsTerminal, Write};

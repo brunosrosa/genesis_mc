@@ -1,11 +1,29 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use tauri::ipc::Channel;
 use tauri::Manager;
 
+/// `souls_ping` — health check trivial.
 #[tauri::command]
 fn souls_ping(payload: &str) -> String {
     format!("Souls MC Core Online. Recebido: {}", payload)
+}
+
+// =============================================================================
+// SOULS MC Marco V — SODA Canvas v0.1: Tauri v2 IPC Zero-Copy Telemetry Bridge.
+//
+// `start_watchdog_stream` recebe um `Channel<Vec<u8>>` do frontend (Svelte 5)
+// e o injeta no `watchdog_ipc::spawn_watchdog_channel`. O canal emite
+// EXATAMENTE 8 bytes (u64 packed little-endian) a cada 1Hz — sem JSON.
+//
+// O frontend chama via:
+//   const channel = new Channel<Uint8Array>();
+//   await invoke('start_watchdog_stream', { channel });
+// =============================================================================
+#[tauri::command]
+async fn start_watchdog_stream(app: tauri::AppHandle, channel: Channel<Vec<u8>>) {
+    souls_mc_lib::telemetry::watchdog_ipc::spawn_watchdog_channel(app, channel);
 }
 
 // =============================================================================
@@ -59,6 +77,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             souls_ping,
+            start_watchdog_stream,
             socratic_export_session,
             socratic_analyze_session,
             socratic_merge_sessions,

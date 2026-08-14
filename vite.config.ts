@@ -1,9 +1,9 @@
+// https://vite.dev/config/
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -11,6 +11,8 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Marco V: alias canônico do Svelte 5 para `src/lib`.
+      "$lib": path.resolve(__dirname, "./src/lib"),
     },
   },
   plugins: [svelte(), tailwindcss()],
