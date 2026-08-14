@@ -1,0 +1,133 @@
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+    "src-tauri/crates/anthropophagy",
+]
+
+# =============================================================================
+# ADR-030 (Módulo 4): Workspace Dependency Pinning Rígido (SSOT)
+# =============================================================================
+[workspace.dependencies]
+# --- Core / Sync primitives ---
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = { version = "=1.0.149", features = ["preserve_order"] }
+regex = "=1.12.4"
+url = "=2.5.8"
+toml = "=1.1.4"
+dunce = "=1.0.5"
+rustc-hash = "=2.1.3"
+tinyrand = "=0.5.0"
+uuid = { version = "=1.23.4", features = ["v4"] }
+sha2 = "=0.10.9"
+walkdir = "=2.5.0"
+dashmap = "6.1.0"
+dotenvy = "=0.15.7"
+enable-ansi-support = "=0.2.1"
+ignore = "=0.4.25"
+
+# --- Async runtime / networking ---
+tokio = { version = "=1.51.1", features = ["full"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
+
+# --- Observability / logging ---
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+thiserror = { version = "=2.0.19", default-features = false }
+sysinfo = "=0.30.13"
+
+# --- Persistence / SQL / Vectors ---
+rusqlite = { version = "=0.39.0", features = ["bundled"] }
+sqlparser = "=0.62.0"
+tempfile = "=3.27.0"
+zstd = "=0.13.3"
+
+# --- Git / VCS ---
+gix = { version = "=0.84.0", features = ["blocking-network-client", "worktree-mutation"] }
+
+# --- Parsing / Encoding ---
+oxc = { version = "=0.120.0", features = ["ast_visit"] }
+quick-xml = "=0.39.4"
+astral-tl = "=0.7.11"
+bumpalo = { version = "=3.20.3", features = ["collections"] }
+memmap2 = "=0.9.11"
+pulldown-cmark = "=0.13.4"
+jsonrepair = "=0.1.0"
+httparse = "=1.10.1"
+jsonwebtoken = { version = "=10.4.0", default-features = false, features = ["use_pem", "rust_crypto"] }
+aho-corasick = "=1.1.4"
+
+# --- Tokenizers / NLP ---
+tiktoken = "=3.5.1"
+tokenizers = "=0.21.4"
+
+# --- WASM Sandbox ---
+wasmtime = { version = "=29.0.0", features = ["wat"] }
+wasmtime-wasi = "=29.0.0"
+
+# --- Tree-sitter ---
+tree-sitter = "=0.26.10"
+tree-sitter-c-sharp = "=0.23.5"
+tree-sitter-yaml = "=0.7.2"
+
+# --- Windows API (unified v0.61.2 - ADR-030) ---
+windows-sys = { version = "=0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Isolation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_JobObjects",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_StationsAndDesktops",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_SystemInformation",
+] }
+
+# --- Arrow (vector / LanceDB stack) ---
+arrow-array = "=58.4.0"
+arrow-schema = "=58.4.0"
+arrow-row = "=58.4.0"
+arrow-cast = "=58.4.0"
+
+# --- Misc utilities ---
+futures-util = "=0.3.31"
+similar = "=2.6.0"
+which = "=6.0.3"
+quote = "=1.0.46"
+nvml-wrapper = "0.10.0"
+
+# --- Tauri ---
+tauri = { version = "=2.11.5", features = ["tray-icon"] }
+tauri-plugin-opener = { version = "=2.5.4" }
+tauri-build = { version = "=2.6.3" }
+windows-projfs = "=0.1.8"
+
+# --- ML Inference ---
+ik-llama-cpp-2 = { path = "src-tauri/vendor/ik-llama-cpp-2", features = ["cuda"] }
+ik-llama-cpp-sys = { path = "src-tauri/vendor/ik-llama-cpp-sys" }
+mistralrs = "0.8"
+llguidance = "1.7"
+
+# --- Test-only ---
+mockito = "=1.7.2"
+
+# =============================================================================
+# ADR-039: CARGO FINOPS WORKSPACE PROFILES (SSOT)
+# =============================================================================
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false
+
+[profile.release]
+debug-assertions = false
+lto = "thin"
+panic = "abort"
+codegen-units = 1
+strip = "symbols"
+opt-level = 3
+incremental = false

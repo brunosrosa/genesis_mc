@@ -129,6 +129,7 @@ if ($killed.Count -gt 0) {
 $webviewDataDirs = @(
     (Join-Path $env:LOCALAPPDATA "com.rosas.souls-mc\EBWebView"),
     (Join-Path $env:LOCALAPPDATA "souls-mc\EBWebView"),
+    (Join-Path $PSScriptRoot "target\release\EBWebView"),
     (Join-Path $PSScriptRoot "src-tauri\target\release\EBWebView")
 )
 if ($CleanWebview -or $Build -or (-not $Dev)) {
@@ -157,10 +158,10 @@ if ($Build) {
     
     # 2. Compilação Rust Release dos 4 daemons de infraestrutura
     Write-Host "[SOULS] Compilando 4 daemons Rust em modo Release (tauri-app, gateway_ccr)..." -ForegroundColor Cyan
-    $srcTauriDir = Join-Path $PSScriptRoot "src-tauri"
-    Push-Location $srcTauriDir
+    Push-Location $PSScriptRoot
     try {
         cargo build --release `
+            --package "souls_mc" `
             --features "tauri-app,gateway_ccr" `
             --bin "souls_mc" `
             --bin "souls_mcp_server" `
@@ -179,7 +180,7 @@ if ($Build) {
     Write-Host "[SOULS] Transplantando executáveis para .agents/bin/..." -ForegroundColor Cyan
     $daemons = @("souls_mc.exe", "souls_mcp_server.exe", "agentgateway_tcp_proxy.exe", "mcp_stdio_guard.exe")
     foreach ($daemon in $daemons) {
-        $sourcePath = Join-Path $srcTauriDir "target\release\$daemon"
+        $sourcePath = Join-Path $PSScriptRoot "target\release\$daemon"
         if (Test-Path $sourcePath) {
             Copy-Item $sourcePath (Join-Path $binDir $daemon) -Force
             Write-Host "   -> [OK] $daemon transplantado para .agents/bin/" -ForegroundColor DarkGreen
@@ -229,9 +230,9 @@ if ($Dev) {
     }
     
     Write-Host "[SOULS] Localhost ativo! Disparando janela de debug..." -ForegroundColor Green
-    $debugPath = Join-Path $PSScriptRoot "src-tauri\target\debug\souls_mc.exe"
+    $debugPath = Join-Path $PSScriptRoot "target\debug\souls_mc.exe"
     if (-not (Test-Path $debugPath)) {
-        $debugPath = Join-Path $PSScriptRoot "src-tauri\target\release\souls_mc.exe"
+        $debugPath = Join-Path $PSScriptRoot "target\release\souls_mc.exe"
     }
     Start-Process $debugPath
     
@@ -245,10 +246,10 @@ if ($Dev) {
     
     # Fallback paths
     if (-not (Test-Path $daemonPath)) {
-        $daemonPath = Join-Path $PSScriptRoot "src-tauri\target\release\souls_mc.exe"
+        $daemonPath = Join-Path $PSScriptRoot "target\release\souls_mc.exe"
     }
     if (-not (Test-Path $proxyPath)) {
-        $proxyPath = Join-Path $PSScriptRoot "src-tauri\target\release\agentgateway_tcp_proxy.exe"
+        $proxyPath = Join-Path $PSScriptRoot "target\release\agentgateway_tcp_proxy.exe"
     }
     
     if (-not (Test-Path $daemonPath)) {
