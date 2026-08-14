@@ -5,7 +5,6 @@
 //! 2. Fuel Metering de 10.000.000 unidades de combustível.
 //! 3. VFS enjaulado pré-abrindo `/workspace` (RW) e `/grammars` (RO).
 
-use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use wasmtime::{Engine, Module, ResourceLimiter, Store};

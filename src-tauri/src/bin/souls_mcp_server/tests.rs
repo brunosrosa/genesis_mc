@@ -2163,6 +2163,9 @@ fn test_rrf_mathematical_fusion() {
             content: "Doc B Content".to_string(),
             similarity: 0.95,
             file_path: "b.rs".to_string(),
+            temporal_stability: "STABLE".to_string(),
+            valid_from: 1700000000,
+            valid_to: None,
             metadata: serde_json::json!({}),
         },
         VectorialMatch {
@@ -2170,6 +2173,9 @@ fn test_rrf_mathematical_fusion() {
             content: "Doc C Content".to_string(),
             similarity: 0.80,
             file_path: "c.rs".to_string(),
+            temporal_stability: "EVOLVING".to_string(),
+            valid_from: 1700000000,
+            valid_to: None,
             metadata: serde_json::json!({}),
         },
     ];
