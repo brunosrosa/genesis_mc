@@ -1,10 +1,11 @@
-// SOULS V6 — Memory Module: Langevin Decay in Poincaré Disk (ADR-040)
-// Algoritmo de decaimento estocástico PGD com Poincaré Boundary Protection e Box-Muller Gaussian Noise.
+// SOULS V6 — Memory Module: Langevin Decay (Metabolismo Estocástico & Invariância STABLE)
+// Conforme ADR-001, ADR-005, ADR-040 e Marco VI.
 
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tinyrand::{Rand, Seeded, StdRand};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PoincareVector {
@@ -39,89 +40,113 @@ pub fn proj_poincare(v: (f64, f64)) -> (f64, f64) {
     }
 }
 
-/// Perturbação estocástica gaussiana 2D via transformação Box-Muller sem alocações no heap.
-pub fn box_muller_noise(seed: u64, index: u64) -> (f64, f64) {
-    let mut h1 = seed.wrapping_add(index.wrapping_mul(2).wrapping_add(1)).wrapping_mul(0x517c_c1b7_2722_0a95);
-    h1 ^= h1 >> 33;
-    let u1 = ((h1 & 0x001F_FFFF_FFFF_FFFF) as f64 + 1.0) / (0x0020_0000_0000_0000u64 as f64);
+/// Perturbação estocástica gaussiana 2D via transformação Box-Muller utilizando a crate `tinyrand`.
+pub fn box_muller_tinyrand(rng: &mut StdRand) -> (f64, f64) {
+    let raw1 = rng.next_u64();
+    let raw2 = rng.next_u64();
 
-    let mut h2 = seed.wrapping_add(index.wrapping_mul(2).wrapping_add(2)).wrapping_mul(0x517c_c1b7_2722_0a95);
-    h2 ^= h2 >> 33;
-    let u2 = ((h2 & 0x001F_FFFF_FFFF_FFFF) as f64 + 1.0) / (0x0020_0000_0000_0000u64 as f64);
+    let u1 = ((raw1 & 0x001F_FFFF_FFFF_FFFF) as f64 + 1.0) / (0x0020_0000_0000_0000u64 as f64);
+    let u2 = ((raw2 & 0x001F_FFFF_FFFF_FFFF) as f64 + 1.0) / (0x0020_0000_0000_0000u64 as f64);
 
     let r = (-2.0 * u1.ln()).sqrt();
     let theta = 2.0 * PI * u2;
     (r * theta.cos(), r * theta.sin())
 }
 
-/// Aplica um ciclo de decaimento de Langevin na Bola de Poincaré para todos os nós 'EVOLVING' no SQLite.
+/// Calcula a atualização do score de relevância segundo a Equação de Langevin:
+/// S_{t+1} = S_t * e^(-lambda * dt) + sigma * sqrt(dt) * eta_t
 ///
-/// x_{t+1} = proj_poincare( x_t - eta * Grad_V(x_t) + sqrt(2 * D * delta_t) * xi_t )
-/// Com V(x) = 1/2 * ||x||^2 -> Grad_V(x) = x.
-/// Nós com ||x|| >= 0.95 são marcados como 'SUPERSEDED'.
+/// Para nós 'STABLE', lambda = 0.0 e sigma = 0.0 (imunes ao esquecimento).
+pub fn compute_langevin_score(
+    initial_score: f64,
+    stability_status: &str,
+    lambda: f64,
+    sigma: f64,
+    delta_t: f64,
+    eta_noise: f64,
+) -> f64 {
+    if stability_status == "STABLE" {
+        // Âncora invariante: sem decaimento
+        initial_score
+    } else {
+        let decay_factor = (-lambda * delta_t).exp();
+        let stochastic_term = sigma * delta_t.sqrt() * eta_noise;
+        (initial_score * decay_factor + stochastic_term).clamp(0.0, 1.0)
+    }
+}
+
+/// Aplica um ciclo de decaimento de Langevin estocástico para todos os nós 'EVOLVING' e preserva os nós 'STABLE'.
 pub fn apply_langevin_decay(
     conn: &Connection,
-    eta: f64,
-    d_coeff: f64,
+    lambda_decay: f64,
+    sigma_diffusion: f64,
     delta_t: f64,
 ) -> Result<usize, String> {
+    let now_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let mut rng = StdRand::seed(now_epoch as u64);
+
     let mut stmt = conn
-        .prepare("SELECT memory_id, poincare_x, poincare_y FROM souls_memory_nodes WHERE stability_status = 'EVOLVING'")
+        .prepare("SELECT memory_id, stability_status, relevance_score, poincare_x, poincare_y FROM souls_memory_nodes")
         .map_err(|e| format!("Erro ao preparar SELECT Langevin: {}", e))?;
 
     let rows = stmt
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, f64>(1)?,
+                row.get::<_, String>(1)?,
                 row.get::<_, f64>(2)?,
+                row.get::<_, f64>(3)?,
+                row.get::<_, f64>(4)?,
             ))
         })
         .map_err(|e| format!("Erro ao executar query Langevin: {}", e))?;
 
-    let now_epoch = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-
-    let noise_scale = (2.0 * d_coeff * delta_t).sqrt();
-    let mut updated_count = 0;
     let mut updates = Vec::new();
 
-    for (idx, res) in rows.enumerate() {
-        let (mem_id, px, py) = match res {
+    for res in rows {
+        let (mem_id, status, score, px, py) = match res {
             Ok(tuple) => tuple,
             Err(_) => continue,
         };
 
-        // Grad_V(x) = (px, py)
-        let grad_x = px;
-        let grad_y = py;
+        if status == "STABLE" {
+            // Âncoras STABLE são imutáveis contra decaimento
+            continue;
+        }
 
-        // Gerador de ruído gaussiano Box-Muller
-        let (xi_x, xi_y) = box_muller_noise(now_epoch as u64, idx as u64);
+        let (eta_x, eta_y) = box_muller_tinyrand(&mut rng);
 
-        // x_{t+1} antes de projeção
-        let next_x = px - eta * grad_x + noise_scale * xi_x;
-        let next_y = py - eta * grad_y + noise_scale * xi_y;
+        // Atualização do score de relevância
+        let new_score = compute_langevin_score(score, &status, lambda_decay, sigma_diffusion, delta_t, eta_x);
+
+        // Atualização das coordenadas Poincaré
+        let eta_pgd = 0.05;
+        let noise_scale = (2.0 * sigma_diffusion * delta_t).sqrt();
+        let next_x = px - eta_pgd * px + noise_scale * eta_x;
+        let next_y = py - eta_pgd * py + noise_scale * eta_y;
 
         let (final_x, final_y) = proj_poincare((next_x, next_y));
         let norm = (final_x * final_x + final_y * final_y).sqrt();
 
-        let new_status = if norm >= 0.95 {
+        let new_status = if new_score <= 0.05 || norm >= 0.95 {
             "SUPERSEDED"
         } else {
             "EVOLVING"
         };
 
-        updates.push((mem_id, final_x, final_y, new_status));
+        updates.push((mem_id, new_score, final_x, final_y, new_status));
     }
 
     drop(stmt);
 
-    for (mem_id, fx, fy, status) in updates {
-        let sql = "UPDATE souls_memory_nodes SET poincare_x = ?1, poincare_y = ?2, stability_status = ?3, updated_at = ?4 WHERE memory_id = ?5";
-        if let Err(e) = conn.execute(sql, params![fx, fy, status, now_epoch, mem_id]) {
+    let mut updated_count = 0;
+    for (mem_id, new_sc, fx, fy, new_st) in updates {
+        let sql = "UPDATE souls_memory_nodes SET relevance_score = ?1, poincare_x = ?2, poincare_y = ?3, stability_status = ?4, updated_at = ?5 WHERE memory_id = ?6";
+        if let Err(e) = conn.execute(sql, params![new_sc, fx, fy, new_st, now_epoch, mem_id]) {
             eprintln!("[langevin_decay] ALERTA: Falha ao atualizar nó {}: {}", mem_id, e);
         } else {
             updated_count += 1;

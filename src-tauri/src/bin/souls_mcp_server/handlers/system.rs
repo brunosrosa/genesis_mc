@@ -592,30 +592,44 @@ pub async fn run_semantic_search_handler(
     let db_path = arguments
         .get("db_path")
         .and_then(Value::as_str)
-        .unwrap_or("souls_state.db")
+        .unwrap_or(".souls_data/souls_state.db")
         .to_string();
 
     let vector_db_path = arguments
         .get("vector_db_path")
         .and_then(Value::as_str)
-        .unwrap_or(".souls_data/souls_vectors.lance")
+        .unwrap_or(".souls_data/lancedb")
         .to_string();
+
+    let min_valid_from = arguments.get("valid_from").and_then(Value::as_i64);
+    let max_valid_to = arguments.get("valid_to").and_then(Value::as_i64);
+    let stability_filter = arguments.get("stability_filter").and_then(Value::as_str);
 
     let query_vector = generate_cpu_embedding_384(query_str);
 
     let fts_retriever = souls_mc_lib::cognition::memory::FtsRetriever::new(&db_path);
     let vector_retriever = souls_mc_lib::cognition::memory::VectorRetriever::new(&vector_db_path);
     let engine = souls_mc_lib::cognition::memory::RrfFusionEngine::default();
+    let firewall = souls_mc_lib::cognition::memory::OntologicalFirewall::default();
 
     let query_str_clone = query_str.to_string();
     let query_vector_clone = query_vector.clone();
+    let stability_filter_owned = stability_filter.map(|s| s.to_string());
 
     let lexical_handle = tokio::spawn(async move {
         fts_retriever.search_lexical(&query_str_clone, limit)
     });
 
     let vector_handle = tokio::spawn(async move {
-        vector_retriever.search_vectorial(&query_vector_clone, limit).await
+        vector_retriever
+            .search_with_temporal_filter(
+                &query_vector_clone,
+                limit,
+                min_valid_from,
+                max_valid_to,
+                stability_filter_owned.as_deref(),
+            )
+            .await
     });
 
     let lexical_res = lexical_handle.await.map_err(|e| RpcError {
@@ -636,44 +650,46 @@ pub async fn run_semantic_search_handler(
         .and_then(|c| souls_mc_lib::cognition::memory::load_tombstones(c).ok())
         .unwrap_or_default();
 
-    let mut results = engine.fuse(&lexical_res, &vector_res, &tombstones);
+    let (mut fused_results, elapsed) = engine.fuse_with_query(query_str, &lexical_res, &vector_res, &tombstones);
 
-    if results.is_empty() {
-        let stability_filter = arguments
-            .get("stability_filter")
-            .and_then(Value::as_str)
-            .unwrap_or("STABLE");
-        let fallback_query = format!("query:{} limit:{}", query_str, limit);
-        let fallback_params = json!({
-            "arguments": {
-                "query": fallback_query,
-                "limit": limit
-            }
-        });
-        if let Ok(graph_res) = crate::handlers::memory_graph::run_mem_search(fallback_params.as_object().unwrap()).await {
-            if let Some(text) = graph_res.get("content").and_then(Value::as_array).and_then(|a| a.first()).and_then(|o| o.get("text")).and_then(Value::as_str) {
-                results.push(souls_mc_lib::cognition::memory::rrf_fusion::UnifiedMatch {
-                    observation_id: "memory_graph_fallback".to_string(),
-                    content: text.to_string(),
-                    file_path: "memory_graph".to_string(),
-                    rrf_score: 0.5,
-                    lexical_rank: None,
-                    vector_rank: None,
-                    status: stability_filter.to_string(),
-                });
-            }
-        }
+    // Circuito Fallback Automático (bypass_vector_index) se pré-filtro ou vetor retornar vazio
+    if fused_results.is_empty() && !lexical_res.is_empty() {
+        fused_results = lexical_res
+            .into_iter()
+            .map(|lex| souls_mc_lib::cognition::memory::UnifiedMatch {
+                observation_id: lex.observation_id,
+                content: lex.content,
+                file_path: lex.file_path,
+                rrf_score: 0.5,
+                lexical_rank: Some(1),
+                vector_rank: None,
+                is_exact_match: false,
+                status: "fallback_fts5".to_string(),
+            })
+            .collect();
     }
+
+    // Filtragem pelo Firewall Ontológico LadybugDB (Anti-RAG Poisoning)
+    let (sanitized_results, vetoed_reasons) = firewall.sanitize_chunks(
+        query_str,
+        fused_results,
+        |m| &m.content,
+    );
+
+    let final_results: Vec<souls_mc_lib::cognition::memory::UnifiedMatch> = sanitized_results.into_iter().take(limit).collect();
 
     Ok(json!({
         "content": [{
             "type": "text",
-            "text": serde_json::to_string_pretty(&results).unwrap_or_default()
+            "text": serde_json::to_string_pretty(&final_results).unwrap_or_default()
         }],
         "structuredContent": {
             "query": query_str,
-            "results_count": results.len(),
-            "results": results
+            "results_count": final_results.len(),
+            "results": final_results,
+            "vetoed_count": vetoed_reasons.len(),
+            "vetoed_reasons": vetoed_reasons,
+            "fusion_latency_us": elapsed.as_micros()
         },
         "isError": false
     }))

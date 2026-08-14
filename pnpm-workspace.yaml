@@ -11,4 +11,7 @@ packages:
   - "src-tauri"
   - "."
 
+allowBuilds:
+  esbuild: set this to true or false
+
 trustLockfile: true

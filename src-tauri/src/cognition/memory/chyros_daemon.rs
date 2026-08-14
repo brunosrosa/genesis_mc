@@ -1,5 +1,6 @@
-// SOULS V6 — Memory Module: Chyros Daemon (AutoDream)
+// SOULS V6 — Memory Module: Chyros Daemon (AutoDream & Metabolismo Estocástico)
 // Daemon assíncrono para monitoramento de ociosidade, decaimento Langevin e consolidação cognitiva episódica L0 estritamente na CPU (AVX2).
+// Conforme ADR-001, ADR-005, ADR-027 e Marco VI.
 
 use super::langevin_decay::apply_langevin_decay;
 use crate::core::gigatoken_encoder::GigaTokenEncoder;
@@ -71,6 +72,7 @@ pub struct ConsolidationReport {
     pub mmv_snapshot: String,
     pub mmv_token_count: usize,
     pub is_aligned_64: bool,
+    pub vacuum_executed: bool,
 }
 
 #[derive(Clone)]
@@ -113,6 +115,43 @@ impl ChyrosDaemon {
         now.saturating_sub(last) >= self.idle_threshold_secs
     }
 
+    /// Executa a desfragmentação periódica via `VACUUM INTO` de forma idempotente e fail-soft.
+    /// Se o banco estiver ocupado (SQLITE_BUSY), aplica recuo exponencial com jitter determinístico.
+    pub fn execute_vacuum_into(&self, conn: &Connection, target_backup_path: &Path) -> Result<(), String> {
+        let target_str = target_backup_path.to_string_lossy().to_string();
+
+        if target_backup_path.exists() {
+            let _ = std::fs::remove_file(target_backup_path);
+        }
+
+        let mut retries = 0;
+        let max_retries = 3;
+        let mut delay_ms = 50;
+
+        loop {
+            let sql = format!("VACUUM INTO '{}';", target_str.replace('\'', "''"));
+            match conn.execute_batch(&sql) {
+                Ok(_) => {
+                    eprintln!("[ChyrosDaemon] VACUUM INTO concluído com sucesso em '{}'.", target_str);
+                    return Ok(());
+                }
+                Err(e) => {
+                    retries += 1;
+                    if retries > max_retries {
+                        eprintln!("[ChyrosDaemon] Falha ao executar VACUUM INTO após {} tentativas: {}", max_retries, e);
+                        return Err(format!("VACUUM INTO falhou: {}", e));
+                    }
+                    eprintln!(
+                        "[ChyrosDaemon] SQLITE_BUSY em VACUUM INTO (tentativa {}/{}). Recuo de {}ms...",
+                        retries, max_retries, delay_ms
+                    );
+                    std::thread::sleep(Duration::from_millis(delay_ms));
+                    delay_ms = (delay_ms * 2) + (retries as u64 * 10);
+                }
+            }
+        }
+    }
+
     /// Executa o ciclo síncrono/assíncrono de AutoDream com verificação de cancelamento <100ms.
     pub fn run_consolidation_cycle(&self, conn: &Connection) -> Result<ConsolidationReport, String> {
         if self.tracker.should_abort() {
@@ -122,7 +161,7 @@ impl ChyrosDaemon {
 
         eprintln!("[ChyrosDaemon] Iniciando ciclo de AutoDream e consolidação cognitiva...");
 
-        // Fase 1: Langevin Decay na Bola de Poincaré
+        // Fase 1: Langevin Decay estocástico (STABLE imutável, EVOLVING decai)
         let decay_count = apply_langevin_decay(conn, 0.05, 0.02, 1.0)?;
 
         if self.tracker.should_abort() {
@@ -141,17 +180,22 @@ impl ChyrosDaemon {
         // Fase 3: Compilação de Snapshot da Visão Materializada de Memória (MMV) com alinhamento de 64-Tokens
         let (mmv_snapshot, token_count) = self.build_aligned_mmv_snapshot(conn)?;
 
+        // Fase 4: Desfragmentação não-destrutiva de páginas físicas em disco (ReFS Z:)
+        let defrag_path = self.db_path.with_extension("defrag.db");
+        let vacuum_ok = self.execute_vacuum_into(conn, &defrag_path).is_ok();
+
         let report = ConsolidationReport {
             decay_nodes_updated: decay_count,
             l0_events_processed: l0_count,
             mmv_snapshot,
             mmv_token_count: token_count,
             is_aligned_64: token_count > 0 && token_count.is_multiple_of(64),
+            vacuum_executed: vacuum_ok,
         };
 
         eprintln!(
-            "[ChyrosDaemon] Ciclo concluído: decay={}, l0={}, mmv_tokens={}",
-            report.decay_nodes_updated, report.l0_events_processed, report.mmv_token_count
+            "[ChyrosDaemon] Ciclo concluído: decay={}, l0={}, mmv_tokens={}, vacuum={}",
+            report.decay_nodes_updated, report.l0_events_processed, report.mmv_token_count, report.vacuum_executed
         );
 
         Ok(report)
@@ -159,7 +203,6 @@ impl ChyrosDaemon {
 
     /// Processamento de Eventos L0 na CPU (AVX2) via LlamaCpp4LogitEngine (n_gpu_layers = 0).
     fn consolidate_l0_events_cpu(&self, conn: &Connection) -> Result<usize, String> {
-        // Garantia de Isolamento de VRAM: LlamaCpp4LogitEngine roda 100% na CPU (AVX2)
         let _cpu_engine = LlamaCpp4LogitEngine::new();
 
         let mut stmt = conn
@@ -191,17 +234,13 @@ impl ChyrosDaemon {
                 break;
             }
 
-            // Tenta efetuar o parse do payload JSON
             let parsed_json: serde_json::Value = serde_json::from_str(&payload).unwrap_or(serde_json::json!({}));
             
-            // Resolução Socrática de Contradições:
-            // Se payload indicar contradição com memória existente (ex: contradicts_id)
             if let Some(contradicts_id) = parsed_json.get("contradicts_id").and_then(|v| v.as_str()) {
                 let sql_tombstone = "UPDATE souls_memory_nodes SET stability_status = 'SUPERSEDED', updated_at = ?1 WHERE memory_id = ?2";
                 let _ = conn.execute(sql_tombstone, params![now_epoch, contradicts_id]);
             }
 
-            // Inserção ou Atualização da Nova Premissa Consolidada em souls_memory_nodes
             let memory_id = parsed_json
                 .get("memory_id")
                 .and_then(|v| v.as_str())
@@ -224,7 +263,6 @@ impl ChyrosDaemon {
                               ON CONFLICT(memory_id) DO UPDATE SET content = excluded.content, stability_status = excluded.stability_status, updated_at = excluded.updated_at";
             let _ = conn.execute(insert_sql, params![memory_id, content, status, now_epoch]);
 
-            // Marca evento L0 como processado
             let update_l0 = "UPDATE souls_raw_events_l0 SET processed = 1 WHERE event_id = ?1";
             let _ = conn.execute(update_l0, params![event_id]);
 
@@ -269,7 +307,6 @@ impl ChyrosDaemon {
             return Ok((raw_mmv, token_count));
         }
 
-        // Iterative Token Padding Loop: Garante alinhamento a múltiplos de 64 tokens no BPE do Tokenizer
         let mut candidate = format!("{}\n/* pad", raw_mmv);
         let mut attempts = 0;
         while attempts < 1000 {

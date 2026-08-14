@@ -1,14 +1,22 @@
 pub mod chyros_daemon;
 pub mod fts_retriever;
+pub mod ladybug_firewall;
 pub mod langevin_decay;
 pub mod rrf_fusion;
 pub mod vector_retriever;
 
 pub use chyros_daemon::{ActivityTracker, ChyrosDaemon, ConsolidationReport};
 pub use fts_retriever::{FtsRetriever, LexicalMatch};
+pub use ladybug_firewall::{FirewallVerdict, OntologicalEdge, OntologicalFirewall, OntologicalNode};
 pub use langevin_decay::{apply_langevin_decay, proj_poincare, PoincareVector};
-pub use rrf_fusion::{load_tombstones, RrfFusionEngine, UnifiedMatch, DEFAULT_RRF_K};
-pub use vector_retriever::{VectorRetriever, VectorialMatch};
+pub use rrf_fusion::{
+    is_exact_term_match, load_tombstones, RrfFusionEngine, UnifiedMatch, DEFAULT_RRF_K,
+    EXACT_MATCH_BONUS,
+};
+pub use vector_retriever::{
+    get_hippocampus_table_schema, HippocampusMemoryRecord, VectorRetriever, VectorialMatch,
+    CANONICAL_TABLE_NAME, VECTOR_DIMENSION,
+};
 
 /// Migração idempotente do FrankenSQLite elevando o schema para suporte do status de estabilidade,
 /// coordenadas na Bola de Poincaré e fila de eventos L0 em modo STRICT.
