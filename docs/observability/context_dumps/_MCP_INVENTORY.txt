@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-08-11 21:52:09
+_MCP_INVENTORY Gerado em: 2026-08-14 13:08:29
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -8,11 +8,11 @@ CAMINHO: C:\Users\rosas/.gemini/antigravity-ide/mcp/souls
 SERVER_NAME: souls
 LEGACY_REPORT_PATH: Z:\souls_mc\.souls_scratchpad\reports\_MCP_INVENTORY_souls-agent-gateway.txt
 SOURCE_DIR: C:\Users\rosas/.gemini/antigravity-ide/mcp/souls
-TOOL_COUNT: 50
+TOOL_COUNT: 51
 SMOKE_TEST_SCOPE: Safe/read-only probes where possible; minimal isolated mutation only inside .souls_scratchpad/reports.
 
 === SUMMARY ===
-OK_COUNT: 50
+OK_COUNT: 51
 WARN_COUNT: 0
 FAIL_COUNT: 0
 OVERALL_STATUS: HEALTHY
@@ -49,7 +49,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: edit
-DESCRIPTION: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
+DESCRIPTION: Aplica edições cirúrgicas baseadas em casamento exato de blocos (Search and Replace) com proteção de travamento.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -175,6 +175,11 @@ TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: read
 DESCRIPTION: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
+TEST_STATUS: OK
+TEST_NOTE: Verificação automatizada concluída sem avisos.
+---
+NAME: replace
+DESCRIPTION: Substitui blocos textuais extensos sob verificação sintática e com rollback atômico em caso de falha de TDD.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

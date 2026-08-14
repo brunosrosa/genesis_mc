@@ -325,7 +325,6 @@ def compile_skills_in_ides(output_dir, root_dir):
 def compile_workspace_map(output_dir, root_dir):
     map_file = os.path.join(root_dir, "_WORKSPACE_MAP.md")
     output_paths = [
-        os.path.join(output_dir, "_WOKSPACE_MAP.txt"),
         os.path.join(output_dir, "_WORKSPACE_MAP.txt")
     ]
     timestamp = get_timestamp()

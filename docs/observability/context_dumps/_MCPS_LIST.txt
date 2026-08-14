@@ -1,6 +1,6 @@
 === SOULS MCPs LIST (ZERO-BRAND CANONICAL) ===
-GERADO EM: 2026-08-11 21:52:09
-TOTAL DE FERRAMENTAS: 50
+GERADO EM: 2026-08-14 13:08:29
+TOTAL DE FERRAMENTAS: 51
 ----------------------------------------------------------------------------------------------------
 • analyze_session: Processa as métricas comportamentais e de revisão de hipóteses socráticas de uma sessão na RAM.
 • callees: Mapeia quais funções e structs são consumidos internamente pelo símbolo interrogado.
@@ -8,7 +8,7 @@ TOTAL DE FERRAMENTAS: 50
 • compress: Aplica o compressor LEAN ao texto fornecido removendo comentários e reduzindo ruído. (souls_compress)
 • dedup: Detecta e substitui blocos duplicados de 5 linhas consecutivas por marcadores de deduplicação. (souls_dedup)
 • delta_diff: Myers diff estrutural (transplantado do lean-ctx ctx_delta via crate similar).
-• edit: Edita cirurgicamente um arquivo existente substituindo old_string por new_string com trava atômica (Fail-Closed).
+• edit: Aplica edições cirúrgicas baseadas em casamento exato de blocos (Search and Replace) com proteção de travamento.
 • execute: [Stub] Execucao multi-lang requer auditoria de sandbox. Aliases: execute | souls_execute | ctx_execute.
 • export_session: Exporta a árvore relacional de pensamentos socráticos de uma sessão em formato estruturado (JSON/Markdown).
 • feedback: Dumps FinOps de telemetria, latencia e eficiencia de token E3 a partir de logs locais de execucao.
@@ -34,6 +34,7 @@ TOTAL DE FERRAMENTAS: 50
 • multi_read: Lê múltiplos arquivos em lote na RAM de forma assíncrona aplicando compressão de contexto CCR lossless.
 • outline: Extrai assinaturas AST sem corpos de funções via sandbox Wasmtime WASI 0.2. (souls_outline)
 • read: Lê arquivo com TOON + SymbolMap (transplantado do lean-ctx ctx_read).
+• replace: Substitui blocos textuais extensos sob verificação sintática e com rollback atômico em caso de falha de TDD.
 • repo_heatmap: Calcula o ranking de calor (Frecency) dos arquivos do monorepo baseando-se em modificacoes e acessos.
 • repo_impact: Analisa o raio de impacto (Blast Radius) de alteracoes de arquivos via travessia reversa de dependencias.
 • repo_meta: Extrai metadados GitHub via octocrab para owner/repo. Aliases: repo_meta | souls_repo_meta.

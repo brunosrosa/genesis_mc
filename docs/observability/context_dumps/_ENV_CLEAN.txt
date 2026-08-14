@@ -1,4 +1,4 @@
-_ENV_CLEAN Gerado em: 2026-08-11 21:52:09
+_ENV_CLEAN Gerado em: 2026-08-14 13:08:29
 
 ### ====================================================================================================
 ARQUIVO: .env (masked)
@@ -11,6 +11,17 @@ CAMINHO: Z:\souls_mc\.env
 # Caminhos essenciais do SOULS (UV e Cargo)
 SOULS_UV_PATH="***MASKED***"
 SOULS_CARGO_PATH="***MASKED***"
+
+# State DB (FrankenSQLite WAL V5) — usado por telemetry_dispatcher + sticky_router.
+# Default: relativo a CWD quando o binário roda. O proxy também tem
+# fallback inteligente via `resolve_state_db_path()` que sobe até
+# `.souls_data/souls_state.db` se esta var não estiver setada.
+SOULS_STATE_DB_PATH="***MASKED***"
+
+# MCP Server binário (souls_mcp_server.exe) — usado pelo SubprocessGuard
+# do agentgateway_tcp_proxy para spawnar o filho. Pode ser absoluto
+# ou apenas o nome (o resolver faz PATH lookup + fallback .exe).
+SOULS_MCP_BIN=.agents/bin/souls_mcp_server.exe
 
 # 1. GITHUB
 GITHUB_PAT="***MASKED***"
