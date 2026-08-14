@@ -592,14 +592,20 @@ pub async fn run_semantic_search_handler(
     let db_path = arguments
         .get("db_path")
         .and_then(Value::as_str)
-        .unwrap_or(".souls_data/souls_state.db")
-        .to_string();
+        .map(|p| {
+            let pb = std::path::PathBuf::from(p);
+            if pb.is_absolute() { pb.to_string_lossy().to_string() } else { crate::workspace_root().join(pb).to_string_lossy().to_string() }
+        })
+        .unwrap_or_else(|| crate::workspace_root().join(".souls_data").join("souls_state.db").to_string_lossy().to_string());
 
     let vector_db_path = arguments
         .get("vector_db_path")
         .and_then(Value::as_str)
-        .unwrap_or(".souls_data/lancedb")
-        .to_string();
+        .map(|p| {
+            let pb = std::path::PathBuf::from(p);
+            if pb.is_absolute() { pb.to_string_lossy().to_string() } else { crate::workspace_root().join(pb).to_string_lossy().to_string() }
+        })
+        .unwrap_or_else(|| crate::workspace_root().join(".souls_data").join("lancedb").to_string_lossy().to_string());
 
     let min_valid_from = arguments.get("valid_from").and_then(Value::as_i64);
     let max_valid_to = arguments.get("valid_to").and_then(Value::as_i64);

@@ -297,9 +297,8 @@ pub fn resolve_state_db_path() -> PathBuf {
                 None => break,
             }
         }
-        return cwd.join(".souls_data").join("souls_state.db");
     }
-    PathBuf::from(".souls_data/souls_state.db")
+    crate::core::workspace_root().join(".souls_data").join("souls_state.db")
 }
 
 /// Materializa o schema v4 (telemetry_logs) antes de aceitar eventos.

@@ -271,7 +271,7 @@ try {
     }
     Write-BootOk "Supervisores antigos encerrados e portas locais liberadas."
 
-    # 1.5. TRANSPLANTE FISICO DE RUNTIME (Marco 4.1.2 — Desacoplamento Fábrica/Produto)
+    # 1.5. TRANSPLANTE FISICO DE RUNTIME (Marco 4.1.2 — Desacoplamento Fábrica/Produto & Marco VI)
     Write-Host "`n[1.5/5] Transplante físico de runtime: .agents/bin/ (Fim dos travamentos NTFS)..." -ForegroundColor Yellow
     $agentsBinDir = Join-Path $PSScriptRoot ".agents\bin"
     # $srcTauriDir é declarado no step 4 (linha ~285); computamos local
@@ -284,10 +284,25 @@ try {
         Write-Host ("[TRANSPLANTE] Diretório seguro já existe: {0}" -f $agentsBinDir) -ForegroundColor DarkGray
     }
 
-    # Build incremental focado nos 3 daemons que o gateway/proxy consomem.
+    # 1.5.1 Garantir frontend Svelte 5 estático compilado em dist/ (ADR-040 / Marco VI)
+    $distIndex = Join-Path $PSScriptRoot "dist\index.html"
+    if (-not (Test-Path $distIndex)) {
+        Write-Host "[FRONTEND] Compilando assets estáticos Svelte 5 via vite build..." -ForegroundColor Cyan
+        try {
+            Invoke-TrackedProcess `
+                -FilePath "npx" `
+                -Arguments @("vite", "build") `
+                -Label "vite-build-frontend" `
+                -WorkingDirectory $PSScriptRoot
+        } catch {
+            Write-Host ("[WARN] Falha no vite build do frontend: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+        }
+    }
+
+    # Build incremental focado nos 4 daemons que o ecossistema consome.
     # Falha-fechado (R1): qualquer exit != 0 interrompe o boot IMEDIATAMENTE
     # para evitar transplante de binário defasado.
-    Write-Host "[TRANSPLANTE] Forjando 3 daemons desacoplados (build incremental)..." -ForegroundColor Cyan
+    Write-Host "[TRANSPLANTE] Forjando 4 daemons desacoplados (build incremental)..." -ForegroundColor Cyan
     try {
         Invoke-TrackedProcess `
             -FilePath "cargo" `
@@ -295,6 +310,7 @@ try {
                 "build",
                 "--message-format", "short",
                 "--features", "tauri-app,gateway_ccr",
+                "--bin", "souls_mc",
                 "--bin", "souls_mcp_server",
                 "--bin", "agentgateway_tcp_proxy",
                 "--bin", "mcp_stdio_guard",
@@ -303,7 +319,7 @@ try {
             -Label "cargo-build-runtime-decoupled" `
             -WorkingDirectory $transplantSrcTauriDir
     } catch {
-        Write-Host ("[ERR] Build dos 3 daemons desacoplados falhou: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        Write-Host ("[ERR] Build dos daemons desacoplados falhou: {0}" -f $_.Exception.Message) -ForegroundColor Red
         Write-Host "[ERR] Boot abortado — binarios de .agents/bin/ NAO serao atualizados (proteção contra stale)." -ForegroundColor Red
         exit 1
     }
@@ -315,10 +331,10 @@ try {
     Start-Sleep -Seconds 1
 
     # R3 da Linha Vermelha: Copy-Item -Force (sobrescrita sem prompt).
-    Write-Host "[TRANSPLANTE] Transplantando 3 .exe para .agents/bin/..." -ForegroundColor Cyan
+    Write-Host "[TRANSPLANTE] Transplantando 4 .exe para .agents/bin/..." -ForegroundColor Cyan
     $transplanted = @()
     $sourceDir = Join-Path $transplantSrcTauriDir "target\debug"
-    $daemonBinaries = @("souls_mcp_server.exe", "agentgateway_tcp_proxy.exe", "mcp_stdio_guard.exe")
+    $daemonBinaries = @("souls_mc.exe", "souls_mcp_server.exe", "agentgateway_tcp_proxy.exe", "mcp_stdio_guard.exe")
     foreach ($bin in $daemonBinaries) {
         $sourcePath = Join-Path $sourceDir $bin
         $destPath = Join-Path $agentsBinDir $bin
@@ -453,14 +469,19 @@ try {
 
         # 5. IGNIÇÃO DO DAEMON SUPERVISOR (tray systray + IPC para o proxy)
         # O `souls_mc.exe` é o daemon de tray (Tauri TrayIconBuilder).
-        # Ele se conecta ao proxy L7 via IPC. **DEVE** rodar antes do proxy
-        # para que o ícone apareça e o cliente MCP consiga se conectar.
+        # Ele roda a partir de .agents/bin/ (desacoplado) ou target/release/ / target/debug/.
         Write-Host "`n[5/5] Iniciando o daemon de tray (souls_mc.exe)..." -ForegroundColor Yellow
-        $daemonPath = Join-Path $srcTauriDir "target\debug\souls_mc.exe"
+        $daemonPath = Join-Path $PSScriptRoot ".agents\bin\souls_mc.exe"
+        if (-not (Test-Path $daemonPath)) {
+            $daemonPath = Join-Path $srcTauriDir "target\release\souls_mc.exe"
+        }
+        if (-not (Test-Path $daemonPath)) {
+            $daemonPath = Join-Path $srcTauriDir "target\debug\souls_mc.exe"
+        }
         if (-not (Test-Path $daemonPath)) {
             throw "Binario souls_mc.exe nao encontrado em: $daemonPath — execute a build antes."
         }
-        Write-BootOk "souls_mc (tray systray) sera iniciado."
+        Write-BootOk ("souls_mc (tray systray) sera iniciado a partir de: {0}" -f $daemonPath)
         $daemonProc = Start-Process -FilePath $daemonPath -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru
         Write-Host ("[DAEMON] souls_mc iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
         Start-Sleep -Seconds 2

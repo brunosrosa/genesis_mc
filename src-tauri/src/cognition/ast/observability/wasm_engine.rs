@@ -128,10 +128,11 @@ impl std::error::Error for WasmTrap {}
 
 /// Cria os contextos WASI Preview 2 e Preview 1 pré-abrindo os diretórios físicos do host.
 pub fn create_wasi_contexts() -> Result<(WasiCtx, WasiP1Ctx), WasmTrap> {
-    let workspace_host = PathBuf::from(".souls_scratchpad/python_test");
+    let root = crate::core::workspace_root();
+    let workspace_host = root.join(".souls_scratchpad").join("python_test");
     std::fs::create_dir_all(&workspace_host).ok();
 
-    let grammars_host = PathBuf::from("src-tauri/resources/wasm_grammars");
+    let grammars_host = root.join("src-tauri").join("resources").join("wasm_grammars");
     std::fs::create_dir_all(&grammars_host).ok();
 
     let mut builder1 = WasiCtxBuilder::new();
@@ -439,10 +440,11 @@ mod tests {
     #[test]
     fn test_wasm_python_sandbox_execution() {
         let engine = WasmEngine::global();
-        let workspace_dir = PathBuf::from(".souls_scratchpad/python_test");
+        let root = crate::core::workspace_root();
+        let workspace_dir = root.join(".souls_scratchpad").join("python_test");
         std::fs::create_dir_all(&workspace_dir).unwrap();
 
-        let grammars_dir = PathBuf::from("src-tauri/resources/wasm_grammars");
+        let grammars_dir = root.join("src-tauri").join("resources").join("wasm_grammars");
         std::fs::create_dir_all(&grammars_dir).unwrap();
 
         let sample_rs_path = workspace_dir.join("sample.rs");

@@ -418,12 +418,12 @@ mod tests {
 
 /// Caminho padrão do banco de estado SQLite
 pub fn default_state_db_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(".souls_data").join("souls_state.db")
+    crate::core::workspace_root().join(".souls_data").join("souls_state.db")
 }
 
 /// Caminho padrão da base vetorial LanceDB
 pub fn default_vector_db_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(".souls_data").join("souls_vectors.lance")
+    crate::core::workspace_root().join(".souls_data").join("souls_vectors.lance")
 }
 
 /// Anexa uma observação ao reator vetorial LanceDB.

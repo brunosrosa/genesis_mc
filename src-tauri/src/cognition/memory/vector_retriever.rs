@@ -79,7 +79,7 @@ impl VectorRetriever {
 
     /// Caminho padrão para o LanceDB dentro do workspace.
     pub fn default_path() -> PathBuf {
-        PathBuf::from(".souls_data").join("lancedb")
+        crate::core::workspace_root().join(".souls_data").join("lancedb")
     }
 
     /// Abre ou conecta à base LanceDB em modo serverless com mmap.
