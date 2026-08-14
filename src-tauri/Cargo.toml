@@ -301,6 +301,7 @@ incremental = false
 incremental = false
 
 [profile.release]
+debug-assertions = false
 lto = "thin"
 panic = "abort"
 codegen-units = 1
