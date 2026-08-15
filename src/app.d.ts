@@ -1,5 +1,2 @@
-declare module "*.svelte" {
-  import { SvelteComponent } from "svelte";
-  export default class Component extends SvelteComponent {}
-}
-
+// SOULS MC — Svelte 5 Ambient Types
+/// <reference types="svelte" />

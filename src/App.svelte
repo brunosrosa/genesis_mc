@@ -1,14 +1,13 @@
-// SOULS MC — Marco V: App Shell (passive).
-//
-// Inicializa o canal de telemetria (bind_channel_to_runes) e o listener
-// de blast radius (listen_for_blast_radius) em onMount. Renderiza
-// AgentInbox passivamente (visível só quando há pendingBlast).
-
 <script lang="ts">
+  // SOULS MC — Marco V: App Shell (passive).
+  //
+  // Inicializa o canal de telemetria (bind_channel_to_runes) e o listener
+  // de blast radius (listen_for_blast_radius) em onMount. Renderiza
+  // AgentInbox passivamente (visível só quando há pendingBlast).
   import { onMount } from "svelte";
   import AgentInbox from "$lib/components/AgentInbox.svelte";
-  import { bind_channel_to_runes, telemetry } from "$lib/stores/telemetry.svelte";
-  import { listen_for_blast_radius } from "$lib/stores/blast.svelte";
+  import { bind_channel_to_runes, telemetry } from "$lib/stores/telemetry.svelte.ts";
+  import { listen_for_blast_radius } from "$lib/stores/blast.svelte.ts";
 
   let cleanupTelemetry: (() => void) | null = null;
   let cleanupBlast: (() => void) | null = null;

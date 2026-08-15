@@ -15,9 +15,8 @@
   import {
     pendingBlast,
     dispatch_blast_decision,
-    type ImpactNode,
-  } from "$lib/stores/blast.svelte";
-  import { telemetry, thermal_status } from "$lib/stores/telemetry.svelte";
+  } from "$lib/stores/blast.svelte.ts";
+  import { telemetry, thermal_status } from "$lib/stores/telemetry.svelte.ts";
 
   let gauge = $state(50);
   let isDragging = $state(false);
@@ -27,7 +26,7 @@
 
   // Ghost border dinâmico: muda cor conforme estado do daemon.
   const ghostClass = $derived(
-    thermal_status === "PRESSAO_CRITICA"
+    thermal_status() === "PRESSAO_CRITICA"
       ? "ghost-border ghost-border--compiling"
       : isOpen
         ? "ghost-border ghost-border--thinking"
