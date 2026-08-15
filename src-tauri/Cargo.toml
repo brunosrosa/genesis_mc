@@ -91,7 +91,7 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-tauri-app = ["dep:tauri", "dep:tauri-plugin-opener"]
+tauri-app = ["dep:tauri", "dep:tauri-plugin-opener", "tauri/custom-protocol"]
 llama_backend = ["dep:ik-llama-cpp-2", "ik-llama-cpp-2/cuda", "dep:llguidance", "lora_adapter"]
 mistral_backend = ["dep:mistralrs"]
 grammar_backend = ["dep:llguidance"]

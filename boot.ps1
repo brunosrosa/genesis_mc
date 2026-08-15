@@ -167,6 +167,10 @@ if ($Build) {
             --bin "souls_mcp_server" `
             --bin "agentgateway_tcp_proxy" `
             --bin "mcp_stdio_guard"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERRO CRÍTICO] Compilação do Cargo falhou com Exit Code $LASTEXITCODE!" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
     } finally {
         Pop-Location
     }

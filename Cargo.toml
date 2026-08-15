@@ -100,7 +100,7 @@ quote = "=1.0.46"
 nvml-wrapper = "0.10.0"
 
 # --- Tauri ---
-tauri = { version = "=2.11.5", features = ["tray-icon"] }
+tauri = { version = "=2.11.5", features = ["tray-icon", "custom-protocol"] }
 tauri-plugin-opener = { version = "=2.5.4" }
 tauri-build = { version = "=2.6.3" }
 windows-projfs = "=0.1.8"
