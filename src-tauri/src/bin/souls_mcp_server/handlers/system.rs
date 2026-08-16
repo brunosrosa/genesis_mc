@@ -395,6 +395,46 @@ pub async fn run_souls_symbol(params: &serde_json::Map<String, Value>) -> Result
         .unwrap_or(".");
     let root_path = validate_and_canonicalize_path(root_str)?;
 
+    // 1. Resolução prioritária O(1) em RAM (SYMBOL_INDEX DashMap)
+    if let Some(entry) = souls_mc_lib::cognition::ast::observability::call_graph::lookup_symbol(&target_symbol) {
+        let matches = vec![json!({
+            "file": entry.file_path.display().to_string(),
+            "line": entry.line,
+            "col": entry.column,
+            "kind": entry.kind.as_str(),
+            "snippet": format!("{} {}", entry.kind.as_str(), entry.qualified_name),
+            "source": "SYMBOL_INDEX_RAM_O1"
+        })];
+        return Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": serde_json::to_string_pretty(&matches).unwrap_or_default()
+            }],
+            "structuredContent": { "symbol": target_symbol, "matches": matches },
+            "isError": false
+        }));
+    }
+
+    // 2. Resolução via resolve_symbol (AST)
+    if let Ok(Some(loc)) = souls_mc_lib::cognition::ast::resolve_symbol(&root_path, &target_symbol) {
+        let matches = vec![json!({
+            "file": loc.file.display().to_string(),
+            "line": loc.line,
+            "col": loc.col,
+            "kind": loc.kind.as_str(),
+            "snippet": format!("{} {}", loc.kind.as_str(), target_symbol),
+            "source": "AST_RESOLVER"
+        })];
+        return Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": serde_json::to_string_pretty(&matches).unwrap_or_default()
+            }],
+            "structuredContent": { "symbol": target_symbol, "matches": matches },
+            "isError": false
+        }));
+    }
+
     let target_symbol_clone = target_symbol.clone();
     let matches = tokio::task::spawn_blocking(move || {
         let mut results = Vec::new();

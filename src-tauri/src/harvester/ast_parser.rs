@@ -873,24 +873,110 @@ impl NodeKindBitSet {
 }
 
 static WASM_ENGINE: std::sync::OnceLock<wasmtime::Engine> = std::sync::OnceLock::new();
-static WASM_MODULE_CACHE: std::sync::OnceLock<std::sync::Mutex<BTreeMap<String, std::sync::Arc<wasmtime::Module>>>> =
+static GLOBAL_MODULES_CACHE: std::sync::OnceLock<dashmap::DashMap<String, std::sync::Arc<wasmtime::Module>>> =
     std::sync::OnceLock::new();
 
-fn get_wasm_engine() -> &'static wasmtime::Engine {
+pub fn get_wasm_engine() -> &'static wasmtime::Engine {
     WASM_ENGINE.get_or_init(|| {
         let mut config = wasmtime::Config::new();
+        config.consume_fuel(true);
+        config.epoch_interruption(true);
+        config.max_wasm_stack(1024 * 1024);
+        config.wasm_component_model(true);
         config.wasm_backtrace(false);
+        config.cache_config_load_default().ok();
         wasmtime::Engine::new(&config).unwrap_or_else(|_| wasmtime::Engine::default())
     })
 }
 
-fn load_wasm_grammar_module(
+pub fn get_global_modules_cache() -> &'static dashmap::DashMap<String, std::sync::Arc<wasmtime::Module>> {
+    GLOBAL_MODULES_CACHE.get_or_init(dashmap::DashMap::new)
+}
+
+#[derive(Debug, Clone)]
+pub struct WasmMemoryLimiter {
+    bytes: usize,
+}
+
+impl WasmMemoryLimiter {
+    pub fn new(bytes: usize) -> Self {
+        Self { bytes }
+    }
+}
+
+impl wasmtime::ResourceLimiter for WasmMemoryLimiter {
+    fn memory_growing(
+        &mut self,
+        _current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+    ) -> Result<bool, wasmtime::Error> {
+        Ok(desired <= self.bytes)
+    }
+
+    fn table_growing(
+        &mut self,
+        _current: usize,
+        _desired: usize,
+        _maximum: Option<usize>,
+    ) -> Result<bool, wasmtime::Error> {
+        Ok(true)
+    }
+}
+
+pub struct ParserStoreData {
+    pub limiter: WasmMemoryLimiter,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WasmTrap {
+    Unreachable { reason: String },
+    Oom { reason: String },
+    FuelExhausted { fuel_consumed: u64 },
+    PermissionDenied { reason: String },
+    StructuredFailure { reason: String },
+    HostPanic { reason: String },
+}
+
+impl std::fmt::Display for WasmTrap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WasmTrap::Unreachable { reason } => write!(f, "WASM_UNREACHABLE: {reason}"),
+            WasmTrap::Oom { reason } => write!(f, "WASM_OOM: {reason}"),
+            WasmTrap::FuelExhausted { fuel_consumed } => {
+                write!(f, "WASM_FUEL_EXHAUSTED: guest consumiu {fuel_consumed} fuel units")
+            }
+            WasmTrap::PermissionDenied { reason } => write!(f, "WASM_PERMISSION_DENIED: {reason}"),
+            WasmTrap::StructuredFailure { reason } => write!(f, "WASM_STRUCTURED_FAILURE: {reason}"),
+            WasmTrap::HostPanic { reason } => write!(f, "WASM_HOST_PANIC: {reason}"),
+        }
+    }
+}
+
+impl std::error::Error for WasmTrap {}
+
+pub fn classify_trap(err: &wasmtime::Error, fuel_consumed: u64) -> WasmTrap {
+    let reason = format!("{err:?}");
+    let lower = reason.to_ascii_lowercase();
+
+    if lower.contains("unreachable") {
+        WasmTrap::Unreachable { reason }
+    } else if lower.contains("out of memory") || lower.contains("memory growth") || lower.contains("allocation") {
+        WasmTrap::Oom { reason }
+    } else if lower.contains("fuel") || lower.contains("interrupt") {
+        WasmTrap::FuelExhausted { fuel_consumed }
+    } else if lower.contains("permission") || lower.contains("not capable") || lower.contains("capabilities") || lower.contains("access denied") {
+        WasmTrap::PermissionDenied { reason }
+    } else {
+        WasmTrap::StructuredFailure { reason }
+    }
+}
+
+pub fn load_wasm_grammar_module(
     language: &str,
     custom_wasm_path: Option<&Path>,
 ) -> Result<std::sync::Arc<wasmtime::Module>, String> {
-    let cache_lock = WASM_MODULE_CACHE.get_or_init(|| std::sync::Mutex::new(BTreeMap::new()));
-    let mut cache = cache_lock.lock().map_err(|e| e.to_string())?;
-
+    let cache = get_global_modules_cache();
     let cache_key = if let Some(p) = custom_wasm_path {
         p.display().to_string()
     } else {
@@ -898,33 +984,29 @@ fn load_wasm_grammar_module(
     };
 
     if let Some(module) = cache.get(&cache_key) {
-        return Ok(std::sync::Arc::clone(module));
+        return Ok(std::sync::Arc::clone(module.value()));
     }
 
     let mut wasm_bytes = None;
 
     if let Some(p) = custom_wasm_path {
-        if let Ok(bytes) = std::fs::read(p) {
-            wasm_bytes = Some(bytes);
+        if let Ok(file) = std::fs::File::open(p) {
+            if let Ok(mmap) = unsafe { memmap2::Mmap::map(&file) } {
+                wasm_bytes = Some(mmap.to_vec());
+            } else if let Ok(bytes) = std::fs::read(p) {
+                wasm_bytes = Some(bytes);
+            }
         }
     } else {
         let candidates = [
             format!("src-tauri/resources/wasm_grammars/tree_sitter_{language}.wasm"),
-            format!("resources/wasm_grammars/tree_sitter_{language}.wasm"),
-            format!("../resources/wasm_grammars/tree_sitter_{language}.wasm"),
-            format!("../../resources/wasm_grammars/tree_sitter_{language}.wasm"),
             format!("src-tauri/resources/wasm_grammars/tree-sitter-{language}.wasm"),
-            format!("resources/wasm_grammars/tree-sitter-{language}.wasm"),
-            format!("../resources/wasm_grammars/tree-sitter-{language}.wasm"),
-            format!("../../resources/wasm_grammars/tree-sitter-{language}.wasm"),
             format!("src-tauri/resources/wasm_grammars/{language}.wasm"),
+            "src-tauri/resources/wasm_grammars/outline_parser.wasm".to_string(),
+            format!("resources/wasm_grammars/tree_sitter_{language}.wasm"),
             format!("resources/wasm_grammars/{language}.wasm"),
             format!("../resources/wasm_grammars/{language}.wasm"),
             format!("../../resources/wasm_grammars/{language}.wasm"),
-            "src-tauri/resources/wasm_grammars/outline_parser.wasm".to_string(),
-            "resources/wasm_grammars/outline_parser.wasm".to_string(),
-            "../resources/wasm_grammars/outline_parser.wasm".to_string(),
-            "../../resources/wasm_grammars/outline_parser.wasm".to_string(),
             format!("Z:/souls_mc/src-tauri/resources/wasm_grammars/tree_sitter_{language}.wasm"),
             format!("Z:/souls_mc/src-tauri/resources/wasm_grammars/{language}.wasm"),
             "Z:/souls_mc/src-tauri/resources/wasm_grammars/outline_parser.wasm".to_string(),
@@ -932,9 +1014,17 @@ fn load_wasm_grammar_module(
         ];
 
         for path in &candidates {
-            if let Ok(bytes) = std::fs::read(path) {
-                wasm_bytes = Some(bytes);
-                break;
+            let p = Path::new(path);
+            if p.exists() {
+                if let Ok(file) = std::fs::File::open(p) {
+                    if let Ok(mmap) = unsafe { memmap2::Mmap::map(&file) } {
+                        wasm_bytes = Some(mmap.to_vec());
+                        break;
+                    } else if let Ok(bytes) = std::fs::read(p) {
+                        wasm_bytes = Some(bytes);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -959,29 +1049,50 @@ impl WasmtimeTreeSitterEngine {
         relative_path: &str,
         custom_wasm_path: Option<&Path>,
     ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
-        if let Some(p) = custom_wasm_path {
-            let module = load_wasm_grammar_module(language, Some(p)).map_err(|reason| {
-                AstParserError::ParseFailure {
-                    file: relative_path.to_string(),
-                    language: language.to_string(),
-                    reason,
+        let engine = get_wasm_engine();
+        let module_res = if let Some(p) = custom_wasm_path {
+            match load_wasm_grammar_module(language, Some(p)) {
+                Ok(m) => Ok(m),
+                Err(reason) => {
+                    return Err(AstParserError::ParseFailure {
+                        file: relative_path.to_string(),
+                        language: language.to_string(),
+                        reason,
+                    });
                 }
-            })?;
-            let engine = get_wasm_engine();
-            let mut store = wasmtime::Store::new(engine, ());
-            let _ = wasmtime::Instance::new(&mut store, &module, &[]);
-        } else if let Ok(module) = load_wasm_grammar_module(language, None) {
-            let engine = get_wasm_engine();
-            let mut store = wasmtime::Store::new(engine, ());
-            let _ = wasmtime::Instance::new(&mut store, &module, &[]);
+            }
+        } else {
+            load_wasm_grammar_module(language, None)
+        };
+
+        if let Ok(module) = module_res {
+            let store_data = ParserStoreData {
+                limiter: WasmMemoryLimiter::new(16 * 1024 * 1024),
+            };
+            let mut store = wasmtime::Store::new(engine, store_data);
+            store.limiter(|d| &mut d.limiter);
+            store.set_fuel(10_000_000).ok();
+
+            let instance_res = wasmtime::Instance::new(&mut store, &module, &[]);
+            if let Err(e) = instance_res {
+                let consumed = store.get_fuel().unwrap_or(10_000_000);
+                let trap = classify_trap(&e, consumed);
+                warn!(file = %relative_path, language = %language, error = %trap, "WASM execution trap");
+            }
         }
 
-        // Extração estrutural de assinaturas em WebAssembly Sandbox (ADR-044)
+        // Extração estrutural limpa e indexação no SYMBOL_INDEX / CALL_GRAPH (RAM Host)
         let mut signatures = Vec::new();
-        match language {
-            "rust" => {
-                for line in source.lines() {
-                    let trimmed = line.trim();
+        let rel_pbuf = PathBuf::from(relative_path);
+
+        for (line_idx, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with("/*") {
+                continue;
+            }
+
+            match language {
+                "rust" => {
                     if trimmed.starts_with("pub struct ")
                         || trimmed.starts_with("struct ")
                         || trimmed.starts_with("pub enum ")
@@ -995,40 +1106,67 @@ impl WasmtimeTreeSitterEngine {
                         || trimmed.starts_with("pub mod ")
                     {
                         signatures.push(arena.alloc_str(trimmed) as &str);
+                        let name = trimmed.split_whitespace().nth(1).unwrap_or(trimmed).trim_end_matches('{').trim_end_matches(';');
+                        crate::cognition::ast::observability::call_graph::insert_symbol(
+                            crate::cognition::ast::observability::call_graph::SymbolEntry {
+                                qualified_name: name.to_string(),
+                                kind: crate::cognition::ast::observability::call_graph::SymbolKind::Struct,
+                                file_path: rel_pbuf.clone(),
+                                line: (line_idx + 1) as u32,
+                                column: 0,
+                            }
+                        );
                     } else if trimmed.starts_with("pub fn ")
                         || trimmed.starts_with("pub async fn ")
                         || trimmed.starts_with("fn ")
                         || trimmed.starts_with("async fn ")
                     {
                         let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
-                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
+                        let sig_str = trimmed[..sig_end].trim();
+                        signatures.push(arena.alloc_str(sig_str) as &str);
+                        let fn_name = sig_str.split('(').next().and_then(|s| s.split_whitespace().last()).unwrap_or(sig_str);
+                        crate::cognition::ast::observability::call_graph::insert_symbol(
+                            crate::cognition::ast::observability::call_graph::SymbolEntry {
+                                qualified_name: fn_name.to_string(),
+                                kind: crate::cognition::ast::observability::call_graph::SymbolKind::Fn,
+                                file_path: rel_pbuf.clone(),
+                                line: (line_idx + 1) as u32,
+                                column: 0,
+                            }
+                        );
                     }
                 }
-            }
-            "python" => {
-                for line in source.lines() {
-                    let trimmed = line.trim();
+                "python" => {
                     if trimmed.starts_with("class ")
                         || trimmed.starts_with("def ")
                         || trimmed.starts_with("async def ")
                     {
                         let sig_end = trimmed.find(':').unwrap_or(trimmed.len());
-                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
+                        let sig_str = trimmed[..sig_end].trim();
+                        signatures.push(arena.alloc_str(sig_str) as &str);
+                        let name = sig_str.split('(').next().and_then(|s| s.split_whitespace().last()).unwrap_or(sig_str);
+                        crate::cognition::ast::observability::call_graph::insert_symbol(
+                            crate::cognition::ast::observability::call_graph::SymbolEntry {
+                                qualified_name: name.to_string(),
+                                kind: if trimmed.starts_with("class ") {
+                                    crate::cognition::ast::observability::call_graph::SymbolKind::Struct
+                                } else {
+                                    crate::cognition::ast::observability::call_graph::SymbolKind::Fn
+                                },
+                                file_path: rel_pbuf.clone(),
+                                line: (line_idx + 1) as u32,
+                                column: 0,
+                            }
+                        );
                     }
                 }
-            }
-            "go" => {
-                for line in source.lines() {
-                    let trimmed = line.trim();
+                "go" => {
                     if trimmed.starts_with("type ") || trimmed.starts_with("func ") {
                         let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
                         signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
                     }
                 }
-            }
-            "elixir" => {
-                for line in source.lines() {
-                    let trimmed = line.trim();
+                "elixir" => {
                     if trimmed.starts_with("defmodule ")
                         || trimmed.starts_with("def ")
                         || trimmed.starts_with("defp ")
@@ -1037,10 +1175,7 @@ impl WasmtimeTreeSitterEngine {
                         signatures.push(arena.alloc_str(trimmed) as &str);
                     }
                 }
-            }
-            "cpp" | "c" | "cuda" => {
-                for line in source.lines() {
-                    let trimmed = line.trim();
+                "cpp" | "c" | "cuda" => {
                     if trimmed.starts_with("class ")
                         || trimmed.starts_with("struct ")
                         || trimmed.starts_with("namespace ")
@@ -1052,10 +1187,7 @@ impl WasmtimeTreeSitterEngine {
                         signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
                     }
                 }
-            }
-            _ => {
-                for line in source.lines() {
-                    let trimmed = line.trim();
+                _ => {
                     if trimmed.starts_with("class ")
                         || trimmed.starts_with("function ")
                         || trimmed.starts_with("fn ")
@@ -1083,6 +1215,7 @@ impl WasmtimeTreeSitterEngine {
         Ok((signatures, estimate_import_edges(language, source)))
     }
 }
+
 
 fn extract_with_oxc<'arena>(
     arena: &'arena bumpalo::Bump,

@@ -288,6 +288,20 @@ pub fn resolve_symbol(root: &Path, name: &str) -> Result<Option<SymbolLocation>,
         )));
     }
 
+    // 1. Resolução prioritária O(1) no SYMBOL_INDEX (RAM Host)
+    if let Some(entry) = crate::cognition::ast::observability::call_graph::lookup_symbol(name) {
+        return Ok(Some(SymbolLocation {
+            file: entry.file_path,
+            line: entry.line as usize,
+            col: entry.column as usize,
+            kind: match entry.kind {
+                crate::cognition::ast::observability::call_graph::SymbolKind::Struct => SymbolKind::Struct,
+                crate::cognition::ast::observability::call_graph::SymbolKind::Fn => SymbolKind::Fn,
+                _ => SymbolKind::Unknown,
+            },
+        }));
+    }
+
     // R3: regex compilada 1x por nome (cache implícito via decl_regex_for,
     //     mas a função retorna nova Regex a cada chamada — custo ~30µs,
     //     amortizado pelo custo de I/O do WalkDir).
@@ -336,12 +350,29 @@ pub fn resolve_symbol(root: &Path, name: &str) -> Result<Option<SymbolLocation>,
                 continue;
             }
 
+            let kind = classify_kind(&line_text, name);
+
+            // Popula SYMBOL_INDEX para O(1) subsequente
+            crate::cognition::ast::observability::call_graph::insert_symbol(
+                crate::cognition::ast::observability::call_graph::SymbolEntry {
+                    qualified_name: name.to_string(),
+                    kind: match kind {
+                        SymbolKind::Struct => crate::cognition::ast::observability::call_graph::SymbolKind::Struct,
+                        SymbolKind::Fn => crate::cognition::ast::observability::call_graph::SymbolKind::Fn,
+                        _ => crate::cognition::ast::observability::call_graph::SymbolKind::Fn,
+                    },
+                    file_path: path.to_path_buf(),
+                    line: line_no as u32,
+                    column: col_no as u32,
+                }
+            );
+
             // Match válido: retorna imediatamente (primeira ocorrência).
             return Ok(Some(SymbolLocation {
                 file: path.to_path_buf(),
                 line: line_no,
                 col: col_no,
-                kind: classify_kind(&line_text, name),
+                kind,
             }));
         }
     }
