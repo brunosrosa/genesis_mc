@@ -4051,3 +4051,27 @@ async fn test_ffi_panic_boundary_isolation() {
     assert!(liveness_resp.get("result").is_some(), "servidor deve responder com sucesso após o panic FFI");
 }
 
+#[tokio::test]
+async fn test_mcp_souls_semantic_search_tool() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": "test-semantic-search-01",
+        "method": "tools/call",
+        "params": {
+            "name": "souls_semantic_search",
+            "arguments": {
+                "query": "ADR-030 windows-sys",
+                "limit": 5
+            }
+        }
+    });
+
+    let resp = super::handle_mcp(req).await.expect("deve processar souls_semantic_search");
+    assert!(resp.get("result").is_some(), "deve conter campo result");
+    let content = resp["result"]["content"][0]["text"].as_str().expect("deve conter text");
+    assert!(!content.is_empty());
+    assert!(resp["result"]["structuredContent"]["query"].as_str() == Some("ADR-030 windows-sys"));
+    assert!(resp["result"]["structuredContent"]["results"].is_array());
+}
+
+

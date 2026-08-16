@@ -645,7 +645,14 @@ pub async fn run_semantic_search_handler(
             let pb = std::path::PathBuf::from(p);
             if pb.is_absolute() { pb.to_string_lossy().to_string() } else { crate::workspace_root().join(pb).to_string_lossy().to_string() }
         })
-        .unwrap_or_else(|| crate::workspace_root().join(".souls_data").join("lancedb").to_string_lossy().to_string());
+        .unwrap_or_else(|| {
+            let canonical = std::path::PathBuf::from(souls_mc_lib::core::semantic_search::CANONICAL_SEMANTIC_TABLE_PATH);
+            if canonical.exists() {
+                canonical.to_string_lossy().to_string()
+            } else {
+                crate::workspace_root().join(".souls_data").join("semantic_memories").to_string_lossy().to_string()
+            }
+        });
 
     let min_valid_from = arguments.get("valid_from").and_then(Value::as_i64);
     let max_valid_to = arguments.get("valid_to").and_then(Value::as_i64);
@@ -653,89 +660,39 @@ pub async fn run_semantic_search_handler(
 
     let query_vector = generate_cpu_embedding_384(query_str);
 
-    let fts_retriever = souls_mc_lib::cognition::memory::FtsRetriever::new(&db_path);
-    let vector_retriever = souls_mc_lib::cognition::memory::VectorRetriever::new(&vector_db_path);
-    let engine = souls_mc_lib::cognition::memory::RrfFusionEngine::default();
-    let firewall = souls_mc_lib::cognition::memory::OntologicalFirewall::default();
-
-    let query_str_clone = query_str.to_string();
-    let query_vector_clone = query_vector.clone();
-    let stability_filter_owned = stability_filter.map(|s| s.to_string());
-
-    let lexical_handle = tokio::spawn(async move {
-        fts_retriever.search_lexical(&query_str_clone, limit)
-    });
-
-    let vector_handle = tokio::spawn(async move {
-        vector_retriever
-            .search_with_temporal_filter(
-                &query_vector_clone,
-                limit,
-                min_valid_from,
-                max_valid_to,
-                stability_filter_owned.as_deref(),
-            )
-            .await
-    });
-
-    let lexical_res = lexical_handle.await.map_err(|e| RpcError {
-        code: -32603,
-        message: format!("Task léxica FTS5 panic: {}", e),
-        data: None,
-    })?.unwrap_or_default();
-
-    let vector_res = vector_handle.await.map_err(|e| RpcError {
-        code: -32603,
-        message: format!("Task vetorial LanceDB panic: {}", e),
-        data: None,
-    })?.unwrap_or_default();
-
-    let conn = Connection::open(&db_path).ok();
-    let tombstones = conn
-        .as_ref()
-        .and_then(|c| souls_mc_lib::cognition::memory::load_tombstones(c).ok())
-        .unwrap_or_default();
-
-    let (mut fused_results, elapsed) = engine.fuse_with_query(query_str, &lexical_res, &vector_res, &tombstones);
-
-    // Circuito Fallback Automático (bypass_vector_index) se pré-filtro ou vetor retornar vazio
-    if fused_results.is_empty() && !lexical_res.is_empty() {
-        fused_results = lexical_res
-            .into_iter()
-            .map(|lex| souls_mc_lib::cognition::memory::UnifiedMatch {
-                observation_id: lex.observation_id,
-                content: lex.content,
-                file_path: lex.file_path,
-                rrf_score: 0.5,
-                lexical_rank: Some(1),
-                vector_rank: None,
-                is_exact_match: false,
-                status: "fallback_fts5".to_string(),
-            })
-            .collect();
-    }
-
-    // Filtragem pelo Firewall Ontológico LadybugDB (Anti-RAG Poisoning)
-    let (sanitized_results, vetoed_reasons) = firewall.sanitize_chunks(
-        query_str,
-        fused_results,
-        |m| &m.content,
+    let engine = souls_mc_lib::core::semantic_search::ActiveHippocampusEngine::new(
+        Some(&vector_db_path),
+        Some(&db_path),
     );
 
-    let final_results: Vec<souls_mc_lib::cognition::memory::UnifiedMatch> = sanitized_results.into_iter().take(limit).collect();
+    let search_result = engine
+        .execute_hybrid_search(
+            query_str,
+            &query_vector,
+            limit,
+            min_valid_from,
+            max_valid_to,
+            stability_filter,
+        )
+        .await
+        .map_err(|e| RpcError {
+            code: -32603,
+            message: format!("Falha no motor de busca semântica híbrida: {e}"),
+            data: None,
+        })?;
 
     Ok(json!({
         "content": [{
             "type": "text",
-            "text": serde_json::to_string_pretty(&final_results).unwrap_or_default()
+            "text": serde_json::to_string_pretty(&search_result.results).unwrap_or_default()
         }],
         "structuredContent": {
-            "query": query_str,
-            "results_count": final_results.len(),
-            "results": final_results,
-            "vetoed_count": vetoed_reasons.len(),
-            "vetoed_reasons": vetoed_reasons,
-            "fusion_latency_us": elapsed.as_micros()
+            "query": search_result.query,
+            "results_count": search_result.results_count,
+            "results": search_result.results,
+            "vetoed_count": search_result.vetoed_count,
+            "vetoed_reasons": search_result.vetoed_reasons,
+            "fusion_latency_us": search_result.fusion_latency_us
         },
         "isError": false
     }))

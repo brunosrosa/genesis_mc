@@ -413,8 +413,8 @@ mod tests {
             valid_score > unsafe_score,
             "Para prompt em português legítimo, valid_intent ({valid_score}) deve superar unsafe_prompt ({unsafe_score})"
         );
-        assert!(valid_score >= 0.0 && valid_score <= 1.0, "Score fora da faixa [0,1]: {valid_score}");
-        assert!(unsafe_score >= 0.0 && unsafe_score <= 1.0, "Score fora da faixa [0,1]: {unsafe_score}");
+        assert!((0.0..=1.0).contains(&valid_score), "Score fora da faixa [0,1]: {valid_score}");
+        assert!((0.0..=1.0).contains(&unsafe_score), "Score fora da faixa [0,1]: {unsafe_score}");
 
         // Validar inferência via EphemeralInferEngine
         let req = SoulsInferenceRequest {
@@ -452,7 +452,7 @@ mod tests {
         // Executar scoring intensivo
         for _ in 0..10 {
             let score = engine.score("Verificação de isolamento térmico e blindagem de VRAM da RTX 2060m");
-            assert!(score >= 0.0 && score <= 1.0);
+            assert!((0.0..=1.0).contains(&score));
         }
 
         // Leitura de VRAM após a inferência
@@ -497,7 +497,7 @@ mod tests {
         let score = engine.score(&large_prompt);
         let elapsed = start.elapsed();
 
-        assert!(score >= 0.0 && score <= 1.0);
+        assert!((0.0..=1.0).contains(&score));
 
         #[cfg(debug_assertions)]
         let max_allowed_ms = 30; // Tolerância em dev/debug
@@ -519,7 +519,7 @@ mod tests {
         let score_a = engine.score("hello world");
         let score_b = engine.score("hello world");
         assert_eq!(score_a, score_b, "score deve ser deterministico");
-        assert!(score_a >= 0.0 && score_a <= 1.0, "score fora de [0,1]: {score_a}");
+        assert!((0.0..=1.0).contains(&score_a), "score fora de [0,1]: {score_a}");
     }
 
     #[test]
