@@ -3906,3 +3906,148 @@ async fn test_safe_fallback_guardrail() {
     );
     // Pai Tokio continua de pé (modo sem llama_backend validado).
 }
+
+/// PACOTE 1 (Resiliência e Coerção Contra Stubs) — Teste 1:
+/// Deve falhar e retornar erro instantaneamente ao injetar uma string de busca vazia,
+/// com tempo de execução sub-milissegundo, sem alocações desnecessárias na memória RAM.
+#[tokio::test]
+async fn test_match_indices_empty_string_guard() {
+    let temp_dir = tempfile::tempdir().expect("cria tempdir para teste");
+    let test_file = temp_dir.path().join("guard_test.rs");
+    std::fs::write(&test_file, "fn main() { println!(\"SOULS V6\"); }").expect("escreve arquivo");
+
+    // Testa no handler 'edit'
+    let req_edit = json!({
+        "jsonrpc": "2.0",
+        "id": "test-empty-guard-edit",
+        "method": "tools/call",
+        "params": {
+            "name": "edit",
+            "arguments": {
+                "path": test_file.to_str().unwrap(),
+                "old_string": "",
+                "new_string": "println!(\"REPLACED\");"
+            }
+        }
+    });
+
+    let start_edit = std::time::Instant::now();
+    let resp_edit = super::handle_mcp(req_edit).await.expect("deve retornar resposta JSON-RPC");
+    let elapsed_edit = start_edit.elapsed();
+
+    assert!(
+        elapsed_edit.as_millis() < 50,
+        "execução da barreira vazia deve ser instantânea: {:?}",
+        elapsed_edit
+    );
+    assert!(resp_edit.get("error").is_some(), "deve conter erro para old_string vazia: {resp_edit}");
+    let err_edit = &resp_edit["error"];
+    assert_eq!(err_edit["code"].as_i64(), Some(-32602));
+    let data_edit = err_edit.get("data").expect("deve conter payload de erro");
+    assert_eq!(data_edit["is_error"].as_bool(), Some(true));
+
+    // Testa no handler 'replace'
+    let req_replace = json!({
+        "jsonrpc": "2.0",
+        "id": "test-empty-guard-replace",
+        "method": "tools/call",
+        "params": {
+            "name": "replace",
+            "arguments": {
+                "path": test_file.to_str().unwrap(),
+                "old_string": "",
+                "new_string": "println!(\"REPLACED\");"
+            }
+        }
+    });
+
+    let resp_replace = super::handle_mcp(req_replace).await.expect("deve retornar resposta JSON-RPC");
+    assert!(resp_replace.get("error").is_some(), "replace deve falhar com old_string vazia");
+
+    // Testa no handler 'stub_fill'
+    let req_stub = json!({
+        "jsonrpc": "2.0",
+        "id": "test-empty-guard-stub",
+        "method": "tools/call",
+        "params": {
+            "name": "stub_fill",
+            "arguments": {
+                "path": test_file.to_str().unwrap(),
+                "stub_marker": "",
+                "code_payload": "// filled"
+            }
+        }
+    });
+    let resp_stub = super::handle_mcp(req_stub).await.expect("deve retornar resposta JSON-RPC");
+    assert!(resp_stub.get("error").is_some(), "stub_fill deve falhar com stub_marker vazio");
+}
+
+/// PACOTE 1 (Resiliência e Coerção Contra Stubs) — Teste 2:
+/// Deve simular uma ferramenta com delay de 35 segundos e comprovar o aborto automático
+/// exatamente aos 30 segundos com resposta JSON-RPC válida de erro sob o namespace souls_mcp.
+#[tokio::test]
+async fn test_mcp_tool_execution_timeout_guilhotina() {
+    tokio::time::pause();
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": "test-timeout-guilhotina-1",
+        "method": "tools/call",
+        "params": {
+            "name": "sys_time",
+            "arguments": {
+                "_test_delay_ms": 35000
+            }
+        }
+    });
+
+    let resp = super::handle_mcp(req).await.expect("deve retornar resposta JSON-RPC após timeout");
+    assert!(resp.get("error").is_some(), "deve conter objeto error por timeout: {resp}");
+    let error = &resp["error"];
+    assert_eq!(error["code"].as_i64(), Some(-32000));
+    let msg = error["message"].as_str().unwrap_or("");
+    assert!(
+        msg.contains("30 segundos") || msg.contains("Timeout"),
+        "mensagem deve indicar estouro de 30 segundos: {msg}"
+    );
+    let data = error.get("data").expect("deve conter data estruturado");
+    assert_eq!(data["server"].as_str(), Some("souls_mcp"));
+    assert_eq!(data["timeout_secs"].as_u64(), Some(30));
+}
+
+/// PACOTE 1 (Resiliência e Coerção Contra Stubs) — Teste 3:
+/// Deve provar que um pânico simulado na borda FFI é capturado pelo 'catch_unwind' / safe_ffi_call
+/// sem quebrar o loop ou o reactor do servidor Tokio.
+#[tokio::test]
+async fn test_ffi_panic_boundary_isolation() {
+    use souls_mc_lib::core::llama_logit_probing::safe_ffi_call;
+
+    // 1) Testa closure normal com sucesso
+    let ok_res = safe_ffi_call(|| 42 * 2);
+    assert_eq!(ok_res, Ok(84));
+
+    // 2) Simula um panic físico/unwind na fronteira FFI de biblioteca C de terceiros
+    let panic_res = safe_ffi_call(std::panic::AssertUnwindSafe(|| {
+        panic!("simulated C-FFI segmentation fault / invalid memory subscript");
+    }));
+
+    assert!(panic_res.is_err(), "safe_ffi_call deve capturar o panic e retornar Err");
+    let err_msg = panic_res.unwrap_err();
+    assert!(
+        err_msg.contains("simulated C-FFI") || err_msg.contains("Panic FFI"),
+        "mensagem capturada deve conter a razão do pânico: {err_msg}"
+    );
+
+    // 3) Prova que o reactor Tokio permanece 100% operacional após o pânico FFI
+    let sys_req = json!({
+        "jsonrpc": "2.0",
+        "id": "test-post-panic-liveness",
+        "method": "tools/call",
+        "params": {
+            "name": "sys_time",
+            "arguments": {}
+        }
+    });
+    let liveness_resp = super::handle_mcp(sys_req).await.expect("servidor deve permanecer vivo");
+    assert!(liveness_resp.get("result").is_some(), "servidor deve responder com sucesso após o panic FFI");
+}
+

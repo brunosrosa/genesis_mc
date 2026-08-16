@@ -96,6 +96,9 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
     let tool_name = normalize_tool_name(raw_tool_name);
 
     if let Some(arguments) = params.get("arguments").and_then(Value::as_object) {
+        if let Some(delay_ms) = arguments.get("_test_delay_ms").and_then(Value::as_u64) {
+            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+        }
         if let Some(prompt_candidate) = arguments
             .get("prompt")
             .or_else(|| arguments.get("query"))

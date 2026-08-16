@@ -452,6 +452,13 @@ pub async fn run_souls_stub_fill(
         message: "Parâmetro obrigatório 'stub_marker' ausente".to_string(),
         data: None,
     })?;
+    if stub_marker.is_empty() {
+        return Err(RpcError {
+            code: -32602,
+            message: "Parâmetro 'stub_marker' não pode ser vazio (Fail-Closed)".to_string(),
+            data: Some(json!({ "stub_marker": "", "is_error": true })),
+        });
+    }
     let code_payload = args.get("code_payload").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
         message: "Parâmetro obrigatório 'code_payload' ausente".to_string(),

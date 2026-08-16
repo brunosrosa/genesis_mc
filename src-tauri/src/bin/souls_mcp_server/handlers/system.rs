@@ -1014,6 +1014,13 @@ async fn run_surgical_edit(
         message: "Parâmetro obrigatório 'old_string' ausente".to_string(),
         data: None,
     })?;
+    if old_string.is_empty() {
+        return Err(RpcError {
+            code: -32602,
+            message: "Parâmetro 'old_string' não pode ser vazio (Fail-Closed)".to_string(),
+            data: Some(json!({ "old_string": "", "is_error": true })),
+        });
+    }
     let new_string = args.get("new_string").and_then(Value::as_str).ok_or_else(|| RpcError {
         code: -32602,
         message: "Parâmetro obrigatório 'new_string' ausente".to_string(),
@@ -1360,8 +1367,11 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
     //   .await + first  ?  → Result<EpistemicScores, EpistemicError>
     //   .map_err + second ? → EpistemicScores
     let eval: EpistemicScores = tokio::task::spawn_blocking(move || {
-        let prober = LlamaCppEpistemicProber::new(&logit_engine);
-        prober.probe(&req)
+        souls_mc_lib::core::llama_logit_probing::safe_ffi_call(std::panic::AssertUnwindSafe(|| {
+            let prober = LlamaCppEpistemicProber::new(&logit_engine);
+            prober.probe(&req)
+        }))
+        .map_err(|reason| souls_mc_lib::core::epistemic_prober::EpistemicError::Execution(format!("FFI Boundary Panic: {reason}")))?
     })
     .await
     .map_err(|e| RpcError {

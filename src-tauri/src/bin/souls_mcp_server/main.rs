@@ -436,15 +436,27 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
         "notifications/initialized" => None,
         "ping" => Some(jsonrpc_ok(request_id, json!({}))),
         "tools/list" => Some(jsonrpc_ok(request_id, tools::list_tools())),
-        "tools/call" => match router::handle_tool_call(payload).await {
-            Ok(result) => Some(jsonrpc_ok(request_id, result)),
-            Err(error) => Some(jsonrpc_error(
-                request_id,
-                error.code,
-                &error.message,
-                error.data,
-            )),
-        },
+        "tools/call" => {
+            match tokio::time::timeout(Duration::from_secs(30), router::handle_tool_call(payload)).await {
+                Ok(Ok(result)) => Some(jsonrpc_ok(request_id, result)),
+                Ok(Err(error)) => Some(jsonrpc_error(
+                    request_id,
+                    error.code,
+                    &error.message,
+                    error.data,
+                )),
+                Err(_elapsed) => Some(jsonrpc_error(
+                    request_id,
+                    -32000,
+                    "Timeout de execução: ferramenta MCP excedeu o limite termodinâmico de 30 segundos no servidor souls_mcp",
+                    Some(json!({
+                        "server": "souls_mcp",
+                        "timeout_secs": 30,
+                        "error": "Execution timeout exceeded (30s limit)"
+                    })),
+                )),
+            }
+        }
         _ => Some(jsonrpc_error(
             request_id,
             -32601,

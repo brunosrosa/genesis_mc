@@ -27,7 +27,7 @@ enable-ansi-support = "=0.2.1"
 ignore = "=0.4.25"
 
 # --- Async runtime / networking ---
-tokio = { version = "=1.51.1", features = ["full"] }
+tokio = { version = "=1.51.1", features = ["full", "test-util"] }
 reqwest = { version = "=0.12.28", default-features = false, features = ["json", "blocking", "rustls-tls-webpki-roots", "charset", "http2"] }
 
 # --- Observability / logging ---

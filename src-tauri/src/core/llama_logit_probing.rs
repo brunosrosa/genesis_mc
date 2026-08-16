@@ -123,13 +123,41 @@ impl LogitSource {
             #[cfg(feature = "llama_backend")]
             LogitSource::RealLlama { inner } => {
                 let mut guard = inner.lock().expect("RealLlama Mutex poisoned");
-                real_llama_extract_logits(&mut guard, prompt).unwrap_or_else(|| {
-                    tracing::debug!("RealLlama FFI indisponível → fallback PromptDerived");
-                    prompt_derived_logits(prompt)
-                })
+                match safe_ffi_call(std::panic::AssertUnwindSafe(|| real_llama_extract_logits(&mut guard, prompt))) {
+                    Ok(Some(logits)) => logits,
+                    Ok(None) => {
+                        tracing::debug!("RealLlama FFI indisponível → fallback PromptDerived");
+                        prompt_derived_logits(prompt)
+                    }
+                    Err(err) => {
+                        tracing::warn!("RealLlama FFI panic capturado: {err} → fallback PromptDerived");
+                        prompt_derived_logits(prompt)
+                    }
+                }
             }
             #[cfg(test)]
             LogitSource::TestFixture(v) => v.clone(),
+        }
+    }
+}
+
+/// Executa uma closure com isolamento rígido contra panics em fronteiras FFI / C externas,
+/// impedindo que falhas ou panics derrubem threads do runtime assíncrono.
+pub fn safe_ffi_call<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce() -> R + std::panic::UnwindSafe,
+{
+    match std::panic::catch_unwind(f) {
+        Ok(res) => Ok(res),
+        Err(panic_payload) => {
+            let reason = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "Panic FFI não identificado capturado na fronteira de segurança".to_string()
+            };
+            Err(reason)
         }
     }
 }
