@@ -199,15 +199,23 @@ fn run_watchdog_loop(running: Arc<AtomicBool>, state: Arc<AtomicU64>) {
         let packed = pack_state(vram_mb, ram_mb, cpu_temp_c, gpu_temp_c, flags);
         state.store(packed, Ordering::Release);
 
+        // Despacho assíncrono de telemetria térmica para SQLite WAL (telemetry_logs) via MPSC
+        if let Some(sender) = crate::core::telemetry_dispatcher::get_telemetry_sender() {
+            sender.dispatch_simple(
+                "souls-hardware-watchdog",
+                ram_mb as i64,
+                vram_mb as i64,
+                0.0,
+                (gpu_temp_c * 10.0) as i64,
+            );
+        }
+
         std::thread::sleep(poll_interval);
     }
 }
 
-/// Lê VRAM consumida via NVML (gateado em `llama_backend`).
-#[cfg(feature = "llama_backend")]
+/// Lê VRAM consumida via NVML carregado dinamicamente via nvml-wrapper.
 fn read_vram_used_mb() -> u32 {
-    // SOULS MC Marco IV: keep the import even if unused at this call site;
-    // other temperature/VRAM probes in this module still rely on the path.
     #[allow(unused_imports)]
     use nvml_wrapper::enums::device::UsedGpuMemory;
 
@@ -223,13 +231,6 @@ fn read_vram_used_mb() -> u32 {
     }
 }
 
-/// Fallback sem NVML: retorna 0. O scheduler trabalha com a *tendência*, não o valor absoluto,
-/// então a ausência de leitura não causa falso positivo de swap-out.
-#[cfg(not(feature = "llama_backend"))]
-fn read_vram_used_mb() -> u32 {
-    0
-}
-
 /// Lê temperatura da CPU via `sysinfo::Components`. Retorna a maior temperatura observada.
 /// Em sysinfo 0.30, `Component::temperature()` retorna `f32` direto (0.0 se indisponível).
 fn read_cpu_temp_celsius(components: &Components) -> Option<f32> {
@@ -240,23 +241,13 @@ fn read_cpu_temp_celsius(components: &Components) -> Option<f32> {
     if max > 0.0 { Some(max) } else { None }
 }
 
-/// Lê temperatura da dGPU via NVML. Gateado em `llama_backend`.
-#[cfg(feature = "llama_backend")]
+/// Lê temperatura da dGPU via NVML carregado dinamicamente.
 fn read_gpu_temp_celsius() -> Option<f32> {
-    // `TemperatureSensor` lives in `enum_wrappers::device` (not `enums::device` —
-    // nvml-wrapper 0.10 split the helpers but the sensor enum stayed behind).
     use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
 
     let nvml = nvml_wrapper::Nvml::init().ok()?;
     let device = nvml.device_by_index(0).ok()?;
-    // nvml-wrapper 0.10 `device.temperature()` returns `u32` (whole °C),
-    // not the historical `f32`; widen to f32 here for downstream consumers.
     device.temperature(TemperatureSensor::Gpu).ok().map(|t| t as f32)
-}
-
-#[cfg(not(feature = "llama_backend"))]
-fn read_gpu_temp_celsius() -> Option<f32> {
-    None
 }
 
 // =============================================================================

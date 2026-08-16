@@ -227,6 +227,11 @@ pub fn init_telemetry_dispatcher(db_path: &Path) -> Result<&'static TelemetrySen
         .ok_or_else(|| "TELEMETRY_SENDER não pôde ser inicializado".to_string())
 }
 
+/// Retorna o `TelemetrySender` global se o dispatcher já foi inicializado.
+pub fn get_telemetry_sender() -> Option<&'static TelemetrySender> {
+    TELEMETRY_SENDER.get()
+}
+
 /// Cria um dispatcher **privado** (sem tocar o `TELEMETRY_SENDER` global),
 /// vinculado a um `db_path` específico. Usado por testes que precisam de
 /// isolamento de path. Spawna worker thread dedicada nomeada
