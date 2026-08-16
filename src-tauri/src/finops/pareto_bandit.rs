@@ -91,6 +91,57 @@ pub fn calculate_pareto_utility(
     q - (lambda * c) - (beta * l)
 }
 
+/// Marcapasso Orçamentário Dinâmico Lagrangeano (ADR-046)
+///
+/// Infla exponencialmente o fator de custo lambda quando o consumo diário
+/// atinge ou ultrapassa 95% do teto diário, forçando o corte de nuvem e
+/// chaveamento invisível para o silício local (custo zero).
+pub fn calculate_lagrangian_budget_pacing(
+    base_lambda: f32,
+    daily_spend_usd: f64,
+    daily_budget_limit_usd: f64,
+) -> f32 {
+    if daily_budget_limit_usd <= 0.0 {
+        return base_lambda * 100.0;
+    }
+    let ratio = (daily_spend_usd / daily_budget_limit_usd) as f32;
+    if ratio >= 1.0 {
+        base_lambda * 1000.0
+    } else if ratio >= 0.95 {
+        let excess = (ratio - 0.95) / 0.05; // [0.0, 1.0]
+        base_lambda * (1.0 + 50.0 * (excess * 4.0).exp())
+    } else if ratio >= 0.80 {
+        let excess = (ratio - 0.80) / 0.15;
+        base_lambda * (1.0 + 5.0 * excess)
+    } else {
+        base_lambda
+    }
+}
+
+/// Consulta métricas empíricas reais (acurácia média e latência média em ms) na tabela `telemetry_logs`
+pub fn query_model_empirical_metrics(
+    conn: &rusqlite::Connection,
+    model_pattern: &str,
+) -> Result<Option<(f32, f32)>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT AVG(accuracy_score), AVG(duration_ms) \
+         FROM telemetry_logs \
+         WHERE tool LIKE ?1 OR tool = ?2",
+    )?;
+    let mut rows = stmt.query(rusqlite::params![
+        format!("%{}%", model_pattern),
+        model_pattern,
+    ])?;
+    if let Some(row) = rows.next()? {
+        let acc: Option<f64> = row.get(0)?;
+        let dur: Option<f64> = row.get(1)?;
+        if let (Some(a), Some(d)) = (acc, dur) {
+            return Ok(Some((a as f32, d as f32)));
+        }
+    }
+    Ok(None)
+}
+
 /// Estima o consumo total de memória do Tier 1 (Nemotron 4B) em bytes para um dado contagem de tokens.
 /// Base: ~2.8 GB (pesos Q4_K_M) + KV Cache (512 KB / token).
 pub fn estimate_tier1_vram_usage(token_count: u32) -> u64 {
@@ -230,6 +281,42 @@ impl ParetoBanditRouter {
             .max_by(|a, b| {
                 let score_a = self.score_candidate(a, beta);
                 let score_b = self.score_candidate(b, beta);
+                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .cloned()
+    }
+
+    /// Roda o ranqueamento empírico real integrando métricas SQLite e marcapasso Lagrangeano
+    pub fn rank_candidates_with_telemetry(
+        &self,
+        candidates: &[ModelCandidate],
+        conn: Option<&rusqlite::Connection>,
+        daily_spend_usd: f64,
+        daily_budget_limit_usd: f64,
+        beta: f32,
+    ) -> Option<ModelCandidate> {
+        let dynamic_lambda = calculate_lagrangian_budget_pacing(
+            self.daily_budget_lambda,
+            daily_spend_usd,
+            daily_budget_limit_usd,
+        );
+
+        let mut hydrated_candidates: Vec<ModelCandidate> = candidates.to_vec();
+
+        if let Some(c) = conn {
+            for cand in &mut hydrated_candidates {
+                if let Ok(Some((acc, dur))) = query_model_empirical_metrics(c, &cand.model_id) {
+                    cand.expected_quality = acc;
+                    cand.estimated_latency_ms = dur;
+                }
+            }
+        }
+
+        hydrated_candidates
+            .iter()
+            .max_by(|a, b| {
+                let score_a = a.calculate_utility(dynamic_lambda, beta);
+                let score_b = b.calculate_utility(dynamic_lambda, beta);
                 score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned()
@@ -501,5 +588,136 @@ mod tests {
                 || decision.endpoint.estimated_cost_per_1m_usd <= 1.0,
             "factual simples deve cair em fast_worker: {}", decision.endpoint.model
         );
+    }
+
+    // ========================================================================
+    // PACOTE 6: Suíte de Testes TDD Mandatória (Rito de Passagem)
+    // ========================================================================
+
+    #[test]
+    fn test_pareto_bandit_routing_decision_real_telemetry() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in memory sqlite");
+        conn.execute_batch(
+            "CREATE TABLE telemetry_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool TEXT NOT NULL,
+                tokens_in INTEGER NOT NULL DEFAULT 0,
+                tokens_out INTEGER NOT NULL DEFAULT 0,
+                cost_usd REAL NOT NULL DEFAULT 0.0,
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                accuracy_score REAL NOT NULL DEFAULT 1.0,
+                created_at INTEGER NOT NULL
+            );",
+        )
+        .expect("create telemetry table");
+
+        // Insere telemetria empírica real da Arena
+        // Local: Qwen 3.5 Coder 4B (Tier 1, custo $0, latência 45ms, acurácia 0.95)
+        conn.execute(
+            "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params!["arena_qwen_coder_4b", 512, 128, 0.0, 45, 0.95, 1700000000],
+        )
+        .expect("insert local telemetry");
+
+        // Nuvem: Claude 3.5 Sonnet (Tier 2, custo $0.05 = 50_000 microUSD, latência 850ms, acurácia 0.98)
+        conn.execute(
+            "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params!["arena_claude_sonnet", 512, 128, 0.05, 850, 0.98, 1700000000],
+        )
+        .expect("insert cloud telemetry");
+
+        let candidates = vec![
+            ModelCandidate::new("qwen_coder_4b", RoutingTier::Tier1, 0.80, 0.0, 100.0),
+            ModelCandidate::new("claude_sonnet", RoutingTier::Tier2, 0.90, 50000.0, 500.0),
+        ];
+
+        let router = ParetoBanditRouter::new(0.001);
+
+        // Cenário 1: Orçamento diário confortável ($1.00 gasto de $10.00 teto)
+        let best_comfortable = router.rank_candidates_with_telemetry(
+            &candidates,
+            Some(&conn),
+            1.00,
+            10.00,
+            0.0001,
+        );
+        assert!(best_comfortable.is_some());
+
+        // Cenário 2: Orçamento diário apertado ($9.60 gasto de $10.00 teto -> 96% do limite!)
+        let best_tight_budget = router.rank_candidates_with_telemetry(
+            &candidates,
+            Some(&conn),
+            9.60,
+            10.00,
+            0.0001,
+        );
+
+        assert!(best_tight_budget.is_some());
+        let selected = best_tight_budget.unwrap();
+        // Com o orçamento em 96% do teto, o marcapasso Lagrangeano infla o lambda,
+        // forçando o desvio da requisição de Claude para o Qwen local de custo zero.
+        assert_eq!(
+            selected.model_id, "qwen_coder_4b",
+            "Orçamento apertado (>=95%) deve desviar para modelo local de custo zero (Qwen Coder)"
+        );
+        assert_eq!(selected.tier, RoutingTier::Tier1);
+    }
+
+    #[test]
+    fn test_e3_metric_calculation_penalizes_overthinking() {
+        use crate::cognition::ast::observability::feedback::e3_real_efficiency;
+
+        // Modelo A (Local rápido e direto: custo $0.00, 50ms = 0.05s, acurácia 0.96)
+        let e3_local_fast = e3_real_efficiency(0.96, 0.0, 0.05);
+
+        // Modelo B (Nuvem em overthinking: custo $0.20, latência 15.0s, acurácia 0.97)
+        let e3_cloud_overthinking = e3_real_efficiency(0.97, 0.20, 15.0);
+
+        assert!(
+            e3_local_fast > e3_cloud_overthinking * 100.0,
+            "Local rápido (E3={e3_local_fast:.2}) deve esmagar nuvem com overthinking (E3={e3_cloud_overthinking:.4})"
+        );
+
+        // Degradação de prioridade baseada na pontuação E3
+        let cand_fast = ModelCandidate::new("qwen_coder_fast", RoutingTier::Tier1, 0.96, 0.0, 50.0);
+        let cand_overthink = ModelCandidate::new("cloud_overthink", RoutingTier::Tier2, 0.97, 200_000.0, 15_000.0);
+
+        let router = ParetoBanditRouter::new(0.001);
+        let candidates = vec![cand_fast, cand_overthink];
+        let ranked = router.rank_candidates(&candidates, 0.0001);
+
+        assert_eq!(
+            ranked.unwrap().model_id,
+            "qwen_coder_fast",
+            "Modelo com E3 degradado por overthinking deve perder prioridade na fila"
+        );
+    }
+
+    #[test]
+    fn test_bandit_lagrangian_budget_pacing() {
+        let base_lambda = 0.001_f32;
+        let budget_limit = 100.0_f64;
+
+        // 1. Gasto normal (50% do teto) -> lambda inalterado
+        let lambda_50 = calculate_lagrangian_budget_pacing(base_lambda, 50.0, budget_limit);
+        assert!((lambda_50 - base_lambda).abs() < 1e-6);
+
+        // 2. Gasto preventivo (85% do teto) -> elevação moderada
+        let lambda_85 = calculate_lagrangian_budget_pacing(base_lambda, 85.0, budget_limit);
+        assert!(lambda_85 > base_lambda);
+
+        // 3. Gasto em 95% do teto -> elevação exponencial aguda
+        let lambda_95 = calculate_lagrangian_budget_pacing(base_lambda, 95.0, budget_limit);
+        assert!(lambda_95 > lambda_85 * 5.0, "Lambda em 95% deve disparar exponencialmente");
+
+        // 4. Gasto em 98% do teto -> elevação massiva
+        let lambda_98 = calculate_lagrangian_budget_pacing(base_lambda, 98.0, budget_limit);
+        assert!(lambda_98 > lambda_95 * 5.0);
+
+        // 5. Gasto em 100% do teto -> trava total (lambda * 1000)
+        let lambda_100 = calculate_lagrangian_budget_pacing(base_lambda, 100.0, budget_limit);
+        assert_eq!(lambda_100, base_lambda * 1000.0, "Em 100% do orçamento a nuvem deve ser bloqueada");
     }
 }

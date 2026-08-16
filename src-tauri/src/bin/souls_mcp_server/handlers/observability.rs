@@ -202,12 +202,13 @@ pub async fn run_feedback(params: &serde_json::Map<String, Value>) -> Result<Val
             "text": serde_json::to_string_pretty(&report).unwrap_or_default()
         }],
         "structuredContent": {
+            "e3_efficiency_real_global": report.e3_efficiency_real,
             "e3_efficiency_v2_global": report.e3_efficiency_v2,
             "e3_efficiency_token_global": report.e3_efficiency,
             "accuracy_score_avg_global": report.accuracy_score_avg,
             "total_calls": report.total_calls,
             "by_tool": report.by_tool,
-            "formula": "E3_v2 = (accuracy_score^2) / max(1.0, duration_ms)"
+            "formula": "E3_real = accuracy_score / (cost_usd + duration_seconds)"
         },
         "isError": false
     }))

@@ -59,6 +59,23 @@ pub fn e3_efficiency_v2(accuracy_score: f64, duration_ms: f64) -> f64 {
     (acc * acc) / dur.max(1.0)
 }
 
+/// Marco VI (Pacote 6): Eficiência de Token E3 (Efficiency-aware Effectiveness Evaluation).
+///
+/// Formula:
+/// ```text
+/// E3 = Acuracia_Tarefa_Arena / (Custo_Financeiro_USD + Latencia_Total_Segundos)
+/// ```
+///
+/// Robusto contra divisão por zero com piso de `1e-4` no denominador.
+/// Se um modelo de nuvem entrar em overthinking ou latência excessiva,
+/// seu score E3 desaba, forçando o desvio JIT para inferência local de alto desempenho.
+#[inline]
+pub fn e3_real_efficiency(accuracy_score: f64, cost_usd: f64, duration_seconds: f64) -> f64 {
+    let acc = accuracy_score.clamp(0.0, 1.0);
+    let denom = (cost_usd.max(0.0) + duration_seconds.max(0.0)).max(1e-4);
+    acc / denom
+}
+
 /// Entrada por tool no relatorio FinOps.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ToolTelemetry {
@@ -75,6 +92,8 @@ pub struct ToolTelemetry {
     /// Marco 3.8 Fase C.1: Eficiencia E3 constitucional
     /// = `(acc^2) / max(1.0, duration_ms_total)`.
     pub e3_efficiency_v2: f64,
+    /// Marco VI (Pacote 6): Eficiência E3 real = `acc / (cost_usd + duration_seconds)`.
+    pub e3_efficiency_real: f64,
 }
 
 /// Relatorio FinOps agregado.
@@ -91,6 +110,8 @@ pub struct TelemetryReport {
     pub accuracy_score_avg: f64,
     /// Marco 3.8 Fase C.1: Eficiencia E3 constitucional global.
     pub e3_efficiency_v2: f64,
+    /// Marco VI (Pacote 6): Eficiência E3 real global.
+    pub e3_efficiency_real: f64,
     /// Decomposicao por tool (ordenada por nome).
     pub by_tool: BTreeMap<String, ToolTelemetry>,
 }
@@ -137,6 +158,8 @@ pub fn aggregate_telemetry(conn: &Connection) -> Result<TelemetryReport, Cogniti
 
         let e3 = e3_efficiency(tin, tout);
         let e3_v2 = e3_efficiency_v2(acc_avg, dur as f64);
+        let dur_sec = (dur as f64) / 1000.0;
+        let e3_real = e3_real_efficiency(acc_avg, cost, dur_sec);
         by_tool.insert(
             tool.clone(),
             ToolTelemetry {
@@ -149,6 +172,7 @@ pub fn aggregate_telemetry(conn: &Connection) -> Result<TelemetryReport, Cogniti
                 e3_efficiency: e3,
                 accuracy_score_avg: acc_avg,
                 e3_efficiency_v2: e3_v2,
+                e3_efficiency_real: e3_real,
             },
         );
         total_in += tin;
@@ -167,6 +191,8 @@ pub fn aggregate_telemetry(conn: &Connection) -> Result<TelemetryReport, Cogniti
         1.0
     };
     let e3_v2_global = e3_efficiency_v2(acc_global, total_dur as f64);
+    let total_dur_sec = (total_dur as f64) / 1000.0;
+    let e3_real_global = e3_real_efficiency(acc_global, total_cost, total_dur_sec);
 
     Ok(TelemetryReport {
         total_tokens_in: total_in,
@@ -177,6 +203,27 @@ pub fn aggregate_telemetry(conn: &Connection) -> Result<TelemetryReport, Cogniti
         e3_efficiency: e3_global,
         accuracy_score_avg: acc_global,
         e3_efficiency_v2: e3_v2_global,
+        e3_efficiency_real: e3_real_global,
         by_tool,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_e3_metric_calculation_penalizes_overthinking() {
+        // Modelo A (Local rápido, custo $0, 45ms = 0.045s, Acurácia 0.95)
+        let e3_fast_local = e3_real_efficiency(0.95, 0.0, 0.045);
+
+        // Modelo B (Nuvem em Overthinking, custo $0.15, 12.0s latência, Acurácia 0.98)
+        let e3_overthinking_cloud = e3_real_efficiency(0.98, 0.15, 12.0);
+
+        assert!(
+            e3_fast_local > e3_overthinking_cloud,
+            "Local rápido (E3={e3_fast_local:.2}) deve superar nuvem com overthinking (E3={e3_overthinking_cloud:.2})"
+        );
+        assert!(e3_overthinking_cloud < 0.1, "Overthinking severo deve colapsar E3 para < 0.1");
+    }
 }
