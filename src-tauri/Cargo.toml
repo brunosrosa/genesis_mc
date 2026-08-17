@@ -141,3 +141,7 @@ required-features = ["gateway_ccr"]
 [[bin]]
 name = "soda_arena_cli"
 path = "src/bin/soda_arena_cli.rs"
+
+[[bin]]
+name = "soda_mcp_tester_cli"
+path = "src/bin/soda_mcp_tester_cli.rs"

@@ -19,20 +19,44 @@ pub async fn run_thinking(params: &serde_json::Map<String, Value>) -> Result<Val
     } else {
         thought_obj.insert("thought".to_string(), Value::String(String::new()));
     }
-    for key in [
-        "thoughtNumber",
-        "totalThoughts",
-        "nextThoughtNeeded",
-        "isRevision",
-        "revisesThought",
-        "branchFromThought",
-        "branchId",
-        "needsMoreThoughts",
-        "hitlAuthorized",
-    ] {
-        if let Some(v) = args.get(key) {
-            thought_obj.insert(key.to_string(), v.clone());
-        }
+    let thought_number = args
+        .get("thought_number")
+        .or_else(|| args.get("thoughtNumber"))
+        .cloned()
+        .unwrap_or(Value::Number(1.into()));
+    thought_obj.insert("thought_number".to_string(), thought_number);
+
+    let total_thoughts = args
+        .get("total_thoughts")
+        .or_else(|| args.get("totalThoughts"))
+        .cloned()
+        .unwrap_or(Value::Number(1.into()));
+    thought_obj.insert("total_thoughts".to_string(), total_thoughts);
+
+    let next_thought_needed = args
+        .get("next_thought_needed")
+        .or_else(|| args.get("nextThoughtNeeded"))
+        .cloned()
+        .unwrap_or(Value::Bool(false));
+    thought_obj.insert("next_thought_needed".to_string(), next_thought_needed);
+
+    if let Some(v) = args.get("is_revision").or_else(|| args.get("isRevision")) {
+        thought_obj.insert("is_revision".to_string(), v.clone());
+    }
+    if let Some(v) = args.get("revises_thought").or_else(|| args.get("revisesThought")) {
+        thought_obj.insert("revises_thought".to_string(), v.clone());
+    }
+    if let Some(v) = args.get("branch_from_thought").or_else(|| args.get("branchFromThought")) {
+        thought_obj.insert("branch_from_thought".to_string(), v.clone());
+    }
+    if let Some(v) = args.get("branch_id").or_else(|| args.get("branchId")) {
+        thought_obj.insert("branch_id".to_string(), v.clone());
+    }
+    if let Some(v) = args.get("needs_more_thoughts").or_else(|| args.get("needsMoreThoughts")) {
+        thought_obj.insert("needs_more_thoughts".to_string(), v.clone());
+    }
+    if let Some(v) = args.get("hitl_authorized").or_else(|| args.get("hitlAuthorized")) {
+        thought_obj.insert("hitl_authorized".to_string(), v.clone());
     }
     let thought_value = Value::Object(thought_obj);
     let thought: ThoughtData = serde_json::from_value(thought_value).map_err(|e| RpcError {

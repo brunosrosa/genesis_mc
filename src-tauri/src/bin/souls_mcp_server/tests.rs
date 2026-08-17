@@ -4163,5 +4163,62 @@ async fn test_mcp_handler_panic_unwind_safety() {
     assert_eq!(liveness_resp["id"], "liveness-post-panic-02");
 }
 
+#[tokio::test]
+async fn test_mcp_50_claws_concurrent_stress_and_no_race_conditions() {
+    let mut join_set = tokio::task::JoinSet::new();
+
+    // Dispara múltiplas ferramentas concorrentes para forçar canais MPSC e SQLite
+    let tool_probes = vec![
+        ("sys_time", json!({})),
+        ("sqlite_query", json!({ "query": "SELECT 42 AS probe;" })),
+        ("sub_agent", json!({ "agent_id": "test_concurrent_subagent", "task_name": "stress", "status": "RUNNING" })),
+        ("knowledge", json!({ "key": "test_concurrent_k1", "category": "stress", "content": "data", "confidence": 0.9 })),
+        ("handoff", json!({ "handoff_id": "test_concurrent_h1", "from_agent": "a1", "to_agent": "a2", "payload": "p1" })),
+        ("thinking", json!({ "thought": "concurrent thinking stress", "thoughtNumber": 1, "totalThoughts": 2, "nextThoughtNeeded": true })),
+        ("compress", json!({ "text": "fn probe() { println!(\"stress\"); }", "ext": "rs" })),
+        ("dedup", json!({ "text": "l1\nl2\nl3\nl4\nl5\nl1\nl2\nl3\nl4\nl5\n" })),
+        ("delta_diff", json!({ "before": "line1\n", "after": "line2\n" })),
+    ];
+
+    for (idx, (tool_name, args)) in tool_probes.into_iter().enumerate() {
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": idx + 500,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": args
+            }
+        });
+
+        join_set.spawn(async move {
+            let start = std::time::Instant::now();
+            let resp = super::handle_mcp(req).await;
+            let elapsed = start.elapsed();
+            (idx, resp, elapsed)
+        });
+    }
+
+    let mut completed = 0;
+    while let Some(res) = join_set.join_next().await {
+        let (idx, resp_opt, elapsed) = res.expect("task join não deve falhar");
+        assert!(resp_opt.is_some(), "task {idx} deve retornar resposta JSON-RPC");
+        let resp = resp_opt.unwrap();
+        assert_eq!(resp["jsonrpc"], "2.0");
+        // Verifica ausência de pânico no worker
+        if let Some(err) = resp.get("error") {
+            assert_ne!(
+                err.get("code").and_then(serde_json::Value::as_i64).unwrap_or(0),
+                -32603,
+                "Nenhuma ferramenta em estresse concorrente deve panicar: {err:?}"
+            );
+        }
+        completed += 1;
+        assert!(elapsed.as_secs() < 10, "latência deve ser inferior a 10s");
+    }
+
+    assert_eq!(completed, 9, "todas as 9 chamadas concorrentes devem ter finalizado");
+}
+
 
 

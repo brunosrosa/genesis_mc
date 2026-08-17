@@ -183,12 +183,12 @@ fn test_llguidance_avx2_json_coercion_speed() {
 
     // Aplica na cópia final e valida que os tokens inválidos foram mascarados para -inf
     mask_logits(&mut logits, &mask);
-    for idx in 0..5 {
-        assert!(logits[idx] > -100.0, "Token {idx} deveria ser permitido");
+    for (idx, &logit) in logits.iter().enumerate().take(5) {
+        assert!(logit > -100.0, "Token {idx} deveria ser permitido");
     }
-    for idx in 5..128 {
+    for (idx, &logit) in logits.iter().enumerate().take(128).skip(5) {
         assert_eq!(
-            logits[idx],
+            logit,
             f32::NEG_INFINITY,
             "Token {idx} deveria estar mascarado para -inf"
         );
