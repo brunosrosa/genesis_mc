@@ -88,8 +88,7 @@ fn main() {
             // (orquestrador central), que já o inicia com guarda de expurgo
             // no step 1 + spawn soberano no step 6. **NÃO** spawnar nenhum
             // binário aqui — qualquer tentativa de supervisão interna
-            // reintroduziria o fantasma `agentgateway.exe` (zumbi eliminado
-            // no Marco I em favor do `agentgateway_tcp_proxy.exe`).
+            // violaria a arquitetura desacoplada.
             //
             // ADR-005: zero lógica de negócios no frontend (Tauri é passivo).
 
@@ -154,7 +153,14 @@ fn toggle_overlay_window(app: &tauri::AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    const MAIN_SOURCE: &str = include_str!("main.rs");
+
+    fn production_source() -> &'static str {
+        MAIN_SOURCE
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or(MAIN_SOURCE)
+    }
 
     /// TDD anti-regressão: o `souls_mc` (tray daemon) **NUNCA** deve tentar
     /// spawnar o binário zumbi `agentgateway.exe` (eliminado no Marco I em
@@ -166,7 +172,7 @@ mod tests {
     ///   `Falha crítica persistente no processo agentgateway.exe`
     #[test]
     fn main_rs_does_not_reference_agentgateway_phantom() {
-        let source = fs::read_to_string(file!()).expect("lê o próprio main.rs");
+        let source = production_source();
         assert!(
             !source.contains("agentgateway.exe"),
             "REGRESSÃO: `agentgateway.exe` (fantasma) foi reintroduzido no main.rs. \
@@ -183,7 +189,7 @@ mod tests {
     /// é o dono soberano do spawn do proxy em :3000).
     #[test]
     fn main_rs_does_not_spawn_tcp_proxy() {
-        let source = fs::read_to_string(file!()).expect("lê o próprio main.rs");
+        let source = production_source();
         assert!(
             !source.contains("spawn_supervised"),
             "REGRESSÃO: `spawn_supervised` foi reintroduzido. O `souls_mc` é \
@@ -201,7 +207,7 @@ mod tests {
     /// de que alguém tentou reintroduzir supervisão interna.
     #[test]
     fn main_rs_does_not_contain_dead_supervisor_infra() {
-        let source = fs::read_to_string(file!()).expect("lê o próprio main.rs");
+        let source = production_source();
         for dead_symbol in [
             "struct ProgramSpec",
             "struct Supervisor",
