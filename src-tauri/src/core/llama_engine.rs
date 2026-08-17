@@ -23,7 +23,9 @@ static GLOBAL_LLAMA_BACKEND: OnceLock<Result<LlamaBackend, String>> = OnceLock::
 
 fn get_global_llama_backend() -> Result<&'static LlamaBackend, InferenceError> {
     let res = GLOBAL_LLAMA_BACKEND.get_or_init(|| {
-        LlamaBackend::init().map_err(|e| format!("Falha ao inicializar LlamaBackend: {}", e))
+        let mut backend = LlamaBackend::init().map_err(|e| format!("Falha ao inicializar LlamaBackend: {}", e))?;
+        backend.void_logs();
+        Ok(backend)
     });
 
     match res {

@@ -437,14 +437,41 @@ async fn handle_mcp(payload: Value) -> Option<Value> {
         "ping" => Some(jsonrpc_ok(request_id, json!({}))),
         "tools/list" => Some(jsonrpc_ok(request_id, tools::list_tools())),
         "tools/call" => {
-            match tokio::time::timeout(Duration::from_secs(30), router::handle_tool_call(payload)).await {
-                Ok(Ok(result)) => Some(jsonrpc_ok(request_id, result)),
-                Ok(Err(error)) => Some(jsonrpc_error(
+            let task = tokio::spawn(async move {
+                router::handle_tool_call(payload).await
+            });
+            match tokio::time::timeout(Duration::from_secs(30), task).await {
+                Ok(Ok(Ok(result))) => Some(jsonrpc_ok(request_id, result)),
+                Ok(Ok(Err(error))) => Some(jsonrpc_error(
                     request_id,
                     error.code,
                     &error.message,
                     error.data,
                 )),
+                Ok(Err(join_err)) => {
+                    let panic_msg = if join_err.is_panic() {
+                        let p = join_err.into_panic();
+                        if let Some(s) = p.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = p.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "Unknown panic payload".to_string()
+                        }
+                    } else {
+                        join_err.to_string()
+                    };
+                    eprintln!("[souls_mcp_server] PANIC capturado na tool: {panic_msg}");
+                    Some(jsonrpc_error(
+                        request_id,
+                        -32603,
+                        "Internal error: Tool panicked in worker thread",
+                        Some(json!({
+                            "is_error": true,
+                            "error": panic_msg
+                        })),
+                    ))
+                }
                 Err(_elapsed) => Some(jsonrpc_error(
                     request_id,
                     -32000,

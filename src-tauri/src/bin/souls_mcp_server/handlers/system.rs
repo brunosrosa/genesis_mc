@@ -366,11 +366,20 @@ pub async fn run_souls_outline(params: &serde_json::Map<String, Value>) -> Resul
             data: None,
         })?;
 
-    let outline_res = crate::execute_wasm_outline_parser(&source_code);
-    let signatures = match outline_res {
-        Ok(sig) => sig,
-        Err(_) => crate::extract_rust_outline_signatures(&source_code),
-    };
+    let outline_res = tokio::task::spawn_blocking(move || {
+        let res = crate::execute_wasm_outline_parser(&source_code);
+        match res {
+            Ok(sig) => sig,
+            Err(_) => crate::extract_rust_outline_signatures(&source_code),
+        }
+    })
+    .await
+    .map_err(|e| RpcError {
+        code: -32021,
+        message: format!("Falha ao aguardar tarefa de outline: {e}"),
+        data: None,
+    })?;
+    let signatures = outline_res;
 
     Ok(json!({
         "content": [{
@@ -415,8 +424,20 @@ pub async fn run_souls_symbol(params: &serde_json::Map<String, Value>) -> Result
         }));
     }
 
-    // 2. Resolução via resolve_symbol (AST)
-    if let Ok(Some(loc)) = souls_mc_lib::cognition::ast::resolve_symbol(&root_path, &target_symbol) {
+    // 2. Resolução via resolve_symbol (AST) em spawn_blocking para não bloquear reactor
+    let root_path_clone = root_path.clone();
+    let target_symbol_clone = target_symbol.clone();
+    let ast_res = tokio::task::spawn_blocking(move || {
+        souls_mc_lib::cognition::ast::resolve_symbol(&root_path_clone, &target_symbol_clone)
+    })
+    .await
+    .map_err(|e| RpcError {
+        code: -32000,
+        message: format!("Spawn blocking falhou em resolve_symbol: {e}"),
+        data: None,
+    })?;
+
+    if let Ok(Some(loc)) = ast_res {
         let matches = vec![json!({
             "file": loc.file.display().to_string(),
             "line": loc.line,

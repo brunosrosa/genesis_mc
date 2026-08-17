@@ -99,6 +99,9 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         if let Some(delay_ms) = arguments.get("_test_delay_ms").and_then(Value::as_u64) {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
         }
+        if arguments.get("_simulate_panic").and_then(Value::as_bool).unwrap_or(false) {
+            panic!("Simulated tool panic in worker thread for resilience testing");
+        }
         if let Some(prompt_candidate) = arguments
             .get("prompt")
             .or_else(|| arguments.get("query"))

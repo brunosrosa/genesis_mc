@@ -4074,4 +4074,94 @@ async fn test_mcp_souls_semantic_search_tool() {
     assert!(resp["result"]["structuredContent"]["results"].is_array());
 }
 
+#[tokio::test]
+async fn test_mcp_server_stdout_unpolluted() {
+    // 1) Prepara 5 comandos concorrentes de ferramentas MCP
+    let req1 = json!({ "jsonrpc": "2.0", "id": 101, "method": "ping" });
+    let req2 = json!({ "jsonrpc": "2.0", "id": 102, "method": "tools/list" });
+    let req3 = json!({ "jsonrpc": "2.0", "id": 103, "method": "tools/call", "params": { "name": "sys_time", "arguments": {} } });
+    let req4 = json!({ "jsonrpc": "2.0", "id": 104, "method": "tools/call", "params": { "name": "session", "arguments": { "action": "list" } } });
+    let req5 = json!({ "jsonrpc": "2.0", "id": 105, "method": "initialize" });
+
+    // 2) Executa concorrentemente no reactor
+    let (r1, r2, r3, r4, r5) = tokio::join!(
+        super::handle_mcp(req1),
+        super::handle_mcp(req2),
+        super::handle_mcp(req3),
+        super::handle_mcp(req4),
+        super::handle_mcp(req5)
+    );
+
+    let responses = vec![r1, r2, r3, r4, r5];
+    assert_eq!(responses.len(), 5);
+
+    // 3) Simula o canal stdout escrevendo os payloads serializados e valida pureza absoluta
+    let mut simulated_stdout = Vec::new();
+    for resp_opt in responses {
+        let resp = resp_opt.expect("todas as respostas devem ser válidas");
+        let serialized = serde_json::to_string(&resp).expect("serialização json-rpc deve ser válida");
+        simulated_stdout.extend_from_slice(serialized.as_bytes());
+        simulated_stdout.push(b'\n');
+    }
+
+    let stdout_content = String::from_utf8(simulated_stdout).expect("stdout deve ser UTF-8 válido");
+    let lines: Vec<&str> = stdout_content.lines().filter(|l| !l.trim().is_empty()).collect();
+    assert_eq!(lines.len(), 5, "descritor stdout deve conter exatamente 5 linhas de resposta");
+
+    for (idx, line) in lines.iter().enumerate() {
+        // Valida que cada linha é estritamente um JSON-RPC 2.0 válido
+        let parsed: serde_json::Value = serde_json::from_str(line).unwrap_or_else(|e| {
+            panic!("Linha {idx} corrompida no stdout com caracteres parasitas: {e} | conteúdo: {line}");
+        });
+        assert_eq!(parsed["jsonrpc"], "2.0", "deve ter versão JSON-RPC 2.0");
+        assert!(parsed.get("id").is_some(), "deve ter campo id");
+        assert!(parsed.get("result").is_some() || parsed.get("error").is_some(), "deve ter result ou error");
+    }
+}
+
+#[tokio::test]
+async fn test_mcp_handler_panic_unwind_safety() {
+    // 1) Força propositalmente um panic em um handler via hook _simulate_panic
+    let panic_req = json!({
+        "jsonrpc": "2.0",
+        "id": "panic-test-01",
+        "method": "tools/call",
+        "params": {
+            "name": "sys_time",
+            "arguments": {
+                "_simulate_panic": true
+            }
+        }
+    });
+
+    let resp = super::handle_mcp(panic_req).await.expect("reactor deve interceptar panic e retornar resposta");
+    
+    // 2) Assevera que o erro foi tratado graciosamente no formato JSON-RPC padrão
+    assert_eq!(resp["jsonrpc"], "2.0");
+    assert_eq!(resp["id"], "panic-test-01");
+    assert!(resp.get("error").is_some(), "deve conter campo error");
+    assert_eq!(resp["error"]["code"], -32603, "código de erro deve ser -32603 (Internal error)");
+    assert_eq!(
+        resp["error"]["message"].as_str().unwrap(),
+        "Internal error: Tool panicked in worker thread"
+    );
+    assert_eq!(resp["error"]["data"]["is_error"], true, "is_error deve ser true no payload data");
+
+    // 3) Comprova que o reactor e o loop de stdio continuam 100% saudáveis após o pânico
+    let liveness_req = json!({
+        "jsonrpc": "2.0",
+        "id": "liveness-post-panic-02",
+        "method": "tools/call",
+        "params": {
+            "name": "sys_time",
+            "arguments": {}
+        }
+    });
+
+    let liveness_resp = super::handle_mcp(liveness_req).await.expect("reactor deve permanecer vivo após pânico");
+    assert!(liveness_resp.get("result").is_some(), "servidor deve responder com sucesso à chamada seguinte");
+    assert_eq!(liveness_resp["id"], "liveness-post-panic-02");
+}
+
+
 

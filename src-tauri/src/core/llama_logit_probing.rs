@@ -339,7 +339,7 @@ fn real_llama_extract_logits(
 
     // (1) Lazy init: carrega GGUF na CPU (n_gpu_layers = 0, ADR-027: 0 MB VRAM).
     if matches!(inner.state, RealLlamaState::Init) {
-        let backend = match LlamaBackend::init() {
+        let mut backend = match LlamaBackend::init() {
             Ok(b) => b,
             Err(e) => {
                 inner.state = RealLlamaState::Failed {
@@ -348,6 +348,7 @@ fn real_llama_extract_logits(
                 return None;
             }
         };
+        backend.void_logs();
         let model_params = LlamaModelParams::default().with_n_gpu_layers(0);
         let model = match LlamaModel::load_from_file(&backend, &inner.model_path, &model_params) {
             Ok(m) => m,
