@@ -169,3 +169,21 @@ pub fn scan_routes(root: &Path) -> Result<RouteReport, CognitiveError> {
         dead_calls,
     })
 }
+
+static ROUTES_CACHE: OnceLock<RouteReport> = OnceLock::new();
+
+/// Retorna o relatório de rotas com resolução ultra-rápida em RAM (< 1ms) via `OnceLock`.
+pub fn cached_scan_routes(root: &Path) -> Result<RouteReport, CognitiveError> {
+    if let Some(cached) = ROUTES_CACHE.get() {
+        return Ok(cached.clone());
+    }
+    let report = scan_routes(root)?;
+    let _ = ROUTES_CACHE.set(report.clone());
+    Ok(report)
+}
+
+/// Força ou popula explicitamente o cache de rotas em RAM.
+pub fn prime_routes_cache(report: RouteReport) {
+    let _ = ROUTES_CACHE.set(report);
+}
+

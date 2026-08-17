@@ -410,7 +410,7 @@ pub fn list_tools() -> Value {
             },
             {
                 "name": "metrics",
-                "description": "[Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.",
+                "description": "Consolida telemetria FinOps, tráfego de tokens, hit-rate do cache L2 e microdólares via telemetry_logs.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {},

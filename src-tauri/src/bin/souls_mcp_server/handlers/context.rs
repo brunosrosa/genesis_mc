@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
-use souls_mc_lib::cognition::{context, lean_vacuum};
-#[cfg(feature = "gateway_ccr")]
-use souls_mc_lib::cognition::context_compression;
+use souls_mc_lib::cognition::{context, context_compression, lean_vacuum};
 use crate::{
     try_log_file_access, try_log_telemetry, try_record_repo_heatmap,
     validate_and_canonicalize_path, RpcError,
@@ -232,7 +230,6 @@ pub async fn run_souls_dedup(
 }
 
 /// `souls_headroom_retrieve` — Recupera um stub comprimido via `SoulsCcrStore::intercept_loopback`.
-#[cfg(feature = "gateway_ccr")]
 pub async fn run_souls_headroom_retrieve(
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value, RpcError> {

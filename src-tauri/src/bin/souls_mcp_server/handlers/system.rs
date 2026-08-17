@@ -4,15 +4,13 @@ use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use souls_mc_lib::cognition::lean_vacuum;
 use souls_mc_lib::harvester::{ast_parser, github_tracker, web_scraper};
-#[cfg(feature = "llama_backend")]
 use souls_mc_lib::core::epistemic_prober::{
     EpistemicProber, EpistemicRequest, EpistemicScores, LlamaCppEpistemicProber,
 };
-#[cfg(feature = "llama_backend")]
 use souls_mc_lib::core::llama_logit_probing::LlamaLogitProber;
 
 use crate::{
-    extract_arguments, generate_cpu_embedding_384, stub_sandbox_audit_pending,
+    extract_arguments, generate_cpu_embedding_384,
     try_log_file_access, try_record_repo_heatmap, validate_and_canonicalize_path,
     validate_repo_path, RpcError, STATE_DB_TX, StateDbOp,
 };
@@ -123,8 +121,18 @@ pub async fn run_web_fetch(params: &serde_json::Map<String, Value>) -> Result<Va
             data: Some(json!({ "required": "url" })),
         })?;
 
-    let markdown = web_scraper::fetch_markdown_with_guarantee(url)
+    let fetch_fut = web_scraper::fetch_markdown_with_guarantee(url);
+    let markdown = tokio::time::timeout(std::time::Duration::from_secs(25), fetch_fut)
         .await
+        .map_err(|_| RpcError {
+            code: -32000,
+            message: format!("Timeout de 25s excedido ao buscar URL '{url}'. Download abortado para prevenir travamento."),
+            data: Some(json!({
+                "url": url,
+                "timeout_seconds": 25,
+                "status": "TIMED_OUT"
+            })),
+        })?
         .map_err(|e| RpcError {
             code: -32020,
             message: format!("Falha ao raspar conteúdo web: {e}"),
@@ -1329,10 +1337,16 @@ pub async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<
 
 pub async fn run_execute(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let _ = params;
-    Ok(stub_sandbox_audit_pending("execute"))
+    Err(RpcError {
+        code: -32001,
+        message: "Execução negada: sandboxing Landlock/WASI pendente de auditoria de segurança (HitlDenied)".to_string(),
+        data: Some(json!({
+            "requires_sandbox": true,
+            "audit_status": "PENDING"
+        })),
+    })
 }
 
-#[cfg(feature = "llama_backend")]
 pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
 
@@ -1389,7 +1403,7 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
             let prober = LlamaCppEpistemicProber::new(&logit_engine);
             prober.probe(&req)
         }))
-        .map_err(|reason| souls_mc_lib::core::epistemic_prober::EpistemicError::Execution(format!("FFI Boundary Panic: {reason}")))?
+        .map_err(|reason| souls_mc_lib::core::epistemic_prober::EpistemicError::LogitsCorrompidos(format!("FFI Boundary Panic: {reason}")))?
     })
     .await
     .map_err(|e| RpcError {
@@ -1403,8 +1417,8 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
         data: None,
     })?;
 
-    let eval_val = serde_json::to_value(&eval).unwrap_or_default();
     let text = serde_json::to_string_pretty(&eval).unwrap_or_default();
+    let eval_val = serde_json::to_value(eval).unwrap_or_default();
 
     Ok(json!({
         "content": [{

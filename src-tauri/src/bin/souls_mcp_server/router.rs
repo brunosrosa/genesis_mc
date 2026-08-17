@@ -144,10 +144,7 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "search" => handlers::system::run_souls_search(params).await,
         "compress" => handlers::context::run_souls_compress(params).await,
         "dedup" => handlers::context::run_souls_dedup(params).await,
-        #[cfg(feature = "gateway_ccr")]
         "headroom_retrieve" => handlers::context::run_souls_headroom_retrieve(params).await,
-        #[cfg(not(feature = "gateway_ccr"))]
-        "headroom_retrieve" => Ok(crate::stub_not_implemented_yet(tool_name)),
         "session" => handlers::system::run_souls_session(params).await,
         "multi_read" => handlers::context::run_souls_multi_read(params).await,
         "symbol" => handlers::system::run_souls_symbol(params).await,
@@ -157,12 +154,9 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "analyze_session" => handlers::thinking::run_souls_analyze_session(params).await,
         "merge_sessions" => handlers::thinking::run_souls_merge_sessions(params).await,
         "souls_semantic_search" | "semantic_search" => handlers::system::run_semantic_search_handler(params).await,
-        "metrics" => Ok(crate::stub_not_implemented_yet(tool_name)),
-        #[cfg(feature = "llama_backend")]
+        "metrics" => handlers::observability::run_metrics(params).await,
         "intent" => handlers::system::run_intent(params).await,
-        #[cfg(not(feature = "llama_backend"))]
-        "intent" => Ok(crate::stub_not_implemented_yet(tool_name)),
-        "execute" => Ok(crate::stub_sandbox_audit_pending(tool_name)),
+        "execute" => handlers::system::run_execute(params).await,
         "shell" => handlers::system::run_souls_shell(params).await,
         "mem_create_entities" | "create_entities" => handlers::memory_graph::run_mem_create_entities(params).await,
         "mem_create_relations" | "create_relations" => handlers::memory_graph::run_mem_create_relations(params).await,

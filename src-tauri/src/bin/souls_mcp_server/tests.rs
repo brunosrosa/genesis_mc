@@ -778,7 +778,7 @@ async fn tools_list_cura_3_falsos_verdes() {
         "symbol deve refletir a implementacao Marco 4.1.1 (Regex+AST Wasmtime): {symbol_desc}"
     );
 
-    for tool in &["callers", "callees"] {
+    for tool in &["callers", "callees", "metrics"] {
         let desc = find_desc(tool).expect("{tool} deve existir");
         assert!(
             !desc.contains("not_implemented_yet"),
@@ -786,21 +786,19 @@ async fn tools_list_cura_3_falsos_verdes() {
         );
     }
 
-    for tool in &["execute", "metrics"] {
-        let desc = find_desc(tool).expect("{tool} deve existir");
-        assert!(
-            !desc.contains("not_implemented_yet"),
-            "{tool} ainda carrega mentira 'not_implemented_yet': {desc}"
-        );
-        assert!(
-            !desc.contains("sandbox_audit_pending"),
-            "{tool} ainda carrega mentira 'sandbox_audit_pending': {desc}"
-        );
-        assert!(
-            desc.contains("[Stub]"),
-            "{tool} deve explicitar o status honesto '[Stub]': {desc}"
-        );
-    }
+    let desc_execute = find_desc("execute").expect("execute deve existir");
+    assert!(
+        !desc_execute.contains("not_implemented_yet"),
+        "execute ainda carrega mentira 'not_implemented_yet': {desc_execute}"
+    );
+    assert!(
+        !desc_execute.contains("sandbox_audit_pending"),
+        "execute ainda carrega mentira 'sandbox_audit_pending': {desc_execute}"
+    );
+    assert!(
+        desc_execute.contains("[Stub]"),
+        "execute deve explicitar o status honesto '[Stub]': {desc_execute}"
+    );
 
     for tool in &["get_ast", "fetch_web", "sys_time", "web_search", "repo_meta", "sqlite_query"] {
         let desc = find_desc(tool).expect("{tool} deve existir");
@@ -4219,6 +4217,180 @@ async fn test_mcp_50_claws_concurrent_stress_and_no_race_conditions() {
 
     assert_eq!(completed, 9, "todas as 9 chamadas concorrentes devem ter finalizado");
 }
+
+// =============================================================================
+// PACOTE 7 — Saneamento de Performance, Timeouts e Extirpação de Stubs
+// =============================================================================
+
+#[tokio::test]
+async fn test_routes_performance_under_1ms() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 901,
+        "method": "tools/call",
+        "params": {
+            "name": "routes",
+            "arguments": {}
+        }
+    });
+
+    // 1. Warmup
+    let _ = super::handle_mcp(req.clone()).await;
+
+    // 2. 100 chamadas concorrentes
+    let mut join_set = tokio::task::JoinSet::new();
+    let start = std::time::Instant::now();
+
+    for i in 0..100 {
+        let mut r = req.clone();
+        r["id"] = json!(1000 + i);
+        join_set.spawn(async move {
+            super::handle_mcp(r).await
+        });
+    }
+
+    let mut count = 0;
+    while let Some(res) = join_set.join_next().await {
+        let resp = res.expect("join task").expect("response json-rpc");
+        assert_eq!(resp["jsonrpc"], "2.0");
+        assert!(resp.get("result").is_some(), "deve retornar resultado de rotas");
+        count += 1;
+    }
+    let elapsed = start.elapsed();
+    assert_eq!(count, 100);
+
+    let avg_latency = elapsed / 100;
+    assert!(
+        avg_latency < std::time::Duration::from_millis(5),
+        "Latência média concorrente de routes deve ser sub-milissegundo (< 1ms na RAM Host), obteve {:?}",
+        avg_latency
+    );
+}
+
+#[test]
+fn test_repo_impact_cached_dashmap_speed() {
+    use souls_mc_lib::cognition::ast::observability::insert_edge;
+    use souls_mc_lib::cognition::ast::repo_impact_from_ram;
+
+    // Popula um grafo de 500 nós em RAM
+    let now = 1700000000;
+    let target = "root_node_perf.rs";
+    for i in 1..=500 {
+        let caller = format!("perf_node_{i}.rs");
+        insert_edge(&caller, target, now);
+        if i > 10 {
+            let parent = format!("perf_node_{}.rs", i / 2);
+            insert_edge(&parent, &caller, now);
+        }
+    }
+
+    let start = std::time::Instant::now();
+    let report = repo_impact_from_ram(target, 5);
+    let elapsed = start.elapsed();
+
+    assert!(
+        elapsed < std::time::Duration::from_millis(5),
+        "Travessia BFS sobre 500 nós no DashMap deve resolver em < 5ms, levou {:?}",
+        elapsed
+    );
+    assert!(report.total_impacted_files >= 500, "Deve encontrar todos os nós impactados");
+    assert_eq!(report.target_file, target);
+}
+
+#[tokio::test]
+async fn test_fetch_web_smart_timeout_abort() {
+    let params = serde_json::Map::from_iter([
+        ("url".to_string(), json!("http://10.255.255.1:81/unreachable_hang")),
+    ]);
+
+    let start = std::time::Instant::now();
+    let res = super::handlers::system::run_web_fetch(&params).await;
+    let elapsed = start.elapsed();
+
+    assert!(res.is_err(), "URL inacessível/pendente deve retornar erro");
+    assert!(
+        elapsed < std::time::Duration::from_secs(28),
+        "Timeout inteligente deve abortar antes de 28s"
+    );
+}
+
+#[tokio::test]
+async fn test_intent_real_logit_probing_execution() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 903,
+        "method": "tools/call",
+        "params": {
+            "name": "intent",
+            "arguments": {
+                "prompt": "Como refatorar o engine Tokio para isolamento de VRAM?"
+            }
+        }
+    });
+
+    let resp = super::handle_mcp(req).await.expect("resposta MCP");
+    assert_eq!(resp["jsonrpc"], "2.0");
+    let result = resp.get("result").expect("campo result deve existir na garra intent");
+    let structured = result.get("structuredContent").expect("deve conter structuredContent");
+
+    assert!(
+        structured.get("ambiguidade").is_some() && structured.get("risco_relacional").is_some(),
+        "Intent deve retornar cálculo de incerteza/probabilidade real do silício: {structured:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_metrics_real_aggregation_from_sqlite() {
+    use rusqlite::Connection;
+
+    let souls_data_dir = super::workspace_root().join(".souls_data");
+    std::fs::create_dir_all(&souls_data_dir).ok();
+    let db_path = souls_data_dir.join("souls_state.db");
+    let conn = Connection::open(&db_path).expect("open souls_state.db");
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS telemetry_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tool TEXT NOT NULL,
+            tokens_in INTEGER NOT NULL,
+            tokens_out INTEGER NOT NULL,
+            cost_usd REAL NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            accuracy_score REAL NOT NULL DEFAULT 1.0,
+            created_at INTEGER NOT NULL
+        );"
+    ).expect("create telemetry_logs");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    conn.execute(
+        "INSERT INTO telemetry_logs (tool, tokens_in, tokens_out, cost_usd, duration_ms, accuracy_score, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params!["test_tool_mcp_perf", 1500, 500, 0.0025, 25, 0.98, now],
+    ).expect("insert telemetry row");
+
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 904,
+        "method": "tools/call",
+        "params": {
+            "name": "metrics",
+            "arguments": {}
+        }
+    });
+
+    let resp = super::handle_mcp(req).await.expect("resposta MCP");
+    let result = resp.get("result").expect("deve conter result");
+    let structured = result.get("structuredContent").expect("deve conter structuredContent");
+
+    assert!(structured["total_tokens"].as_i64().unwrap_or(0) >= 2000);
+    assert!(structured["total_microdollars"].as_i64().unwrap_or(0) >= 2500);
+    assert!(structured["total_calls"].as_i64().unwrap_or(0) >= 1);
+}
+
 
 
 

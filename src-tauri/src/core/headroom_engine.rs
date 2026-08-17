@@ -264,6 +264,9 @@ pub struct SoulsCcrStore {
     access_counter: AtomicU64,
 }
 
+/// Alias canônico SODA / SOULS para o CCR Store.
+pub type SodaCcrStore = SoulsCcrStore;
+
 impl SoulsCcrStore {
     pub fn new(max_ram_bytes: usize) -> Self {
         Self {

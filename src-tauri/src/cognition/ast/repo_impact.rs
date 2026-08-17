@@ -30,7 +30,7 @@
 //! 100% CPU + std. Zero CUDA/Python/Node. RTX 2060m intocada.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use thiserror::Error;
@@ -168,6 +168,53 @@ pub fn repo_impact(root: &Path, target: &Path, max_depth: u8) -> Result<ImpactRe
         max_depth_reached,
         impact_graph: ImpactGraphPayload { nodes, edges },
     })
+}
+
+/// Executa a travessia BFS de impacto exclusivamente em RAM Host (< 3ms) via DashMap do CALL_GRAPH / SYMBOL_INDEX.
+pub fn repo_impact_from_ram(target: &str, max_depth: u8) -> ImpactReport {
+    let depth = max_depth.clamp(1, MAX_DEPTH_CEILING);
+    let graph = crate::cognition::ast::observability::call_graph_global();
+
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<(String, u8)> = VecDeque::new();
+    let mut edges: Vec<ImpactEdge> = Vec::new();
+    let mut max_depth_reached: u8 = 0;
+
+    visited.insert(target.to_string());
+    queue.push_back((target.to_string(), 0));
+
+    while let Some((current, d)) = queue.pop_front() {
+        if d >= depth {
+            continue;
+        }
+        if let Some(node) = graph.get(&current) {
+            for caller in &node.callers {
+                edges.push(ImpactEdge {
+                    from: caller.clone(),
+                    to: current.clone(),
+                });
+                if visited.insert(caller.clone()) {
+                    let next_depth = d + 1;
+                    if next_depth > max_depth_reached {
+                        max_depth_reached = next_depth;
+                    }
+                    queue.push_back((caller.clone(), next_depth));
+                }
+            }
+        }
+    }
+
+    let mut nodes: Vec<String> = visited.into_iter().filter(|n| n != target).collect();
+    nodes.sort();
+    edges.sort_by(|a, b| (&a.from, &a.to).cmp(&(&b.from, &b.to)));
+    edges.dedup();
+
+    ImpactReport {
+        target_file: target.replace('\\', "/"),
+        total_impacted_files: nodes.len(),
+        max_depth_reached,
+        impact_graph: ImpactGraphPayload { nodes, edges },
+    }
 }
 
 /// Varre `root` filtrando diretórios tóxicos e extensões não-canônicas,

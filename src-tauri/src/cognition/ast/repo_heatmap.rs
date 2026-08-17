@@ -329,6 +329,51 @@ pub fn compute_repo_heatmap(
     })
 }
 
+/// Consulta atômica indexada na tabela `repo_heatmap` do SQLite sem WalkDir de disco (< 3ms).
+pub fn compute_repo_heatmap_from_db(
+    conn: &Connection,
+    now: i64,
+    lambda: f64,
+    limit: usize,
+) -> Result<HeatmapReport, HeatmapError> {
+    ensure_heatmap_table(conn)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT file_path, frecency_score, modification_count, last_modified_epoch
+             FROM repo_heatmap
+             ORDER BY frecency_score DESC, file_path ASC
+             LIMIT ?1",
+        )
+        .map_err(|e| HeatmapError::Sqlite(e.to_string()))?;
+
+    let entries_iter = stmt
+        .query_map(rusqlite::params![limit as i64], |row| {
+            Ok(HeatmapEntry {
+                file_path: row.get(0)?,
+                score: row.get(1)?,
+                modification_count: row.get(2)?,
+                last_modified_epoch: row.get(3)?,
+            })
+        })
+        .map_err(|e| HeatmapError::Sqlite(e.to_string()))?;
+
+    let mut entries: Vec<HeatmapEntry> = Vec::new();
+    for entry in entries_iter {
+        match entry {
+            Ok(e) => entries.push(e),
+            Err(err) => return Err(HeatmapError::Sqlite(err.to_string())),
+        }
+    }
+
+    let total = entries.len();
+    Ok(HeatmapReport {
+        lambda,
+        now,
+        total,
+        entries,
+    })
+}
+
 /// Retorna o epoch atual (helper para o dispatcher).
 pub fn now_epoch() -> i64 {
     SystemTime::now()
