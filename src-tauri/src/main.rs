@@ -127,6 +127,9 @@ fn main() {
                 })
                 .build(app)?;
 
+            #[cfg(target_os = "windows")]
+            spawn_global_shortcut_listener(app.handle().clone());
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -137,6 +140,42 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("erro ao rodar a aplicação tauri");
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_global_shortcut_listener(app_handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            RegisterHotKey, MOD_ALT, MOD_NOREPEAT, VK_SPACE,
+        };
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
+        use tauri::Emitter;
+
+        const HOTKEY_ID: i32 = 0x50DA; // SODA Alt+Space Hotkey ID
+        unsafe {
+            let registered = RegisterHotKey(
+                0 as _,
+                HOTKEY_ID,
+                MOD_ALT | MOD_NOREPEAT,
+                VK_SPACE as u32,
+            );
+            if registered == 0 {
+                let _ = RegisterHotKey(0 as _, HOTKEY_ID, MOD_ALT, VK_SPACE as u32);
+            }
+
+            let mut msg: MSG = std::mem::zeroed();
+            while GetMessageW(&mut msg as *mut _, 0 as _, 0, 0) > 0 {
+                if msg.message == WM_HOTKEY {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                        let _ = window.emit("toggle-spotlight", ());
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn toggle_overlay_window(app: &tauri::AppHandle) {

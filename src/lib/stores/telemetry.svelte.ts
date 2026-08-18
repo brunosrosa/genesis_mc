@@ -3,22 +3,16 @@
 // O canal binário do Tauri emite 8 bytes (u64 packed LE) a 1Hz.
 // Este store decodifica o buffer via `DataView` (zero-parse, zero-JSON)
 // e atualiza Runes (`$state`, `$derived`) sob `requestAnimationFrame`
-// para alinhamento com o refresh do monitor (60Hz/120Hz nativo).
+// para alinhamento com o refresh do monitor (60 FPS consistente).
 //
 // ## Decoupling temporal
-//
 // - Rust pulsa a 1Hz (`tokio::time::interval`).
 // - rAF pulsa a 60Hz no browser.
 // - Svelte 5 Runes faz diffing estrutural: se o u64 packed é idêntico
-//   ao tick anterior, **nenhum repaint é disparado**. Zero Layout Shift.
-//
-// ## Agnosticismo
-//
-// Totalmente agnóstico ao host. Decodifica apenas o layout do u64 packed
-// (definido em `core/hardware_watchdog::pack_state`). Não importa
-// sysinfo, NVML, nem qualquer crate de SO.
+//   ao tick anterior, nenhum repaint é disparado. Zero Layout Shift.
 
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 // ---------------------------------------------------------------------------
 // Bit-masks — DEVEM ser idênticas às constantes em `core/hardware_watchdog.rs`.
@@ -30,13 +24,20 @@ const MASK_GPU_TEMP = ((1n << 10n) - 1n) << 50n; // bits 50..59
 const MASK_FLAGS = 0xFn << 60n; // bits 60..63
 
 // Limite físico de VRAM para a flag de "PRESSAO_CRITICA" (RTX 2060m = 6GB).
-// A Runa `thermal_status` reage a este threshold.
 const VRAM_CRITICAL_MB = 5000;
+
+export interface TelemetryState {
+  vram_mb: number;
+  ram_mb: number;
+  cpu_temp: number;
+  gpu_temp: number;
+  thermal_throttle: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Runes reativas (Svelte 5).
 // ---------------------------------------------------------------------------
-export const telemetry = $state({
+export const telemetry = $state<TelemetryState>({
   vram_mb: 0,
   ram_mb: 0,
   cpu_temp: 0,
@@ -45,12 +46,15 @@ export const telemetry = $state({
 });
 
 /**
- * `$derived` que classifica o estado térmico de forma calma (sem cores
- * vermelhas piscando). Reativo a `telemetry.vram_mb` automaticamente.
- *
- * Svelte 5 não permite exportar `$derived` diretamente; expomos um
- * getter (função) que devolve o valor atual — os consumidores chamam
- * `thermal_status()` em qualquer local reativo.
+ * Função utilitária estrita para sanitização de proxy (ADR-005).
+ * Remove completamente a casca de Proxy das Runes antes de qualquer repasse ao Rust.
+ */
+export function snapshot_telemetry(): TelemetryState {
+  return $state.snapshot(telemetry);
+}
+
+/**
+ * Classifica o estado térmico reativamente sem spinners.
  */
 export function thermal_status(): "PRESSAO_CRITICA" | "OCIOSO" {
   return telemetry.vram_mb > VRAM_CRITICAL_MB
@@ -61,17 +65,8 @@ export function thermal_status(): "PRESSAO_CRITICA" | "OCIOSO" {
 // ---------------------------------------------------------------------------
 // Decoder binário puro (DataView + BigInt — zero JSON).
 // ---------------------------------------------------------------------------
-
-/**
- * Decodifica um `ArrayBuffer` de 8 bytes (u64 LE) para o objeto
- * `telemetry` global. Mutação direta nas Runes — Svelte 5 detecta via
- * Proxy e dispara o diffing estrutural automático.
- */
 export function decode_payload(arrayBuffer: ArrayBuffer): void {
-  if (arrayBuffer.byteLength < 8) {
-    // Buffer truncado: ignorar (não alocar erro na UI).
-    return;
-  }
+  if (arrayBuffer.byteLength < 8) return;
 
   const view = new DataView(arrayBuffer);
   const state = view.getBigUint64(0, true /* little-endian */);
@@ -83,7 +78,6 @@ export function decode_payload(arrayBuffer: ArrayBuffer): void {
   const gpu = Number((state & MASK_GPU_TEMP) >> 50n) * 0.5;
   const flags = Number((state & MASK_FLAGS) >> 60n);
 
-  // Svelte 5 Runes detecta a mutação e só repinta o que mudou.
   telemetry.vram_mb = vram;
   telemetry.ram_mb = ram;
   telemetry.cpu_temp = cpu;
@@ -91,25 +85,29 @@ export function decode_payload(arrayBuffer: ArrayBuffer): void {
   telemetry.thermal_throttle = (flags & 0b0001) !== 0;
 }
 
-// ---------------------------------------------------------------------------
-// Bridge: conecta o canal Tauri ao decoder + rAF throttle.
-// ---------------------------------------------------------------------------
-
 /**
- * Cria um `Channel<Uint8Array>` do Tauri, invoca o comando
- * `start_watchdog_stream` e desce os ticks binários para o decoder
- * com rAF-throttle.
- *
- * Idempotente: chamar mais de uma vez cria múltiplos canais (o Tauri
- * já dedup por janela; comportamento documentado).
+ * Atualiza o estado da telemetria diretamente a partir de payload descompactado.
  */
+export function update_unpacked_state(state: Partial<TelemetryState>): void {
+  if (state.vram_mb !== undefined) telemetry.vram_mb = state.vram_mb;
+  if (state.ram_mb !== undefined) telemetry.ram_mb = state.ram_mb;
+  if (state.cpu_temp !== undefined) telemetry.cpu_temp = state.cpu_temp;
+  if (state.gpu_temp !== undefined) telemetry.gpu_temp = state.gpu_temp;
+  if (state.thermal_throttle !== undefined) telemetry.thermal_throttle = state.thermal_throttle;
+}
+
+// ---------------------------------------------------------------------------
+// Bridge: Conecta canal Tauri Zero-Copy e evento 'hardware-telemetry' via rAF
+// ---------------------------------------------------------------------------
 export async function bind_channel_to_runes(): Promise<() => void> {
   const channel = new Channel<Uint8Array>();
   let pendingBuffer: ArrayBuffer | null = null;
+  let pendingState: Partial<TelemetryState> | null = null;
   let rafId: number | null = null;
   let cancelled = false;
+  let unlistenEvent: UnlistenFn | null = null;
 
-  // rAF loop: drena o último buffer pendente (1 por frame) e atualiza Runes.
+  // rAF loop: Micro-batching a 60 FPS
   const tick = (): void => {
     if (cancelled) return;
     if (pendingBuffer !== null) {
@@ -117,28 +115,44 @@ export async function bind_channel_to_runes(): Promise<() => void> {
       pendingBuffer = null;
       decode_payload(buf);
     }
+    if (pendingState !== null) {
+      const st = pendingState;
+      pendingState = null;
+      update_unpacked_state(st);
+    }
     rafId = requestAnimationFrame(tick);
   };
   rafId = requestAnimationFrame(tick);
 
-  // Wire do canal: cada `onmessage` (do Tauri) deposita o buffer
-  // mais recente — a rAF drena no próximo frame.
+  // Wire do canal binário 1Hz (u64 LE packed)
   channel.onmessage = (bytes: Uint8Array) => {
-    // Copia para ArrayBuffer (o Tauri entrega Uint8Array; o decoder
-    // aceita ambos via DataView).
     pendingBuffer = bytes.buffer.slice(
       bytes.byteOffset,
       bytes.byteOffset + bytes.byteLength
     ) as ArrayBuffer;
   };
 
-  await invoke("start_watchdog_stream", { channel });
+  try {
+    await invoke("start_watchdog_stream", { channel });
+  } catch {
+    // Fallback gracioso se start_watchdog_stream não estiver disponível
+  }
 
-  // Cleanup: cancela rAF + fecha canal.
+  // Assinatura do canal de eventos 'hardware-telemetry'
+  try {
+    unlistenEvent = await listen<Partial<TelemetryState>>("hardware-telemetry", (event) => {
+      pendingState = event.payload;
+    });
+  } catch {
+    // Fallback gracioso em ambiente web standalone
+  }
+
+  // Cleanup: cancela rAF + desinscreve listeners
   return () => {
     cancelled = true;
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
     }
+    unlistenEvent?.();
   };
 }

@@ -1,19 +1,18 @@
 <script lang="ts">
   // SOULS MC — SODA Canvas v0.1: AppShell (Arquitetura Geométrica de 5 Camadas)
   //
-  // Camada 0: Substrate (Tauri Window Shell)
-  // Camada 1: Governor Rail (Sidebar w-16)
-  // Camada 2: Telemetry HUD (Topbar)
+  // Camada 0: Substrate (Tauri Window Shell / Acrylic Frameless)
+  // Camada 1: Governor Rail (Sidebar w-16 / 64px)
+  // Camada 2: Telemetry HUD (Topbar ECG 60 FPS rAF)
   // Camada 3: Active Canvas (Telemetry / Socratic / Inbox)
-  // Camada 4: Ephemeral Layer (Spotlight Zen)
-  // Camada 5: Terminal Drawer (libghostty-vt Stdio Reader)
+  // Camada 4: Ephemeral Layer (Spotlight Zen Conversacional)
+  // Camada 5: Terminal Drawer (libghostty-vt Stdio Reader com GPU Transform)
 
   import { onMount } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import GovernorRail, { type ActiveCanvasView } from "$lib/components/GovernorRail.svelte";
   import TelemetryHUD from "$lib/components/TelemetryHUD.svelte";
-  import TelemetryDashboard from "$lib/components/TelemetryDashboard.svelte";
-  import SocraticExplorer from "$lib/components/SocraticExplorer.svelte";
-  import AgentInbox from "$lib/components/AgentInbox.svelte";
+  import ActiveCanvas from "$lib/components/ActiveCanvas.svelte";
   import SpotlightZen from "$lib/components/SpotlightZen.svelte";
   import TerminalDrawer from "$lib/components/TerminalDrawer.svelte";
 
@@ -27,10 +26,11 @@
 
   let cleanupTelemetry: (() => void) | null = null;
   let cleanupBlast: (() => void) | null = null;
+  let unlistenSpotlight: (() => void) | null = null;
 
   function handleKeyDown(e: KeyboardEvent) {
-    // Atalho global Alt+Space
-    if (e.altKey && e.code === "Space") {
+    // Atalho global / local Alt+Space
+    if (e.altKey && (e.code === "Space" || e.key === " ")) {
       e.preventDefault();
       isSpotlightOpen = !isSpotlightOpen;
     }
@@ -49,12 +49,21 @@
     void (async () => {
       cleanupTelemetry = await bind_channel_to_runes();
       cleanupBlast = await listen_for_blast_radius();
+
+      try {
+        unlistenSpotlight = await listen("toggle-spotlight", () => {
+          isSpotlightOpen = true;
+        });
+      } catch {
+        // Fallback em ambiente dev sem backend ativo
+      }
     })();
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       cleanupTelemetry?.();
       cleanupBlast?.();
+      unlistenSpotlight?.();
     };
   });
 
@@ -71,12 +80,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
   <link
     rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
   />
 </svelte:head>
 
-<!-- Camada 0: Substrate Shell -->
-<div class="relative w-screen h-screen overflow-hidden flex bg-black text-[oklch(0.985_0_0)] font-sans select-none">
+<!-- Camada 0: Substrate Shell (Frameless, Acrylic Black, Zero-VDOM) -->
+<div class="relative w-screen h-screen overflow-hidden flex bg-[oklch(0%_0_0)] text-[oklch(0.985_0_0)] font-sans select-none rounded-none">
   <!-- Camada 1: Governor Rail -->
   <GovernorRail
     {currentView}
@@ -94,20 +103,11 @@
     />
 
     <!-- Camada 3: Active Canvas -->
-    <main class="flex-1 flex overflow-hidden relative">
-      {#if currentView === "telemetry"}
-        <TelemetryDashboard />
-      {:else if currentView === "socratic"}
-        <SocraticExplorer
-          initialPrompt={socraticPrompt}
-          onCloseSession={() => { socraticPrompt = null; }}
-        />
-      {:else if currentView === "inbox"}
-        <div class="flex-1 p-8 overflow-y-auto">
-          <AgentInbox />
-        </div>
-      {/if}
-    </main>
+    <ActiveCanvas
+      {currentView}
+      {socraticPrompt}
+      onCloseSocratic={() => { socraticPrompt = null; }}
+    />
   </div>
 
   <!-- Camada 4: Ephemeral Layer (Spotlight Zen) -->
@@ -117,7 +117,7 @@
     onExpandToSocratic={handleExpandToSocratic}
   />
 
-  <!-- Camada 5: Bottom Drawer (Terminal Logs) -->
+  <!-- Camada 5: Bottom Drawer (Terminal Logs com Ocultação Virtual) -->
   <TerminalDrawer
     isOpen={isTerminalOpen}
     onClose={() => { isTerminalOpen = false; }}
