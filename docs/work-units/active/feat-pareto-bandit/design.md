@@ -1,11 +1,11 @@
-# Design Document — Feat: SODA Arena, Telemetria Real e Roteamento ParetoBandit
+# Design Document — Feat: SOULS Arena, Telemetria Real e Roteamento ParetoBandit
 
-## 1. Contexto e Objetivos (ADR-001, ADR-010, ADR-027, ADR-043, ADR-046)
+## 1. Contexto e Objetivos (ADR-001, ADR-010, ADR-027, ADR-041, ADR-043, ADR-046)
 
 O **Pacote 6: O Rito de Passagem** estabelece a ponte empírica e física entre o profiling de hardware/modelos locais e o roteador econômico-cognitivo **ParetoBandit**.
 
 Proibido terminantemente o uso de *mocks* ou simulações matemáticas em produção:
-1. **SODA Arena (`soda_arena_cli`)**: Profiling empírico de modelos GGUF locais via `LlamaCppEngine`/`EphemeralInferEngine`, medindo TTFT (*Time to First Token*) e TPOT (*Time Per Output Token*) em microssegundos no metal.
+1. **SOULS Arena (`souls_arena_cli`)**: Profiling empírico de modelos GGUF locais via `LlamaCppEngine`/`EphemeralInferEngine`, medindo TTFT (*Time to First Token*) e TPOT (*Time Per Output Token*) em microssegundos no metal.
 2. **FrankenSQLite (`souls_state.db` -> `telemetry_logs`)**: Persistência atômica das medições de benchmark com timestamp UNIX.
 3. **ParetoBandit Real (`pareto_bandit.rs`)**: Roteamento baseado na função de utilidade real:
    $$U_t(a \mid x) = q_t(a \mid x) - \lambda_t \cdot c(a) - \beta \cdot l_t(a)$$
@@ -20,7 +20,7 @@ Proibido terminantemente o uso de *mocks* ou simulações matemáticas em produ�
 
 ```mermaid
 flowchart TD
-    subgraph SODA_ARENA [SODA Arena Engine & CLI]
+    subgraph SOULS_ARENA [SOULS Arena Engine & CLI]
         A[Início Benchmark Arena] --> B[Carrega GGUFs Locais Tier 0 / Tier 1]
         B --> C[Executa Inferência Estruturada]
         C --> D[Mede TTFT e TPOT em µs]
@@ -51,5 +51,5 @@ flowchart TD
 ## 3. Padrão Orchestrator-Worker & Agnosticismo de Hardware
 
 - **Agnosticismo de Hardware**: O motor de arena e o roteador operam sob abstrações de traits (`EphemeralInferEngine`, `SystemTopology`), preparados para transmutação para Metal/Vulkan/NPU sem amarras hardcoded à RTX 2060m. A RTX 2060m funciona como piso de validação de gravidade (6GB VRAM, PCIe Gen3x16).
-- **Isolamento de Stdio (ADR-003)**: O binário `soda_arena_cli` e o servidor MCP comunicam-se via IPC seguro e canais MPSC, sem poluição de stdout.
+- **Isolamento de Stdio (ADR-003)**: O binário `souls_arena_cli` e o servidor MCP comunicam-se via IPC seguro e canais MPSC, sem poluição de stdout.
 - **Fail-Soft e Resiliência**: Fallback atômico para heurísticas locais caso a base SQLite não possua histórico suficiente para determinado modelo.

@@ -9,9 +9,9 @@ use walkdir::WalkDir;
 use crate::core::engine_trait::{EngineCascade, EngineSupportLevel, TopologyFeatures, FileFormat, AttentionType, RopeScalingType};
 
 /// Profundidade máxima rígida de navegação (Marco 4.10.1 ETAPA 2).
-/// Limite de 4 níveis previne recursão acidental em árvores de modelo
+/// Limite de 5 níveis previne recursão acidental em árvores de modelo
 /// profundamente aninhadas e mantém a varredura O(n) sobre modelos reais.
-pub const MAX_MODEL_WALK_DEPTH: usize = 4;
+pub const MAX_MODEL_WALK_DEPTH: usize = 5;
 
 /// Iterator seguro para varredura de diretórios de modelos.
 ///
@@ -890,6 +890,51 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN deactivated_at INTEGER DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN deactivation_reason TEXT DEFAULT NULL", []);
 
+    // SOULS ARENA CLI — Extensão de métricas e capacidades para o ParetoBandit
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN score_json_tools REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN score_code_ast REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN score_reasoning REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN score_vision_vqa REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN has_mmproj_sidecar INTEGER DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN mmproj_file_path TEXT DEFAULT NULL", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN mtp_acceptance_rate REAL DEFAULT 0.0", []);
+    let _ = conn.execute("ALTER TABLE model_registry ADD COLUMN vram_cold_load_ms INTEGER DEFAULT 0", []);
+
+    // View FinOps canonical para o roteador ParetoBandit
+    let _ = conn.execute_batch(
+        "DROP VIEW IF EXISTS vw_finops_routing;
+         CREATE VIEW vw_finops_routing AS
+         SELECT 
+            file_path,
+            model_name,
+            family,
+            parameters,
+            context_length,
+            quantization,
+            capabilities,
+            file_size_bytes,
+            is_active,
+            tier1_passed,
+            ttft_ms,
+            tpot_ms,
+            e3_score,
+            score_json_tools,
+            score_code_ast,
+            score_reasoning,
+            score_vision_vqa,
+            has_mmproj_sidecar,
+            mmproj_file_path,
+            mtp_acceptance_rate,
+            vram_cold_load_ms,
+            last_seen
+         FROM model_registry
+         WHERE is_active = 1
+         ORDER BY 
+            tier1_passed DESC,
+            e3_score DESC,
+            file_size_bytes DESC;"
+    );
+
     // Criação da tabela de telemetria da arena se não existir
     conn.execute(
         "CREATE TABLE IF NOT EXISTS arena_telemetry (
@@ -908,6 +953,58 @@ pub fn init_model_registry_db(db_path: &Path) -> Result<Connection, String> {
     .map_err(|e| format!("Falha ao criar tabela arena_telemetry: {e}"))?;
 
     Ok(conn)
+}
+
+/// Localiza o arquivo visual projector (mmproj) associado ao modelo no mesmo diretório
+pub fn find_mmproj_for_model(model_path: &Path) -> Option<PathBuf> {
+    if let Some(parent) = model_path.parent() {
+        if let Ok(entries) = fs::read_dir(parent) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let fn_lower = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+                    if fn_lower.contains("mmproj") && fn_lower.ends_with(".gguf") {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Atualiza as pontuações especializadas por trilha e métricas de sidecars no SQLite SSOT
+pub fn update_specialized_scores(
+    conn: &Connection,
+    file_path: &str,
+    score_json: f64,
+    score_code: f64,
+    score_reasoning: f64,
+    score_vision: f64,
+    mtp_rate: f64,
+    cold_load_ms: u64,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "UPDATE model_registry 
+         SET score_json_tools = ?1,
+             score_code_ast = ?2,
+             score_reasoning = ?3,
+             score_vision_vqa = ?4,
+             mtp_acceptance_rate = ?5,
+             vram_cold_load_ms = ?6,
+             last_seen = DATETIME('now')
+         WHERE file_path = ?7",
+        params![
+            score_json,
+            score_code,
+            score_reasoning,
+            score_vision,
+            mtp_rate,
+            cold_load_ms as i64,
+            file_path,
+        ],
+    )?;
+    Ok(())
 }
 
 /// Helper para categorizar a função do arquivo GGUF
@@ -1701,26 +1798,25 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = temp_dir.path();
 
-        // Marco 4.10.1 — ETAPA 2: max_depth=4 (não 5).
-        // Profundidade 4: root / d1 / d2 / d3 / model_l4.gguf
-        let l4_dir = root.join("d1").join("d2").join("d3");
-        std::fs::create_dir_all(&l4_dir).unwrap();
-        std::fs::write(l4_dir.join("model_l4.gguf"), b"GGUF").unwrap();
-
-        // Profundidade 5 (acima de max_depth 4): root / d1 / d2 / d3 / d4 / model_l5.gguf
-        let l5_dir = l4_dir.join("d4");
+        // Profundidade 5 (dentro de max_depth 5): root / d1 / d2 / d3 / d4 / model_l5.gguf
+        let l5_dir = root.join("d1").join("d2").join("d3").join("d4");
         std::fs::create_dir_all(&l5_dir).unwrap();
         std::fs::write(l5_dir.join("model_l5.gguf"), b"GGUF").unwrap();
 
+        // Profundidade 6 (acima de max_depth 5): root / d1 / d2 / d3 / d4 / d5 / model_l6.gguf
+        let l6_dir = l5_dir.join("d5");
+        std::fs::create_dir_all(&l6_dir).unwrap();
+        std::fs::write(l6_dir.join("model_l6.gguf"), b"GGUF").unwrap();
+
         let models = collect_local_models(root);
         assert!(
-            models.iter().any(|p| p.file_name().unwrap() == "model_l4.gguf"),
-            "model_l4.gguf (depth=4) deve ser encontrado, modelos: {:?}",
+            models.iter().any(|p| p.file_name().unwrap() == "model_l5.gguf"),
+            "model_l5.gguf (depth=5) deve ser encontrado, modelos: {:?}",
             models
         );
         assert!(
-            !models.iter().any(|p| p.file_name().unwrap() == "model_l5.gguf"),
-            "model_l5.gguf (depth=5) NAO deve ser encontrado com max_depth=4"
+            !models.iter().any(|p| p.file_name().unwrap() == "model_l6.gguf"),
+            "model_l6.gguf (depth=6) NAO deve ser encontrado com max_depth=5"
         );
     }
 

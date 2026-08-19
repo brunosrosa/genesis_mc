@@ -1,12 +1,12 @@
-# Task Breakdown — Feat: SODA Arena, Telemetria Real e Roteamento ParetoBandit
+# Task Breakdown — Feat: SOULS Arena, Telemetria Real e Roteamento ParetoBandit
 
 ## Marcos e Definition of Done (DoD)
 
-### Tarefa 1: SODA Arena Engine & CLI (`src-tauri/src/bin/soda_arena_cli.rs`)
+### Tarefa 1: SOULS Arena Engine & CLI (`src-tauri/src/bin/souls_arena_cli.rs`)
 - [x] Implementar o motor de profiling e stress-test de inferência local.
 - [x] Invocar `EphemeralInferEngine`/`LlamaCppEngine` com medição precisa em microssegundos de TTFT e TPOT.
 - [x] Gravar registros empíricos na tabela `telemetry_logs` do `souls_state.db` com timestamp UNIX.
-- [x] Configurar entrada no `Cargo.toml` para o binário `soda_arena_cli`.
+- [x] Configurar entrada no `Cargo.toml` para o binário `souls_arena_cli`.
 - **DoD**: Executável compila sem warnings e persiste dados reais na tabela SQLite.
 
 ### Tarefa 2: ParetoBandit Router Real (`src-tauri/src/finops/pareto_bandit.rs`)
