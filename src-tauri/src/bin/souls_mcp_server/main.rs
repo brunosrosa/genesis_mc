@@ -249,13 +249,14 @@ pub struct RepoDriftCandidate {
 
 pub fn start_reactive_drift_checker() {
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(300));
+        let mut interval = tokio::time::interval(Duration::from_secs(souls_mc_lib::core::drift_sentinel::DRIFT_INTERVAL_SECS));
         loop {
             interval.tick().await;
 
-            if !souls_mc_lib::telemetry::is_internet_active().await {
+            if !souls_mc_lib::core::drift_sentinel::check_internet_udp().await {
                 continue;
             }
+
 
             let souls_data_dir = workspace_root().join(".souls_data");
             let db_path = souls_data_dir.join("souls_state.db");

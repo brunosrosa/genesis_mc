@@ -1546,3 +1546,34 @@ pub fn compress_cmd_logs(raw: &str) -> String {
     }
 }
 
+pub async fn run_souls_summon_tool(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
+    let args = extract_arguments(params);
+    let tool_name = args
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Parâmetro 'tool_name' obrigatório para souls_summon_tool".to_string(),
+            data: None,
+        })?;
+
+    let router = souls_mc_lib::core::late_binding_router::LateBindingRouter::global();
+    let res = router.summon(tool_name).map_err(|e| RpcError {
+        code: -32602,
+        message: e,
+        data: None,
+    })?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!("Garra '{}' summonada com sucesso e vinculada dinamicamente ao roteador MCP.", tool_name)
+        }],
+        "structuredContent": res,
+        "isError": false,
+    }))
+}
+
+

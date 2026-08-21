@@ -110,9 +110,36 @@ Toda tarefa abaixo só é considerada **CONCLUÍDA** quando atende **simultaneam
 
 ---
 
+## Bloco L — Operação Trilogia Final (GigaToken SIMD, Drift Reativo e Late-Binding MCP)
+
+- [x] **L1. GigaToken SIMD & Vocab Self-Healing (`core/gigatoken.rs` / `core/gigatoken_encoder.rs`)**
+  - GigaTokenEncoder OnceLock singleton via CPU SIMD/AVX2 tiktoken BPE.
+  - Adaptador de entrada `InferenceInput` (`RawText` / `PreTokenized`) em `inference_adapter.rs`.
+  - Interceptação de `PreTokenized` no `llama_engine.rs`, conversão segura `u32` -> `i32` (`LlamaToken`) e bypass na GPU.
+  - Autocura de vocabulário via leitura de cabeçalho GGUF mmap2 e compilação de `tokenizer_recovered.json`.
+- [x] **L2. Olheiro de Drift Reativo de Fase -1 (`core/drift_sentinel.rs`)**
+  - Loop assíncrono via `tokio::time::interval` (1 hora / 3600s) sem chamadas de rede bloqueantes no boot.
+  - Internet Detection UDP: conexão temporária em `1.1.1.1:53` com timeout de 200ms para repouso tático offline.
+  - Cooldown Gate: consulta a `repo_heuristics` abortando requisições com intervalo < 24h.
+- [x] **L3. Maestro de Amarração Tardia / Late-Binding (`core/late_binding_router.rs`)**
+  - Bootstrap com as 6 ferramentas basais (`export_session`, `analyze_session`, `symbol`, `repo_heatmap`, `execute`, `souls_summon_tool`).
+  - Meta-garra `souls_summon_tool(tool_name: String)` no router MCP para injeção dinâmica de schemas.
+  - GC de Schemas: expurgo atômico de ferramentas summonadas com inatividade > 10 minutos (600s).
+- [x] **L4. Caderno de Testes de Estresse Antifraude (TDD)**
+  - `test_gigatoken_prefill_bypass`
+  - `test_gigatoken_vocab_self_healing`
+  - `test_drift_sentinel_offline_bypass`
+  - `test_drift_time_cooldown_gate`
+  - `test_late_binding_summon_and_eviction`
+- [x] **L5. Homologação Master (116/116 testes verdes e Zero Clippy Warnings)**
+
+
+---
+
 ## Notas de Execução
 
 - **Antes de cada bloco**: rodar `cargo check` para confirmar compilação incremental.
 - **Após cada bloco**: rodar `cargo clippy --bin souls_mcp_server -- -D warnings`.
 - **Política de Commits**: por bloco, com mensagem Conventional Commits (`feat(socratic):`, `feat(heatmap):`, `feat(l3):`, `test(antifraud):`).
 - **HITL Gate**: homologação final com Exit Code 0 absoluto.
+

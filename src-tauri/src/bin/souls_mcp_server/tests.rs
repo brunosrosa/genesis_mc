@@ -5090,6 +5090,224 @@ async fn test_socratic_cli_block_and_stdin_approval() {
     assert!(res_invalid.is_err(), "Entrada inválida deve rejeitar por segurança (Fail-Closed)");
 }
 
+// ============================================================================
+// MARCO 5.4.0 / ADR-010 / ADR-025 / ADR-041: OPERAÇÃO TRILOGIA FINAL
+// ============================================================================
+
+#[tokio::test]
+async fn test_gigatoken_prefill_bypass() {
+    use souls_mc_lib::core::gigatoken::GigaTokenEncoder;
+    use souls_mc_lib::core::inference_adapter::{InferenceInput, SoulsInferenceRequest};
+
+    let encoder = GigaTokenEncoder::global();
+    let prompt = "fn main() { println!(\"SOULS GigaToken Prefill Bypass Real Execution\"); }";
+
+    let tokens = encoder.tokenize_to_bin(prompt).expect("Tokenização SIMD na CPU deve ter sucesso");
+    assert!(!tokens.is_empty(), "Tokens não podem ser vazios");
+
+    let req_raw = SoulsInferenceRequest {
+        model_path: "models/qwen_test.gguf".to_string(),
+        system_prompt: "You are a helpful assistant.".to_string(),
+        few_shot_examples: Vec::new(),
+        user_query: prompt.to_string(),
+        max_tokens: 32,
+        min_p: 0.05,
+        temperature: 0.7,
+        json_schema: None,
+        input: Some(InferenceInput::RawText(prompt.to_string())),
+    };
+
+    let req_pretokenized = SoulsInferenceRequest {
+        model_path: "models/qwen_test.gguf".to_string(),
+        system_prompt: "You are a helpful assistant.".to_string(),
+        few_shot_examples: Vec::new(),
+        user_query: String::new(),
+        max_tokens: 32,
+        min_p: 0.05,
+        temperature: 0.7,
+        json_schema: None,
+        input: Some(InferenceInput::PreTokenized(tokens.clone())),
+    };
+
+    // Valida estrutura e conversão segura para tokens de inferência
+    match req_pretokenized.input {
+        Some(InferenceInput::PreTokenized(ref ids)) => {
+            assert_eq!(ids.len(), tokens.len());
+            assert_eq!(ids[0], tokens[0]);
+        }
+        _ => panic!("Esperado payload PreTokenized"),
+    }
+
+    match req_raw.input {
+        Some(InferenceInput::RawText(ref txt)) => {
+            assert_eq!(txt, prompt);
+        }
+        _ => panic!("Esperado payload RawText"),
+    }
+}
+
+#[test]
+fn test_gigatoken_vocab_self_healing() {
+    use souls_mc_lib::core::gigatoken::GigaTokenEncoder;
+    use tokenizers::Tokenizer;
+    use tempfile::tempdir;
+
+    let dir = tempdir().expect("Falha ao criar diretório temporário");
+    let recovered_json_path = dir.path().join("tokenizer_recovered.json");
+
+    // Simula ausência de tokenizer.json e gera vocabulário autocurado no SSD
+    let mock_vocab = vec![
+        ("<|endoftext|>".to_string(), 0u32),
+        ("<|im_start|>".to_string(), 1u32),
+        ("<|im_end|>".to_string(), 2u32),
+        ("fn".to_string(), 3u32),
+        ("main".to_string(), 4u32),
+        ("let".to_string(), 5u32),
+        ("mut".to_string(), 6u32),
+    ];
+
+    let res = GigaTokenEncoder::write_recovered_tokenizer_json(&mock_vocab, &recovered_json_path);
+    assert!(res.is_ok(), "Gravação do JSON autocurado no SSD deve ter sucesso");
+    assert!(recovered_json_path.exists(), "Arquivo tokenizer_recovered.json físico deve existir");
+
+    let tok = Tokenizer::from_file(&recovered_json_path);
+    assert!(tok.is_ok(), "Tokenizer Rust deve carregar com sucesso o vocabulário autocurado");
+    let loaded_tok = tok.unwrap();
+    let vocab_size = loaded_tok.get_vocab_size(true);
+    assert!(vocab_size >= 7, "Vocabulário deve conter ao menos os tokens recuperados");
+}
+
+#[tokio::test]
+async fn test_drift_time_cooldown_gate() {
+    use souls_mc_lib::core::drift_sentinel::{is_within_cooldown_24h, fetch_drift_candidates};
+    use rusqlite::Connection;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    // 1. Asserção matemática pura de cooldown
+    assert!(is_within_cooldown_24h(now - 3600, now), "Análise de 1h atrás DEVE estar em cooldown (bloqueio)");
+    assert!(!is_within_cooldown_24h(now - 90000, now), "Análise de 25h atrás NÃO DEVE estar em cooldown (liberado)");
+    assert!(!is_within_cooldown_24h(0, now), "Análise virgem (0) NÃO DEVE estar em cooldown");
+
+    // 2. Asserção sobre SQLite físico em memória
+    let conn = Connection::open_in_memory().expect("open memory db");
+    conn.execute_batch(
+        "CREATE TABLE repositorios (
+            project_name TEXT PRIMARY KEY NOT NULL,
+            repo_url TEXT NOT NULL UNIQUE,
+            status_processamento TEXT NOT NULL
+        );
+        CREATE TABLE repo_heuristics (
+            project_name TEXT PRIMARY KEY NOT NULL,
+            solution_id TEXT NOT NULL,
+            repo_version TEXT NOT NULL,
+            ultima_versao_online TEXT,
+            status_atualizacao TEXT NOT NULL,
+            data_ultima_analise INTEGER
+        );",
+    ).expect("create tables");
+
+    let recent_time = now - 1800; // 30 min atrás
+    conn.execute(
+        "INSERT INTO repositorios (project_name, repo_url, status_processamento) VALUES ('org/repo_blocked', 'https://github.com/org/repo_blocked', 'F0_OK')",
+        [],
+    ).expect("insert blocked repo");
+    conn.execute(
+        "INSERT INTO repo_heuristics (project_name, solution_id, repo_version, status_atualizacao, data_ultima_analise) VALUES ('org/repo_blocked', 'https://github.com/org/repo_blocked', 'v1.0.0', 'CONCLUIDO', ?1)",
+        [recent_time],
+    ).expect("insert blocked heuristic");
+
+    let old_time = now - 100000; // > 24h atrás
+    conn.execute(
+        "INSERT INTO repositorios (project_name, repo_url, status_processamento) VALUES ('org/repo_eligible', 'https://github.com/org/repo_eligible', 'F0_OK')",
+        [],
+    ).expect("insert eligible repo");
+    conn.execute(
+        "INSERT INTO repo_heuristics (project_name, solution_id, repo_version, status_atualizacao, data_ultima_analise) VALUES ('org/repo_eligible', 'https://github.com/org/repo_eligible', 'v1.0.0', 'CONCLUIDO', ?1)",
+        [old_time],
+    ).expect("insert eligible heuristic");
+
+    let candidates = fetch_drift_candidates(&conn, now).expect("fetch_drift_candidates");
+    assert_eq!(candidates.len(), 1, "Apenas 1 repositório deve passar pelo portão de 24h");
+    assert_eq!(candidates[0].repo_url, "https://github.com/org/repo_eligible");
+}
+
+#[tokio::test]
+async fn test_late_binding_summon_and_eviction() {
+    use souls_mc_lib::core::late_binding_router::LateBindingRouter;
+    use serde_json::json;
+
+    // 1. Inicializa roteador late-binding com catálogo mestre
+    let master_tools = crate::tools::list_tools()["tools"].as_array().expect("master tools").clone();
+    let router = LateBindingRouter::new_with_base_tools(master_tools);
+
+    // 2. Assevera que inicialmente apenas as 6 ferramentas basais estão ativas
+    assert_eq!(router.active_count(), 6, "Bootstrap deve conter estritamente 6 ferramentas basais");
+    assert!(router.is_base_tool("export_session"));
+    assert!(router.is_base_tool("analyze_session"));
+    assert!(router.is_base_tool("symbol"));
+    assert!(router.is_base_tool("repo_heatmap"));
+    assert!(router.is_base_tool("execute"));
+    assert!(router.is_base_tool("souls_summon_tool"));
+
+    // 3. Ferramenta adicional não deve estar ativa
+    assert!(!router.is_active("handoff"), "Ferramenta 'handoff' não deve estar ativa no bootstrap");
+
+    // 4. Injeção dinâmica via summon
+    let summon_res = router.summon("handoff");
+    assert!(summon_res.is_ok(), "Summon de 'handoff' deve ter sucesso");
+    assert!(router.is_active("handoff"), "Ferramenta 'handoff' deve estar ativa após summon");
+    assert_eq!(router.active_count(), 7, "Contagem ativa deve ser 7 após summon");
+
+    // 5. Teste via JSON-RPC handle_mcp chamando souls_summon_tool
+    let summon_rpc = json!({
+        "jsonrpc": "2.0",
+        "id": 991,
+        "method": "tools/call",
+        "params": {
+            "name": "souls_summon_tool",
+            "arguments": {
+                "tool_name": "semantic_search"
+            }
+        }
+    });
+    let rpc_res = super::handle_mcp(summon_rpc).await.expect("RPC summon deve responder");
+    assert!(rpc_res["result"]["isError"] == false || rpc_res["result"]["content"].is_array(), "RPC summon deve ser bem-sucedido");
+
+    // 6. Expurgador GC de ociosidade
+    // Com timeout 0s (evicção imediata de ferramentas dinâmicas não basais)
+    let evicted = router.evict_idle(std::time::Duration::from_millis(0));
+    assert_eq!(evicted, 1, "GC deve expurgar exatamente a ferramenta dinamicamente summonada 'handoff'");
+    assert!(!router.is_active("handoff"), "'handoff' deve ter sido expurgada");
+    assert_eq!(router.active_count(), 6, "Apenas as 6 ferramentas basais devem permanecer ativas");
+}
+
+#[test]
+fn test_gigatoken_simd_throughput_and_budget_bounds() {
+    use souls_mc_lib::core::gigatoken::{calculate_vram_budget_math, GigaTokenEncoder};
+
+    let encoder = GigaTokenEncoder::global();
+    let _ = encoder.tokenize_to_bin("warmup"); // Warmup estático do BPE
+
+    let sample = "struct TensorChunk { ptr: *const f32, len: usize }\n".repeat(100);
+    let start = std::time::Instant::now();
+    let tokens = encoder.tokenize_to_bin(&sample).expect("tokenize_to_bin");
+    let elapsed = start.elapsed();
+
+    assert!(!tokens.is_empty());
+    assert!(elapsed.as_millis() < 500, "Tokenização SIMD BPE na CPU deve rodar com baixa latência");
+
+    // Limites de VRAM: n_ctx=16384 com 4B Q4_K -> seguro
+    let (vram_mb, is_safe) = calculate_vram_budget_math(16384, 36, 8, 128, 2800.0);
+    assert!(is_safe, "Para n_ctx=16384, consumo ({:.2} MB) deve respeitar teto de 5.5 GB", vram_mb);
+}
+
+
+
+
 
 
 

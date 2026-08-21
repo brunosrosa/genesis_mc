@@ -649,6 +649,18 @@ pub fn list_tools() -> Value {
                 }
             },
             {
+                "name": "souls_summon_tool",
+                "description": "Vincula dinamicamente esquemas JSON-RPC de garras adicionais no roteador MCP sob demanda.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tool_name": { "type": "string", "description": "Nome da garra MCP a ser summonada dinamicamente." }
+                    },
+                    "required": ["tool_name"],
+                    "additionalProperties": false
+                }
+            },
+            {
                 "name": "symbol",
                 "description": "Resolve localizacao fisica (file:line:col) via WalkDir+Regex+AST Wasmtime. (souls_symbol)",
                 "inputSchema": {

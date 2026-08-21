@@ -94,6 +94,7 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
             data: None,
         })?;
     let tool_name = normalize_tool_name(raw_tool_name);
+    souls_mc_lib::core::late_binding_router::LateBindingRouter::global().touch(tool_name);
 
     if let Some(arguments) = params.get("arguments").and_then(Value::as_object) {
         if let Some(delay_ms) = arguments.get("_test_delay_ms").and_then(Value::as_u64) {
@@ -170,9 +171,11 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         "thinking" => handlers::thinking::run_thinking(params).await,
         "heatmap" => handlers::observability::run_heatmap(params).await,
         "repo_heatmap" => handlers::observability::run_repo_heatmap(params).await,
+        "souls_summon_tool" | "summon_tool" | "summon" => handlers::system::run_souls_summon_tool(params).await,
         "repo_impact" | "impact" => handlers::observability::run_repo_impact(params).await,
         "routes" => handlers::observability::run_routes(params).await,
         "feedback" => handlers::observability::run_feedback(params).await,
+
         other => Err(RpcError {
             code: -32601,
             message: "Ferramenta MCP desconhecida".to_string(),
