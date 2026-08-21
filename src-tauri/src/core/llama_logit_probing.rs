@@ -271,6 +271,22 @@ impl LlamaLogitProber {
         Ok(logits)
     }
 
+    /// Executa o forward pass puro sobre o prompt na CPU (AVX2) e extrai o vetor de logits do último token.
+    pub fn probe_prompt_logits(&self, prompt: &str) -> Vec<f32> {
+        let req = SoulsInferenceRequest {
+            model_path: "cpu_avx2_llama".to_string(),
+            system_prompt: String::new(),
+            few_shot_examples: Vec::new(),
+            user_query: prompt.to_string(),
+            max_tokens: 1,
+            min_p: 0.05,
+            temperature: 0.0,
+            json_schema: None,
+            input: None,
+        };
+        self.extract_last_token_raw_logits(&req).unwrap_or_default()
+    }
+
     /// Cálculo estático de KV Cache e orçamento de VRAM total em MB.
     pub fn calculate_expected_vram_footprint(
         model_size_mb: u32,

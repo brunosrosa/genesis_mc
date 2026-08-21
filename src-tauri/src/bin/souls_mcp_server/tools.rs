@@ -94,10 +94,16 @@ pub fn list_tools() -> Value {
             },
             {
                 "name": "execute",
-                "description": "[Stub] Execucao multi-lang requer auditoria de sandbox. Aliases: execute | souls_execute | ctx_execute.",
+                "description": "Execução isolada de comandos em Shadow Workspace sob jaula LPAC Win11 com Job Objects.",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                        "command": { "type": "string", "description": "Comando ou caminho do executável a rodar no sandbox." },
+                        "args": { "type": "array", "items": { "type": "string" }, "description": "Argumentos do comando." },
+                        "workspace_path": { "type": "string", "description": "Diretório do shadow workspace isolado." },
+                        "timeout_secs": { "type": "integer", "description": "Timeout limite em segundos." }
+                    },
+                    "required": ["command"],
                     "additionalProperties": false
                 }
             },

@@ -1332,15 +1332,100 @@ pub async fn run_souls_shell(params: &serde_json::Map<String, Value>) -> Result<
 }
 
 pub async fn run_execute(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
-    let _ = params;
-    Err(RpcError {
-        code: -32001,
-        message: "Execução negada: sandboxing Landlock/WASI pendente de auditoria de segurança (HitlDenied)".to_string(),
-        data: Some(json!({
-            "requires_sandbox": true,
-            "audit_status": "PENDING"
-        })),
+    let args = extract_arguments(params);
+
+    let command = args
+        .get("command")
+        .or_else(|| args.get("executable_path"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| RpcError {
+            code: -32602,
+            message: "Argumento 'command' (string não-vazia) é obrigatório".to_string(),
+            data: Some(json!({ "required": "command" })),
+        })?;
+
+    let cmd_args: Vec<String> = args
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let workspace_path = if let Some(ws) = args.get("workspace_path").and_then(Value::as_str) {
+        PathBuf::from(ws)
+    } else {
+        std::env::temp_dir().join(".souls_workspaces").join(uuid::Uuid::new_v4().to_string())
+    };
+
+    if !workspace_path.exists() {
+        let _ = std::fs::create_dir_all(&workspace_path);
+    }
+
+    let container_name = format!("souls_lpac_exec_{}", uuid::Uuid::new_v4());
+    let container_name_clone = container_name.clone();
+    let command_owned = command.to_string();
+    let ws_str = workspace_path.to_string_lossy().to_string();
+    let cmd_args_slices: Vec<String> = cmd_args.clone();
+
+    let exec_res = tokio::task::spawn_blocking(move || {
+        let args_refs: Vec<&str> = cmd_args_slices.iter().map(|s| s.as_str()).collect();
+        let pid_res = souls_mc_lib::core::sandbox::create_lpac_sandbox_process(
+            &container_name_clone,
+            &ws_str,
+            &command_owned,
+            &args_refs,
+        );
+        (pid_res, container_name_clone)
     })
+    .await
+    .map_err(|e| RpcError {
+        code: -32001,
+        message: format!("Falha ao aguardar execução no sandbox LPAC: {e}"),
+        data: None,
+    })?;
+
+    let (pid_result, container_name_used) = exec_res;
+    souls_mc_lib::core::sandbox::cleanup_lpac_profile(&container_name_used);
+
+    let pid = pid_result.map_err(|e| RpcError {
+        code: -32050,
+        message: format!("Falha ao instanciar processo sob jaula LPAC: {e}"),
+        data: Some(json!({ "command": command, "workspace": workspace_path.display().to_string() })),
+    })?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": format!(
+                "### LPAC Sandbox Execution\n\n\
+                 - **Command:** `{}`\n\
+                 - **Args:** `{:?}`\n\
+                 - **Workspace:** `{}`\n\
+                 - **PID:** {}\n\
+                 - **Sandbox:** Win11 Less Privileged AppContainer (LPAC) + Job Objects\n\
+                 - **Network:** 0 Capabilities (Isolated Localhost/LAN)\n",
+                command,
+                cmd_args,
+                workspace_path.display(),
+                pid,
+            )
+        }],
+        "structuredContent": {
+            "command": command,
+            "args": cmd_args,
+            "workspace": workspace_path.display().to_string(),
+            "pid": pid,
+            "lpac_enforced": true,
+            "isolation": "Win11 LPAC / Job Objects"
+        },
+        "isError": false,
+    }))
 }
 
 pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {

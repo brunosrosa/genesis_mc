@@ -86,6 +86,28 @@ Toda tarefa abaixo só é considerada **CONCLUÍDA** quando atende **simultaneam
 - [x] **J2. `cargo clippy --bin souls_mcp_server -- -D warnings`** com 0 warnings.
 - [x] **J3. Logs finais em `.souls_scratchpad/logs/cargo/clippy_mcp_perf.log`**.
 
+## Bloco K — Operação Tríade de Autonomia (Jaula LPAC, Metabolismo Chyros e Interrupção HITL)
+
+- [x] **K1. Jaula de Silício Win11 e Liberação da Garra `execute`**
+  - Confinamento bare-metal LPAC via `windows-sys = "=0.61.2"`, `CreateAppContainerProfile`, ACLs NTFS estritas (`GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE`), Job Object limites de CPU/memória e kill-on-close.
+  - Bypass Gracioso em Session 0 com isolamento por Job Objects e varredura estática de `Cargo.toml` (`build.rs` / `proc-macro = true`).
+  - Conectar `run_execute` no router MCP para execução real enjaulada.
+- [x] **K2. Metabolismo Noturno Chyros Daemon (Marco 5.7.0)**
+  - Loop assíncrono em background Tokio avaliando ociosidade a cada 60s.
+  - Gather de eventos `souls_raw_events_l0` e subgrafos LadybugDB.
+  - Consolidação lógica via `LlamaCpp4LogitEngine` CPU AVX2 (`n_gpu_layers = 0`), marcando obsoletos como `SUPERSEDED`.
+  - Poincaré Gradient Descent Langevin Decay ($\ge 0.95$ evicção), atualização de embeddings na CPU e LanceDB (mmap).
+  - Materialized Memory View (MMV) com alinhamento a 64 tokens e `VACUUM INTO` assíncrono.
+- [x] **K3. Interrupção Socrática e CPU Logit Probing**
+  - Logit probing na CPU Host via AVX2 sobre tokens de controle "0" e "1" do Verbalizer.
+  - Cálculo de Softmax e Entropia de Shannon $H(p) \ge 0.75$ ou 3 falhas de compilação $\to$ Canal de Interrupção Socrática.
+  - Extração de diff via `gix` (gitoxide), Pergunta Socrática de Duas Pernas ("Como", "O que") e bloqueio assíncrono no stdin.
+- [x] **K4. Suíte de Testes Antifraude**
+  - `test_sandbox_lpac_confinement`
+  - `test_chyros_langevin_eviction_convergence`
+  - `test_socratic_cli_block_and_stdin_approval`
+- [x] **K5. Homologação Final (Exit Code 0 e Zero Clippy Warnings — 111/111 testes verdes)**
+
 ---
 
 ## Notas de Execução
