@@ -91,14 +91,17 @@ pub async fn run_repo_heatmap(params: &serde_json::Map<String, Value>) -> Result
         data: None,
     })?;
 
-    // Consulta atômica indexada (< 3ms); se banco novo/vazio, seed via scan completo
-    let report = match repo_heatmap::compute_repo_heatmap_from_db(&conn, now, lambda, limit) {
+    // Consulta atômica indexada (< 3ms) via decaimento exponencial de Langevin no log de acessos; se banco novo/vazio, fallback
+    let report = match repo_heatmap::compute_repo_heatmap_langevin(&conn, now, lambda, limit) {
         Ok(rep) if rep.total > 0 => rep,
-        _ => repo_heatmap::compute_repo_heatmap(&repo_root, &mut conn, now, lambda, limit).map_err(|e| RpcError {
-            code: -32000,
-            message: format!("Falha ao escanear repo_heatmap: {e}"),
-            data: None,
-        })?,
+        _ => match repo_heatmap::compute_repo_heatmap_from_db(&conn, now, lambda, limit) {
+            Ok(rep) if rep.total > 0 => rep,
+            _ => repo_heatmap::compute_repo_heatmap(&repo_root, &mut conn, now, lambda, limit).map_err(|e| RpcError {
+                code: -32000,
+                message: format!("Falha ao escanear repo_heatmap: {e}"),
+                data: None,
+            })?,
+        },
     };
 
     Ok(json!({

@@ -224,3 +224,42 @@ impl RrfFusionEngine {
         results
     }
 }
+
+/// Vetorização SIMD AVX2 de cálculo recíproco RRF para lotes de ranks.
+/// RRF_Score = 1.0 / (k + rank)
+#[cfg(target_arch = "x86_64")]
+pub fn compute_rrf_batch_avx2(ranks: &[f32], k: f32, out_scores: &mut [f32]) {
+    if is_x86_feature_detected!("avx2") {
+        unsafe {
+            use std::arch::x86_64::*;
+            let len = ranks.len();
+            let mut i = 0;
+            let k_vec = _mm256_set1_ps(k);
+            let ones = _mm256_set1_ps(1.0);
+
+            while i + 8 <= len {
+                let r_vec = _mm256_loadu_ps(ranks.as_ptr().add(i));
+                let denom = _mm256_add_ps(k_vec, r_vec);
+                let score_vec = _mm256_div_ps(ones, denom);
+                _mm256_storeu_ps(out_scores.as_mut_ptr().add(i), score_vec);
+                i += 8;
+            }
+
+            while i < len {
+                out_scores[i] = 1.0 / (k + ranks[i]);
+                i += 1;
+            }
+        }
+    } else {
+        for (i, &r) in ranks.iter().enumerate() {
+            out_scores[i] = 1.0 / (k + r);
+        }
+    }
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+pub fn compute_rrf_batch_avx2(ranks: &[f32], k: f32, out_scores: &mut [f32]) {
+    for (i, &r) in ranks.iter().enumerate() {
+        out_scores[i] = 1.0 / (k + r);
+    }
+}

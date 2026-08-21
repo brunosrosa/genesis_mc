@@ -131,6 +131,26 @@ impl SocraticWriteHandle {
     }
 }
 
+impl crate::cognition::thinking::persistence::SocraticPersist for SocraticWriteHandle {
+    fn persist_thought(&self, thought: SocraticThought) -> Result<(), String> {
+        self.try_send(SocraticOp::UpsertThoughtFire { thought })
+            .map_err(|_| "SocraticWriteWorker saturado: canal MPSC rejeitou pensamento".to_string())
+    }
+
+    fn persist_session(&self, session_id: &str, metadata: &str) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or_default();
+        self.try_send(SocraticOp::UpsertSessionFire {
+            session_id: session_id.to_string(),
+            created_at: now,
+            metadata: metadata.to_string(),
+        })
+        .map_err(|_| "SocraticWriteWorker saturado: canal MPSC rejeitou sessão".to_string())
+    }
+}
+
 /// Constrói o canal MPSC e devolve o `SocraticWriteHandle` + dispara
 /// o worker dedicado.
 ///

@@ -1380,49 +1380,23 @@ pub fn format_dir_nodes(nodes: &[TreeNode], prefix: &str) -> String {
 }
 
 pub fn execute_wasm_outline_parser(code: &str) -> Result<String, RpcError> {
-    let mut config = wasmtime::Config::new();
-    config.wasm_component_model(true);
-    let engine = wasmtime::Engine::new(&config).map_err(|e| RpcError {
-        code: -32020,
-        message: format!("Falha ao inicializar Wasmtime engine: {e}"),
-        data: None,
-    })?;
+    let arena = bumpalo::Bump::new();
+    let res = souls_mc_lib::harvester::ast_parser::WasmtimeTreeSitterEngine::parse_and_extract(
+        &arena,
+        code,
+        "rust",
+        "inline.rs",
+        None,
+    );
 
-    let wat = r#"
-        (module
-            (memory (export "memory") 1)
-            (func (export "parse_rust_outline") (param i32 i32) (result i32)
-                i32.const 0
-            )
-        )
-    "#;
-
-    let module = wasmtime::Module::new(&engine, wat).map_err(|e| RpcError {
-        code: -32021,
-        message: format!("Falha ao compilar módulo WASM do outline parser: {e}"),
-        data: None,
-    })?;
-
-    let mut store = wasmtime::Store::new(&engine, ());
-    let instance = wasmtime::Instance::new(&mut store, &module, &[]).map_err(|e| RpcError {
-        code: -32022,
-        message: format!("Falha ao instanciar módulo WASM: {e}"),
-        data: None,
-    })?;
-
-    let parse_fn = instance
-        .get_typed_func::<(i32, i32), i32>(&mut store, "parse_rust_outline")
-        .map_err(|e| RpcError {
-            code: -32023,
-            message: format!("Função 'parse_rust_outline' não encontrada no WASM: {e}"),
-            data: None,
-        })?;
-
-    let _res = parse_fn.call(&mut store, (0, code.len() as i32)).map_err(|err| {
-        map_wasm_trap_to_rpc(&err)
-    })?;
-
-    Ok(extract_rust_outline_signatures(code))
+    match res {
+        Ok((signatures, _)) => Ok(signatures.join("\n")),
+        Err(err) => Err(RpcError {
+            code: -32022,
+            message: format!("WASM sandbox trap interceptado com sucesso (fail-closed): {err}"),
+            data: Some(serde_json::json!({ "error": err.to_string() })),
+        }),
+    }
 }
 
 pub fn extract_rust_outline_signatures(code: &str) -> String {

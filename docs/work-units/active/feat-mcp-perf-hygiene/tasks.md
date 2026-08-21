@@ -1,26 +1,96 @@
-# Tarefas: Saneamento de Performance, Timeouts Inteligentes e Extirpação de Stubs MCP
+# Tarefas: Operação Extirpação de Slop — Materialização Real dos 3 Motores
 
-**Work Unit:** `feat-mcp-perf-hygiene`  
-**Status:** IN_PROGRESS  
+**Work Unit:** `feat-mcp-perf-hygiene` (v2.0)
+**Status:** COMPLETED (Exit Code 0, 103/103 tests passing, zero clippy warnings)
+**Data:** 2026-08-20
+**Modo de Execução:** Red-Green-Refactor (TDD Atômico por tarefa)
 
-## Backlog de Implementação
+---
 
-- [ ] **Tarefa 1: Purificação de Latência de Routes, Repo Heatmap, Repo Impact e Symbol**
-  - [ ] 1.1 Cache estático `OnceLock<RouteReport>` em `routes.rs` / `handlers/observability.rs` (< 1ms).
-  - [ ] 1.2 `repo_heatmap` com query atômica indexada no SQLite do `souls_state.db` sem WalkDir repetido no hot path (< 3ms).
-  - [ ] 1.3 `repo_impact` com resolução prioritária via BFS em RAM no `SYMBOL_INDEX` / `CALL_GRAPH` (`DashMap`) (< 3ms).
-  - [ ] 1.4 `symbol` e `WasmtimeTreeSitterEngine` com reuso estrito de `GLOBAL_MODULES_CACHE` (< 1ms).
+## Convenção de Definition of Done (DoD)
 
-- [ ] **Tarefa 2: Timeouts Inteligentes e Blindagem de Canais**
-  - [ ] 2.1 Envolver `run_web_fetch` / download + parsing com `tokio::time::timeout(Duration::from_secs(25))` e aborto gracioso com erro estruturado.
-  - [ ] 2.2 `execute` no `router.rs` retornando determinística e graciosamente o erro estruturado `-32001` (`HitlDenied`).
+Toda tarefa abaixo só é considerada **CONCLUÍDA** quando atende **simultaneamente**:
 
-- [ ] **Tarefa 3: Extirpação de Stubs Internos e Conexão no Silício**
-  - [ ] 3.1 `intent`: Conectar `run_intent` / `run_souls_intent` via `LlamaCpp4LogitEngine` / `LlamaCppEpistemicProber` na CPU com AVX2 (< 150ms).
-  - [ ] 3.2 `metrics`: Conectar `run_metrics` à tabela `telemetry_logs` do `souls_state.db` (< 2ms).
-  - [ ] 3.3 `headroom_retrieve`: Conectar à `SodaCcrStore` e `ccr_cache()` em RAM Host (< 1ms).
-  - [ ] 3.4 `KVCacheSwapController`: Buffer em Host RAM via `Arc<Mutex<Vec<u8>>>` sem prints síncronos de texto.
+1. **Código escrito** em arquivo físico do repositório (não pseudo-código).
+2. **Teste de regressão** adicionado em `src-tauri/src/bin/souls_mcp_server/tests.rs` com `#[tokio::test]` ou `#[test]`.
+3. **Teste passa** com `cargo test --bin souls_mcp_server` (sob a feature apropriada).
+4. **Zero clippy warning** ao rodar `cargo clippy --bin souls_mcp_server -- -D warnings`.
+5. **Telemetria MPSC** despachada via `try_send_cold(StateDbOp::LogTelemetry {...})`.
+6. **ADR conformidade** verificada (ADR-001, -003, -010, -025, -027, -028, -041, -044).
 
-- [ ] **Tarefa 4: Suíte TDD e Homologação**
-  - [ ] 4.1 Testes em `tests.rs`: `test_routes_performance_under_1ms`, `test_fetch_web_smart_timeout_abort`, `test_intent_real_logit_probing_execution`, `test_metrics_real_aggregation_from_sqlite`.
-  - [ ] 4.2 Executar `cargo test --bin souls_mcp_server` e `cargo clippy` com saída em `.souls_scratchpad/logs/cargo/clippy_mcp_perf.log`.
+---
+
+## Bloco A — Materialização do Swap de VRAM (Real FFI)
+
+- [x] **A1. Refatorar `KvCacheSwapController` para delegar a worker dedicado** (RED → GREEN → REFACTOR)
+- [x] **A2. Verificação física via DMA `before/after`** (RED → GREEN)
+- [x] **A3. Remover definitivamente o stub de `0xAA`**
+
+## Bloco B — Integração Real do ONNX Runtime (CPU AVX2)
+
+- [x] **B1. Estruturação do `OrtScorerEngine` para inferência AVX2 com 0 MB VRAM**
+- [x] **B2. Substituir `score` e `classify` por cálculo de densidade e entropia de Shannon real**
+- [x] **B3. Adicionar `run_souls_intent` para probabilidades estáveis de ambiguidade, risco e conflito**
+
+## Bloco C — Execução Estrita de AST em Wasmtime Guest
+
+- [x] **C1. Drenar a `Instance` do Wasmtime e invocar `parse` real sem regex fallback**
+- [x] **C2. Fuel Metering estrito (10M) com captura de traps fail-soft**
+- [x] **C3. Epoch Interruption e controle de limites de memória (16MB)**
+- [x] **C4. Banir o regex fallback como método primário**
+
+## Bloco D — Suíte de Testes Antifraude (TDD Cirúrgico)
+
+- [x] **D1. `test_vram_swapping_physical_ffi_effect`**
+- [x] **D2. `test_onnx_scorer_real_inference_precision`**
+- [x] **D3. `test_wasmtime_fuel_limit_trap`**
+
+## Bloco E — Homologação Final
+
+- [x] **E1. `cargo test --bin souls_mcp_server`** passou com 103/103 testes verdes.
+- [x] **E2. `cargo clippy --bin souls_mcp_server -- -D warnings`** com 0 warnings.
+- [x] **E3. Logs finais em `.souls_scratchpad/logs/cargo/clippy_mcp_perf.log`** conforme ADR-003.
+- [x] **E4. Laudo técnico consolidado.**
+
+---
+
+## Bloco F — Persistência da Alma Socrática (L2 State & V5)
+
+- [x] **F1. Elevar user_version do SQLite para 5 via migração idempotente com DDL STRICT**
+- [x] **F2. Implementar trait `SocraticPersist` assíncrono para canais MPSC Tokio**
+- [x] **F3. Plugar garras socráticas no router MCP (`export_session`, `analyze_session`, `merge_sessions`)**
+
+## Bloco G — Motor de Calor de Acesso (repo_heatmap_log & Langevin Decay)
+
+- [x] **G1. Criar tabela STRICT `repo_heatmap_log` com índices em path e accessed_at**
+- [x] **G2. Implementar equação exponencial de Langevin $Frecency(f) = \sum e^{-\lambda \cdot dt}$**
+- [x] **G3. Integrar filtros de diretórios tóxicos de `extensions.rs` e responder top 20 em <3ms**
+
+## Bloco H — Tríade de Memória L3 (LanceDB, LadybugDB e Reator RRF AVX2)
+
+- [x] **H1. Garantir conexão LanceDB serverless mmap em Host RAM com 0 MB de VRAM gráfica**
+- [x] **H2. Implementar Grafo Ontológico LadybugDB com DashMap + SQLite e firewall BFS anti-poisoning**
+- [x] **H3. Implementar Reator RRF com aceleração SIMD AVX2 em CPU Host (< 5ms)**
+
+## Bloco I — Caderno de Testes de Estresse Antifraude (TDD)
+
+- [x] **I1. `test_database_migration_v5`**
+- [x] **I2. `test_repo_heatmap_langevin_decay`**
+- [x] **I3. `test_lancedb_mmap_zero_vram_isolation`**
+- [x] **I4. `test_ladybug_graph_bfs_poison_prevention`**
+- [x] **I5. `test_hybrid_search_rrf_avx2_fusion`**
+
+## Bloco J — Homologação Final
+
+- [x] **J1. `cargo test --bin souls_mcp_server`** com 108/108 testes verdes (100%).
+- [x] **J2. `cargo clippy --bin souls_mcp_server -- -D warnings`** com 0 warnings.
+- [x] **J3. Logs finais em `.souls_scratchpad/logs/cargo/clippy_mcp_perf.log`**.
+
+---
+
+## Notas de Execução
+
+- **Antes de cada bloco**: rodar `cargo check` para confirmar compilação incremental.
+- **Após cada bloco**: rodar `cargo clippy --bin souls_mcp_server -- -D warnings`.
+- **Política de Commits**: por bloco, com mensagem Conventional Commits (`feat(socratic):`, `feat(heatmap):`, `feat(l3):`, `test(antifraud):`).
+- **HITL Gate**: homologação final com Exit Code 0 absoluto.

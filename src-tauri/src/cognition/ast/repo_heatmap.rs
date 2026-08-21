@@ -131,10 +131,22 @@ pub fn calculate_frecency(count: i64, mtime: i64, now: i64, lambda: f64) -> f64 
     raw.min(MAX_SCORE)
 }
 
-/// Garante que a tabela `repo_heatmap` existe no SQLite (idempotente).
+/// Calcula o score de decaimento de Langevin para múltiplos eventos de acesso discretos:
+/// Frecency(f) = min(Sum(e^(-lambda * dt)), MAX_SCORE)
+#[inline]
+pub fn compute_langevin_decay(access_epochs: &[i64], now: i64, lambda: f64) -> f64 {
+    let mut sum: f64 = 0.0;
+    for &epoch in access_epochs {
+        let dt = (now - epoch).max(0) as f64;
+        sum += (-lambda * dt).exp();
+    }
+    sum.min(MAX_SCORE)
+}
+
+/// Garante que as tabelas `repo_heatmap` e `repo_heatmap_log` existem no SQLite (idempotente).
 ///
 /// **Lei da Idempotencia:** pode ser chamada multiplas vezes sem
-/// efeito colateral. NUNCA derruba a tabela existente.
+/// efeito colateral. NUNCA derruba as tabelas existentes.
 ///
 /// **STRICT mode:** garante blindagem contra coercao silenciosa
 /// de tipos (Marco 3.9 Estado V5).
@@ -146,12 +158,36 @@ pub fn ensure_heatmap_table(conn: &Connection) -> Result<(), HeatmapError> {
              last_modified_epoch INTEGER NOT NULL,
              modification_count INTEGER NOT NULL
          ) STRICT;
-         CREATE INDEX IF NOT EXISTS idx_heatmap_score ON repo_heatmap(frecency_score DESC);",
+         CREATE INDEX IF NOT EXISTS idx_heatmap_score ON repo_heatmap(frecency_score DESC);
+
+         CREATE TABLE IF NOT EXISTS repo_heatmap_log (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             file_path TEXT NOT NULL,
+             access_type TEXT NOT NULL,
+             accessed_at INTEGER NOT NULL
+         ) STRICT;
+         CREATE INDEX IF NOT EXISTS idx_heatmap_log_path ON repo_heatmap_log(file_path);
+         CREATE INDEX IF NOT EXISTS idx_heatmap_log_time ON repo_heatmap_log(accessed_at);",
     )
     .map_err(|e| HeatmapError::Sqlite(e.to_string()))
 }
 
-/// Hook fire-and-forget: UPSERT silencioso em `repo_heatmap`.
+/// Registra um acesso discreto na tabela `repo_heatmap_log`.
+pub fn record_access_log(
+    conn: &Connection,
+    file_path: &str,
+    access_type: &str,
+    accessed_at: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO repo_heatmap_log (file_path, access_type, accessed_at)
+         VALUES (?1, ?2, ?3)",
+        rusqlite::params![file_path, access_type, accessed_at],
+    )?;
+    Ok(())
+}
+
+/// Hook fire-and-forget: UPSERT silencioso em `repo_heatmap` e inserção em `repo_heatmap_log`.
 ///
 /// **Lei R15-R17:** NUNCA retorna erro. Filtra por extensao canonica.
 /// Recalcula score com `lambda = DEFAULT_LAMBDA`.
@@ -159,18 +195,9 @@ pub fn ensure_heatmap_table(conn: &Connection) -> Result<(), HeatmapError> {
 /// **Lei R18 (hotfix Marco 4.1.2-ac):** o `frecency_score` e
 /// calculado em Rust com o `modification_count` acumulado (via
 /// read-modify-write serializado por transacao `IMMEDIATE`).
-/// Isso garante:
-/// 1. **Atomicidade:** o write lock exclusivo e adquirido ANTES
-///    do SELECT, eliminando race entre threads concorrentes.
-/// 2. **Acumulo:** o score reflete o count FINAL apos o incremento.
-/// 3. **Coerencia com a formula canonica:** `MIN(count * exp(-lambda * dt), MAX_SCORE)`.
 ///
 /// **Uso:** invocado pelo dispatcher apos chamadas bem-sucedidas de
 /// `read`, `edit`, `symbol`, `repo_impact`, `repo_ast`, `multi_read`.
-///
-/// **Comportamento de erro:** silencioso (log warn, nao propaga).
-/// Caller NUNCA recebe erro deste hook — alinhado ao SSOT
-/// `try_log_file_access` ja presente no dispatcher.
 pub fn record_access(conn: &mut Connection, file_path: &str, now: i64) {
     // R17: filtro por extensao canonica. Arquivos temporarios e
     // efemeros NAO poluem o heatmap.
@@ -182,9 +209,9 @@ pub fn record_access(conn: &mut Connection, file_path: &str, now: i64) {
         return;
     }
 
+    let _ = record_access_log(conn, file_path, "read", now);
+
     // R18: UPSERT com read-modify-write em transacao IMMEDIATE.
-    // dt = now - mtime = now - now = 0, entao exp(-lambda * 0) = 1.0
-    // e score = count (saturado em MAX_SCORE).
     if let Err(e) = upsert_heatmap_row(conn, file_path, now, now, DEFAULT_LAMBDA) {
         // Hook fire-and-forget: log warn mas NAO propaga.
         eprintln!("[repo_heatmap::record_access] WARN: {e} (path={file_path})");
@@ -366,6 +393,90 @@ pub fn compute_repo_heatmap_from_db(
     }
 
     let total = entries.len();
+    Ok(HeatmapReport {
+        lambda,
+        now,
+        total,
+        entries,
+    })
+}
+
+/// Consulta o log histórico em `repo_heatmap_log`, calcula o decaimento exponencial de Langevin:
+/// Frecency(f) = Sum(e^(-lambda * dt))
+/// Filtrando diretórios tóxicos e retornando os 20 arquivos mais quentes do workspace em < 3ms.
+pub fn compute_repo_heatmap_langevin(
+    conn: &Connection,
+    now: i64,
+    lambda: f64,
+    limit: usize,
+) -> Result<HeatmapReport, HeatmapError> {
+    ensure_heatmap_table(conn)?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT file_path, accessed_at
+             FROM repo_heatmap_log
+             ORDER BY accessed_at DESC",
+        )
+        .map_err(|e| HeatmapError::Sqlite(e.to_string()))?;
+
+    let mut path_accesses: std::collections::HashMap<String, Vec<i64>> = std::collections::HashMap::new();
+
+    let rows = stmt
+        .query_map([], |row| {
+            let path: String = row.get(0)?;
+            let epoch: i64 = row.get(1)?;
+            Ok((path, epoch))
+        })
+        .map_err(|e| HeatmapError::Sqlite(e.to_string()))?;
+
+    for r in rows.flatten() {
+        let (file_path, epoch) = r;
+        // Filtra exclusões de diretórios tóxicos e extensões não produtivas
+        let is_excluded = file_path.split(['/', '\\']).any(is_excluded_dir);
+        if is_excluded {
+            continue;
+        }
+        let ext = Path::new(&file_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        if !is_source_ext(ext) {
+            continue;
+        }
+
+        path_accesses.entry(file_path).or_default().push(epoch);
+    }
+
+    if path_accesses.is_empty() {
+        return compute_repo_heatmap_from_db(conn, now, lambda, limit);
+    }
+
+    let mut entries: Vec<HeatmapEntry> = path_accesses
+        .into_iter()
+        .map(|(path, epochs)| {
+            let score = compute_langevin_decay(&epochs, now, lambda);
+            let last_epoch = epochs.iter().cloned().max().unwrap_or(now);
+            let count = epochs.len() as i64;
+            HeatmapEntry {
+                file_path: path,
+                score,
+                modification_count: count,
+                last_modified_epoch: last_epoch,
+            }
+        })
+        .collect();
+
+    entries.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.file_path.cmp(&b.file_path))
+    });
+
+    entries.truncate(limit);
+    let total = entries.len();
+
     Ok(HeatmapReport {
         lambda,
         now,

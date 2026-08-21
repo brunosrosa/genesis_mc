@@ -78,3 +78,12 @@ pub struct SocraticThought {
     /// Epoch seconds (Unix timestamp).
     pub created_at: i64,
 }
+
+/// Trait de escrita assíncrona socrática (Marco 3.9 / Marco VI).
+/// Envia dados de pensamento e sessão de forma não-bloqueante via MPSC sem travar a interface de chat.
+pub trait SocraticPersist: Send + Sync {
+    /// Persiste um pensamento de forma assíncrona/não-bloqueante.
+    fn persist_thought(&self, thought: SocraticThought) -> Result<(), String>;
+    /// Persiste uma sessão de forma assíncrona/não-bloqueante.
+    fn persist_session(&self, session_id: &str, metadata: &str) -> Result<(), String>;
+}

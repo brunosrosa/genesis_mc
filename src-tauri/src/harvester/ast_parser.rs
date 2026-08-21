@@ -80,6 +80,14 @@ pub enum AstParserError {
         reason: String,
     },
 
+    #[error("WASM runtime failure em '{file}' ({language}): {trap_kind} - {detail}")]
+    WasmRuntimeFailure {
+        file: String,
+        language: String,
+        trap_kind: String,
+        detail: String,
+    },
+
     #[error("Nenhum símbolo estrutural foi extraído do repositório '{path}'")]
     NoStructuralSymbols { path: String },
 
@@ -1042,6 +1050,16 @@ pub fn load_wasm_grammar_module(
 pub struct WasmtimeTreeSitterEngine;
 
 impl WasmtimeTreeSitterEngine {
+    /// Executa a travessia sintática estritamente dentro do runtime Wasmtime.
+    ///
+    /// Contrato com o guest WASM (outline_parser.wasm ou tree_sitter_*.wasm):
+    ///   - Exporta uma função `parse(src_ptr: i32, src_len: i32, out_ptr: i32, out_cap: i32) -> i32`
+    ///   - Lê `src_len` bytes de `src_ptr`
+    ///   - Escreve em `out_ptr` (capacidade `out_cap`) as assinaturas separadas por `\n`
+    ///   - Retorna o número de bytes efetivamente escritos; valores negativos indicam erro.
+    ///
+    /// **Fail-Closed:** qualquer desvio (módulo sem `parse`, fuel esgotado, OOM) retorna
+    /// `AstParserError::WasmRuntimeFailure` SEM recorrer a fallback de regex/string match.
     pub fn parse_and_extract<'arena>(
         arena: &'arena bumpalo::Bump,
         source: &str,
@@ -1050,154 +1068,175 @@ impl WasmtimeTreeSitterEngine {
         custom_wasm_path: Option<&Path>,
     ) -> Result<(Vec<&'arena str>, usize), AstParserError> {
         let engine = get_wasm_engine();
-        let module_res = if let Some(p) = custom_wasm_path {
-            match load_wasm_grammar_module(language, Some(p)) {
-                Ok(m) => Ok(m),
-                Err(reason) => {
-                    return Err(AstParserError::ParseFailure {
-                        file: relative_path.to_string(),
-                        language: language.to_string(),
-                        reason,
-                    });
-                }
+        let module = load_wasm_grammar_module(language, custom_wasm_path).map_err(|reason| {
+            AstParserError::ParseFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                reason,
             }
-        } else {
-            load_wasm_grammar_module(language, None)
+        })?;
+
+        let store_data = ParserStoreData {
+            limiter: WasmMemoryLimiter::new(16 * 1024 * 1024),
         };
+        let mut store = wasmtime::Store::new(engine, store_data);
+        store.limiter(|d| &mut d.limiter);
+        // Fuel metering compulsório: 10.000.000 unidades impedem loops infinitos
+        // e travamento do event loop do Tokio.
+        store.set_fuel(10_000_000).map_err(|e| AstParserError::WasmRuntimeFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            trap_kind: "FuelInitFailure".into(),
+            detail: format!("store.set_fuel falhou: {e}"),
+        })?;
+        // Epoch interruption como rede de segurança (10 ms) para garantir
+        // fail-soft mesmo se o guest manipular o fuel meter internamente.
+        store.set_epoch_deadline(1);
+        let epoch_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let epoch_count_for_callback = std::sync::Arc::clone(&epoch_count);
+        store.epoch_deadline_callback(move |_| {
+            epoch_count_for_callback.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(wasmtime::UpdateDeadline::Yield(u64::MAX))
+        });
 
-        if let Ok(module) = module_res {
-            let store_data = ParserStoreData {
-                limiter: WasmMemoryLimiter::new(16 * 1024 * 1024),
-            };
-            let mut store = wasmtime::Store::new(engine, store_data);
-            store.limiter(|d| &mut d.limiter);
-            store.set_fuel(10_000_000).ok();
-
-            let instance_res = wasmtime::Instance::new(&mut store, &module, &[]);
-            if let Err(e) = instance_res {
-                let consumed = store.get_fuel().unwrap_or(10_000_000);
-                let trap = classify_trap(&e, consumed);
-                warn!(file = %relative_path, language = %language, error = %trap, "WASM execution trap");
+        let instance = wasmtime::Instance::new(&mut store, &module, &[]).map_err(|e| {
+            let consumed = store.get_fuel().unwrap_or(0);
+            let trap = classify_trap(&e, consumed);
+            AstParserError::WasmRuntimeFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                trap_kind: format!("{trap:?}").split(' ').next().unwrap_or("Instance").to_string(),
+                detail: format!("{trap}"),
             }
+        })?;
+
+        // Vincula a função `parse` exportada. A ausência é falha dura, não fallback.
+        let parse_fn = instance
+            .get_typed_func::<(i32, i32, i32, i32), i32>(&mut store, "parse")
+            .map_err(|e| AstParserError::WasmRuntimeFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                trap_kind: "MissingParseExport".into(),
+                detail: format!("guest WASM nao exporta funcao `parse(src_ptr, src_len, out_ptr, out_cap) -> i32`: {e}"),
+            })?;
+
+        // Reserva memória linear mínima para input + output. Se insuficiente,
+        // pede crescimento limitado pelo WasmMemoryLimiter (16MB).
+        let memory = instance
+            .get_memory(&mut store, "memory")
+            .ok_or_else(|| AstParserError::WasmRuntimeFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                trap_kind: "MissingMemory".into(),
+                detail: "guest WASM nao exporta memoria linear `memory`".to_string(),
+            })?;
+
+        const HEADER_RESERVE: usize = 64; // área reservada para header/control
+        const PAGE_SIZE: usize = 65536;
+        let source_bytes = source.as_bytes();
+        let input_size = source_bytes.len();
+        let output_size = std::cmp::max(input_size * 2, 16 * 1024);
+        let total_needed = HEADER_RESERVE + input_size + output_size;
+        let min_pages = total_needed.div_ceil(PAGE_SIZE);
+        let current_pages = memory.size(&store);
+        if current_pages < min_pages as u64 {
+            let delta = min_pages as u64 - current_pages;
+            memory.grow(&mut store, delta).map_err(|e| {
+                AstParserError::WasmRuntimeFailure {
+                    file: relative_path.to_string(),
+                    language: language.to_string(),
+                    trap_kind: "MemoryGrow".into(),
+                    detail: format!("linear memory nao cresceu para {min_pages} pages: {e}"),
+                }
+            })?;
         }
 
-        // Extração estrutural limpa e indexação no SYMBOL_INDEX / CALL_GRAPH (RAM Host)
-        let mut signatures = Vec::new();
-        let rel_pbuf = PathBuf::from(relative_path);
+        // Escreve o código-fonte na memória linear do guest.
+        memory
+            .write(&mut store, HEADER_RESERVE, source_bytes)
+            .map_err(|e| AstParserError::WasmRuntimeFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                trap_kind: "MemoryWrite".into(),
+                detail: format!("falha ao copiar source para linear memory: {e}"),
+            })?;
 
-        for (line_idx, line) in source.lines().enumerate() {
+        let src_ptr = HEADER_RESERVE as i32;
+        let src_len = input_size as i32;
+        let out_ptr = (HEADER_RESERVE + input_size) as i32;
+        let out_cap = output_size as i32;
+
+        // Bump epoch antes de invocar o guest (rede de segurança contra DoS).
+        engine.increment_epoch();
+        let bytes_written = parse_fn
+            .call(&mut store, (src_ptr, src_len, out_ptr, out_cap))
+            .map_err(|e| {
+                let consumed = 10_000_000u64.saturating_sub(store.get_fuel().unwrap_or(0));
+                let trap = classify_trap(&e, consumed);
+                AstParserError::WasmRuntimeFailure {
+                    file: relative_path.to_string(),
+                    language: language.to_string(),
+                    trap_kind: format!("{trap:?}").split(' ').next().unwrap_or("Trap").to_string(),
+                    detail: format!("{trap}"),
+                }
+            })?;
+
+        if bytes_written < 0 {
+            return Err(AstParserError::WasmRuntimeFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                trap_kind: "GuestReportedError".into(),
+                detail: format!("guest retornou codigo de erro {}", bytes_written),
+            });
+        }
+
+        let mut out_buf = vec![0u8; bytes_written as usize];
+        memory
+            .read(&store, out_ptr as usize, &mut out_buf)
+            .map_err(|e| AstParserError::WasmRuntimeFailure {
+                file: relative_path.to_string(),
+                language: language.to_string(),
+                trap_kind: "MemoryRead".into(),
+                detail: format!("falha ao ler buffer de saida do guest: {e}"),
+            })?;
+
+        let out_str = std::str::from_utf8(&out_buf).map_err(|e| AstParserError::WasmRuntimeFailure {
+            file: relative_path.to_string(),
+            language: language.to_string(),
+            trap_kind: "Utf8Decode".into(),
+            detail: format!("saida do guest nao e UTF-8 valido: {e}"),
+        })?;
+
+        // Indexa as assinaturas na arena do bumpalo e propaga o resultado para o SYMBOL_INDEX.
+        let rel_pbuf = PathBuf::from(relative_path);
+        let mut signatures = Vec::new();
+        for (line_idx, line) in out_str.lines().enumerate() {
             let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with("/*") {
+            if trimmed.is_empty() {
                 continue;
             }
-
-            match language {
-                "rust" => {
-                    if trimmed.starts_with("pub struct ")
-                        || trimmed.starts_with("struct ")
-                        || trimmed.starts_with("pub enum ")
-                        || trimmed.starts_with("enum ")
-                        || trimmed.starts_with("pub trait ")
-                        || trimmed.starts_with("trait ")
-                        || trimmed.starts_with("impl ")
-                        || trimmed.starts_with("pub impl ")
-                        || trimmed.starts_with("pub type ")
-                        || trimmed.starts_with("pub const ")
-                        || trimmed.starts_with("pub mod ")
-                    {
-                        signatures.push(arena.alloc_str(trimmed) as &str);
-                        let name = trimmed.split_whitespace().nth(1).unwrap_or(trimmed).trim_end_matches('{').trim_end_matches(';');
-                        crate::cognition::ast::observability::call_graph::insert_symbol(
-                            crate::cognition::ast::observability::call_graph::SymbolEntry {
-                                qualified_name: name.to_string(),
-                                kind: crate::cognition::ast::observability::call_graph::SymbolKind::Struct,
-                                file_path: rel_pbuf.clone(),
-                                line: (line_idx + 1) as u32,
-                                column: 0,
-                            }
-                        );
-                    } else if trimmed.starts_with("pub fn ")
-                        || trimmed.starts_with("pub async fn ")
-                        || trimmed.starts_with("fn ")
-                        || trimmed.starts_with("async fn ")
-                    {
-                        let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
-                        let sig_str = trimmed[..sig_end].trim();
-                        signatures.push(arena.alloc_str(sig_str) as &str);
-                        let fn_name = sig_str.split('(').next().and_then(|s| s.split_whitespace().last()).unwrap_or(sig_str);
-                        crate::cognition::ast::observability::call_graph::insert_symbol(
-                            crate::cognition::ast::observability::call_graph::SymbolEntry {
-                                qualified_name: fn_name.to_string(),
-                                kind: crate::cognition::ast::observability::call_graph::SymbolKind::Fn,
-                                file_path: rel_pbuf.clone(),
-                                line: (line_idx + 1) as u32,
-                                column: 0,
-                            }
-                        );
-                    }
-                }
-                "python" => {
-                    if trimmed.starts_with("class ")
-                        || trimmed.starts_with("def ")
-                        || trimmed.starts_with("async def ")
-                    {
-                        let sig_end = trimmed.find(':').unwrap_or(trimmed.len());
-                        let sig_str = trimmed[..sig_end].trim();
-                        signatures.push(arena.alloc_str(sig_str) as &str);
-                        let name = sig_str.split('(').next().and_then(|s| s.split_whitespace().last()).unwrap_or(sig_str);
-                        crate::cognition::ast::observability::call_graph::insert_symbol(
-                            crate::cognition::ast::observability::call_graph::SymbolEntry {
-                                qualified_name: name.to_string(),
-                                kind: if trimmed.starts_with("class ") {
-                                    crate::cognition::ast::observability::call_graph::SymbolKind::Struct
-                                } else {
-                                    crate::cognition::ast::observability::call_graph::SymbolKind::Fn
-                                },
-                                file_path: rel_pbuf.clone(),
-                                line: (line_idx + 1) as u32,
-                                column: 0,
-                            }
-                        );
-                    }
-                }
-                "go" => {
-                    if trimmed.starts_with("type ") || trimmed.starts_with("func ") {
-                        let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
-                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
-                    }
-                }
-                "elixir" => {
-                    if trimmed.starts_with("defmodule ")
-                        || trimmed.starts_with("def ")
-                        || trimmed.starts_with("defp ")
-                        || trimmed.starts_with("defmacro ")
-                    {
-                        signatures.push(arena.alloc_str(trimmed) as &str);
-                    }
-                }
-                "cpp" | "c" | "cuda" => {
-                    if trimmed.starts_with("class ")
-                        || trimmed.starts_with("struct ")
-                        || trimmed.starts_with("namespace ")
-                        || trimmed.starts_with("template")
-                        || (trimmed.contains('(') && trimmed.ends_with('{'))
-                        || (trimmed.starts_with("__global__") || trimmed.starts_with("__device__"))
-                    {
-                        let sig_end = trimmed.find('{').unwrap_or(trimmed.len());
-                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
-                    }
-                }
-                _ => {
-                    if trimmed.starts_with("class ")
-                        || trimmed.starts_with("function ")
-                        || trimmed.starts_with("fn ")
-                        || trimmed.starts_with("def ")
-                    {
-                        let sig_end = trimmed.find('{').or_else(|| trimmed.find(':')).unwrap_or(trimmed.len());
-                        signatures.push(arena.alloc_str(trimmed[..sig_end].trim()) as &str);
-                    }
-                }
-            }
+            signatures.push(arena.alloc_str(trimmed) as &str);
+            let name = trimmed
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or(trimmed)
+                .trim_end_matches('{')
+                .trim_end_matches(';')
+                .trim_end_matches('(');
+            let kind = if trimmed.contains(" fn ") || trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ") {
+                crate::cognition::ast::observability::call_graph::SymbolKind::Fn
+            } else {
+                crate::cognition::ast::observability::call_graph::SymbolKind::Struct
+            };
+            crate::cognition::ast::observability::call_graph::insert_symbol(
+                crate::cognition::ast::observability::call_graph::SymbolEntry {
+                    qualified_name: name.to_string(),
+                    kind,
+                    file_path: rel_pbuf.clone(),
+                    line: (line_idx + 1) as u32,
+                    column: 0,
+                },
+            );
         }
 
         signatures.sort();
@@ -1552,16 +1591,16 @@ fn compact_node_text<'arena>(
 fn sanitize_outline_signatures_in<'arena>(
     arena: &'arena bumpalo::Bump,
     signatures: Vec<&'arena str>,
-    source: &str,
+    _source: &str,
     language: &str,
 ) -> Vec<&'arena str> {
     let mut sanitized = signatures
         .into_iter()
         .filter_map(|signature| sanitize_outline_signature_in(arena, signature, language))
         .collect::<Vec<_>>();
-    for imp in extract_import_signatures_in(arena, source, language) {
-        sanitized.push(imp);
-    }
+    // ADR-044: import edges agora sao contabilizados exclusivamente via
+    // `estimate_import_edges` (contador O(n) sobre o source), preservando o
+    // princípio de zero regex como método primário de parsing.
     sanitized.sort();
     sanitized.dedup();
     sanitized
@@ -1654,36 +1693,9 @@ fn compact_signature_whitespace_in<'arena>(
     arena.alloc_str(compact.trim())
 }
 
-fn extract_import_signatures_in<'arena>(
-    arena: &'arena bumpalo::Bump,
-    source: &str,
-    language: &str,
-) -> Vec<&'arena str> {
-    let patterns: &[&str] = match language {
-        "rust" => &[r"(?m)^\s*(?:pub\s+)?use\s+[^;\n]+;"],
-        "python" => &[r"(?m)^\s*(?:from\s+[^\n]+?\s+import\s+[^\n#]+|import\s+[^\n#]+)"],
-        "javascript" | "typescript" | "svelte" => &[r#"(?m)^\s*import\s+[^;\n]+(?:from\s+["'][^"']+["'])?;?"#],
-        "go" => &[r#"(?m)^\s*import\s+(?:\([\s\S]*?\)|[^\n]+)"#],
-        "java" | "kotlin" => &[r"(?m)^\s*import\s+[^\n;]+;"],
-        "c" | "cpp" => &[r#"(?m)^\s*#include\s+[<"][^>"]+[>"]"#],
-        "php" => &[r"(?m)^\s*use\s+[^\n;]+;"],
-        "ruby" => &[r#"(?m)^\s*(?:require|require_relative)\s+["'][^"']+["']"#],
-        _ => &[],
-    };
-
-    let mut imports = Vec::new();
-    for pattern in patterns {
-        let Ok(regex) = Regex::new(pattern) else {
-            continue;
-        };
-        for matched in regex.find_iter(source) {
-            if let Some(signature) = sanitize_outline_signature_in(arena, matched.as_str(), language) {
-                imports.push(signature);
-            }
-        }
-    }
-    imports
-}
+// ADR-044: `extract_import_signatures_in` removido. Import edges agora sao
+// contabilizados via `estimate_import_edges` (analise direta por bytes,
+// O(n), sem regex). Regex fica BANIDO do parsing sintático primário.
 
 // ── FUNÇÕES ORIGINAIS DE COMPATIBILIDADE (SEM ARENA) ─────────────────
 fn compact_signature_whitespace(signature: &str) -> String {
@@ -2117,7 +2129,7 @@ fn build_health_report(
         .unwrap_or("repo");
     let mut text = String::from("# Health Report\n");
     text.push_str("\nsummary: findings=0");
-    text.push_str("\nsource: native-rust multi-strategy (language-pack + targeted-tree-sitter + regex-fallback)");
+    text.push_str("\nsource: native-rust Wasmtime-gated (outline_parser.wasm guest + tree-sitter wasm grammars)");
     text.push_str("\nrepo: ");
     text.push_str(repo_name);
     text.push_str("\nparsed_files: ");
@@ -2461,32 +2473,6 @@ impl UserStore {
         assert!(architecture_map.contains("cpp/CMakeLists.txt"));
         assert!(architecture_map.contains("[zig]"));
         assert!(architecture_map.contains("zig/build.zig.zon"));
-    }
-
-    #[test]
-    fn regex_fallback_covers_target_polyglot_ecosystems() {
-        let scenarios = [
-            ("rust", "pub struct Engine;\npub async fn run() {}\n", "src/lib.rs", "rust fn run"),
-            ("python", "class Engine:\n    pass\n\ndef run():\n    pass\n", "app.py", "python def run"),
-            (
-                "typescript",
-                "export interface Engine {}\nexport const boot = async () => {}\n",
-                "src/app.ts",
-                "typescript const boot",
-            ),
-            ("cpp", "namespace demo {}\nclass Engine {};\nint run() { return 0; }\n", "src/main.cpp", "cpp fn run"),
-            ("elixir", "defmodule Demo.Engine do\n  def run, do: :ok\nend\n", "lib/demo/engine.ex", "elixir module Demo.Engine"),
-        ];
-
-        let arena = bumpalo::Bump::new();
-        for (language, source, path, _expected_fragment) in scenarios {
-            let (signatures, _) = extract_structural_signatures(&arena, source, language, path).unwrap();
-            assert!(
-                !signatures.is_empty(),
-                "assinaturas de {language} nao deveriam estar vazias; obtido: {:?}",
-                signatures
-            );
-        }
     }
 
     #[test]

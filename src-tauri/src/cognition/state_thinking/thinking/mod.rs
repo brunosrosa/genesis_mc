@@ -42,7 +42,7 @@ pub use ops::{
     migrate_v3_to_v5, upsert_socratic_session, upsert_socratic_thought, TARGET_VERSION,
     V5_SCHEMA_DDL,
 };
-pub use persistence::{BranchId, SessionId, SocraticThought, ThoughtId, ThoughtType};
+pub use persistence::{BranchId, SessionId, SocraticPersist, SocraticThought, ThoughtId, ThoughtType};
 pub use socratic_bridge::{spawn_socratic_write_worker, SocraticOp, SocraticWriteHandle};
 pub use types::{
     BranchSummary, ThoughtData, ThinkingMode, ThinkingResponse,

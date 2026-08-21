@@ -974,6 +974,7 @@ pub fn find_mmproj_for_model(model_path: &Path) -> Option<PathBuf> {
 }
 
 /// Atualiza as pontuações especializadas por trilha e métricas de sidecars no SQLite SSOT
+#[allow(clippy::too_many_arguments)]
 pub fn update_specialized_scores(
     conn: &Connection,
     file_path: &str,

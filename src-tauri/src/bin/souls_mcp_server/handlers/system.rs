@@ -375,18 +375,14 @@ pub async fn run_souls_outline(params: &serde_json::Map<String, Value>) -> Resul
         })?;
 
     let outline_res = tokio::task::spawn_blocking(move || {
-        let res = crate::execute_wasm_outline_parser(&source_code);
-        match res {
-            Ok(sig) => sig,
-            Err(_) => crate::extract_rust_outline_signatures(&source_code),
-        }
+        crate::execute_wasm_outline_parser(&source_code)
     })
     .await
     .map_err(|e| RpcError {
         code: -32021,
         message: format!("Falha ao aguardar tarefa de outline: {e}"),
         data: None,
-    })?;
+    })??;
     let signatures = outline_res;
 
     Ok(json!({
