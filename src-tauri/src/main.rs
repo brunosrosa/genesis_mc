@@ -130,6 +130,18 @@ fn main() {
             #[cfg(target_os = "windows")]
             spawn_global_shortcut_listener(app.handle().clone());
 
+            // OPERAÇÃO NERVO ÓPTICO: Inicialização dos emissores de alta performance Tauri v2 IPC
+            let telemetry_sink = std::sync::Arc::new(souls_mc_lib::core::ipc_bridge::TauriTelemetrySink::new(app.handle().clone()));
+            souls_mc_lib::core::ipc_bridge::set_telemetry_sink(telemetry_sink.clone());
+            let bridge = souls_mc_lib::core::ipc_bridge::WatchdogIpcBridge::from_hz(5);
+            bridge.spawn(telemetry_sink);
+
+            let thought_sink = std::sync::Arc::new(souls_mc_lib::core::socratic_thought_stream::TauriSocraticThoughtSink::new(app.handle().clone()));
+            souls_mc_lib::core::socratic_thought_stream::init_global_thought_broadcaster(thought_sink);
+
+            let terminal_sink = std::sync::Arc::new(souls_mc_lib::core::terminal_drawer_stream::TauriTerminalStreamSink::new(app.handle().clone()));
+            souls_mc_lib::core::terminal_drawer_stream::init_global_terminal_batcher(terminal_sink);
+
             Ok(())
         })
         .on_window_event(|window, event| {

@@ -133,6 +133,25 @@ Toda tarefa abaixo só é considerada **CONCLUÍDA** quando atende **simultaneam
   - `test_late_binding_summon_and_eviction`
 - [x] **L5. Homologação Master (116/116 testes verdes e Zero Clippy Warnings)**
 
+---
+
+## Bloco M — Operação Nervo Óptico: Soldagem do Sistema Nervoso Tauri v2 IPC, Telemetria Binária e Tráfego Zero-Copy
+
+- [x] **M1. Emissor Telemétrico do Watchdog Binário (`core/ipc_bridge.rs`)**
+  - Implementação do `WatchdogIpcBridge` inicializado no bootstrap do Tauri.
+  - Thread assíncrona Tokio consumindo `WATCHDOG_STATE` a taxa de 1Hz a 5Hz.
+  - Conversão binária `to_le_bytes()` emitindo array cru `[u8; 8]` via `app_handle.emit("hardware-telemetry", bytes_array)`.
+- [x] **M2. Transmissor de Pensamentos Socráticos (`core/socratic_thought_stream.rs`)**
+  - Interceptação de nós socráticos (Regular, Revision, Branching).
+  - Emissão não-bloqueante via MPSC de eventos `app_handle.emit("socratic-thought", SocraticThoughtPayload)`.
+- [x] **M3. Streamer do Terminal da Jaula LPAC (`core/terminal_drawer_stream.rs`)**
+  - Captura e dreno de logs stdout/stderr da ferramenta execute / sandbox LPAC.
+  - Micro-batching com buffer de 10ms (Token Bucket / Sliding Window) para emissão `app_handle.emit("terminal-stream", batched_log_chunk)`.
+- [x] **M4. Suíte de Testes Antifraude IPC (`tests.rs`)**
+  - `test_watchdog_atomic_u64_le_bytes`
+  - `test_socratic_thought_tauri_broadcast`
+  - `test_terminal_stream_micro_batching_backpressure`
+- [x] **M5. Homologação Master (119/119 testes verdes e Zero Clippy Warnings)**
 
 ---
 
@@ -142,4 +161,5 @@ Toda tarefa abaixo só é considerada **CONCLUÍDA** quando atende **simultaneam
 - **Após cada bloco**: rodar `cargo clippy --bin souls_mcp_server -- -D warnings`.
 - **Política de Commits**: por bloco, com mensagem Conventional Commits (`feat(socratic):`, `feat(heatmap):`, `feat(l3):`, `test(antifraud):`).
 - **HITL Gate**: homologação final com Exit Code 0 absoluto.
+
 

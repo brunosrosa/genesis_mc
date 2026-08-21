@@ -113,6 +113,26 @@ pub async fn run_thinking(params: &serde_json::Map<String, Value>) -> Result<Val
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or_default(),
         };
+        let mode_str = match response.mode {
+            souls_mc_lib::cognition::thinking::types::ThinkingMode::Regular => "regular",
+            souls_mc_lib::cognition::thinking::types::ThinkingMode::Revision => "revision",
+            souls_mc_lib::cognition::thinking::types::ThinkingMode::Branching => "branching",
+        };
+        let stream_payload = souls_mc_lib::core::socratic_thought_stream::SocraticThoughtPayload::new(
+            souls_mc_lib::cognition::memory_graph::uuid::generate_uuid_v7(),
+            session_id.clone(),
+            thought.branch_id.clone().unwrap_or_else(|| "main".to_string()),
+            thought
+                .revises_thought
+                .map(|n| n.to_string())
+                .or_else(|| thought.branch_from_thought.map(|n| n.to_string())),
+            mode_str,
+            thought.thought.clone(),
+            thought.thought_number,
+            0,
+        );
+        souls_mc_lib::core::socratic_thought_stream::broadcast_socratic_thought(stream_payload);
+
         let _ = handle.try_send(souls_mc_lib::cognition::thinking::socratic_bridge::SocraticOp::UpsertThoughtFire {
             thought: socratic,
         });

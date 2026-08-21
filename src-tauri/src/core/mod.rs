@@ -49,6 +49,9 @@ pub mod sdd; // SOULS V6 MARCO 5.16.0: Orquestrador de Cascata Documental SDD (S
 pub mod semantic_search; // SOULS V6 MARCO VI: Hipocampo Ativo, LanceDB Zero-VRAM, RRF AVX2 e LadybugDB
 pub mod chyros_daemon; // SOULS V6 MARCO 5.7.0: Chyros Daemon (AutoDream & Metabolismo Estocástico)
 pub mod socratic_cli; // SOULS V6 MARCO 5.11.0: Socratic CLI & CPU Logit Probing Controller
+pub mod ipc_bridge; // SOULS V6 NERVO ÓPTICO: WatchdogIpcBridge & Zero-Copy Binary Telemetry
+pub mod socratic_thought_stream; // SOULS V6 NERVO ÓPTICO: SocraticThoughtBroadcaster MPSC Stream
+pub mod terminal_drawer_stream; // SOULS V6 NERVO ÓPTICO: TerminalLogBatcher Token Bucket Micro-Batching
 
 #[cfg(feature = "lora_adapter")]
 pub mod llama_lora_adapter; // SOULS V6 MARCO IV: Hot-swap de adaptadores LoRA (ik_llama.cpp FFI)

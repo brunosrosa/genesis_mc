@@ -5305,6 +5305,160 @@ fn test_gigatoken_simd_throughput_and_budget_bounds() {
     assert!(is_safe, "Para n_ctx=16384, consumo ({:.2} MB) deve respeitar teto de 5.5 GB", vram_mb);
 }
 
+// =============================================================================
+// OPERAÇÃO NERVO ÓPTICO — Suíte de Testes Antifraude IPC Tauri v2
+// =============================================================================
+
+#[test]
+fn test_watchdog_atomic_u64_le_bytes() {
+    use std::sync::atomic::Ordering;
+    use souls_mc_lib::core::hardware_watchdog::{
+        self, decode_cpu_temp_c, decode_gpu_temp_c, decode_ram_mb, decode_thermal_flag,
+        decode_vram_mb, pack_state, FLAG_THERMAL_THROTTLE,
+    };
+    use souls_mc_lib::core::ipc_bridge::decode_v8_dataview_u64_le;
+
+    // Cenário: VRAM 5120 MB, RAM 32768 MB, CPU 62.5 °C, GPU 86.0 °C (com thermal throttle)
+    let vram_input = 5120u32;
+    let ram_input = 32768u32;
+    let cpu_input = 62.5f32;
+    let gpu_input = 86.0f32;
+    let flag_input = FLAG_THERMAL_THROTTLE >> 60;
+
+    let packed = pack_state(vram_input, ram_input, cpu_input, gpu_input, flag_input);
+
+    // Salva no AtomicU64 global
+    let atomic_arc = hardware_watchdog::WATCHDOG_STATE
+        .get_or_init(|| std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)));
+    atomic_arc.store(packed, Ordering::Release);
+
+    // Extrai o valor do AtomicU64 e converte em 8 bytes little-endian contíguos
+    let loaded_u64 = atomic_arc.load(Ordering::Acquire);
+    let bytes: [u8; 8] = loaded_u64.to_le_bytes();
+
+    assert_eq!(bytes.len(), 8, "Buffer cru deve ter exatamente 8 bytes para zero-copy");
+
+    // Simula a decodificação do DataView do JavaScript V8: getBigUint64(0, true /* littleEndian */)
+    let decoded_u64 = decode_v8_dataview_u64_le(&bytes).expect("Decodificação DataView V8");
+    assert_eq!(decoded_u64, packed, "Valor decodificado via DataView LE deve ser idêntico ao empacotado");
+
+    // Verifica cada campo decodificado
+    assert_eq!(decode_vram_mb(decoded_u64), vram_input, "VRAM decodificada");
+    assert_eq!(decode_ram_mb(decoded_u64), ram_input, "RAM decodificada");
+    assert!((decode_cpu_temp_c(decoded_u64) - cpu_input).abs() < 0.01, "CPU temp decodificada");
+    assert!((decode_gpu_temp_c(decoded_u64) - gpu_input).abs() < 0.01, "GPU temp decodificada");
+    assert!(decode_thermal_flag(decoded_u64), "Thermal throttle flag ativo");
+}
+
+#[tokio::test]
+async fn test_socratic_thought_tauri_broadcast() {
+    use souls_mc_lib::core::socratic_thought_stream::{
+        InMemorySocraticThoughtSink, SocraticThoughtBroadcaster, SocraticThoughtPayload,
+    };
+    use std::sync::Arc;
+
+    let sink = Arc::new(InMemorySocraticThoughtSink::new());
+    let broadcaster = SocraticThoughtBroadcaster::new(sink.clone(), 2048);
+
+    // Simula geração contínua de pensamentos sob estresse concorrente
+    let mut handles = Vec::new();
+
+    for t in 0..3 {
+        let b = broadcaster.clone();
+        let handle = tokio::spawn(async move {
+            for i in 1..=100 {
+                let mode = match (t + i) % 3 {
+                    0 => "regular",
+                    1 => "revision",
+                    _ => "branching",
+                };
+                let payload = SocraticThoughtPayload::new(
+                    format!("thn_worker_{t}_{i}"),
+                    format!("sess_{t}"),
+                    format!("branch_{t}"),
+                    if i > 1 { Some(format!("thn_worker_{t}_{}", i - 1)) } else { None },
+                    mode,
+                    format!("Hipótese paralela #{i} gerada pela thread {t}"),
+                    i,
+                    15,
+                );
+                let sent = b.broadcast(payload);
+                assert!(sent, "O canal MPSC socrático não deve bloquear ou rejeitar");
+            }
+        });
+        handles.push(handle);
+    }
+
+    for h in handles {
+        h.await.expect("Worker thread deve concluir sem pânico");
+    }
+
+    // Aguarda drenagem assíncrona do canal MPSC
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    assert_eq!(
+        sink.count(),
+        300,
+        "Todos os 300 nós de pensamento devem ter sido recebidos com zero perda de pacotes"
+    );
+
+    let thoughts = sink.snapshot();
+    let has_regular = thoughts.iter().any(|t| t.thought_type == "regular");
+    let has_revision = thoughts.iter().any(|t| t.thought_type == "revision");
+    let has_branching = thoughts.iter().any(|t| t.thought_type == "branching");
+
+    assert!(has_regular && has_revision && has_branching, "Todos os 3 modos devem estar presentes");
+}
+
+#[tokio::test]
+async fn test_terminal_stream_micro_batching_backpressure() {
+    use souls_mc_lib::core::terminal_drawer_stream::{
+        InMemoryTerminalStreamSink, TerminalLogBatcher,
+    };
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let sink = Arc::new(InMemoryTerminalStreamSink::new());
+    // Janela de 10ms com limite de buffer de 64KB
+    let batcher = TerminalLogBatcher::new(sink.clone(), 10, 64 * 1024);
+
+    let start = Instant::now();
+    let total_logs = 10_000;
+
+    // Alimenta o duto de execução com 10.000 logs em 1 segundo
+    for i in 0..total_logs {
+        let sent = batcher.push_line(&format!("cargo build log line #{i} [LPAC sandbox stdout]"));
+        assert!(sent, "push_line não deve falhar nem bloquear");
+    }
+
+    let push_duration = start.elapsed();
+    assert!(
+        push_duration.as_millis() < 800,
+        "10.000 logs devem ser enfileirados em < 800ms sem travar o loop, levou {:?}",
+        push_duration
+    );
+
+    // Aguarda a drenagem completa da janela deslizante (10ms * buffer)
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let emitted_batches = sink.batch_count();
+    let total_bytes = sink.total_bytes();
+
+    assert!(total_bytes > 0, "Bytes de log devem ter sido emitidos");
+    assert!(
+        emitted_batches <= 100,
+        "10.000 logs devem ser agrupados em no máximo 100 eventos (redução > 90%), emitidos: {emitted_batches}"
+    );
+
+    let reduction_percentage = (1.0 - (emitted_batches as f64 / total_logs as f64)) * 100.0;
+    assert!(
+        reduction_percentage >= 90.0,
+        "Redução de eventos Tauri deve ser >= 90%, foi {:.2}%",
+        reduction_percentage
+    );
+}
+
+
 
 
 
