@@ -1,25 +1,23 @@
 <script lang="ts">
   // SOULS MC — Camada 4: Spotlight Zen Conversacional (Alt+Space)
   //
-  // Barra AMOLED ultra-translúcida com autofocus.
-  // - Micro-comando rápido: feedback JIT na própria barra e fechamento ao perder foco.
-  // - Continuidade / Código: expansão fluida (150ms) para Sessão Socrática no Active Canvas (Camada 3).
-  // - Fechamento: expurgo atômico do buffer de memória local (persistência física em SQLite).
+  // Barra AMOLED ultra-translúcida com autofocus e roteamento de intenções JIT.
+  // Conformidade: ADR-005, ADR-014 (Fricção Produtiva), ADR-041.
 
   import { tick } from "svelte";
+  import type { CockpitView } from "./HorizonTopbar.svelte";
+  import { governanceStore } from "$lib/stores/governance.svelte.ts";
 
   interface Props {
     isOpen: boolean;
     onClose: () => void;
-    onExpandToSocratic: (prompt: string) => void;
+    onSelectView: (view: CockpitView) => void;
   }
 
-  let { isOpen, onClose, onExpandToSocratic }: Props = $props();
+  let { isOpen, onClose, onSelectView }: Props = $props();
 
   let inputQuery = $state("");
   let inputRef: HTMLInputElement | null = $state(null);
-  let feedbackMessage = $state<string | null>(null);
-  let isExecuting = $state(false);
 
   $effect(() => {
     if (isOpen) {
@@ -28,8 +26,6 @@
       });
     } else {
       inputQuery = "";
-      feedbackMessage = null;
-      isExecuting = false;
     }
   });
 
@@ -39,48 +35,47 @@
       onClose();
     } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      executeCommand();
+      dispatchIntent();
     }
   }
 
-  function handleBlur() {
-    // Ao perder o foco após micro-comando ou cancelamento, fecha a barra
-    setTimeout(() => {
-      if (feedbackMessage) {
-        onClose();
-      }
-    }, 200);
-  }
-
-  function executeCommand() {
-    const trimmed = inputQuery.trim();
+  function dispatchIntent() {
+    const trimmed = inputQuery.trim().toLowerCase();
     if (!trimmed) return;
 
-    // Micro-comando JIT se começar com "/"
-    if (trimmed.startsWith("/")) {
-      isExecuting = true;
-      if (trimmed === "/ping") {
-        feedbackMessage = "SOULS Core Online (Ping 0.2ms · Zero-Copy IPC)";
-      } else if (trimmed === "/clear") {
-        feedbackMessage = "Memória do renderizador expurgada (100% RAM livre).";
-        inputQuery = "";
-      } else if (trimmed === "/status") {
-        feedbackMessage = "Hardware Watchdog Ativo · 60 FPS rAF Loop · RTX 2060m";
-      } else {
-        feedbackMessage = `Comando '${trimmed}' processado com sucesso.`;
-      }
-      isExecuting = false;
+    governanceStore.recordUsage(60, 0.00002);
 
-      // Fecha automaticamente após exibição do feedback
-      setTimeout(() => {
-        onClose();
-      }, 1200);
-    } else {
-      // Pergunta / reflexão / continuidade -> Transição fluida de 150ms expandindo para a Sessão Socrática
-      const query = inputQuery;
+    if (trimmed.startsWith("/chat") || trimmed.includes("chat") || trimmed.includes("diálogo")) {
+      onSelectView("chat");
       onClose();
-      onExpandToSocratic(query);
+    } else if (trimmed.startsWith("/bancada") || trimmed.includes("bancada") || trimmed.includes("sandbox")) {
+      onSelectView("bancada");
+      onClose();
+    } else if (trimmed.startsWith("@memoria") || trimmed.startsWith("/memoria") || trimmed.includes("grafo")) {
+      onSelectView("memory");
+      onClose();
+    } else if (trimmed.startsWith("/tarefas") || trimmed.includes("kanban") || trimmed.includes("tasks")) {
+      onSelectView("tasks");
+      onClose();
+    } else if (trimmed.startsWith("/settings") || trimmed.includes("config") || trimmed.includes("governança")) {
+      onSelectView("settings");
+      onClose();
+    } else if (trimmed.startsWith("/inbox") || trimmed.includes("pr") || trimmed.includes("blast")) {
+      onSelectView("inbox");
+      onClose();
+    } else if (trimmed.startsWith("/telemetry") || trimmed.includes("vram") || trimmed.includes("cpu")) {
+      onSelectView("telemetry");
+      onClose();
+    } else {
+      // Intenção aberta -> navega para o chat socrático
+      onSelectView("chat");
+      onClose();
     }
+  }
+
+  function handleChipClick(view: CockpitView) {
+    onSelectView(view);
+    onClose();
   }
 </script>
 
@@ -89,18 +84,18 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-start justify-center pt-[16vh] transition-all duration-150 ease-[cubic-bezier(0.2,0.8,0.2,1)] select-none"
+    class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-start justify-center pt-28 transition-all duration-150 select-none"
     onclick={onClose}
   >
-    <!-- Spotlight Bar AMOLED Translúcida -->
+    <!-- Modal Card -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="w-[min(680px,92vw)] cyber-panel-elevated p-3 flex flex-col gap-2.5 shadow-[0_25px_60px_rgba(0,0,0,0.95),_inset_0_0_0_1px_rgba(255,255,255,0.18)] gpu-transition"
+      class="w-full max-w-2xl bg-surface-mid ghost-border-active p-4 shadow-2xl relative"
       onclick={(e) => e.stopPropagation()}
     >
-      <div class="flex items-center gap-3 px-3 py-2 bg-[oklch(0.04_0_0_/_90%)] rounded-xl border border-[rgba(255,255,255,0.06)]">
-        <svg class="w-5 h-5 text-[oklch(0.65_0.28_296)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="flex items-center gap-3 border-b border-white/10 pb-3">
+        <svg class="w-5 h-5 text-cyber-purple shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
@@ -109,43 +104,70 @@
           bind:this={inputRef}
           bind:value={inputQuery}
           onkeydown={handleKeyDown}
-          onblur={handleBlur}
           type="text"
-          placeholder="Digite um micro-comando (/ping, /status) ou questione o SODA..."
-          class="w-full bg-transparent text-[oklch(0.98_0_0)] placeholder-[oklch(0.40_0_0)] font-sans text-sm outline-none"
+          placeholder="Invoque uma intenção (/chat, /bancada, @memoria, /tarefas, /settings)..."
+          class="w-full bg-transparent font-mono text-sm text-text-main placeholder-text-muted outline-none border-none"
         />
 
-        <div class="flex items-center gap-1.5 shrink-0">
-          {#if isExecuting}
-            <span class="w-2 h-2 rounded-full bg-[oklch(0.70_0.18_50)] animate-pulse"></span>
-          {/if}
-          <kbd class="px-1.5 py-0.5 rounded bg-[oklch(0.10_0_0)] text-[oklch(0.50_0_0)] font-mono text-[10px] border border-[rgba(255,255,255,0.08)]">
-            ESC
-          </kbd>
-        </div>
+        <kbd class="font-mono text-[10px] text-text-muted bg-surface-high px-2 py-1">
+          ESC
+        </kbd>
       </div>
 
-      <!-- JIT Feedback Area -->
-      {#if feedbackMessage}
-        <div class="px-3.5 py-2 rounded-xl bg-[oklch(0.08_0_0)] border border-[oklch(0.65_0.28_296_/_0.4)] text-xs font-mono text-[oklch(0.88_0.20_296)] flex items-center justify-between">
-          <span class="flex items-center gap-2">
-            <span class="w-1.5 h-1.5 rounded-full bg-[oklch(0.65_0.28_296)]"></span>
-            {feedbackMessage}
-          </span>
-          <span class="text-[10px] font-bold text-[oklch(0.50_0_0)] uppercase tracking-wider">JIT 0ms</span>
-        </div>
-      {/if}
+      <!-- Quick Commands Chips -->
+      <div class="flex items-center gap-2 mt-3 pt-1 flex-wrap font-mono text-xs">
+        <button
+          type="button"
+          onclick={dispatchIntent}
+          class="px-3 py-1 bg-cyber-purple text-black font-bold text-[11px] hover:bg-white transition-colors flex items-center gap-1.5"
+        >
+          <span>✨ Processar Intenção AI</span>
+        </button>
 
-      <!-- Footer Hints -->
-      <div class="flex items-center justify-between px-3 py-1 text-[11px] font-mono text-[oklch(0.45_0_0)] border-t border-[rgba(255,255,255,0.04)] pt-2">
-        <span class="flex items-center gap-1.5">
-          <kbd class="px-1 py-0.5 rounded bg-[oklch(0.08_0_0)] text-[oklch(0.60_0_0)] text-[9px] border border-[rgba(255,255,255,0.06)]">↵</kbd>
-          Executar / Expandir Socrático
-        </span>
-        <span class="flex items-center gap-1.5">
-          <kbd class="px-1 py-0.5 rounded bg-[oklch(0.08_0_0)] text-[oklch(0.60_0_0)] text-[9px] border border-[rgba(255,255,255,0.06)]">Alt+Space</kbd>
-          Fechar
-        </span>
+        <button
+          type="button"
+          onclick={() => handleChipClick("chat")}
+          class="px-2.5 py-1 bg-surface-high hover:bg-cyber-purple/20 hover:text-cyber-purple border border-white/5 text-[11px] flex items-center gap-1.5 transition-colors text-text-main"
+        >
+          <span class="text-cyber-purple">/chat</span> Diálogo
+        </button>
+
+        <button
+          type="button"
+          onclick={() => handleChipClick("bancada")}
+          class="px-2.5 py-1 bg-surface-high hover:bg-cyber-purple/20 hover:text-cyber-purple border border-white/5 text-[11px] flex items-center gap-1.5 transition-colors text-text-main"
+        >
+          <span class="text-telemetry-cyan">/bancada</span> Sandbox
+        </button>
+
+        <button
+          type="button"
+          onclick={() => handleChipClick("memory")}
+          class="px-2.5 py-1 bg-surface-high hover:bg-cyber-purple/20 hover:text-cyber-purple border border-white/5 text-[11px] flex items-center gap-1.5 transition-colors text-text-main"
+        >
+          <span class="text-cyber-purple">@memoria</span> Grafo
+        </button>
+
+        <button
+          type="button"
+          onclick={() => handleChipClick("tasks")}
+          class="px-2.5 py-1 bg-surface-high hover:bg-cyber-purple/20 hover:text-cyber-purple border border-white/5 text-[11px] flex items-center gap-1.5 transition-colors text-text-main"
+        >
+          <span class="text-amber-400">/tarefas</span> Kanban
+        </button>
+
+        <button
+          type="button"
+          onclick={() => handleChipClick("settings")}
+          class="px-2.5 py-1 bg-surface-high hover:bg-cyber-purple/20 hover:text-cyber-purple border border-white/5 text-[11px] flex items-center gap-1.5 transition-colors text-text-main"
+        >
+          <span class="text-emerald-400">/settings</span> Governança
+        </button>
+      </div>
+
+      <div class="mt-4 pt-2 border-t border-white/5 flex justify-between items-center text-[10px] font-mono text-text-muted">
+        <span>PRESSIONE <kbd class="text-text-main font-bold">ALT + SPACE</kbd> EM QUALQUER LUGAR</span>
+        <span>SOULS MC // JIT INTENT ROUTER</span>
       </div>
     </div>
   </div>
