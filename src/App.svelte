@@ -82,61 +82,63 @@
   />
 </svelte:head>
 
-<!-- Camada 0: Substrate Shell (Void Dark, Cyber Grid) -->
-<div class="relative w-screen h-screen overflow-hidden flex flex-col bg-void text-text-main font-body select-none cyber-grid antialiased">
+<!-- Camada 0: Substrate Shell (Void Dark, Cyber Grid) com Gaiola Ortogonal Indestrutível -->
+<div class="cockpit-grid relative bg-void text-text-main font-body select-none cyber-grid antialiased">
   
-  <!-- Camada 2: Horizon Topbar (h-12) -->
-  <HorizonTopbar
-    {currentView}
-    onViewChange={(v) => { currentView = v; }}
-    onToggleSpotlight={() => { isSpotlightOpen = !isSpotlightOpen; }}
-  />
-
-  <!-- Main Body (Governor Rail + Central Canvas) -->
-  <div class="flex flex-1 overflow-hidden relative">
-    <!-- Camada 1: Governor Rail (Sidebar Esquerda) -->
+  <!-- Camada 1: Governor Rail (Sidebar Esquerda Fixa 4rem) -->
+  <div style="grid-area: rail;" class="h-full w-16 overflow-hidden">
     <GovernorRail
       {currentView}
       onViewChange={(v) => { currentView = v; }}
       onOpenSpotlight={() => { isSpotlightOpen = true; }}
       pendingInboxCount={1}
     />
-
-    <!-- Central Working Area with Dynamic Kill Switch Alert Banner -->
-    <div class="flex-1 flex flex-col h-full overflow-hidden relative">
-      {#if governanceStore.isKillSwitchActive}
-        <div class="m-3 p-3 bg-alert-crimson/40 border border-alert-crimson flex items-center justify-between text-red-200 font-mono text-xs z-30">
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-red-400">[KILL-SWITCH ATIVADO]:</span>
-            <span>Todos os Workers Tokio, SLMs Locais e sub-processos MCP foram parados via SIGKILL atômico.</span>
-          </div>
-          <button 
-            type="button"
-            onclick={() => governanceStore.resetKillSwitch()}
-            class="px-2.5 py-1 bg-red-950 border border-red-500 hover:bg-red-800 transition-colors text-[10px] text-white font-bold"
-          >
-            REARMAR SISTEMA
-          </button>
-        </div>
-      {/if}
-
-      <!-- Camada 3: Active Canvas -->
-      <ActiveCanvas
-        {currentView}
-        onViewChange={(v) => { currentView = v; }}
-      />
-    </div>
   </div>
 
-  <!-- Camada 5: Terminal Drawer (Engine Room) + Cockpit Footer (h-8) -->
-  <TerminalDrawer
-    isOpen={isTerminalOpen}
-    onClose={() => { isTerminalOpen = false; }}
-  />
-  <CockpitFooter
-    {isTerminalOpen}
-    onToggleTerminal={() => { isTerminalOpen = !isTerminalOpen; }}
-  />
+  <!-- Camada 2: Horizon Topbar (h-12 / 3rem) -->
+  <div style="grid-area: topbar;" class="h-12 w-full overflow-hidden">
+    <HorizonTopbar
+      {currentView}
+      onViewChange={(v) => { currentView = v; }}
+      onToggleSpotlight={() => { isSpotlightOpen = !isSpotlightOpen; }}
+    />
+  </div>
+
+  <!-- Camada 3: Active Canvas (Contêiner Exclusivo das 6 Visões) -->
+  <div style="grid-area: canvas;" class="flex flex-col h-full w-full overflow-hidden relative">
+    {#if governanceStore.isKillSwitchActive}
+      <div class="m-3 p-3 bg-alert-crimson/40 border border-alert-crimson flex items-center justify-between text-red-200 font-mono text-xs z-30 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-red-400">[KILL-SWITCH ATIVADO]:</span>
+          <span>Todos os Workers Tokio, SLMs Locais e sub-processos MCP foram parados via SIGKILL atômico.</span>
+        </div>
+        <button 
+          type="button"
+          onclick={() => governanceStore.resetKillSwitch()}
+          class="px-2.5 py-1 bg-red-950 border border-red-500 hover:bg-red-800 transition-colors text-[10px] text-white font-bold"
+        >
+          REARMAR SISTEMA
+        </button>
+      </div>
+    {/if}
+
+    <ActiveCanvas
+      {currentView}
+      onViewChange={(v) => { currentView = v; }}
+    />
+  </div>
+
+  <!-- Camada 5: Engine Room Terminal Drawer + Cockpit Footer (h-8 / 2rem) -->
+  <div style="grid-area: terminal;" class="h-8 w-full overflow-visible relative">
+    <TerminalDrawer
+      isOpen={isTerminalOpen}
+      onClose={() => { isTerminalOpen = false; }}
+    />
+    <CockpitFooter
+      {isTerminalOpen}
+      onToggleTerminal={() => { isTerminalOpen = !isTerminalOpen; }}
+    />
+  </div>
 
   <!-- Camada 4: Ephemeral Layer (Spotlight Zen) -->
   <SpotlightZen

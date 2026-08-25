@@ -97,9 +97,13 @@ impl OrtScorerEngine {
             return Err("A lista de rótulos para classificação não pode ser vazia".to_string());
         }
 
-        // Aplicar o limite rígido de segurança MAX_TRIAGE_CHARS (4096)
+        // Aplicar o limite rígido de segurança MAX_TRIAGE_CHARS (4096) com respeito a limites de char UTF-8
         let truncated_prompt = if prompt.len() > MAX_TRIAGE_CHARS {
-            &prompt[..MAX_TRIAGE_CHARS]
+            let mut idx = MAX_TRIAGE_CHARS;
+            while idx > 0 && !prompt.is_char_boundary(idx) {
+                idx -= 1;
+            }
+            &prompt[..idx]
         } else {
             prompt
         };

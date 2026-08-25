@@ -4,7 +4,7 @@ use super::{
 };
 use super::router::normalize_tool_name;
 use souls_mc_lib::cognition::thinking::persistence::ThoughtType;
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[test]
 fn sqlite_query_rejects_multi_statement_payload() {
@@ -3872,7 +3872,7 @@ async fn test_safe_fallback_guardrail() {
     );
     // Esta chamada é safe: a funcao loga warning se o catalogo nao contém o
     // modelo, e retorna normalmente. NAO propaga Result.
-    crate::core::llama_engine::disable_model_in_sqlite(&nonexist_path);
+    souls_mc_lib::core::llama_engine::disable_model_in_sqlite(&nonexist_path);
     // Se chegamos aqui, o reactor Tokio sobreviveu — que é exatamente o que
     // o user pediu: o pai NAO pode morrer por causa de crash do worker.
     assert!(true, "pai Tokio sobreviveu a crash FFI simulado");
@@ -4326,7 +4326,10 @@ async fn test_intent_real_logit_probing_execution() {
 
     let resp = super::handle_mcp(req).await.expect("resposta MCP");
     assert_eq!(resp["jsonrpc"], "2.0");
-    let result = resp.get("result").expect("campo result deve existir na garra intent");
+    let result = match resp.get("result") {
+        Some(r) => r,
+        None => panic!("campo result deve existir na garra intent, obteve: {resp:?}"),
+    };
     let structured = result.get("structuredContent").expect("deve conter structuredContent");
 
     assert!(

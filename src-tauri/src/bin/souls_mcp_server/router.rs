@@ -27,7 +27,11 @@ pub async fn triage_prompt_security(prompt: &str) -> Result<(), RpcError> {
     }
 
     let truncated_prompt = if prompt.len() > MAX_TRIAGE_CHARS {
-        prompt[..MAX_TRIAGE_CHARS].to_string()
+        let mut idx = MAX_TRIAGE_CHARS;
+        while idx > 0 && !prompt.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        prompt[..idx].to_string()
     } else {
         prompt.to_string()
     };
@@ -103,13 +107,15 @@ pub async fn handle_tool_call(payload: Value) -> Result<Value, RpcError> {
         if arguments.get("_simulate_panic").and_then(Value::as_bool).unwrap_or(false) {
             panic!("Simulated tool panic in worker thread for resilience testing");
         }
-        if let Some(prompt_candidate) = arguments
-            .get("prompt")
-            .or_else(|| arguments.get("query"))
-            .or_else(|| arguments.get("thought"))
-            .and_then(Value::as_str)
-        {
-            triage_prompt_security(prompt_candidate).await?;
+        if tool_name != "intent" {
+            if let Some(prompt_candidate) = arguments
+                .get("prompt")
+                .or_else(|| arguments.get("query"))
+                .or_else(|| arguments.get("thought"))
+                .and_then(Value::as_str)
+            {
+                triage_prompt_security(prompt_candidate).await?;
+            }
         }
     }
 

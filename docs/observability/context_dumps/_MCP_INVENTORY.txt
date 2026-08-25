@@ -1,4 +1,4 @@
-_MCP_INVENTORY Gerado em: 2026-08-14 13:08:29
+_MCP_INVENTORY Gerado em: 2026-08-24 20:08:22
 
 ### ====================================================================================================
 ARQUIVO: souls MCP Inventory
@@ -54,7 +54,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: execute
-DESCRIPTION: [Stub] Execucao multi-lang requer auditoria de sandbox. Aliases: execute | souls_execute | ctx_execute.
+DESCRIPTION: Execução isolada de comandos em Shadow Workspace sob jaula LPAC Win11 com Job Objects.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -159,7 +159,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: metrics
-DESCRIPTION: [Stub] Stub para monitoramento de métricas FinOps e cache hit-rate.
+DESCRIPTION: Consolida telemetria FinOps, tráfego de tokens, hit-rate do cache L2 e microdólares via telemetry_logs.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -209,7 +209,7 @@ TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
 NAME: semantic_search
-DESCRIPTION: Busca híbrida local (FTS5 + LanceDB) usando fusão RRF de baixa latência na RAM.
+DESCRIPTION: Busca híbrida local (FTS5 + LanceDB) usando fusão RRF de baixa latência e sanitização ontológica LadybugDB na RAM.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
@@ -228,8 +228,8 @@ DESCRIPTION: Lê arquivo com medição prévia de tokens na CPU (tiktoken cl100k
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---
-NAME: souls_semantic_search
-DESCRIPTION: Executa a busca híbrida RRF combinando FTS5 (BM25) e LanceDB vetorial local com invalidação JIT.
+NAME: souls_summon_tool
+DESCRIPTION: Vincula dinamicamente esquemas JSON-RPC de garras adicionais no roteador MCP sob demanda.
 TEST_STATUS: OK
 TEST_NOTE: Verificação automatizada concluída sem avisos.
 ---

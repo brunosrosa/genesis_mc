@@ -132,7 +132,10 @@ pub fn scan_routes(root: &Path) -> Result<RouteReport, CognitiveError> {
                         let line = content[..name.start()].lines().count();
                         // Heuristica leve: exige `invoke(` ou `await invoke(` antes
                         // da aspa. Filtra falso-positivos como strings soltas.
-                        let prefix_start = name.start().saturating_sub(32);
+                        let mut prefix_start = name.start().saturating_sub(32);
+                        while prefix_start > 0 && !content.is_char_boundary(prefix_start) {
+                            prefix_start -= 1;
+                        }
                         let prefix = &content[prefix_start..name.start()];
                         if prefix.contains("invoke(") {
                             frontend.push(RouteEntry {

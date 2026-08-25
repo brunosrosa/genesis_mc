@@ -1,22 +1,22 @@
-_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-14 13:08:29
+_YAML_AgentGateway_e_souls_mcp_server.rs Gerado em: 2026-08-24 20:08:22
 
 ### ====================================================================================================
 ARQUIVO: mcp_config.json
 CAMINHO: C:\Users\rosas\.gemini\config\mcp_config.json
 ---
 {
-    "mcpServers":  {
-                       "souls":  {
-                                     "args":  [
-                                                  "http://127.0.0.1:3001/"
-                                              ],
-                                     "env":  {
-                                                 "AG_BRIDGE_URL":  "http://127.0.0.1:3001",
-                                                 "ZERO_COPY_MODE":  "1",
-                                                 "GPU_RASTERIZATION":  "true"
-                                             },
-                                     "command":  "mcp-remote.cmd",
-                                     "disabled":  false
-                                 }
-                   }
+  "mcpServers": {
+    "souls": {
+      "args": [
+        "http://127.0.0.1:3001/"
+      ],
+      "env": {
+        "AG_BRIDGE_URL": "http://127.0.0.1:3001",
+        "ZERO_COPY_MODE": "1",
+        "GPU_RASTERIZATION": "true"
+      },
+      "command": "mcp-remote.cmd",
+      "disabled": false
+    }
+  }
 }

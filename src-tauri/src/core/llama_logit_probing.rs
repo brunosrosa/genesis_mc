@@ -25,6 +25,13 @@ use crate::souls_thermal_governor::SystemState;
 
 #[cfg(feature = "llama_backend")]
 use ik_llama_cpp_2::context::LlamaContext;
+
+#[cfg(feature = "llama_backend")]
+unsafe extern "C" fn silence_llama_logs(
+    _level: ik_llama_cpp_sys::ggml_log_level,
+    _text: *const std::os::raw::c_char,
+    _user_data: *mut std::os::raw::c_void,
+) {}
 /// Tamanho canônico do vocabulário para logit probing epistêmico (AVX2/CPU).
 /// Preservado como SSOT para compatibilidade com o `VerbalizerMap` em `epistemic_prober.rs`.
 pub const MOCK_VOCAB_SIZE: usize = 128;
@@ -355,7 +362,10 @@ fn real_llama_extract_logits(
 
     // (1) Lazy init: carrega GGUF na CPU (n_gpu_layers = 0, ADR-027: 0 MB VRAM).
     if matches!(inner.state, RealLlamaState::Init) {
-        let mut backend = match LlamaBackend::init() {
+        unsafe {
+            ik_llama_cpp_sys::llama_log_set(Some(silence_llama_logs), std::ptr::null_mut());
+        }
+        let backend = match LlamaBackend::init() {
             Ok(b) => b,
             Err(e) => {
                 inner.state = RealLlamaState::Failed {
@@ -364,7 +374,6 @@ fn real_llama_extract_logits(
                 return None;
             }
         };
-        backend.void_logs();
         let model_params = LlamaModelParams::default().with_n_gpu_layers(0);
         let model = match LlamaModel::load_from_file(&backend, &inner.model_path, &model_params) {
             Ok(m) => m,
@@ -379,7 +388,7 @@ fn real_llama_extract_logits(
             .with_n_ctx(std::num::NonZeroU32::new(512))
             .with_n_batch(512)
             .with_type_k(ik_llama_cpp_2::context::params::KvCacheType::F16)
-            .with_type_v(ik_llama_cpp_2::context::params::KvCacheType::Q4_K);
+            .with_type_v(ik_llama_cpp_2::context::params::KvCacheType::F16);
         // SOULS MC Marco IV — fix for ik-llama-cpp-2 v0.1.7: the model loader
         // returns a `LlamaModel<'a>` tied to the path's lifetime, and the
         // context must borrow from the model. To make both `'static` (so the

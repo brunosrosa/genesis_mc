@@ -6,14 +6,15 @@
    ========================================================================= */
 
 @theme {
-  --color-void: #08080A;
+  --color-void: oklch(0% 0 0);
+  --color-void-black: oklch(0.12 0 0);
   --color-surface-low: #111015;
   --color-surface-mid: #17151F;
   --color-surface-high: #242030;
-  --color-cyber-purple: #BA9EFF;
+  --color-cyber-purple: oklch(0.65 0.3 300);
   --color-cyber-dim: #8455EF;
-  --color-telemetry-cyan: #61C2FF;
-  --color-alert-crimson: #7F1D1D;
+  --color-telemetry-cyan: oklch(0.75 0.15 200);
+  --color-alert-crimson: oklch(0.55 0.25 20);
   --color-text-main: #E5E2E3;
   --color-text-muted: #8E8997;
 
@@ -32,28 +33,30 @@
   --color-neon-green: oklch(0.78 0.20 145);
   --color-neon-crimson: oklch(0.60 0.25 25);
 
-  --font-sans: "Space Grotesk", "Inter", -apple-system, system-ui, sans-serif;
+  --font-sans: "Inter", -apple-system, system-ui, sans-serif;
   --font-body: "Inter", -apple-system, system-ui, sans-serif;
   --font-headline: "Space Grotesk", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
-  --font-telemetry: "Space Mono", "Doto", "JetBrains Mono", monospace;
+  --font-telemetry: "Doto", "Space Mono", "JetBrains Mono", monospace;
 
   --ease-tactile: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root {
-  --background: #08080A;
+  --background: oklch(0% 0 0);
   --foreground: #E5E2E3;
   --muted: #17151F;
   --muted-foreground: #8E8997;
   --border: rgba(255, 255, 255, 0.08);
-  --accent: #BA9EFF;
+  --accent: oklch(0.65 0.3 300);
   --compiling: #F59E0B;
   --idle: #242030;
-  --font-sans: "Space Grotesk", "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
-  --font-telemetry: "Space Mono", "Doto", "JetBrains Mono", monospace;
+  --font-telemetry: "Doto", "Space Mono", "JetBrains Mono", monospace;
 }
 
 * {
@@ -64,17 +67,34 @@
 
 html,
 body {
-  width: 100vw;
+  margin: 0;
+  overflow: hidden;
+  background-color: oklch(0% 0 0);
   height: 100vh;
-  background-color: #08080A;
+  width: 100vw;
   color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  overflow: hidden;
   user-select: none;
+}
+
+/* =========================================================================
+   A Gaiola Ortogonal Indestrutível (CSS Grid Puro)
+   ========================================================================= */
+.cockpit-grid {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-rows: 3rem minmax(0, 1fr) 2rem;
+  grid-template-areas:
+    "rail topbar"
+    "rail canvas"
+    "rail terminal";
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 
 /* =========================================================================

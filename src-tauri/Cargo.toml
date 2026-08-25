@@ -92,7 +92,7 @@ tempfile = { workspace = true }
 [features]
 default = []
 tauri-app = ["dep:tauri", "dep:tauri-plugin-opener", "tauri/custom-protocol"]
-llama_backend = ["dep:ik-llama-cpp-2", "ik-llama-cpp-2/cuda", "lora_adapter"]
+llama_backend = ["dep:ik-llama-cpp-2", "dep:ik-llama-cpp-sys", "ik-llama-cpp-2/cuda", "lora_adapter"]
 mistral_backend = ["dep:mistralrs"]
 grammar_backend = []
 # Marco 4.10.1 — ETAPA 5: gateway_ccr é um marker feature que gateia o

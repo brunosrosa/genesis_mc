@@ -456,16 +456,17 @@ def compile_models_inventory(output_dir, root_dir):
 
     # 2. Varredura física profunda por arquivos de modelo no disco host
     search_dirs = [
-        os.path.expanduser("~/.lmstudio/models"),
-        os.path.join(root_dir, ".souls_data", "models")
+        ("lmstudio", os.path.expanduser("~/.lmstudio/models")),
+        ("souls_data", os.path.join(root_dir, ".souls_data", "models")),
+        ("src_tauri_core", os.path.join(root_dir, "src-tauri", "models")),
     ]
 
-    model_exts = {".gguf", ".safetensors", ".bin", ".onnx", ".pt", ".pth", ".engine", ".llamafile", ".part", ".tflite", ".keras"}
+    model_exts = {".gguf", ".safetensors", ".bin", ".onnx", ".data", ".pt", ".pth", ".engine", ".llamafile", ".part", ".tflite", ".keras"}
     
     found_items = []
     seen_norm = set()
 
-    for d in search_dirs:
+    for origin_tag, d in search_dirs:
         if os.path.exists(d):
             for root, dirs, files in os.walk(d):
                 for f in files:
@@ -477,19 +478,26 @@ def compile_models_inventory(output_dir, root_dir):
                         if norm not in seen_norm:
                             seen_norm.add(norm)
                             sz = os.path.getsize(fp)
-                            found_items.append((fp, f, ext, sz, norm))
+                            found_items.append((fp, f, ext, sz, norm, origin_tag))
 
     primary_models = []
     addon_modules = []
+    embedded_core_models = []
     partial_downloads = []
 
-    for fp, f, ext, sz, norm in found_items:
+    for fp, f, ext, sz, norm, origin_tag in found_items:
         clean_p = fp.replace("\\\\?\\", "")
         p_dir = os.path.dirname(clean_p)
         folder_name = os.path.basename(p_dir)
 
         if ext == ".part" or f.lower().endswith(".part"):
             partial_downloads.append((f, sz, clean_p))
+            continue
+
+        # Modelos internos em src-tauri/models são catalogados como CORE EMBARCADOS
+        if origin_tag == "src_tauri_core" or "src-tauri" in clean_p.lower():
+            mod_desc = "Modelo ONNX / Classificador de Intenção / NER Core" if "gliclass" in f.lower() or ext == ".onnx" else "Pesos / Tensores Binários de Modelo Core"
+            embedded_core_models.append((f, mod_desc, ext.upper().replace(".", ""), sz, clean_p))
             continue
 
         if norm in sqlite_map:
@@ -548,6 +556,7 @@ def compile_models_inventory(output_dir, root_dir):
     # Ordenação Lógica: Tamanho em Disco (GB) do Maior para o Menor
     primary_models.sort(key=lambda x: x[6], reverse=True)
     addon_modules.sort(key=lambda x: x[6], reverse=True)
+    embedded_core_models.sort(key=lambda x: x[3], reverse=True)
     partial_downloads.sort(key=lambda x: x[1], reverse=True)
 
     total_count = len(found_items)
@@ -556,6 +565,7 @@ def compile_models_inventory(output_dir, root_dir):
 
     prim_size_gb = sum(x[6] for x in primary_models) / (1024 ** 3) if primary_models else 0
     addon_size_gb = sum(x[6] for x in addon_modules) / (1024 ** 3) if addon_modules else 0
+    embed_size_gb = sum(x[3] for x in embedded_core_models) / (1024 ** 3) if embedded_core_models else 0
     part_size_gb = sum(x[1] for x in partial_downloads) / (1024 ** 3) if partial_downloads else 0
 
     lines = []
@@ -566,6 +576,7 @@ def compile_models_inventory(output_dir, root_dir):
     lines.append(f"TOTAL DE ARQUIVOS FÍSICOS DE MODELOS NO DISCO: {total_count} | ESPAÇO TOTAL EM DISCO: {total_size_gb:.2f} GB")
     lines.append(f"  • MODELOS LLM PRINCIPAIS DE INFERÊNCIA: {len(primary_models)} ({prim_size_gb:.2f} GB)")
     lines.append(f"  • MÓDULOS AUXILIARES / ADDONS (VISÃO, DRAFT, MTP, LORA): {len(addon_modules)} ({addon_size_gb:.2f} GB)")
+    lines.append(f"  • MODELOS EMBARCADOS & CORE INTERNOS (src-tauri/models - ONNX / NER): {len(embedded_core_models)} ({embed_size_gb:.2f} GB)")
     lines.append(f"  • DOWNLOADS E ARQUIVOS PARCIAIS (.PART): {len(partial_downloads)} ({part_size_gb:.2f} GB)")
     lines.append("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
     lines.append("")
@@ -599,10 +610,20 @@ def compile_models_inventory(output_dir, root_dir):
         addon_desc = addon_descriptions.get(addon_type, "Módulo Auxiliar")
         lines.append(f"{addon_type:<20} | {addon_desc:<35} | {family:<20} | {model_name:<75} | {quant:<14} | {size_gb:<12.2f} | {path}")
 
+    lines.append("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+    lines.append("")
+    lines.append(f"=== SEÇÃO 3: MODELOS EMBARCADOS & CORE INTERNOS (src-tauri/models) ({len(embedded_core_models)}) ===")
+    lines.append("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+    lines.append(f"{'NOME DO ARQUIVO':<35} | {'FUNÇÃO / TIPO':<50} | {'FORMATO':<10} | {'TAMANHO (GB)':<12} | CAMINHO FÍSICO")
+    lines.append("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+    for fn, mod_desc, fmt, size_b, path in embedded_core_models:
+        size_gb = size_b / (1024 ** 3)
+        lines.append(f"{fn:<35} | {mod_desc:<50} | {fmt:<10} | {size_gb:<12.2f} | {path}")
+
     if partial_downloads:
         lines.append("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
         lines.append("")
-        lines.append(f"=== SEÇÃO 3: DOWNLOADS E ARQUIVOS PARCIAIS (.PART) ({len(partial_downloads)}) ===")
+        lines.append(f"=== SEÇÃO 4: DOWNLOADS E ARQUIVOS PARCIAIS (.PART) ({len(partial_downloads)}) ===")
         lines.append("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
         lines.append(f"{'NOME DO ARQUIVO':<65} | {'TAMANHO ATUAL (GB)':<18} | CAMINHO FÍSICO")
         lines.append("----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")

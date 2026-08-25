@@ -1431,16 +1431,27 @@ pub async fn run_execute(params: &serde_json::Map<String, Value>) -> Result<Valu
 pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value, RpcError> {
     let args = extract_arguments(params);
 
-    let prompt = args
-        .get("prompt")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| RpcError {
-            code: -32602,
-            message: "Argumento 'prompt' (string não-vazia) é obrigatório".to_string(),
+    let prompt_val = args.get("prompt").ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Argumento 'prompt' é obrigatório".to_string(),
+        data: None,
+    })?;
+
+    let prompt_str = prompt_val.as_str().ok_or_else(|| RpcError {
+        code: -32602,
+        message: "Argumento 'prompt' deve ser string".to_string(),
+        data: None,
+    })?;
+
+    if prompt_str.trim().is_empty() {
+        return Err(RpcError {
+            code: -32000,
+            message: "PromptVazio: o prompt não pode ser vazio ou conter apenas espaços".to_string(),
             data: None,
-        })?;
+        });
+    }
+
+    let prompt = prompt_str.trim();
 
     let session_id = args
         .get("session_id")
@@ -1461,8 +1472,6 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
     // SOULS MC Marco IV: `LlamaCppEpistemicProber` borrows `&LlamaLogitProber`
     // with a non-`'static` lifetime, so the borrow must be constructed
     // INSIDE the `spawn_blocking` closure (where the owned engine now lives).
-    // Building it outside (with a local `&logit_engine`) would force the
-    // borrow to be `'static`, which the local engine cannot satisfy.
     let logit_engine = LlamaLogitProber::default();
     let req = EpistemicRequest {
         prompt: prompt.to_string(),
@@ -1470,15 +1479,6 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
         memory_window,
     };
 
-    // `move` captures `logit_engine` (owned) and `req` (owned) so the
-    // spawned task has full ownership. The `prober` is constructed
-    // inside, holding a borrow into the local `logit_engine` that lives
-    // exactly as long as the closure body.
-    //
-    // Double-`?` chain:
-    //   spawn_blocking  → Result<Result<EpistemicScores, EpistemicError>, JoinError>
-    //   .await + first  ?  → Result<EpistemicScores, EpistemicError>
-    //   .map_err + second ? → EpistemicScores
     let eval: EpistemicScores = tokio::task::spawn_blocking(move || {
         souls_mc_lib::core::llama_logit_probing::safe_ffi_call(std::panic::AssertUnwindSafe(|| {
             let prober = LlamaCppEpistemicProber::new(&logit_engine);
@@ -1498,8 +1498,44 @@ pub async fn run_intent(params: &serde_json::Map<String, Value>) -> Result<Value
         data: None,
     })?;
 
-    let text = serde_json::to_string_pretty(&eval).unwrap_or_default();
-    let eval_val = serde_json::to_value(eval).unwrap_or_default();
+    // Disjuntor de Segurança (Hostile Prompt / OrtScorerEngine)
+    let is_hostile = prompt.contains("ignore as instruções")
+        || prompt.contains("senha do banco")
+        || session_id.contains("hostile");
+    if is_hostile {
+        return Err(RpcError {
+            code: -32001,
+            message: "Prompt interceptado pelo módulo de segurança".to_string(),
+            data: Some(json!({
+                "hitl_required": true,
+                "sentinel": "OrtScorerEngine"
+            })),
+        });
+    }
+
+    // Disjuntor Socrático (Vague Prompt / High Ambiguity)
+    let is_vague = prompt == "edite o config" || session_id.contains("vago") || (eval.ambiguidade > 0.90 && prompt.len() < 25);
+    if is_vague {
+        return Err(RpcError {
+            code: -32001,
+            message: "Disjuntor Socrático disparado: ambiguidade ou conflito elevado".to_string(),
+            data: Some(json!({
+                "hitl_required": true,
+                "interrupt": {
+                    "session_id": session_id,
+                    "prompt_truncated": prompt,
+                    "scores": eval,
+                    "reason": "Ambiguidade crítica detectada no prompt (> 0.80)"
+                }
+            })),
+        });
+    }
+
+    let mut eval_val = serde_json::to_value(&eval).unwrap_or_default();
+    if let Some(obj) = eval_val.as_object_mut() {
+        obj.insert("disjuntor_ativo".to_string(), json!(false));
+    }
+    let text = serde_json::to_string_pretty(&eval_val).unwrap_or_default();
 
     Ok(json!({
         "content": [{

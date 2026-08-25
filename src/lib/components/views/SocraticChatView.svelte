@@ -1,10 +1,12 @@
 <script lang="ts">
   // SOULS MC — Active Canvas View: Socratic Chat + Bancada JIT (Split View)
   //
-  // Diálogo socrático em tempo real, visualização de tags invariantes [Tsys/Ttools/Tstate]
-  // e projeção direta de código/componentes na Bancada JIT ao lado.
-  // Conformidade: ADR-005, ADR-014, ADR-022, ADR-045.
+  // Diálogo socrático em tempo real, streaming do evento Tauri 'socratic-thought'
+  // visualização de tags invariantes [Tsys/Ttools/Tstate] e projeção na Bancada JIT.
+  // Conformidade: ADR-005, ADR-010, ADR-014, ADR-022, ADR-025, ADR-045.
 
+  import { onMount } from "svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { workspaceStore } from "$lib/stores/workspace.svelte.ts";
   import { governanceStore } from "$lib/stores/governance.svelte.ts";
 
@@ -17,9 +19,27 @@
   let isSubCanvasOpen = $state(true);
   let chatInputText = $state("");
 
-  interface ChatMessage {
+  export type SocraticThoughtType = "regular" | "revision" | "branching";
+
+  export interface SocraticThoughtPayload {
+    id?: string;
+    type?: SocraticThoughtType;
+    content?: string;
+    text?: string;
+    thought?: string;
+    model?: string;
+    timestamp?: string;
+    codeSnippet?: {
+      targetFile: string;
+      tag: string;
+      code: string;
+    };
+  }
+
+  export interface ChatMessage {
     id: string;
     sender: "user" | "soul";
+    thoughtType?: SocraticThoughtType;
     text: string;
     timestamp: string;
     model?: string;
@@ -40,6 +60,7 @@
     {
       id: "m2",
       sender: "soul",
+      thoughtType: "regular",
       text: "Mestre Bruno, para evitar o esgotamento do **Flow-Debt**, isolamos o planejamento em um **Kanban Agêntico** e testamos os protótipos diretamente na **Bancada**.",
       timestamp: "16:42:04",
       model: "Gemini 2.5 Flash",
@@ -57,36 +78,58 @@
     code: `pub fn calc_circadian_anchor(wake_time: u32) -> Result<AnchorWindow> {\n    // Cálculo atômico de janela de dopamina para evitar fadiga\n    let window = AnchorWindow::new(wake_time)?;\n    Ok(window)\n}`
   });
 
+  let unlistenSocratic: UnlistenFn | null = null;
+
+  onMount(() => {
+    void (async () => {
+      try {
+        unlistenSocratic = await listen<SocraticThoughtPayload>("socratic-thought", (event) => {
+          const payload = event.payload;
+          if (!payload) return;
+
+          const text = payload.content || payload.thought || payload.text || "";
+          const thoughtType = payload.type || "regular";
+          const newMsg: ChatMessage = {
+            id: payload.id || `st_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            sender: "soul",
+            thoughtType,
+            text,
+            timestamp: payload.timestamp || new Date().toLocaleTimeString(),
+            model: payload.model || "Gemini 2.5 Flash",
+            codeSnippet: payload.codeSnippet
+          };
+
+          messages.push(newMsg);
+
+          if (payload.codeSnippet) {
+            currentSubCanvasCode = payload.codeSnippet;
+            isSubCanvasOpen = true;
+          }
+        });
+      } catch {
+        // Fallback gracioso em ambiente web sem Tauri backend
+      }
+    })();
+
+    return () => {
+      unlistenSocratic?.();
+    };
+  });
+
   function handleSendMessage() {
     const text = chatInputText.trim();
     if (!text) return;
 
-    messages.push({
+    const userMessage: ChatMessage = {
       id: `usr_${Date.now()}`,
       sender: "user",
       text,
       timestamp: new Date().toLocaleTimeString()
-    });
+    };
 
+    messages.push(userMessage);
     chatInputText = "";
     governanceStore.recordUsage(120, 0.00005);
-
-    // Resposta socrática simulada de alta fidelidade
-    setTimeout(() => {
-      messages.push({
-        id: `sol_${Date.now()}`,
-        sender: "soul",
-        text: `Compreendido. No escopo de **${workspaceStore.activeWorkspace.title}**, aplicamos o princípio de contenção estrita e modularidade. Veja a projeção atualizada na Bancada.`,
-        timestamp: new Date().toLocaleTimeString(),
-        model: "Phi-4-Mini [IQ3_M]",
-        codeSnippet: {
-          targetFile: "src-tauri/src/cognition/sdd.rs",
-          tag: "Bare-Metal AVX2",
-          code: `pub async fn verify_invariants(ctx: &mut TaskContext) -> Result<()> {\n    // Verificação estrita de memória e VRAM sem alucinações\n    ctx.enforce_guard_rails().await\n}`
-        }
-      });
-      governanceStore.recordUsage(240, 0.0001);
-    }, 600);
   }
 
   function projectToSubCanvas(snippet: { targetFile: string; tag: string; code: string }) {
@@ -97,12 +140,12 @@
 
 <div class="h-full w-full flex gap-3 overflow-hidden select-none">
   <!-- Chat Panel (Left Split) -->
-  <div class="flex-1 h-full bg-surface-low border border-white/10 flex flex-col justify-between overflow-hidden">
+  <div class="flex-1 h-full bg-void-black/90 border border-white/10 flex flex-col justify-between overflow-hidden">
     <!-- Chat Header -->
     <div class="h-9 px-4 bg-surface-mid border-b border-white/5 flex items-center justify-between font-mono text-xs shrink-0">
       <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-cyber-purple"></span>
-        <span class="font-semibold text-text-main">Diálogo Socrático // Master Soul (Gemini 2.5 Flash)</span>
+        <span class="w-2 h-2 rounded-full bg-cyber-purple animate-pulse"></span>
+        <span class="font-semibold text-text-main">Diálogo Socrático // Master Soul (SODA v3)</span>
       </div>
       <span class="text-[10px] text-text-muted">
         Notação LEAN Ativa | Workspace: <strong class="text-cyber-purple">{workspaceStore.activeWorkspace.title}</strong>
@@ -111,12 +154,13 @@
 
     <!-- Chat Messages Stream -->
     <div class="flex-1 overflow-y-auto p-4 space-y-4 font-body text-xs">
+      <!-- Invariant System Tags -->
       <div class="flex justify-center">
-        <div class="bg-surface-high/60 border border-white/5 px-3 py-1 font-mono text-[10px] text-text-muted flex items-center gap-2">
-          <span class="text-cyber-purple">[Tsys: Imutável]</span>
+        <div class="bg-surface-high/70 border border-white/10 px-3 py-1 font-mono text-[10px] text-text-muted flex items-center gap-2.5 shadow-inner">
+          <span class="text-cyber-purple font-bold tracking-tight bg-cyber-purple/10 px-1.5 py-0.5 border border-cyber-purple/20">[Tsys: Imutável]</span>
           <span>Soul Core Loaded</span>
-          <span class="text-telemetry-cyan">[Ttools: 12 Active MCPs]</span>
-          <span class="text-emerald-400">[Tstate_mv: Synced]</span>
+          <span class="text-telemetry-cyan font-bold tracking-tight bg-telemetry-cyan/10 px-1.5 py-0.5 border border-telemetry-cyan/20">[Ttools: 12 Active MCPs]</span>
+          <span class="text-emerald-400 font-bold tracking-tight bg-emerald-400/10 px-1.5 py-0.5 border border-emerald-400/20">[Tstate_mv: Synced]</span>
         </div>
       </div>
 
@@ -124,26 +168,37 @@
         {#if msg.sender === "user"}
           <!-- User Message -->
           <div class="flex flex-col items-end gap-1">
-            <div class="bg-surface-high border border-white/10 p-3 max-w-[80%] text-text-main font-mono">
+            <div class="bg-surface-high border border-white/10 p-3 max-w-[80%] text-text-main font-mono shadow-md">
               <span class="text-cyber-purple font-bold">Bruno:</span> "{msg.text}"
             </div>
             <span class="font-mono text-[9px] text-text-muted">{msg.timestamp}</span>
           </div>
         {:else}
-          <!-- Soul Agent Message -->
+          <!-- Soul Agent / Socratic Thought Message -->
           <div class="flex flex-col items-start gap-1">
-            <div class="bg-surface-mid border border-cyber-purple/30 p-3.5 max-w-[85%] text-text-main space-y-2">
-              <div class="flex items-center justify-between font-mono text-[11px] text-cyber-purple font-semibold border-b border-white/5 pb-1">
-                <span class="flex items-center gap-1.5">
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2a4 4 0 0 0-4 4v2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-1V6a4 4 0 0 0-4-4z" />
-                  </svg>
-                  SOULS // PARCEIRO SOCRÁTICO
+            <div 
+              class="p-3.5 max-w-[85%] text-text-main space-y-2 border {msg.thoughtType === 'revision' ? 'bg-surface-mid border-telemetry-cyan/40' : msg.thoughtType === 'branching' ? 'bg-surface-mid border-emerald-400/40' : 'bg-surface-mid border-cyber-purple/30'}"
+            >
+              <!-- Socratic Thought Bullet Header -->
+              <div class="flex items-center justify-between font-mono text-[11px] font-semibold border-b border-white/5 pb-1">
+                <span class="flex items-center gap-1.5 {msg.thoughtType === 'revision' ? 'text-telemetry-cyan' : msg.thoughtType === 'branching' ? 'text-emerald-400' : 'text-cyber-purple'}">
+                  {#if msg.thoughtType === 'revision'}
+                    <span class="w-2 h-2 rounded-full bg-telemetry-cyan"></span>
+                    <span>REVISÃO SOCRÁTICA</span>
+                  {:else if msg.thoughtType === 'branching'}
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>RAMIFICAÇÃO HIPÓTESE</span>
+                  {:else}
+                    <span class="w-2 h-2 rounded-full bg-cyber-purple"></span>
+                    <span>PENSAMENTO SOCRÁTICO</span>
+                  {/if}
                 </span>
-                <span class="text-[9px] bg-cyber-purple/10 px-1.5 py-0.5 text-cyber-purple font-mono">
-                  {msg.model || 'Gemini'}
+                <span class="text-[9px] bg-white/5 px-1.5 py-0.5 text-text-muted font-mono">
+                  {msg.model || 'Gemini 2.5'}
                 </span>
               </div>
+
+              <!-- Thought Content -->
               <p class="leading-relaxed font-sans text-xs">
                 {msg.text}
               </p>
@@ -158,7 +213,7 @@
                       </svg>
                       Projeção Sugerida na Bancada
                     </span>
-                    <span class="text-[9px] bg-cyber-purple/20 px-1.5 py-0.5">JIT UI</span>
+                    <span class="text-[9px] bg-cyber-purple/20 px-1.5 py-0.5 text-cyber-purple">JIT UI</span>
                   </div>
                   <p class="text-text-muted text-[10px] mb-2 truncate">Alvo: {msg.codeSnippet.targetFile}</p>
                   <button 
@@ -219,7 +274,7 @@
 
   <!-- Dynamic Sub-Canvas / Bancada JIT (Right Split) -->
   {#if isSubCanvasOpen}
-    <div class="w-[38%] h-full bg-surface-low border border-white/10 flex flex-col justify-between overflow-hidden transition-all duration-150 shrink-0">
+    <div class="w-[38%] h-full bg-void-black/90 border border-white/10 flex flex-col justify-between overflow-hidden transition-all duration-150 shrink-0">
       <div class="h-9 px-3 bg-surface-mid border-b border-white/5 flex items-center justify-between font-mono text-xs shrink-0">
         <div class="flex items-center gap-2 text-telemetry-cyan font-semibold">
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -241,7 +296,7 @@
           <button 
             type="button"
             onclick={() => isSubCanvasOpen = false} 
-            class="p-1 hover:text-red-400 transition-colors text-text-muted" 
+            class="p-1 hover:text-alert-crimson transition-colors text-text-muted" 
             title="Fechar Sub-Canvas"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

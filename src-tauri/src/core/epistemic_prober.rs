@@ -397,11 +397,12 @@ fn compute_specificity(prompt: &str) -> f32 {
         || prompt.contains("fn ")
         || prompt.contains("struct ");
     let has_arquivo = lower.contains("arquivo ") || lower.contains("file ");
-    let has_imperative = lower.contains("refatore")
-        || lower.contains("implemente")
-        || lower.contains("adicione")
-        || lower.contains("corrija")
-        || lower.contains("crie");
+    let has_imperative = lower.contains("refator")
+        || lower.contains("implement")
+        || lower.contains("adicion")
+        || lower.contains("corrij")
+        || lower.contains("cri")
+        || lower.contains("como ");
     let path_bonus = if has_path { 0.35 } else { 0.0 };
     let type_bonus = if has_type { 0.20 } else { 0.0 };
     let sig_bonus = if has_signature { 0.25 } else { 0.0 };

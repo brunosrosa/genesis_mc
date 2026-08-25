@@ -86,15 +86,28 @@ impl EngineProbe for DefaultLlamaCppProbe {
             return EngineSupportLevel::Unsupported("Arquivo de modelo inexistente no disco".to_string());
         }
 
+        let path_lower = model_path.to_string_lossy().to_lowercase();
+        let fam_lower = topology.family_raw.to_lowercase();
+        let is_mamba_or_recurrent = fam_lower.contains("mamba")
+            || fam_lower.contains("rwkv")
+            || fam_lower.contains("zamba")
+            || path_lower.contains("mamba")
+            || path_lower.contains("rwkv")
+            || path_lower.contains("zamba");
+        let is_bitnet = fam_lower.contains("bitnet")
+            || path_lower.contains("bitnet")
+            || path_lower.contains("i2_s")
+            || path_lower.contains("i1_s");
+
+        if is_mamba_or_recurrent {
+            return EngineSupportLevel::Unsupported("Arquitetura Mamba/Recurrente incompatível com llama.cpp".to_string());
+        }
+        if is_bitnet {
+            return EngineSupportLevel::Unsupported("Arquitetura BitNet incompatível com llama.cpp".to_string());
+        }
+
         match topology.file_format {
-            FileFormat::Gguf => {
-                let lower = topology.family_raw.to_lowercase();
-                if lower == "rwkv" || lower == "zamba2" || lower == "mamba" || lower == "mamba-ssm" {
-                    EngineSupportLevel::Unsupported(format!("Arquitetura '{}' incompatível com llama.cpp", topology.family_raw))
-                } else {
-                    EngineSupportLevel::Native(100)
-                }
-            }
+            FileFormat::Gguf => EngineSupportLevel::Native(100),
             _ => EngineSupportLevel::Unsupported("Formato incompatível com motor llama.cpp (requer GGUF)".to_string()),
         }
     }
@@ -112,16 +125,28 @@ impl EngineProbe for LlamaVanguardProbe {
             return EngineSupportLevel::Unsupported("Arquivo de modelo inexistente no disco".to_string());
         }
 
+        let path_lower = model_path.to_string_lossy().to_lowercase();
+        let fam_lower = topology.family_raw.to_lowercase();
+        let is_mamba_or_recurrent = fam_lower.contains("mamba")
+            || fam_lower.contains("rwkv")
+            || fam_lower.contains("zamba")
+            || path_lower.contains("mamba")
+            || path_lower.contains("rwkv")
+            || path_lower.contains("zamba");
+        let is_bitnet = fam_lower.contains("bitnet")
+            || path_lower.contains("bitnet")
+            || path_lower.contains("i2_s")
+            || path_lower.contains("i1_s");
+
+        if is_mamba_or_recurrent {
+            return EngineSupportLevel::Unsupported("Arquitetura Mamba/Recurrente incompatível com LlamaVanguard (requer sidecar mamba-ssm)".to_string());
+        }
+        if is_bitnet {
+            return EngineSupportLevel::Unsupported("Arquitetura BitNet incompatível com LlamaVanguard (requer sidecar bitnet.cpp)".to_string());
+        }
+
         match topology.file_format {
-            FileFormat::Gguf => {
-                let lower = topology.family_raw.to_lowercase();
-                if lower == "rwkv" || lower == "zamba2" || lower == "mamba" || lower == "mamba-ssm" {
-                    EngineSupportLevel::Unsupported(format!("Arquitetura '{}' incompatível com LlamaVanguard", topology.family_raw))
-                } else {
-                    // Vanguard tem prioridade (200) para acionar o worker isolado com fallback gracioso
-                    EngineSupportLevel::Native(200)
-                }
-            }
+            FileFormat::Gguf => EngineSupportLevel::Native(200),
             _ => EngineSupportLevel::Unsupported("Formato incompatível com LlamaVanguard (requer GGUF)".to_string()),
         }
     }
@@ -138,17 +163,15 @@ impl EngineProbe for LlamaCpp4LogitProbe {
         "llama_cpp4_logit"
     }
 
-    fn probe_support(&self, _model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
-        // Logit probing so faz sentido em arquiteturas transformer-like. Arquiteturas
-        // state-space (rwkv, mamba, zamba2) nao produzem logits canonicos.
-        let lower = topology.family_raw.to_lowercase();
-        if lower == "rwkv" || lower == "zamba2" || lower == "mamba" || lower == "mamba-ssm" {
+    fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
+        let path_lower = model_path.to_string_lossy().to_lowercase();
+        let fam_lower = topology.family_raw.to_lowercase();
+        if fam_lower.contains("rwkv") || fam_lower.contains("zamba") || fam_lower.contains("mamba") || path_lower.contains("mamba") {
             return EngineSupportLevel::Unsupported(format!(
                 "Arquitetura '{}' nao suporta logit probing (apenas transformers)",
                 topology.family_raw
             ));
         }
-        // Para transformers, logit probing opera sobre qualquer modelo carregado. Native medio (150).
         EngineSupportLevel::Native(150)
     }
 }
@@ -160,9 +183,14 @@ impl EngineProbe for MistralRsSidecarProbe {
         "mistral_rs_sidecar"
     }
 
-    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
-        // Sidecar efemero; depende do binario estar presente. Fallback (80) para mock.
-        EngineSupportLevel::Fallback(80)
+    fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
+        let path_lower = model_path.to_string_lossy().to_lowercase();
+        let fam_lower = topology.family_raw.to_lowercase();
+        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
+            EngineSupportLevel::Native(210)
+        } else {
+            EngineSupportLevel::Fallback(80)
+        }
     }
 }
 
@@ -173,13 +201,13 @@ impl EngineProbe for BitnetProbe {
         "bitnet"
     }
 
-    fn probe_support(&self, model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
-        // BitNet so aceita modelos ternarios (i2_s, i1_s, "bitnet", "ternary" no path).
-        let lower = model_path.to_string_lossy().to_lowercase();
-        if lower.contains("i2_s") || lower.contains("i1_s") || lower.contains("bitnet") || lower.contains("ternary") {
-            EngineSupportLevel::Native(180)
+    fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
+        let path_lower = model_path.to_string_lossy().to_lowercase();
+        let fam_lower = topology.family_raw.to_lowercase();
+        if fam_lower.contains("bitnet") || path_lower.contains("i2_s") || path_lower.contains("i1_s") || path_lower.contains("bitnet") || path_lower.contains("ternary") {
+            EngineSupportLevel::Native(220)
         } else {
-            EngineSupportLevel::Unsupported("Bitnet so suporta modelos ternarios (i2_s, i1_s, bitnet)".to_string())
+            EngineSupportLevel::Unsupported("Bitnet só suporta modelos ternários (i2_s, i1_s, bitnet)".to_string())
         }
     }
 }

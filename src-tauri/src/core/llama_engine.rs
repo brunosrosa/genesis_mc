@@ -19,12 +19,20 @@ use crate::souls_thermal_governor::SystemState;
 use tokio::sync::watch;
 use std::sync::OnceLock;
 
+unsafe extern "C" fn silence_llama_logs(
+    _level: ik_llama_cpp_sys::ggml_log_level,
+    _text: *const std::os::raw::c_char,
+    _user_data: *mut std::os::raw::c_void,
+) {}
+
 static GLOBAL_LLAMA_BACKEND: OnceLock<Result<LlamaBackend, String>> = OnceLock::new();
 
 fn get_global_llama_backend() -> Result<&'static LlamaBackend, InferenceError> {
     let res = GLOBAL_LLAMA_BACKEND.get_or_init(|| {
-        let mut backend = LlamaBackend::init().map_err(|e| format!("Falha ao inicializar LlamaBackend: {}", e))?;
-        backend.void_logs();
+        unsafe {
+            ik_llama_cpp_sys::llama_log_set(Some(silence_llama_logs), std::ptr::null_mut());
+        }
+        let backend = LlamaBackend::init().map_err(|e| format!("Falha ao inicializar LlamaBackend: {}", e))?;
         Ok(backend)
     });
 
@@ -132,11 +140,72 @@ fn build_chat_prompt(system: &str, few_shot: &[(String, String)], user_query: &s
 }
 
 pub fn calculate_kv_cache_v_type(n_embd_head_v: u32) -> KvCacheType {
-    if n_embd_head_v > 0 && n_embd_head_v.is_multiple_of(256) {
+    if n_embd_head_v == 0 {
+        // Sem garantia de metadados -> F16 universal blindado contra qualquer GGML_ASSERT
+        KvCacheType::F16
+    } else if n_embd_head_v >= 256 && n_embd_head_v.is_multiple_of(256) {
         KvCacheType::Q4_K
+    } else if n_embd_head_v >= 32 && n_embd_head_v.is_multiple_of(32) {
+        // TurboQuant: Q4_0 (4-bits com bloco 32) para 100% de compatibilidade com head_dim 128/64
+        KvCacheType::Q4_0
     } else {
-        // Fallback matemático silencioso para Q8_0 (tamanho de bloco 32) prevenindo pânico na C-FFI
-        KvCacheType::Q8_0
+        KvCacheType::F16
+    }
+}
+
+/// Calcula o número seguro de camadas GPU para offload na RTX 2060m (6GB VRAM / ADR-027).
+///
+/// Teto seguro para pesos na VRAM: 4.200 MB (~4.2 GB), preservando 1.8 GB para Windows/Display e KV Cache.
+pub fn calculate_safe_gpu_layers(model_path: &Path, meta: Option<&model_registry::ModelMetadata>) -> u32 {
+    let path_lower = model_path.to_string_lossy().to_lowercase();
+
+    // 1. Quantizações experimentais/ternárias/1-bit (Q1_0, i1_s, i2_s, dspark) não têm kernels CUDA completos no GGML -> CPU-only (0 layers GPU)
+    if path_lower.contains("q1_0")
+        || path_lower.contains("q1_s")
+        || path_lower.contains("i1_s")
+        || path_lower.contains("i2_s")
+        || path_lower.contains("dspark")
+    {
+        tracing::info!("Modelo com quantização 1-bit/experimental ({}). Forçando CPU-only (0 GPU layers).", model_path.display());
+        return 0;
+    }
+
+    let file_size_mb = std::fs::metadata(model_path)
+        .map(|m| m.len() as f64 / (1024.0 * 1024.0))
+        .unwrap_or(4000.0);
+
+    // 2. Parâmetros > 14B (ex: 27B, 32B, 70B): Na RTX 2060m (6GB), teto de VRAM é estrito
+    let is_large_model = if let Some(m) = meta {
+        m.parameters.contains("27B") || m.parameters.contains("32B") || m.parameters.contains("70B") || m.parameters.contains("14B")
+    } else {
+        path_lower.contains("27b") || path_lower.contains("32b") || path_lower.contains("70b")
+    };
+
+    if is_large_model {
+        let total_layers = meta
+            .map(|m| m.architecture.block_count)
+            .unwrap_or(62)
+            .max(1);
+        let safe_layers = (total_layers / 4).min(16);
+        tracing::info!(
+            "Modelo de Grande Porte ({:.1}MB). Offload híbrido seguro: {}/{} camadas na GPU.",
+            file_size_mb, safe_layers, total_layers
+        );
+        return safe_layers.max(1);
+    }
+
+    const SAFE_VRAM_WEIGHTS_MB: f64 = 4200.0;
+
+    if file_size_mb <= SAFE_VRAM_WEIGHTS_MB {
+        99 // Offload completo na GPU para modelos <= 8B
+    } else {
+        let total_layers = meta
+            .map(|m| m.architecture.block_count)
+            .unwrap_or(32)
+            .max(1);
+        let mb_per_layer = file_size_mb / total_layers as f64;
+        let safe_layers = (SAFE_VRAM_WEIGHTS_MB / mb_per_layer).floor() as u32;
+        safe_layers.max(1)
     }
 }
 
@@ -160,10 +229,10 @@ pub fn build_context_params_with_fallback(
     let n_ctx = cap_context_length_for_family(family, declared_n_ctx);
 
     // TurboQuant (Battle 3 / ADR-027): K=F16 preserva precisão de RoPE,
-    // V=Q4_K comprime 4x (ou TQ1/TQ2 para compressão extrema). Para 32k ctx na RTX 2060m: ~800MB VRAM.
+    // V=Q4_0 / Q4_K comprime 4x. Para 32k ctx na RTX 2060m: ~400MB-800MB VRAM.
     // Compilação exclusiva via fork ikawrakow vendorado (ik-llama-cpp-2 / vendor).
     tracing::info!(
-        "TurboQuant ativado (ik-llama-cpp-2 vendor): K=F16, V={:?}, n_embd_head_v={}, ctx={} → ~800MB VRAM",
+        "TurboQuant ativado (ik-llama-cpp-2 vendor): K=F16, V={:?}, n_embd_head_v={}, ctx={} → ~400-800MB VRAM",
         type_v, n_embd_head_v, n_ctx
     );
 
@@ -190,7 +259,7 @@ pub fn build_context_params_with_fallback(
 }
 
 pub fn build_default_context_params() -> LlamaContextParams {
-    build_context_params_with_fallback(256, 4096, "", None)
+    build_context_params_with_fallback(128, 4096, "", None)
 }
 
 impl EphemeralInferEngine for LlamaCppEngine {
@@ -210,18 +279,17 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         // 0. Interceptação Fail-Soft de Arquiteturas Ternárias (BitNet i2_s/i1_s) ou Recorrentes (Mamba/Zamba/RWKV)
         let path_lower = req.model_path.to_lowercase();
-        let is_ternary = path_lower.contains("i2_s") || path_lower.contains("i1_s") || path_lower.contains("bitnet");
-        let is_recurrent = if let Some(ref meta) = gguf_meta {
-            let fam = meta.family.to_lowercase();
-            fam.contains("mamba") || fam.contains("zamba") || fam.contains("rwkv")
-        } else {
-            path_lower.contains("mamba") || path_lower.contains("zamba") || path_lower.contains("rwkv")
-        };
-
-        if is_ternary || is_recurrent {
-            return Err(InferenceError::ExecutionError(
-                "PENDING_ENGINE: Este modelo requer engine especializada (bitnet.cpp/mamba-ssm) ainda não integrada no runtime".to_string()
-            ));
+        if path_lower.contains("bitnet")
+            || path_lower.contains("i2_s")
+            || path_lower.contains("i1_s")
+            || path_lower.contains("mamba")
+            || path_lower.contains("rwkv")
+            || path_lower.contains("zamba")
+        {
+            return Err(InferenceError::ExecutionError(format!(
+                "Arquitetura não suportada via LlamaCppEngine: {}",
+                req.model_path
+            )));
         }
 
         if let Some(ref meta) = gguf_meta {
@@ -236,8 +304,9 @@ impl EphemeralInferEngine for LlamaCppEngine {
         // 1. Inicializa backend bare-metal do llama.cpp
         let backend = get_global_llama_backend()?;
 
-        // 2. Parâmetros do modelo
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(99);
+        // 2. Parâmetros do modelo com offload seguro de camadas GPU (ADR-027 / 6GB VRAM)
+        let n_gpu_layers = calculate_safe_gpu_layers(model_path, gguf_meta.as_ref());
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(n_gpu_layers);
 
         let model = LlamaModel::load_from_file(backend, model_path, &model_params).map_err(|e| {
             InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF '{}': {}", req.model_path, e))
@@ -245,15 +314,15 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         // 3. Alocação do contexto com KV Cache Assimétrico & RoPE Scaling Params
         let (n_embd_head_v, declared_ctx, family, rope_attn_factor) = if let Some(ref meta) = gguf_meta {
-            let h_kv = meta.architecture.head_count_kv.max(1);
-            let head_v = if meta.architecture.embedding_length > 0 {
-                meta.architecture.embedding_length / h_kv
+            let h_q = meta.architecture.head_count;
+            let head_v = if h_q > 0 && meta.architecture.embedding_length > 0 {
+                meta.architecture.embedding_length / h_q
             } else {
-                128
+                0 // Se desconhecido, força F16 universal blindado contra GGML_ASSERT
             };
             (head_v, meta.context_length as u32, meta.family.clone(), meta.architecture.rope_scaling_attn_factor)
         } else {
-            (256, 4096, String::new(), None)
+            (0, 4096, String::new(), None)
         };
 
         let ctx_params = build_context_params_with_fallback(n_embd_head_v, declared_ctx, &family, rope_attn_factor);
