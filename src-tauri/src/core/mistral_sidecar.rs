@@ -185,6 +185,7 @@ mod tests {
             temperature: 0.7,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
 
         // Sem tokio runtime: cai no fallback mock.

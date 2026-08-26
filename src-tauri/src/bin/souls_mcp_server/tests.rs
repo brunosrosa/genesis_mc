@@ -4,7 +4,7 @@ use super::{
 };
 use super::router::normalize_tool_name;
 use souls_mc_lib::cognition::thinking::persistence::ThoughtType;
-use serde_json::{json, Value};
+use serde_json::json;
 
 #[test]
 fn sqlite_query_rejects_multi_statement_payload() {
@@ -5118,6 +5118,7 @@ async fn test_gigatoken_prefill_bypass() {
         temperature: 0.7,
         json_schema: None,
         input: Some(InferenceInput::RawText(prompt.to_string())),
+        lora_adapter_path: None,
     };
 
     let req_pretokenized = SoulsInferenceRequest {
@@ -5130,6 +5131,7 @@ async fn test_gigatoken_prefill_bypass() {
         temperature: 0.7,
         json_schema: None,
         input: Some(InferenceInput::PreTokenized(tokens.clone())),
+        lora_adapter_path: None,
     };
 
     // Valida estrutura e conversão segura para tokens de inferência

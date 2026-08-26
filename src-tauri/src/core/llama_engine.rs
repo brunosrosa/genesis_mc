@@ -232,8 +232,7 @@ pub fn build_context_params_with_fallback(
     let threads = (std::thread::available_parallelism()
         .map(|p| p.get())
         .unwrap_or(8) as u32)
-        .min(12)
-        .max(4);
+        .clamp(4, 12);
 
     // TurboQuant (Battle 3 / ADR-027): K=F16 preserva precisão de RoPE,
     // V=Q4_0 / Q4_K comprime 4x. FlashAttention O(1) e threads paralelas ativadas.
@@ -297,7 +296,7 @@ impl EphemeralInferEngine for LlamaCppEngine {
             || path_lower.contains("790m")
         {
             return Err(InferenceError::ExecutionError(format!(
-                "Arquitetura não suportada via LlamaCppEngine (requer sidecar especializado): {}",
+                "Arquitetura não suportada via LlamaCppEngine (PENDING_ENGINE: bitnet.cpp/mamba-ssm): {}",
                 req.model_path
             )));
         }
@@ -349,6 +348,31 @@ impl EphemeralInferEngine for LlamaCppEngine {
         }).map_err(|_| {
             InferenceError::GpuOom
         })?;
+
+        // 3.1. Aplicação de Micro-Adaptador Residual (~1MB) ou LoRA para calibração de modelos quantizados
+        let _lora_handle = if let Some(ref lora_path_str) = req.lora_adapter_path {
+            let lora_path = Path::new(lora_path_str);
+            if lora_path.exists() {
+                match model.lora_adapter_init(lora_path) {
+                    Ok(adapter) => {
+                        if let Err(e) = ctx.lora_adapter_set(&adapter, 1.0) {
+                            tracing::warn!("Falha ao ativar LoRA/Residual adapter no contexto: {:?}", e);
+                        } else {
+                            tracing::info!("Micro-adaptador residual (~1MB) ativado com sucesso: {}", lora_path.display());
+                        }
+                        Some(adapter)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Falha ao carregar micro-adaptador residual {}: {:?}", lora_path.display(), e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // 4. Concatenação estruturada Few-Shot & Tokenização do prompt final (com suporte a Gigatoken Prefill Bypass)
         use crate::core::inference_adapter::InferenceInput;
@@ -745,11 +769,10 @@ mod tests {
 
     #[test]
     fn test_llama_engine_context_init_asymmetric_kv_cache() {
-        let params = build_default_context_params();
-        let type_k = params.type_k();
-        let type_v = params.type_v();
-        assert_eq!(type_k, KvCacheType::F16, "Keys no KV Cache devem ser F16 para rotação RoPE");
-        assert_eq!(type_v, KvCacheType::Q4_K, "Values no KV Cache devem ser Q4_K para esmagar o footprint < 1GB");
+        let _params = build_default_context_params();
+        assert_eq!(calculate_kv_cache_v_type(256), KvCacheType::Q4_K, "Values para head 256 devem ser Q4_K");
+        assert_eq!(calculate_kv_cache_v_type(128), KvCacheType::Q4_0, "Values para head 128 devem ser TurboQuant Q4_0");
+        assert_eq!(calculate_kv_cache_v_type(0), KvCacheType::F16, "Fallback seguro para head 0 deve ser F16");
     }
 
     #[test]
@@ -794,6 +817,7 @@ mod tests {
             temperature: 0.7,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
 
         let err = engine.run_inference(req_fake, None).unwrap_err();
@@ -890,6 +914,7 @@ mod tests {
             temperature: 0.7,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
 
         let result = worker.run_async(req, None).await;

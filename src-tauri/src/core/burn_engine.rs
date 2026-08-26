@@ -98,6 +98,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
 
         match engine.run_inference(req, None) {

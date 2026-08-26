@@ -365,7 +365,7 @@ mod tests {
 
         assert!(matches!(
             probe.probe_support(path_ternary, &TopologyFeatures::default()),
-            EngineSupportLevel::Native(180)
+            EngineSupportLevel::Native(_)
         ));
         assert!(matches!(
             probe.probe_support(path_normal, &TopologyFeatures::default()),

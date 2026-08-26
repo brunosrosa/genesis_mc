@@ -48,17 +48,21 @@ pub enum ArenaMode {
     Pressure,    // Tier 5: Context Pressure & Needle-in-a-Haystack (4k-32k)
 }
 
-impl ArenaMode {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().trim() {
+impl std::str::FromStr for ArenaMode {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().trim() {
             "eval" | "tier2" | "colosseum" | "cot" | "ast" => ArenaMode::Eval,
             "vision" | "tier3" | "sidecars" | "vlm" => ArenaMode::Vision,
             "speculative" | "tier4" | "mtp" | "draft" => ArenaMode::Speculative,
             "pressure" | "tier5" | "context" | "needle" => ArenaMode::Pressure,
             _ => ArenaMode::Profile,
-        }
+        })
     }
+}
 
+impl ArenaMode {
     pub fn as_str(&self) -> &'static str {
         match self {
             ArenaMode::Profile => "profile",
@@ -70,6 +74,17 @@ impl ArenaMode {
     }
 }
 
+fn get_current_process_ram_mb() -> f64 {
+    let mut sys = sysinfo::System::new();
+    let pid = sysinfo::Pid::from_u32(std::process::id());
+    sys.refresh_process(pid);
+    if let Some(process) = sys.process(pid) {
+        process.memory() as f64 / (1024.0 * 1024.0)
+    } else {
+        0.0
+    }
+}
+
 /// Resultado de profiling empírico (Tier 1)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelProfileResult {
@@ -78,7 +93,9 @@ pub struct ModelProfileResult {
     pub family: String,
     pub parameters: String,
     pub engine_selected: String,
+    pub target_device: String,
     pub vram_estimated_mb: f64,
+    pub host_ram_mb: f64,
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub ttft_us: u64,
@@ -602,6 +619,20 @@ async fn run_mode_profile(
         let start_all = Instant::now();
         let epoch_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
 
+        #[cfg(feature = "llama_backend")]
+        let gpu_layers = souls_mc_lib::core::llama_engine::calculate_safe_gpu_layers(model_path, meta.as_ref());
+        #[cfg(not(feature = "llama_backend"))]
+        let gpu_layers = 0;
+        let total_layers = meta.as_ref().map(|m| m.architecture.block_count).unwrap_or(32).max(1);
+        let target_device = if gpu_layers == 0 {
+            "CPU (AVX2)".to_string()
+        } else if gpu_layers >= total_layers || gpu_layers == 99 {
+            "GPU (CUDA)".to_string()
+        } else {
+            format!("Hybrid ({}/{}L)", gpu_layers, total_layers)
+        };
+        let host_ram_mb = get_current_process_ram_mb();
+
         let name_lower = model_name.to_lowercase();
         let path_lower = model_path_str.to_lowercase();
         if name_lower.contains("dspark") || name_lower.contains("dflash") || path_lower.contains("dspark") || path_lower.contains("dflash") {
@@ -615,7 +646,9 @@ async fn run_mode_profile(
                 family,
                 parameters,
                 engine_selected: "speculative_draft_tier4".to_string(),
+                target_device: "Reserved (Tier 4)".to_string(),
                 vram_estimated_mb: 0.0,
+                host_ram_mb,
                 prompt_tokens: 0,
                 completion_tokens: 0,
                 ttft_us: 0,
@@ -643,7 +676,9 @@ async fn run_mode_profile(
                 family,
                 parameters,
                 engine_selected: engine_id,
+                target_device: "External Sidecar".to_string(),
                 vram_estimated_mb: 0.0,
+                host_ram_mb,
                 prompt_tokens: 0,
                 completion_tokens: 0,
                 ttft_us: 0,
@@ -671,7 +706,9 @@ async fn run_mode_profile(
                 family,
                 parameters,
                 engine_selected: engine_id,
+                target_device: "Unsupported".to_string(),
                 vram_estimated_mb: 0.0,
+                host_ram_mb,
                 prompt_tokens: 0,
                 completion_tokens: 0,
                 ttft_us: 0,
@@ -708,6 +745,7 @@ async fn run_mode_profile(
                 temperature: 0.1,
                 json_schema: test_case.json_schema.clone(),
                 input: None,
+                lora_adapter_path: None,
             };
 
             let test_start = Instant::now();
@@ -780,7 +818,9 @@ async fn run_mode_profile(
             family,
             parameters,
             engine_selected: engine_id.to_string(),
+            target_device,
             vram_estimated_mb,
+            host_ram_mb,
             prompt_tokens: total_prompt_tokens,
             completion_tokens: total_completion_tokens,
             ttft_us: avg_ttft_us,
@@ -936,6 +976,7 @@ async fn run_mode_eval(
                 temperature: 0.2,
                 json_schema: prompt.json_schema.clone(),
                 input: None,
+                lora_adapter_path: None,
             };
 
             let start = Instant::now();
@@ -1333,7 +1374,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match args[i].as_str() {
             "--mode" => {
                 if i + 1 < args.len() {
-                    mode = ArenaMode::from_str(&args[i + 1]);
+                    mode = args[i + 1].parse().unwrap_or(ArenaMode::Profile);
                     i += 1;
                 }
             }
@@ -1400,17 +1441,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&res)?);
             } else {
-                println!("\n============================================================");
-                println!("  RESUMO EXECUTIVO DO TIER 1 PROFILE CONCLUÍDO              ");
-                println!("============================================================");
-                println!("  Modelos Avaliados: {}", res.len());
+                println!("\n=========================================================================================================================");
+                println!("  RESUMO EXECUTIVO DO TIER 1 PROFILE CONCLUÍDO (HARDWARE, TARGET DEVICE & HOST RAM)                                       ");
+                println!("=========================================================================================================================");
+                println!("  +--------------------------------------------+---------------+-------+----------+----------+------+--------------------+");
+                println!("  | Modelo                                     | Target Device |  TPS  | VRAM(MB) | Host(MB) |  E³  | Status             |");
+                println!("  +--------------------------------------------+---------------+-------+----------+----------+------+--------------------+");
                 for r in &res {
+                    let truncated_name = if r.model_id.len() > 42 {
+                        format!("{}...", &r.model_id[..39])
+                    } else {
+                        r.model_id.clone()
+                    };
                     println!(
-                        "  -> [{:<14}] TTFT: {:>6} µs | TPOT: {:>5} µs/tok | TPS: {:>5.1} | VRAM: {:>4.0} MB | E³: {:.2} | Status: {}",
-                        r.model_id, r.ttft_us, r.tpot_us, r.tps, r.vram_estimated_mb, r.e3_score, r.status
+                        "  | {:<42} | {:<13} | {:>5.1} | {:>8.0} | {:>8.0} | {:>4.2} | {:<18} |",
+                        truncated_name, r.target_device, r.tps, r.vram_estimated_mb, r.host_ram_mb, r.e3_score, r.status
                     );
                 }
-                println!("============================================================");
+                println!("  +--------------------------------------------+---------------+-------+----------+----------+------+--------------------+");
             }
         }
         ArenaMode::Eval => {

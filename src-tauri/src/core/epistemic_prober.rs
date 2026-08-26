@@ -1042,7 +1042,7 @@ mod tests {
             batch.set_logits((batch.n_tokens() as usize).saturating_sub(1), true);
             ctx.decode(&mut batch).expect("prefill decode falhou");
             let latency_ms = start.elapsed().as_millis();
-            let logits = ctx.get_logits_ith(last_idx as i32).to_vec();
+            let logits = ctx.get_logits_ith(last_idx as i32).expect("logits ok").to_vec();
             (logits, latency_ms)
         };
 

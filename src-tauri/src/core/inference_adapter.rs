@@ -35,6 +35,8 @@ pub struct SoulsInferenceRequest {
     pub temperature: f32,
     pub json_schema: Option<String>,
     pub input: Option<InferenceInput>,
+    #[serde(default)]
+    pub lora_adapter_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

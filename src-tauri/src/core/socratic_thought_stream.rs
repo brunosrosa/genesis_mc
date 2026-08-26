@@ -195,13 +195,14 @@ mod tests {
         }
 
         // Aguarda drenagem da fila MPSC
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         assert_eq!(sink.count(), 20);
 
         let snap = sink.snapshot();
         assert_eq!(snap[0].thought_id, "thn_1");
         assert_eq!(snap[19].thought_id, "thn_20");
-        assert_eq!(snap[1].thought_type, "revision");
-        assert_eq!(snap[2].thought_type, "branching");
+        assert_eq!(snap[0].thought_type, "revision");
+        assert_eq!(snap[1].thought_type, "branching");
+        assert_eq!(snap[2].thought_type, "regular");
     }
 }

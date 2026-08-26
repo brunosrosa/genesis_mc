@@ -290,6 +290,7 @@ impl LlamaLogitProber {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
         self.extract_last_token_raw_logits(&req).unwrap_or_default()
     }
@@ -722,6 +723,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
         let resp = prober.run_inference(req, None).expect("prompt-derived não deve falhar");
         assert_eq!(resp.completion_tokens, 0, "Logit Probing NUNCA deve gerar completion tokens");
@@ -741,6 +743,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
         let err = prober.run_inference(req, None).unwrap_err();
         assert!(matches!(err, InferenceError::ModelNotFound(_)));
@@ -770,6 +773,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
         let start = Instant::now();
         let raw = prober

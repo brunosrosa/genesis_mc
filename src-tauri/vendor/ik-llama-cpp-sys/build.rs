@@ -382,6 +382,8 @@ fn cmake_build(
 
     if want_cuda {
         cfg.define("GGML_CUDA", "ON");
+        cfg.define("GGML_CUDA_FORCE_MMQ", "ON");
+        cfg.define("GGML_CUDA_F16", "ON");
         cfg.define("GGML_NCCL", "OFF");
         // SOULS MC Marco IV (cold-start FinOps): RTX 2060m = sm_75 only.
         // The upstream ggml CMakeLists would compile all 6 archs

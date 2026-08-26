@@ -542,6 +542,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
 
         let resp = engine.run_inference(req, None).expect("Inferência via trait não deve falhar");
@@ -650,6 +651,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
         let resp = engine.run_inference(req, None).expect("inferencia nao deve falhar");
         assert!(resp.text.contains("GLICLASS_ONNX_AVX2"));
@@ -669,6 +671,7 @@ mod tests {
             temperature: 0.0,
             json_schema: None,
             input: None,
+            lora_adapter_path: None,
         };
         match engine.run_inference(req, None) {
             Err(InferenceError::ModelNotFound(_)) => {}

@@ -1072,7 +1072,7 @@ pub fn build_topology_features_from_meta(meta: &ModelMetadata) -> TopologyFeatur
 pub fn is_architecture_supported(arch: &str) -> bool {
     let lower = arch.trim().to_lowercase();
 
-    if matches!(lower.as_str(), "rwkv") {
+    if matches!(lower.as_str(), "rwkv" | "zamba2") {
         return false;
     }
 
