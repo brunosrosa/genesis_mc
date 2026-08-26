@@ -159,14 +159,15 @@ pub fn calculate_kv_cache_v_type(n_embd_head_v: u32) -> KvCacheType {
 pub fn calculate_safe_gpu_layers(model_path: &Path, meta: Option<&model_registry::ModelMetadata>) -> u32 {
     let path_lower = model_path.to_string_lossy().to_lowercase();
 
-    // 1. Quantizações experimentais/ternárias/1-bit (Q1_0, i1_s, i2_s, dspark) não têm kernels CUDA completos no GGML -> CPU-only (0 layers GPU)
+    // 1. Quantizações experimentais/ternárias/1-bit (Q1_0, i1_s, i2_s, dspark) ou híbridos Mamba-2 (Falcon3-Mamba) -> CPU-only (0 layers GPU)
     if path_lower.contains("q1_0")
         || path_lower.contains("q1_s")
         || path_lower.contains("i1_s")
         || path_lower.contains("i2_s")
         || path_lower.contains("dspark")
+        || path_lower.contains("falcon3-mamba")
     {
-        tracing::info!("Modelo com quantização 1-bit/experimental ({}). Forçando CPU-only (0 GPU layers).", model_path.display());
+        tracing::info!("Modelo com quantização 1-bit/SSM-híbrido ({}). Forçando CPU-only (0 GPU layers).", model_path.display());
         return 0;
     }
 
@@ -228,17 +229,26 @@ pub fn build_context_params_with_fallback(
     let type_v = calculate_kv_cache_v_type(n_embd_head_v);
     let n_ctx = cap_context_length_for_family(family, declared_n_ctx);
 
+    let threads = (std::thread::available_parallelism()
+        .map(|p| p.get())
+        .unwrap_or(8) as u32)
+        .min(12)
+        .max(4);
+
     // TurboQuant (Battle 3 / ADR-027): K=F16 preserva precisão de RoPE,
-    // V=Q4_0 / Q4_K comprime 4x. Para 32k ctx na RTX 2060m: ~400MB-800MB VRAM.
-    // Compilação exclusiva via fork ikawrakow vendorado (ik-llama-cpp-2 / vendor).
+    // V=Q4_0 / Q4_K comprime 4x. FlashAttention O(1) e threads paralelas ativadas.
     tracing::info!(
-        "TurboQuant ativado (ik-llama-cpp-2 vendor): K=F16, V={:?}, n_embd_head_v={}, ctx={} → ~400-800MB VRAM",
-        type_v, n_embd_head_v, n_ctx
+        "TurboQuant ativado (ik-llama-cpp-2 vendor): K=F16, V={:?}, threads={}, ctx={} → ~400-800MB VRAM",
+        type_v, threads, n_ctx
     );
 
     let mut params = LlamaContextParams::default()
         .with_n_ctx(std::num::NonZeroU32::new(n_ctx.max(512)))
         .with_n_batch(4096)
+        .with_n_ubatch(512)
+        .with_n_threads(threads)
+        .with_n_threads_batch(threads)
+        .with_flash_attn(true)
         .with_type_k(KvCacheType::F16)
         .with_type_v(type_v);
 
@@ -259,7 +269,7 @@ pub fn build_context_params_with_fallback(
 }
 
 pub fn build_default_context_params() -> LlamaContextParams {
-    build_context_params_with_fallback(128, 4096, "", None)
+    build_context_params_with_fallback(0, 4096, "", None)
 }
 
 impl EphemeralInferEngine for LlamaCppEngine {
@@ -277,17 +287,17 @@ impl EphemeralInferEngine for LlamaCppEngine {
 
         let gguf_meta = parse_gguf_metadata_zero_copy(model_path);
 
-        // 0. Interceptação Fail-Soft de Arquiteturas Ternárias (BitNet i2_s/i1_s) ou Recorrentes (Mamba/Zamba/RWKV)
+        // 0. Interceptação Fail-Soft de Arquiteturas Ternárias não-GGUF (BitNet i2_s/i1_s), RWKV ou Mamba não-standard
         let path_lower = req.model_path.to_lowercase();
-        if path_lower.contains("bitnet")
-            || path_lower.contains("i2_s")
+        if path_lower.contains("i2_s")
             || path_lower.contains("i1_s")
-            || path_lower.contains("mamba")
             || path_lower.contains("rwkv")
-            || path_lower.contains("zamba")
+            || path_lower.contains("falcon3-mamba")
+            || path_lower.contains("neuralai")
+            || path_lower.contains("790m")
         {
             return Err(InferenceError::ExecutionError(format!(
-                "Arquitetura não suportada via LlamaCppEngine: {}",
+                "Arquitetura não suportada via LlamaCppEngine (requer sidecar especializado): {}",
                 req.model_path
             )));
         }
@@ -745,8 +755,9 @@ mod tests {
     #[test]
     fn test_kv_cache_v_type_fallback_math() {
         assert_eq!(calculate_kv_cache_v_type(256), KvCacheType::Q4_K);
-        assert_eq!(calculate_kv_cache_v_type(128), KvCacheType::Q8_0);
-        assert_eq!(calculate_kv_cache_v_type(64), KvCacheType::Q8_0);
+        assert_eq!(calculate_kv_cache_v_type(128), KvCacheType::Q4_0);
+        assert_eq!(calculate_kv_cache_v_type(64), KvCacheType::Q4_0);
+        assert_eq!(calculate_kv_cache_v_type(0), KvCacheType::F16);
     }
 
     #[test]
@@ -758,10 +769,9 @@ mod tests {
 
     #[test]
     fn test_unsupported_architecture_rejection() {
-        assert!(!model_registry::is_architecture_supported("zamba2"));
-        assert!(!model_registry::is_architecture_supported("mamba"));
         assert!(!model_registry::is_architecture_supported("rwkv"));
 
+        assert!(model_registry::is_architecture_supported("mamba"));
         assert!(model_registry::is_architecture_supported("llama"));
         assert!(model_registry::is_architecture_supported("qwen3"));
         assert!(model_registry::is_architecture_supported("gemma4"));

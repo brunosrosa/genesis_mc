@@ -88,22 +88,10 @@ impl EngineProbe for DefaultLlamaCppProbe {
 
         let path_lower = model_path.to_string_lossy().to_lowercase();
         let fam_lower = topology.family_raw.to_lowercase();
-        let is_mamba_or_recurrent = fam_lower.contains("mamba")
-            || fam_lower.contains("rwkv")
-            || fam_lower.contains("zamba")
-            || path_lower.contains("mamba")
-            || path_lower.contains("rwkv")
-            || path_lower.contains("zamba");
-        let is_bitnet = fam_lower.contains("bitnet")
-            || path_lower.contains("bitnet")
-            || path_lower.contains("i2_s")
-            || path_lower.contains("i1_s");
 
-        if is_mamba_or_recurrent {
-            return EngineSupportLevel::Unsupported("Arquitetura Mamba/Recurrente incompatível com llama.cpp".to_string());
-        }
-        if is_bitnet {
-            return EngineSupportLevel::Unsupported("Arquitetura BitNet incompatível com llama.cpp".to_string());
+        // RWKV puro utiliza motor linear próprio não-GGUF
+        if fam_lower.contains("rwkv") || path_lower.contains("rwkv") {
+            return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
         }
 
         match topology.file_format {
@@ -127,22 +115,10 @@ impl EngineProbe for LlamaVanguardProbe {
 
         let path_lower = model_path.to_string_lossy().to_lowercase();
         let fam_lower = topology.family_raw.to_lowercase();
-        let is_mamba_or_recurrent = fam_lower.contains("mamba")
-            || fam_lower.contains("rwkv")
-            || fam_lower.contains("zamba")
-            || path_lower.contains("mamba")
-            || path_lower.contains("rwkv")
-            || path_lower.contains("zamba");
-        let is_bitnet = fam_lower.contains("bitnet")
-            || path_lower.contains("bitnet")
-            || path_lower.contains("i2_s")
-            || path_lower.contains("i1_s");
 
-        if is_mamba_or_recurrent {
-            return EngineSupportLevel::Unsupported("Arquitetura Mamba/Recurrente incompatível com LlamaVanguard (requer sidecar mamba-ssm)".to_string());
-        }
-        if is_bitnet {
-            return EngineSupportLevel::Unsupported("Arquitetura BitNet incompatível com LlamaVanguard (requer sidecar bitnet.cpp)".to_string());
+        // RWKV puro utiliza motor linear próprio não-GGUF
+        if fam_lower.contains("rwkv") || path_lower.contains("rwkv") {
+            return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
         }
 
         match topology.file_format {
@@ -183,14 +159,12 @@ impl EngineProbe for MistralRsSidecarProbe {
         "mistral_rs_sidecar"
     }
 
-    fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
-        let path_lower = model_path.to_string_lossy().to_lowercase();
-        let fam_lower = topology.family_raw.to_lowercase();
-        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
-            EngineSupportLevel::Native(210)
-        } else {
-            EngineSupportLevel::Fallback(80)
-        }
+    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
+        #[cfg(feature = "mistral_backend")]
+        return EngineSupportLevel::Native(210);
+
+        #[cfg(not(feature = "mistral_backend"))]
+        EngineSupportLevel::Fallback(80)
     }
 }
 

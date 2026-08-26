@@ -1072,9 +1072,7 @@ pub fn build_topology_features_from_meta(meta: &ModelMetadata) -> TopologyFeatur
 pub fn is_architecture_supported(arch: &str) -> bool {
     let lower = arch.trim().to_lowercase();
 
-    // Gate estrutural: engines agnósticos do V4 (ex: PulpLele/Burn/Ort) não podem
-    // reclassificar arquiteturas state-space como "suportadas" para o chassi llama/headroom.
-    if matches!(lower.as_str(), "rwkv" | "zamba2" | "mamba" | "mamba-ssm") {
+    if matches!(lower.as_str(), "rwkv") {
         return false;
     }
 
