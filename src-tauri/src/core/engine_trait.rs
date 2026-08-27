@@ -115,7 +115,7 @@ pub struct LlamaVanguardProbe;
 
 impl EngineProbe for LlamaVanguardProbe {
     fn engine_id(&self) -> &'static str {
-        "llama_vanguard"
+        "ik_llama_vanguard"
     }
 
     fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
@@ -342,8 +342,8 @@ mod tests {
         let dummy_path = Path::new("Cargo.toml"); // arquivo existente no workspace
         let (engine_id, support) = cascade.probe_best_engine(dummy_path, &topology);
 
-        assert_eq!(engine_id, "llama_vanguard");
-        assert!(matches!(support, EngineSupportLevel::Native(200)));
+        assert_eq!(engine_id, "llama_upstream");
+        assert!(matches!(support, EngineSupportLevel::Native(220)));
     }
 
     #[test]

@@ -29,10 +29,10 @@ use souls_mc_lib::core::model_registry::{
 };
 use souls_mc_lib::souls_thermal_governor;
 
-#[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
+#[cfg(all(not(feature = "ik_llama_backend"), not(feature = "llama_backend"), not(feature = "mistral_backend")))]
 use souls_mc_lib::core::inference_adapter::MockEphemeralInferEngine;
 
-#[cfg(feature = "llama_backend")]
+#[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
 use souls_mc_lib::core::llama_engine::LlamaCppEngine;
 
 #[cfg(feature = "mistral_backend")]
@@ -693,7 +693,7 @@ async fn profile_single_model_pass(
     }
 
     if engine_id == "llama_upstream" {
-        #[cfg(not(feature = "upstream_backend"))]
+        #[cfg(not(feature = "llama_upstream_backend"))]
         {
             if !json_mode {
                 println!("  [LLAMA UPSTREAM] Modelo requer motor oficial llama.cpp upstream de 2026 (Phi-4/Nemotron/LFM).");
@@ -730,7 +730,7 @@ async fn profile_single_model_pass(
         }
     }
 
-    if engine_id == "mistral_rs_sidecar" {
+    if engine_id == "mistral_rs_sidecar" || engine_id == "mistral_rs" {
         #[cfg(not(feature = "mistral_backend"))]
         {
             if !json_mode {
@@ -768,7 +768,7 @@ async fn profile_single_model_pass(
         }
     }
 
-    if engine_id != "llama_vanguard" && engine_id != "llama_upstream" && engine_id != "llama_cpp" {
+    if engine_id != "ik_llama_vanguard" && engine_id != "llama_vanguard" && engine_id != "llama_upstream" && engine_id != "llama_cpp" {
         if !json_mode {
             println!("  [IGNORADO] Modelo requer motor especializado '{}' (Sidecar não embarcado no build nativo)", engine_id);
         }
@@ -840,14 +840,14 @@ async fn profile_single_model_pass(
 
     #[cfg(feature = "mistral_backend")]
     let engine = std::sync::Arc::new(MistralRsEngine);
-    #[cfg(all(feature = "llama_backend", not(feature = "mistral_backend")))]
+    #[cfg(all(any(feature = "ik_llama_backend", feature = "llama_backend"), not(feature = "mistral_backend")))]
     let engine = std::sync::Arc::new(LlamaCppEngine);
-    #[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
+    #[cfg(all(not(feature = "ik_llama_backend"), not(feature = "llama_backend"), not(feature = "mistral_backend")))]
     let engine = std::sync::Arc::new(MockEphemeralInferEngine);
 
-    #[cfg(feature = "llama_backend")]
+    #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
     let raw_gpu_layers = if force_cpu { 0 } else { souls_mc_lib::core::llama_engine::calculate_safe_gpu_layers(model_path, meta.as_ref()) };
-    #[cfg(not(feature = "llama_backend"))]
+    #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
     let raw_gpu_layers = 0;
 
     let total_layers = meta.as_ref().map(|m| m.architecture.block_count).unwrap_or(32).max(1);
@@ -1196,9 +1196,9 @@ async fn run_mode_eval(
 
     #[cfg(feature = "mistral_backend")]
     let engine = std::sync::Arc::new(MistralRsEngine);
-    #[cfg(all(feature = "llama_backend", not(feature = "mistral_backend")))]
+    #[cfg(all(any(feature = "ik_llama_backend", feature = "llama_backend"), not(feature = "mistral_backend")))]
     let engine = std::sync::Arc::new(LlamaCppEngine);
-    #[cfg(all(not(feature = "llama_backend"), not(feature = "mistral_backend")))]
+    #[cfg(all(not(feature = "ik_llama_backend"), not(feature = "llama_backend"), not(feature = "mistral_backend")))]
     let engine = std::sync::Arc::new(MockEphemeralInferEngine);
 
     let mut eval_results = Vec::new();
