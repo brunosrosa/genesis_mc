@@ -74,11 +74,11 @@ pub trait EngineProbe: Send + Sync {
     fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel;
 }
 
-pub struct DefaultLlamaCppProbe;
+pub struct LlamaUpstreamProbe;
 
-impl EngineProbe for DefaultLlamaCppProbe {
+impl EngineProbe for LlamaUpstreamProbe {
     fn engine_id(&self) -> &'static str {
-        "llama_cpp"
+        "llama_upstream"
     }
 
     fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
@@ -94,9 +94,19 @@ impl EngineProbe for DefaultLlamaCppProbe {
             return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
         }
 
+        // Mamba / SSM deve ir para mistral_rs
+        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
+            return EngineSupportLevel::Unsupported("Modelos SSM/Mamba requerem motor mistral.rs".to_string());
+        }
+
+        // Modelos específicos que exigem kernels upstream do llama.cpp oficial
+        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") {
+            return EngineSupportLevel::Native(220);
+        }
+
         match topology.file_format {
-            FileFormat::Gguf => EngineSupportLevel::Native(100),
-            _ => EngineSupportLevel::Unsupported("Formato incompatível com motor llama.cpp (requer GGUF)".to_string()),
+            FileFormat::Gguf => EngineSupportLevel::Fallback(100),
+            _ => EngineSupportLevel::Unsupported("Formato incompatível com motor llama_upstream (requer GGUF)".to_string()),
         }
     }
 }
@@ -119,6 +129,16 @@ impl EngineProbe for LlamaVanguardProbe {
         // RWKV puro utiliza motor linear próprio não-GGUF
         if fam_lower.contains("rwkv") || path_lower.contains("rwkv") {
             return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
+        }
+
+        // Mamba / SSM deve ir para mistral_rs
+        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
+            return EngineSupportLevel::Unsupported("Modelos SSM/Mamba requerem motor mistral.rs".to_string());
+        }
+
+        // Modelos específicos que exigem llama_upstream oficial
+        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") {
+            return EngineSupportLevel::Unsupported("Arquitetura requer motor oficial llama_upstream".to_string());
         }
 
         match topology.file_format {
@@ -159,7 +179,14 @@ impl EngineProbe for MistralRsSidecarProbe {
         "mistral_rs_sidecar"
     }
 
-    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
+    fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
+        let path_lower = model_path.to_string_lossy().to_lowercase();
+        let fam_lower = topology.family_raw.to_lowercase();
+
+        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
+            return EngineSupportLevel::Native(250);
+        }
+
         #[cfg(feature = "mistral_backend")]
         return EngineSupportLevel::Native(210);
 
@@ -240,7 +267,7 @@ impl EngineCascade {
         cascade.register(Box::new(PulpLeleProbe));
         cascade.register(Box::new(BurnAgnosticProbe));
         cascade.register(Box::new(OrtScorerProbe));
-        cascade.register(Box::new(DefaultLlamaCppProbe));
+        cascade.register(Box::new(LlamaUpstreamProbe));
         cascade
     }
 
