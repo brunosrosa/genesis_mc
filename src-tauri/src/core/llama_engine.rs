@@ -159,15 +159,11 @@ pub fn calculate_kv_cache_v_type(n_embd_head_v: u32) -> KvCacheType {
 pub fn calculate_safe_gpu_layers(model_path: &Path, meta: Option<&model_registry::ModelMetadata>) -> u32 {
     let path_lower = model_path.to_string_lossy().to_lowercase();
 
-    // 1. Quantizações experimentais/ternárias/1-bit (Q1_0, i1_s, i2_s, dspark) ou híbridos Mamba-2 (Falcon3-Mamba) -> CPU-only (0 layers GPU)
-    if path_lower.contains("q1_0")
-        || path_lower.contains("q1_s")
-        || path_lower.contains("i1_s")
-        || path_lower.contains("i2_s")
-        || path_lower.contains("dspark")
+    // 1. Modelos específicos de teste de rascunho (dspark) ou SSM-híbridos (Falcon3-Mamba) -> CPU-only (0 layers GPU)
+    if path_lower.contains("dspark")
         || path_lower.contains("falcon3-mamba")
     {
-        tracing::info!("Modelo com quantização 1-bit/SSM-híbrido ({}). Forçando CPU-only (0 GPU layers).", model_path.display());
+        tracing::info!("Modelo com SSM-híbrido/Drafter ({}). Forçando CPU-only (0 GPU layers).", model_path.display());
         return 0;
     }
 

@@ -38,7 +38,7 @@ use souls_mc_lib::core::llama_engine::LlamaCppEngine;
 #[cfg(feature = "mistral_backend")]
 use souls_mc_lib::core::mistral_engine::MistralRsEngine;
 
-/// Modo de execução da Arena (5 Tiers Operacionais)
+/// Modo de execução da Arena (5 Tiers Operacionais + All)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArenaMode {
     Profile,     // Tier 1: Hardware & Sanity (TTFT, TPOT, TPS, VRAM)
@@ -46,6 +46,7 @@ pub enum ArenaMode {
     Vision,      // Tier 3: Vision Combat (VLM + mmproj + VQA Score)
     Speculative, // Tier 4: Speculative / MTP Combat (Alpha Acceptance Rate)
     Pressure,    // Tier 5: Context Pressure & Needle-in-a-Haystack (4k-32k)
+    All,         // Executa a suíte completa de todos os Tiers em sequência
 }
 
 impl std::str::FromStr for ArenaMode {
@@ -57,6 +58,7 @@ impl std::str::FromStr for ArenaMode {
             "vision" | "tier3" | "sidecars" | "vlm" => ArenaMode::Vision,
             "speculative" | "tier4" | "mtp" | "draft" => ArenaMode::Speculative,
             "pressure" | "tier5" | "context" | "needle" => ArenaMode::Pressure,
+            "all" | "full" | "complete" | "suite" => ArenaMode::All,
             _ => ArenaMode::Profile,
         })
     }
@@ -70,6 +72,7 @@ impl ArenaMode {
             ArenaMode::Vision => "vision",
             ArenaMode::Speculative => "speculative",
             ArenaMode::Pressure => "pressure",
+            ArenaMode::All => "all",
         }
     }
 }
@@ -99,7 +102,7 @@ impl ModelTier {
         match self {
             ModelTier::Tier0Bootstrap => "Tier 0",
             ModelTier::Tier05Epistemic => "Tier 0.5",
-            ModelTier::Tier1Master => "Tier 1 / 1.5",
+            ModelTier::Tier1Master => "Tier 1-1.5",
             ModelTier::Tier2Background => "Tier 2",
             ModelTier::Tier4Drafter => "Tier 4",
         }
@@ -109,7 +112,7 @@ impl ModelTier {
         match self {
             ModelTier::Tier0Bootstrap => "TIER 0: BOOTSTRAP & SANITY MODELS (CPU AVX2 vs GPU CUDA COMPARISON)",
             ModelTier::Tier05Epistemic => "TIER 0.5: SENSOR EPISTÊMICO & PROBING (CPU AVX2 vs GPU CUDA COMPARISON)",
-            ModelTier::Tier1Master => "TIER 1 / 1.5: LIVE CHAT & MASTER AGENTS (GPU FULL VRAM)",
+            ModelTier::Tier1Master => "TIER 1-1.5: LIVE CHAT & MASTER AGENTS (GPU FULL VRAM)",
             ModelTier::Tier2Background => "TIER 2: BACKGROUND AGENTS & MOE (HYBRID OFFLOAD VRAM + RAM HOST)",
             ModelTier::Tier4Drafter => "TIER 4: SPECULATIVE DRAFTERS (RESERVED FOR DRAFTING COMBAT)",
         }
@@ -156,29 +159,150 @@ pub fn print_tier_profile_table(title: &str, results: &[ModelProfileResult]) {
     if results.is_empty() {
         return;
     }
-    println!("\n================================================================================================================================================================================================");
+    println!("\n================================================================================================================================================================================================================");
     println!("  {}", title);
-    println!("================================================================================================================================================================================================");
-    println!("  +------------+--------------------------------------------+----------------+---------+---------------+-----+-----+----------+----------+-------+----------+---------+---------+------+--------+");
-    println!("  | Tier_Model | Modelo                                     | Engine         | Quant   | KV Cache      | CPU | GPU | HYBRID   | TTFT(ms) |  TPS  | VRAM_Mod | VRAM_KV | RAM_Hst |  E³  | Status |");
-    println!("  +------------+--------------------------------------------+----------------+---------+---------------+-----+-----+----------+----------+-------+----------+---------+---------+------+--------+");
+    println!("================================================================================================================================================================================================================");
+    println!("  +------------+--------------------------------------------+-------------------+---------+---------+-----------+-----+-----+----------+----------+---------+-------+----------+-----------------+---------+------+------------------+");
+    println!("  | Tier_Model | Modelo                                     | Engine            | Size_GB | Ctx_Max | Quant     | CPU | GPU | HYBRID   | TTFT(ms) | TPOT(ms)|  TPS  | VRAM_Mod | KV Cache (U/Max)| RAM_Mod |  E³  | Status           |");
+    println!("  +------------+--------------------------------------------+-------------------+---------+---------+-----------+-----+-----+----------+----------+---------+-------+----------+-----------------+---------+------+------------------+");
+    let mut last_tier = "";
     for r in results {
+        if !last_tier.is_empty() && last_tier != r.tier_model {
+            println!("  +------------+--------------------------------------------+-------------------+---------+---------+-----------+-----+-----+----------+----------+---------+-------+----------+-----------------+---------+------+------------------+");
+        }
+        last_tier = &r.tier_model;
         let truncated_name = if r.model_id.len() > 42 {
             format!("{}...", &r.model_id[..39])
         } else {
             r.model_id.clone()
         };
         let cpu_mark = if r.is_cpu { " X " } else { "   " };
-        let gpu_mark = if r.is_gpu && !r.is_hybrid { " X " } else { "   " };
+        let gpu_mark = if r.is_gpu { " X " } else { "   " };
         let hybrid_mark = if r.is_hybrid { format!("{:<8}", r.hybrid_desc) } else { "        ".to_string() };
         println!(
-            "  | {:<10} | {:<42} | {:<14} | {:<7} | {:<13} | {} | {} | {} | {:>8.1} | {:>5.1} | {:>6.0} MB | {:>5.0} MB | {:>5.0} MB | {:>4.2} | {:<6} |",
-            r.tier_model, truncated_name, r.engine_selected, r.quant, r.kv_cache,
+            "  | {:<10} | {:<42} | {:<17} | {:>5.1} GB | {:>5.1} k | {:<9} | {} | {} | {} | {:>8.1} | {:>7.1} | {:>5.1} | {:>6.0} MB | {:<15} | {:>5.0} MB | {:>4.2} | {:<16} |",
+            r.tier_model, truncated_name, r.engine_selected, r.size_gb, r.ctx_max_k, r.quant,
             cpu_mark, gpu_mark, hybrid_mark,
-            r.ttft_ms, r.tps, r.vram_model_mb, r.vram_kv_mb, r.host_ram_mb, r.e3_score, r.status
+            r.ttft_ms, r.tpot_ms, r.tps, r.vram_model_mb, r.kv_cache, r.ram_model_mb, r.e3_score, r.status
         );
     }
-    println!("  +------------+--------------------------------------------+----------------+---------+---------------+-----+-----+----------+----------+-------+----------+---------+---------+------+--------+");
+    println!("  +------------+--------------------------------------------+-------------------+---------+---------+-----------+-----+-----+----------+----------+---------+-------+----------+-----------------+---------+------+------------------+");
+}
+
+pub fn print_tier2_eval_table(results: &[ModelEvalResult]) {
+    if results.is_empty() {
+        return;
+    }
+    println!("\n================================================================================================================================================================================================================");
+    println!("  SOULS ARENA — TIER 2: COGNITIVE AST & CoT EFFICIENCY COLOSSEUM (E³ SCORE & PARETO RANKING)");
+    println!("================================================================================================================================================================================================================");
+    println!("  +--------------------------------------------+-------------------+----------+-----------+--------------+------------+----------+---------+----------+------------------+");
+    println!("  | Modelo                                     | Trilha Cognitiva  | Acurácia | AST Válida| Think Tokens | CoT Ratio  | TTFT(ms) |   TPS   | E³ Score | Status           |");
+    println!("  +--------------------------------------------+-------------------+----------+-----------+--------------+------------+----------+---------+----------+------------------+");
+    for r in results {
+        let truncated_name = if r.model_id.len() > 42 {
+            format!("{}...", &r.model_id[..39])
+        } else {
+            r.model_id.clone()
+        };
+        let ast_mark = if r.ast_valid { "   SIM   " } else { "   NÃO   " };
+        let status = if r.accuracy_pct >= 70.0 && r.ast_valid {
+            "QUALIFIED"
+        } else if r.accuracy_pct >= 40.0 {
+            "PROVISIONAL"
+        } else {
+            "REJECTED"
+        };
+        println!(
+            "  | {:<42} | {:<17} | {:>6.1} % | {} | {:>12} | {:>10.4} | {:>8.1} | {:>7.1} | {:>8.4} | {:<16} |",
+            truncated_name, r.track, r.accuracy_pct, ast_mark, r.think_tokens_avg, r.cot_efficiency_ratio, r.avg_ttft_ms, r.avg_tps, r.e3_score, status
+        );
+    }
+    println!("  +--------------------------------------------+-------------------+----------+-----------+--------------+------------+----------+---------+----------+------------------+");
+}
+
+pub fn print_tier3_vision_table(results: &[VisionCombatResult]) {
+    if results.is_empty() {
+        return;
+    }
+    println!("\n================================================================================================================================================================================================================");
+    println!("  SOULS ARENA — TIER 3: VISION & MULTIMODAL COMBAT (mmproj PROJECTOR PAIRING)");
+    println!("================================================================================================================================================================================================================");
+    println!("  +--------------------------------------------+-----------------------------+----------+-----------------+---------------------+");
+    println!("  | Modelo                                     | Sidecar / mmproj            | Latência | Multimodal TTFT | Status              |");
+    println!("  +--------------------------------------------+-----------------------------+----------+-----------------+---------------------+");
+    for r in results {
+        let truncated_name = if r.model_id.len() > 42 {
+            format!("{}...", &r.model_id[..39])
+        } else {
+            r.model_id.clone()
+        };
+        let truncated_sidecar = if r.sidecar_type.len() > 27 {
+            format!("{}...", &r.sidecar_type[..24])
+        } else {
+            r.sidecar_type.clone()
+        };
+        println!(
+            "  | {:<42} | {:<27} | {:>6} ms | {:>11.1} ms | {:<19} |",
+            truncated_name, truncated_sidecar, r.latency_ms, r.multimodal_ttft_ms, r.status
+        );
+    }
+    println!("  +--------------------------------------------+-----------------------------+----------+-----------------+---------------------+");
+}
+
+pub fn print_tier4_speculative_table(results: &[SpeculativeCombatResult]) {
+    if results.is_empty() {
+        return;
+    }
+    println!("\n================================================================================================================================================================================================================");
+    println!("  SOULS ARENA — TIER 4: SPECULATIVE DECODING & MTP ACCELERATION COMBAT (ALPHA ACCEPTANCE)");
+    println!("================================================================================================================================================================================================================");
+    println!("  +--------------------------------------------+-------------------+---------------+----------+-----------+---------+-----------+------------------------+");
+    println!("  | Modelo                                     | Tipo de Rascunho  | Alpha (Taxa)  | Base TPS | Spec. TPS | Speedup | FinOps OK | Veredito               |");
+    println!("  +--------------------------------------------+-------------------+---------------+----------+-----------+---------+-----------+------------------------+");
+    for r in results {
+        let truncated_name = if r.model_id.len() > 42 {
+            format!("{}...", &r.model_id[..39])
+        } else {
+            r.model_id.clone()
+        };
+        let finops_mark = if r.is_beneficial { "   SIM   " } else { "   NÃO   " };
+        let verdict_short = if r.is_beneficial { "SPEEDUP CONFIRMADO" } else { "DESACELEROU (ALERTA)" };
+        println!(
+            "  | {:<42} | {:<17} | {:>11.1} % | {:>8.1} | {:>9.1} | {:>5.2} x | {} | {:<22} |",
+            truncated_name, r.draft_type, r.acceptance_rate_alpha * 100.0, r.base_tps, r.speculative_tps, r.speedup_ratio, finops_mark, verdict_short
+        );
+    }
+    println!("  +--------------------------------------------+-------------------+---------------+----------+-----------+---------+-----------+------------------------+");
+}
+
+pub fn print_tier5_pressure_table(results: &[ContextPressureResult]) {
+    if results.is_empty() {
+        return;
+    }
+    println!("\n================================================================================================================================================================================================================");
+    println!("  SOULS ARENA — TIER 5: CONTEXT PRESSURE & NEEDLE-IN-A-HAYSTACK (ANTI-COLLAPSE PROBE)");
+    println!("================================================================================================================================================================================================================");
+    println!("  +--------------------------------------------+--------------+---------------+--------+--------+---------+---------+-------------+");
+    println!("  | Modelo                                     | Contexto Max | Ctx Efetivo   | N@4k   | N@8k   | N@16k   | N@32k   | Degradação  |");
+    println!("  +--------------------------------------------+--------------+---------------+--------+--------+---------+---------+-------------+");
+    for r in results {
+        let truncated_name = if r.model_id.len() > 42 {
+            format!("{}...", &r.model_id[..39])
+        } else {
+            r.model_id.clone()
+        };
+        let n4 = if r.needle_found_at_4k { "  OK  " } else { " FAIL " };
+        let n8 = if r.needle_found_at_8k { "  OK  " } else { "  -   " };
+        let n16 = if r.needle_found_at_16k { "  OK  " } else { "  -   " };
+        let n32 = if r.needle_found_at_32k { "  OK  " } else { "  -   " };
+        let deg_mark = if r.degradation_detected { "     SIM     " } else { "     NÃO     " };
+        println!(
+            "  | {:<42} | {:>10} k | {:>11} k | {} | {} | {} | {} | {} |",
+            truncated_name, r.max_tested_context / 1024, r.max_effective_context / 1024, n4, n8, n16, n32, deg_mark
+        );
+    }
+    println!("  +--------------------------------------------+--------------+---------------+--------+--------+---------+---------+-------------+");
 }
 
 /// Resultado de profiling empírico (Tier 1)
@@ -190,6 +314,8 @@ pub struct ModelProfileResult {
     pub family: String,
     pub parameters: String,
     pub engine_selected: String,
+    pub size_gb: f64,
+    pub ctx_max_k: f64,
     pub quant: String,
     pub kv_cache: String,
     pub is_cpu: bool,
@@ -197,10 +323,12 @@ pub struct ModelProfileResult {
     pub is_hybrid: bool,
     pub hybrid_desc: String,
     pub ttft_ms: f64,
+    pub tpot_ms: f64,
     pub tpot_us: u64,
     pub tps: f64,
     pub vram_model_mb: f64,
     pub vram_kv_mb: f64,
+    pub ram_model_mb: f64,
     pub host_ram_mb: f64,
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
@@ -535,8 +663,8 @@ fn extract_and_measure_thinking(raw_text: &str) -> (String, u32) {
 }
 
 /// Despacha inferência para Dedicated OS Worker Thread
-fn dispatch_dedicated_infer<E: EphemeralInferEngine + 'static>(
-    engine: std::sync::Arc<E>,
+fn dispatch_dedicated_infer(
+    engine: std::sync::Arc<dyn EphemeralInferEngine>,
     req: SoulsInferenceRequest,
 ) -> Result<SoulsInferenceResponse, InferenceError> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -561,14 +689,15 @@ fn dispatch_dedicated_infer<E: EphemeralInferEngine + 'static>(
     }
 }
 
-/// Carrega prompts do Tier 2 a partir do diretório de benchmarks
+/// Carrega prompts do Tier 2 a partir do diretório de benchmarks com cobertura multi-trilha (BFCL v4, Rust AST, CoT Reasoning)
 fn load_eval_tier2_prompts(bench_dir: &Path) -> Vec<ArenaPrompt> {
     let mut prompts = Vec::new();
 
+    // 1. Trilha JSON / BFCL v4 Tool Calling (Multi-Turn e Schemas Reais)
     let json_schema_path = bench_dir.join("JSONSchemaBench_Github_easy_test.jsonl");
     if let Ok(file) = File::open(&json_schema_path) {
         let reader = BufReader::new(file);
-        for (idx, line) in reader.lines().take(20).flatten().enumerate() {
+        for (idx, line) in reader.lines().take(10).flatten().enumerate() {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
                 let schema_str = val.get("json_schema").and_then(|v| v.as_str()).unwrap_or("{}").to_string();
                 prompts.push(ArenaPrompt {
@@ -587,7 +716,7 @@ fn load_eval_tier2_prompts(bench_dir: &Path) -> Vec<ArenaPrompt> {
     let bfcl_path = bench_dir.join("BFCL_v4_multi_turn_base.jsonl");
     if let Ok(file) = File::open(&bfcl_path) {
         let reader = BufReader::new(file);
-        for (idx, line) in reader.lines().take(20).flatten().enumerate() {
+        for (idx, line) in reader.lines().take(10).flatten().enumerate() {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
                 let mut user_text = String::new();
                 if let Some(q_arr) = val.get("question").and_then(|v| v.as_array()) {
@@ -618,10 +747,58 @@ fn load_eval_tier2_prompts(bench_dir: &Path) -> Vec<ArenaPrompt> {
         }
     }
 
-    if prompts.is_empty() {
-        for test_case in get_sanity_test_cases() {
-            prompts.push(test_case);
-        }
+    // Se poucos ou nenhum prompt foram carregados do disco, injeta a suíte padrão de referência
+    if prompts.len() < 5 {
+        // Trilha 1: Structured Tools (BFCL v4 Style)
+        prompts.push(ArenaPrompt {
+            id: "bfcl_tool_file_lock".to_string(),
+            track: "json",
+            system_prompt: "You are an agent core. Respond strictly with a JSON object containing keys 'tool', 'action', and 'parameters'.".to_string(),
+            user_query: "Acquire an exclusive lock on 'souls_state.db' with timeout_ms: 5000 and mode: 'exclusive'.".to_string(),
+            expected_contains: vec!["tool", "action", "parameters"],
+            json_schema: None,
+            max_tokens: 256,
+        });
+        prompts.push(ArenaPrompt {
+            id: "bfcl_tool_vector_query".to_string(),
+            track: "json",
+            system_prompt: "You are an IPC dispatcher. Respond ONLY in valid JSON with 'query', 'top_k', and 'metric'.".to_string(),
+            user_query: "Query LanceDB collection 'epistemic_triad' for 'zero_copy_ipc' with top_k: 5 and metric: 'cosine'.".to_string(),
+            expected_contains: vec!["query", "top_k", "metric"],
+            json_schema: None,
+            max_tokens: 256,
+        });
+
+        // Trilha 2: Rust AST Synthesis (Aider / HumanEval+ Style)
+        prompts.push(ArenaPrompt {
+            id: "rust_ast_ring_buffer".to_string(),
+            track: "code",
+            system_prompt: "You are an expert bare-metal Rust developer. Output valid Rust code for a lock-free RingBuffer struct and its push/pop methods.".to_string(),
+            user_query: "Implement a RingBuffer struct in Rust with capacity usize and atomic indices head and tail.".to_string(),
+            expected_contains: vec!["struct RingBuffer", "fn push", "fn pop"],
+            json_schema: None,
+            max_tokens: 384,
+        });
+        prompts.push(ArenaPrompt {
+            id: "rust_ast_binary_search".to_string(),
+            track: "code",
+            system_prompt: "You are a Rust algorithmic expert. Write a generic binary_search function without using standard library binary search.".to_string(),
+            user_query: "Write fn binary_search<T: Ord>(slice: &[T], target: &T) -> Result<usize, usize> in Rust.".to_string(),
+            expected_contains: vec!["fn binary_search", "Result<usize, usize>", "while"],
+            json_schema: None,
+            max_tokens: 384,
+        });
+
+        // Trilha 3: CoT Reasoning Efficiency (DeepSeek R1 / OpenR1 Style)
+        prompts.push(ArenaPrompt {
+            id: "cot_reasoning_vram_budget".to_string(),
+            track: "reasoning",
+            system_prompt: "You are a hardware reasoning expert. You MUST reason step-by-step inside <think> ... </think> tags. After the think tags, output a JSON object: {\"fits_in_vram\": bool, \"remaining_mb\": number}.".to_string(),
+            user_query: "A GPU has 6144 MB of VRAM. A model weights tensor occupies 3450 MB, KV cache occupies 1400 MB, and runtime overhead is 512 MB. Does this configuration fit without triggering OOM?".to_string(),
+            expected_contains: vec!["fits_in_vram", "remaining_mb"],
+            json_schema: None,
+            max_tokens: 512,
+        });
     }
 
     prompts
@@ -652,6 +829,9 @@ async fn profile_single_model_pass(
     let mmproj_str = mmproj_path.as_ref().map(|p| p.to_string_lossy().to_string());
 
     let file_size_mb = fs::metadata(model_path).map(|m| m.len() as f64 / (1024.0 * 1024.0)).unwrap_or(1000.0);
+    let size_gb = file_size_mb / 1024.0;
+    let declared_ctx = meta.as_ref().map(|m| m.context_length).unwrap_or(32768);
+    let ctx_max_k = declared_ctx as f64 / 1000.0;
     let epoch_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
     let host_ram_mb = get_current_process_ram_mb();
 
@@ -668,6 +848,8 @@ async fn profile_single_model_pass(
             family,
             parameters,
             engine_selected: "speculative_draft_tier4".to_string(),
+            size_gb,
+            ctx_max_k,
             quant,
             kv_cache: "N/A".to_string(),
             is_cpu: false,
@@ -675,10 +857,12 @@ async fn profile_single_model_pass(
             is_hybrid: false,
             hybrid_desc: "".to_string(),
             ttft_ms: 0.0,
+            tpot_ms: 0.0,
             tpot_us: 0,
             tps: 0.0,
             vram_model_mb: 0.0,
             vram_kv_mb: 0.0,
+            ram_model_mb: 0.0,
             host_ram_mb,
             prompt_tokens: 0,
             completion_tokens: 0,
@@ -688,117 +872,6 @@ async fn profile_single_model_pass(
             has_mmproj,
             mmproj_path: mmproj_str,
             status: "SPECULATIVE_DRAFT_TIER4".to_string(),
-            timestamp_epoch_sec: epoch_now,
-        };
-    }
-
-    if engine_id == "llama_upstream" {
-        #[cfg(not(feature = "llama_upstream_backend"))]
-        {
-            if !json_mode {
-                println!("  [LLAMA UPSTREAM] Modelo requer motor oficial llama.cpp upstream de 2026 (Phi-4/Nemotron/LFM).");
-            }
-            return ModelProfileResult {
-                tier_model: tier.as_str().to_string(),
-                model_id: model_name,
-                model_path: model_path_str,
-                family,
-                parameters,
-                engine_selected: "llama_upstream".to_string(),
-                quant,
-                kv_cache: "K:F16/V:F16".to_string(),
-                is_cpu: force_cpu,
-                is_gpu: !force_cpu,
-                is_hybrid: false,
-                hybrid_desc: "".to_string(),
-                ttft_ms: 0.0,
-                tpot_us: 0,
-                tps: 0.0,
-                vram_model_mb: if force_cpu { 0.0 } else { file_size_mb * 0.95 },
-                vram_kv_mb: if force_cpu { 0.0 } else { 36.0 },
-                host_ram_mb,
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                duration_ms: 0,
-                accuracy_score: 0.0,
-                e3_score: 0.0,
-                has_mmproj,
-                mmproj_path: mmproj_str,
-                status: "PENDING_UPSTREAM".to_string(),
-                timestamp_epoch_sec: epoch_now,
-            };
-        }
-    }
-
-    if engine_id == "mistral_rs_sidecar" || engine_id == "mistral_rs" {
-        #[cfg(not(feature = "mistral_backend"))]
-        {
-            if !json_mode {
-                println!("  [MISTRAL.RS] Modelo requer runtime SSM/Mamba mistral.rs.");
-            }
-            return ModelProfileResult {
-                tier_model: tier.as_str().to_string(),
-                model_id: model_name,
-                model_path: model_path_str,
-                family,
-                parameters,
-                engine_selected: "mistral_rs".to_string(),
-                quant,
-                kv_cache: "K:F16/V:F16".to_string(),
-                is_cpu: force_cpu,
-                is_gpu: !force_cpu,
-                is_hybrid: false,
-                hybrid_desc: "".to_string(),
-                ttft_ms: 0.0,
-                tpot_us: 0,
-                tps: 0.0,
-                vram_model_mb: if force_cpu { 0.0 } else { file_size_mb * 0.95 },
-                vram_kv_mb: if force_cpu { 0.0 } else { 36.0 },
-                host_ram_mb,
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                duration_ms: 0,
-                accuracy_score: 0.0,
-                e3_score: 0.0,
-                has_mmproj,
-                mmproj_path: mmproj_str,
-                status: "PENDING_MISTRAL".to_string(),
-                timestamp_epoch_sec: epoch_now,
-            };
-        }
-    }
-
-    if engine_id != "ik_llama_vanguard" && engine_id != "llama_vanguard" && engine_id != "llama_upstream" && engine_id != "llama_cpp" {
-        if !json_mode {
-            println!("  [IGNORADO] Modelo requer motor especializado '{}' (Sidecar não embarcado no build nativo)", engine_id);
-        }
-        return ModelProfileResult {
-            tier_model: tier.as_str().to_string(),
-            model_id: model_name,
-            model_path: model_path_str,
-            family,
-            parameters,
-            engine_selected: engine_id,
-            quant,
-            kv_cache: "N/A".to_string(),
-            is_cpu: force_cpu,
-            is_gpu: !force_cpu,
-            is_hybrid: false,
-            hybrid_desc: "".to_string(),
-            ttft_ms: 0.0,
-            tpot_us: 0,
-            tps: 0.0,
-            vram_model_mb: 0.0,
-            vram_kv_mb: 0.0,
-            host_ram_mb,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            duration_ms: 0,
-            accuracy_score: 0.0,
-            e3_score: 0.0,
-            has_mmproj,
-            mmproj_path: mmproj_str,
-            status: "SKIPPED_SPECIALIZED_ENGINE".to_string(),
             timestamp_epoch_sec: epoch_now,
         };
     }
@@ -814,6 +887,8 @@ async fn profile_single_model_pass(
             family,
             parameters,
             engine_selected: engine_id,
+            size_gb,
+            ctx_max_k,
             quant,
             kv_cache: "N/A".to_string(),
             is_cpu: force_cpu,
@@ -821,10 +896,12 @@ async fn profile_single_model_pass(
             is_hybrid: false,
             hybrid_desc: "".to_string(),
             ttft_ms: 0.0,
+            tpot_ms: 0.0,
             tpot_us: 0,
             tps: 0.0,
             vram_model_mb: 0.0,
             vram_kv_mb: 0.0,
+            ram_model_mb: if force_cpu { file_size_mb } else { 0.0 },
             host_ram_mb,
             prompt_tokens: 0,
             completion_tokens: 0,
@@ -838,12 +915,29 @@ async fn profile_single_model_pass(
         };
     }
 
-    #[cfg(feature = "mistral_backend")]
-    let engine = std::sync::Arc::new(MistralRsEngine);
-    #[cfg(all(any(feature = "ik_llama_backend", feature = "llama_backend"), not(feature = "mistral_backend")))]
-    let engine = std::sync::Arc::new(LlamaCppEngine);
-    #[cfg(all(not(feature = "ik_llama_backend"), not(feature = "llama_backend"), not(feature = "mistral_backend")))]
-    let engine = std::sync::Arc::new(MockEphemeralInferEngine);
+    let (engine_selected, engine): (String, std::sync::Arc<dyn EphemeralInferEngine>) = if force_cpu {
+        #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
+        {
+            ("llama_cpp4".to_string(), std::sync::Arc::new(LlamaCppEngine))
+        }
+        #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
+        {
+            ("llama_cpp4".to_string(), std::sync::Arc::new(MockEphemeralInferEngine))
+        }
+    } else if engine_id == "llama_upstream" {
+        ("llama_upstream".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine))
+    } else if engine_id == "mistral_rs" || engine_id == "mistral_rs_sidecar" {
+        ("mistral_rs".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine))
+    } else {
+        #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
+        {
+            ("ik_llama_vanguard".to_string(), std::sync::Arc::new(LlamaCppEngine))
+        }
+        #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
+        {
+            ("ik_llama_vanguard".to_string(), std::sync::Arc::new(MockEphemeralInferEngine))
+        }
+    };
 
     #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
     let raw_gpu_layers = if force_cpu { 0 } else { souls_mc_lib::core::llama_engine::calculate_safe_gpu_layers(model_path, meta.as_ref()) };
@@ -851,12 +945,16 @@ async fn profile_single_model_pass(
     let raw_gpu_layers = 0;
 
     let total_layers = meta.as_ref().map(|m| m.architecture.block_count).unwrap_or(32).max(1);
-    let (is_cpu, is_gpu, is_hybrid, hybrid_desc, kv_cache, vram_model_mb, vram_kv_mb) = if force_cpu || raw_gpu_layers == 0 {
-        (true, false, false, "".to_string(), "K:F16/V:F16".to_string(), 0.0, 0.0)
+    let (is_cpu, is_gpu, is_hybrid, hybrid_desc, kv_cache, vram_model_mb, vram_kv_mb, ram_model_mb) = if force_cpu || raw_gpu_layers == 0 {
+        let kv_max_gb = (declared_ctx as f64 * 32.0 * 2.0 * 2.0) / (1024.0 * 1024.0);
+        (true, false, false, "".to_string(), format!("36MB/{:.1}GB(F16)", kv_max_gb), 0.0, 0.0, file_size_mb)
     } else if raw_gpu_layers >= total_layers || raw_gpu_layers == 99 {
-        (false, true, false, "".to_string(), "K:F16/V:Q4".to_string(), file_size_mb * 0.95, 36.0)
+        let kv_max_gb = (declared_ctx as f64 * 32.0 * 0.5 * 2.0) / (1024.0 * 1024.0);
+        (false, true, false, "".to_string(), format!("36MB/{:.1}GB(Q4)", kv_max_gb), file_size_mb * 0.95, 36.0, 0.0)
     } else {
-        (false, true, true, format!("{}/{}L", raw_gpu_layers, total_layers), "K:F16/V:Q4".to_string(), file_size_mb * (raw_gpu_layers as f64 / total_layers as f64), 36.0)
+        let gpu_ratio = (raw_gpu_layers as f64 / total_layers as f64).clamp(0.0, 1.0);
+        let kv_max_gb = (declared_ctx as f64 * 32.0 * 0.5 * 2.0) / (1024.0 * 1024.0);
+        (true, true, true, format!("{}/{}L", raw_gpu_layers, total_layers), format!("36MB/{:.1}GB(Q4)", kv_max_gb), file_size_mb * gpu_ratio, 36.0, file_size_mb * (1.0 - gpu_ratio))
     };
 
     let mut total_duration_us = 0u64;
@@ -918,12 +1016,12 @@ async fn profile_single_model_pass(
                 test_count += 1;
 
                 if !json_mode {
-                    println!("  -> [{}] ({}) {} em {} ms (Acurácia: {:.0}%)", test_case.id, if is_cpu { "CPU" } else { "GPU" }, if is_valid { "OK" } else { "AVISO" }, elapsed.as_millis(), acc * 100.0);
+                    println!("  -> [{}] ({}) {} em {} ms (Acurácia: {:.0}%)", test_case.id, if is_cpu && !is_gpu { "CPU" } else if is_hybrid { "HYBRID" } else { "GPU" }, if is_valid { "OK" } else { "AVISO" }, elapsed.as_millis(), acc * 100.0);
                 }
             }
             Err(e) => {
                 if !json_mode {
-                    println!("  -> [{}] ({}) Falha na inferência: {:?}", test_case.id, if is_cpu { "CPU" } else { "GPU" }, e);
+                    println!("  -> [{}] ({}) Falha na inferência: {:?}", test_case.id, if is_cpu && !is_gpu { "CPU" } else if is_hybrid { "HYBRID" } else { "GPU" }, e);
                 }
             }
         }
@@ -953,7 +1051,9 @@ async fn profile_single_model_pass(
         model_path: model_path_str,
         family,
         parameters,
-        engine_selected: engine_id.to_string(),
+        engine_selected,
+        size_gb,
+        ctx_max_k,
         quant,
         kv_cache,
         is_cpu,
@@ -961,10 +1061,12 @@ async fn profile_single_model_pass(
         is_hybrid,
         hybrid_desc,
         ttft_ms: avg_ttft_us as f64 / 1000.0,
+        tpot_ms: avg_tpot_us as f64 / 1000.0,
         tpot_us: avg_tpot_us,
         tps,
         vram_model_mb,
         vram_kv_mb,
+        ram_model_mb,
         host_ram_mb,
         prompt_tokens: total_prompt_tokens,
         completion_tokens: total_completion_tokens,
@@ -1194,13 +1296,6 @@ async fn run_mode_eval(
         });
     }
 
-    #[cfg(feature = "mistral_backend")]
-    let engine = std::sync::Arc::new(MistralRsEngine);
-    #[cfg(all(any(feature = "ik_llama_backend", feature = "llama_backend"), not(feature = "mistral_backend")))]
-    let engine = std::sync::Arc::new(LlamaCppEngine);
-    #[cfg(all(not(feature = "ik_llama_backend"), not(feature = "llama_backend"), not(feature = "mistral_backend")))]
-    let engine = std::sync::Arc::new(MockEphemeralInferEngine);
-
     let mut eval_results = Vec::new();
 
     for model_path in &models {
@@ -1213,7 +1308,7 @@ async fn run_mode_eval(
         let meta = parse_gguf_metadata_zero_copy(model_path);
         let tf = meta.as_ref().map(build_topology_features_from_meta).unwrap_or_default();
         let cascade = EngineCascade::new();
-        let (_engine_id, support_level) = cascade.probe_best_engine(model_path, &tf);
+        let (engine_id, support_level) = cascade.probe_best_engine(model_path, &tf);
         if let EngineSupportLevel::Unsupported(ref reason) = support_level {
             if !json_mode {
                 println!("\n[COLISEU TIER 2] Modelo: {}", model_name);
@@ -1233,8 +1328,23 @@ async fn run_mode_eval(
             "structured_tools"
         };
 
+        let (engine_selected, engine): (String, std::sync::Arc<dyn EphemeralInferEngine>) = if engine_id == "llama_upstream" {
+            ("llama_upstream".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine))
+        } else if engine_id == "mistral_rs" || engine_id == "mistral_rs_sidecar" {
+            ("mistral_rs".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine))
+        } else {
+            #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
+            {
+                ("ik_llama_vanguard".to_string(), std::sync::Arc::new(LlamaCppEngine))
+            }
+            #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
+            {
+                ("ik_llama_vanguard".to_string(), std::sync::Arc::new(MockEphemeralInferEngine))
+            }
+        };
+
         if !json_mode {
-            println!("\n[COLISEU TIER 2] Modelo: {} | Trilha: {}", model_name, track);
+            println!("\n[COLISEU TIER 2] Modelo: {} | Engine: {} | Trilha: {}", model_name, engine_selected, track);
         }
 
         let mut valid_count = 0usize;
@@ -1343,7 +1453,10 @@ async fn run_mode_eval(
         );
 
         eval_results.push(eval_item);
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        if !json_mode {
+            println!("[FastSwitch] VRAM purgada.");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
     let report_dir = resolve_root_dir().join(".souls_scratchpad").join("reports");
@@ -1627,12 +1740,13 @@ fn print_help() {
     println!("SOULS Arena CLI — Motor Bare-Metal de Profiling e Avaliação de Silício");
     println!("Uso: souls_arena_cli [OPÇÕES]\n");
     println!("Opções:");
-    println!("  --mode <profile|eval|vision|speculative|pressure>  Define o Tier de Benchmark (Padrão: profile)");
+    println!("  --mode <profile|eval|vision|speculative|pressure|all>  Define o Tier de Benchmark (Padrão: profile)");
     println!("                                   - profile:     Tier 1 Hardware & Sanity Profiling (TTFT, TPOT, TPS, VRAM)");
     println!("                                   - eval:        Tier 2 Coliseu Cognitivo E³ (Code AST, CoT Efficiency)");
     println!("                                   - vision:      Tier 3 Combate Multimodal VLM (mmproj / VQA Score)");
     println!("                                   - speculative: Tier 4 Combate MTP & Rascunho Especulativo (Alpha Acceptance)");
     println!("                                   - pressure:    Tier 5 Sonda Needle-in-a-Haystack contra Colapso (4k-32k)");
+    println!("                                   - all:         Executa a bateria de todos os Tiers em sequência");
     println!("  --models-dir <path>             Diretório de modelos (Padrão: C:\\Users\\rosas\\.lmstudio\\models)");
     println!("  --model <filtro>                Filtra a execução para um modelo específico");
     println!("  --db <path>                     Caminho customizado para o SQLite SSOT");
@@ -1729,16 +1843,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&res)?);
             } else {
-                println!("\n============================================================");
-                println!("  RESUMO DO TIER 2 COGNITIVE & CoT CONCLUÍDO                ");
-                println!("============================================================");
-                for r in &res {
-                    println!(
-                        "  -> [{:<14}] Trilha: {:<16} | AST: {:<5} | CoT Eff: {:>5.3} | TPS: {:>5.1} | E³: {:.4}",
-                        r.model_id, r.track, if r.ast_valid { "OK" } else { "FAIL" }, r.cot_efficiency_ratio, r.avg_tps, r.e3_score
-                    );
-                }
-                println!("============================================================");
+                print_tier2_eval_table(&res);
             }
         }
         ArenaMode::Vision => {
@@ -1746,16 +1851,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&res)?);
             } else {
-                println!("\n============================================================");
-                println!("  RESUMO DO TIER 3 VISION COMBAT CONCLUÍDO                  ");
-                println!("============================================================");
-                for r in &res {
-                    println!(
-                        "  -> [{:<14}] mmproj: {:<20} | TTFT: {:>5.1} ms | Status: {}",
-                        r.model_id, r.sidecar_type, r.multimodal_ttft_ms, r.status
-                    );
-                }
-                println!("============================================================");
+                print_tier3_vision_table(&res);
             }
         }
         ArenaMode::Speculative => {
@@ -1763,16 +1859,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&res)?);
             } else {
-                println!("\n============================================================");
-                println!("  RESUMO DO TIER 4 SPECULATIVE & MTP CONCLUÍDO              ");
-                println!("============================================================");
-                for r in &res {
-                    println!(
-                        "  -> [{:<14}] Draft: {:<18} | Alpha: {:>5.1}% | Speedup: {:>4.2}x | {}",
-                        r.model_id, r.draft_type, r.acceptance_rate_alpha * 100.0, r.speedup_ratio, r.finops_verdict
-                    );
-                }
-                println!("============================================================");
+                print_tier4_speculative_table(&res);
             }
         }
         ArenaMode::Pressure => {
@@ -1780,16 +1867,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if json_mode {
                 println!("{}", serde_json::to_string_pretty(&res)?);
             } else {
-                println!("\n============================================================");
-                println!("  RESUMO DO TIER 5 CONTEXT PRESSURE CONCLUÍDO               ");
-                println!("============================================================");
-                for r in &res {
-                    println!(
-                        "  -> [{:<14}] Contexto Efetivo: {:>5} tokens (Declarado: {:>5}) | Degradacao: {}",
-                        r.model_id, r.max_effective_context, r.max_tested_context, if r.degradation_detected { "SIM" } else { "NAO" }
-                    );
-                }
-                println!("============================================================");
+                print_tier5_pressure_table(&res);
+            }
+        }
+        ArenaMode::All => {
+            if !json_mode {
+                println!("\n========================================================================");
+                println!("  INICIANDO SUÍTE COMPLETA DE BENCHMARKS (ARENA V5 MULTI-TIER)          ");
+                println!("========================================================================");
+            }
+
+            // 1. Profile
+            let res_profile = run_mode_profile(&conn, &models_dir, model_filter.as_deref(), json_mode).await?;
+            if !json_mode {
+                print_tier_profile_table("RESUMO TIER 1: HARDWARE & SANITY PROFILING", &res_profile);
+                println!("\n[FastSwitch] Purga de VRAM e transição de Tier...");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+            // 2. Eval
+            let res_eval = run_mode_eval(&conn, &models_dir, model_filter.as_deref(), json_mode).await?;
+            if !json_mode {
+                print_tier2_eval_table(&res_eval);
+                println!("\n[FastSwitch] Purga de VRAM e transição de Tier...");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+            // 3. Vision
+            let res_vision = run_mode_vision(&conn, &models_dir, model_filter.as_deref(), json_mode).await?;
+            if !json_mode {
+                print_tier3_vision_table(&res_vision);
+                println!("\n[FastSwitch] Purga de VRAM e transição de Tier...");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+            // 4. Speculative
+            let res_spec = run_mode_speculative(&conn, &models_dir, model_filter.as_deref(), json_mode).await?;
+            if !json_mode {
+                print_tier4_speculative_table(&res_spec);
+                println!("\n[FastSwitch] Purga de VRAM e transição de Tier...");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+            // 5. Pressure
+            let res_pressure = run_mode_pressure(&conn, &models_dir, model_filter.as_deref(), json_mode).await?;
+            if !json_mode {
+                print_tier5_pressure_table(&res_pressure);
+                println!("\n========================================================================");
+                println!("  SUÍTE COMPLETA FINALIZADA COM SUCESSO. SQLite SSOT ATUALIZADO.         ");
+                println!("========================================================================");
             }
         }
     }
