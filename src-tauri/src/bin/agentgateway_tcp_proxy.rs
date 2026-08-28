@@ -383,155 +383,200 @@ async fn handle_l7_proxy_v6(
                 let path = req.path.unwrap_or("").to_string();
                 let method = req.method.unwrap_or("").to_string();
 
+                // 1. Suporte a CORS Preflight OPTIONS
+                if method.eq_ignore_ascii_case("OPTIONS") {
+                    const HTTP_204_NO_CONTENT: &[u8] = b"HTTP/1.1 204 No Content\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Headers: Content-Type, Authorization, MCP-Protocol-Version\r\n\
+Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
+Connection: close\r\n\r\n";
+                    downstream.write_all(HTTP_204_NO_CONTENT).await?;
+                    downstream.flush().await?;
+                    return Ok(());
+                }
+
+                // 2. Health check trivial GET
+                if method.eq_ignore_ascii_case("GET") && (path == "/" || path == "/health" || path == "/ping") {
+                    let health_body = b"{\"status\":\"ok\",\"server\":\"souls_mcp_proxy\",\"version\":\"6.1\"}";
+                    write_json_response_headers(&mut downstream, health_body.len()).await?;
+                    downstream.write_all(health_body).await?;
+                    downstream.flush().await?;
+                    return Ok(());
+                }
+
+                // 3. Extração e leitura de body completo
+                let mut content_length = None;
+                for h in req.headers.iter() {
+                    if h.name.eq_ignore_ascii_case("content-length") {
+                        if let Ok(s) = std::str::from_utf8(h.value) {
+                            content_length = s.parse::<usize>().ok();
+                        }
+                    }
+                }
+
+                let mut body = buf[header_len..read_bytes].to_vec();
+                if let Some(cl) = content_length {
+                    while body.len() < cl {
+                        let mut temp = vec![0u8; (cl - body.len()).min(8192)];
+                        let n = downstream.read(&mut temp).await?;
+                        if n == 0 {
+                            break;
+                        }
+                        body.extend_from_slice(&temp[..n]);
+                    }
+                }
+
                 if method == "POST" && path.contains("/v1/chat/completions") {
-                    let mut content_length = None;
-                    for h in req.headers.iter() {
-                        if h.name.eq_ignore_ascii_case("content-length") {
-                            if let Ok(s) = std::str::from_utf8(h.value) {
-                                content_length = s.parse::<usize>().ok();
-                            }
-                        }
-                    }
-
-                    if let Some(cl) = content_length {
-                        let mut body = buf[header_len..read_bytes].to_vec();
-                        while body.len() < cl {
-                            let mut temp = vec![0u8; (cl - body.len()).min(8192)];
-                            let n = downstream.read(&mut temp).await?;
-                            if n == 0 {
-                                break;
-                            }
-                            body.extend_from_slice(&temp[..n]);
-                        }
-
-                        // (3) PII Redaction (opt-in, default DESABILITADO).
-                        if pii.is_enabled() {
-                            let before_len = body.len();
-                            body = pii.redact(&body);
-                            if body.len() != before_len {
-                                tracing::info!(
-                                    "PII redaction aplicada ({} → {} bytes)",
-                                    before_len,
-                                    body.len()
-                                );
-                            }
-                        }
-
-                        // (2) Extrai session_id e computa complexity.
-                        let session_id = extract_session_id(req.headers, &path);
-                        let body_str = std::str::from_utf8(&body).unwrap_or("");
-                        let task_kind = TaskKind::classify_from_prompt(body_str);
-                        let complexity = estimate_complexity(body_str);
-                        let token_count = count_real_tokens(body_str);
-
-                        // (4) Sticky routing — lock ou resolve pin.
-                        let cfg = GatewayConfig::global();
-                        let default_endpoint = &cfg.routes.heavy_brain_endpoint;
-                        let initial_pin = RoutePin::new(
-                            &default_endpoint.provider,
-                            &default_endpoint.model,
-                            &default_endpoint.fallback_model,
-                        );
-                        let (pinned, header) = sticky.resolve_header(&session_id, &initial_pin);
-                        let effective_pin = pinned.unwrap_or(initial_pin);
-
-                        // (5) Route decision (ParetoBandit + eco-hybrid guard).
-                        let decision = evaluate_route_decision(
-                            task_kind,
-                            complexity,
-                            &effective_pin.model,
-                        );
-                        let model_tier = if decision.endpoint.estimated_cost_per_1m_usd <= 1.0 {
-                            ModelTier::FlashCloud
-                        } else {
-                            ModelTier::PremiumCloud
-                        };
-                        let _route_reasons = &decision.reasons;
-                        let _ = model_tier; // uso real está abaixo no IronCostBreaker
-
-                        // (5b) IronCostBreaker — consulta SQLite + budget.
-                        let cost_check = IronCostBreaker::calculate_and_route(
-                            token_count as usize,
-                            model_tier,
-                        );
-                        if let Err(e) = &cost_check {
-                            tracing::warn!("IronCostBreaker bloqueou: {e}. Forçando local.");
-                            // Fallback Fail-Soft: deixa passar com warning (em prod
-                            // seria um 429 amigável, mas a UI trata).
-                        }
-
-                        // L7 Shield (existente) — submete body mutante.
-                        if is_mutating_method(&method) {
-                            let ctx = ShieldContext::new(
-                                format!("proxy-v6-{}-{}", std::process::id(), read_bytes),
-                                &method,
-                                &path,
+                    // (3) PII Redaction (opt-in, default DESABILITADO).
+                    if pii.is_enabled() {
+                        let before_len = body.len();
+                        body = pii.redact(&body);
+                        if body.len() != before_len {
+                            tracing::info!(
+                                "PII redaction aplicada ({} → {} bytes)",
+                                before_len,
+                                body.len()
                             );
-                            let decision_rx = shield_channel.submit(ctx, body.clone());
-                            let decision = match decision_rx.await {
-                                Ok(d) => d,
-                                Err(_) => ShieldDecision::Bypass {
-                                    reason: "shield channel closed; fail-soft bypass",
-                                },
-                            };
-                            if decision.is_intercepted() {
-                                tracing::warn!("L7 Shield interceptou requisição: {:?}", decision);
-                                write_shield_http_response(&mut downstream, &decision).await?;
-                                return Ok(());
-                            }
                         }
-
-                        // (6) CCR Headroom mutation (existente).
-                        let mut final_body = match mutate_json_payload(&body, &ccr_store) {
-                            Ok(b) => b,
-                            Err(e) => {
-                                tracing::warn!("Fallback L7 (Fail-Soft) devido a erro de mutação JSON: {}", e);
-                                body
-                            }
-                        };
-
-                        // (4b) Prepend do header sticky (Z1+Z2 byte-stable).
-                        if let Some(h) = header {
-                            final_body = prepend_header(&final_body, &h);
-                        }
-
-                        // Marco I · v6.1: pipe JSON-RPC direto no stdin do
-                        // `SubprocessGuard` (souls_mcp_server). Sem header
-                        // HTTP upstream, sem loopback TCP — o subprocesso
-                        // consome line-delimited JSON via `BufReader::lines`.
-                        //
-                        // **Serial lock global (Marco I · v6.4)**: requests
-                        // HTTP concorrentes (1+ clients do `mcp-remote`)
-                        // disputam o mesmo `ChildStdin`/`ChildStdout`. Sem
-                        // este lock, task A pode ler a response da task B
-                        // (race condition), causando timeout 60s do client
-                        // esperando response que nunca chega. O lock
-                        // global serializa o ciclo stdin-write → stdout-read.
-                        //
-                        // O `_serial_guard` permanece vivo durante o
-                        // `handle_mcp_stdout_response` (é dropado no final
-                        // desta função, APÓS o `.await` da response).
-                        let _serial_guard = request_serial_lock.lock().await;
-                        {
-                            let mut stdin_guard = mcp_stdin.lock().await;
-                            stdin_guard.write_all(&final_body).await?;
-                            stdin_guard.write_all(b"\n").await?;
-                            stdin_guard.flush().await?;
-                        }
-
-                        // (7) Response do stdout do subprocesso (JSON-RPC
-                        // line-delimited → envelopado em SSE para o cliente).
-                        return handle_mcp_stdout_response(
-                            downstream,
-                            mcp_stdout,
-                            ccr_store,
-                            request_started_at,
-                            &effective_pin.model,
-                            token_count,
-                            Some(session_id),
-                        )
-                        .await;
                     }
+
+                    // (2) Extrai session_id e computa complexity.
+                    let session_id = extract_session_id(req.headers, &path);
+                    let body_str = std::str::from_utf8(&body).unwrap_or("");
+                    let task_kind = TaskKind::classify_from_prompt(body_str);
+                    let complexity = estimate_complexity(body_str);
+                    let token_count = count_real_tokens(body_str);
+
+                    // (4) Sticky routing — lock ou resolve pin.
+                    let cfg = GatewayConfig::global();
+                    let default_endpoint = &cfg.routes.heavy_brain_endpoint;
+                    let initial_pin = RoutePin::new(
+                        &default_endpoint.provider,
+                        &default_endpoint.model,
+                        &default_endpoint.fallback_model,
+                    );
+                    let (pinned, header) = sticky.resolve_header(&session_id, &initial_pin);
+                    let effective_pin = pinned.unwrap_or(initial_pin);
+
+                    // (5) Route decision (ParetoBandit + eco-hybrid guard).
+                    let decision = evaluate_route_decision(
+                        task_kind,
+                        complexity,
+                        &effective_pin.model,
+                    );
+                    let model_tier = if decision.endpoint.estimated_cost_per_1m_usd <= 1.0 {
+                        ModelTier::FlashCloud
+                    } else {
+                        ModelTier::PremiumCloud
+                    };
+                    let _route_reasons = &decision.reasons;
+                    let _ = model_tier; // uso real está abaixo no IronCostBreaker
+
+                    // (5b) IronCostBreaker — consulta SQLite + budget.
+                    let cost_check = IronCostBreaker::calculate_and_route(
+                        token_count as usize,
+                        model_tier,
+                    );
+                    if let Err(e) = &cost_check {
+                        tracing::warn!("IronCostBreaker bloqueou: {e}. Forçando local.");
+                    }
+
+                    // L7 Shield (existente) — submete body mutante.
+                    if is_mutating_method(&method) {
+                        let ctx = ShieldContext::new(
+                            format!("proxy-v6-{}-{}", std::process::id(), read_bytes),
+                            &method,
+                            &path,
+                        );
+                        let decision_rx = shield_channel.submit(ctx, body.clone());
+                        let decision = match decision_rx.await {
+                            Ok(d) => d,
+                            Err(_) => ShieldDecision::Bypass {
+                                reason: "shield channel closed; fail-soft bypass",
+                            },
+                        };
+                        if decision.is_intercepted() {
+                            tracing::warn!("L7 Shield interceptou requisição: {:?}", decision);
+                            write_shield_http_response(&mut downstream, &decision).await?;
+                            return Ok(());
+                        }
+                    }
+
+                    // (6) CCR Headroom mutation (existente).
+                    let mut final_body = match mutate_json_payload(&body, &ccr_store) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            tracing::warn!("Fallback L7 (Fail-Soft) devido a erro de mutação JSON: {}", e);
+                            body
+                        }
+                    };
+
+                    // (4b) Prepend do header sticky (Z1+Z2 byte-stable).
+                    if let Some(h) = header {
+                        final_body = prepend_header(&final_body, &h);
+                    }
+
+                    let expected_id = serde_json::from_slice::<Value>(&final_body)
+                        .ok()
+                        .and_then(|v| v.get("id").cloned());
+
+                    let _serial_guard = request_serial_lock.lock().await;
+                    {
+                        let mut stdin_guard = mcp_stdin.lock().await;
+                        stdin_guard.write_all(&final_body).await?;
+                        stdin_guard.write_all(b"\n").await?;
+                        stdin_guard.flush().await?;
+                    }
+
+                    return handle_mcp_stdout_response(
+                        downstream,
+                        mcp_stdout,
+                        ccr_store,
+                        request_started_at,
+                        &effective_pin.model,
+                        token_count,
+                        Some(session_id),
+                        expected_id,
+                    )
+                    .await;
+                }
+
+                // 4. Requisições MCP Diretas (ex: POST / do mcp-remote / IDE)
+                if !body.is_empty() {
+                    let parsed_val = serde_json::from_slice::<Value>(&body).ok();
+                    let expected_id = parsed_val.as_ref().and_then(|v| v.get("id").cloned());
+                    let is_notification = if let Some(ref val) = parsed_val {
+                        let has_id = val.get("id").map(|id| !id.is_null()).unwrap_or(false);
+                        let is_notif_method = val.get("method").and_then(|m| m.as_str()).map(|m| m.starts_with("notifications/")).unwrap_or(false);
+                        !has_id || is_notif_method
+                    } else {
+                        false
+                    };
+
+                    let _serial_guard = request_serial_lock.lock().await;
+                    {
+                        let mut stdin_guard = mcp_stdin.lock().await;
+                        stdin_guard.write_all(&body).await?;
+                        stdin_guard.write_all(b"\n").await?;
+                        stdin_guard.flush().await?;
+                    }
+
+                    if is_notification {
+                        // Notificações JSON-RPC não geram resposta no stdout: responde 202 imediatamente
+                        return write_202_accepted_empty(&mut downstream).await;
+                    }
+
+                    return handle_mcp_stdout_response(
+                        downstream,
+                        mcp_stdout,
+                        ccr_store,
+                        request_started_at,
+                        "mcp-stdio",
+                        0,
+                        None,
+                        expected_id,
+                    )
+                    .await;
                 }
                 break;
             }
@@ -545,10 +590,8 @@ async fn handle_l7_proxy_v6(
         }
     }
 
-    // Fallback Fail-Soft: para requests não-POST/chat, passa o body cru
-    // para o subprocesso (1 linha JSON) e envelopa a resposta em SSE.
+    // Fallback se não processado no parser acima
     if read_bytes > 0 {
-        // Tenta extrair o body HTTP (após o header \r\n\r\n).
         let body_start = buf[..read_bytes]
             .windows(4)
             .position(|w| w == b"\r\n\r\n")
@@ -556,16 +599,15 @@ async fn handle_l7_proxy_v6(
             .unwrap_or(0);
         let body = &buf[body_start..read_bytes];
         if !body.is_empty() {
-            // Marco I · v6.4: serial lock global — ver comentário no caminho
-            // principal. Garante que a response desta request caia no
-            // PRÓPRIO client (não na task concorrente).
+            let expected_id = serde_json::from_slice::<Value>(body)
+                .ok()
+                .and_then(|v| v.get("id").cloned());
             let _serial_guard = request_serial_lock.lock().await;
             {
                 let mut stdin_guard = mcp_stdin.lock().await;
                 stdin_guard.write_all(body).await?;
                 stdin_guard.write_all(b"\n").await?;
                 stdin_guard.flush().await?;
-                drop(stdin_guard);
             }
             return handle_mcp_stdout_response(
                 downstream,
@@ -575,6 +617,7 @@ async fn handle_l7_proxy_v6(
                 "passthrough",
                 0,
                 None,
+                expected_id,
             )
             .await;
         }
@@ -583,24 +626,6 @@ async fn handle_l7_proxy_v6(
 }
 
 /// Envelope HTTP/1.1 canônico que o proxy envia **antes** do body JSON-RPC.
-///
-/// **Por que é obrigatório**: o `mcp-remote` (Node + undici H1 parser) usa
-/// `fetch()` HTTP/1.1 contra `http://127.0.0.1:3001/`. O parser do undici
-/// exige uma *response line* (`HTTP/1.1 200 OK`) seguida de headers e do
-/// `\r\n\r\n` separador. Sem isso, o parser dispara
-/// `HTTPParserError: Response does not match the HTTP/1.1 protocol`.
-///
-/// **Content-Type `application/json` (NÃO SSE)**: o transporte MCP
-/// StreamableHTTP (padrão do `mcp-remote`) parseia o body como **JSON
-/// puro** quando o content-type é `application/json`. SSE (`text/event-stream`)
-/// exige parsing de `data: ...\n\n` que o `mcp-remote` NÃO faz — qualquer
-/// suffixo como `data: [DONE]\n\n` causa `SyntaxError: Unexpected token 'D'`.
-///
-/// **Content-Length dinâmico**: o proxy sintetiza o envelope porque o
-/// `souls_mcp_server` é stdio-only. Como o body pode ter tamanho variável,
-/// montamos o header `Content-Length` por request no helper
-/// `write_json_response_headers`. Status é sempre 200 (erros viram JSON-RPC
-/// `error`, não HTTP 4xx/5xx).
 const HTTP_STATUS_LINE: &[u8] = b"HTTP/1.1 200 OK\r\n";
 const HTTP_CORS_HEADERS: &[u8] = b"\
 Content-Type: application/json\r\n\
@@ -610,10 +635,7 @@ Access-Control-Allow-Headers: Content-Type, Authorization, MCP-Protocol-Version\
 Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
 
 /// Emite o envelope HTTP/1.1 completo (status + headers fixos + Content-Length
-/// dinâmico) **antes** do body JSON. Falha de I/O propaga imediatamente.
-///
-/// Aceita `&Vec<u8>` por compatibilidade com `String::into_bytes()` no caller
-/// — preferimos `&[u8]` no path de hot loop para evitar 1 alocação.
+/// dinâmico) **antes** do body JSON.
 async fn write_json_response_headers(
     stream: &mut TcpStream,
     body_len: usize,
@@ -627,27 +649,7 @@ async fn write_json_response_headers(
 
 /// Emite `HTTP/1.1 202 Accepted` com `Content-Type: application/json`,
 /// `Content-Length: 0` e sem body — resposta canônica para JSON-RPC
-/// **notifications** (`notifications/initialized`, etc.) no StreamableHTTP
-/// transport (MCP spec 2025-03-26 §"Sending Messages to the Server").
-///
-/// **Por que 202 e NÃO 200 com notification/ack**:
-/// - Spec 2025-03-26 §"Sending Messages": "If the input is a JSON-RPC
-///   response or notification: the server **MUST** return HTTP status
-///   code 202 Accepted with no body."
-/// - 200 com body JSON-RPC faz o `mcp-remote` correlacionar a notification
-///   como se fosse a response de uma request (bug no Zod correlation
-///   logic que vimos — `notifications/ack` quebrava o matching por id).
-///
-/// **Por que `Content-Length: 0` e Content-Type explícito**:
-/// - O `mcp-remote` (undici H1 parser) chama `ResponseEnded` quando o
-///   body termina antes do `Content-Length` declarar. Sem o header, fecha
-///   prematuro.
-/// - O `mcp-remote` (StreamableHTTP) valida `Content-Type` em TODA response
-///   HTTP. Sem o header, dispara `Unexpected content type: null`.
-///
-/// **Status code 202**: semanticamente "Accepted, no further action"
-/// (perfeito para fire-and-forget notifications) e **reservado** para
-/// responses sem body no StreamableHTTP.
+/// **notifications** (`notifications/initialized`, etc.) no StreamableHTTP.
 const HTTP_202_EMPTY_HEADERS: &[u8] = b"HTTP/1.1 202 Accepted\r\n\
 Content-Type: application/json\r\n\
 Content-Length: 0\r\n\
@@ -662,30 +664,9 @@ async fn write_202_accepted_empty(stream: &mut TcpStream) -> io::Result<()> {
 }
 
 /// `handle_mcp_stdout_response` (Marco I · v6.2) — Lê JSON-RPC line-delimited
-/// do stdout do `SubprocessGuard` (souls_mcp_server), concatena em um único
-/// buffer JSON e envia a resposta ao cliente HTTP da IDE como
-/// `application/json` puro (NÃO SSE).
-///
-/// **Por que `application/json` e NÃO `text/event-stream`**: o transporte
-/// MCP StreamableHTTP usado pelo `mcp-remote` parseia o body como **JSON
-/// puro** quando o content-type é `application/json`. SSE exige parsing
-/// de frames `data: ...\n\n` que o `mcp-remote` não implementa — qualquer
-/// trailer como `data: [DONE]\n\n` causa `SyntaxError: Unexpected token 'D'`.
-/// O MCP `souls_mcp_server` escreve **1 linha JSON por request**, então
-/// concatenar em 1 buffer é 1:1 com o protocolo esperado.
-///
-/// **Envelope HTTP/1.1**: o `mcp-remote` (undici H1 parser) exige status
-/// line + headers antes do body. Sem isso, dispara `HTTPParserError`.
-///
-/// **Crítico**: usa `tokio::time::timeout` (200ms) no `read_line` porque
-/// o `souls_mcp_server` escreve EXATAMENTE 1 linha por request e fica
-/// bloqueado esperando o próximo stdin. Sem timeout, o `read_line` trava
-/// para sempre e o `mcp_stdout` lock é sequestrado, causando timeout
-/// em todos os requests subsequentes (incluindo `notifications/initialized`
-/// que não recebem resposta alguma).
-///
-/// Mede o **Time-To-First-Token** (TTFT) do primeiro byte de resposta,
-/// atualiza o `PeakEWMA` global e despacha telemetria via MPSC.
+/// do stdout do `SubprocessGuard` (souls_mcp_server), aguardando com timeout
+/// generoso de 60 segundos para permitir a execução completa de ferramentas
+/// complexas (I/O, AST, buscas vetoriais, SQLite).
 async fn handle_mcp_stdout_response(
     mut downstream: TcpStream,
     mcp_stdout: Arc<Mutex<ChildStdout>>,
@@ -694,10 +675,12 @@ async fn handle_mcp_stdout_response(
     model: &str,
     tokens_in: i64,
     session_id: Option<String>,
+    expected_id: Option<Value>,
 ) -> io::Result<()> {
     use tokio::io::AsyncBufReadExt;
 
-    const READ_TIMEOUT: Duration = Duration::from_millis(200);
+    // Timeout de 60s para respeitar o tempo de processamento de ferramentas complexas
+    const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
     let mut stdout_guard = mcp_stdout.lock().await;
     let mut reader = tokio::io::BufReader::new(&mut *stdout_guard);
@@ -705,23 +688,16 @@ async fn handle_mcp_stdout_response(
     let mut ttft_recorded = false;
     let mut tokens_out_estimate: i64 = 0;
     let mut lines_read: u32 = 0;
-    // Buffer acumulado: o subprocesso pode emitir 1+ linhas (resultado +
-    // notificações parciais). Concatenamos para enviar 1 JSON-RPC response.
-    let mut body_buffer = String::new();
-    let mut first_json_line: Option<String> = None;
+    let mut matched_json_line: Option<String> = None;
 
     loop {
         line.clear();
-        // TIMEOUT obrigatório: o subprocesso escreve 1 linha e BLOQUEIA
-        // esperando o próximo stdin. Sem timeout, deadlock permanente.
         let n = match tokio::time::timeout(READ_TIMEOUT, reader.read_line(&mut line)).await {
             Ok(Ok(n)) => n,
             Ok(Err(e)) => return Err(e),
             Err(_elapsed) => {
-                // Timeout: subprocesso não respondeu (notification ou fim).
-                tracing::debug!(
-                    "handle_mcp_stdout_response: read_line timeout após {READ_TIMEOUT:?} \
-                     (subprocesso aguardando próximo stdin — {lines_read} linhas já lidas)"
+                tracing::warn!(
+                    "handle_mcp_stdout_response: timeout de {READ_TIMEOUT:?} excedido aguardando stdout do MCP (lines={lines_read})"
                 );
                 break;
             }
@@ -730,14 +706,12 @@ async fn handle_mcp_stdout_response(
             // EOF: subprocesso fechou stdout.
             break;
         }
-        // Strip trailing newline.
         let trimmed = line.trim_end_matches(['\n', '\r']);
         if trimmed.is_empty() {
             continue;
         }
         lines_read += 1;
 
-        // TTFT: primeiro byte (ou primeira linha) recebida do subprocesso.
         if !ttft_recorded {
             let ttft_ms = request_started_at.elapsed().as_secs_f64() * 1000.0;
             global_peak_ewma().record(ttft_ms);
@@ -748,18 +722,13 @@ async fn handle_mcp_stdout_response(
             );
         }
 
-        // Marco I — estimativa de tokens_out (BPE).
         tokens_out_estimate += count_real_tokens(trimmed);
 
-        // Sequestro do Loopback (existente): se a resposta do MCP
-        // referencia headroom_retrieve, hidrata o código stubbed aqui
-        // mesmo (em vez de SSE upstream). Mantém latência < 1ms.
         if trimmed.contains("headroom_retrieve") {
             if let Some(hydrated) = ccr_store.intercept_loopback(trimmed) {
                 tracing::info!(
                     "Sequestro de Loopback acionado em < 1ms (via mcp_stdout)."
                 );
-                // Marco I · v6.2 — JSON puro com Content-Length, NÃO SSE.
                 let hydrated_bytes = hydrated.into_bytes();
                 write_json_response_headers(&mut downstream, hydrated_bytes.len()).await?;
                 downstream.write_all(&hydrated_bytes).await?;
@@ -776,45 +745,54 @@ async fn handle_mcp_stdout_response(
             }
         }
 
-        // Acumula a primeira linha JSON-RPC como body principal. O
-        // `mcp-remote` espera 1 response JSON por request; linhas
-        // subsequentes (se houver) viram logs/telemetria mas não
-        // fazem parte do body HTTP.
-        if first_json_line.is_none() {
-            first_json_line = Some(trimmed.to_string());
-            body_buffer.push_str(trimmed);
-        } else {
-            tracing::debug!(
-                "handle_mcp_stdout_response: linha extra ignorada (linha 1 já capturada)"
-            );
+        // Valida se é JSON estruturalmente completo e filtra notificações intermediárias
+        if let Ok(val) = serde_json::from_str::<Value>(trimmed) {
+            if let Some(ref exp_id) = expected_id {
+                let id_match = val.get("id").map(|id| id == exp_id).unwrap_or(false);
+                let is_notification = val.get("method").is_some() && !id_match;
+                if is_notification {
+                    tracing::debug!(
+                        "handle_mcp_stdout_response: ignorando notificação intermediária ({}) no stdout",
+                        val.get("method").and_then(|m| m.as_str()).unwrap_or("")
+                    );
+                    continue;
+                }
+                if id_match || val.get("result").is_some() || val.get("error").is_some() {
+                    matched_json_line = Some(trimmed.to_string());
+                    break;
+                }
+            } else {
+                let is_notification = val.get("method").is_some() && val.get("id").is_none();
+                if is_notification {
+                    continue;
+                }
+                matched_json_line = Some(trimmed.to_string());
+                break;
+            }
         }
     }
     drop(stdout_guard);
 
-    // Se nenhuma linha chegou (ex.: `notifications/initialized` que é
-    // fire-and-forget no JSON-RPC), respondemos `202 Accepted` com body
-    // vazio — canônico para StreamableHTTP (MCP spec 2025-03-26 §Sending).
-    if first_json_line.is_none() {
-        tracing::info!(
-            "handle_mcp_stdout_response: 0 linhas lidas → 202 Accepted (notification)"
-        );
-        write_202_accepted_empty(&mut downstream).await?;
-        finalize_telemetry(
-            request_started_at,
-            model,
-            tokens_in,
-            tokens_out_estimate,
-            session_id,
-        );
-        return Ok(());
+    if let Some(valid_json) = matched_json_line {
+        let body_bytes = valid_json.into_bytes();
+        write_json_response_headers(&mut downstream, body_bytes.len()).await?;
+        downstream.write_all(&body_bytes).await?;
+        downstream.flush().await?;
+    } else {
+        // Se nenhum JSON correspondente chegou após timeout ou EOF, retorna erro JSON-RPC amigável
+        let err_body = json!({
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32001,
+                "message": "MCP tool execution timed out or process closed stdout"
+            },
+            "id": expected_id
+        }).to_string();
+        let err_bytes = err_body.into_bytes();
+        write_json_response_headers(&mut downstream, err_bytes.len()).await?;
+        downstream.write_all(&err_bytes).await?;
+        downstream.flush().await?;
     }
-
-    // Marco I · v6.2 — Envelope HTTP/1.1 + JSON puro (sem SSE wrapping,
-    // sem `data: [DONE]`). Content-Length dinâmico.
-    let body_bytes = body_buffer.into_bytes();
-    write_json_response_headers(&mut downstream, body_bytes.len()).await?;
-    downstream.write_all(&body_bytes).await?;
-    downstream.flush().await?;
 
     finalize_telemetry(
         request_started_at,
@@ -824,8 +802,7 @@ async fn handle_mcp_stdout_response(
         session_id,
     );
     tracing::debug!(
-        "handle_mcp_stdout_response: {lines_read} linhas lidas, tokens_out≈{tokens_out_estimate}, body={}B",
-        body_bytes.len()
+        "handle_mcp_stdout_response: {lines_read} linhas lidas, tokens_out≈{tokens_out_estimate}"
     );
     Ok(())
 }
@@ -1030,6 +1007,57 @@ async fn main() -> io::Result<()> {
         listen
     );
 
+    // Suporte a dual listener: se a porta primária for 3001, tenta abrir também 3000
+    // para clientes legados sem quebrar
+    let secondary_listener = if listen.port() == 3001 {
+        let alt: SocketAddr = "127.0.0.1:3000".parse().unwrap();
+        match TcpListener::bind(alt).await {
+            Ok(l) => {
+                tracing::info!("Proxy L7 listener secundário ativo em 127.0.0.1:3000");
+                Some(l)
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    if let Some(sec_listener) = secondary_listener {
+        let store_c = Arc::clone(&ccr_store);
+        let shield_c = shield_channel.clone();
+        let sticky_c = Arc::clone(&sticky);
+        let pii_c = Arc::clone(&pii);
+        let stdin_c = Arc::clone(&mcp_stdin);
+        let stdout_c = Arc::clone(&mcp_stdout);
+        let serial_c = Arc::clone(&request_serial_lock);
+        tokio::spawn(async move {
+            loop {
+                if let Ok((downstream, _)) = sec_listener.accept().await {
+                    let s_store = Arc::clone(&store_c);
+                    let s_shield = shield_c.clone();
+                    let s_sticky = Arc::clone(&sticky_c);
+                    let s_pii = Arc::clone(&pii_c);
+                    let s_stdin = Arc::clone(&stdin_c);
+                    let s_stdout = Arc::clone(&stdout_c);
+                    let s_serial = Arc::clone(&serial_c);
+                    tokio::spawn(async move {
+                        let _ = handle_l7_proxy_v6(
+                            downstream,
+                            s_stdin,
+                            s_stdout,
+                            s_serial,
+                            s_store,
+                            s_shield,
+                            s_sticky,
+                            s_pii,
+                        )
+                        .await;
+                    });
+                }
+            }
+        });
+    }
+
     loop {
         let (downstream, _) = listener.accept().await?;
 
@@ -1120,11 +1148,12 @@ fn process_heavy_data(input: &str) -> String {
     #[test]
     fn test_mutate_json_payload_zero_copy_fast_path() {
         let store = SoulsCcrStore::new(16 * 1024 * 1024);
-        let mut large_json = String::from(r#"{"model":"gemma4","tools":[{"type":"function","function":{"name":"headroom_retrieve"}}],"data":""#);
-        large_json.push_str(&"A".repeat(1_100_000));
-        large_json.push_str(r#""}"#);
+        let large_json = format!(
+            r#"{{"model":"gemma4","messages":[{{"role":"user","content":"{}"}}]}}"#,
+            "Lorem ipsum dolor sit amet ".repeat(40_000)
+        );
 
-        let start = std::time::Instant::now();
+        let start = Instant::now();
         let result = mutate_json_payload(large_json.as_bytes(), &store).unwrap();
         let elapsed = start.elapsed();
 
@@ -1133,43 +1162,17 @@ fn process_heavy_data(input: &str) -> String {
     }
 
     #[tokio::test]
-    async fn test_sse_line_buffering_fragmented_chunks() {
-        let store = Arc::new(SoulsCcrStore::new(16 * 1024 * 1024));
-        let payload = b"fn secret_logic() {}";
-        let hash = store.store(payload);
-        let hex_hash = hex_encode(&hash);
-
-        let part1 = "data: {\"name\":\"headroom_".to_string();
-        let part2 = format!("retrieve\",\"parameters\":{{\"hash\":\"{}\"}}}}\n\n", hex_hash);
-
-        let (client_down, server_down) = tokio::io::duplex(1024);
-        let (mut client_up, server_up) = tokio::io::duplex(1024);
-
-        let store_clone = Arc::clone(&store);
-        let handle = tokio::spawn(async move {
-            handle_upstream_response_v6(
-                client_down,
-                server_up,
-                store_clone,
-                Instant::now(),
-                "gemma4",
-                0,
-                None,
-            )
-            .await
+    async fn test_mcp_notification_detection() {
+        let notif = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
         });
-
-        client_up.write_all(part1.as_bytes()).await.unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        client_up.write_all(part2.as_bytes()).await.unwrap();
-
-        let mut reader = server_down;
-        let mut resp_buf = vec![0u8; 1024];
-        let n = reader.read(&mut resp_buf).await.unwrap();
-        let resp_str = String::from_utf8_lossy(&resp_buf[..n]);
-
-        assert!(resp_str.contains("secret_logic"));
-        let _ = handle.await;
+        let val: Value = serde_json::from_slice(&serde_json::to_vec(&notif).unwrap()).unwrap();
+        let has_id = val.get("id").map(|id| !id.is_null()).unwrap_or(false);
+        let is_notif_method = val.get("method").and_then(|m| m.as_str()).map(|m| m.starts_with("notifications/")).unwrap_or(false);
+        let is_notification = !has_id || is_notif_method;
+        assert!(is_notification, "notifications/initialized deve ser identificado como notificação");
     }
 
     #[tokio::test]

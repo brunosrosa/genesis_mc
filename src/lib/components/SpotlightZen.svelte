@@ -84,7 +84,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-start justify-center pt-28 transition-all duration-150 select-none"
+    class="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 flex items-start justify-center pt-28 transition-all duration-150 select-none"
     onclick={onClose}
   >
     <!-- Modal Card -->

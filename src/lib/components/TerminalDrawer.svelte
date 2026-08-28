@@ -94,13 +94,14 @@
     });
   }
 
-  onMount(() => {
-    const processLoop = () => {
+  // Quando o usuário abre o terminal, descarrega imediatamente os logs acumulados
+  $effect(() => {
+    if (isOpen) {
       flushBatch();
-      rafId = requestAnimationFrame(processLoop);
-    };
-    rafId = requestAnimationFrame(processLoop);
+    }
+  });
 
+  onMount(() => {
     void (async () => {
       try {
         unlistenStream = await listen<string | string[] | Partial<TerminalLogEntry> | Partial<TerminalLogEntry>[]>("terminal-stream", (event) => {
@@ -114,6 +115,10 @@
           } else {
             pendingLogBatch.push(parseIncomingLog(payload));
           }
+
+          if (isOpen && typeof document !== "undefined" && !document.hidden) {
+            flushBatch();
+          }
         });
       } catch {
         // Fallback em ambiente standalone
@@ -121,9 +126,6 @@
     })();
 
     return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
       unlistenStream?.();
     };
   });

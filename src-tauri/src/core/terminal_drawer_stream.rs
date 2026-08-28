@@ -41,7 +41,12 @@ impl TauriTerminalStreamSink {
 #[cfg(feature = "tauri-app")]
 impl TerminalStreamSink for TauriTerminalStreamSink {
     fn emit_terminal_chunk(&self, chunk: &[u8]) -> Result<(), String> {
-        use tauri::Emitter;
+        use tauri::{Emitter, Manager};
+        if let Some(window) = self.app_handle.get_webview_window("main") {
+            if !window.is_visible().unwrap_or(false) {
+                return Ok(());
+            }
+        }
         self.app_handle
             .emit(TERMINAL_STREAM_EVENT, chunk.to_vec())
             .map_err(|e| format!("Falha ao emitir {TERMINAL_STREAM_EVENT} via Tauri: {e}"))

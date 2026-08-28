@@ -72,7 +72,43 @@ async fn socratic_merge_sessions(
     .map_err(|e| format!("merge_sessions falhou: {e}"))
 }
 
+// Símbolos de driver para forçar o uso exclusivo da iGPU (GPU integrada)
+// e blindar a dGPU (RTX 2060m / 6GB VRAM) para os modelos locais (CUDA/Candle/mistral.rs).
+#[no_mangle]
+pub static NvOptimusEnablement: u32 = 0x00000000;
+#[no_mangle]
+pub static AmdPowerXpressRequestHighPerformance: i32 = 0;
+
+#[cfg(target_os = "windows")]
+fn enforce_integrated_gpu_preference() {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_str) = exe_path.to_str() {
+            let _ = std::process::Command::new("reg")
+                .args(&[
+                    "add",
+                    "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences",
+                    "/v",
+                    exe_str,
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    "GpuPreference=1;",
+                    "/f",
+                ])
+                .output();
+        }
+    }
+}
+
 fn main() {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--force_low_power_gpu --enable-low-power-gpu --enable-features=Calculators,BackgroundTabThrottling,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes --disable-backgrounding-occluded-windows=false",
+        );
+        enforce_integrated_gpu_preference();
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![

@@ -40,7 +40,14 @@ impl TauriTelemetrySink {
 #[cfg(feature = "tauri-app")]
 impl TelemetrySink for TauriTelemetrySink {
     fn emit_telemetry(&self, event: &str, payload: &[u8]) -> Result<(), String> {
-        use tauri::Emitter;
+        use tauri::{Emitter, Manager};
+        // Se a janela principal estiver oculta no systray, não emite eventos a 5Hz
+        // permitindo que o WebView2 entre em modo de suspensão profunda (0% GPU/CPU).
+        if let Some(window) = self.app_handle.get_webview_window("main") {
+            if !window.is_visible().unwrap_or(false) {
+                return Ok(());
+            }
+        }
         self.app_handle
             .emit(event, payload.to_vec())
             .map_err(|e| format!("Falha ao emitir {event} via Tauri: {e}"))

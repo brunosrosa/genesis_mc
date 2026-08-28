@@ -49,8 +49,9 @@ const TICK_MS: u64 = 1_000;
 /// Esta função NÃO bloqueia o caller — o `tokio::spawn` retorna
 /// imediatamente e a task roda em background. O caller deve passar
 /// o `Channel<Vec<u8>>` recebido do comando Tauri.
-pub fn spawn_watchdog_channel(_app: tauri::AppHandle, channel: Channel<Vec<u8>>) {
+pub fn spawn_watchdog_channel(app: tauri::AppHandle, channel: Channel<Vec<u8>>) {
     tokio::spawn(async move {
+        use tauri::Manager;
         let mut interval = tokio::time::interval(Duration::from_millis(TICK_MS));
         // Skip caso o runtime esteja sobrecarregado — preferimos pular um
         // tick a empilhar ticks atrasados (evita avalanches de send).
@@ -58,6 +59,14 @@ pub fn spawn_watchdog_channel(_app: tauri::AppHandle, channel: Channel<Vec<u8>>)
 
         loop {
             interval.tick().await;
+
+            // Se a janela principal estiver oculta no Systray, pula o envio
+            // para permitir a suspensão de CPU/GPU do WebView2.
+            if let Some(window) = app.get_webview_window("main") {
+                if !window.is_visible().unwrap_or(false) {
+                    continue;
+                }
+            }
 
             // Lê o estado atômico (lock-free, sem contenção com a thread
             // watchdog). Se ainda não foi inicializado, envia zeros

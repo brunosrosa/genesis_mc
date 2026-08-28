@@ -123,18 +123,18 @@ export function update_unpacked_state(state: Partial<TelemetryState>): void {
 }
 
 // ---------------------------------------------------------------------------
-// Bridge: Conecta canal Tauri Zero-Copy e evento 'hardware-telemetry' via rAF
+// Bridge: Conecta canal Tauri Zero-Copy e evento 'hardware-telemetry' via rAF sob demanda
 // ---------------------------------------------------------------------------
 export async function bind_channel_to_runes(): Promise<() => void> {
   const channel = new Channel<Uint8Array>();
   let pendingBuffer: ArrayBuffer | Uint8Array | null = null;
   let pendingState: Partial<TelemetryState> | null = null;
-  let rafId: number | null = null;
+  let rafScheduled = false;
   let cancelled = false;
   let unlistenEvent: UnlistenFn | null = null;
 
-  // rAF loop: Micro-batching a 60 FPS
-  const tick = (): void => {
+  const flush = (): void => {
+    rafScheduled = false;
     if (cancelled) return;
     if (pendingBuffer !== null) {
       const buf = pendingBuffer;
@@ -146,13 +146,34 @@ export async function bind_channel_to_runes(): Promise<() => void> {
       pendingState = null;
       update_unpacked_state(st);
     }
-    rafId = requestAnimationFrame(tick);
   };
-  rafId = requestAnimationFrame(tick);
 
-  // Wire do canal binário 1Hz (u64 LE packed)
+  const scheduleUpdate = (): void => {
+    if (cancelled) return;
+    // Se a aba/janela estiver oculta no Systray, não agenda rAF na GPU
+    if (typeof document !== "undefined" && document.hidden) {
+      return;
+    }
+    if (!rafScheduled) {
+      rafScheduled = true;
+      requestAnimationFrame(flush);
+    }
+  };
+
+  const handleVisibilityChange = (): void => {
+    if (typeof document !== "undefined" && !document.hidden) {
+      scheduleUpdate();
+    }
+  };
+
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+  }
+
+  // Wire do canal binário (u64 LE packed)
   channel.onmessage = (bytes: Uint8Array) => {
     pendingBuffer = bytes;
+    scheduleUpdate();
   };
 
   try {
@@ -173,16 +194,17 @@ export async function bind_channel_to_runes(): Promise<() => void> {
       } else if (p && typeof p === "object") {
         pendingState = p as Partial<TelemetryState>;
       }
+      scheduleUpdate();
     });
   } catch {
     // Fallback gracioso em ambiente web standalone
   }
 
-  // Cleanup: cancela rAF + desinscreve listeners
+  // Cleanup: cancela agendamento + desinscreve listeners
   return () => {
     cancelled = true;
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     }
     unlistenEvent?.();
   };

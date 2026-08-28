@@ -136,46 +136,44 @@ body {
 }
 
 /* =========================================================================
-   Soul Agent Pip Pulse Animation
+   Soul Agent Pip Pulse Animation (Otimizado para iGPU)
    ========================================================================= */
 @keyframes soul-pulse {
   0%, 100% {
     transform: scale(1);
     opacity: 0.8;
-    box-shadow: 0 0 6px #BA9EFF;
   }
   50% {
-    transform: scale(1.18);
+    transform: scale(1.1);
     opacity: 1;
-    box-shadow: 0 0 16px #BA9EFF, 0 0 24px #61C2FF;
   }
 }
 
 .soul-pip {
-  animation: soul-pulse 2.5s infinite ease-in-out;
+  animation: soul-pulse 3s infinite ease-in-out;
+  box-shadow: 0 0 6px #BA9EFF;
 }
 
 /* =========================================================================
-   Cyber-Glass Panels (Acrylic / Mica)
+   Cyber-Glass Panels (Acrylic / Mica - Otimizado para iGPU)
    ========================================================================= */
 .cyber-panel {
-  background: rgba(23, 21, 31, 0.75);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(23, 21, 31, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.5rem;
-  contain: layout style;
+  contain: layout style paint;
 }
 
 .cyber-panel-elevated {
-  background: rgba(36, 32, 48, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(36, 32, 48, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(186, 158, 255, 0.2);
-  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.8),
-              0 0 12px rgba(186, 158, 255, 0.15);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.7);
   border-radius: 0.5rem;
-  contain: layout style;
+  contain: layout style paint;
 }
 
 /* Transições com will-change ativo para otimização de iGPU */
