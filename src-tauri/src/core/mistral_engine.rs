@@ -38,49 +38,65 @@ impl EphemeralInferEngine for MistralRsEngine {
             _ => return Err(InferenceError::ExecutionError(format!("Caminho de modelo invalido: {}", req.model_path))),
         };
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| InferenceError::ExecutionError(format!("Falha ao criar runtime Tokio: {}", e)))?;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| InferenceError::ExecutionError(format!("Falha ao criar runtime Tokio: {}", e)))?;
 
-        rt.block_on(async {
-            let model = GgufModelBuilder::new(
-                parent_dir.to_string_lossy().to_string(),
-                vec![filename],
-            )
-            .build()
-            .await
-            .map_err(|e| InferenceError::ExecutionError(format!("Falha ao carregar modelo Mistral GGUF: {}", e)))?;
+            rt.block_on(async {
+                let model = GgufModelBuilder::new(
+                    parent_dir.to_string_lossy().to_string(),
+                    vec![filename],
+                )
+                .build()
+                .await
+                .map_err(|e| InferenceError::ExecutionError(format!("Falha ao carregar modelo Mistral GGUF: {}", e)))?;
 
-            let mut messages = TextMessages::new();
-            if !req.system_prompt.trim().is_empty() {
-                messages = messages.add_message(TextMessageRole::System, req.system_prompt.trim());
-            }
-            for (input, output) in &req.few_shot_examples {
-                messages = messages.add_message(TextMessageRole::User, input.trim());
-                messages = messages.add_message(TextMessageRole::Assistant, output.trim());
-            }
-            messages = messages.add_message(TextMessageRole::User, req.user_query.trim());
+                let mut messages = TextMessages::new();
+                if !req.system_prompt.trim().is_empty() {
+                    messages = messages.add_message(TextMessageRole::System, req.system_prompt.trim());
+                }
+                for (input, output) in &req.few_shot_examples {
+                    messages = messages.add_message(TextMessageRole::User, input.trim());
+                    messages = messages.add_message(TextMessageRole::Assistant, output.trim());
+                }
+                messages = messages.add_message(TextMessageRole::User, req.user_query.trim());
 
-            let response = model.send_chat_request(messages).await
-                .map_err(|e| InferenceError::ExecutionError(format!("Falha na inferencia Mistral: {}", e)))?;
+                let response = model.send_chat_request(messages).await
+                    .map_err(|e| InferenceError::ExecutionError(format!("Falha na inferencia Mistral: {}", e)))?;
 
-            let choice = response.choices.first()
-                .ok_or_else(|| InferenceError::ExecutionError("Nenhuma resposta gerada pelo motor Mistral".to_string()))?;
+                let choice = response.choices.first()
+                    .ok_or_else(|| InferenceError::ExecutionError("Nenhuma resposta gerada pelo motor Mistral".to_string()))?;
 
-            let generated_text = choice.message.content.clone().unwrap_or_default();
-            let prompt_tokens = response.usage.prompt_tokens as u32;
-            let completion_tokens = response.usage.completion_tokens as u32;
-            let total_latency_ms = start_time.elapsed().as_millis() as u64;
+                let generated_text = choice.message.content.clone().unwrap_or_default();
+                let prompt_tokens = response.usage.prompt_tokens as u32;
+                let completion_tokens = response.usage.completion_tokens as u32;
+                let total_latency_ms = start_time.elapsed().as_millis() as u64;
 
-            Ok(SoulsInferenceResponse {
-                status: "success".to_string(),
-                text: generated_text,
-                prompt_tokens,
-                completion_tokens,
-                total_latency_ms,
+                Ok(SoulsInferenceResponse {
+                    status: "success".to_string(),
+                    text: generated_text,
+                    prompt_tokens,
+                    completion_tokens,
+                    total_latency_ms,
+                })
             })
-        })
+        }));
+
+        match result {
+            Ok(inner_res) => inner_res,
+            Err(panic_payload) => {
+                let msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Panic interno capturado em mistralrs-core (GGUF metadata/architecture unsupported)".to_string()
+                };
+                Err(InferenceError::ExecutionError(format!("Mistral.rs panic interceptado: {}", msg)))
+            }
+        }
     }
 }
 

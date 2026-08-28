@@ -35,8 +35,7 @@ use souls_mc_lib::core::inference_adapter::MockEphemeralInferEngine;
 #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
 use souls_mc_lib::core::llama_engine::LlamaCppEngine;
 
-#[cfg(feature = "mistral_backend")]
-use souls_mc_lib::core::mistral_engine::MistralRsEngine;
+
 
 /// Modo de execução da Arena (5 Tiers Operacionais + All)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -662,7 +661,7 @@ fn extract_and_measure_thinking(raw_text: &str) -> (String, u32) {
     (text, 0)
 }
 
-/// Despacha inferência para Dedicated OS Worker Thread
+/// Despacha inferência para Dedicated OS Worker Thread com blindagem contra Panic
 fn dispatch_dedicated_infer(
     engine: std::sync::Arc<dyn EphemeralInferEngine>,
     req: SoulsInferenceRequest,
@@ -671,8 +670,27 @@ fn dispatch_dedicated_infer(
     let builder = std::thread::Builder::new().name("souls-arena-worker".to_string());
 
     let handle = builder.spawn(move || {
-        let res = engine.run_inference(req, None);
-        let _ = tx.send(res);
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            engine.run_inference(req, None)
+        }));
+        match res {
+            Ok(infer_res) => {
+                let _ = tx.send(infer_res);
+            }
+            Err(panic_payload) => {
+                let msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Panic interno no motor de inferência capturado com sucesso".to_string()
+                };
+                let _ = tx.send(Err(InferenceError::ExecutionError(format!(
+                    "Panic capturado no motor: {}",
+                    msg
+                ))));
+            }
+        }
     });
 
     if handle.is_err() {
@@ -681,10 +699,10 @@ fn dispatch_dedicated_infer(
         ));
     }
 
-    match rx.recv_timeout(std::time::Duration::from_secs(300)) {
+    match rx.recv_timeout(std::time::Duration::from_secs(60)) {
         Ok(res) => res,
         Err(_) => Err(InferenceError::ExecutionError(
-            "Timeout fatal na Arena Worker Thread (300s)".to_string(),
+            "Timeout na Arena Worker Thread (60s)".to_string(),
         )),
     }
 }
@@ -807,6 +825,7 @@ fn load_eval_tier2_prompts(bench_dir: &Path) -> Vec<ArenaPrompt> {
 async fn profile_single_model_pass(
     model_path: &Path,
     tier: ModelTier,
+    engine_override: Option<&str>,
     force_cpu: bool,
     json_mode: bool,
 ) -> ModelProfileResult {
@@ -823,7 +842,8 @@ async fn profile_single_model_pass(
 
     let cascade = EngineCascade::new();
     let tf = meta.as_ref().map(build_topology_features_from_meta).unwrap_or_default();
-    let (engine_id, support_level) = cascade.probe_best_engine(model_path, &tf);
+    let (probed_engine_id, support_level) = cascade.probe_best_engine(model_path, &tf);
+    let engine_id = engine_override.unwrap_or(&probed_engine_id).to_string();
     let mmproj_path = find_mmproj_for_model(model_path);
     let has_mmproj = mmproj_path.is_some();
     let mmproj_str = mmproj_path.as_ref().map(|p| p.to_string_lossy().to_string());
@@ -876,43 +896,45 @@ async fn profile_single_model_pass(
         };
     }
 
-    if let EngineSupportLevel::Unsupported(ref reason) = support_level {
-        if !json_mode {
-            println!("  [IGNORADO] Modelo não suportado pelo motor nativo: {}", reason);
+    if engine_override.is_none() && matches!(support_level, EngineSupportLevel::Unsupported(_)) {
+        if let EngineSupportLevel::Unsupported(ref reason) = support_level {
+            if !json_mode {
+                println!("  [IGNORADO] Modelo não suportado pelo motor nativo: {}", reason);
+            }
+            return ModelProfileResult {
+                tier_model: tier.as_str().to_string(),
+                model_id: model_name,
+                model_path: model_path_str,
+                family,
+                parameters,
+                engine_selected: engine_id,
+                size_gb,
+                ctx_max_k,
+                quant,
+                kv_cache: "N/A".to_string(),
+                is_cpu: force_cpu,
+                is_gpu: !force_cpu,
+                is_hybrid: false,
+                hybrid_desc: "".to_string(),
+                ttft_ms: 0.0,
+                tpot_ms: 0.0,
+                tpot_us: 0,
+                tps: 0.0,
+                vram_model_mb: 0.0,
+                vram_kv_mb: 0.0,
+                ram_model_mb: if force_cpu { file_size_mb } else { 0.0 },
+                host_ram_mb,
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                duration_ms: 0,
+                accuracy_score: 0.0,
+                e3_score: 0.0,
+                has_mmproj,
+                mmproj_path: mmproj_str,
+                status: "UNSUPPORTED_ARCH".to_string(),
+                timestamp_epoch_sec: epoch_now,
+            };
         }
-        return ModelProfileResult {
-            tier_model: tier.as_str().to_string(),
-            model_id: model_name,
-            model_path: model_path_str,
-            family,
-            parameters,
-            engine_selected: engine_id,
-            size_gb,
-            ctx_max_k,
-            quant,
-            kv_cache: "N/A".to_string(),
-            is_cpu: force_cpu,
-            is_gpu: !force_cpu,
-            is_hybrid: false,
-            hybrid_desc: "".to_string(),
-            ttft_ms: 0.0,
-            tpot_ms: 0.0,
-            tpot_us: 0,
-            tps: 0.0,
-            vram_model_mb: 0.0,
-            vram_kv_mb: 0.0,
-            ram_model_mb: if force_cpu { file_size_mb } else { 0.0 },
-            host_ram_mb,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            duration_ms: 0,
-            accuracy_score: 0.0,
-            e3_score: 0.0,
-            has_mmproj,
-            mmproj_path: mmproj_str,
-            status: "UNSUPPORTED_ARCH".to_string(),
-            timestamp_epoch_sec: epoch_now,
-        };
     }
 
     let (engine_selected, engine): (String, std::sync::Arc<dyn EphemeralInferEngine>) = if force_cpu {
@@ -1142,23 +1164,43 @@ async fn run_mode_profile(
     }
 
     let mut all_results = Vec::new();
+    let cascade = EngineCascade::new();
 
-    // BATERIA TIER 0: Executa em GPU E em CPU (compara ambos)
+    // BATERIA TIER 0: Executa em todos os motores GPU compatíveis + passada CPU (AVX2)
     if !tier0_models.is_empty() {
         let mut tier0_res = Vec::new();
         for m in &tier0_models {
             let name = m.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            if !json_mode {
-                println!("\n[TIER 0 PROFILE] Modelo: {} | Executando Passada GPU (CUDA)...", name);
+            let meta = parse_gguf_metadata_zero_copy(m);
+            let tf = meta.as_ref().map(build_topology_features_from_meta).unwrap_or_default();
+            let candidate_probes = cascade.probe_candidate_engines(m, &tf);
+            let mut gpu_engines = Vec::new();
+            for (eng, _) in &candidate_probes {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !gpu_engines.contains(&eng.as_str()) {
+                    gpu_engines.push(eng.as_str());
+                }
             }
-            let res_gpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, false, json_mode).await;
-            tier0_res.push(res_gpu.clone());
-            all_results.push(res_gpu);
+            if gpu_engines.is_empty() {
+                gpu_engines.push("ik_llama_vanguard");
+            }
+
+            for eng in gpu_engines {
+                if !json_mode {
+                    println!("\n[TIER 0 PROFILE] Modelo: {} | Executando Engine GPU: {}...", name, eng);
+                }
+                let res_gpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, Some(eng), false, json_mode).await;
+                tier0_res.push(res_gpu.clone());
+                all_results.push(res_gpu);
+                if !json_mode {
+                    println!("[FastSwitch] VRAM purgada.");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
 
             if !json_mode {
-                println!("[FastSwitch] VRAM purgada. Executando Passada CPU (AVX2)...");
+                println!("\n[TIER 0 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
             }
-            let res_cpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, true, json_mode).await;
+            let res_cpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, Some("llama_cpp4"), true, json_mode).await;
             tier0_res.push(res_cpu.clone());
             all_results.push(res_cpu);
             if !json_mode {
@@ -1171,22 +1213,41 @@ async fn run_mode_profile(
         }
     }
 
-    // BATERIA TIER 0.5: Executa em GPU E em CPU
+    // BATERIA TIER 0.5: Executa em todos os motores GPU compatíveis + passada CPU (AVX2)
     if !tier05_models.is_empty() {
         let mut tier05_res = Vec::new();
         for m in &tier05_models {
             let name = m.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            if !json_mode {
-                println!("\n[TIER 0.5 PROFILE] Modelo: {} | Executando Passada GPU (CUDA)...", name);
+            let meta = parse_gguf_metadata_zero_copy(m);
+            let tf = meta.as_ref().map(build_topology_features_from_meta).unwrap_or_default();
+            let candidate_probes = cascade.probe_candidate_engines(m, &tf);
+            let mut gpu_engines = Vec::new();
+            for (eng, _) in &candidate_probes {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !gpu_engines.contains(&eng.as_str()) {
+                    gpu_engines.push(eng.as_str());
+                }
             }
-            let res_gpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, false, json_mode).await;
-            tier05_res.push(res_gpu.clone());
-            all_results.push(res_gpu);
+            if gpu_engines.is_empty() {
+                gpu_engines.push("ik_llama_vanguard");
+            }
+
+            for eng in gpu_engines {
+                if !json_mode {
+                    println!("\n[TIER 0.5 PROFILE] Modelo: {} | Executando Engine GPU: {}...", name, eng);
+                }
+                let res_gpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, Some(eng), false, json_mode).await;
+                tier05_res.push(res_gpu.clone());
+                all_results.push(res_gpu);
+                if !json_mode {
+                    println!("[FastSwitch] VRAM purgada.");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
 
             if !json_mode {
-                println!("[FastSwitch] VRAM purgada. Executando Passada CPU (AVX2)...");
+                println!("\n[TIER 0.5 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
             }
-            let res_cpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, true, json_mode).await;
+            let res_cpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, Some("llama_cpp4"), true, json_mode).await;
             tier05_res.push(res_cpu.clone());
             all_results.push(res_cpu);
             if !json_mode {
@@ -1199,42 +1260,72 @@ async fn run_mode_profile(
         }
     }
 
-    // BATERIA TIER 1 / 1.5: Executa em GPU Full VRAM com TurboQuant
+    // BATERIA TIER 1 / 1.5: Executa em todos os motores compatíveis com o modelo
     if !tier1_models.is_empty() {
         let mut tier1_res = Vec::new();
         for m in &tier1_models {
             let name = m.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            if !json_mode {
-                println!("\n[TIER 1 / 1.5 PROFILE] Modelo: {} | Executando GPU Full VRAM...", name);
+            let meta = parse_gguf_metadata_zero_copy(m);
+            let tf = meta.as_ref().map(build_topology_features_from_meta).unwrap_or_default();
+            let candidate_probes = cascade.probe_candidate_engines(m, &tf);
+            let mut engines_to_run = Vec::new();
+            for (eng, _) in &candidate_probes {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !engines_to_run.contains(&eng.as_str()) {
+                    engines_to_run.push(eng.as_str());
+                }
             }
-            let res_gpu = profile_single_model_pass(m, ModelTier::Tier1Master, false, json_mode).await;
-            tier1_res.push(res_gpu.clone());
-            all_results.push(res_gpu);
-            if !json_mode {
-                println!("[FastSwitch] VRAM purgada.");
+            if engines_to_run.is_empty() {
+                engines_to_run.push("ik_llama_vanguard");
             }
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+            for eng in engines_to_run {
+                if !json_mode {
+                    println!("\n[TIER 1 / 1.5 PROFILE] Modelo: {} | Engine: {}...", name, eng);
+                }
+                let res_gpu = profile_single_model_pass(m, ModelTier::Tier1Master, Some(eng), false, json_mode).await;
+                tier1_res.push(res_gpu.clone());
+                all_results.push(res_gpu);
+                if !json_mode {
+                    println!("[FastSwitch] VRAM purgada.");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
         }
         if !json_mode {
             print_tier_profile_table(ModelTier::Tier1Master.title(), &tier1_res);
         }
     }
 
-    // BATERIA TIER 2: Executa em Hybrid Offload
+    // BATERIA TIER 2: Executa em Hybrid Offload nos motores compatíveis
     if !tier2_models.is_empty() {
         let mut tier2_res = Vec::new();
         for m in &tier2_models {
             let name = m.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            if !json_mode {
-                println!("\n[TIER 2 PROFILE] Modelo: {} | Executando Hybrid Offload...", name);
+            let meta = parse_gguf_metadata_zero_copy(m);
+            let tf = meta.as_ref().map(build_topology_features_from_meta).unwrap_or_default();
+            let candidate_probes = cascade.probe_candidate_engines(m, &tf);
+            let mut engines_to_run = Vec::new();
+            for (eng, _) in &candidate_probes {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !engines_to_run.contains(&eng.as_str()) {
+                    engines_to_run.push(eng.as_str());
+                }
             }
-            let res_hybrid = profile_single_model_pass(m, ModelTier::Tier2Background, false, json_mode).await;
-            tier2_res.push(res_hybrid.clone());
-            all_results.push(res_hybrid);
-            if !json_mode {
-                println!("[FastSwitch] VRAM purgada.");
+            if engines_to_run.is_empty() {
+                engines_to_run.push("ik_llama_vanguard");
             }
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+            for eng in engines_to_run {
+                if !json_mode {
+                    println!("\n[TIER 2 PROFILE] Modelo: {} | Engine: {} | Executando Hybrid Offload...", name, eng);
+                }
+                let res_hybrid = profile_single_model_pass(m, ModelTier::Tier2Background, Some(eng), false, json_mode).await;
+                tier2_res.push(res_hybrid.clone());
+                all_results.push(res_hybrid);
+                if !json_mode {
+                    println!("[FastSwitch] VRAM purgada.");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
         }
         if !json_mode {
             print_tier_profile_table(ModelTier::Tier2Background.title(), &tier2_res);
@@ -1244,7 +1335,7 @@ async fn run_mode_profile(
     // TIER 4 (Drafters): Registro direto
     if !tier4_models.is_empty() {
         for m in &tier4_models {
-            let res_draft = profile_single_model_pass(m, ModelTier::Tier4Drafter, false, json_mode).await;
+            let res_draft = profile_single_model_pass(m, ModelTier::Tier4Drafter, None, false, json_mode).await;
             all_results.push(res_draft);
         }
     }
